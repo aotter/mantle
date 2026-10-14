@@ -116,6 +116,7 @@ export function safeReturnPath(raw: string | null | undefined): string {
 
 // The signed OAuth query lives in the kit, which a service's own sign-in page uses too.
 import { signedOAuthQuery } from "@aotter/mantle-ui/kit";
+import { AUTH_BASE } from "../../lib/auth";
 export { signedOAuthQuery };
 
 // Both moved to the kit component that now owns the email-OTP flow;
@@ -370,7 +371,7 @@ function MethodSection({
     case "social":
       return (
         <RedirectSignInSection
-          endpoint="/api/auth/sign-in/social"
+          endpoint=`${AUTH_BASE}/sign-in/social`
           body={{
             provider: method.provider,
             callbackURL: returnTo,
@@ -383,7 +384,7 @@ function MethodSection({
     case "oauth":
       return (
         <RedirectSignInSection
-          endpoint="/api/auth/sign-in/social"
+          endpoint=`${AUTH_BASE}/sign-in/social`
           body={{
             provider: method.providerId,
             callbackURL: returnTo,
@@ -526,7 +527,7 @@ function EmailOtpSection({
         requestFailed: t(language, "auth.signIn.requestFailed"),
       }}
       onSendCode={async (email) => {
-        const res = await fetch("/api/auth/email-otp/send-verification-otp", {
+        const res = await fetch(`${AUTH_BASE}/email-otp/send-verification-otp`, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -541,7 +542,7 @@ function EmailOtpSection({
         }
       }}
       onVerifyCode={async (email, code) => {
-        const res = await fetch("/api/auth/sign-in/email-otp", {
+        const res = await fetch(`${AUTH_BASE}/sign-in/email-otp`, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -600,7 +601,7 @@ function MagicLinkSection({
     e.preventDefault();
     if (!email) return;
     void withBusy(async () => {
-      const res = await fetch("/api/auth/sign-in/magic-link", {
+      const res = await fetch(`${AUTH_BASE}/sign-in/magic-link`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

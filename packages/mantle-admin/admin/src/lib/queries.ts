@@ -3,6 +3,7 @@ import { queryClient } from "../app/query-client";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
 import { isFoldedFieldChild } from "./collection-nav";
 import type { CollectionsMetadata, EntryDocument, AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, AdminOperation, ViewManifestInfo } from "./types";
+import { AUTH_BASE } from "./auth";
 
 export const COLLECTION_PAGE_SIZE = 50;
 
@@ -162,7 +163,7 @@ export function authMethodsQueryOptions(): {
   return {
     queryKey: ["auth-methods"] as const,
     queryFn: async () => {
-      const res = await fetch("/api/auth/methods", { credentials: "include" });
+      const res = await fetch(`${AUTH_BASE}/methods`, { credentials: "include" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { methods?: AuthMethodInfo[] };
       return data.methods ?? [];

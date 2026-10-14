@@ -1,7 +1,11 @@
 /** The Admin SPA shell for an app that serves `@aotter/mantle-admin/admin` itself: anti-framing, no-store HTML and path refusals. */
 const notFound = () => new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
 /** `assets` fetches one built file by its path under /admin (`index.html`, `assets/app.js`); a 404 means missing. */
-export async function adminShell(request: Request, assets: (path: string) => Response | Promise<Response>): Promise<Response | undefined> {
+/** `authBasePath`: the Better Auth instance Admin signs in with, when it is not the default `/api/auth` (e.g. a staff instance). */
+export async function adminShell(request: Request, assets: (path: string) => Response | Promise<Response>, options: { readonly authBasePath?: string } = {}): Promise<Response | undefined> {
+    const authBase = options.authBasePath?.replace(/\/+$/, "");
+    if (authBase !== undefined && !/^(\/[A-Za-z0-9_-]+)+$/.test(authBase))
+        throw new Error("authBasePath must be a path such as /api/auth/staff.");
     const url = new URL(request.url);
     if (request.method !== "GET" || (url.pathname !== "/admin" && !url.pathname.startsWith("/admin/")))
         return undefined;
@@ -26,5 +30,9 @@ export async function adminShell(request: Request, assets: (path: string) => Res
     headers.append("content-security-policy", "frame-ancestors 'none'");
     headers.set("x-frame-options", "DENY");
     headers.set("cache-control", "no-store");
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    if (!authBase || authBase === "/api/auth")
+        return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    headers.delete("content-length");
+    const html = (await response.text()).replace("</head>", `<meta name="mantle-auth-base" content="${authBase}"></head>`);
+    return new Response(html, { status: response.status, statusText: response.statusText, headers });
 }

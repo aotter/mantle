@@ -153,3 +153,17 @@ Better Auth adapter code stays outside the Worker startup graph.
 `ctx.admin` role names are open and must match `^[a-z][a-zA-Z0-9_]{0,62}$`. Bare `ctx.admin` admits any admin; a list admits admins holding one of its roles. Better Auth’s `adminRoles` decides who is an admin. Member role names alone grant no privilege.
 
 The generated auth DDL adds a native `(createdAt, id)` member-paging index (respecting schema field/table names). Unfiltered forward/backward paging orders native timestamps through that index; PostgreSQL cursors retain all six fractional digits and bind as text before timestamp casting. Member search (`%term%` over id/name/email, casting UUID ids to text only in the search expression) is a full scan; the index does not accelerate it.
+
+## Several Better Auth instances in one app
+
+The default is one instance with `admin` and `user` roles. An app that keeps two populations apart (for example
+staff and customers) can run one Better Auth instance per population in the same Worker; every Mantle primitive
+takes the instance it works on:
+
+- Give each instance its own `basePath`, `advanced.cookiePrefix`, `secret` and table names (`user.modelName`,
+  `session.modelName`, ... and plugin `schema` options). Generation and the native adapter follow each instance's
+  mapping.
+- One `authLoader(load, cookiePrefix)` per instance; call `resolveCaller(request, loader)` with the instance the
+  route belongs to, and mount `authRoutes(loader, ...)` per instance (it guards that instance's `/admin/*`).
+- Admin signs in with the instance passed to `adminShell(request, assets, { authBasePath })`; its identity
+  directory is the instance you pass to `d1Identity` / `postgresIdentity`.
