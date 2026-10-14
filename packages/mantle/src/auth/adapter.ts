@@ -83,7 +83,7 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
     const cols = (values: Row) => Object.entries(values).filter(([, v]) => v !== undefined);
     const assign = (s: Statement, values: Row, increment: Record<string, number> = {}) =>
       [...cols(values).map(([c, v]) => `${ident(c)} = ${s.bind(v)}`), ...Object.entries(increment).map(([c, n]) => `${ident(c)} = ${ident(c)} + ${s.bind(n)}`)].join(", ");
-    const { adminRoles: roles, adminUserIds } = options ? adminOptionsOf({ options }) : { adminRoles: [], adminUserIds: [] };
+    const { adminRoles: roles, adminUserIds } = options ? adminOptionsOf({ options }) : { adminRoles: [] as string[], adminUserIds: [] as readonly string[] };
     const holdsAdmin = (role: unknown) => typeof role === "string" && role.split(",").some(role => roles.includes(role));
     const field = (name: string) => getFieldName({ model: "user", field: name });
     const protects = (modelKey: string, values?: Row) => modelKey === "user" && roles.length > 0 &&
