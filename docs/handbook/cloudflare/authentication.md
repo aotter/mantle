@@ -29,6 +29,10 @@ Mantle reads the official admin plugin’s `adminRoles` when auth loads (default
 - `withAuthTasks(ctx.waitUntil.bind(ctx), () => auth.handler(request))` retains background sends/cleanup for the current request, with concurrent requests isolated. `authHardening` installs `retainAuthTask` as Better Auth's background handler. Failure logs are generic and contain no OTPs/credentials.
 - `authSetupIncomplete()` returns 503/no-store while secrets/providers are unconfigured; do not authenticate by fallback.
 
+Better Auth config is app-owned, so restrict who may sign up (an allowlist, an invitation) with a
+`databaseHooks.user.create.before` hook that throws `APIError("FORBIDDEN")` from `better-auth/api` (the app shell calls
+`src/signup.ts` there; returning `false` instead breaks email-OTP sign-in in Better Auth 1.7.7, which does not expect a refused create).
+
 Magic links use hashed tokens, 15-minute expiry and the same task retention. Email callbacks pass the first
 Accept-Language tag (fallback `en`) to the app's sender. `authRoutes` (as the app shell mounts it) also guards raw Better Auth `/admin/*` routes with the fresh database-backed Caller and the shared session origin check, so a stale KV role cannot bypass the directory gate. Mount that handler when selecting session KV. Configure ordinary Better Auth social providers;
 Apple needs `https://appleid.apple.com` trusted origin and secure SameSite=None callback cookies. Generic OAuth login

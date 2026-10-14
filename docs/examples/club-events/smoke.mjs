@@ -1,14 +1,38 @@
-// Club events acceptance: officers create events in Admin, members register/cancel their own seats over REST and MCP.
+// Club events acceptance: only listed members sign up; officers create events in Admin, members register/cancel their own seats over REST and MCP.
 import assert from "node:assert/strict";
 import { smoke } from "./smoke-kit.mjs";
 
-await smoke(async ({ call, mcp, signIn, sql, owner, step }) => {
+await smoke(async ({ call, mcp, signIn, sql, owner, step, logs }) => {
   assert.equal((await call("POST", "/api/registrations", { body: { eventId: "x" } })).status, 401);
   assert.equal((await call("GET", "/api/views/events")).status, 401);
   step("anonymous: register and the event list are 401");
 
   const admin = await signIn(owner);
   assert.equal((await call("GET", "/admin/api/me", { cookie: admin })).body.role.split(",")[0], "admin");
+  step("ADMIN_EMAIL signs in although the members list is empty, and becomes the officer (admin)");
+
+  // A verified email that is not on the list: the code is sent, but creating the account is refused.
+  const stranger = "stranger@example.test", ip = "198.51.100.7", logStart = logs().length;
+  assert.equal((await call("POST", "/api/auth/email-otp/send-verification-otp", { body: { email: stranger, type: "sign-in" }, ip })).status, 200);
+  let code;
+  for (let i = 0; i < 40 && !code; i++) {
+    code = /stranger@example\.test: one-time code is (\d{6})/.exec(logs().slice(logStart))?.[1];
+    if (!code) await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(code, "no one-time code for the stranger");
+  const refused = await call("POST", "/api/auth/sign-in/email-otp", { body: { email: stranger, otp: code }, ip });
+  assert.equal(refused.status, 403, JSON.stringify(refused.body));
+  assert.equal(refused.headers.getSetCookie().length, 0);
+  assert.equal((await sql(`SELECT count(*) AS n FROM user WHERE email = '${stranger}'`))[0].n, 0);
+  step("an email not on the members list cannot sign up: 403, no session cookie, no user row");
+
+  for (const name of ["alice", "bob", "carol", "dave", "erin", "frank"]) {
+    const added = await call("POST", "/admin/api/entries", { cookie: admin, body: { collection: "members", data: { email: `${name}@example.test`, name } } });
+    assert.equal(added.status, 200, JSON.stringify(added.body));
+  }
+  const mixed = await call("POST", "/admin/api/entries", { cookie: admin, body: { collection: "members", data: { email: "Grace@example.test" } } });
+  assert.ok(mixed.status >= 400 && mixed.status < 500, JSON.stringify(mixed.body));
+  step("the officer adds members to the allowlist in Admin (a mixed-case email is refused by the lowercase check)");
   const create = async (title, seats, closed = false) => {
     const created = await call("POST", "/admin/api/entries", { cookie: admin, body: { collection: "events", data: { title, startsAt: "2026-11-01T10:00:00Z", capacity: seats, closed } } });
     assert.equal(created.status, 200, JSON.stringify(created.body));
