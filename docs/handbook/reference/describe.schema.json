@@ -259,42 +259,7 @@
                 "type": "boolean"
               },
               "requires": {
-                "type": "object",
-                "properties": {
-                  "all": {
-                    "type": "array",
-                    "items": {
-                      "oneOf": [
-                        {
-                          "enum": [
-                            "ctx.user",
-                            "ctx.admin",
-                            "ctx.auth"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "ctx.auth.scope": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "ctx.auth.scope"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    }
-                  },
-                  "guard": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "all"
-                ],
-                "additionalProperties": false
+                "$ref": "#/$defs/requirements"
               },
               "variants": {
                 "type": "array",
@@ -304,7 +269,13 @@
                     "id",
                     "scope",
                     "restrict",
-                    "requires"
+                    "requires",
+                    "inputSchema",
+                    "readOnly",
+                    "hostCallable",
+                    "trustedOnly",
+                    "opaque",
+                    "unscopedReads"
                   ],
                   "additionalProperties": false,
                   "properties": {
@@ -394,9 +365,69 @@
                       }
                     },
                     "requires": {
+                      "$ref": "#/$defs/requirements"
+                    },
+                    "inputSchema": {
                       "type": "object"
+                    },
+                    "readOnly": {
+                      "type": "boolean"
+                    },
+                    "hostCallable": {
+                      "type": "boolean"
+                    },
+                    "trustedOnly": {
+                      "type": "boolean"
+                    },
+                    "opaque": {
+                      "type": "boolean"
+                    },
+                    "unscopedReads": {
+                      "type": "boolean"
                     }
                   }
+                }
+              },
+              "surfaces": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "public",
+                    "admin",
+                    "rest",
+                    "internal",
+                    "lifecycle",
+                    "schedule"
+                  ]
+                },
+                "uniqueItems": true
+              },
+              "requiresBySurface": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/requirements"
+                }
+              },
+              "trustedOnly": {
+                "type": "boolean"
+              },
+              "triggers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source"
+                  ],
+                  "additionalProperties": false
                 }
               }
             },
@@ -414,7 +445,11 @@
               "unscopedReads",
               "hostCallable",
               "requires",
-              "variants"
+              "variants",
+              "surfaces",
+              "requiresBySurface",
+              "trustedOnly",
+              "triggers"
             ],
             "additionalProperties": false
           }
@@ -437,5 +472,45 @@
     "access",
     "targets"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "requirements": {
+      "type": "object",
+      "properties": {
+        "all": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "enum": [
+                  "ctx.user",
+                  "ctx.admin",
+                  "ctx.auth"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "ctx.auth.scope": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "ctx.auth.scope"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "guard": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "all"
+      ],
+      "additionalProperties": false
+    }
+  }
 }

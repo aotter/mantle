@@ -2,11 +2,15 @@ import type { RuntimePlan } from "../../build/compiler.js";
 import type { PlanRestrict } from "../../build/spec/domain/model/RuntimePlan.js";
 import { mcpToolNameSegment, mcpTools } from "../../build/spec/domain/service/McpToolNaming.js";
 import { resolveLocalizedText, type JsonSchema, type AuthorizationRequirements, type ProcedureMcpAnnotations } from "../../build/spec/domain/model/ManifestGrammar.js";
+import { canonical } from "../../build/spec/domain/service/PlanFingerprint.js";
+import { mediaDefinitions, publishingInput, publishingTransitions } from "../generated-tools.js";
 
 export interface TargetDefinition {
   id: string;
   name: string;
   surface: string;
+  surfaces: string[];
+  triggers: { id: string; source: RuntimePlan["triggers"][string]["source"] }[];
   kind: "view" | "procedure" | "rest" | "admin";
   title: string;
   description: string;
@@ -19,13 +23,15 @@ export interface TargetDefinition {
   readOnly: boolean;
   opaque: boolean;
   hostCallable: boolean;
+  trustedOnly: boolean;
   behavior: unknown;
   variants: TargetDefinition[];
 }
 
 /** Walk sealed IR, including nested statements and expanded View dependencies. */
-export function inspectSql(value: unknown): { schemas: string[]; readSchemas: string[]; readOnly: boolean } {
+export function inspectSql(value: unknown): { schemas: string[]; readSchemas: string[]; readOnly: boolean; writes: { schema: string; operation: string }[] } {
   const schemas = new Set<string>(), readSchemas = new Set<string>();
+  const writes: { schema: string; operation: string }[] = [];
   let readOnly = true;
   const walk = (v: unknown): void => {
     if (!v || typeof v !== "object") return;
@@ -33,12 +39,67 @@ export function inspectSql(value: unknown): { schemas: string[]; readSchemas: st
     if (n.RangeVar?.mantle === "table") { schemas.add(n.RangeVar.relname.toLowerCase()); readSchemas.add(n.RangeVar.relname.toLowerCase()); }
     for (const kind of ["InsertStmt", "UpdateStmt", "DeleteStmt"]) if (n[kind]) {
       readOnly = false;
+      if (n[kind].relation?.relname) writes.push({ schema: n[kind].relation.relname.toLowerCase(), operation: kind === "InsertStmt" ? "create" : kind === "UpdateStmt" ? "update" : "delete" });
       if (n[kind].relation?.relname) { schemas.add(n[kind].relation.relname.toLowerCase()); if (kind !== "InsertStmt") readSchemas.add(n[kind].relation.relname.toLowerCase()); }
     }
     Object.values(n).forEach(walk);
   };
   walk(value);
-  return { schemas: [...schemas].sort(), readSchemas: [...readSchemas].sort(), readOnly };
+  return { schemas: [...schemas].sort(), readSchemas: [...readSchemas].sort(), readOnly, writes };
+}
+
+/** Guards run together; dispatcher variants do not. */
+function mergeRestrict(policies: PlanRestrict[], conjunctive: boolean): PlanRestrict {
+  return Object.fromEntries([...new Set(policies.flatMap(p => Object.keys(p)))].sort().map(schema => {
+    const rows = policies.map(p => p[schema] ?? { terms: [] });
+    const terms = [...new Map(rows.flatMap(p => p.terms).map(t => [canonical(t), t])).values()]
+      .filter(t => conjunctive || rows.every(p => p.terms.some(v => canonical(v) === canonical(t))));
+    const owner = rows.find(p => p.owner)?.owner;
+    return [schema, { ...(owner && (conjunctive || rows.every(p => p.owner === owner)) ? { owner } : {}), terms }];
+  }));
+}
+
+/** Follow guards and write hooks to a fixed point, including writes made by hooks. */
+function inspectBehavior(plan: RuntimePlan, ir: unknown, opaque: boolean, requires?: AuthorizationRequirements, restrict?: PlanRestrict, writes?: { schema: string; operation: string }[]) {
+  const inspected = inspectSql(ir);
+  if (writes) {
+    inspected.writes = [...writes];
+    inspected.schemas.push(...writes.map(w => w.schema));
+    inspected.readSchemas.push(...writes.filter(w => w.operation !== "create").map(w => w.schema));
+  }
+  const dependencies: unknown[] = [], policies = [restrict ?? {}];
+  const procedures = new Set<string>(), hooks = new Set<string>();
+  const visit = (name: string): void => {
+    if (procedures.has(name)) return;
+    procedures.add(name);
+    const p = plan.procedures[name];
+    if (!p) throw new TypeError(`Unknown dependency '${name}'.`);
+    dependencies.push({ procedure: name, declaration: p });
+    policies.push(p.restrict ?? {});
+    opaque ||= "ref" in p.handler;
+    const g = inspectSql("sql" in p.handler ? p.handler.sql.stmts : undefined);
+    inspected.schemas.push(...g.schemas); inspected.readSchemas.push(...g.readSchemas); inspected.writes.push(...g.writes);
+    inspected.readOnly &&= g.readOnly;
+    if (p.requires?.guard) visit(p.requires.guard.procedure);
+  };
+  if (requires?.guard) visit(requires.guard.procedure);
+  for (;;) {
+    const before = hooks.size;
+    for (const [id, t] of Object.entries(plan.triggers).sort(([a], [b]) => a.localeCompare(b))) {
+      if (t.source.kind !== "lifecycle" || hooks.has(id)) continue;
+      const source = t.source;
+      if (!opaque && !inspected.writes.some(w => w.schema === source.schema.toLowerCase() && source.on.some(on => on.endsWith(`_${w.operation}`)))) continue;
+      hooks.add(id); dependencies.push({ trigger: id, source }); visit(t.procedure);
+    }
+    if (hooks.size === before) break;
+  }
+  const related = (names: string[]) => {
+    const all = new Set(opaque ? Object.keys(plan.schemas) : names);
+    for (const name of all) { const parent = plan.schemas[name]?.translates?.parent.toLowerCase(); if (parent) all.add(parent); }
+    return [...all].sort();
+  };
+  return { ...inspected, schemas: related(inspected.schemas), readSchemas: related(inspected.readSchemas), opaque,
+    restrict: mergeRestrict(policies, true), dependencies };
 }
 
 const objectInput: JsonSchema = { type: "object", properties: {} };
@@ -82,74 +143,73 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
     for (const [name, p] of Object.entries(entries).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
       const view = kind === "view" ? plan.views[name]! : undefined;
       const proc = kind === "procedure" ? plan.procedures[name]! : undefined;
-      let opaque = !!proc && "ref" in proc.handler;
       const ir = view?.stmts ?? (proc && "sql" in proc.handler ? proc.handler.sql.stmts : undefined);
-      const inspected = inspectSql(ir);
-      const guards: unknown[] = [];
-      const seen = new Set<string>();
-      const guard = (requires: AuthorizationRequirements | undefined): void => {
-        const name = requires?.guard?.procedure;
-        if (!name || seen.has(name)) return;
-        seen.add(name);
-        const p = plan.procedures[name];
-        if (!p) throw new TypeError(`Unknown guard '${name}'.`);
-        guards.push(p);
-        if ("ref" in p.handler) { inspected.readOnly = false; opaque = true; }
-        else { const g = inspectSql(p.handler.sql.stmts); inspected.schemas.push(...g.schemas); inspected.readSchemas.push(...g.readSchemas); inspected.readOnly &&= g.readOnly; }
-        guard(p.requires);
-      };
-      guard(p.requires);
-      // Translation visibility reads the parent even when it is absent from authored IR.
-      const related = new Set(inspected.schemas);
-      for (const name of related) {
-        const parent = plan.schemas[name]?.translates?.parent.toLowerCase();
-        if (parent) related.add(parent);
-      }
-      inspected.schemas = [...related].sort();
-      const reads = new Set(inspected.readSchemas);
-      for (const name of reads) { const parent = plan.schemas[name]?.translates?.parent.toLowerCase(); if (parent) reads.add(parent); }
-      inspected.readSchemas = [...reads].sort();
+      const inspected = inspectBehavior(plan, ir, !!proc && "ref" in proc.handler, p.requires, p.restrict);
       const tool = tools.find(t => t.kind === kind && t.source === name);
       const title = resolveLocalizedText(p.title, "en", "en") ?? name;
-      const surfaces = Object.values(plan.triggers).flatMap(t => t.procedure === name && t.source.kind === "mcp" ? [t.source.surface] : []);
+      const triggers = Object.entries(plan.triggers).filter(([, t]) => kind === "procedure" && t.procedure === name).sort(([a], [b]) => a.localeCompare(b)).map(([id, t]) => ({ id, source: t.source }));
+      const surfaces = [...new Set([
+        ...(view ? [view.surface, "admin", ...(view.surface === "public" ? ["rest"] : [])] : []),
+        ...triggers.map(t => t.source.kind === "mcp" ? t.source.surface : t.source.kind === "http" ? "rest" : t.source.kind),
+      ])].sort();
+      if (!surfaces.length) surfaces.push("internal");
       out.push({ id: `${kind}:${name}`, name: tool?.name ?? mcpToolNameSegment(name), kind,
-        surface: view?.surface ?? (surfaces.includes("admin") ? "admin" : surfaces.includes("public") ? "public" : "internal"),
+        surface: view?.surface ?? (surfaces.includes("public") || surfaces.includes("rest") ? "public" : surfaces.includes("admin") ? "admin" : "internal"), surfaces, triggers,
         title, description: resolveLocalizedText(p.description, "en", "en") ?? title,
         inputSchema: tool?.inputSchema ?? view?.input ?? proc?.input ?? objectInput,
-        annotations: tool?.annotations ?? {}, requires: p.requires, restrict: p.restrict ?? {},
-        schemas: opaque ? Object.keys(plan.schemas).sort() : inspected.schemas, readSchemas: inspected.readSchemas, readOnly: !opaque && inspected.readOnly, opaque, hostCallable: !proc?.trustedOnly,
-        variants: [], behavior: { declaration: p, guards, lowered: kind === "view" ? plan.lowered?.views[name] : plan.lowered?.procedures[name] },
+        annotations: tool?.annotations ?? {}, requires: p.requires, restrict: inspected.restrict,
+        schemas: inspected.schemas, readSchemas: inspected.readSchemas, readOnly: !inspected.opaque && inspected.readOnly, opaque: inspected.opaque, hostCallable: !proc?.trustedOnly, trustedOnly: !!proc?.trustedOnly,
+        variants: [], behavior: { declaration: p, dependencies: inspected.dependencies },
       });
     }
   }
   const addRoute = (id: string, dependencies: TargetDefinition[], inputSchema = objectInput) => {
     const admin = id.startsWith("admin:");
-    out.push({ id, name: id.replace(/[^a-zA-Z0-9_-]/g, "_"), title: id, description: id, kind: admin ? "admin" : "rest", surface: admin ? "admin" : "public",
+    out.push({ id, name: id.replace(/[^a-zA-Z0-9_-]/g, "_"), title: id, description: id, kind: admin ? "admin" : "rest", surface: admin ? "admin" : "public", surfaces: [admin ? "admin" : "rest"], triggers: dependencies.flatMap(d => d.triggers),
       inputSchema, annotations: {}, requires: admin ? { auth: { all: ["ctx.admin"] } } : dependencies[0]?.requires,
-      restrict: Object.fromEntries([...new Set(dependencies.flatMap(d => Object.keys(d.restrict)))].sort().map(schema => {
-        const policies = dependencies.flatMap(d => d.restrict[schema] ? [d.restrict[schema]!] : []);
-        return [schema, { ...(policies.find(p => p.owner)?.owner ? { owner: policies.find(p => p.owner)!.owner } : {}), terms: policies.flatMap(p => p.terms) }];
-      })),
+      restrict: mergeRestrict(dependencies.map(d => d.restrict), false),
       schemas: [...new Set(dependencies.flatMap(d => d.schemas))].sort(), readSchemas: [...new Set(dependencies.flatMap(d => d.readSchemas))].sort(),
-      readOnly: dependencies.every(d => d.readOnly) && (!admin || id.startsWith("admin:GET ") || id === "admin:POST /operations/:name" || id === "admin:POST /webmcp/:tool"),
-      opaque: dependencies.some(d => d.opaque), hostCallable: dependencies.every(d => d.hostCallable),
-      variants: dependencies, behavior: dependencies.map(d => ({ id: d.id, behavior: d.behavior, requires: d.requires, restrict: d.restrict })),
+      readOnly: dependencies.length > 0 && dependencies.every(d => d.readOnly) && (!admin || id.startsWith("admin:GET ") || id === "admin:POST /operations/:name" || id === "admin:POST /webmcp/:tool"),
+      opaque: dependencies.some(d => d.opaque), hostCallable: dependencies.every(d => d.hostCallable), trustedOnly: dependencies.some(d => d.trustedOnly),
+      variants: dependencies, behavior: dependencies.map(d => ({ id: d.id, behavior: d.behavior, surfaces: d.surfaces, triggers: d.triggers, input: d.inputSchema, requires: d.requires, restrict: d.restrict, trustedOnly: d.trustedOnly })),
     });
   };
   const declarations = [...out];
   const adminOperations = new Set(mcpTools(plan, "admin").filter(t => t.kind === "procedure").map(t => `procedure:${t.source}`));
-  for (const d of declarations) if (d.kind === "view" && d.surface === "public") addRoute(`rest:GET /api/views/${d.id.slice(5)}`, [d], d.inputSchema);
+  for (const d of declarations) if (d.kind === "view" && d.surfaces.includes("public")) addRoute(`rest:GET /api/views/${d.id.slice(5)}`, [d], d.inputSchema);
   for (const [, t] of Object.entries(plan.triggers).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) if (t.source.kind === "http") {
     const d = declarations.find(d => d.id === `procedure:${t.procedure}`)!;
     addRoute(`rest:${t.source.method} ${pathTemplate(t.source.path)}`, [d], d.inputSchema);
   }
+  const generated: TargetDefinition[] = [];
+  for (const [schema, s] of Object.entries(plan.schemas).sort(([a], [b]) => a.localeCompare(b))) if (s.publishing) for (const [verb, from, to] of publishingTransitions) {
+    addRoute(`procedure:${s.name}.${verb}`, [], publishingInput);
+    const d = out.at(-1)!;
+    const inspected = inspectBehavior(plan, undefined, false, undefined, undefined, [{ schema, operation: verb === "publish" ? "publish" : "update" }]);
+    Object.assign(d, { kind: "procedure", name: mcpToolNameSegment(`${verb}_${s.name}`), surface: "admin", surfaces: ["admin"], requires: { auth: { all: ["ctx.admin"] } },
+      schemas: [...new Set([schema, ...inspected.schemas])].sort(), readSchemas: [...new Set([schema, ...inspected.readSchemas])].sort(), opaque: inspected.opaque,
+      behavior: { schema, verb, from, to, dependencies: inspected.dependencies } });
+    generated.push(d);
+  }
+  // Optional mounted media tools are included conservatively: the plan does not record router composition.
+  for (const tool of mediaDefinitions()) {
+    addRoute(`admin:tool:${tool.name}`, [], tool.inputSchema as JsonSchema);
+    const d = out.at(-1)!;
+    Object.assign(d, { name: tool.name, readOnly: tool.annotations.readOnlyHint, annotations: tool.annotations, behavior: { tool, schemas: plan.schemas } });
+    generated.push(d);
+  }
   for (const route of adminRoutes) {
-    const deps = route.includes("/views/:") ? declarations.filter(d => d.kind === "view" && (route.includes("/developer/") || d.surface === "admin"))
-      : route.includes("/operations/:") ? declarations.filter(d => adminOperations.has(d.id)) : route === "POST /webmcp/:tool" ? declarations.filter(d => mcpTools(plan, "admin").some(t => `${t.kind}:${t.source}` === d.id)) : [];
+    const deps = route.includes("/views/:") ? declarations.filter(d => d.kind === "view" && (route.includes("/developer/") || plan.views[d.id.slice(5)]?.surface === "admin"))
+      : route.includes("/operations/:") ? declarations.filter(d => adminOperations.has(d.id)) : route === "POST /webmcp/:tool" ? declarations.filter(d => mcpTools(plan, "admin").some(t => `${t.kind}:${t.source}` === d.id)).concat(generated) : [];
     const generic = route.includes("/entries") || route.includes("/statistics") || route === "GET /bootstrap";
     addRoute(`admin:${route}`, deps, adminInput(route, deps, plan));
     const d = out.at(-1)!;
-    if (generic) { d.schemas = Object.keys(plan.schemas).sort(); d.readSchemas = d.schemas; d.behavior = plan.schemas; }
+    if (generic) {
+      const operation = route === "POST /entries" ? "create" : route === "DELETE /entries/:id" ? "delete" : route.startsWith("GET ") ? undefined : route.endsWith("/publish") ? "publish" : "update";
+      const inspected = inspectBehavior(plan, undefined, false, undefined, undefined, operation ? Object.keys(plan.schemas).map(schema => ({ schema, operation })) : []);
+      d.schemas = Object.keys(plan.schemas).sort(); d.readSchemas = d.schemas; d.opaque = inspected.opaque;
+      d.behavior = { schemas: plan.schemas, dependencies: inspected.dependencies };
+    }
   }
   return [...new Map(out.map(d => [d.id, d])).values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
