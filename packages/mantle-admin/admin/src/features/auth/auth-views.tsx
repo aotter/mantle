@@ -371,7 +371,7 @@ function MethodSection({
     case "social":
       return (
         <RedirectSignInSection
-          endpoint=`${AUTH_BASE}/sign-in/social`
+          endpoint={`${AUTH_BASE}/sign-in/social`}
           body={{
             provider: method.provider,
             callbackURL: returnTo,
@@ -384,7 +384,7 @@ function MethodSection({
     case "oauth":
       return (
         <RedirectSignInSection
-          endpoint=`${AUTH_BASE}/sign-in/social`
+          endpoint={`${AUTH_BASE}/sign-in/social`}
           body={{
             provider: method.providerId,
             callbackURL: returnTo,
