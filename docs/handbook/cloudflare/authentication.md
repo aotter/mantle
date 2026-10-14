@@ -165,9 +165,12 @@ staff and customers) can run one Better Auth instance per population in the same
 takes the instance it works on:
 
 - Give each instance its own `basePath`, `advanced.cookiePrefix`, `secret` and table names (`user.modelName`,
-  `session.modelName`, ... and plugin `schema` options). Generation and the native adapter follow each instance's
-  mapping.
+  `session.modelName`, ... and plugin `schema` options). Keep each instance's options in its own module and pass
+  one `--auth` per module to `mantle generate`; the tables are merged into one migration, and two instances that
+  define the same table differently are refused. The native adapter follows each instance's mapping.
 - One `authLoader(load, cookiePrefix)` per instance; call `resolveCaller(request, loader)` with the instance the
-  route belongs to, and mount `authRoutes(loader, ...)` per instance (it guards that instance's `/admin/*`).
+  route belongs to, and mount `authRoutes(loader, ...)` per instance (it guards that instance's `/admin/*`). The
+  loader takes `cookiePrefix` separately on purpose: it checks the cookie before loading Better Auth, so anonymous
+  requests never pay for it. Read both from one constant.
 - Admin signs in with the instance passed to `adminShell(request, assets, { authBasePath })`; its identity
   directory is the instance you pass to `d1Identity` / `postgresIdentity`.

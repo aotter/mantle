@@ -10,10 +10,10 @@ import { INPUTS_FILE, inputsFingerprint } from "./inputs.js";
 import type { Target } from "../domain/model.js";
 
 const targets: readonly Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
-const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>] [--admin-extensions <module>] [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>]\n       mantle bundle <entry> <outdir>\n       mantle describe <target> <manifest>... [--diff <old.json>]";
+const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>]... (one per Better Auth instance) [--admin-extensions <module>] [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>]\n       mantle bundle <entry> <outdir>\n       mantle describe <target> <manifest>... [--diff <old.json>]";
 try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-    diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, "admin-extensions": { type: "string" }, auth: { type: "string" }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" },
+    diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, "admin-extensions": { type: "string" }, auth: { type: "string", multiple: true }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" },
   } });
   const command = positionals[0] === "bundle" || positionals[0] === "generate" || positionals[0] === "describe" ? positionals.shift()! : "generate";
   if (command === "describe") {
@@ -38,19 +38,23 @@ try {
     if (!target || !targets.includes(target as Target) || !destination || !paths.length) throw new Error(usage);
     const sources = await Promise.all(paths.map(async path => ({ sourceId: path, text: await readFile(path, "utf8") })));
     // Read plain options without constructing Better Auth, which can touch the database.
-    const loaded = values.auth ? await import(pathToFileURL(resolve(values.auth)).href) : undefined;
-    const auth = loaded && (loaded.authOptions?.(new Proxy({}, { get: () => undefined })) ?? loaded.auth?.options);
-    if (values.auth && !auth) throw new Error(`${values.auth} must export \`authOptions(env)\` (or \`auth\`, a betterAuth() instance).`);
+    // One --auth per Better Auth instance; their tables are merged into one migration.
+    const auth = await Promise.all((values.auth ?? []).map(async path => {
+      const loaded = await import(pathToFileURL(resolve(path)).href);
+      const options = loaded.authOptions?.(new Proxy({}, { get: () => undefined })) ?? loaded.auth?.options;
+      if (!options) throw new Error(`${path} must export \`authOptions(env)\` (or \`auth\`, a betterAuth() instance).`);
+      return options;
+    }));
     const site = values.site ? (await import(pathToFileURL(resolve(values.site)).href)).siteDefaults : undefined;
     if (values.site && !site) throw new Error(`${values.site} must export siteDefaults.`);
     const extensionModule = values["admin-extensions"] ? await import(pathToFileURL(resolve(values["admin-extensions"])).href) : undefined;
     const adminExtensions = extensionModule?.adminExtensions ?? extensionModule?.default;
     if (values["admin-extensions"] && !Array.isArray(adminExtensions)) throw new Error(`${values["admin-extensions"]} must export an adminExtensions array (named or default).`);
-    const { generateFromSources } = await (values.auth ? import("./generateAuth.js") : import("./generate.js"));
+    const { generateFromSources } = await (auth.length ? import("./generateAuth.js") : import("./generate.js"));
     const result = await generateFromSources({ target: target as Target, sources: { sources }, admin:values.admin, auth, site, adminExtensions });
     if (!result.ok) throw new Error(JSON.stringify(result.diagnostics, null, 2));
     for (const warning of result.warnings ?? []) console.warn(`warning: ${warning}`);
-    const read = [...paths, ...[values.auth, values.site, values["admin-extensions"]].filter((path): path is string => !!path)];
+    const read = [...paths, ...(values.auth ?? []), ...[values.site, values["admin-extensions"]].filter((path): path is string => !!path)];
     const changed = await writeArtifacts(destination, { ...result.files, [INPUTS_FILE]: inputsFingerprint(destination, read) }, values.check);
     if (target.startsWith("cloudflare-")) {
       const wrangler = values.wrangler ?? ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].find(existsSync) ?? "wrangler.jsonc";

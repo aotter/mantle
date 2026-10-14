@@ -475,3 +475,4 @@ test('Store, Admin native and prepare refuse the same forbidden writes before SQ
   }finally{await rm(dir,{recursive:true,force:true});}
  }
 },30000);
+test("PostgreSQL Admin entries without date fields skip the year guard (an empty tuple has no strict includes)",async()=>{const result=await generateFromSources({target:"bun-postgres",sources:{sources:[{sourceId:"plain.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"plains"},spec:{title:"Plains",lifecycle:"operational",schema:{type:"object",required:["label"],properties:{label:{type:"string"}}}}})}]},admin:true});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));const entries=result.files["admin/entries-plains.ts"]!;expect(entries).not.toContain("[].includes");expect(entries).toContain("nativeText(raw);");});
