@@ -6,7 +6,7 @@ import type { SqlSchemaDef } from "../model/SqlIr.js";
 import type { UserScope } from "../model/UserFields.js";
 import type { PlanRestrict } from "../model/RuntimePlan.js";
 
-/** `caller` preserves Core visibility; `admin` additionally hides publishing drafts from non-admin callers. */
+/** `caller` and `admin` hide publishing drafts from non-admin callers. */
 export type RowMode = "caller" | "public" | "trusted" | "admin";
 /** A value an engine binds. Inside a term a `const` is part of the rule (printed inline); in a write it is an input. */
 export type RowValue = { readonly k: "uid" | "admin" | "now" | "version" } | { readonly k: "cutoff"; readonly seconds: number } | { readonly k: "const"; readonly value: string } | { readonly k: "user"; readonly field: string; readonly multiple: boolean; readonly type: "string" | "number"; readonly scope?: true };
@@ -36,6 +36,8 @@ const PUBLISHED = "published";
 const NOW: RowValue = { k: "now" };
 /** The rows a caller can see: its own (unless trusted), live (TTL) and, for a public caller of a publishing Schema, published. */
 export function rowPolicy(s: RowSchema, mode: RowMode, schemas?: Readonly<Record<string, RowSchema>>): RowTerm[] {
+  if (!["caller", "admin", "public", "trusted"].includes(mode)) throw new Error("An explicit row mode is required.");
+  if (mode === "caller") mode = "admin";
   let parent: RowTerm[] = [];
   if (s.translates && (mode === "public" || mode === "admin")) {
     const table = s.translates.parent.toLowerCase(), schema = schemas?.[table];

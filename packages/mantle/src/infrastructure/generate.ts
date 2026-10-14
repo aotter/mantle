@@ -4,7 +4,6 @@ import { compilePlan, viewOutputs, sqliteCompiler, postgresCompiler, d1Dialect, 
 import { wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { boundaryType, outputType } from "../domain/columns.js";
 import { castCursor, provePaging, type PagingProof } from "../domain/paging.js";
-import { nextMode } from "../domain/visibility.js";
 import { dialect as sqliteDialect } from "../kernel/dialect/sqlite.js";
 import { cast, dialect as postgresDialect_ } from "../kernel/dialect/postgres.js";
 import { adminBindingsOf } from "./adminPaging.js";
@@ -85,7 +84,6 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
   }));
   const refusals: GenerateDiagnostic[] = [], paging: Record<string, PagingProof | undefined> = {};
   const lower = (boundary: boolean) => lowerPlan(compiled.plan, dialect, {
-    mode: nextMode,
     pageQuery(ast, name) {
       // Core visits public/caller before trusted. Prove the real caller equality prefixes;
       // a trusted all-scope read does not acquire a fictional scope predicate.

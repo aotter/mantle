@@ -14,7 +14,6 @@ type Env = { readonly dialect: MantleDialect; readonly schemas: Readonly<Record<
 type Warn = (message: string) => void;
 type Project = (ast: N, page?: Paged) => N;
 export interface LoweringOptions {
-  readonly mode?: (mode: Mode) => Mode;
   readonly pageQuery?: (ast: N, name: string) => N;
   readonly project?: (ast: N, kind: "view" | "procedure", name: string, page?: Paged) => N;
 }
@@ -84,13 +83,13 @@ export function lowerPlan(plan: Body, dialect: MantleDialect, options: LoweringO
 
   const views = Object.entries(plan.views).flatMap(([name, v]) => {
     const modes = v.surface === "public" ? (["public"] as const) : (["caller", "trusted"] as const);
-    const lowered = Object.fromEntries(modes.flatMap((mode) => { const x = lowerView(env, { inputs: v.inputs, ir: v.stmts, restrict: v.restrict }, options.mode?.(mode) ?? mode, columns, warn, `plan#/views/${name}`, options.project && ((ast, page) => options.project!(ast, "view", name, page)), options.pageQuery && (ast => options.pageQuery!(ast, name))); return x ? [[mode, x]] : []; }));
+    const lowered = Object.fromEntries(modes.flatMap((mode) => { const x = lowerView(env, { inputs: v.inputs, ir: v.stmts, restrict: v.restrict }, mode, columns, warn, `plan#/views/${name}`, options.project && ((ast, page) => options.project!(ast, "view", name, page)), options.pageQuery && (ast => options.pageQuery!(ast, name))); return x ? [[mode, x]] : []; }));
     return Object.keys(lowered).length ? [[name, lowered]] : [];
   });
   const procedures = Object.entries(plan.procedures).flatMap(([name, proc]) => {
     if (!("sql" in proc.handler)) return [];
     const { inputs } = proc, ir = proc.handler.sql.stmts;
-    const lowered = Object.fromEntries(PROCEDURE_MODES.flatMap((mode) => { const x = lowerProcedure(env, { inputs, ir, restrict: proc.restrict }, proc.trustedOnly ? "trusted" : options.mode?.(mode) ?? mode, returning, columns, warn, `plan#/procedures/${name}`, options.project && (ast => options.project!(ast, "procedure", name))); return x ? [[mode, x]] : []; }));
+    const lowered = Object.fromEntries(PROCEDURE_MODES.flatMap((mode) => { const x = lowerProcedure(env, { inputs, ir, restrict: proc.restrict }, proc.trustedOnly ? "trusted" : mode, returning, columns, warn, `plan#/procedures/${name}`, options.project && (ast => options.project!(ast, "procedure", name))); return x ? [[mode, x]] : []; }));
     return Object.keys(lowered).length ? [[name, lowered]] : [];
   });
   return { lowered: { mantle: MANTLE_VERSION, dialect: { name: dialect.name, version: dialect.version, key: dialect.lowerKey ?? "" }, views: Object.fromEntries(views), procedures: Object.fromEntries(procedures) }, warnings };

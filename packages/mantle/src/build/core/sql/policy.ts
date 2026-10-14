@@ -28,7 +28,7 @@ export type PolicyOpts = {
   nativeOrder?: boolean;
   schemas: Schemas;
   inputs: Record<string, string>;
-  mode?: Mode;
+  mode: Mode;
   /** The target's `restrict` terms per Schema (lower-case name): AND-ed onto its row policy for non-trusted callers. */
   restrict?: PlanRestrict;
   /** add `AND version = ?` (the version checked by the publishing lifecycle) to a row op's WHERE */
@@ -158,7 +158,7 @@ function visible(s: SchemaDef, a: string, c: C, table?: string): N | undefined {
   if (c.unsafeNoVisibility) return undefined;
   const r = table !== undefined && c.mode !== 'trusted' ? c.restrict?.[table.toLowerCase()] : undefined;
   const extra: RowTerm[] = r ? [...(r.owner ? [[r.owner, 'eq', { k: 'uid' }] as const] : []), ...r.terms.map(u => userScopeTerm(u))] : [];
-  return and(...[...rowPolicy(s, c.mode ?? 'caller', c.schemas), ...extra].map((t) => term(c, a, t)));
+  return and(...[...rowPolicy(s, c.mode, c.schemas), ...extra].map((t) => term(c, a, t)));
 
 }
 /** A write's `SET` items beyond the author's own. */

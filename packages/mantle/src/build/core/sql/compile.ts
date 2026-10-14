@@ -19,7 +19,7 @@ export interface CompileContext {
   /** Declared input properties and their Mantle types. */
   readonly inputs: Readonly<Record<string, string>>;
   readonly kind: "view" | "procedure";
-  readonly mode?: Mode;
+  readonly mode: Mode;
   /** Schema + semantic verb keys whose after hooks need whole rows in hidden columns. */
   readonly returning?: ReadonlySet<string>;
   /** Add `AND version = ?` (the version checked by the publishing lifecycle) to a row op. */

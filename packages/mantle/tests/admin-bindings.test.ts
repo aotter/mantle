@@ -450,3 +450,28 @@ test('native Admin enforces field scope and { all: true } variants for entries, 
   expect(result.files['admin-bindings.ts']).not.toContain('"adminRole"');
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
 });
+
+test('Store, Admin native and prepare refuse the same forbidden writes before SQL on every target',async()=>{
+ const {authenticatedAs}=await import('@aotter/mantle/testing'),{entries}=await import('../../mantle-admin/src/server/entries.js');
+ const m=JSON.parse(source.text);m.spec.lifecycle='operational';m.spec.scope="ownerId IN auth.user('region')";
+ const upsert={apiVersion:'cms.mantle.aotter.net/v2',kind:'Procedure',metadata:{name:'move'},spec:{title:'Move',input:{type:'object',additionalProperties:false},output:{type:'object'},restrict:{records:"kind IN auth.user('tier')"},handler:{sql:"INSERT INTO records(ownerid,label,kind) VALUES ('TW','upsert','a') ON CONFLICT(id) DO UPDATE SET kind=excluded.kind RETURNING id"}}};
+ const fields={region:{type:'string' as const,multiple:true},tier:{type:'string' as const,multiple:false}},member=authenticatedAs({id:'member',role:'admin',region:'TW',tier:'a'},{fields}),absent=authenticatedAs({id:'absent',role:'admin',tier:'a'},{fields});
+ const code=async(run:()=>unknown)=>{try{await run();return 'ok';}catch(e){return (e as {code:string}).code;}};
+ for(const target of ['bun-sqlite','cloudflare-d1','bun-postgres','cloudflare-postgres'] as const){
+  const result=await generateFromSources({target,admin:true,sources:{sources:[{sourceId:'write-policy.json',text:[m,upsert,{apiVersion:'cms.mantle.aotter.net/v2',kind:'Trigger',metadata:{name:'move-admin'},spec:{source:{kind:'mcp',surface:'admin'},target:{procedure:'move'}}}].map(x=>JSON.stringify(x)).join('\n---\n')}]}});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));
+  const dir=await mkdtemp(join(import.meta.dir,'apps/.admin-write-policy-'));
+  try{await writeBindings(dir,result.files);const {adminBindings}=await import(join(dir,'admin-bindings.ts')),{store}=await import(join(dir,'generated.ts')),native=await import(join(dir,'native-admin.ts')),bindings=adminBindings(),s=bindings.schemas[0],adapter=bindings.adapter;
+   let sql=0;const db=new Proxy({}, {get(){sql++;throw Error('SQL before admission');}}),routes=entries(bindings.schemas,adapter),create=routes.find(r=>r.method==='POST'&&r.path==='/entries')!;
+   const prepare=(caller:any,data:object)=>create.prepare!({caller,params:{},url:new URL('https://app.test/admin/api/entries'),request:new Request('https://app.test/admin/api/entries',{method:'POST',body:JSON.stringify({collection:'records',data})})} as any);
+   expect(s.binding.userScopes).toEqual([{column:'ownerid',field:'region',type:'string'}]);
+   expect(s.binding.caller.fields.ownerid.update).toBeUndefined();
+   for(const [caller,data]of [[member,{ownerId:'JP',label:'foreign',kind:'a'}],[absent,{ownerId:'TW',label:'missing',kind:'a'}]] as const){
+    const values=s.values(data),codes=await Promise.all([code(()=>store(db,caller).collection('records').insert(values)),code(()=>native.nativeEntryProcedure(s.binding,adapter,db,caller,'create',values)),code(()=>prepare(caller,data))]);
+    expect(codes).toEqual(['AUTH_DENIED','AUTH_DENIED','AUTH_DENIED']);
+   }
+   const operation=bindings.operations.find((p:any)=>p.name==='move');
+   expect([await code(()=>store(db,member).procedures.move({})),await code(()=>operation.run(db,member,{})),await code(()=>operation.check(member))]).toEqual(['AUTH_DENIED','AUTH_DENIED','AUTH_DENIED']);
+   expect(sql).toBe(0);
+  }finally{await rm(dir,{recursive:true,force:true});}
+ }
+},30000);

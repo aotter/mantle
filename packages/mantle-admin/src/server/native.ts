@@ -166,22 +166,30 @@ export async function nativeEntryGet<Database>(spec: NativeCollection, adapter: 
     const where = [m.policy, `${spec.id} = ${adapter.param(values.length)}`].filter(Boolean).map(term => "(" + term + ")").join(" AND ");
     return (await adapter.read(db, `SELECT ${m.projection} ${m.from} WHERE ${where} LIMIT 1`, values))[0] ?? null;
 }
+/** Prepare and execution admit only writable fields; inserts fill the caller's scope values. */
+export function nativeEntryData(spec: NativeEntryProcedures, values: Values, caller: Caller, verb: "create" | "patch", data: Row): Row {
+    const m = modeOf(caller) === 'trusted' ? spec.trusted : spec.caller;
+    if (verb === "create" && spec.scoped && caller.kind === "anonymous") throw new ContractError("UNAUTHENTICATED", "A scoped insert requires an authenticated caller.", spec.path);
+    if (verb === "create" && spec.userScopes?.length) data = values.scopeInsert!(spec.userScopes, caller, data) as Row;
+    for (const [field, value] of Object.entries(data)) {
+        if (!Object.hasOwn(m.fields, field) || value === undefined) invalid("Unknown writable field or missing value.", spec.path);
+        if (verb === "patch" && !m.fields[field]!.update) throw new ContractError("AUTH_DENIED", "The scoped column is never writable through SET.", spec.path);
+    }
+    return data;
+}
 export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures, adapter: NativeProcedureAdapter<Database>, db: Database, caller: Caller, verb: "create", data: Row, id?: string, version?: number | string): Promise<Row>;
 export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures, adapter: NativeProcedureAdapter<Database>, db: Database, caller: Caller, verb: "patch", data: Row, id: string, version: number | string): Promise<Row>;
 export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures, adapter: NativeProcedureAdapter<Database>, db: Database, caller: Caller, verb: "remove", data: Row, id: string, version: number | string): Promise<void>;
 export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures, adapter: NativeProcedureAdapter<Database>, db: Database, caller: Caller, verb: "create" | "patch" | "remove", data: Row, id?: string, version?: number | string): Promise<Row | void> {
     const m = selectMode(spec, caller, adapter.values), context = {id, version};
-    if (verb === "create" && spec.scoped && caller.kind === "anonymous") throw new ContractError("UNAUTHENTICATED", "A scoped insert requires an authenticated caller.", spec.path);
     if (verb !== "create" && (typeof id !== "string" || !id || !exactVersion(version))) invalid("An id and exact version are required.", spec.path);
-    if (spec.userScopes?.length && verb === "create") data = adapter.values.scopeInsert!(spec.userScopes, caller, data) as Row;
-    if (spec.userScopes?.length && verb === "patch" && Object.keys(data).some(key => spec.userScopes!.some(u => u.column === key.toLowerCase()))) throw new ContractError("AUTH_DENIED", "The scoped column is never writable through SET.", spec.path);
+    if (verb !== "remove") data = nativeEntryData(spec, adapter.values, caller, verb, data);
     if (!adapter.sqlite) {nativeText(context); nativeText(data);}
     if (verb === "remove") {
         await adapter.procedure(db, bound(adapter.values, [m.remove], caller, context), spec.path);
         return;
     }
     const present = Object.entries(data).map(([field, value]) => {
-        if (!Object.hasOwn(m.fields, field) || value === undefined) invalid("Unknown writable field or missing value.", spec.path);
         return {fragment: m.fields[field]!, value};
     });
     const c = verb === "create" ? m.create : m.patch;

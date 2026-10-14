@@ -16,7 +16,7 @@ it("the D1 compiler accepts every authored printer corpus item",async()=>{
 it("the policy wrapper prints scope and TTL once and native SQLite uses the declared indexes",async()=>{
  const sql="SELECT i.name,count(o.id) AS n,coalesce(sum(o.qty),0) AS total FROM items i LEFT JOIN orders o ON o.item_id=i.id GROUP BY i.name HAVING count(o.id)>=input.min ORDER BY total DESC,i.name LIMIT 10";
  const r=await compileSql(sql,{schemas,kind:"view",inputs:{min:"int8"}});if(!r.ok)throw Error(r.diagnostic.message);
- const native=print(compileProgram(r.plan.stmts,{schemas,dialect:d1Dialect,kind:"view",inputs:{min:"int8"}})[0]!.ast);
+ const native=print(compileProgram(r.plan.stmts,{schemas,dialect:d1Dialect,kind:"view",mode:"caller",inputs:{min:"int8"}})[0]!.ast);
  expect(native).toMatch(/FROM items WHERE items\.owner = \?1 AND \(items\.expires_at IS NULL OR items\.expires_at > \?2\)/);
  expect(native).toMatch(/FROM orders WHERE orders\.owner = \?1/);expect(native).not.toMatch(/\?4/);
  const sqlite=new DatabaseSync(":memory:");try{
