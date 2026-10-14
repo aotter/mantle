@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { configureWrangler } from "./wrangler.js";
 import { writeArtifacts } from "./artifacts.js";
+import { INPUTS_FILE, inputsFingerprint } from "./inputs.js";
 import type { Target } from "../domain/model.js";
 
 const targets: readonly Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
@@ -49,7 +50,8 @@ try {
     const result = await generateFromSources({ target: target as Target, sources: { sources }, admin:values.admin, auth, site, adminExtensions });
     if (!result.ok) throw new Error(JSON.stringify(result.diagnostics, null, 2));
     for (const warning of result.warnings ?? []) console.warn(`warning: ${warning}`);
-    const changed = await writeArtifacts(destination, result.files, values.check);
+    const read = [...paths, ...[values.auth, values.site, values["admin-extensions"]].filter((path): path is string => !!path)];
+    const changed = await writeArtifacts(destination, { ...result.files, [INPUTS_FILE]: inputsFingerprint(destination, read) }, values.check);
     if (target.startsWith("cloudflare-")) {
       const wrangler = values.wrangler ?? ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].find(existsSync) ?? "wrangler.jsonc";
       if (configureWrangler(wrangler, values.entry!, values.outdir!, destination, values.check)) changed.push(wrangler);

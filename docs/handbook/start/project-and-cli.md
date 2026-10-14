@@ -41,6 +41,11 @@ Other handles may adapt to the same [structural driver contracts](../guides/adap
 
 ## Outputs
 
+`generated/.mantle-inputs.json` records the Mantle version and a hash of every input the run read (manifests and the
+`--auth`, `--site`, `--admin-extensions` modules). `mantle bundle`, which Wrangler runs for `wrangler dev` and every
+deploy, refuses to build when an input changed since, so stale generated code cannot run; regenerate and rebuild.
+Commit it with the other generated files.
+
 `generated.ts` exports typed queries and Store. Direct `views/<encoded-name>.ts` and `procedures/<encoded-name>.ts` entries export an operation and its types. Proved pageable Views also have `paged/views/*`; boundary checks live in `validation/*`. `admin-descriptors.ts`, `rest.ts` and `web.ts` are always emitted. Manifest exposure selects `mcp.ts`; `admin-bindings.ts` and `admin/*` require `--admin`. Auth and site are explicit options.
 
 Apply `schema.sql` only to an empty database. Later changes require [explicit migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations); generation and runtime do not inspect the database. Ref declarations print the `Handlers` keys to implement.
