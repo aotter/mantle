@@ -142,7 +142,7 @@ Sign-out clears the session-token and cache cookies; pass SDK Set-Cookie headers
 through to the browser. A copied pre-sign-out cookie can remain usable for
 read-only snapshots until TTL, while fresh authority rejects revoked sessions.
 
-With secondaryStorage, disableCookieCache does not bypass KV. Caller keeps a primary authority check before any second SDK call refreshes/forwards cookies. Stale snapshots cannot revive deleted/expired primary sessions or retain obsolete role/ban state. 
+With secondaryStorage, disableCookieCache does not bypass KV. Caller keeps a primary authority check before any second SDK call refreshes/forwards cookies. Stale snapshots cannot revive deleted/expired primary sessions or retain obsolete role/ban state.
 
 `authRoutes` may be imported statically: its consent/provider integration loads
 only for a matching consent request, after Caller/origin/body guards. Optional
