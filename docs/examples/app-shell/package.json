@@ -28,5 +28,8 @@
     "typescript": "^6.0.3",
     "wrangler": "4.129.0"
   },
-  "packageManager": "pnpm@9.15.0"
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22.22"
+  }
 }

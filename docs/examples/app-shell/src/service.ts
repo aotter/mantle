@@ -33,8 +33,11 @@ export async function fetchService(request: Request, env: Env, context: Executio
   const caller = () => authority ??= resolveCaller(request, auth!, { audience: `${env.PUBLIC_ORIGIN}/mcp`, responseHeaders: headers }).then(value => { checkOrigin(request, value); return value; });
   authorities.set(request, caller);
   const respond = (response: Response) => {
-    for (const cookie of headers.getSetCookie()) response.headers.append("set-cookie", cookie);
-    return response;
+    if (!headers.has("set-cookie")) return response;
+    // Copy first: some responses (Response.redirect, fetched ones) have immutable headers.
+    const copy = new Response(response.body, response);
+    for (const cookie of headers.getSetCookie()) copy.headers.append("set-cookie", cookie);
+    return copy;
   };
   try {
     const ownAuth = await withAuthTasks(context.waitUntil.bind(context), () => authRoutes(auth!, { methods: [{ kind: "email-otp" }], resolver: caller })(request));

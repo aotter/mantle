@@ -272,7 +272,8 @@ read-only/destructive/open-world hints. Image bytes are PUT directly to the
 returned short-lived URLs with their required headers, then committed; bytes
 never enter MCP. Store permanent asset ids, never upload URLs.
 
-Handler-less applications call `adminBindings()`, generated `rest(options)` and
-`mcp(options)`, and `webmcpRoutes(catalogue, tools)` without casts. WebMCP also
-accepts explicit `undefined` for a handler-less tool table. Applications with ref
-Procedures must supply their generated `Handlers` at these wiring points.
+Generation always emits a `Handlers` type (empty when no Procedure uses `handler: { ref }`), so every app wires the
+same way: `const handlers: Handlers = {...}`, then `store(db, caller, { handlers })`, `adminBindings({ handlers })`,
+`rest({ ...options, handlers })`, `mcp({ ...options, handlers })` and `webmcpRoutes(catalogue, tools, handlers)`.
+Type extra hand-written tools as `Tool<Handle, Handlers>` with the generated `Handlers` before combining them with
+the generated `tools`. Handler-less apps may still omit `{ handlers }` at `store()` and `adminBindings()`.

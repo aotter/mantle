@@ -49,6 +49,6 @@ keep their authored field names; explicit aliases keep SQL casing rules. Store
 rows and nested SQL relations use storage names. Boundary validators support a
 permissive `format: email` check (one `@`, non-empty parts, no whitespace). For
 LEFT JOIN paging, join on the joined Schema's id or single-field unique key and
-keep the base indexed, non-null order/id tuple. Handler-less apps omit handlers
-at `adminBindings()`, generated REST/MCP options and `webmcpRoutes(catalogue, tools)`;
-ref-handler apps must supply the generated implementations.
+keep the base indexed, non-null order/id tuple. Generation always emits `Handlers`
+(empty without ref Procedures); pass `handlers` at `adminBindings()`, generated REST/MCP options and
+`webmcpRoutes(catalogue, tools, handlers)`, as the app shell does.

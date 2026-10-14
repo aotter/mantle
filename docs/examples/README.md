@@ -16,14 +16,13 @@ capabilities the others do not; combine them for anything else.
 | You need | Take |
 |---|---|
 | Stock that never oversells (orders, tickets, bookings) | club-events' capacity: a Schema `checks` constraint plus the decrement in the same program |
-| Employees or customers who see only their own records | club-events' `restrict: "author_id = auth.uid()"` |
-| An approval step, or any state machine | purchasing's guarded `UPDATE ... WHERE status = ...` Procedures |
+| Employees or customers who see only their own records | club-events' `restrict: { <schema>: "author_id = auth.uid()" }` |
+| An approval step, or any state machine | purchasing's guarded `UPDATE ... WHERE requestStatus = ...` Procedures |
 | A third-party API that answers later (webhooks, callbacks) | purchasing's `src/routes.ts`: verify the raw request, then call a Procedure |
 | Public, multilingual, search- and AI-friendly pages | recipes' `src/routes.ts` |
 | Notifications and reminders | purchasing's `EmailSender` call and `src/schedule.ts` |
 
-Roles stay `admin` and `user`. For finer permissions, see Better Auth access control and
-[authorization](../handbook/reference/authorization.md).
+Every example uses two roles: `admin` (the admin layer) and `user`.
 
 [Reference service](./reference-service/README.md) is the release smoke test for packed packages, not a starting point.
 Projects on 0.1.x move with [the upgrade guide](../upgrade-0.1-to-0.2.md).
