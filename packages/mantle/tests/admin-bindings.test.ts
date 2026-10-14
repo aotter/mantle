@@ -476,3 +476,26 @@ test('Store, Admin native and prepare refuse the same forbidden writes before SQ
  }
 },30000);
 test("PostgreSQL Admin entries without date fields skip the year guard (an empty tuple has no strict includes)",async()=>{const result=await generateFromSources({target:"bun-postgres",sources:{sources:[{sourceId:"plain.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"plains"},spec:{title:"Plains",lifecycle:"operational",schema:{type:"object",required:["label"],properties:{label:{type:"string"}}}}})}]},admin:true});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));const entries=result.files["admin/entries-plains.ts"]!;expect(entries).not.toContain("[].includes");expect(entries).toContain("nativeText(raw);");});
+test("ref operations run with the handlers given to adminBindings; admin() needs no second copy",async()=>{
+ const ref={sourceId:"ref.yaml",text:`apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: app-test}
+spec:
+  requires: {auth: {all: [ctx.admin]}}
+  input: {type: object, properties: {label: {type: string}}, required: [label], additionalProperties: false}
+  output: {type: object, properties: {label: {type: string}}, required: [label]}
+  handler: {ref: app.test}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: app-test-mcp}
+spec: {source: {kind: mcp, surface: admin}, target: {procedure: app-test}}
+`};
+ const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-ref-"));try{
+  const result=await generateFromSources({target:"bun-sqlite",admin:true,sources:{sources:[source,ref]}});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));
+  await writeBindings(dir,result.files);
+  const {adminBindings}=await import(join(dir,"admin-bindings.ts"));
+  const operation=adminBindings({handlers:{"app-test":async(_ctx:unknown,input:{label:string})=>({label:input.label+"!"})}}).operations.find((o:{name:string})=>o.name==="app-test");
+  expect(await operation.run(new Database(":memory:"),caller("A"),{label:"hi"})).toEqual({label:"hi!"});
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
