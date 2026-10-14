@@ -3,8 +3,9 @@ import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { resolve } from "node:path";
 import { rm } from "node:fs/promises";
-import { authLoader, resolveCaller, type AuthInstance } from "../src/auth/caller.js";
+import { authLoader, resolveCaller, adminOptionsOf, type AuthInstance } from "../src/auth/caller.js";
 import { isAdmin, hasAdminRole, type Caller } from "../src/kernel/contracts.js";
+import { userCaller } from "../src/kernel/user-caller.js";
 import { mcp } from "../src/kernel/mcp.js";
 import { generateOrThrow, loadFixtureSources, writeGenerated } from "./apps/link.js";
 
@@ -72,4 +73,15 @@ test("bare admin, Store and publishing use only the admin layer", async () => {
 test("role lists in requires are refused: per-target roles belong to authorize(target, caller)", async () => {
   const text = JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind: "View", metadata: { name: "roles" }, spec: { surface: "admin", requires: { auth: { all: [{ "ctx.admin": ["editor"] }] } }, sql: "SELECT 1 AS value" } });
   await expect(generateOrThrow("bun-sqlite", [{ sourceId: "role.yaml", text }])).rejects.toThrow("withdrawn");
+});
+
+
+test("trimmed adminRoles and adminUserIds classify the same layer in callers and direct identities", async () => {
+  const instance = auth("editor");
+  instance.options.plugins = [{ id: "admin", options: { adminRoles: "admin, org-admin", adminUserIds: ["reader"] } } as never];
+  const caller = await resolveCaller(request(), authLoader(async () => instance));
+  expect(isAdmin(caller)).toBe(true);
+  expect(isAdmin(userCaller({ id: "reader", role: "editor" }, adminOptionsOf(instance)))).toBe(true);
+  expect(isAdmin(userCaller({ id: "another", role: "editor,org-admin" }, adminOptionsOf(instance)))).toBe(true);
+  expect(isAdmin(userCaller({ id: "another", role: "editor" }, adminOptionsOf(instance)))).toBe(false);
 });

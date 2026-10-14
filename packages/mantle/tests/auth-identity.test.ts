@@ -3,6 +3,7 @@ import { guardAuthAdminRequest } from "../src/auth/admin.js";
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SQL } from "bun";
+import type { BetterAuthOptions } from "better-auth/types";
 import { betterAuth } from "better-auth/minimal";
 import { admin as adminFunction, emailOTP } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
@@ -28,15 +29,16 @@ afterAll(() => {
 async function app(pg?: SQL, store?: {
     cache: SessionCache;
     prefix: string;
-}, adminRoles: readonly string[] = ["admin"]) {
-    const sqlite = new Database(":memory:");
-    resources.push(sqlite);
+}, adminRoles: readonly string[] = ["admin"], config: { db?: Database; prefix?: string; defaultRole?: string } = {}) {
+    const sqlite = config.db ?? new Database(":memory:");
+    if (!config.db) resources.push(sqlite);
     sqlite.run("PRAGMA foreign_keys=ON");
     let sent = "";
     const d1 = d1Shim(sqlite), options = { secret, baseURL: "http://localhost/api/auth", session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true }, database: pg ? bunSqlAdapter(pg) : d1Adapter(d1),
         ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], plugins: [{ id: "email-otp" }], baseURL: "http://localhost" }),
-        user: { additionalFields: { githubLogin: { type: "string" as const, required: false } } },
-        plugins: [adminFunction({ adminRoles: [...adminRoles], ac, roles: { ...Object.fromEntries(adminRoles.map(role => [role, ac.newRole(defaultStatements)])), user: ac.newRole({ user: [], session: [] }) } }), emailOTP({ storeOTP: { hash: otp => hashEmailOtp(secret, otp) }, sendVerificationOTP: async ({ otp }) => { sent = otp; } })] };
+        user: { ...(config.prefix ? { modelName: `${config.prefix}_people`, fields: { createdAt: "joined_at", emailVerified: "verified" } } : {}), additionalFields: (config.prefix ? {} : { githubLogin: { type: "string" as const, required: false } }) as NonNullable<BetterAuthOptions["user"]>["additionalFields"] },
+        ...(config.prefix ? { session: { storeSessionInDatabase: true, modelName: `${config.prefix}_sessions` }, account: { modelName: `${config.prefix}_accounts` }, verification: { storeInDatabase: true, modelName: `${config.prefix}_proofs` } } : {}),
+        plugins: [adminFunction({ defaultRole: config.defaultRole, schema: config.prefix ? { user: { fields: { role: "roles" } } } : undefined, adminRoles: [...adminRoles], ac, roles: { admin: ac.newRole({ user: [], session: [] }), editor: ac.newRole({ user: [], session: [] }), ...Object.fromEntries(adminRoles.map(role => [role, ac.newRole(defaultStatements)])), user: ac.newRole({ user: [], session: [] }), guest: ac.newRole({ user: [], session: [] }), vip: ac.newRole({ user: [], session: [] }), approver: ac.newRole({ user: [], session: [] }), operator: ac.newRole(defaultStatements), support: ac.newRole({ user: ["list"], session: [] }), denied: ac.newRole({ user: [], session: [] }) } }), emailOTP({ storeOTP: { hash: otp => hashEmailOtp(secret, otp) }, sendVerificationOTP: async ({ otp }) => { sent = otp; } })] };
     const ddl = authSchemaSql(options, pg ? "postgres" : "sqlite");
     if (pg)
         for (const sql of ddl)
@@ -91,7 +93,7 @@ test("request-scoped waitUntil isolates concurrent sends and session cache exclu
     await expect(cache.increment!("count", 60)).rejects.toThrow("atomic");
     await expect(cache.getAndDelete!("otp")).rejects.toThrow("verification");
 });
-test("native member keysets forward/backward, scoped search, admin exclusion and self/credential guards", async () => {
+test("native member keysets forward/backward, scoped search and Better Auth access control", async () => {
     const a = await app();
     for (let i = 0; i < 5; i++)
         await a.ctx.internalAdapter.createUser({ id: `m${i}`, email: `m${i}@example.test`, name: i === 4 ? "100%" : "Member", emailVerified: false, role: "user", githubLogin: null, createdAt: new Date("2026-01-01T00:00:00Z") }, { method: "admin" });
@@ -103,7 +105,7 @@ test("native member keysets forward/backward, scoped search, admin exclusion and
     expect(prev.items.map(x => x.id)).toEqual(["m0", "m1"]);
     await expect(a.directory.listMembers({ search: "x", cursor: p.nextCursor! })).rejects.toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
     expect((await a.directory.listMembers({ search: "%" })).items.map(x => x.id)).toEqual(["m4"]);
-    await expect(a.directory.setUserRole("s", null)).rejects.toMatchObject({ code: "AUTH_DENIED" });
+    await expect(a.directory.setUserRole("s", null)).rejects.toMatchObject({ code: "CONFLICT" });
     await expect(d1Identity(a.d1, a.auth, fixtureCaller({ ...admin, role: "owner", admin: false }), new Headers()).listMembers()).rejects.toMatchObject({ code: "AUTH_DENIED" });
     await expect(d1Identity(a.d1, a.auth, fixtureCaller({ ...admin, credential: "oauth" }), new Headers()).listMembers()).rejects.toMatchObject({ code: "AUTH_DENIED" });
 });
@@ -114,7 +116,7 @@ test("D1 bootstrap promotes one contender atomically; invitation revocation guar
         await a.ctx.internalAdapter.createUser({ id, email: `${id}@example.test`, name: id, emailVerified: false, role: "user", githubLogin: "match" }, { method: "admin" });
     const bootstrap = d1BootstrapAdmin(a.d1, { match: "github-login", value: "MATCH" }, a.auth);
     await Promise.all([bootstrap({ id: "a", githubLogin: "match" }), bootstrap({ id: "b", githubLogin: "match" })]);
-    expect(a.sqlite.query("SELECT id FROM user WHERE role='admin'").all()).toHaveLength(1);
+    expect(a.sqlite.query("SELECT id FROM user WHERE role LIKE '%admin%'").all()).toHaveLength(1);
     a.sqlite.run("UPDATE user SET role='admin' WHERE id='s'");
     a.sqlite.run("UPDATE user SET role='admin' WHERE id IN ('a','b')");
     expect(await a.directory.revokeInvite("a")).toBe(true);
@@ -131,7 +133,7 @@ test.skipIf(!pgUrl)("PostgreSQL UUID member search casts only the search express
         const ids = ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"];
         for (const id of ids) await db.unsafe(`INSERT INTO "user" VALUES ($1,$2,'Member',NULL,NULL,true,'2026-02-01T00:00:00.000001Z')`, [id, `${id}@example.test`]);
         const handle = { unsafe: (text: string, values: unknown[]) => { statements.push(text); return db.unsafe(text, values); } };
-        const directory = postgresIdentity(handle as unknown as Postgres, {options: {plugins: [adminFunction()]}} as never, admin, new Headers());
+        const directory = postgresIdentity(handle as unknown as Postgres, { options: { database: bunSqlAdapter(db), plugins: [adminFunction()], user: { additionalFields: { githubLogin: { type: "string", required: false } } } }, api: { listUsers: async () => ({ users: [], total: 0 }) } } as never, admin, new Headers());
         expect((await directory.listMembers({ search: "000001" })).items.map(row => row.id)).toEqual([ids[0]!]);
         expect((await directory.listMembers({ search: "MEMBER" })).items.map(row => row.id)).toEqual(ids);
         statements.length = 0;
@@ -140,7 +142,7 @@ test.skipIf(!pgUrl)("PostgreSQL UUID member search casts only the search express
         expect([...first.items, ...second.items].map(row => row.id)).toEqual(ids);
         expect(statements).toHaveLength(2);
         expect(statements.every(text => !text.includes("CAST(id AS text)"))).toBe(true);
-        expect(statements[1]).toContain("AND id >");
+        expect(statements[1]).toContain('AND "id" >');
     } finally { await db.close(); await adminDb.unsafe(`DROP SCHEMA ${schema} CASCADE`); await adminDb.close(); }
 });
 test.skipIf(!pgUrl)("PostgreSQL competing bootstrap transactions serialize and native member paging works", async () => {
@@ -162,7 +164,7 @@ test.skipIf(!pgUrl)("PostgreSQL competing bootstrap transactions serialize and n
                 await a.ctx.internalAdapter.createUser({ id, email: `${id}@example.test`, name: id, emailVerified: false, role: "user", githubLogin: "match" }, { method: "admin" });
             const bootstrap = postgresBootstrapAdmin(scoped as unknown as Postgres, { match: "github-login", value: "match" }, a.auth);
             await Promise.all([bootstrap({ id: "a", githubLogin: "match" }), bootstrap({ id: "b", githubLogin: "match" })]);
-            expect(await scoped.unsafe(`SELECT id FROM "user" WHERE role='admin'`)).toHaveLength(1);
+            expect(await scoped.unsafe(`SELECT id FROM "user" WHERE role LIKE '%admin%'`)).toHaveLength(1);
             expect((await a.directory.listMembers({ limit: 1 })).items).toHaveLength(1);
             for (const [id, clock] of [["z_micro", "2026-02-01T00:00:00.000001Z"], ["a_micro", "2026-02-01T00:00:00.000002Z"], ["m_micro", "2026-02-01T00:00:00.000003Z"]]) {
                 await a.ctx.internalAdapter.createUser({ id, email: `${id}@example.test`, name: "Microseconds", emailVerified: true, role: "user" }, { method: "admin" });
@@ -191,7 +193,7 @@ async function lastAdmin(a: Awaited<ReturnType<typeof app>>) {
     const adminIds = async () => (await a.ctx.adapter.findMany({ model: "user", where: [{ field: "role", value: "admin" }] }) as { id: string }[]).map(u => u.id).sort();
     for (const id of ["a", "b"])
         await a.ctx.internalAdapter.createUser({ id, email: `${id}@example.test`, name: id, emailVerified: true, role: "admin", githubLogin: null }, { method: "admin" });
-    await a.ctx.internalAdapter.updateUser("s", { role: "user" });
+    await a.ctx.internalAdapter.updateUser("s", { role: "operator" });
     const results = await Promise.allSettled([a.directory.setUserRole("a", null), a.directory.setUserRole("b", null)]);
     expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
     expect(results.filter(r => r.status === "rejected").map(r => (r as PromiseRejectedResult).reason)).toMatchObject([{ code: "CONFLICT", message: expect.stringContaining("last admin") }]);
@@ -260,9 +262,9 @@ test("email bootstrap cannot grant admin to an unverified matching address", asy
     a.sqlite.run("UPDATE user SET role='user'");
     const hook = d1BootstrapAdmin(a.d1, { match: "email", value: "s@example.test" }, a.auth);
     await hook({ id: "s", email: "s@example.test", emailVerified: false });
-    expect(a.sqlite.query("SELECT id FROM user WHERE role='admin'").all()).toHaveLength(0);
+    expect(a.sqlite.query("SELECT id FROM user WHERE role LIKE '%admin%'").all()).toHaveLength(0);
     await hook({ id: "s", email: "s@example.test", emailVerified: true });
-    expect(a.sqlite.query("SELECT id FROM user WHERE role='admin'").all()).toHaveLength(1);
+    expect(a.sqlite.query("SELECT id FROM user WHERE role LIKE '%admin%'").all()).toHaveLength(1);
 });
 test("KV failures cannot preserve admin roles, bans or revoked sessions", async () => {
     const values = new Map<string, string>();
@@ -286,7 +288,7 @@ test("KV failures cannot preserve admin roles, bans or revoked sessions", async 
     const raw = new Request("http://localhost/api/auth/admin/list-users", { headers: a.headers });
     expect((await handleAuth(a.auth as never, raw, () => { })).status).toBe(403);
     const encoded = new Request("http://localhost/api/auth/%61dmin/list-users", { headers: a.headers });
-    expect((await handleAuth(a.auth as never, encoded, () => { })).status).toBe(403);
+    expect((await handleAuth(a.auth as never, encoded, () => { })).status).toBe(404);
     a.sqlite.run("UPDATE user SET banned=1 WHERE id='s'");
     expect(await resolveCaller(request, loader)).toEqual({ kind: "anonymous" });
     a.sqlite.run("UPDATE user SET banned=0 WHERE id='s'");
@@ -301,6 +303,9 @@ test("shared admin guard is lazy outside admin and checks mutation origin", asyn
     await expect(guardAuthAdminRequest(new Request("https://x.test/api/auth/admin/set-role", { method: "POST" }), resolve)).rejects.toMatchObject({ code: "AUTH_DENIED", path: "request:origin" });
     await guardAuthAdminRequest(new Request("https://x.test/api/auth/admin/set-role", { method: "POST", headers: { origin: "https://x.test" } }), resolve);
     expect(calls).toBe(2);
+    const member = fixtureCaller({ ...admin, role: "user", admin: false });
+    for (const endpoint of ["has-permission", "stop-impersonating"])
+        await guardAuthAdminRequest(new Request(`https://x.test/api/auth/admin/${endpoint}`, { method: "POST", headers: { origin: "https://x.test" } }), () => member);
 });
 test("authority-bound KV cannot resurrect expired sessions and session listing rebuilds a missing index", async () => {
     const values = new Map<string, string>();
@@ -376,7 +381,7 @@ test("configured comma-separated admins stay out of members and retain the last-
     await expect(other.setUserRole("s", null)).rejects.toMatchObject({ code: "CONFLICT" });
     const bootstrap = d1BootstrapAdmin(a.d1, { match: "email", value: "member@example.test" }, a.auth);
     await bootstrap({ id: "member", email: "member@example.test", emailVerified: true });
-    expect(a.sqlite.query("SELECT role FROM user WHERE id='member'").get()).toEqual({ role: "user" });
+    expect(a.sqlite.query("SELECT role FROM user WHERE id='member'").get()).toEqual({ role: "admin" });
 });
 
 async function nativeLastAdmin(a: Awaited<ReturnType<typeof app>>) {
@@ -404,4 +409,39 @@ test.skipIf(!pgUrl)("native auth writes serialize competing demotions and bans (
     const scoped = new SQL({ url: pgUrl!, max: 4, connection: { search_path: schema } });
     try { await nativeLastAdmin(await app(scoped, undefined, ["editor"])); }
     finally { await scoped.close(); await db.unsafe(`DROP SCHEMA ${schema} CASCADE`); await db.close(); }
+});
+
+
+test("role grants, demotions and bootstrap preserve other roles and use the plugin default", async () => {
+    const a = await app(undefined, undefined, ["admin", "org-admin"], { defaultRole: "guest" });
+    for (const [id, role] of [["mixed", "admin,editor"], ["member", "editor"], ["only", "org-admin"]] as const)
+        await a.ctx.internalAdapter.createUser({ id, email: `${id}@example.test`, name: id, emailVerified: true, role }, { method: "admin" });
+    expect(await a.directory.setUserRole("mixed", null)).toBe(true);
+    expect(await a.ctx.internalAdapter.findUserById("mixed")).toMatchObject({ role: "editor" });
+    expect(await a.directory.setUserRole("member", "org-admin")).toBe(true);
+    expect(await a.ctx.internalAdapter.findUserById("member")).toMatchObject({ role: "editor,org-admin" });
+    expect(await a.directory.setUserRole("only", null)).toBe(true);
+    expect(await a.ctx.internalAdapter.findUserById("only")).toMatchObject({ role: "guest" });
+    await a.directory.setUserRole("mixed", []);
+    expect(await a.ctx.internalAdapter.findUserById("mixed")).toMatchObject({ role: "guest" });
+    // Better Auth permits changing one's own role while another admin remains.
+    expect(await a.directory.setUserRole("s", null)).toBe(true);
+    expect(await a.ctx.internalAdapter.findUserById("s")).toMatchObject({ role: "guest" });
+});
+
+test("two mapped Better Auth instances share a database without crossing identities or requiring githubLogin", async () => {
+    const a = await app(undefined, undefined, ["admin"], { prefix: "first" });
+    const b = await app(undefined, undefined, ["admin"], { prefix: "second", db: a.sqlite });
+    for (const instance of [a, b]) await instance.ctx.internalAdapter.createUser({ id: "member", email: "member@example.test", name: "Member", emailVerified: true, role: "approver" }, { method: "admin" });
+    expect((await a.directory.listMembers()).items).toMatchObject([{ id: "member", role: "approver", githubLogin: null }]);
+    await a.directory.setUserRole("member", "admin");
+    await a.directory.setUserRole("member", null);
+    expect(await a.ctx.internalAdapter.findUserById("member")).toMatchObject({ role: "approver" });
+    expect(await b.ctx.internalAdapter.findUserById("member")).toMatchObject({ role: "approver" });
+    await a.directory.deleteUser("member");
+    expect(await b.ctx.internalAdapter.findUserById("member")).not.toBeNull();
+    a.sqlite.run("UPDATE first_people SET roles='approver'");
+    await d1BootstrapAdmin(a.d1, { match: "email", value: "s@example.test" }, a.auth)({ id: "s", email: "s@example.test", emailVerified: true });
+    expect(await a.ctx.internalAdapter.findUserById("s")).toMatchObject({ role: "admin,approver" });
+    expect((await b.directory.listUsers()).map(user => user.id)).toEqual(["s"]);
 });

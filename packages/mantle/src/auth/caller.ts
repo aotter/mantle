@@ -22,16 +22,12 @@ export interface AuthInstance {
 }
 
 /** Better Auth owns the role model; absence of its admin plugin grants no admin layer. */
-const adminRoles = new WeakMap<object, readonly string[]>();
-export function adminRolesOf(auth: Pick<AuthInstance, "options">): readonly string[] {
-  const cached = adminRoles.get(auth);
-  if (cached) return cached;
-  const plugin = auth.options.plugins?.find(plugin => plugin.id === "admin") as { options?: { adminRoles?: string | readonly string[] } } | undefined;
+export function adminOptionsOf(auth: Pick<AuthInstance, "options">) {
+  const plugin = auth.options.plugins?.find(plugin => plugin.id === "admin") as { options?: { adminRoles?: string | readonly string[]; adminUserIds?: readonly string[]; defaultRole?: string } } | undefined;
   const configured = plugin?.options?.adminRoles ?? ["admin"];
-  const roles = Object.freeze(plugin ? typeof configured === "string" ? configured.split(",") : [...configured] : []);
-  adminRoles.set(auth, roles);
-  return roles;
+  return { adminRoles: plugin ? (typeof configured === "string" ? configured.split(",") : [...configured]).map(role => role.trim()) : [], adminUserIds: plugin?.options?.adminUserIds ?? [], defaultRole: plugin?.options?.defaultRole ?? "user" };
 }
+export const adminRolesOf = (auth: Pick<AuthInstance, "options">): readonly string[] => adminOptionsOf(auth).adminRoles;
 
 export interface AuthLoader<A extends AuthInstance = AuthInstance> {
   /** `advanced.cookiePrefix` of the same options; read before Better Auth loads. */
@@ -90,7 +86,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     const context = options.fields && Object.keys(options.fields).length ? await instance.$context as import("@better-auth/core").AuthContext : undefined;
     const user = context ? await context.internalAdapter.findUserById(supplied.subject) : { id: supplied.subject, role: supplied.role };
     if (!user || isBanned(user)) throw new ContractError("UNAUTHENTICATED", "The service credential's user is not active.");
-    return userCaller({ ...user, id: user.id }, { fields: options.fields, adminRoles: adminRolesOf(instance), credential: supplied.credential, credentialId: supplied.credentialId, clientId: supplied.clientId, scopes: supplied.scopes, issuer: supplied.issuer });
+    return userCaller({ ...user, id: user.id }, { fields: options.fields, ...adminOptionsOf(instance), credential: supplied.credential, credentialId: supplied.credentialId, clientId: supplied.clientId, scopes: supplied.scopes, issuer: supplied.issuer });
   }
   const authorization = request.headers.get("authorization");
   if (authorization && /^(bearer|dpop) /i.test(authorization)) {
@@ -114,7 +110,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     if (lacks(scopes)) throw new ContractError("AUTH_DENIED", "The access token lacks a required scope.");
     if (!user || isBanned(user)) throw new ContractError("UNAUTHENTICATED", "The access token's user is not active.");
     const text = (v: unknown) => (typeof v === "string" ? v : null);
-    return userCaller({ ...user, id: user.id }, { fields: options.fields, adminRoles: adminRolesOf(instance), issuer: claims.iss, scopes, credential: "oauth", credentialId: text(claims.jti), clientId: text(claims.azp) ?? text(claims.client_id) });
+    return userCaller({ ...user, id: user.id }, { fields: options.fields, ...adminOptionsOf(instance), issuer: claims.iss, scopes, credential: "oauth", credentialId: text(claims.jti), clientId: text(claims.azp) ?? text(claims.client_id) });
   }
   if (authorization !== null) throw new ContractError("UNAUTHENTICATED", "The authorization header is not a supported credential.");
   // With no Cookie header at all getSessionCookie returns null: skip even loading the helper.
@@ -156,7 +152,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     if (!refreshed.response || refreshed.response.session.id !== found.session.id || refreshed.response.user.id !== user.id) return { kind: "anonymous" };
     for (const cookie of refreshed.headers?.getSetCookie().flatMap(splitSetCookieHeader) ?? []) options.responseHeaders.append("set-cookie", cookie);
   }
-  const caller: Caller = userCaller({ ...user, id: user.id }, { fields: options.fields, adminRoles: adminRolesOf(instance), credentialId: found.session.id });
+  const caller: Caller = userCaller({ ...user, id: user.id }, { fields: options.fields, ...adminOptionsOf(instance), credentialId: found.session.id });
   sessionUsers.set(caller, user);
   return caller;
 }

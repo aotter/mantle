@@ -446,9 +446,8 @@ Then:
   surrogates.
 - No local admin: Admin and `/mcp/admin` refuse every local user while host callers
   pass.
-- Admin targets checked against Better Auth statements for local admins; host member
-  management (ban with session revocation, member roles only, no `adminRoles`, no
-  impersonation).
+- Admin targets checked against Better Auth statements for local admins. Host callers
+  do not manage members: gateway-mode applications load no Better Auth instance.
 - Member roles and fields with `auth.hasRole()` and `auth.user()`, from the admin plugin,
   `additionalFields`, `customSession` and a test plugin.
 - A forged header or props on a public entry.

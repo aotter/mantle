@@ -60,3 +60,5 @@ export const userRefs = (sqlite: boolean, version: number) => {
     throw new ContractError('USER_REFS_VERSION', `Unknown user-reference bind recipe '${recipe.k}'.`);
   };
 };
+
+export { roleName, rolesFrom } from "./user-caller.js";

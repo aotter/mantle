@@ -7,7 +7,7 @@ import { callToolLazy as callTool } from "@aotter/mantle/mcp";
 import { convert, type Conversions } from "@aotter/mantle/surface";
 import { siteInfo, type MantleSite, type MediaStorage } from "@aotter/mantle/site";
 import { csv } from "./csv.js";
-export type Admin = (Extract<Caller, { kind: "user" }> & { readonly admin: true; readonly credential: "session" }) | (Extract<Caller, { kind: "host" }> & { readonly admin: true });
+export type Admin = (Extract<Caller, { kind: "user" }> & { readonly credential: "session" }) | (Extract<Caller, { kind: "host" }> & { readonly admin: true });
 export interface Context<Env, Database> {
     request: Request;
     url: URL;
@@ -20,6 +20,8 @@ export interface Context<Env, Database> {
     authorize?: (target: Target) => Promise<boolean>;
 }
 export interface Route<Env, Database> {
+    /** Identity endpoints delegate operation permissions to Better Auth. */
+    readonly identity?: true;
     readonly target?: (context: Context<Env, Database>) => Target;
     readonly prepare?: (context: Context<Env, Database>) => void | Promise<void>;
     readonly method: string;
@@ -40,6 +42,7 @@ export interface IdentityUser {
     createdAt: Date;
 }
 export interface IdentityMethods {
+    readonly adminRoles?: readonly string[];
     listUsers(): Promise<readonly IdentityUser[]>;
     listMembers(args: {
         search?: string;
@@ -47,7 +50,7 @@ export interface IdentityMethods {
         cursor?: string;
         cursorDirection?: "forward" | "backward";
     }): Promise<{
-        items: readonly Pick<IdentityUser, "id" | "email" | "name" | "emailVerified" | "createdAt">[];
+        items: readonly (Pick<IdentityUser, "id" | "email" | "name" | "emailVerified" | "createdAt"> & { role?: string | null })[];
         previousCursor: string | null;
         nextCursor: string | null;
     }>;
@@ -149,7 +152,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     const localized = (value: unknown) => typeof value === "string" ? value : value && typeof value === "object" ? (value as Record<string, string>)[options.locale ?? "en"] ?? (value as Record<string, string>).en ?? Object.values(value)[0] : undefined;
     const webmcp = metadata.webmcp as { tools?: readonly Record<string, unknown>[] };
     const catalogue = { ...webmcp, tools: webmcp.tools?.map(tool => { const {target: _target, ...display} = tool; return { ...display, ...(tool.title ? { title: localized(tool.title) } : {}), description: localized(tool.description) ?? localized(tool.title) ?? tool.name }; }) };
-    const me = async ({ caller, request, env }: Context<Env, Database>) => { const user = (options.getUser ? await options.getUser(caller.subject, request, env) : undefined) ?? sessionUserOf(caller); return { userId: caller.subject, role: caller.role, admin: true, login: user?.githubLogin || user?.name || user?.email || null, image: user?.image ?? null }; };
+    const me = async ({ caller, request, env }: Context<Env, Database>) => { const user = (options.getUser ? await options.getUser(caller.subject, request, env) : undefined) ?? sessionUserOf(caller); return { userId: caller.subject, role: caller.role, admin: isAdmin(caller), login: user?.githubLogin || user?.name || user?.email || null, image: user?.image ?? null }; };
     const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendAdminInvitation, mcpEndpoints: options.mcpEndpoints, extensions: options.extensions }); return { ...info, capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics") } }; };
     const checkTarget = async (target: Target, caller: Caller) => (await import("@aotter/mantle/authorization")).authorizeTarget(options.authorize!, target, caller);
     const visibleMetadata = async (c: Context<Env, Database>) => {
@@ -169,7 +172,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
         return view.row ? { ...page, rows: page.rows.map(view.row) } : page;
     };
     const routes: readonly Route<Env, Database>[] = [
-        { method: "GET", path: "/me", run: me }, { method: "GET", path: "/site", run: site },
+        { method: "GET", path: "/me", identity: true, run: me }, { method: "GET", path: "/site", run: site },
         { method: "GET", path: "/collections", run: c => {
             const result = (m: Metadata) => ({collections: m.collections, allCollections: m.allCollections ?? Object.fromEntries(m.collections.map(c => [c.name, c]))});
             return options.authorize ? visibleMetadata(c).then(result) : result(metadata);
@@ -254,7 +257,8 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             await access?.select(targetId, caller);
             if (caller.kind === "anonymous")
                 throw new ContractError("UNAUTHENTICATED", "Sign in to use Admin.", "admin");
-            if (!isAdmin(caller) || caller.kind !== "host" && caller.credential !== "session") {
+            const identityRoute = matched && routes[table.indexOf(matched)]!.identity;
+            if ((!identityRoute && !isAdmin(caller)) || caller.kind !== "host" && (caller.kind !== "user" || caller.credential !== "session")) {
                 if (options.gateway) throw new ContractError("AUTH_DENIED", "Admin layer required.", "admin");
                 return Response.json({ error: { code: "AUTH_DENIED", message: "Admin needs a signed-in admin session.", path: "admin" }, minimumRole: "admin" }, { status: 403, headers: { "cache-control": "private, no-store" } });
             }
