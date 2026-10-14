@@ -9,13 +9,35 @@ import { writeArtifacts } from "./artifacts.js";
 import type { Target } from "../domain/model.js";
 
 const targets: readonly Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
-const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>] [--admin-extensions <module>] [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>]\n       mantle bundle <entry> <outdir>";
+const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>] [--admin-extensions <module>] [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>]\n       mantle bundle <entry> <outdir>\n       mantle describe [<target>] <manifest>... [--json] [--diff <old.json>]";
 try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-    check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, "admin-extensions": { type: "string" }, auth: { type: "string" }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" },
+    json: { type: "boolean" }, diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, "admin-extensions": { type: "string" }, auth: { type: "string" }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" },
   } });
-  const command = positionals[0] === "bundle" || positionals[0] === "generate" ? positionals.shift()! : "generate";
-  if (command === "bundle") {
+  const command = positionals[0] === "bundle" || positionals[0] === "generate" || positionals[0] === "describe" ? positionals.shift()! : "generate";
+  if (command === "describe") {
+    const target = targets.includes(positionals[0] as Target) ? positionals.shift()! : "bun-sqlite";
+    if (!positionals.length) throw new Error(usage);
+    const { compilePlan, sqliteCompiler, postgresCompiler } = await import("../build/compiler.js");
+    const { describeApp, diffApp } = await import("../domain/describe/index.js");
+    const sources = await Promise.all(positionals.map(async path => ({ sourceId: path, text: await readFile(path, "utf8") })));
+    const compiled = await compilePlan({ sources }, target.endsWith("postgres") ? postgresCompiler : sqliteCompiler, "operational");
+    if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics, null, 2));
+    const report = await describeApp(compiled.plan);
+    if (values.diff) {
+      const changes = diffApp(JSON.parse(await readFile(values.diff, "utf8")), report);
+      console.log(values.json ? JSON.stringify(changes, null, 2) : changes.map(c => `${c.direction}: ${c.id} ${c.field}`).join("\n") || "No changes.");
+    } else if (values.json) console.log(JSON.stringify(report, null, 2));
+    else {
+      console.log(`Plan ${report.planHash} (schemaVersion ${report.schemaVersion})`);
+      for (const [name, field] of Object.entries(report.access)) console.log(`Field ${name}: ${field.type} ${field.op}${field.enum ? ` enum=${JSON.stringify(field.enum)}` : ""}; scope=${field.scope.join(",")}; restrict=${field.restrict.join(",")}`);
+      for (const t of report.targets) {
+        const m = t._meta;
+        console.log(`${m.id} [${m.surface}] ${m.readOnly ? "readOnly" : "writes or custom code"}${["opaque", "ownerScoped", "unscopedReads", "hostCallable"].filter(k => m[k as keyof typeof m]).map(k => ` ${k}`).join("")} requires=${JSON.stringify(m.requires)}`);
+        console.log(`  scope=${JSON.stringify(m.scope)} restrict=${JSON.stringify(m.restrict)} fields=${JSON.stringify(m.userFields)}`);
+      }
+    }
+  } else if (command === "bundle") {
     const [entry, outdir] = positionals;
     if (!entry || !outdir || positionals.length !== 2 || values.admin || values.site || values.auth || values["admin-extensions"] || values.wrangler || values.check) throw new Error(usage);
     await (await import("./bundle.js")).bundle(entry, outdir);

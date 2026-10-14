@@ -439,18 +439,28 @@ gateway, generated documentation, a host). It writes no file into the project.
   `describeApp(plan)`, give a machine-readable report with a published JSON Schema and
   `schemaVersion`.
 
-**Top level:** `access`, every role and user field the application uses, with each
-field's type, enum, operator form and the Schemas whose scope binds it. It is derived
-from use, never declared.
+**Top level:** `schemaVersion: 1`, `planHash` and `access`, every user field the
+application uses, with each field's type, enum, operator (`in`, or owner `eq`),
+the Schemas whose scope binds it and targets whose restrict binds it. It is
+derived from use, never declared. Role lists are withdrawn.
 
-**Each target** is an MCP `Tool` object (`name`, `title`, `description`, `inputSchema`,
-`annotations`). Mantle's fields sit under `_meta`:
-- surface, kind and `targetHash`;
-- `roles`: the roles its `requires` accepts and the roles that widen its scope;
-- `userFields`: each field it reads, and whether through `scope` (enforced) or `sql`
-  (a filter only);
+**Each target** is an MCP `Tool` object (`name`, `title`, `description`,
+`inputSchema`, `annotations`). Mantle's fields sit under `_meta`:
+- `id`, surface, kind and `targetHash`;
+- `requires`: credential/admin predicates and required scopes, without role lists;
+- `scope` and `restrict`: the per-Schema owner and value terms;
+- `userFields`: each field's `via` (`scope` or `restrict`), Schemas, operator and
+  `allAllowed`. A restrict term makes `allAllowed` false: `{ all: true }` cannot
+  drop it. Owner equality also cannot be dropped;
+- `readOnly`: true only when every statement the target can run is a read;
+  ref handlers are false regardless of authored annotations;
 - `hostCallable`;
-- the flags `opaque`, `rawDb`, `ownerScoped` and `unscopedReads`.
+- the flags `opaque`, `ownerScoped` and `unscopedReads`.
+
+`diffApp(a, b)` and `mantle describe --diff <old.json>` list added/removed targets
+and changes to scope/restrict terms, `allAllowed`, `readOnly` and `requires`.
+Each change is `widened`, `narrowed` or `changed`; removing a restrict term is
+`widened`. Incomparable or opaque behavior changes remain `changed`.
 
 The report holds no SQL and no data. Anything that fronts the application builds its
 own registry from it; Mantle does not define such registries.
