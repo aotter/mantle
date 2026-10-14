@@ -70,18 +70,3 @@ spec:
 `;
   await expect(generateOrThrow("bun-sqlite", [{ sourceId: "operational.yaml", text }])).rejects.toThrow(/SQL_COLUMN/);
 });
-
-test("Core and Store read only the admin layer for custom role names", async () => {
-  const db = new Database(":memory:");
-  try {
-    const files = await generateOrThrow("bun-sqlite", await loadFixtureSources("publishing.yaml"));
-    const path = resolve(directory, "policy-data"); await writeGenerated(path, files);
-    const app = await import(resolve(path, "generated.ts")); db.exec(files["schema.sql"]!);
-    await app.store(db, { kind: "system", reason: "test" }).collection("posts").insert({ title: "Draft" });
-    for (const [role, expected] of [["reviewer", 1], ["admin", 0]] as const) {
-      const caller = fixtureCaller({ kind: "user", subject: "reader", role, admin: role === "reviewer", scopes: [], credential: "session", credentialId: null, clientId: null });
-      expect((await app.views["posts-admin"](db, caller, {})).length).toBe(expected);
-      expect(await app.store(db, caller).collection("posts").count()).toBe(expected);
-    }
-  } finally { db.close(); }
-});

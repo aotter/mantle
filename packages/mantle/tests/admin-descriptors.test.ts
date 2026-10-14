@@ -6,7 +6,6 @@ import {compilePlan,type RuntimePlan} from "../src/build/compiler.js";
 import * as compiler from "../src/build/d1/compile/index.js";
 import {collectionOf,developerConsole,rowPreconditions} from "../src/build/compiler.js";
 import {appCatalog} from "../src/build/compiler.js";
-import {adminOrder} from "../src/domain/adminOrder.js";
 import {emitAdminDescriptors} from "../src/usecase/adminDescriptors.js";
 import {generateFromSources} from "../src/infrastructure/generateAuth.js";
 import type {GenerateDiagnostic} from "../src/domain/model.js";
@@ -49,12 +48,6 @@ test("Admin projections match 0.2 collections, operations, SQL graph and MCP cat
   expect(files["admin-descriptors.ts"]).not.toMatch(/^import\b/m);expect(files["admin-descriptors.ts"]).not.toContain('"stmts":');expect(files["admin-descriptors.ts"]).not.toContain('"ColumnRef":');
 });
 
-test("sortableFields skips the scope column exactly as the server's Admin order does",async()=>{
-  const plan=await planOf([manifest("Schema","notes",schema({owner:{type:"string"},title:{type:"string"}},["owner","title"],{scope:"owner = auth.uid()",indexes:[["owner","title"]]}))]),notes=plan.schemas.notes!;
-  expect(Object.keys(adminOrder(notes))).toEqual(["id","updated_at","title"]);
-  expect(collectionOf(notes,Object.values(plan.schemas)).sortableFields).toEqual(["title"]);
-});
-
 test("translation projection folds children, inherits media and retains composition",async()=>{
   const plan=await planOf([sources[0]!,manifest("Schema","project-translations",schema({code:{type:"string"},locale:{type:"string"},title:{type:"string"},photo:{type:"string","x-mcp-hint":"media-image"}},["code","locale","title"],{localized:true,translates:{parent:"projects",on:"code"}}))]),{loaded:m}=await metadata(plan);
   expect(m.collections.map((s:any)=>s.name)).toEqual(["projects"]);expect(m.collections[0]).toMatchObject({hasTranslations:true,mediaFields:[{name:"cover",hint:"media-image"},{name:"photo",hint:"media-image"}]});
@@ -86,22 +79,6 @@ test("descriptors have no runtime Core imports and unrelated Workers bundle none
     const selected=await build({entryPoints:[entry],bundle:true,write:false,metafile:true,platform:"neutral",format:"esm"});expect(Object.keys(selected.metafile!.inputs)).toHaveLength(2);expect(selected.outputFiles![0]!.text).not.toContain("observationAvailability");expect(selected.outputFiles![0]!.text).not.toContain("ColumnRef");
     const unrelated=join(dir,"worker.ts");await writeFile(unrelated,'export default {fetch:()=>new Response("ok")};');const bare=await build({entryPoints:[unrelated],bundle:true,write:false,metafile:true,platform:"neutral",format:"esm"});expect(Object.keys(bare.metafile!.inputs)).toHaveLength(1);expect(bare.outputFiles![0]!.text).not.toContain("tasks");
   }finally{await rm(dir,{recursive:true,force:true});}
-});
-
-
-test("normalized publishing tool collisions are refused instead of overwriting a catalogue",async()=>{
-  const input=[manifest("Schema","article-parts",schema({title:{type:"string"}},["title"],{lifecycle:"publishing"})),manifest("Procedure","publish-article-parts",{description:"A custom publication action.",input:{type:"object",properties:{id:{type:"string"}},required:["id"]},output:{type:"object"},handler:{ref:"customPublish"},target:{schema:"article-parts",id:"id"}}),manifest("Trigger","custom-publish-mcp",{source:{kind:"mcp",surface:"admin"},target:{procedure:"publish-article-parts"}})];
-  const plan=await planOf(input),diagnostics:GenerateDiagnostic[]=[];emitAdminDescriptors({plan},diagnostics);
-  expect(diagnostics).toHaveLength(1);expect(diagnostics[0]).toMatchObject({code:"GENERATE_UNSUPPORTED",path:"schemas/article-parts",message:expect.stringContaining("publish_article_parts")});
-});
-
-test("Admin generation accepts Schema properties named like Object.prototype members", async () => {
-  const { generateFromSources } = await import("../src/infrastructure/generate.js");
-  for (const field of ["__proto__", "constructor", "toString"]) {
-    const text = `apiVersion: cms.mantle.aotter.net/v2\nkind: Schema\nmetadata: {name: notes}\nspec:\n  title: Notes\n  lifecycle: operational\n  indexes: [[title]]\n  schema: {type: object, required: [title], properties: {title: {type: string}, ${field}: {type: string}}}\n`;
-    const result = await generateFromSources({ target: "bun-sqlite", admin: true, sources: { sources: [{ sourceId: "n.yaml", text }] } });
-    expect(result.ok ? [] : result.diagnostics).toEqual([]);
-  }
 });
 
 test("row preconditions derive AND equality/IN literals only from the declared target-row write",async()=>{

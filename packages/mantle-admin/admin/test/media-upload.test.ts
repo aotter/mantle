@@ -71,15 +71,9 @@ describe("chooseMime", () => {
     await expect(
       chooseMime(["image/avif"], policy({ "image/avif": 200_000 }), "en"),
     ).rejects.toThrow(/cannot produce.*image\/avif/);
-  });
-
-  it("localizes the encoder-unsupported error for zh-TW", async () => {
     await (await import("../src/app/i18n")).loadLanguage("zh-TW");
-    stubDocument(new Set());
-    const { chooseMime } = await import("../src/features/media/media-upload");
-    await expect(
-      chooseMime(["image/avif"], policy({ "image/avif": 200_000 }), "zh-TW"),
-    ).rejects.toThrow(/瀏覽器無法產生.*image\/avif/);
+    await expect(chooseMime(["image/avif"], policy({ "image/avif": 200_000 }), "zh-TW"))
+      .rejects.toThrow(/瀏覽器無法產生.*image\/avif/);
   });
 
   it("reports the mime that has maxBytes-but-no-encoder, not just the slot's first entry", async () => {

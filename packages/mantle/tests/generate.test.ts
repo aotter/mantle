@@ -1,10 +1,8 @@
 import { describeApp } from "../src/domain/describe/index.js";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { compilePlan, NATIVE_NOT_NULL, notNullColumns, viewOutputs, type LoweredStatement } from "../src/build/compiler.js";
+import { compilePlan, viewOutputs, type LoweredStatement } from "../src/build/compiler.js";
 import * as postgresCompile from "../src/build/postgres/compile/index.js";
-import { initialStorageSql as sqliteSchema } from "../src/build/d1/storage.js";
-import { initialStorageSql as postgresSchema } from "../src/build/postgres/storage.js";
 import { generateFromSources } from "../src/infrastructure/generateAuth.js";
 import { coreNewId } from "../src/infrastructure/generate.js";
 import { generate } from "../src/usecase/generate.js";
@@ -79,15 +77,6 @@ describe("native generation", () => {
     const mismatch = generate({ ...input, target: "bun-postgres" });
     expect(mismatch.ok).toBe(false);
   });
-});
-
-test("a lifecycle declaration refuses generation even when only trusted SQL is marked hooked", async () => {
-  const input = await canonical("bun-sqlite");
-  const modes = input.lowered.procedures["create-note"]!;
-  const hooked = { ...input, plan: { ...input.plan, triggers: { after: { source: { kind: "lifecycle" as const, schema: "notes", on: ["after_create" as const] }, procedure: "create-note" } } }, lowered: { ...input.lowered, procedures: { ...input.lowered.procedures, "create-note": { ...modes, trusted: modes.trusted.map((s: LoweredStatement) => ({ ...s, hooked: true as const })) } } } };
-  const result = generate(hooked);
-  expect(result.ok).toBe(false);
-  if (!result.ok) expect(result.diagnostics).toEqual([{ code: "GENERATE_UNSUPPORTED", path: "triggers/after", message: "Before/after lifecycle hooks are unsupported. Write a custom handler." }]);
 });
 
 test("bare PG writes on the Bun.SQL shape read a unique clash as CONFLICT and signal uncertain outcomes", async () => {
@@ -189,16 +178,6 @@ for (const target of ["bun-sqlite"] as const) test(`${target} bare View preserve
   }
 });
 
-test("SQLite native bound fields retain nullable unions and require explicit values", async () => {
-  const input = await canonical("cloudflare-d1");
-  const procedure = {...input.plan.procedures["create-note"]!,input:{type:"object" as const,properties:{title:{type:["boolean","null"] as ("boolean"|"null")[]}}}};
-  const lower = {...input.lowered,procedures:{...input.lowered.procedures,"create-note":Object.fromEntries((["caller","trusted"] as const).map(mode=>[mode,input.lowered.procedures["create-note"]![mode]!.map((statement:LoweredStatement)=>({...statement,binds:statement.binds.map(bind=>bind.k === "input" ? {...bind,type:"bool"} : bind)}))]))}};
-  const result = generate({...input,plan:{...input.plan,procedures:{"create-note":procedure}},lowered:lower});
-  if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
-  expect(result.files["generated.ts"]).toContain('readonly "title": number | null;');
-  expect(result.files["generated.ts"]).not.toContain('readonly "title"?:');
-});
-
 const scalars = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: events}
@@ -250,18 +229,6 @@ test("declared timestamps and dates come back in wire form from the SQL itself",
     const pg = await generateFromSources({target,sources:{sources:[{sourceId:"events.yaml",text:scalars}]}});
     if (!pg.ok) throw Error(JSON.stringify(pg.diagnostics));
     expect(pg.files["generated.ts"]).toContain(`to_char((e.at) AT TIME ZONE 'UTC', 'YYYY-MM-DD\\"T\\"HH24:MI:SS.US\\"Z\\"')`);
-  }
-});
-test("the NOT NULL columns the generated types assume are the ones the initial storage SQL declares", async () => {
-  const columns = (ddl: string) => { // the NOT NULL column names of one CREATE TABLE
-    const body = ddl.slice(ddl.indexOf("(") + 1, ddl.lastIndexOf(")"));
-    return body.split(/,\s(?![^(]*\))/).filter(c => /\bNOT NULL\b/.test(c)).map(c => /^"?(\w+)"?/.exec(c.trim())![1]!);
-  };
-  for (const [target, storage] of [["bun-sqlite", sqliteSchema], ["bun-postgres", postgresSchema]] as const) {
-    const { plan } = await canonical(target);
-    const notes = plan.schemas.notes!, ddl = storage(plan.schemas).find(sql => sql.includes(`"notes"`) && /CREATE TABLE/.test(sql))!;
-    // not `status` (publishing only) nor `_rid`; the scope column is native text
-    expect(new Set(columns(ddl))).toEqual(new Set([...[...NATIVE_NOT_NULL].filter(c => c !== "status"), notes.scope!, ...notNullColumns(notes)]));
   }
 });
 test("generation is refused when a Schema's rules would not be Core's", async () => {

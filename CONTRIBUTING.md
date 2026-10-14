@@ -94,6 +94,9 @@ PR CI builds once in each of two parallel jobs: typecheck plus boundaries,
 skills, plugin manifests, startup graphs/budgets and release/packed-consumer
 self-tests; and the three packages’ tests running concurrently. Both jobs use
 the pnpm store cache and must pass the combined required status.
+PR tests skip PostgreSQL; Full checks retains PostgreSQL-backed coverage.
+Build typechecks library sources; `pnpm typecheck` checks the remaining test,
+app, example and config roots (including their imports). Run build first.
 Build before running package tests locally; `pnpm test` does not rebuild or pack.
 Package and upload bytes are reports; cold-start checks remain gates.
 

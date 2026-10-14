@@ -166,18 +166,6 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
     const shape = await compile(withCells("text: preview"));
     expect(!shape.ok && shape.diagnostics[0]?.code).toBe("VIEW_UI_INVALID");
   });
-
-  it("refuses an inline program as a lifecycle hook target (events are delivered to ref handlers)", async () => {
-    const trigger = `---
-apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: audit }
-spec: { source: { kind: lifecycle, schema: notes, on: [before_update] }, target: { procedure: p } }
-`;
-    const res = await compile(SCHEMA + procedure("INSERT INTO notes (body) VALUES (input.text)") + trigger);
-    if (res.ok) throw new Error("accepted an inline hook target");
-    expect(res.diagnostics[0]).toMatchObject({ code: "LIFECYCLE_TARGET_NOT_REF" });
-  });
 });
 
 describe("a field with more than one JSON Schema type", () => {

@@ -24,7 +24,7 @@ test("generate lists every ref Procedure's Handlers key, then prompts typecheck"
     expect(sqlOnly).not.toContain("Ref Procedure");
     expect(sqlOnly).not.toContain("Next: run tsc");
   } finally { await rm(dir, { recursive: true, force: true }); }
-});
+}, 30_000);
 
 test("generate creates valid Wrangler config; edits preserve unrelated keys, comments and idempotence", async () => {
   const dir = await mkdtemp(join(tmpdir(), "next-cli-"));
@@ -123,7 +123,7 @@ test.skipIf(!process.env.MANTLE_NATIVE_TESTS)("workspace consumer bin: plain Wra
       await exited;
     }
   } finally { await rm(dir, { recursive: true, force: true }); }
-}, 90_000);
+}, 30_000);
 
 test("generate loads declared Admin extensions without runtime construction",async()=>{
   const dir=await mkdtemp(join(tmpdir(),"next-cli-extensions-"));
@@ -139,4 +139,4 @@ test("generate loads declared Admin extensions without runtime construction",asy
     await writeFile(module,"export default "+JSON.stringify(declarations)+";");expect(spawnSync("node",[...args,"--admin-extensions",module],{cwd:dir}).status).toBe(0);
     await writeFile(module,"export const adminExtensions=()=>{throw Error('constructed runtime');};");const invalid=spawnSync("node",[...args,"--admin-extensions",module],{cwd:dir,encoding:"utf8"});expect(invalid.status).toBe(1);expect(invalid.stderr).toContain("must export an adminExtensions array");expect(invalid.stderr).not.toContain("constructed runtime");
   }finally{await rm(dir,{recursive:true,force:true});}
-},30000);
+},30_000);

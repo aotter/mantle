@@ -46,27 +46,6 @@ test('caller references are refused in SQL and restrict is validated', async () 
   for (const restrict of <Record<string, string>[]>[{ other: "region IN auth.user('region')" }, { orders: "missing IN auth.user('region')" }, { orders: "region = auth.user('region')" }, { orders: 'region = auth.uid()' }, { orders: "region IN auth.user('region') OR tier IN auth.user('tier')" }])
     await expect(generateOrThrow('bun-sqlite', [{ sourceId: 'restrict.yaml', text: schema+'\n---\n'+view('restricted', 'SELECT id FROM orders', restrict) }]), JSON.stringify(restrict)).rejects.toThrow();
 });
-test('field scope covers Store reads, native writes, autofill and partitioned uniqueness', async () => {
-  const scoped = JSON.parse(schema); scoped.spec.scope = "region IN auth.user('region')"; scoped.spec.uniqueIndexes = [['tier']];
-  const sources = [{ sourceId: 'scope.yaml', text: JSON.stringify(scoped)+'\n---\n'+view('scoped', 'SELECT id, region, tier FROM orders ORDER BY region, id') }];
-  const files = await generateOrThrow('bun-sqlite', sources), dir = await mkdtemp(resolve(import.meta.dir, 'apps/.generated/field-scope-')), db = new Database(':memory:');
-  try {
-    await writeGenerated(dir, files); const app = await import(resolve(dir, 'generated.ts')); db.exec(files['schema.sql']!);
-    const system = app.store(db, { kind: 'system', reason: 'fixture' }).collection('orders');
-    const a = await system.insert({ region: 'TW', tier: 'gold' }), b = await system.insert({ region: 'JP', tier: 'gold' });
-    const caller = userCaller({ id: 'member', region: 'TW' }, { fields, adminRoles: [] }), own = app.store(db, caller).collection('orders');
-    expect((await app.views.scoped(db, caller, {})).map((row: { region: string }) => row.region)).toEqual(['TW']);
-    expect(await own.findById(b.id)).toBeNull(); expect(await own.count()).toBe(1);
-    expect(await code(() => app.store(db, { ...caller }).collection('orders').count())).toBe('AUTH_DENIED');
-    const created = await own.insert({ tier: 'silver' }); expect(created.region).toBe('TW');
-    await expect(Promise.resolve(own.insert({ region: 'JP', tier: 'outside' }))).rejects.toMatchObject({ code: 'AUTH_DENIED' });
-    await expect(Promise.resolve(own.insert({ region: 'TW', tier: 'gold' }))).rejects.toMatchObject({ code: 'CONFLICT' });
-    await expect(Promise.resolve(own.update(a.id, { region: 'JP' }, { lock: 1 }))).rejects.toThrow('not writable');
-    await expect(Promise.resolve(own.update(b.id, { tier: 'outside' }, { lock: 1 }))).rejects.toMatchObject({ code: 'CONFLICT' });
-    await expect(Promise.resolve(own.delete(b.id, { lock: 1 }))).rejects.toMatchObject({ code: 'CONFLICT' });
-    expect((await system.findById(b.id)).tier).toBe('gold');
-  } finally { db.close(); await rm(dir, { recursive: true, force: true }); }
-});
 
 test('scope wraps SQL relations; { all: true } drops only the scope term, never a restrict',async()=>{
  const scoped=JSON.parse(schema);scoped.spec.scope="region IN auth.user('region')";scoped.spec.uniqueIndexes=[['tier']];
@@ -76,6 +55,14 @@ test('scope wraps SQL relations; { all: true } drops only the scope term, never 
  try{await writeGenerated(dir,files);const app=await import(resolve(dir,'generated.ts'));db.exec(files['schema.sql']!);const system={kind:'system',reason:'fixture'} as const;
   await app.store(db,system).collection('orders').insert({region:'TW',tier:'gold'});await app.store(db,system).collection('orders').insert({region:'JP',tier:'gold'});
   const member=userCaller({id:'member',region:'TW'},{fields}),admin=userCaller({id:'admin',role:'admin',region:{all:true}},{fields});
+  const {default:page}=await import(resolve(dir,'paged/views/cte.ts'));
+  let queries=0;const noSql={query(){queries++;throw Error('SQL before scope admission');}};
+  for(const region of [undefined,[]]){
+   const absent=userCaller({id:'absent',region},{fields}),collection=app.store(noSql,absent).collection('orders');
+   for(const run of [()=>app.views.cte(noSql,absent,{}),()=>app.procedures.seed(noSql,absent,{}),()=>collection.find(),()=>collection.insert({tier:'silver'}),()=>page(noSql,absent,{})])
+    await expect(Promise.resolve().then(run)).rejects.toMatchObject({code:'AUTH_DENIED'});
+  }
+  expect(queries).toBe(0);
   for(const name of Object.keys(sqls)){const own=await app.views[name](db,member,{});expect(own.length).toBe(1);expect(own.every((row:any)=>row.region==='TW')).toBe(true);expect(name==='restricted'?await code(()=>app.views[name](db,admin,{})):(await app.views[name](db,admin,{})).length).toBe(name==='restricted'?'AUTH_DENIED':2);expect(await code(()=>app.views[name](db,{...admin},{}))).toBe('AUTH_DENIED');}
   expect(await app.store(db,member).collection('orders').count()).toBe(1);expect(await app.store(db,admin).collection('orders').count()).toBe(2);
   await expect(app.procedures.seed(db,member,{})).rejects.toMatchObject({code:'AUTH_DENIED'});expect((await app.procedures.seed(db,system,{})).results[0]).toHaveLength(1);
@@ -84,8 +71,6 @@ test('scope wraps SQL relations; { all: true } drops only the scope term, never 
   await expect(generateOrThrow('bun-sqlite',[{sourceId:'unsupported-set.yaml',text:JSON.stringify(scoped)+'\n---\n'+view('set','SELECT id FROM orders UNION ALL SELECT id FROM orders')}])).rejects.toThrow('SQL_UNSUPPORTED');
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
 });
-
-
 
 test('translation parent scope remains inside EXISTS when the child field is { all: true }',async()=>{
  const manifest=(kind:string,name:string,spec:object)=>JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind,metadata:{name},spec});

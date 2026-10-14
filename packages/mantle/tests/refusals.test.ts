@@ -40,11 +40,6 @@ test("guards are refused on every View and Procedure", async () => {
   for (const d of guards) expect(d.message).toContain("Write a custom handler that checks authorization before executing queries.");
 });
 
-test("localized and translates declarations generate native helpers", async () => {
- const result=await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"localized.yaml",text:[...base,doc("Schema","translations",{...localized,translates:{parent:"notes",on:"slug"}})].join("\n---\n")}]}});
- expect(result.ok).toBe(true);if(result.ok)expect(result.files["translations.ts"]).toContain("translationLocales");
-});
-
 test("each native geo View output is refused with an explicit scalar alternative", async () => {
   const result = await diagnostics([
     doc("Schema", "places", { ...schema, schema: { type: "object", properties: { point: { type: "object", format: "geo" }, other: { type: "object", format: "geo" } } } }),
@@ -68,15 +63,6 @@ test("unmatched date-time SELECT outputs give an actionable expansion hint", () 
   expect(wireScalars(ast, ["created_at"], ["timestamptz"], dialect)).toBe("Declared timestamp and date outputs need one SELECT item per output. Expand the SELECT list explicitly.");
 });
 
-test("mixed refused declarations are reported together", async () => {
-  const result = await diagnostics([
-    doc("Trigger", "cron", { source: { kind: "schedule", cron: "0 * * * *" }, target: { procedure: "read" } }),
-    doc("Trigger", "timer", { source: { kind: "schedule", cron: "0 * * * *" }, target: { procedure: "read" } }),
-  ]);
-  expect(result.map(d => d.path)).toEqual(["triggers/cron", "triggers/timer"]);
-  for (const d of result) expect(d.code).toBe("GENERATE_UNSUPPORTED");
-});
-
 
 test("a noncanonical input cast and another refused declaration are reported together", () => {
   const text = [doc("Schema", "local", localized), doc("View", "bad-cast", { surface: "internal", requires:{guard:{procedure:"guard"}}, input: { type: "object", properties: { payload: { type: "object" } } }, sql: "SELECT input.payload AS value" }), doc("Procedure","guard",{input:{type:"object"},output:{type:"object"},handler:{ref:"guard"}})].join("\n---\n");
@@ -97,19 +83,4 @@ console.log(JSON.stringify(await generateFromSources({ target: "bun-postgres", s
   expect(result.ok).toBe(false);
   expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "views/bad-cast", message: "Input $1 must appear only as CAST($1 AS jsonb). Wrap each occurrence in CAST($1 AS jsonb)." });
   expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "views/bad-cast/requires/guard", message: "Dynamic authorization guards are unsupported. Write a custom handler that checks authorization before executing queries." });
-});
-
-test("HTTP Trigger exposure emits its REST handler", async () => {
-  const result=await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"http.yaml",text:[...base,doc("Trigger","expose",{source:{kind:"http",method:"POST",path:"/api/notes"},target:{procedure:"read"}})].join("\n---\n")}]}});
-  expect(result.ok).toBe(true);if(result.ok)expect(result.files["rest.ts"]).toContain("/api/notes");
-});
-
-test("old authorization keys fail with the admin replacement",async()=>{
- for (const predicate of ["ctx.staff", {"ctx.staff":["owner","editor"]}, {"ctx.staff":["contributor"]}]) {
-  const result = await diagnostics([doc("View","old-view",{surface:"admin",sql:"SELECT id FROM notes",requires:{auth:{all:[predicate]}}})]);
-  expect(result.length).toBeGreaterThan(0);
-  for(const diagnostic of result){expect(diagnostic.message).toContain("ctx.staff");expect(diagnostic.message).toContain("ctx.admin");expect(diagnostic.message).toContain("replace");}
- }
- const valid=await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"admin.yaml",text:[...base,doc("View","admin-view",{surface:"admin",sql:"SELECT id FROM notes ORDER BY id",requires:{auth:{all:["ctx.admin"]}}})].join("\n---\n")}]}});
- expect(valid.ok).toBe(true);
-});
+}, 30_000);

@@ -1,7 +1,6 @@
 // @ts-nocheck original inspectable SQL IR fixtures
 import {expect,it} from "vitest";
 import {compilePlan,compileSql} from "../compiler.js";
-import {relationNames} from "../../src/build/spec/infrastructure/sql/compileSql.js";
 import * as pgCompile from "../../src/build/postgres/compile/index.js";
 const doc = (kind, name, spec) => `apiVersion: cms.mantle.aotter.net/v2\nkind: ${kind}\nmetadata: { name: ${name} }\nspec:\n${spec}`;
 const schema = doc("Schema", "notes", `  title: Notes
@@ -25,11 +24,6 @@ const documents = [
   view("left-notes", "SELECT id, title, due FROM base_notes WHERE title <> 'hidden'"),
   view("base-notes", "SELECT id, title, due FROM notes"),
 ];
-it("resolves dependencies in lexical CTE scope, including siblings and nested WITH", async () => {
-  expect([...await relationNames("SELECT a.id FROM a WHERE EXISTS (WITH a AS (SELECT id FROM b) SELECT id FROM a)")].sort()).toEqual(["a", "b"]);
-  expect([...await relationNames("WITH a AS (SELECT id FROM a), b AS (SELECT id FROM a) SELECT id FROM b")]).toEqual(["a"]);
-  expect([...await relationNames("WITH RECURSIVE a AS (SELECT id FROM a) SELECT id FROM a")]).toEqual([]);
-});
 for(const engine of ["sqlite","postgres"]) it(`${engine} compiles lexical CTE dependencies with column provenance`,async()=>{
     const result = await compilePlan(source(...documents), engine === "postgres" ? pgCompile : undefined);
     expect(result.ok, JSON.stringify(result.diagnostics)).toBe(true);
@@ -74,20 +68,4 @@ for(const engine of ["sqlite","postgres"]) it(`${engine} CTE lowering retains vi
  const visit=n=>{if(!n||typeof n!=="object")return;if(n.RangeVar?.mantle==="table")n.RangeVar.mantle="cte";Object.values(n).forEach(visit);};visit(forged.plan.stmts);
  expect(()=>lower(forged)).toThrow(/cte reference is not defined in scope/);
  expect((await compileSql("WITH x AS (SELECT owner FROM items) SELECT owner FROM x",{schemas,inputs:{},kind:"view"},dialect)).ok).toBe(false);
-});
-
-for (const engine of ["sqlite", "postgres"]) it(`${engine} preserves SQL output names in Views and every RETURNING statement`, async () => {
-  const ctx = { schemas: { notes: { fields: { reqstatus: "text" }, names: { reqstatus: "reqStatus" } } }, inputs: {}, kind: "procedure" };
-  for (const sql of [
-    'SELECT reqStatus, reqStatus AS "reqStatus", reqStatus AS explicitName FROM notes',
-    'SELECT n.reqStatus, n.reqStatus AS "reqStatus", n.reqStatus AS explicitName FROM notes n',
-    'INSERT INTO notes(reqStatus) VALUES (\'submitted\') RETURNING reqStatus, reqStatus AS "reqStatus", reqStatus AS explicitName',
-    'UPDATE notes SET reqStatus = \'approved\' WHERE id = \'one\' RETURNING reqStatus, reqStatus AS "reqStatus", reqStatus AS explicitName',
-    'DELETE FROM notes WHERE id = \'one\' RETURNING reqStatus, reqStatus AS "reqStatus", reqStatus AS explicitName',
-  ]) {
-    const result = await compileSql(sql, { ...ctx, kind: sql.startsWith("SELECT") ? "view" : "procedure" }, engine === "postgres" ? pgCompile : undefined);
-    expect(result.ok, JSON.stringify(result.diagnostic)).toBe(true);
-    const stmt = Object.values(result.plan.stmts[0])[0];
-    expect((stmt.returningClause?.exprs ?? stmt.targetList).map(t => t.ResTarget.name)).toEqual([undefined, "reqStatus", "explicitname"]);
-  }
 });

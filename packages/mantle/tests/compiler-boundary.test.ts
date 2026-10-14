@@ -19,4 +19,4 @@ test("the generator imports without loading optional Auth or MCP dependencies", 
     console.log("compiler-only load passed");`;
   const output = execFileSync(process.env.NODE_BIN ?? "node", ["--import", "data:text/javascript," + encodeURIComponent(setup), "--input-type=module", "--eval", run], {encoding:"utf8"});
   expect(output.trim()).toBe("compiler-only load passed");
-});
+}, 30_000);

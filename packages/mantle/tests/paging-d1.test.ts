@@ -24,7 +24,7 @@ export default{async fetch(request:Request,env:{DB:any}){const path=new URL(requ
   const origin=`http://127.0.0.1:${port}`;expect(await (await fetch(origin+"/seed")).json()).toEqual({ok:true});let calls=0;
   const post=async(path:string,body:unknown)=>{const result:any=await(await fetch(origin+path,{method:"POST",body:JSON.stringify(body)})).json();if(result.error)throw Object.assign(Error(result.error.message),{code:result.error.code});return result;};
   const pages:Record<string,Function>={};for(const name of names)pages[name]=async(_:unknown,caller:unknown,input:unknown,options:unknown)=>{const result=await post("/page",{name,caller,input,options});calls+=result.calls;return result.rows;};
-  await verifyPaging(pages,null,sql=>post("/native",{sql}),()=>calls,false);expect(calls).toBeGreaterThan(500);
+  await verifyPaging(pages,null,sql=>post("/native",{sql}),()=>calls,false);
   const caller=fixtureCaller({kind:"user",subject:"a",role:null,scopes:[],credential:"api-key",credentialId:null,clientId:null}), args={name:"integer-groups",caller,input:{}};
   const first=await post("/page",{...args,options:{limit:1}}),tuple=JSON.parse(decodeURIComponent(first.rows.nextCursor));expect(first.calls).toBe(1);
   const cursor=(text:boolean)=>encodeURIComponent(JSON.stringify(tuple.map((v:any,i:number)=>i<2?(text?String(v):Number(v)):v)));

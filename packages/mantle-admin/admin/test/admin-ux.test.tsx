@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeAll, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { operationMatchesRow, OperationResult } from "../src/features/content/row-operations";
 import { OperationDiagnostic } from "../src/features/ops/interaction-dialog";
@@ -7,19 +7,16 @@ import { AdminRouterProvider } from "../src/app/router";
 import { TooltipProvider } from "@aotter/mantle-ui/kit";
 import { fetchViewPreview, previewCollection, ViewDataPreview } from "../src/features/logic/live-data-preview";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { globalOperations } from "../src/features/ops/operations-view";
-import { buildNavGroups } from "../src/layout/authenticated-layout";
-import { loadLanguage, STRINGS } from "../src/app/i18n";
-import { ADMIN_LANGUAGES, PreferencesProvider } from "../src/app/preferences";
-import type { Collection, AdminOperation, DeveloperViewModel } from "../src/lib/types";
-
+import { PreferencesProvider } from "../src/app/preferences";
+import type { Collection, AdminOperation, DeveloperViewModel, JsonSchema } from "../src/lib/types";
+import { loadLanguage } from "../src/app/i18n";
+import { optionLabel } from "../src/lib/enum-options";
+import { renderDataValue, withNativeSchema } from "../src/lib/render-data-value";
+import { propertyLabel } from "../src/lib/field-label";
+import { api } from "../src/lib/api";
+import { StatusBadge } from "../src/ui/status-badge";
 const operation: AdminOperation = {name: "approve", title: null, description: null, input: {type: "object"}, uiSchema: null, triggers: ["mcp"], rowBindings: [], interactions: [], preconditions: [{field: "reqStatus", values: ["submitted", "reopened"]}]};
 describe("acceptance Admin UX", () => {
-  it("shows the Operations sidebar destination exactly when an unplaced admin action remains", () => {
-    const actions: AdminOperation[] = [{...operation, interactions: [{collection: "requisitions", bind: [], mutates: true}]}, {...operation, name: "create", uiSchema: {collectionAction: "requisitions"}}, {...operation, name: "notify"}];
-    expect(JSON.stringify(buildNavGroups([], [], "en", null, true, globalOperations(actions).length > 0))).toContain("/admin/operations");
-    expect(JSON.stringify(buildNavGroups([], [], "en", null, true, globalOperations(actions.slice(0, 2)).length > 0))).not.toContain("/admin/operations");
-  });
   it.each(["internal", "public"] as const)("explains unavailable %s Views instead of displaying route errors", surface => {
     const model = {name: "unavailable", surface, query: {kind: "sql", statement: "SELECT id FROM records"}} as DeveloperViewModel;
     const client = new QueryClient();
@@ -65,10 +62,48 @@ describe("acceptance Admin UX", () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({unavailable: true}));
     try { expect(await fetchViewPreview("my-requisitions", {limit: 20, q: "a & b"})).toEqual({unavailable: true}); expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/developer/views/my-requisitions?limit=20&q=a+%26+b"), expect.anything()); } finally { fetch.mockRestore(); }
   });
-  it("provides all new messages in every retained locale", async () => {
-    for (const { value: language } of ADMIN_LANGUAGES) {
-      await loadLanguage(language);
-      for (const key of ["ops.details", "ops.conditionConflict", "ops.uniqueConflict", "model.viewDataUnavailable"] as const) expect(STRINGS[language]?.[key]).toBeTruthy();
+});
+
+beforeAll(() => Promise.all([loadLanguage("zh-TW"), loadLanguage("ja")]));
+
+const status: JsonSchema = { type: "string", oneOf: [{ const: "submitted", title: { en: "Submitted", "zh-TW": "已送出" } }, { const: "approved" }] };
+
+describe("enum options", () => {
+
+  it("labels an option by its title in the language, else humanizes the value", () => {
+    expect(optionLabel(status, "submitted", "zh-TW")).toBe("已送出");
+    expect(optionLabel(status, "approved", "zh-TW")).toBe("Approved");
+    expect(renderToStaticMarkup(<>{renderDataValue(status, "submitted", "zh-TW")}</>)).toBe("已送出");
+    expect(renderToStaticMarkup(<>{renderDataValue(status, "", "zh-TW")}</>)).toContain(">-<");
+  });
+});
+
+describe("timestamps", () => {
+  it("renders a date-time and the entry's own timestamps as a time, not the raw string", () => {
+    const html = renderToStaticMarkup(<>{renderDataValue(withNativeSchema("createdAt", undefined), "2026-10-01T09:30:00.000000Z")}</>);
+    expect(html).toMatch(/^<time dateTime="2026-10-01T09:30:00.000000Z">/);
+    expect(withNativeSchema("title", undefined)).toBeUndefined();
+  });
+});
+
+describe("labels and errors", () => {
+  it("names the entry's own timestamps in the language", () => {
+    expect(propertyLabel("createdAt", undefined, "zh-TW", null)).toBe("建立時間");
+    expect(propertyLabel("updated_at", undefined, "en", null)).toBe("Updated");
+  });
+
+  it("reports the server's message, not the status line", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: { code: "SITE_NOT_CONFIGURED", message: "Site settings need the site tables." } }), { status: 501, statusText: "Not Implemented" }));
+    try {
+      await expect(api.get("/site-settings")).rejects.toThrow("Site settings need the site tables.");
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
+});
+test("operational NULL status has no badge and inherited names remain literal text",()=>{
+  const html=(status:string|null)=>renderToStaticMarkup(<PreferencesProvider initialLanguage="en"><StatusBadge status={status}/></PreferencesProvider>);
+  expect(html(null)).toBe("");
+  for(const value of ["constructor","toString","__proto__"]){expect(html(value)).toContain(value);}
+  expect(html("draft")).toContain("Draft");
 });

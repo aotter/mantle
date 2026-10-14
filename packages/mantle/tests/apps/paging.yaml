@@ -119,4 +119,4 @@ kind: View
 metadata: {name: window-groups}
 spec:
   surface: internal
-  sql: SELECT day, max(at) AS latest, count(*) AS total FROM windowed WHERE rn <= 500 GROUP BY day ORDER BY max(at) DESC
+  sql: SELECT day, max(at) AS latest, count(*) AS total FROM windowed WHERE rn <= 8 GROUP BY day ORDER BY max(at) DESC

@@ -16,13 +16,13 @@ beforeAll(async () => {
   const base = fileURLToPath(new URL("apps/.generated/", import.meta.url));
   await mkdir(base, {recursive:true});
   directory = await mkdtemp(join(base, "consumer-"));
-  const sources = await loadFixtureSources();
+  const sources = await loadFixtureSources("purchase.yaml", "store-extra.yaml", "publishing.yaml");
   for (const target of targets) {
     const destination = join(directory, target);
     // unlinked: the consumer resolves @aotter/mantle/* through the package (dist), as an application does
     const generated = await generateOrThrow(target, sources);
     await writeGenerated(destination, generated, false);
-    boundaryFiles.push(...Object.keys(generated).filter(name => name.startsWith("paged/") || name.startsWith("validation/") || name === "mcp.ts").map(name => join(destination, name)));
+    boundaryFiles.push(...Object.keys(generated).filter(name => name.startsWith("paged/") || name.startsWith("validation/") || name.endsWith(".sweepExpired.ts") || name === "mcp.ts").map(name => join(destination, name)));
     files.push(join(destination, "generated.ts"));
     selectedFiles.push(join(destination, "views/purchase-totals.ts"), join(destination, "procedures/create-purchase.ts"));
   }
@@ -121,7 +121,7 @@ test("four generated consumers typecheck against official native driver types", 
   });
   const diagnostics = ts.getPreEmitDiagnostics(program);
   expect(diagnostics.map(d => `${d.file?.fileName}:${d.start} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`).join("\n")).toBe("");
-}, 15_000);
+}, 30_000);
 
 for (const [index, target] of [[2, "cloudflare-d1"]] as const) test(`${target} consumer browser bundle contains no old runtime or compiler`, async () => {
   const bundle = await Bun.build({ entrypoints: [files[index]!], target: "browser", sourcemap: "external" });
@@ -168,7 +168,7 @@ test("CLI regeneration cannot route removed operation entries to renumbered func
   load(join(destination,"procedures/create-b.ts"));
   expect(() => load(join(destination,"views/a.ts"))).toThrow();
   expect(() => load(join(destination,"procedures/create-a.ts"))).toThrow();
-}, 15_000);
+}, 30_000);
 
 test("CLI --check reports stale generated files and Wrangler without writing", async () => {
   const destination = join(directory!, "committed dir");
@@ -202,4 +202,4 @@ test("CLI --check reports stale generated files and Wrangler without writing", a
   run();
   expect(existsSync(join(destination, "obsolete.ts"))).toBe(false);
   expect(() => run(true)).not.toThrow();
-}, 15_000);
+}, 30_000);

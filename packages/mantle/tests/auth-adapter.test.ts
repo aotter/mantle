@@ -26,7 +26,7 @@ const skipIf = bunTest.test.skipIf;
     }, (options as { timeout?: number }).timeout);
   };
 };
-const { authFlowTestSuite, caseInsensitiveTestSuite, joinsTestSuite, normalTestSuite, numberIdTestSuite, testAdapter, transactionsTestSuite, uuidTestSuite } = await import("@better-auth/test-utils/adapter");
+const { authFlowTestSuite, caseInsensitiveTestSuite, createTestSuite, getNormalTestSuiteTests, testAdapter, transactionsTestSuite } = await import("@better-auth/test-utils/adapter");
 
 const sqlite = new Database(":memory:");
 sqlite.run("PRAGMA foreign_keys = ON");
@@ -41,7 +41,45 @@ const resetSqlite = (options: BetterAuthOptions) => {
 // bun's `expect(promise).resolves.not.toThrow()` fails on a promise that resolves to undefined (vitest accepts it), so that one
 // assertion is covered by the "delete of a missing row" test below instead.
 const disableTests = { "delete - should not throw on record not found": true };
-const suites = [normalTestSuite({ disableTests }), transactionsTestSuite(), authFlowTestSuite(), caseInsensitiveTestSuite(), joinsTestSuite({ disableTests }), uuidTestSuite({ disableTests }), numberIdTestSuite({ disableTests })];
+// Joins exercise the same CRUD contract; ID formats need only their own round-trip below.
+const crud = createTestSuite("native CRUD", {
+  defaultBetterAuthOptions: { advanced: { database: { joins: true } } },
+  alwaysMigrate: true,
+}, helpers => {
+  const tests = getNormalTestSuiteTests(helpers);
+  // The combined cases retain these same predicates/projections and check their interaction.
+  for (const name of [
+    "create - should always return an id",
+    "findOne - should find a model",
+    "findOne - should find a model with join",
+    "findOne - should select fields with one-to-many join",
+    "findOne - should select fields with one-to-one join",
+    "findOne - should return an object for one-to-one joins",
+    "findOne - should return an array for one-to-many joins",
+    "findOne - should be able to perform a limited join",
+    "findMany - should find many models",
+    "findMany - should find many models with join",
+    "findMany - should find many with join and limit",
+    "findMany - should select fields with one-to-many join",
+    "findMany - should select fields with one-to-one join",
+    "findMany - should find many with join and offset",
+    "findMany - should find many with join and sortBy",
+    "findMany - should find many with join and where clause",
+    "findMany - should find many with one-to-one join",
+    "findMany - should find many models with contains operator",
+    "findMany - should find many models with limit",
+    "findMany - should find many models with offset",
+    "findMany - should find many models with limit and offset",
+    "findMany - should find many models with sortBy and offset",
+    "findMany - should find many models with sortBy and limit",
+    "findMany - should find many models with sortBy and limit and offset",
+    "findMany - should be able to perform a limited join",
+    "update - should update a model",
+    "update - should work when updated field is not in where clause",
+  ] as const) delete tests[name];
+  return tests;
+});
+const suites = [crud({ disableTests }), transactionsTestSuite(), authFlowTestSuite(), caseInsensitiveTestSuite()];
 
 (await testAdapter({ adapter: () => d1Adapter(d1), runMigrations: resetSqlite, tests: suites })).execute();
 
@@ -93,6 +131,17 @@ for (const [label, setup, enabled] of backends) describe.skipIf(!enabled)(`${lab
   const joins: BetterAuthOptions = { ...rateLimit, advanced: { database: { joins: true } } };
   /** Runs `body` on a fresh database and always drops it. */
   const run = (options: BetterAuthOptions, body: (adapter: Adapter) => Promise<void>) => async () => { const { adapter, done } = await setup(options); try { await body(adapter); } finally { await done?.(); } };
+
+  test("UUID and serial IDs retain their format through a native lookup", async () => {
+    for (const generateId of ["uuid", "serial"] as const) {
+      const { adapter, done } = await setup({ advanced: { database: { generateId } } });
+      try {
+        const user = await makeUser(adapter, `${generateId}@x.io`);
+        expect(user.id).toMatch(generateId === "uuid" ? /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i : /^[1-9]\d*$/);
+        expect(await adapter.findOne({ model: "user", where: [{ field: "id", value: user.id }] })).toMatchObject({ id: user.id });
+      } finally { await done?.(); }
+    }
+  });
 
   // consumeOne guards OTP consumption and incrementOne attempt counting: one statement, at most one winner.
   test("the same code consumed twice concurrently succeeds once", run(rateLimit, async adapter => {
