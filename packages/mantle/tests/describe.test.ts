@@ -307,16 +307,16 @@ test("dispatcher restrictions stay per variant and any variant loosening widens"
   }
 });
 
-test("expanded View SQL pins outer behavior; inner target restrictions stay on the inner target", async () => {
+test("expanded View SQL pins outer behavior; a View that reads a restricted View carries its restrict", async () => {
   const base = await fixtureText();
   const mk = (sql: string, restrict = "") => base + `---\n${H}kind: View\nmetadata: {name: inner_v}\nspec:\n  title: inner\n  surface: internal\n${restrict}  sql: ${sql}\n---\n${H}kind: View\nmetadata: {name: outer-v}\nspec:\n  title: outer\n  surface: public\n  sql: SELECT id, title FROM inner_v ORDER BY id\n`;
   const a = await compile(mk("SELECT id, title FROM orders ORDER BY id"));
   const b = await compile(mk("SELECT id, title FROM orders WHERE tier = 'x' ORDER BY id"));
   const c = await compile(mk("SELECT id, title FROM orders ORDER BY id", "  restrict: {orders: \"region IN auth.user('region')\"}\n"));
   expect(await targetHash(a, "view:outer-v")).not.toBe(await targetHash(b, "view:outer-v"));
-  expect(await targetHash(a, "view:outer-v")).toBe(await targetHash(c, "view:outer-v"));
-  expect(target(await describeApp(c), "view:outer-v").restrict).toEqual({});
-  expect(diffApp(await describeApp(c), await describeApp(a))).toContainEqual(expect.objectContaining({ id: "view:inner_v", field: "restrict", direction: "widened" }));
+  expect(await targetHash(a, "view:outer-v")).not.toBe(await targetHash(c, "view:outer-v"));
+  expect(Object.keys(target(await describeApp(c), "view:outer-v").restrict)).toEqual(["orders"]);
+  for (const id of ["view:inner_v", "view:outer-v"]) expect(diffApp(await describeApp(c), await describeApp(a))).toContainEqual(expect.objectContaining({ id, field: "restrict", direction: "widened" }));
 });
 
 test("standalone route hashes retain the global user-field vocabulary", async () => {
