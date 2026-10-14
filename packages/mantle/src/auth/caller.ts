@@ -9,9 +9,13 @@ import { userCaller } from "../kernel/user-caller.js";
 import type { UserFields } from "../kernel/user-fields.js";
 
 type User = { name?: string | null; email?: string | null; image?: string | null; githubLogin?: string | null; id: string; role?: string | null; banned?: boolean | null; banExpires?: Date | string | number | null };
-const sessionUsers = new WeakMap<Caller, User>();
+const users = new WeakMap<Caller, User>();
+const withUser = <C extends Caller>(caller: C, user: User): C => (users.set(caller, user), caller);
 /** Display identity from the session this Caller already resolved; never an authority source. */
-export const sessionUserOf = (caller: Caller): Readonly<User> | undefined => sessionUsers.get(caller);
+/** The Better Auth user record the caller was resolved from (session, OAuth or service credential): name, email, image. */
+export const userOf = (caller: Caller): Readonly<User> | undefined => users.get(caller);
+/** @deprecated Use `userOf`; it covers every credential, not only sessions. */
+export const sessionUserOf = userOf;
 /** The admin plugin's ban, lapsed once `banExpires` has passed (as the plugin reads it at sign-in). */
 const isBanned = (user: User) => !!user.banned && (user.banExpires == null || new Date(user.banExpires).getTime() > Date.now());
 /** The application's `betterAuth()` instance, as far as Caller resolution reads it. */
@@ -95,7 +99,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     const instance = await auth.get();
     const user = await loadSubject(instance, supplied.subject, options.fields);
     if (!user) throw new ContractError("UNAUTHENTICATED", "The service credential's user is not active.");
-    return userCaller(user, { fields: options.fields, ...adminOptionsOf(instance), credential: supplied.credential, credentialId: supplied.credentialId, clientId: supplied.clientId, scopes: supplied.scopes, issuer: supplied.issuer });
+    return withUser(userCaller(user, { fields: options.fields, ...adminOptionsOf(instance), credential: supplied.credential, credentialId: supplied.credentialId, clientId: supplied.clientId, scopes: supplied.scopes, issuer: supplied.issuer }), user);
   }
   const authorization = request.headers.get("authorization");
   if (authorization && /^(bearer|dpop) /i.test(authorization)) {
@@ -119,7 +123,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     if (lacks(scopes)) throw new ContractError("AUTH_DENIED", "The access token lacks a required scope.");
     if (!user) throw new ContractError("UNAUTHENTICATED", "The access token's user is not active.");
     const text = (v: unknown) => (typeof v === "string" ? v : null);
-    return userCaller(user, { fields: options.fields, ...adminOptionsOf(instance), issuer: claims.iss, scopes, credential: "oauth", credentialId: text(claims.jti), clientId: text(claims.azp) ?? text(claims.client_id) });
+    return withUser(userCaller(user, { fields: options.fields, ...adminOptionsOf(instance), issuer: claims.iss, scopes, credential: "oauth", credentialId: text(claims.jti), clientId: text(claims.azp) ?? text(claims.client_id) }), user);
   }
   if (authorization !== null) throw new ContractError("UNAUTHENTICATED", "The authorization header is not a supported credential.");
   // With no Cookie header at all getSessionCookie returns null: skip even loading the helper.
@@ -154,6 +158,5 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     for (const cookie of refreshed.headers?.getSetCookie().flatMap(splitSetCookieHeader) ?? []) options.responseHeaders.append("set-cookie", cookie);
   }
   const caller = userCaller(user, { fields: options.fields, ...adminOptionsOf(instance), credentialId: found.session.id, impersonatedBy: found.session.impersonatedBy ?? undefined });
-  sessionUsers.set(caller, user);
-  return caller;
+  return withUser(caller, user);
 }

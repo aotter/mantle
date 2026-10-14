@@ -23,7 +23,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
   const print=(ast:SqlNode)=>dialect.print!(ast,plan.schemas);
   const expr=(value:SqlNode)=>print({SelectStmt:{targetList:[{ResTarget:{val:value}}],op:"SETOP_NONE",limitOption:"LIMIT_OPTION_DEFAULT"}}).replace(/^SELECT /,"");
   for(const s of Object.values(plan.schemas))try{
-    const columns=[...system(s),...fields(s)],writable=Object.keys(s.fields).filter(f=>f!==s.scope&&s.fields[f]!=="geo"&&!serverOwned(s.schema,f));
+    const columns=[...system(s),...fields(s)],writable=Object.keys(s.fields).filter(f=>f!==s.scope&&s.fields[f]!=="geo");
     const parent=s.translates&&plan.schemas[s.translates.parent.toLowerCase()];
     const types=columns.map(f=>declaredType(s.fields,f)??(f==="version"?"integer":f.endsWith("_lat")||f.endsWith("_lng")?"real":"text"));
     // Compiler scope names belong only to relations this generated query can reference.
@@ -90,7 +90,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
         const rewrite=(n:SqlNode)=>{if(n.ParamRef){const b=c.binds[n.ParamRef.number-1]!;if(b.k==="input"&&writable.includes(String(b.name))){delete n.ParamRef;n.Raw={parts:[wire.cast(markerText,String(b.type))]};return;}n.ParamRef.number=fixed.indexOf(b)+1;}for(const v of Object.values(n))if(v&&typeof v==="object")Array.isArray(v)?v.forEach(rewrite):rewrite(v);};rewrite(rewritten);return {ast:rewritten,binds:recipesOf({binds:fixed},["id"],message=>{throw Error(message);})};};
       const create=write(insertAst),patch=write(updateAst),remove=write(deleteAst),entryFields:Record<string,unknown>=Object.create(null);
       const insert=create.ast.InsertStmt,update=patch.ast.UpdateStmt;
-      for(const [i,field]of writable.entries())entryFields[field]={column:wire.ident(field),insert:expr(insert.selectStmt.SelectStmt.fromClause[0].RangeSubselect.subquery.SelectStmt.valuesLists[0].List.items[i]),...(!protectedColumns(s).includes(field) ? {update:wire.ident(field)+" = "+expr(update.targetList[updateFields.indexOf(field)].ResTarget.val)} : {})};
+      for(const [i,field]of writable.entries())entryFields[field]={column:wire.ident(field),insert:expr(insert.selectStmt.SelectStmt.fromClause[0].RangeSubselect.subquery.SelectStmt.valuesLists[0].List.items[i]),...(!protectedColumns(s).includes(field)&&!serverOwned(s.schema,field) ? {update:wire.ident(field)+" = "+expr(update.targetList[updateFields.indexOf(field)].ResTarget.val)} : {})};
       const returnSQL=(ast:SqlNode)=>" RETURNING "+ast.returningClause.exprs.map((t:SqlNode)=>expr(t.ResTarget.val)+(t.ResTarget.name?" AS "+wire.ident(t.ResTarget.name):"")).join(",");
       return {projection,from,policy:policy?expr(policy):"",binds:recipesOf(compiled,[],message=>{throw Error(message);}),fields:entryFields,create:{prefix:print(create.ast).slice(0,print(create.ast).indexOf(" ("))+" (",between:") VALUES (",suffix:")",binds:create.binds,columns:insert.cols.slice(writable.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)),values:insert.selectStmt.SelectStmt.targetList.slice(writable.length?1:0).map((t:SqlNode)=>expr(t.ResTarget.val)),returning:returnSQL(insert)},patch:{prefix:print(patch.ast).slice(0,print(patch.ast).indexOf(" SET "))+" SET ",binds:patch.binds,sets:update.targetList.slice(updateFields.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)+" = "+expr(t.ResTarget.val)),where:" WHERE "+expr(update.whereClause),returning:returnSQL(update)},remove:{sql:print(remove.ast),binds:remove.binds,row:true}};
     }));
