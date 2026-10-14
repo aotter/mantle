@@ -26,16 +26,19 @@ type Row = Record<string, unknown>;
 type Exec = (text: string, values: unknown[], protectAdmin?: boolean) => ReturnType<typeof bunSql.run>;
 const nativeReaders = new WeakMap<object, { exec: Exec; param(n: number): string; now(ms: number): Date | string }>();
 /** Selected auth queries share this adapter's handle, dialect and Better Auth's physical model/field mapping. */
-export function nativeAuthRead(options: BetterAuthOptions) {
-  const native = options.database && nativeReaders.get(options.database as object);
-  if (!native) throw new ContractError("AUTH_CONFIGURATION_ERROR", "OAuth requires Mantle's native auth database adapter.", "auth:database");
+/** Better Auth's table and column names for these options (modelName/fieldName mapping); needs no database. */
+export function authNames(options: BetterAuthOptions) {
   const schema = getAuthTables(options);
   return {
-    ...native,
     table: (model: string) => postgres.ident(schema[model]!.modelName),
     column: (model: string, field: string) => postgres.ident(schema[model]?.fields[field]?.fieldName ?? field),
     has: (model: string, field: string) => field === "id" || !!schema[model]?.fields[field],
   };
+}
+export function nativeAuthRead(options: BetterAuthOptions) {
+  const native = options.database && nativeReaders.get(options.database as object);
+  if (!native) throw new ContractError("AUTH_CONFIGURATION_ERROR", "OAuth requires Mantle's native auth database adapter.", "auth:database");
+  return { ...native, ...authNames(options) };
 }
 /** The slice of D1 the adapter calls (a real `D1Database` satisfies it). */
 export type D1Like = Reader;

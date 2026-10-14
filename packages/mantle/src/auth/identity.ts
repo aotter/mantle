@@ -1,6 +1,6 @@
 /** Optional identity operations. Better Auth owns access control, writes and user hooks. */
 import { adminOptionsOf, type AuthInstance } from "./caller.js";
-import { nativeAuthRead } from "./adapter.js";
+import { authNames, nativeAuthRead } from "./adapter.js";
 import { APIError } from "@better-auth/core/error";
 import type { AuthContext } from "@better-auth/core";
 import { ContractError, type Caller, type Postgres } from "../kernel/contracts.js";
@@ -150,7 +150,7 @@ type BootstrapAuth = Pick<AuthInstance, "options"> | (() => Pick<AuthInstance, "
 const promote = (d: Dialect, param: string, source: BootstrapAuth) => {
     const auth = typeof source === "function" ? source() : source, { adminRoles: roles } = adminOptionsOf(auth);
     if (!roles[0]) throw new ContractError("AUTH_CONFIGURATION_ERROR", "Bootstrap requires Better Auth adminRoles.", "identity");
-    const { table, column } = nativeAuthRead(auth.options), role = column("user", "role"), id = column("user", "id");
+    const { table, column } = authNames(auth.options), role = column("user", "role"), id = column("user", "id");
     return `UPDATE ${table("user")} SET ${role}=${literal(roles[0])} || CASE WHEN COALESCE(${role}, '') = '' THEN '' ELSE ',' || ${role} END WHERE ${id}=${param} AND NOT EXISTS (SELECT 1 FROM ${table("user")} WHERE ${adminSql(d, auth)}) RETURNING ${id}`;
 };
 /** First-admin bootstrap has no authorized session for setRole; one conditional write elects a single admin. */
@@ -167,7 +167,7 @@ export function d1BootstrapAdmin(db: Reader, rule: BootstrapRule, auth: Bootstra
 export function postgresBootstrapAdmin(db: Postgres, rule: BootstrapRule, source: BootstrapAuth) {
     return bootstrap(rule, id => transaction(db, async tx => {
         const auth = typeof source === "function" ? source() : source;
-        await tx.unsafe("SELECT pg_advisory_xact_lock(hashtext($1))", [nativeAuthRead(auth.options).table("user")]);
+        await tx.unsafe("SELECT pg_advisory_xact_lock(hashtext($1))", [authNames(auth.options).table("user")]);
         return tx.unsafe(promote(postgres.dialect, "$1", auth), [id]);
     }, { isolation: "read committed" }, "identity/bootstrap"));
 }
