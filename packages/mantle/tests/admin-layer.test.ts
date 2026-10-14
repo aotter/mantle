@@ -12,7 +12,7 @@ import { generateOrThrow, loadFixtureSources, writeGenerated } from "./apps/link
 const user = (role: string, admin = false): Caller => (fixtureCaller({ kind: "user", subject: "reader", role, admin, scopes: ["mcp"], credential: "session", credentialId: "session", clientId: null }));
 const request = () => new Request("https://app.test/private", { headers: { cookie: "better-auth.session_token=fixture" } });
 function auth(role: string, adminRoles?: readonly string[], plugin = true): AuthInstance {
-  return { options: { plugins: plugin ? [{ id: "admin", options: adminRoles ? { adminRoles } : undefined } as never] : [] }, $context: Promise.resolve({}), api: { getSession: async () => ({ headers: null, response: { session: { id: "session" }, user: { id: "reader", role } } }) } };
+  return { options: { plugins: plugin ? [{ id: "admin", options: adminRoles ? { adminRoles } : undefined } as never] : [] }, $context: Promise.resolve({ internalAdapter: { findUserById: async () => ({ id: "reader", role }) } }), api: { getSession: async () => ({ headers: null, response: { session: { id: "session" }, user: { id: "reader", role } } }) } };
 }
 
 test("Better Auth configuration classifies defaults, comma-separated custom roles, and no-admin deployments", async () => {
@@ -32,9 +32,9 @@ test("Better Auth configuration classifies defaults, comma-separated custom role
 
 test("service credentials use the same configured layer and scope checks", async () => {
   const supplied = fixtureCaller({ ...user("editor"), credential: "api-key" as const });
-  const caller = await resolveCaller(request(), authLoader(async () => auth("", ["editor"])), { resolveCredential: () => supplied, scopes: ["mcp"] });
+  const caller = await resolveCaller(request(), authLoader(async () => auth("editor", ["editor"])), { resolveCredential: () => supplied, scopes: ["mcp"] });
   expect(isAdmin(caller)).toBe(true);
-  await expect(resolveCaller(request(), authLoader(async () => auth("", ["editor"])), { resolveCredential: () => supplied, scopes: ["write"] })).rejects.toMatchObject({ code: "AUTH_DENIED" });
+  await expect(resolveCaller(request(), authLoader(async () => auth("editor", ["editor"])), { resolveCredential: () => supplied, scopes: ["write"] })).rejects.toMatchObject({ code: "AUTH_DENIED" });
 });
 
 test("admin MCP refuses every caller outside its allowlist before tools or database load", async () => {

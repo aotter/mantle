@@ -356,7 +356,7 @@ test("authority cache plus joined caller guard and two-session listing have expl
     a.ctx.adapter.findOne = async (...args) => { reads++; return one(...args); };
     a.ctx.adapter.findMany = async (...args) => { reads++; return many(...args); };
     expect(await resolveCaller(new Request("http://localhost/private", { headers: a.headers }), authLoader(async () => a.auth))).toMatchObject({ role: "admin", admin: true });
-    expect(reads).toBe(2);
+    expect(reads).toBe(3);
     reads = 0;
     expect(await a.ctx.internalAdapter.listSessions("s")).toHaveLength(2);
     expect(reads).toBe(3);

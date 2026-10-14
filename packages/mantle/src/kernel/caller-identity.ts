@@ -1,7 +1,7 @@
 import { ContractError } from "./contract-error.js";
 import type { Caller } from "./contracts.js";
 import type { UserValue } from "./user-fields.js";
-type Identity = { readonly roles: readonly string[]; readonly fields: Readonly<Record<string, UserValue>>; readonly admin: boolean; readonly host?: true };
+type Identity = { readonly roles: readonly string[]; readonly fields: Readonly<Record<string, UserValue>>; readonly admin: boolean; readonly impersonatedBy?: string; readonly host?: true };
 export const identities = /* @__PURE__ */ new WeakMap<Caller, Identity>();
 
 

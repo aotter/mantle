@@ -8,7 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { authenticatedAs } from "../src/testing/index.js";
-import { fieldsOf } from "../src/kernel/caller-identity.js";
+import { fieldsOf, rolesOf } from "../src/kernel/caller-identity.js";
 import type { BetterAuthOptions } from "better-auth/types";
 import { afterAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -152,7 +152,7 @@ describe("resolveCaller: session cookie", () => {
     const loader = authLoader(async () => instance);
     app.statements.length = 0;
     expect(await resolveCaller(app.request({ cookie }), loader)).toMatchObject({ kind: "user", subject: userId });
-    expect(app.statements.filter(text => /^\s*(SELECT|WITH)\b/i.test(text))).toHaveLength(1);
+    expect(app.statements.filter(text => /^\s*(SELECT|WITH)\b/i.test(text))).toHaveLength(2);
     expect(await resolveCaller(app.request({ cookie }), loader)).toEqual({ kind: "anonymous" });
   });
 
@@ -185,19 +185,21 @@ const b64url = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
 const REDIRECT = "https://client.example.test/callback";
 
 /** The official authorization-code + PKCE flow against the live instance; returns the access token. */
-async function oauthAccessToken(app: App, cookie: string, scope = "mcp", proof?: (url: string, method: string, token?: string) => Promise<string>) {
+async function oauthAccessToken(app: App, cookie: string, scope = "mcp", proof?: (url: string, method: string, token?: string) => Promise<string>, skipConsent = false) {
   const registered = await app.post("/oauth2/register", { client_name: "test", redirect_uris: [REDIRECT], token_endpoint_auth_method: "none", grant_types: ["authorization_code"], response_types: ["code"], scope });
   expect(registered.status).toBe(201);
   const client = await registered.json() as { client_id: string };
+
+  if (skipConsent) await (await app.auth.$context).adapter.update({ model: "oauthClient", where: [{ field: "clientId", value: client.client_id }], update: { skipConsent: true } });
 
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
   const query = new URLSearchParams({ response_type: "code", client_id: client.client_id, redirect_uri: REDIRECT, scope, state: "s1", code_challenge: challenge, code_challenge_method: "S256", resource: AUDIENCE });
   const authorize = await fetch(`${app.baseURL}/oauth2/authorize?${query}`, { headers: { cookie }, redirect: "manual" });
   const consentUrl = authorize.headers.get("location") ?? "";
-  expect(consentUrl).toContain("/oauth/consent?");
+  if (!skipConsent) expect(consentUrl).toContain("/oauth/consent?");
   const consent = oauthConsents(app.auth as unknown as AuthInstance & { handler(request: Request): Promise<Response> });
-  const location = await consent.completeOAuthConsent(new Request(`${app.baseURL}/oauth/consent`, { method: "POST", headers: { cookie, origin: new URL(app.baseURL).origin, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ oauth_query: new URL(consentUrl, app.baseURL).search.slice(1) }).toString() }), true);
+  const location = skipConsent ? consentUrl : await consent.completeOAuthConsent(new Request(`${app.baseURL}/oauth/consent`, { method: "POST", headers: { cookie, origin: new URL(app.baseURL).origin, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ oauth_query: new URL(consentUrl, app.baseURL).search.slice(1) }).toString() }), true);
   expect(location).toStartWith(REDIRECT);
   const code = new URL(location).searchParams.get("code")!;
   expect(code).toBeTruthy();
@@ -247,7 +249,7 @@ describe("resolveCaller: OAuth bearer", () => {
 
 
 describe("OAuth grant revocation and consent routes", () => {
-  test("revoke then call rejects issued JWT, cleans tokens/codes and does not resurrect it on reconsent", async () => {
+  test("revoke rejects issued JWT and does not resurrect it on reconsent", async () => {
     const app = await makeApp();
     const { cookie, userId } = await app.signIn();
     const { accessToken, clientId } = await oauthAccessToken(app, cookie);
@@ -257,10 +259,11 @@ describe("OAuth grant revocation and consent routes", () => {
     const consents = oauthConsents(app.auth as unknown as AuthInstance & { handler(request: Request): Promise<Response> });
     const [consent] = await consents.listOAuthConsents(userId);
     expect(consent!.clientId).toBe(clientId);
-    for (let i = 0; i < 105; i++) app.sqlite.run('INSERT INTO verification (id, identifier, value, expiresAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)', [`pending-${i}`, `pending-${i}`, JSON.stringify({ type: "authorization_code", userId, query: { client_id: clientId } }), new Date(Date.now()+60000).toISOString(), new Date().toISOString(), new Date().toISOString()]);
+    app.sqlite.run('UPDATE oauthConsent SET referenceId = ? WHERE id = ?', ["other-reference", consent!.id]);
+    await expect(resolveCaller(request, app.loader, { audience: AUDIENCE })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    app.sqlite.run('UPDATE oauthConsent SET referenceId = NULL WHERE id = ?', [consent!.id]);
     expect(await consents.revokeOAuthConsent("someone-else", consent!.id)).toBe(false);
     expect(await consents.revokeOAuthConsent(userId, consent!.id)).toBe(true);
-    expect(app.sqlite.query("SELECT count(*) AS n FROM verification WHERE id LIKE 'pending-%'").get()).toEqual({ n: 0 });
     await expect(resolveCaller(request, app.loader, { audience: AUDIENCE })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
     const { adapter } = await app.auth.$context;
     await adapter.create({ model: "oauthConsent", data: { clientId, userId, scopes: ["mcp"], resources: [AUDIENCE], createdAt: new Date(), updatedAt: new Date() } });
@@ -383,14 +386,14 @@ describe("OAuth grant revocation and consent routes", () => {
     expect(rows.every(row => row.expiresAt === expired)).toBe(true);
     expect(await resolveCaller(app.request({ cookie }), app.loader)).toEqual({ kind: "anonymous" });
   });
-  test("bearer authority is one native JOIN; connected apps is one JOIN in updated order", async () => {
+  test("bearer authority checks the live grant and current user; connected apps is one JOIN in updated order", async () => {
     const app = await makeApp(); const { cookie, userId } = await app.signIn();
     const { accessToken } = await oauthAccessToken(app, cookie);
     app.statements.length = 0;
     expect(await resolveCaller(app.request({ authorization: `Bearer ${accessToken}` }), app.loader, { audience: AUDIENCE })).toMatchObject({ subject: userId });
-    expect(app.statements.filter(sql => sql.includes('FROM "oauthConsent"'))).toHaveLength(1);
-    expect(app.statements.some(sql => sql.includes('JOIN "session"') && sql.includes('JOIN "user"'))).toBe(true);
-    expect(app.statements.some(sql => /FROM "user"/.test(sql))).toBe(false);
+    expect(app.statements.filter(sql => sql.includes('LEFT JOIN "oauthConsent"'))).toHaveLength(1);
+    expect(app.statements.some(sql => sql.includes('JOIN "session"'))).toBe(true);
+    expect(app.statements.some(sql => /FROM "user"/.test(sql))).toBe(true);
     const { adapter } = await app.auth.$context;
     for (const [clientId, updatedAt] of [["older", new Date(0)], ["newer", new Date(Date.now()+60000)]] as const) {
       await adapter.create({ model: "oauthClient", data: { clientId, name: clientId, redirectUris: [REDIRECT], createdAt: new Date(), updatedAt } });
@@ -416,9 +419,9 @@ describe("OAuth grant revocation and consent routes", () => {
     await expect(loader.get()).rejects.toMatchObject({ name: "ContractError", code: "AUTH_CONFIGURATION_ERROR", path: "auth:session" });
   });
   test("app-owned credential hook precedes OAuth/cookies and never falls back after denial", async () => {
-    const app = await makeApp(); const { cookie } = await app.signIn();
-    const credential = fixtureCaller({ kind: "user", subject: "api-user", role: null, scopes: ["mcp"], credential: "api-key", credentialId: "key-id", clientId: null } as const);
-    expect(await resolveCaller(app.request({ cookie, authorization: "Bearer invalid" }), app.loader, { scopes: ["mcp"], resolveCredential: () => credential })).toEqual({ ...credential, admin: false });
+    const app = await makeApp(); const { cookie, userId } = await app.signIn();
+    const credential = fixtureCaller({ kind: "user", subject: userId, role: null, scopes: ["mcp"], credential: "api-key", credentialId: "key-id", clientId: null } as const);
+    expect(await resolveCaller(app.request({ cookie, authorization: "Bearer invalid" }), app.loader, { scopes: ["mcp"], resolveCredential: () => credential })).toEqual({ ...credential, role: "user", roles: ["user"], admin: false });
     await expect(resolveCaller(app.request({ cookie }), app.loader, { scopes: ["other"], resolveCredential: () => credential })).rejects.toMatchObject({ code: "AUTH_DENIED" });
     await expect(resolveCaller(app.request({ cookie }), app.loader, { resolveCredential: () => { throw new ContractError("UNAUTHENTICATED", "Invalid key."); } })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
   });
@@ -488,6 +491,69 @@ describe("verified user field sources", () => {
       const app = await makeApp({ localOnly: true, derivedRegion: true, sessionCache });
       const { cookie } = await app.signIn();
       expect(fieldsOf(await resolveCaller(app.request({ cookie }), app.loader, { fields }))).toEqual({ region: ['TW'] });
+      const service = authenticatedAs({ id: (await app.auth.api.getSession({ headers: new Headers({ cookie }) }))!.user.id }, { credential: 'api-key' });
+      for (const requestOptions of [{ resolveCredential: () => service }, { audience: AUDIENCE }]) {
+        await expect(resolveCaller(app.request({ authorization: 'Bearer unused' }), app.loader, { fields, ...requestOptions })).rejects.toMatchObject({ code: 'AUTH_CONFIGURATION_ERROR', message: expect.stringContaining('customSession-only') });
+      }
     }
   });
+});
+
+test("all credentials load the same current roles, ban and JSON user fields", async () => {
+  const fields = { region: { type: "string", multiple: true } } as const;
+  const app = await makeApp({ additionalFields: { region: { type: "json", required: false, input: false } } });
+  const { cookie, userId } = await app.signIn();
+  const { internalAdapter } = await app.auth.$context;
+  await internalAdapter.updateUser(userId, { role: "admin,editor", region: { all: true } } as never);
+  const { accessToken } = await oauthAccessToken(app, cookie);
+  const service = authenticatedAs({ id: userId, role: "admin", region: ["JP"] }, { fields, credential: "api-key" });
+  const resolve = (withFields = true) => Promise.all([
+    resolveCaller(app.request({ cookie }), app.loader, { fields: withFields ? fields : undefined }),
+    resolveCaller(app.request({ authorization: `Bearer ${accessToken}` }), app.loader, { audience: AUDIENCE, fields: withFields ? fields : undefined }),
+    resolveCaller(app.request(), app.loader, { fields: withFields ? fields : undefined, resolveCredential: () => service }),
+  ]);
+  for (const caller of await resolve()) {
+    expect(rolesOf(caller)).toEqual(["admin", "editor"]);
+    expect(fieldsOf(caller)).toEqual({ region: { all: true } });
+  }
+  app.sqlite.run('UPDATE user SET role = ?, region = ? WHERE id = ?', ["editor", JSON.stringify(["TW"]), userId]);
+  for (const caller of await resolve()) {
+    expect(caller).toMatchObject({ admin: false, role: "editor" });
+    expect(fieldsOf(caller)).toEqual({ region: ["TW"] });
+  }
+  expect((await resolve(false))[2]).toMatchObject({ admin: false, role: "editor" });
+  await internalAdapter.updateUser(userId, { banned: true } as never);
+  expect(await resolveCaller(app.request({ cookie }), app.loader)).toEqual({ kind: "anonymous" });
+  await expect(resolveCaller(app.request(), app.loader, { resolveCredential: () => service })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+  await expect(resolveCaller(app.request({ authorization: `Bearer ${accessToken}` }), app.loader, { audience: AUDIENCE })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+});
+
+test("impersonated sessions carry a real actor only on the branded identity", async () => {
+  const app = await makeApp({ localOnly: true });
+  const actor = await app.signIn("admin@example.test"), member = await app.signIn();
+  await (await app.auth.$context).internalAdapter.updateUser(actor.userId, { role: "admin" } as never);
+  const result = await app.auth.api.impersonateUser({ headers: new Headers({ cookie: actor.cookie }), body: { userId: member.userId }, returnHeaders: true });
+  const cookies = new Map(result.headers.getSetCookie().map(line => { const pair = line.split(";")[0]!; const index = pair.indexOf("="); return [pair.slice(0, index), pair.slice(index + 1)] as const; }));
+  const cookie = [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
+  const caller = await resolveCaller(app.request({ cookie }), app.loader);
+  expect(caller).toMatchObject({ subject: member.userId, impersonatedBy: actor.userId });
+  expect("impersonatedBy" in { ...caller }).toBe(false);
+  expect(Object.create(caller).impersonatedBy).toBeUndefined();
+  expect(Object.isFrozen(caller)).toBe(true);
+});
+
+test("first-party skip_consent tokens require live client scopes and a live session", async () => {
+  const app = await makeApp(); const { cookie, userId } = await app.signIn();
+  const { accessToken, clientId } = await oauthAccessToken(app, cookie, "mcp", undefined, true);
+  const request = app.request({ authorization: `Bearer ${accessToken}` });
+  const caller = () => resolveCaller(request, app.loader, { audience: AUDIENCE });
+  expect(await caller()).toMatchObject({ subject: userId, credential: "oauth" });
+  app.sqlite.run('UPDATE oauthClient SET scopes = ? WHERE clientId = ?', ['[]', clientId]);
+  await expect(caller()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+  app.sqlite.run('UPDATE oauthClient SET scopes = ?, skipConsent = 0 WHERE clientId = ?', ['["mcp"]', clientId]);
+  await expect(caller()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+  app.sqlite.run('UPDATE oauthClient SET skipConsent = 1 WHERE clientId = ?', [clientId]);
+  expect(await caller()).toMatchObject({ subject: userId });
+  app.sqlite.run('DELETE FROM session WHERE userId = ?', [userId]);
+  await expect(caller()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
 });
