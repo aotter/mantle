@@ -2,16 +2,22 @@ import { ContractError, type Caller } from "@aotter/mantle/contracts";
 import { store } from "../generated/generated.js";
 import confirmOrder from "../generated/procedures/confirm-order.js";
 import { handlers } from "./handlers.js";
+import { requestsPage } from "./requests-page.js";
+import { signInPage } from "./sign-in.js";
 
 const MAX_BODY = 64 * 1024, MAX_SKEW_SECONDS = 300;
 
 /**
  * App-owned routes, tried before Admin, MCP and REST. Return undefined to fall through.
+ * GET /sign-in: member sign-in (src/sign-in.ts). GET/POST /requests: the employee's page (src/requests-page.ts).
  * POST /callbacks/supplier: the supplier confirms an order. The signature is checked over the RAW body before parsing.
  * AGENT: match the real supplier's signature scheme (header names, what is signed, encoding).
  */
-export async function appRoutes(request: Request, env: Env, _context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
-  if (new URL(request.url).pathname !== "/callbacks/supplier") return undefined;
+export async function appRoutes(request: Request, env: Env, context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
+  const path = new URL(request.url).pathname;
+  if (path === "/sign-in" && request.method === "GET") return signInPage();
+  if (path === "/requests" && (request.method === "GET" || request.method === "POST")) return requestsPage(request, env, await context.caller());
+  if (path !== "/callbacks/supplier") return undefined;
   if (request.method !== "POST") return new Response(null, { status: 405, headers: { allow: "POST" } });
   if (Number(request.headers.get("content-length") ?? MAX_BODY + 1) > MAX_BODY) return new Response(null, { status: 413 });
   const raw = await request.arrayBuffer();

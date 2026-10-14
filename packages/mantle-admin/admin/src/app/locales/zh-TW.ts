@@ -549,6 +549,7 @@ export default {
     "entryEdit.uploadMedia": "上傳",
     "entryEdit.uploadingMedia": "上傳中...",
     "entryEdit.noMediaPurpose": "尚未設定媒體上傳用途。",
+    "ops.error.refused": "已拒絕，資料沒有變更：{message}",
     "ops.error.executionFailed": "操作已執行，但未能完成。",
     "ops.error.detailsLabel": "顯示詳細資訊",
     "ops.success": "{name} 已完成。",

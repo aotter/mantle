@@ -37,6 +37,11 @@ that have been waiting too long.
   `wrangler.jsonc`. The cron retries failed orders (internal View `approved-requests`) and sends the reminder
   (internal View `stale-requests`) to admins who are not banned.
 - Employees see only their own requests through `my-requests` (`restrict: { requests: "author_id = auth.uid()" }`).
+- **A page only signed-in employees reach**: `src/requests-page.ts` serves `/requests`. An anonymous visitor gets a 303
+  to the shell's `/sign-in?return=/requests` (`src/sign-in.ts`, email code, then back). Signed in, the form posts to the
+  generated `submit-request` Procedure and the table reads `my-requests`, both as the visitor's own caller, so the
+  manifest's `requires` and `restrict` decide access, not the page. Unstyled on purpose. `src/signup.ts` lets only
+  `@EMPLOYEE_DOMAIN` emails create an account (`vars` in `wrangler.jsonc`).
 
 Search for `AGENT:` to find what a real app must still provide: an email sender, the supplier's real API and signature
 scheme.

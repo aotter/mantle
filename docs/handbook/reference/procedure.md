@@ -15,3 +15,5 @@ A ref handler is application code called as `(ctx, input)`. Generation prints re
 Generated requires checks gate calls. Boundary input validators are generated separately; direct queries accept driver-ready, app-validated input. Dynamic guards and lifecycle hooks are rejected. See [native execution](../guides/native-execution.md) and [surface contracts](surface.md).
 
 SQL INSERT/upsert into a user-field scoped Schema is system-only. For a verified user, insert through `ctx.store` so membership and single-partition autofill run before the native write. SET cannot change a field-scope column, including ON CONFLICT DO UPDATE. Scoped unique conflict targets gain the owner/field prefix automatically.
+
+App code (a page, a callback) may call a generated Procedure directly: `import run from "../generated/procedures/<name>.js"`, `await run(db, caller, input)`. REST and MCP validate input before that call; direct callers do it themselves with `validate(input)` from `generated/validation/procedures/<name>.js`, which throws `INPUT_VALIDATION_FAILED`. See `docs/examples/purchasing/src/requests-page.ts`.
