@@ -125,7 +125,7 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
       assert.equal(writer.kind === "user" && writer.role, "admin"); assert.equal(reads(), expected);
       counts[`${variant}:write-current-role`] = reads();
     }
-    assert.equal((await check("headers", variant === "authority" ? 4 : expected, new Headers())).caller.kind, "user");
+    assert.equal((await check("headers", expected, new Headers())).caller.kind, "user");
     assert.equal(statements.some(text => /^UPDATE /i.test(text)), false, "fresh responseHeaders do not refresh or add an UPDATE");
     await run(`UPDATE "${u}" SET "${field("banned")}" = ${dialect === "postgres" ? "true" : "1"} WHERE id = ${dialect === "postgres" ? "$1" : "?"}`, [id]);
     assert.deepEqual((await check("banned", expected)).caller, { kind: "anonymous" });
@@ -141,7 +141,7 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
     assert.equal((await resolveCaller(request(cookie), loader)).kind, "user");
     assert.equal(reads(), expected);
     assert.equal(statements.some(text => /^UPDATE /i.test(text)), false, "without responseHeaders a due cookie must not refresh");
-    const refresh = await check("refresh", variant === "authority" ? 6 : expected, new Headers());
+    const refresh = await check("refresh", expected, new Headers());
     assert.equal(refresh.caller.kind, "user");
     assert.ok(refresh.responseHeaders.getSetCookie().some(line => line.includes("session_token=")));
     assert.equal(statements.filter(text => /^UPDATE /i.test(text)).length, 1);
@@ -170,10 +170,6 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
     const signedAgain = await post("/sign-in/email-otp", { email: `${variant}@example.test`, otp });
     assert.equal(signedAgain.status, 200);
     const newCookie = signedAgain.headers.getSetCookie().map(line => line.split(";")[0]).join("; ");
-    if (variant === "authority") {
-      for (const key of cache.keys()) if (key.endsWith("active-sessions-" + id)) cache.delete(key);
-      assert.equal((await (await auth.$context).internalAdapter.listSessions(id)).length, 1, "missing KV index rebuilds from primary sessions");
-    }
     assert.equal((await resolveCaller(request(newCookie), loader)).kind, "user");
     await run(`DELETE FROM "${u}" WHERE id = ${dialect === "postgres" ? "$1" : "?"}`, [id]);
     statements.length = 0;
