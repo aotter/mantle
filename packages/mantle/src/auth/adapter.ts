@@ -1,5 +1,5 @@
 /**
- * Better Auth `database` adapters on the same native handle as the data layer: a Cloudflare D1 binding or Bun.SQL.
+ * Better Auth `database` adapters on the same native handle as the data layer: a Cloudflare D1 binding, or PostgreSQL through Bun.SQL or postgres.js.
  * No Kysely. Rules (where semantics, joins, field/model mapping, value transforms) come from Better Auth's own
  * `createAdapterFactory`; this file only turns its already-normalised calls into parameterised SQL.
  * `consumeOne` and `incrementOne` are single statements: D1 has no transactions, and they guard OTP consumption and
@@ -11,9 +11,8 @@ import { APIError } from "@better-auth/core/error";
 import { getAuthTables } from "@better-auth/core/db";
 import type { OAuthOptions } from "@better-auth/oauth-provider";
 import { resourceSeeds } from "./resource-seeds.js";
-import { ContractError } from "../kernel/contracts.js";
+import { ContractError, type Postgres, type Unsafe } from "../kernel/contracts.js";
 import { adminOptionsOf } from "./caller.js";
-import type { SQL } from "bun";
 import type { Dialect } from "../kernel/dialect/common.js";
 import * as postgres from "../kernel/dialect/postgres.js";
 import * as sqlite from "../kernel/dialect/sqlite.js";
@@ -269,17 +268,23 @@ export function d1Adapter(db: D1Like) {
   return factory;
 }
 
-/** Bun.SQL against PostgreSQL. Transactions use `sql.begin`, which pins every statement to one connection. */
-export function bunSqlAdapter(sql: SQL) {
-  const executor = (handle: Pick<SQL, "unsafe">): Exec => async (text, values, protectAdmin) => {
-    const run = async (tx: Pick<SQL, "unsafe">) => {
+/**
+ * PostgreSQL through Bun.SQL or postgres.js (the `Postgres` contract the data layer uses). Transactions use `begin`,
+ * which pins every statement to one connection. On Workers, create the postgres.js client per request (or per isolate
+ * with `max: 1`), as for the data layer.
+ */
+export function postgresAdapter(sql: Postgres) {
+  const executor = (handle: Unsafe): Exec => async (text, values, protectAdmin) => {
+    const run = async (tx: Unsafe) => {
       if (protectAdmin) await tx.unsafe("SELECT pg_advisory_xact_lock(1296125516,1)", []);
       return bunSql.run(tx as never, text, values);
     };
-    return protectAdmin && handle === sql ? sql.begin(tx => run(tx)) : run(handle);
+    return protectAdmin && handle === sql ? sql.begin("read write", tx => run(tx)) : run(handle);
   };
-  const make = (handle: Pick<SQL, "unsafe">, transaction: DBAdapterFactoryConfig["transaction"]) => (options: BetterAuthOptions) => build(postgres, true, "bun-sql", "Mantle Bun.SQL Adapter", executor(handle), transaction, options)(options);
-  const factory = (options: BetterAuthOptions) => make(sql, cb => sql.begin(tx => cb(make(tx, false)(options))))(options);
+  const make = (handle: Unsafe, transaction: DBAdapterFactoryConfig["transaction"]) => (options: BetterAuthOptions) => build(postgres, true, "postgres", "Mantle PostgreSQL Adapter", executor(handle), transaction, options)(options);
+  const factory = (options: BetterAuthOptions) => make(sql, async cb => sql.begin("read write", tx => cb(make(tx, false)(options))))(options);
   nativeReaders.set(factory, { exec: executor(sql), param: postgres.param, now: postgres.now });
   return factory;
 }
+/** @deprecated The same adapter under its earlier name; use `postgresAdapter`. */
+export const bunSqlAdapter = postgresAdapter;

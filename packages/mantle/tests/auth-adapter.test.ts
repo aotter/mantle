@@ -1,13 +1,15 @@
 /**
  * Better Auth's official adapter suite (`@better-auth/test-utils/adapter`) against the native adapters:
- * D1 (a bun:sqlite-backed D1 shim) and Bun.SQL PostgreSQL (when MANTLE_NEXT_BUN_PG_URL is set).
+ * D1 (a bun:sqlite-backed D1 shim) and PostgreSQL through Bun.SQL and postgres.js (when MANTLE_NEXT_BUN_PG_URL is set).
  */
 import * as bunTest from "bun:test";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SQL } from "bun";
+import postgresJs from "postgres";
 import type { BetterAuthOptions } from "@better-auth/core";
-import { bunSqlAdapter, d1Adapter } from "../src/auth/adapter.js";
+import { postgresAdapter, d1Adapter } from "../src/auth/adapter.js";
+import type { Postgres } from "../src/kernel/contracts.js";
 import { d1Shim } from "./apps/d1-shim.js";
 import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 
@@ -84,41 +86,46 @@ const suites = [crud({ disableTests }), transactionsTestSuite(), authFlowTestSui
 (await testAdapter({ adapter: () => d1Adapter(d1), runMigrations: resetSqlite, tests: suites })).execute();
 
 const pgUrl = process.env.MANTLE_NEXT_BUN_PG_URL;
-test.skipIf(!pgUrl)("Bun.SQL PostgreSQL official suite (set MANTLE_NEXT_BUN_PG_URL)", () => {});
+test.skipIf(!pgUrl)("PostgreSQL official suite (set MANTLE_NEXT_BUN_PG_URL)", () => {});
+/** The two PostgreSQL clients the adapter accepts. */
+const clients = {
+  "Bun.SQL": (search_path: string) => { const sql = new SQL({ url: pgUrl!, connection: { search_path }, max: 4 }); return { sql: sql as unknown as Postgres, close: () => sql.close() }; },
+  "postgres.js": (search_path: string) => { const sql = postgresJs(pgUrl!, { connection: { search_path }, max: 4, onnotice: () => {} }); return { sql: sql as unknown as Postgres, close: () => sql.end() }; },
+};
 
 /**
  * A fresh schema per run on `search_path`, dropped after. Bun.SQL caches prepared statements by text with the parameter
  * types the server inferred, so a pool that outlives a schema reset reuses stale plans: every reset gets a new pool.
  */
-async function pgSchema() {
+async function pgSchema(client: keyof typeof clients = "Bun.SQL") {
   const name = `auth_${crypto.randomUUID().replaceAll("-", "")}`;
   const admin = new SQL(pgUrl!);
   await admin.unsafe(`CREATE SCHEMA "${name}"`, []);
-  const pool = () => new SQL({ url: pgUrl!, connection: { search_path: name }, max: 4 });
+  let current = clients[client](name);
   const fixture = {
-    sql: pool(),
+    get sql() { return current.sql; },
     reset: async (options: BetterAuthOptions) => {
-      await fixture.sql.close();
+      await current.close();
       await admin.unsafe(`DROP SCHEMA "${name}" CASCADE`, []);
       await admin.unsafe(`CREATE SCHEMA "${name}"`, []);
-      fixture.sql = pool();
-      for (const statement of authSchemaSql(options, "postgres")) await fixture.sql.unsafe(statement, []);
+      current = clients[client](name);
+      for (const statement of authSchemaSql(options, "postgres")) await current.sql.unsafe(statement, []);
     },
-    drop: async () => { await fixture.sql.close(); await admin.unsafe(`DROP SCHEMA IF EXISTS "${name}" CASCADE`, []); await admin.close(); },
+    drop: async () => { await current.close(); await admin.unsafe(`DROP SCHEMA IF EXISTS "${name}" CASCADE`, []); await admin.close(); },
   };
   return fixture;
 }
 
-if (pgUrl) {
-  const pg = await pgSchema();
-  (await testAdapter({ adapter: () => bunSqlAdapter(pg.sql), runMigrations: pg.reset, tests: suites, onFinish: pg.drop })).execute();
+if (pgUrl) for (const client of Object.keys(clients) as (keyof typeof clients)[]) {
+  const pg = await pgSchema(client);
+  (await testAdapter({ adapter: () => postgresAdapter(pg.sql), runMigrations: pg.reset, tests: suites, onFinish: pg.drop })).execute();
 }
 
 type Adapter = ReturnType<ReturnType<typeof d1Adapter>>;
 /** One database per test (a bun:sqlite D1 shim, or a fresh PostgreSQL schema) with the adapter built for `options`. */
 const backends: [label: string, setup: (options: BetterAuthOptions) => Promise<{ adapter: Adapter; done?: () => Promise<void> }>, enabled: boolean][] = [
   ["D1", async options => { resetSqlite(options); return { adapter: d1Adapter(d1)(options) }; }, true],
-  ["Bun.SQL", async options => { const pg = await pgSchema(); await pg.reset(options); return { adapter: bunSqlAdapter(pg.sql)(options) as never, done: pg.drop }; }, !!pgUrl],
+  ...(Object.keys(clients) as (keyof typeof clients)[]).map(client => [client, async (options: BetterAuthOptions) => { const pg = await pgSchema(client); await pg.reset(options); return { adapter: postgresAdapter(pg.sql)(options) as never, done: pg.drop }; }, !!pgUrl] satisfies (typeof backends)[number]),
 ];
 const expiresAt = () => new Date(Date.now() + 60_000);
 const makeUser = (adapter: Adapter, email: string, sessions = 0) => adapter.create<{ id: string }>({ model: "user", data: { name: email, email, emailVerified: true, createdAt: new Date(), updatedAt: new Date() } }).then(async user => {
