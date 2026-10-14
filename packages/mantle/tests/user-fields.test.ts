@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { userCaller } from '../src/kernel/user-caller.js';
 import { hasRole, fieldsOf } from '../src/kernel/caller-identity.js';
-import { userBinds, modeOf, userRefs, isAll } from '../src/kernel/user-fields.js';
+import { userBinds, modeOf, userRefs, isAll, scopeInsert } from '../src/kernel/user-fields.js';
 import { binds } from '../src/kernel/binds.js';
 import { renderTerm } from '../src/kernel/store.js';
 import { dialect } from '../src/kernel/dialect/sqlite.js';
@@ -230,4 +230,13 @@ test('a caller Procedure may insert where the target restricts only the owner co
  const own=JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Procedure',metadata:{name:'add-own'},spec:{title:'Add',input:{type:'object',properties:{region:{type:'string'},tier:{type:'string'}},required:['region','tier'],additionalProperties:false},output:{type:'object'},restrict:{orders:'author_id = auth.uid()'},handler:{sql:'INSERT INTO orders (region, tier) VALUES (input.region, input.tier) RETURNING id'}}});
  const files=await generateOrThrow('bun-sqlite',[{sourceId:'own.yaml',text:schema+'\n---\n'+own}]);
  expect(files['generated.ts']).toContain('add-own');
+});
+test('an undefined scope value is not given: one partition autofills, several still ask, a system caller must name it', () => {
+  const scopes = [{ column: 'region', field: 'region', type: 'string' as const }];
+  const one = userCaller({ id: 'member', role: 'user', region: ['TW'] }, { fields });
+  expect(scopeInsert(scopes, one, { region: undefined, name: 'n' })).toEqual({ name: 'n', region: 'TW' });
+  expect(() => scopeInsert(scopes, one, { region: 'JP' })).toThrow(/outside the caller/);
+  const two = userCaller({ id: 'member', role: 'user', region: ['TW', 'JP'] }, { fields });
+  expect(() => scopeInsert(scopes, two, { region: undefined })).toThrow(/several 'region' values/);
+  expect(() => scopeInsert(scopes, { kind: 'system', reason: 'test' }, { region: undefined })).toThrow(/explicit 'region' value/);
 });

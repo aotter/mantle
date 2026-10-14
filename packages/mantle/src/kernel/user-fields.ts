@@ -26,7 +26,10 @@ const missing = (caller: Caller, field: string): never => {
 export function scopeInsert(scopes: readonly { readonly column: string; readonly field: string; readonly type: 'string' | 'number' }[], caller: Caller, set: object): object {
   let out = set;
   for (const scope of scopes) {
-    const given = Object.entries(out).find(([field]) => field.toLowerCase() === scope.column);
+    const own = ([field]: [string, unknown]) => field.toLowerCase() === scope.column;
+    // An optional input forwarded as `undefined` is "not given": autofill or the usual refusal applies, not a scope denial.
+    if (Object.entries(out).some(entry => own(entry) && entry[1] === undefined)) out = Object.fromEntries(Object.entries(out).filter(entry => !(own(entry) && entry[1] === undefined)));
+    const given = Object.entries(out).find(own);
     if (caller.kind === 'system' || isAll(caller, scope.field)) {
       if (!given) throw new ContractError('INPUT_VALIDATION_FAILED', `An explicit '${scope.column}' value is required.`);
       continue;
