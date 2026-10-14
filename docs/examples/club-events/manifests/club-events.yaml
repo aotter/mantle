@@ -1,0 +1,142 @@
+# Club events: officers (admin) create events in Admin; signed-in members register and cancel their own seats.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: events }
+spec:
+  title: Events
+  lifecycle: operational
+  # Registering subtracts a seat in the same program as the insert: at 0 seats the check fails and the insert rolls back.
+  checks: ["seats_left >= 0"]
+  indexes: [[startsAt, id]]
+  uiSchema: { list: { primaryField: title, columns: [startsAt, seats_left, closed] } }
+  schema:
+    type: object
+    required: [title, startsAt, seats_left, closed]
+    properties:
+      title: { type: string, minLength: 1 }
+      startsAt: { type: string, format: date-time }
+      # Officers enter the capacity here when they create the event; register/cancel keep it current.
+      seats_left: { type: integer, minimum: 0, title: Seats left }
+      closed: { type: boolean, default: false }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: registrations }
+spec:
+  title: Registrations
+  lifecycle: operational
+  # No `scope` here: a field scope would hide rows from officers too. Members are narrowed by `restrict` below.
+  # `member` is written by the register handler from the caller; native authorId cannot be in a unique index.
+  uniqueIndexes: [[eventId, member]]
+  indexes: [[authorId, createdAt, id]]
+  # Officers read registrations in Admin; generic edits would bypass seats_left, so writes go through the Procedures.
+  uiSchema: { list: { primaryField: eventId, columns: [member] } }
+  schema:
+    type: object
+    readOnly: true
+    required: [eventId, member]
+    properties:
+      eventId: { type: string, x-mantle-ref: events }
+      member: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: events }
+spec:
+  surface: public
+  description: Upcoming club events with the seats still available.
+  requires: { auth: { all: [ctx.user] } }
+  sql: |
+    SELECT id, title, startsAt AS "startsAt", seats_left, closed FROM events ORDER BY startsAt, id
+---
+# Only the caller's own rows: restrict narrows registrations to author_id = the caller.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: my-registrations }
+spec:
+  surface: public
+  description: The signed-in member's registrations.
+  requires: { auth: { all: [ctx.user] } }
+  restrict: { registrations: "author_id = auth.uid()" }
+  sql: |
+    SELECT r.id, r.eventId AS "eventId", e.title, e.startsAt AS "startsAt"
+    FROM registrations r JOIN events e ON e.id = r.eventId
+    ORDER BY r.created_at DESC, r.id DESC
+---
+# The member-facing entry: a ref handler checks the event, then runs register-write.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: register }
+spec:
+  title: Register for an event
+  description: Take one seat at a club event for the signed-in member. Fails when the event is closed, full or already registered.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [eventId]
+    additionalProperties: false
+    properties:
+      eventId: { type: string }
+  output: { type: object }
+  handler: { ref: register }
+---
+# Internal (no Trigger): one program, so a failed seat check rolls back the insert too.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: register-write }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [eventId, member]
+    properties:
+      eventId: { type: string }
+      member: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO registrations (eventId, member) VALUES (input.eventId, input.member) RETURNING id, eventId AS "eventId";
+      UPDATE events SET seats_left = seats_left - 1 WHERE id = input.eventId RETURNING seats_left
+---
+# restrict: another member's registration is invisible here, so the UPDATE matches no row -> CONFLICT, nothing changes.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: cancel-registration }
+spec:
+  title: Cancel a registration
+  description: Cancel one of the signed-in member's registrations and return the seat.
+  requires: { auth: { all: [ctx.user] } }
+  restrict: { registrations: "author_id = auth.uid()" }
+  input:
+    type: object
+    required: [id]
+    additionalProperties: false
+    properties:
+      id: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE events SET seats_left = seats_left + 1 WHERE id = (SELECT eventId FROM registrations WHERE id = input.id) RETURNING seats_left;
+      DELETE FROM registrations WHERE id = input.id RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: register-http }
+spec:
+  source: { kind: http, method: POST, path: /api/registrations }
+  target: { procedure: register }
+---
+# "Your AI" registers for the member over the member MCP endpoint (/mcp) with the member's own sign-in.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: register-mcp }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: register }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: cancel-registration-http }
+spec:
+  source: { kind: http, method: POST, path: /api/registrations/cancel }
+  target: { procedure: cancel-registration }

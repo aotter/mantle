@@ -1,10 +1,10 @@
 # Transactional email
 
-Import the optional email port from `@aotter/mantle/email`. OSS supplies
+Import the optional email port from `@aotter/mantle/email`. Mantle supplies
 `EmailSender`, `EmailSendArgs`, English `signInCodeEmail`, `signInLinkEmail`
 and `adminInvitationEmail` templates, and `ConsoleEmailSender` for local
-development. Mantle Cloud wires email sending and email OTP by default; OSS
-applications select and configure their sender and Better Auth plugins.
+development. Applications select and configure their sender and Better Auth
+plugins.
 
 `send({ to, subject, text, html?, locale, category? })` returns `Promise<void>`.
 The templates return `{ subject, text }`, with the same English text as 0.2;

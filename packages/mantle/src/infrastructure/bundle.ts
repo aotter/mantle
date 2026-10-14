@@ -47,6 +47,14 @@ export async function bundle(entry: string, outdir: string): Promise<Metafile> {
     entryPoints: [entry], outdir, bundle: true, splitting: true, format: "esm", platform: "neutral",
     conditions: ["workerd", "worker", "browser"], mainFields: ["module", "main"],
     external: ["cloudflare:*", "node:*"], minify: true, metafile: true, chunkNames: "chunks/[name]-[hash]",
+    plugins: [{ name: "optional-peers", setup(builder) {
+      builder.onResolve({ filter: /^(?:better-auth|@better-auth\/(?:core|oauth-provider)|@modelcontextprotocol\/server)(?:\/|$)/ }, async args => {
+        if (args.pluginData?.optionalPeer) return;
+        const resolved = await builder.resolve(args.path, { importer: args.importer, resolveDir: args.resolveDir, kind: args.kind, pluginData: { optionalPeer: true } });
+        // Unselected request paths may reference absent peers; installed peers still bundle normally.
+        return resolved.errors.length ? { path: args.path, external: true } : resolved;
+      });
+    } }],
   });
   if (Object.keys(result.metafile.inputs).some(input => /(?:^|\/)mantle\/(?:src|dist)\/testing\//.test(resolve(input).replaceAll("\\", "/"))))
     throw new Error("@aotter/mantle/testing is only for tests and cannot be bundled for production.");

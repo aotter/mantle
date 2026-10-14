@@ -68,6 +68,7 @@ jobs:
       - name: Packed-consumer provenance self-test
         run: node scripts/check-packed-consumer.mjs --self-test
       - run: pnpm check:worker-consumer
+      - run: pnpm check:examples
       - run: pnpm check:doc-examples
       - run: pnpm check:oss-plugin
       - name: Install Chrome

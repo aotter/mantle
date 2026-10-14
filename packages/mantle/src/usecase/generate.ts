@@ -133,7 +133,7 @@ export function generate(input: GenerateInput): GenerateResult {
     ...(hasHandlers ? [`const storeProcedures = { ${[...procedures, ...refProcedures].join(", ")} };`] : []),
     `const initStore = () => createStore<Database, Tables, typeof DRIVER, { views: typeof views; procedures: typeof ${storeProcedures} }${hasHandlers ? ", { handlers: Handlers }" : ""}>(${user.used ? "{...DIALECT.dialect, ...USER_VALUES}" : "DIALECT.dialect"}, DRIVER, RULES, ${stores.facts}, { views, procedures: ${storeProcedures} });`,
     `let makeStore: ReturnType<typeof initStore>;`,
-    `export function store${hasHandlers ? "<const H extends Handlers>" : ""}(db: Database, caller: Caller${hasHandlers ? ", options: { handlers: H & Record<Exclude<keyof H, keyof Handlers>, never> }" : ""}): ReturnType<typeof makeStore> { return (makeStore ??= initStore())(db, caller${hasHandlers ? ", options" : ""}); }`,
+    `export function store${hasHandlers ? "<const H extends Handlers>" : ""}(db: Database, caller: Caller${hasHandlers ? ", options: { handlers: H & Record<Exclude<keyof H, keyof Handlers>, never> }" : ", _options?: { handlers?: Handlers }"}): ReturnType<typeof makeStore> { return (makeStore ??= initStore())(db, caller${hasHandlers ? ", options" : ""}); }`,
   ] : [])].join("\n");
   const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
   const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny", ...(/\bisAdmin\(/.test(code) ? ["isAdmin"] : []), ...(/\bisUser\(/.test(code) ? ["isUser"] : [])] : []), ...(procedures.length ? ["type Output"] : [])];

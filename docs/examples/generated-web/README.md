@@ -2,10 +2,9 @@
 
 A minimal application-owned Cloudflare D1 Worker: an HTML list and detail page,
 REST, `llms.txt`, sitemap, Markdown alternates and canonical head tags. It uses the
-positional native generator documented by the selected `@aotter/mantle` package
-(alpha.7 onwards); earlier Core releases use a different CLI. The frontend has no
-runtime dependencies. It renders Markdown as escaped text, preserving the source
-for the `.md` alternate.
+positional native generator documented by the installed `@aotter/mantle` version.
+The frontend has no runtime dependencies. It renders Markdown as escaped text,
+preserving the source for the `.md` alternate.
 
 Copy this directory outside the SDK checkout. In that directory, set
 `"type": "module"` in `package.json`, install the exact selected Mantle version
@@ -27,10 +26,9 @@ npx wrangler dev --local
 Keep generated TypeScript, `schema.sql` and the configured Wrangler file in
 version control. The workflow is generate → typecheck → implement any listed ref
 handlers → typecheck → commit generated output. This manifest has no ref handlers.
-For alpha.7 after the service-composition work lands, CI runs
+Use the installed version's documented commands. CI runs
 `mantle generate cloudflare-d1 generated posts.yaml --check` to refuse stale or
-missing generated files without writing them. Earlier linked generators do not
-yet support `--check`; use the installed version's documented commands. `dist/`
+missing generated files without writing them. `dist/`
 and local Wrangler state stay ignored.
 
 For a linked pre-release SDK, use its installed `mantle` CLI instead of installing

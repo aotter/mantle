@@ -175,8 +175,8 @@ import {mcp,tools} from './mcp.js';
 import {rest} from './rest.js';
 const options={db:()=>null!,caller:()=>({kind:'anonymous' as const})};
 adminBindings(); mcp(options); rest(options);
-webmcpRoutes({tools:[]},tools);
-webmcpRoutes({tools:[]},tools,undefined);
+// Generated tools always carry the app's Handlers (empty without ref Procedures), so wiring is one shape.
+webmcpRoutes({tools:[]},tools,{});
 `);roots.push(plainConsumer);
  // A field-scoped app passes its generated metadata (with userFields) straight to admin().
  const scoped=join(dir,"scoped"),scopedResult=await generateFromSources({target:"cloudflare-d1",admin:true,sources:{sources:[{sourceId:"scoped.yaml",text:`apiVersion: cms.mantle.aotter.net/v2

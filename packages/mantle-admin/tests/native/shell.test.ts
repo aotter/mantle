@@ -26,3 +26,10 @@ test("traversal, encoded separators and NUL are refused; missing built files sta
   expect(await get("/elsewhere")).toBeUndefined();
   expect(await adminShell(new Request("https://app.test/admin",{method:"POST"}),assets)).toBeUndefined();
 });
+test("a non-default auth base is announced to the SPA; the default leaves the page untouched",async()=>{
+  const page=(body:string)=>()=>new Response(body,{headers:{"content-type":"text/html"}});
+  const staff=(await adminShell(new Request("https://app.test/admin"),page("<head></head>"),{authBasePath:"/api/auth/staff/"}))!;
+  expect(await staff.text()).toBe('<head><meta name="mantle-auth-base" content="/api/auth/staff"></head>');
+  expect(await (await adminShell(new Request("https://app.test/admin"),page("<head></head>"),{authBasePath:"/api/auth"}))!.text()).toBe("<head></head>");
+  await expect(adminShell(new Request("https://app.test/admin"),page(""),{authBasePath:'/x"><script>'})).rejects.toThrow("authBasePath");
+});

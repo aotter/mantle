@@ -67,15 +67,15 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
   for (const [schema, count] of uses) if (count > 1 && schema) shared.set(schema, `schema${shared.size}`);
   return {...files,"mcp.ts": `${[`import { mcp as serve, type Options as McpOptions, type Tool } from "@aotter/mantle/mcp";`, databaseImport(target),
     ...(media ? ['import type { MediaStorage } from "@aotter/mantle/site";'] : []),
-    ...(refs ? ['import type { Handlers } from "./generated.js";'] : []), ...(hasRef ? ['import { store } from "./generated.js";'] : []), ...imports,
+    'import type { Handlers } from "./generated.js";', ...(hasRef ? ['import { store } from "./generated.js";'] : []), ...imports,
     ...[...shared].map(([schema, name]) => `const ${name} = ${schema};`)].join("\n")}
-export type Options<Env = unknown> = McpOptions<Env, Database>${refs ? " & { handlers: Handlers }" : ""}${media ? " & { media?: (env: Env) => MediaStorage }" : ""};
+export type Options<Env = unknown> = McpOptions<Env, Database> & { handlers${refs ? "" : "?"}: Handlers }${media ? " & { media?: (env: Env) => MediaStorage }" : ""};
 /** The generated tools, exported so an app can compose them with its own tools and MCP Apps. */
-export const tools: readonly Tool<Database${refs ? ", Handlers" : ""}>[] = [
+export const tools: readonly Tool<Database, Handlers>[] = [
 ${tools.map(({ fields, schema }) => `  { ${fields.map(field => field === "inputSchema" ? `inputSchema: ${shared.get(schema) ?? schema}` : field).join(", ")} },`).join("\n")}
 ];
 export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env, ctx?: import("@aotter/mantle/contracts").RequestContext) => Promise<Response | undefined> {
-  return serve<Env, Database${refs ? ", Handlers" : ""}>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/admin" ? (await import("./mcp-media.js")).mediaTools${refs ? "<Handlers>" : ""}(() => options.media!(env)) : [])]` : "tools"}, ${plan.access ? `{...options, fields: ${q(plan.access.userFields)}, accessTargets: () => import("./access-targets.js").then(m => m.targets)}` : '{...options, accessTargets: () => import("./access-targets.js").then(m => m.targets)}'}, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaDefinitions().filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"admin"})))} : [])]` : q(reads)});
+  return serve<Env, Database, Handlers>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/admin" ? (await import("./mcp-media.js")).mediaTools<Handlers>(() => options.media!(env)) : [])]` : "tools"}, ${plan.access ? `{...options, fields: ${q(plan.access.userFields)}, accessTargets: () => import("./access-targets.js").then(m => m.targets)}` : '{...options, accessTargets: () => import("./access-targets.js").then(m => m.targets)}'}, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaDefinitions().filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"admin"})))} : [])]` : q(reads)});
 }
 `};
 }

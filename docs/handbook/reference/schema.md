@@ -25,6 +25,8 @@ spec:
 
 ## Fields and storage
 
+A string `pattern` needs a `maxLength`: generation bounds each regex's backtracking and, when it refuses one (`INVALID_PATTERN`), names the largest `maxLength` it accepts. Anchor patterns with `^` and avoid nested quantifiers such as `(-[a-z0-9]+)*`.
+
 | Field | sqlite | postgres |
 | --- | --- | --- |
 | string | TEXT | text |
@@ -54,13 +56,17 @@ Owner and field columns prefix every unique index in that order. User reads/writ
 
 Indexes are ordered composite scalar/native columns. Required operational fields are NOT NULL; publishing drafts may be incomplete. Store sortable types use indexed/non-null columns, with explicit nullable published_at support.
 
+`uniqueIndexes` accept declared fields only, never native entry columns such as `authorId`. For per-member uniqueness, declare a required string `member` field, write `member: caller.subject` in a handler, and use `uniqueIndexes: [[member, orderNumber]]`; do not take `member` from client input.
+
+Publishing fields may be NULL in drafts even when required, so they cannot be View paging keys. Store accepts `published_at` ordering, but View paging rejects it. Use `ORDER BY id`, or keep the business date in an operational Schema as an indexed, required non-null field. See [View paging](view.md#results-and-paging).
+
 `checks` are restricted SQL expressions over the table's columns, emitted in initial DDL. Native databases enforce them; bare database errors are not automatically mapped to input-validation failures. Searchable fields must be plain string fields. SQLite/D1 emit FTS5 trigram tables and maintenance triggers; PostgreSQL uses ILIKE. Short SQLite terms use LIKE. Store search additionally matches exact id and combines with row policy.
 
 The runtime never creates, alters or checks tables. Initial DDL is for an empty database. Changed fields, checks, indexes and search DDL require [agent-owned native migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations), including explicit data migration for destructive/type changes. Mantle drops nothing.
 
 ## Admin uiSchema
 
-`fields.<name>.widget/options` select supported controls or extension contributions; `list.primaryField`, columns/cells and enum `filterField` select list presentation; `nav.standalone/parentField` control child navigation; panels select record sidebars. Generation validates these against declared fields/indexes and selected extension declarations. Root `readOnly` disables generic Admin writes, not declared Procedures. `x-mantle-ref` relates a field to another Schema id or single-field unique field.
+`fields.<name>.widget/options` select supported controls or extension contributions; `list.primaryField`, columns/cells and enum `filterField` select list presentation; `nav.standalone/parentField` control child navigation; panels select record sidebars. Generation validates these against declared fields/indexes and selected extension declarations. JSON Schema root `schema.readOnly: true` disables generic Admin writes, not declared Procedures; `uiSchema.readOnly` is rejected with `SCHEMA_UI_INVALID`. `x-mantle-ref` relates a field to another Schema id or single-field unique field.
 
 See [Admin](../guides/admin-ui.md), [extensions](../guides/admin-extensions.md) and [diagnostics](diagnostics.md).
 
@@ -70,4 +76,13 @@ See [Admin](../guides/admin-ui.md), [extensions](../guides/admin-extensions.md) 
 
 A caller whose value for a field is `{ all: true }` drops that field's term only; the other terms still apply. Generated SQL holds one statement per target and selects the form for each caller at run time; values are always bound parameters. Neither roles nor the admin layer widen a field scope or a translation parent's visibility. A Schema whose `x-mantle-ref` points to a field-scoped Schema must carry the same scope terms.
 
-For inserts, one allowed partition autofills a missing value; multiple values require an explicit allowed partition, and missing/empty values fail with `AUTH_DENIED`. Callers holding `{ all: true }` and system callers always provide an explicit partition. Procedure INSERT/upsert is trusted-only; use the scoped Store for user writes. The partition is never writable through SET, including upsert and native Admin patch. Reads and writes to an excluded id behave like a missing row. SQLite binds a JSON array; PostgreSQL binds a quoted, escaped array. Public Views over field scope warn that anonymous callers are refused.
+For inserts, one allowed partition autofills a missing value; multiple values require an explicit allowed partition, and missing/empty values fail with `AUTH_DENIED`. Callers holding `{ all: true }` and system callers always provide an explicit partition. Procedure INSERT/upsert is trusted-only; use the scoped Store for user writes. The partition is never writable through SET, including upsert and native Admin patch. An excluded id behaves like a missing row: reads return not found; Store update/delete and row-classified Procedure UPDATE/DELETE affecting zero rows return HTTP 409 (`CONFLICT`). Native Admin's visible-row pre-read returns 404 for either id. SQLite binds a JSON array; PostgreSQL binds a quoted, escaped array. Public Views over field scope warn that anonymous callers are refused.
+
+## Reserved entry columns
+
+Every Schema row has native columns that a Schema must not declare as data properties: `id`, `status`, `version`,
+`createdAt`, `updatedAt` and `authorId` (SQL `id`, `status`, `version`, `created_at`, `updated_at`, `author_id`).
+Use a domain name for your own fields (`requestStatus`, `submittedAt`). Views read native columns and `spec.indexes`
+can index them without declaring them; `uniqueIndexes` cannot include them. `status` and `published_at` belong to
+the publishing lifecycle; `version` backs `expectedVersion`; `author_id` is the verified creator used by
+`restrict: { <schema>: "author_id = auth.uid()" }`.

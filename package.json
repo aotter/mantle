@@ -32,7 +32,8 @@
     "bench:compare": "pnpm --filter @aotter/mantle bench:compare",
     "check:ui-size": "node scripts/check-ui-size.mjs",
     "check:startup": "pnpm --filter @aotter/mantle check:startup && node scripts/check-ui-size.mjs --startup-only",
-    "check:oss-plugin": "node scripts/check-oss-plugin.mjs"
+    "check:oss-plugin": "node scripts/check-oss-plugin.mjs",
+    "check:examples": "node scripts/check-examples.mjs"
   },
   "devDependencies": {
     "typescript": "catalog:"
