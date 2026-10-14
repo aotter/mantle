@@ -88,8 +88,9 @@ export interface AppChange { id: string; field: string; direction: "widened" | "
 type Direction = AppChange["direction"];
 const securityFlags = ["readOnly", "hostCallable", "trustedOnly", "opaque", "unscopedReads"] as const;
 const flagDirection = (field: typeof securityFlags[number], value: boolean): Direction => (field === "readOnly" || field === "trustedOnly" ? !value : value) ? "widened" : "narrowed";
-// Constraints are conjunctive. Exposure sets have the opposite direction.
-const inclusion = (before: string[], after: string[]): Direction => before.every(t => after.includes(t)) && after.every(t => before.includes(t)) ? "changed" : before.every(t => after.includes(t)) ? "narrowed" : after.every(t => before.includes(t)) ? "widened" : "changed";
+// Exposure sets have the opposite direction.
+// Constraints are conjunctive: losing any term widens, even when another term is added (a swap is still a widening).
+const inclusion = (before: string[], after: string[]): Direction => before.some(t => !after.includes(t)) ? "widened" : after.some(t => !before.includes(t)) ? "narrowed" : "changed";
 const exposureDirection = (before: string[], after: string[]): Direction => after.some(t => !before.includes(t) && t !== canonical("internal")) ? "widened" : before.some(t => !after.includes(t) && t !== canonical("internal")) ? "narrowed" : "changed";
 const combine = (directions: Direction[]): Direction => directions.includes("widened") ? "widened" : directions.length && directions.every(d => d === "narrowed") ? "narrowed" : "changed";
 const terms = (p: PlanRestrict[string]) => [...(p.owner ? [canonical({ owner: p.owner })] : []), ...p.terms.map(canonical)];
@@ -130,7 +131,7 @@ function inputDirection(x: DescribeTarget["inputSchema"], y: DescribeTarget["inp
       }
     } else directions.push("changed");
   }
-  return directions.length && directions.every(d => d === "widened") ? "widened" : directions.length && directions.every(d => d === "narrowed") ? "narrowed" : "changed";
+  return combine(directions);
 }
 
 /** Report widening on any reachable surface or dispatcher variant. */

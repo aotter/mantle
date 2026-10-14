@@ -85,7 +85,7 @@ function inspectBehavior(plan: RuntimePlan, ir: unknown, opaque: boolean, requir
   if (requires?.guard) visit(requires.guard.procedure);
   for (;;) {
     const before = hooks.size;
-    for (const [id, t] of Object.entries(plan.triggers).sort(([a], [b]) => a.localeCompare(b))) {
+    for (const [id, t] of Object.entries(plan.triggers).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
       if (t.source.kind !== "lifecycle" || hooks.has(id)) continue;
       const source = t.source;
       if (!opaque && !inspected.writes.some(w => w.schema === source.schema.toLowerCase() && source.on.some(on => on.endsWith(`_${w.operation}`)))) continue;
@@ -147,7 +147,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
       const inspected = inspectBehavior(plan, ir, !!proc && "ref" in proc.handler, p.requires, p.restrict);
       const tool = tools.find(t => t.kind === kind && t.source === name);
       const title = resolveLocalizedText(p.title, "en", "en") ?? name;
-      const triggers = Object.entries(plan.triggers).filter(([, t]) => kind === "procedure" && t.procedure === name).sort(([a], [b]) => a.localeCompare(b)).map(([id, t]) => ({ id, source: t.source }));
+      const triggers = Object.entries(plan.triggers).filter(([, t]) => kind === "procedure" && t.procedure === name).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([id, t]) => ({ id, source: t.source }));
       const surfaces = [...new Set([
         ...(view ? [view.surface, "admin", ...(view.surface === "public" ? ["rest"] : [])] : []),
         ...triggers.map(t => t.source.kind === "mcp" ? t.source.surface : t.source.kind === "http" ? "rest" : t.source.kind),
@@ -182,7 +182,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
     addRoute(`rest:${t.source.method} ${pathTemplate(t.source.path)}`, [d], d.inputSchema);
   }
   const generated: TargetDefinition[] = [];
-  for (const [schema, s] of Object.entries(plan.schemas).sort(([a], [b]) => a.localeCompare(b))) if (s.publishing) for (const [verb, from, to] of publishingTransitions) {
+  for (const [schema, s] of Object.entries(plan.schemas).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) if (s.publishing) for (const [verb, from, to] of publishingTransitions) {
     addRoute(`procedure:${s.name}.${verb}`, [], publishingInput);
     const d = out.at(-1)!;
     const inspected = inspectBehavior(plan, undefined, false, undefined, undefined, [{ schema, operation: verb === "publish" ? "publish" : "update" }]);
