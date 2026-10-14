@@ -1,6 +1,7 @@
 name: CI
 
-# ponytail: PR-only. The merge ref was already tested; push runs repeated it.
+# ponytail: PR-only, and only for PRs nobody ran locally: forks and bots. Maintainer PRs merge on a local
+# `pnpm check` (exit code 0) plus review and fix forward; release.yml is the hard gate before publishing.
 # Drafts skip until ready_for_review — agent PRs iterate in draft.
 # Every base: a release line (0.2.x) and a PR stacked on another PR are merged as well, so they are tested as well.
 on:
@@ -21,7 +22,7 @@ jobs:
   lint:
     name: Typecheck + tests
     needs: [typecheck, tests]
-    if: ${{ always() && !github.event.pull_request.draft }}
+    if: ${{ always() && !github.event.pull_request.draft && !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) }}
     runs-on: ubuntu-latest
     steps:
       - name: Require both jobs
@@ -32,7 +33,7 @@ jobs:
 
   typecheck:
     name: Typecheck + gates
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ !github.event.pull_request.draft && !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -74,7 +75,7 @@ jobs:
 
   tests:
     name: Package tests
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ !github.event.pull_request.draft && !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
