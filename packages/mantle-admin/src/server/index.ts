@@ -1,5 +1,5 @@
 /** Optional Admin API: generated data and native calls, with one fresh admin session per request. */
-import { isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller } from "@aotter/mantle/contracts";
+import { deny, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller, type Target, type Authorize } from "@aotter/mantle/contracts";
 import { nativeRest, body, type Route as RestRoute } from "@aotter/mantle/rest";
 import { sessionUserOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
@@ -20,8 +20,11 @@ export interface Context<Env, Database> {
     caller: Admin;
     params: Record<string, string>;
     input?: Record<string, unknown>;
+    /** Request-bound application gate for related collection reads. */
+    authorize?: (target: Target) => Promise<boolean>;
 }
 export interface Route<Env, Database> {
+    readonly target?: (context: Context<Env, Database>) => Target;
     readonly method: string;
     /** Relative to /admin/api; {name} captures one segment, {name*} captures a suffix. */
     readonly path: string;
@@ -59,6 +62,7 @@ export interface IdentityMethods {
     revokeInvite(id: string): Promise<boolean>;
 }
 export interface Options<Env, Database> {
+    authorize?: Authorize;
     locale?: string;
     /** Read-only developer preview bindings, including public Views. */
     developerViews?: readonly View<Database>[];
@@ -90,6 +94,8 @@ export interface Descriptor {
     readonly [key: string]: unknown;
 }
 export interface Metadata {
+    /** Generated requires guards for metadata targets beyond callable Admin routes. */
+    readonly allows?: (target: Target, caller: Caller) => boolean;
     readonly collections: readonly Descriptor[];
     readonly allCollections?: Readonly<Record<string, Descriptor>>;
     readonly views: readonly Descriptor[];
@@ -138,12 +144,21 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     const missing = () => new ContractError("NOT_FOUND", "No such Admin route.", "admin");
     const localized = (value: unknown) => typeof value === "string" ? value : value && typeof value === "object" ? (value as Record<string, string>)[options.locale ?? "en"] ?? (value as Record<string, string>).en ?? Object.values(value)[0] : undefined;
     const webmcp = metadata.webmcp as { tools?: readonly Record<string, unknown>[] };
-    const catalogue = { ...webmcp, tools: webmcp.tools?.map(tool => ({ ...tool, ...(tool.title ? { title: localized(tool.title) } : {}), description: localized(tool.description) ?? localized(tool.title) ?? tool.name })) };
+    const catalogue = { ...webmcp, tools: webmcp.tools?.map(tool => { const {target: _target, ...display} = tool; return { ...display, ...(tool.title ? { title: localized(tool.title) } : {}), description: localized(tool.description) ?? localized(tool.title) ?? tool.name }; }) };
     const me = async ({ caller, request, env }: Context<Env, Database>) => { const user = (options.getUser ? await options.getUser(caller.subject, request, env) : undefined) ?? sessionUserOf(caller); return { userId: caller.subject, role: caller.role, admin: true, login: user?.githubLogin || user?.name || user?.email || null, image: user?.image ?? null }; };
     const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendAdminInvitation, mcpEndpoints: options.mcpEndpoints, extensions: options.extensions }); return { ...info, capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics") } }; };
+    const checkTarget = async (target: Target, caller: Caller) => (await import("@aotter/mantle/authorization")).authorizeTarget(options.authorize!, target, caller);
+    const visibleMetadata = async (c: Context<Env, Database>) => {
+        if (!options.authorize) return { ...metadata, views: sees(metadata.views, views, c.caller), operations: sees(metadata.operations, operations, c.caller), webmcp: catalogue };
+        return (await import("./authorization.js")).visibleMetadata(metadata, catalogue, views, operations, options.developerViews ?? views, options.authorize, c.caller);
+    };
+    const runRoute = (route: Route<Env, Database>, c: Context<Env, Database>) => options.authorize && route.target
+        ? checkTarget(route.target(c), c.caller).then(() => route.run(c)) : route.run(c);
     const viewPage = async (c: Context<Env, Database>, preview = false) => {
-        const view = (preview ? options.developerViews ?? views : views).find(v => v.name === c.params.name && v.allows(c.caller));
+        const view = (preview ? options.developerViews ?? views : views).find(v => v.name === c.params.name && (options.authorize || v.allows(c.caller)));
+        if (view && options.authorize) deny(c.caller, view.allows(c.caller), "views/" + view.name);
         if (!view) { if (preview) return { unavailable: true }; throw missing(); }
+        if (options.authorize) await checkTarget({ kind: "view", name: view.name }, c.caller);
         const { input: raw, ...paging } = view.query(c.url.searchParams), input = { ...raw };
         convert(input, view.convert);
         const page = await view.page(c.db, c.caller, input as never, paging);
@@ -151,18 +166,24 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     };
     const routes: readonly Route<Env, Database>[] = [
         { method: "GET", path: "/me", run: me }, { method: "GET", path: "/site", run: site },
-        { method: "GET", path: "/collections", run: () => ({ collections: metadata.collections, allCollections: metadata.allCollections ?? Object.fromEntries(metadata.collections.map(c => [c.name, c])) }) },
-        { method: "GET", path: "/views-manifest", run: c => ({ views: sees(metadata.views, views, c.caller) }) },
-        { method: "GET", path: "/operations", run: c => ({ operations: sees(metadata.operations, operations, c.caller) }) },
-        { method: "GET", path: "/webmcp", run: () => catalogue },
+        { method: "GET", path: "/collections", run: c => {
+            const result = (m: Metadata) => ({collections: m.collections, allCollections: m.allCollections ?? Object.fromEntries(m.collections.map(c => [c.name, c]))});
+            return options.authorize ? visibleMetadata(c).then(result) : result(metadata);
+        } },
+        { method: "GET", path: "/views-manifest", run: c => options.authorize ? visibleMetadata(c).then(m => ({views: m.views})) : {views: sees(metadata.views, views, c.caller)} },
+        { method: "GET", path: "/operations", run: c => options.authorize ? visibleMetadata(c).then(m => ({operations: m.operations})) : {operations: sees(metadata.operations, operations, c.caller)} },
+        { method: "GET", path: "/webmcp", run: c => options.authorize ? visibleMetadata(c).then(m => m.webmcp) : catalogue },
         { method: "GET", path: "/bootstrap", run: async c => {
                 const list = c.url.searchParams.has("collection") ? options.routes?.find(route => route.path === "/entries" && route.method === "GET") : undefined;
-                const [user, settings, entries] = await Promise.all([me(c), site(c), list ? Promise.resolve(list.run(c)).catch(() => undefined) : undefined]);
-                return { me: user, site: settings, collections: metadata.collections, allCollections: metadata.allCollections, views: sees(metadata.views, views, c.caller), operations: sees(metadata.operations, operations, c.caller), webmcp: catalogue, ...(entries ? { entries } : {}) };
+                const [user, settings, entries] = await Promise.all([me(c), site(c), list ? Promise.resolve(runRoute(list, c)).catch(error => { if (options.authorize && (!(error instanceof ContractError) || error.code !== "AUTH_DENIED")) throw error; return undefined; }) : undefined]);
+                const m = await visibleMetadata(c);
+                return { me: user, site: settings, collections: m.collections, allCollections: m.allCollections, views: m.views, operations: m.operations, webmcp: m.webmcp, ...(entries ? { entries } : {}) };
             } },
         { method: "GET", path: "/views/{name}/export", run: async (c) => {
-                const view = views.find(v => v.name === c.params.name && v.allows(c.caller));
+                const view = views.find(v => v.name === c.params.name && (options.authorize || v.allows(c.caller)));
+                if (view && options.authorize) deny(c.caller, view.allows(c.caller), "views/" + view.name);
                 if (!view) throw missing();
+                if (options.authorize) await checkTarget({ kind: "view", name: view.name }, c.caller);
                 const params = new URLSearchParams(c.url.searchParams);
                 params.delete("cursor"); params.set("limit", "500");
                 const {input: raw, ...paging} = view.query(params), input = {...raw};
@@ -177,12 +198,14 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
         { method: "GET", path: "/views/{name}", run: c => viewPage(c) },
         ...(metadata.developerConsole === undefined ? [] : [{ method: "GET" as const, path: "/developer/views/{name}", run: (c: Context<Env, Database>) => viewPage(c, true) }]),
         { method: "POST", path: "/operations/{name}", run: async (c) => {
-                const operation = operations.find(p => p.name === c.params.name && p.allows(c.caller));
+                const operation = operations.find(p => p.name === c.params.name && (options.authorize || p.allows(c.caller)));
+                if (operation && options.authorize) deny(c.caller, operation.allows(c.caller), "procedures/" + operation.name);
                 if (!operation)
                     throw missing();
+                if (options.authorize) await checkTarget({ kind: "procedure", name: operation.name }, c.caller);
                 return { ok: true, output: await callTool({ ...operation, surface: "admin", description: "", inputSchema: {} }, await json(c), () => c.db, c.caller, options.handlers as Handlers) };
             } },
-        ...(metadata.developerConsole === undefined ? [] : [{ method: "GET", path: "/developer-console", run: () => metadata.developerConsole }]),
+        ...(metadata.developerConsole === undefined ? [] : [{ method: "GET", path: "/developer-console", run: (c: Context<Env, Database>) => options.authorize ? visibleMetadata(c).then(m => m.developerConsole) : metadata.developerConsole }]),
         ...(options.routes ?? []),
     ];
     const table: RestRoute<Database, Handlers, Env>[] = routes.map(route => {
@@ -196,7 +219,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             return encodeURIComponent(segment).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         }).join("/");
         return { method: route.method, pattern: new RegExp("^/admin/api" + path + "/?$"), keys, bodyLimit: route.bodyLimit, rawBody: route.rawBody, handle: async (request, env, getDb, caller, params, _handlers, input) => {
-                const result = await route.run({ request, url: new URL(request.url), env, get db() { return getDb(); }, caller: caller as Admin, params, input });
+                const result = await runRoute(route, { request, url: new URL(request.url), env, get db() { return getDb(); }, caller: caller as Admin, params, input, ...(options.authorize ? { authorize: (target: Target) => import("@aotter/mantle/authorization").then(m => m.authorized(options.authorize!, target, caller)) } : {}) });
                 if (!(result instanceof Response))
                     return result;
                 const headers = new Headers(result.headers);

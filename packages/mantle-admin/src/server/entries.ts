@@ -1,5 +1,5 @@
 /** Selected Admin entry transport over generated native Views and Procedures. No schema or SQL interpreter. */
-import { ContractError, type Row, type Caller } from "@aotter/mantle/contracts";
+import { ContractError, type Target, type Row, type Caller } from "@aotter/mantle/contracts";
 import { invalid } from "@aotter/mantle/surface";
 import { csv } from "./csv.js";
 import { json, type Context, type Route } from "./index.js";
@@ -86,7 +86,13 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
         const fields = [d.list?.primaryField, "title", "name", "slug", ...(d.schema?.required ?? []).filter(f => [properties[f]?.type].flat().includes("string"))];
         return fields.map(f => f ? valueOf(row, f) : null).find(v => typeof v === "string" && v !== "") ?? null;
     };
+    /** A translation child's rows carry its parent's fields, so reading it also needs the parent's read. */
+    const readable = async (schema: EntrySchema<DB>, ctx: Context<Env, DB>) => {
+        const parent = ctx.authorize && descriptor(schema).translates?.parent;
+        if (parent && !await ctx.authorize!({kind: "schema", name: parent, action: "read"})) throw new ContractError("AUTH_DENIED", "Target is not authorized.", "schema/" + parent);
+    };
     const pageOf = async (schema: EntrySchema<DB>, ctx: Context<Env, DB>, params: URLSearchParams) => {
+        await readable(schema, ctx);
         const q = schema.query(params);
         return q ? nativeEntryPage(schema.binding, adapter, () => ctx.db, ctx.caller, q) : {rows: [] as Row[], nextCursor: undefined};
     };
@@ -97,9 +103,13 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
     };
     /** After a committed write, related reads are best effort: a failed read must not turn a committed write into an error. */
     const editor = async (schema: EntrySchema<DB>, row: Row, ctx: Context<Env, DB>, written = false): Promise<any> => {
+        const inherited = descriptor(schema).translates?.parent;
+        if (ctx.authorize && (!await ctx.authorize({kind: "schema", name: schema.name, action: "read"}) || inherited && !await ctx.authorize({kind: "schema", name: inherited, action: "read"})))
+            return {collection: schema.descriptor, entry: {id: row.id, version: row.version}, parentEntryId: null, parentEntryTitle: null, related: []};
         if (written) return editor(schema, row, ctx).catch(() => ({collection: schema.descriptor, entry: entry(schema, row), parentEntryId: null, parentEntryTitle: null, related: []}));
         const d = descriptor(schema), e = entry(schema, row), up = d.parent;
-        const parentSchema = up && schemas.find(s => s.name === up.collection);
+        const parentCandidate = up && schemas.find(s => s.name === up.collection);
+        const parentSchema = parentCandidate && (!ctx.authorize || await ctx.authorize({kind:"schema",name:parentCandidate.name,action:"read"})) ? parentCandidate : undefined;
         const parent = parentSchema && (await find(parentSchema, ctx, up!.parentField, valueOf(e, up!.childField), 1))[0];
         const related = await Promise.all(schemas.flatMap(child => {
             const c = descriptor(child);
@@ -111,16 +121,18 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
                     return ref?.schema === schema.name ? [{kind: "field", parentField: ref.field ?? "id", childField: field}] : [];
                 });
             return relations.map(async relation => {
+                if (ctx.authorize && !await ctx.authorize({kind:"schema",name:child.name,action:"read"})) return undefined;
                 const value = valueOf(e, relation.parentField), parentValue = scalar(value) && value !== "" ? value : null;
                 return {collection: child.descriptor, relationship: {...relation, parentValue}, entries: await find(child, ctx, relation.childField, parentValue, 50)};
             });
         }));
-        return {collection: schema.descriptor, entry: e, parentEntryId: parent?.id ?? null, parentEntryTitle: parent && parentSchema ? titleOf(parentSchema, parent) ?? parent.id : null, related};
+        return {collection: schema.descriptor, entry: e, parentEntryId: parent?.id ?? null, parentEntryTitle: parent && parentSchema ? titleOf(parentSchema, parent) ?? parent.id : null, related: related.filter(Boolean)};
     };
     const list = async (ctx: Context<Env, DB>) => {
         const schema = schemaOf(ctx.url.searchParams.get("collection")), page = await pageOf(schema, ctx, ctx.url.searchParams);
         const items = page.rows.map(raw => entry(schema, raw)), locales = new Map(items.map(row => [row.id, new Set<string>()]));
         for (const child of schemas.filter(child => descriptor(child).translates?.parent === schema.name && descriptor(child).localized)) {
+            if (ctx.authorize && !await ctx.authorize({kind:"schema",name:child.name,action:"read"})) continue;
             const on = descriptor(child).translates!.on, byKey = new Map<unknown, Set<string>>();
             const keys = [...new Set(items.map(row => valueOf(row, on)).filter(v => scalar(v) && v !== ""))];
             for (let offset = 0; offset < keys.length; offset += 50) {
@@ -158,7 +170,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
     if (!schemas.length)
         return [];
     const ranges = { "1h": [3600000, 300000], "24h": [86400000, 3600000], "7d": [604800000, 21600000], "20d": [1728000000, 86400000] } as const;
-    return [
+    const routes: readonly Route<Env, DB>[] = [
         ...(schemas.some(s => s.primary && s.binding.statistics) ? [{ method: "GET", path: "/collections/{name}/statistics", run: async (ctx: Context<Env, DB>) => {
                     const schema = schemaOf(ctx.params.name);
                     if (!schema.primary)
@@ -216,4 +228,10 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
                 return { affected: 1 };
             } },
     ];
+    return routes.map(route => ({...route, target: ctx => {
+        const schema = schemaOf(route.path.startsWith("/collections/") ? ctx.params.name : route.method === "POST" && route.path === "/entries" ? ctx.input?.collection : ctx.url.searchParams.get("collection"));
+        if (route.path.endsWith("/publish") || route.path.endsWith("/unpublish") || route.path.endsWith("/archive")) return {kind:"procedure",name:schema.name + "." + route.path.split("/").at(-1)};
+        const action: Target["action"] = route.method === "GET" ? "read" : route.method === "POST" ? "create" : route.method === "PATCH" ? "update" : "delete";
+        return {kind:"schema",name:schema.name,action};
+    }}));
 }

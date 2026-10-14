@@ -119,3 +119,79 @@ test("collection CSV preserves system timestamps as UTC ISO strings instead of U
     expect(text).not.toContain("1791849600000");
   }
 });
+
+test("Admin target authorization covers Views, Procedures and every generic entry action before storage",async()=>{
+  const {spyOn}=await import("bun:test");
+  type Authorize=import("@aotter/mantle/contracts").Authorize;
+  type Target=import("@aotter/mantle/contracts").Target;
+  const cases: readonly [Authorize|undefined,number][]=[[undefined,200],[()=>true,200],[async()=>true,200],[()=>false,403],[async()=>false,403],[()=>Promise.reject(Error("denied")),403],[()=>{throw Error("broken");},500]];
+  const row={id:"a",version:1,title:"Old",created_at:0,updated_at:0};
+  const schema:EntrySchema={binding:compiled,name:"posts",primary:true,descriptor:{name:"posts"},publishing:false,readOnly:false,fields:{title:"title"},defaults:{},query:()=>({input:{},order:"id:asc"}),validate:d=>d,values:d=>d,row:r=>r};
+  const routes: readonly [string,string,object|undefined,Target][]=[
+    ["/views/recent","GET",undefined,{kind:"view",name:"recent"}],
+    ["/views/recent/export","GET",undefined,{kind:"view",name:"recent"}],
+    ["/developer/views/recent","GET",undefined,{kind:"view",name:"recent"}],
+    ["/operations/edit","POST",{},{kind:"procedure",name:"edit"}],
+    ["/entries?collection=POSTS","GET",undefined,{kind:"schema",name:"posts",action:"read"}],
+    ["/entries/a?collection=posts","GET",undefined,{kind:"schema",name:"posts",action:"read"}],
+    ["/entries/export?collection=posts","GET",undefined,{kind:"schema",name:"posts",action:"read"}],
+    ["/entries","POST",{collection:"POSTS",data:{title:"New"}},{kind:"schema",name:"posts",action:"create"}],
+    ["/entries/a?collection=posts","PATCH",{expectedVersion:1,data:{title:"New"}},{kind:"schema",name:"posts",action:"update"}],
+    ["/entries/a?collection=posts","DELETE",undefined,{kind:"schema",name:"posts",action:"delete"}],
+    ["/collections/posts/statistics","GET",undefined,{kind:"schema",name:"posts",action:"read"}],
+  ];
+  const log=spyOn(console,"error").mockImplementation(()=>{});
+  try {
+    for(const [authorize,status] of cases)for(const [path,method,input,target]of routes){
+      let providers=0,sql=0,handlers=0,authorizations=0;
+      const adapter:NativeProcedureAdapter<{}>={...unused,read:()=>{sql++;return [row];},procedure:async()=>{sql++;return [[row]];}};
+      const view={name:"recent",allows:()=>true,query:()=>({input:{}}),page:async()=>{handlers++;return {rows:[row]};}};
+      const operation={name:"edit",allows:()=>true,validate:(r:unknown)=>r as Record<string,unknown>,run:async()=>{handlers++;return {ok:true};}};
+      const fetch=adminFunction({...metadata,developerConsole:{}},[view],[operation],{db:()=>{providers++;return {};},caller:()=>admin,developerViews:[view],routes:entries([schema],adapter),...(authorize?{authorize:(t:Target,c:Caller)=>{if(++authorizations===1)expect(t).toEqual(target);else expect(t).toEqual({kind:"schema",name:"posts",action:"read"});expect(c).toBe(admin);return authorize(t,c);}}:{})});
+      const response=await fetch(new Request("https://app.test/admin/api"+path,{method,body:input?JSON.stringify(input):undefined,headers:{origin:"https://app.test"}}),{});
+      expect(response?.status).toBe(status);await response?.text();
+      if(status!==200){expect([providers,sql,handlers]).toEqual([0,0,0]);}
+      else {expect(providers).toBeGreaterThan(0);expect(sql+handlers).toBeGreaterThan(0);}
+      // the route's target first; a returned entry also needs its read
+      if(authorize)expect(authorizations).toBeGreaterThanOrEqual(1);else expect(authorizations).toBe(0);
+    }
+    let authorizations=0;
+    const fetch=adminFunction(metadata,[{name:"closed",allows:()=>false,query:()=>{throw Error("query before requires");},page:async()=>{throw Error("SQL before requires");}}],[{name:"closed",allows:()=>false,validate:()=>({}),run:async()=>{throw Error("handler before requires");}}],{db:()=>{throw Error("provider before requires");},caller:()=>admin,authorize:()=>{authorizations++;return true;}});
+    for(const [path,method]of[["/views/closed","GET"],["/operations/closed","POST"]])expect((await fetch(new Request("https://app.test/admin/api"+path,{method,headers:{origin:"https://app.test"},body:method==="POST"?"{}":undefined}),{}))?.status).toBe(403);
+    expect(authorizations).toBe(0);
+  }finally{log.mockRestore();}
+});
+
+test("Admin navigation, bootstrap and developer metadata hide unauthorized targets",async()=>{
+  type Target=import("@aotter/mantle/contracts").Target;
+  const collections=[{name:"visible"},{name:"hidden"}];
+  const views=collections.map(d=>({...d,allows:()=>true,query:()=>({input:{}}),page:async()=>{throw Error("metadata SQL");}}));
+  const operations=collections.map(d=>({...d,allows:()=>true,validate:()=>({}),run:async()=>{throw Error("metadata handler");}}));
+  const tools=collections.map(d=>({name:d.name,target:{kind:"view",name:d.name},description:d.name}));
+  const data:Metadata={collections,allCollections:Object.fromEntries(collections.map(d=>[d.name,d])),views:collections,operations:collections,webmcp:{tools,routes:{visible:{path:"visible"},hidden:{path:"hidden"}}},developerConsole:{dataModel:{schemas:collections,views:collections},logic:{procedures:collections,triggers:[]},interfaces:{callable:tools.map(t=>({...t,kind:"view",target:t.name})),http:[]},graph:{atoms:[],relations:[]},operations:{schedules:[],ttlPolicies:[]}}};
+  const seen:Target[]=[];
+  const fetch=adminFunction(data,views,operations,{db:()=>{throw Error("metadata provider");},caller:()=>admin,authorize:async target=>{seen.push(target);return target.name==="visible";}});
+  const ask=async(path:string)=>{const response=await fetch(new Request("https://app.test/admin/api"+path),{});expect(response?.status).toBe(200);return response!.json();};
+  const bootstrap=await ask("/bootstrap");
+  expect(bootstrap.collections).toEqual([{name:"visible"}]);expect(Object.keys(bootstrap.allCollections)).toEqual(["visible"]);
+  expect(bootstrap.views).toEqual([{name:"visible"}]);expect(bootstrap.operations).toEqual([{name:"visible"}]);
+  expect(bootstrap.webmcp.tools.map((t:{name:string})=>t.name)).toEqual(["visible"]);expect(Object.keys(bootstrap.webmcp.routes)).toEqual(["visible"]);
+  expect((await ask("/collections")).collections).toEqual(bootstrap.collections);expect((await ask("/views-manifest")).views).toEqual(bootstrap.views);expect((await ask("/operations")).operations).toEqual(bootstrap.operations);expect((await ask("/webmcp")).tools).toEqual(bootstrap.webmcp.tools);
+  const developer=await ask("/developer-console");expect(developer.dataModel.schemas).toEqual([{name:"visible"}]);expect(developer.dataModel.views).toEqual([{name:"visible"}]);expect(developer.logic.procedures).toEqual([{name:"visible"}]);
+  expect(seen.some(t=>t.kind==="schema"&&t.action==="read")).toBe(true);
+  const omitted=adminFunction(data,views,operations,{db:()=>{throw Error("metadata provider");},caller:()=>admin});
+  expect((await(await omitted(new Request("https://app.test/admin/api/collections"),{}))!.json()).collections).toEqual(collections);
+});
+
+test("entry editor and translation badges do not query denied related collections",async()=>{
+  let reads=0;
+  const row={id:"a",version:1,title:"A",created_at:0,updated_at:0};
+  const schema:EntrySchema={binding:compiled,name:"posts",descriptor:{name:"posts",parent:{collection:"hidden",parentField:"id",childField:"id"}},publishing:false,readOnly:false,fields:{title:"title"},defaults:{},query:()=>({input:{},order:"id:asc"}),validate:d=>d,values:d=>d,row:r=>r};
+  const hidden={...schema,name:"hidden",descriptor:{name:"hidden",localized:true,translates:{parent:"posts",on:"id"}}};
+  const adapter:NativeProcedureAdapter<{}>={...unused,read:()=>{reads++;return [row];}};
+  const fetch=adminFunction(metadata,[],[],{db:()=>({}),caller:()=>admin,routes:entries([schema,hidden],adapter),authorize:target=>target.name!=="hidden"});
+  const editor=await(await fetch(new Request("https://app.test/admin/api/entries/a?collection=posts"),{}))!.json();
+  expect(editor.parentEntryId).toBeNull();expect(editor.related).toEqual([]);expect(reads).toBe(1);
+  const list=await(await fetch(new Request("https://app.test/admin/api/entries?collection=posts"),{}))!.json();
+  expect(list.items[0].translation_locales).toEqual([]);expect(reads).toBe(2);
+});

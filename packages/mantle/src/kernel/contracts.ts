@@ -24,6 +24,10 @@ export type Caller =
   | { readonly kind: "system"; readonly reason: string };
 
 
+/** A selected boundary's application authorization target. */
+export type Target = { kind: "view" | "procedure" | "schema"; name: string; action?: "read" | "create" | "update" | "delete" };
+export type Authorize = (target: Target, caller: Caller) => boolean | Promise<boolean>;
+
 /** Privilege never follows a member role name. Only the original verified identity carries the admin layer. */
 export const isAdmin = (caller: Caller): caller is Extract<Caller, { kind: "user" }> & { readonly admin: true } => isAdminCaller(caller);
 export const hasAdminRole = (caller: Caller, name: string): boolean => isAdmin(caller) && hasRole(caller, name);

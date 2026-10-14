@@ -52,7 +52,7 @@ test("ordinary REST GET startup excludes the request-only JSON reader",async()=>
     await writeFile(entry,'import {rest} from "@aotter/mantle/rest";export default{fetch:rest([{method:"GET",pattern:/^\\/api\\/static$/,query:()=>({input:{}}),page:async()=>({rows:[]})}],{db:()=>null,caller:()=>({kind:"anonymous"} as const)})};');
     const meta=await bundle(entry,join(dir,"bundle")),graph=startupGraph(meta,entry);
     expect(Object.keys(meta.outputs).some(path=>Object.keys(meta.outputs[path]!.inputs).some(input=>input.endsWith("/kernel/json-body.js")))).toBe(true);
-    expect(graph.some(path=>Object.keys(meta.outputs[path]!.inputs).some(input=>input.endsWith("/kernel/json-body.js")))).toBe(false);
+    expect(graph.some(path=>Object.keys(meta.outputs[path]!.inputs).some(input=>input.endsWith("/kernel/json-body.js") || input.endsWith("/kernel/authorization.js")))).toBe(false);
     for(const path of graph)expect(await readFile(join(process.cwd(),path),"utf8")).not.toContain("bytes.subarray(0, length)");
   }finally{await rm(dir,{recursive:true,force:true});}
 });
