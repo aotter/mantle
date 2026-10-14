@@ -63,6 +63,7 @@ spec:
 `;
   const generated = await generateFromSources({ target: "cloudflare-d1", sources: { sources: [{ sourceId: "n.yaml", text: source }] }, auth: authOptions({ DB: undefined as never, ORIGIN: "https://app.example" }) });
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+  expect(generated.files["generated.ts"]).not.toContain("export const userFields");
   const sql = generated.files["schema.sql"]!;
   const noEnv = await generateFromSources({ target: "cloudflare-d1", sources: { sources: [{ sourceId: "n.yaml", text: source }] }, auth: authOptions(new Proxy({} as never, { get: () => undefined })) });
   if (!noEnv.ok) throw Error(JSON.stringify(noEnv.diagnostics));
@@ -93,5 +94,18 @@ test("CLI --auth reads authOptions(env) without constructing Better Auth", async
     const cli = new URL("../src/infrastructure/cli.ts", import.meta.url).pathname;
     execFileSync(process.execPath, [cli, "cloudflare-d1", join(dir, "out"), manifest, "--auth", new URL("apps/auth/auth.ts", import.meta.url).pathname], { cwd: dir, stdio: "pipe" });
     expect(await readFile(join(dir, "out/schema.sql"), "utf8")).toContain('CREATE TABLE IF NOT EXISTS "oauthClient"');
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+
+test("bundle refuses testing helpers in static and dynamic production imports", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "mantle-testing-bundle-"));
+  const helper = JSON.stringify(new URL("../dist/testing/index.js", import.meta.url).pathname);
+  try {
+    const entry = join(dir, "worker.ts");
+    for (const code of [`export { authenticatedAs } from ${helper};`, `export const load = () => import(${helper});`]) {
+      await writeFile(entry, code);
+      await expect(bundle(entry, join(dir, "out"))).rejects.toThrow("testing is only for tests");
+    }
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

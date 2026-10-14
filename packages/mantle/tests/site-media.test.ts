@@ -1,3 +1,4 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 import {test,expect} from "bun:test";
 import {Database} from "bun:sqlite";
 import {SQL} from "bun";
@@ -8,7 +9,7 @@ import {loadFixtureSources,writeGenerated} from "./apps/link.js";
 import {r2MediaStorage,type R2Bucket} from "../src/kernel/r2-media.js";
 import {ContractError,wire} from "../src/kernel/contracts.js";
 const defaults = {origin:"https://site.test",locales:["en","zh-TW"],brand:"Seed",media:{purposes:[{name:"cover",required:["jpg,png","webp"],maxBytes:{"image/jpeg":100,"image/png":100,"image/webp":100}}]}};
-const admin:any={kind:"user",subject:"admin-id",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null};
+const admin:any=fixtureCaller({kind:"user",subject:"admin-id",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null});
 function memoryStorage() {
  const objects=new Map<string,{type:string;size:number}>(); let failedDelete:string|undefined;
  const bucket:R2Bucket={async head(key){const o=objects.get(key);return o?{size:o.size,httpMetadata:{contentType:o.type}}:null;},async get(key){const o=objects.get(key);return o?{size:o.size,httpMetadata:{contentType:o.type},body:new Blob([new Uint8Array(o.size)]).stream()}:null;},async put(key,body,options){objects.set(key,{size:(await new Response(body).arrayBuffer()).byteLength,type:options.httpMetadata.contentType});},async delete(keys){for(const key of typeof keys==="string"?[keys]:keys){if(key===failedDelete)throw new Error("temporary private blob deletion failure");objects.delete(key);}}};

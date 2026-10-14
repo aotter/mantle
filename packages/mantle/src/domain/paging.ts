@@ -35,7 +35,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
           if (!side.unique || !id || !otherId || e?.kind !== "AEXPR_OP" || e.name?.[0]?.String?.sval !== "=") return false;
           const a = column(e.lexpr), b = column(e.rexpr);
           const unique = (f: Field | undefined, value: Field | undefined) => f && value && f.source === id.source && value.source === otherId.source &&
-            (f.name === id.name || f.schema.unique?.some(index => index.length === 1 && index[0] === f.name));
+            (f.name === id.name || (!f.schema.userScopes?.length && !f.schema.scope && f.schema.unique?.some(index => index.length === 1 && index[0] === f.name)));
           return !!(unique(a, b) || unique(b, a));
         };
         const rightSingle = right.single || lookup(right, left, n.JoinExpr.quals);

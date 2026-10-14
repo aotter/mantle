@@ -4,11 +4,13 @@
  */
 import type { AuthorizationRequirements, JsonSchema, LocalizedText, ProcedureMcpAnnotations, ProcedureTarget, TriggerSource } from "./ManifestGrammar.js";
 import type { SqlNode, SqlPlan } from "./SqlIr.js";
+import type { UserScope, UserFieldSpec } from "./UserFields.js";
 
 export const RUNTIME_PLAN_VERSION = 6 as const;
 
 /** A Schema as storage and Store see it. Keys of `fields` and `names` are lower case: SQL folds unquoted identifiers. */
 export interface PlanSchema {
+  readonly userScopes?: readonly UserScope[];
   /** The name as declared: the key of `schemas` is lower case. */
   readonly name: string;
   readonly title?: LocalizedText;
@@ -35,7 +37,10 @@ export interface PlanSchema {
   readonly indexes?: readonly (readonly string[])[];
 }
 
+/** A target's extra row terms per Schema (`restrict`): AND-ed onto that Schema's scope, never dropped by `{ all: true }`. */
+export type PlanRestrict = Readonly<Record<string, { readonly owner?: string; readonly terms: readonly UserScope[] }>>;
 export interface PlanView extends SqlPlan {
+  readonly restrict?: PlanRestrict;
   readonly title?: LocalizedText;
   readonly description?: LocalizedText;
   readonly uiSchema?: Readonly<Record<string, unknown>>;
@@ -53,6 +58,8 @@ export interface PlanView extends SqlPlan {
 }
 
 export interface PlanProcedure {
+  readonly restrict?: PlanRestrict;
+  readonly trustedOnly?: true;
   readonly title?: LocalizedText;
   readonly description?: LocalizedText;
   readonly uiSchema?: Readonly<Record<string, unknown>>;
@@ -119,6 +126,7 @@ export interface PlanLowered {
 }
 
 export interface RuntimePlan {
+  readonly access?: { readonly roles: readonly string[]; readonly userFields: Readonly<Record<string, UserFieldSpec>>; readonly warnings: readonly string[] };
   readonly version: typeof RUNTIME_PLAN_VERSION;
   /** The dialect the SQL was compiled for (ADR-0035 decision 5); boot refuses a storage of another. */
   readonly dialect: { readonly name: string; readonly version: string };

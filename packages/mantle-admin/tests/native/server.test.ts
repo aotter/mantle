@@ -1,3 +1,4 @@
+import { sdkFixtureCaller as fixtureCaller } from "../../../mantle/tests/apps/fixtures.js";
 import {test, expect} from "bun:test";
 import { admin as adminFunction, type Route, type Metadata} from "../../src/server/index.js";
 import {entries, type EntrySchema} from "../../src/server/entries.js";
@@ -7,7 +8,7 @@ import type {NativeCollection,NativeProcedureAdapter} from "../../src/server/nat
 const mode={projection:"id, version, title",from:"FROM fixture",policy:"",binds:[],fields:{title:{column:"title",insert:"@value",update:"title=@value"}},create:{prefix:"create(",between:")(",suffix:")",columns:[],values:[],binds:[],returning:""},patch:{prefix:"patch ",sets:[],where:"",returning:"",binds:[{k:"input" as const,name:"id"},{k:"version" as const}]},remove:{sql:"remove",binds:[{k:"input" as const,name:"id"},{k:"version" as const}],row:true}};
 const compiled:NativeCollection={path:"admin/entries",marker:"@value",id:"id",cursorAliases:[{name:"_cursor0",sql:"_cursor0"},{name:"_cursor1",sql:"_cursor1"}],fields:{id:{expression:"id",value:"@value",wire:"id",kind:"text",nullable:false}},orderFields:["id"],caller:mode,trusted:mode,statistics:{time:"created_at",subtype:"NULL",rowsAlias:{name:"_statistics",sql:"_statistics"}}};
 const unused:NativeProcedureAdapter<{}>={sqlite:true,values:{},param:n=>"?"+n,escapeLike:value=>value,read:()=>{throw Error("unexpected read");},procedure:async()=>{throw Error("unexpected write");}};
-const admin: Caller={kind:"user",subject:"a",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null};
+const admin: Caller=fixtureCaller({kind:"user",subject:"a",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null});
 const metadata: Metadata={collections:[],views:[],operations:[],webmcp:{tools:[],routes:{}}};
 function fixture(routes: readonly Route<{}, {}>[]=[]){
   let caller: Caller=admin, resolves=0, providers=0;
@@ -19,7 +20,7 @@ test("admin session gate and builtin JSON byte limits precede database providers
   let writes=0;
   const f=fixture([{method:"PATCH",path:"/save",run:c=>{writes++;const db=c.db;expect(c.db).toBe(db);return c.input;}}]);
   f.caller({kind:"anonymous"});expect((await f.ask("/save","PATCH","{"))?.status).toBe(401);
-  f.caller({...admin,kind:"user",credential:"api-key"});expect((await f.ask("/save","PATCH","{}"))?.status).toBe(403);
+  f.caller(fixtureCaller({...admin,kind:"user",credential:"api-key"}));expect((await f.ask("/save","PATCH","{}"))?.status).toBe(403);
   f.caller(admin);expect((await f.ask("/save","PATCH","{}",{origin:"https://foreign.test"}))?.status).toBe(403);
   expect((await f.ask("/save","PATCH","{}",{"content-length":"1000001"}))?.status).toBe(400);
   expect((await f.ask("/save","PATCH",JSON.stringify({data:"x".repeat(1000001)})))?.status).toBe(400);

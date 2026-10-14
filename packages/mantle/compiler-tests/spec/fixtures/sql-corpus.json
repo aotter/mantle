@@ -192,7 +192,7 @@
   {
     "id": "mantle-refs",
     "kind": "view",
-    "sql": "SELECT auth.uid() AS uid, auth.role() AS role, now() AS now, input.x AS x FROM items WHERE id = 'a'",
+    "sql": "SELECT auth.uid() AS uid, now() AS now, input.x AS x FROM items WHERE id = 'a'",
     "inputs": {
       "x": "int8"
     }

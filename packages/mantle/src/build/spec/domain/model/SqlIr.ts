@@ -8,19 +8,22 @@
  * Pure types and constants only. Nothing here imports the parser.
  */
 import type { DiagnosticCode } from "../../kernel/diagnostic.js";
+import type { UserScope } from "./UserFields.js";
 export type SqlNode = Record<string, any>;
 
 /** The PostgreSQL grammar version a plan records (libpg-query 18: PG 18.0.4). */
 export const PG_GRAMMAR = 180004;
 
 /** The `SQL_*` codes of the diagnostic kernel; each is described in docs/handbook/reference/diagnostics.md. */
-export type SqlDiagnosticCode = Extract<DiagnosticCode, `SQL_${string}`>;
+export type SqlDiagnosticCode = Extract<DiagnosticCode, `SQL_${string}` | `USER_FIELD_${string}` | "USER_REF_SCOPE_ONLY" | "AUTH_ROLE_REMOVED">;
 
 export interface SqlSchemaDef {
   /** Translation reads share their parent's current visibility on this field. */
   readonly translates?: { readonly parent: string; readonly on: string };
   /** column that holds the owner; every read and write is filtered on it */
   readonly scope?: string;
+  /** AND-joined value terms of the row template, beside the owner column `scope`. */
+  readonly userScopes?: readonly UserScope[];
   /** a declared timestamptz field the author writes; a row is invisible once it is `ttlSeconds` old (a NULL never expires) */
   readonly ttl?: string;
   readonly ttlSeconds?: number;
@@ -31,7 +34,7 @@ export interface SqlSchemaDef {
   /** lower-cased column -> the name the JSON Schema declares (the plan has it; `notNullColumns` reads it with `schema`) */
   readonly names?: Readonly<Record<string, string>>;
   /** the Schema's JSON Schema, of which storage reads only what is required and nullable */
-  readonly schema?: { readonly required?: readonly string[]; readonly properties?: Readonly<Record<string, { readonly type?: unknown; readonly nullable?: boolean }>> };
+  readonly schema?: { readonly required?: readonly string[]; readonly properties?: Readonly<Record<string, { readonly type?: unknown; readonly nullable?: boolean; readonly enum?: readonly unknown[]; readonly oneOf?: readonly { readonly const?: unknown }[] }>> };
 }
 
 /**
@@ -87,10 +90,11 @@ export function viewCacheProblem(stmts: readonly SqlNode[], schemas: Readonly<Re
     if (!node || typeof node !== "object") continue;
     const n = node as SqlNode;
     const fn = n.FuncCall?.funcname?.map((x: SqlNode) => x.String.sval).join(".").replace(/^pg_catalog\./, "");
-    if (fn === "now" || fn === "auth.uid" || fn === "auth.role") return `shared caching cannot read ${fn}()`;
+    if (fn === "now" || fn?.startsWith("auth.")) return `shared caching cannot read ${fn}()`;
     const relation = n.RangeVar;
     if (relation?.mantle === "table") {
       const schema = schemas[relation.relname.toLowerCase()];
+      if (schema?.userScopes?.length) return `shared caching cannot read field-scoped Schema '${relation.relname}'`;
       if (schema?.ttl || (schema && !schema.publishing)) return `shared caching cannot read ${schema.ttl ? "TTL" : "operational"} Schema '${relation.relname}'`;
     }
     pending.push(...Object.values(n));
@@ -123,6 +127,7 @@ export const NATIVE_NOT_NULL: ReadonlySet<string> = new Set(["id", "version", "c
  */
 export function notNullColumns(s: SqlSchemaDef): Set<string> {
   const out = new Set<string>();
+  for (const u of s.userScopes ?? []) out.add(u.column);
   if (s.publishing || !s.schema?.required) return out;
   const required = new Set(s.schema.required);
   for (const [f, t] of Object.entries(s.fields)) {

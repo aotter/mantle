@@ -1,3 +1,4 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 import { beforeAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import ts from "typescript";
@@ -12,7 +13,7 @@ metadata: {name: notes}
 spec:
   title: Notes
   lifecycle: operational
-  scope: {owner: auth.uid()}
+  scope: "owner = auth.uid()"
   indexes: [[owner]]
   schema:
     type: object
@@ -31,21 +32,21 @@ const ref = `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: {name: app-note}
 spec:
-  requires: {auth: {all: [ctx.user, {ctx.admin: [admin]}, {ctx.auth.scope: notes:write}]}}
+  requires: {auth: {all: [ctx.user, ctx.admin, {ctx.auth.scope: notes:write}]}}
   input: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}
   output: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}
   handler: {ref: app.createNote}
 `;
 beforeAll(() => mkdir(resolve(import.meta.dir, "apps/.generated"), { recursive: true }));
 const targets = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const;
-const caller = { ...user("writer"), role: "admin" as const, admin: true, scopes: ["notes:write"] };
+const caller = fixtureCaller({ ...user("writer"), role: "admin" as const, admin: true, scopes: ["notes:write"] });
 const files = (target: typeof targets[number], text = schema + ref) => generateOrThrow(target, [{ sourceId: "handlers.yaml", text }]);
 
 for (const target of ["bun-sqlite"] as const) test(`${target} caller-owned handlers gate dispatch and preserve context/errors`, async () => {
   const generated = await files(target);
   const app = await loadGenerated(generated["generated.ts"]!);
   const db = {};
-  for (const denied of [{ kind: "anonymous" }, { kind: "system", reason: "test" }, user("admin"), { ...caller, scopes: [] }]) {
+  for (const denied of [{ kind: "anonymous" }, { kind: "system", reason: "test" }, user("admin"), fixtureCaller({ ...caller, scopes: [] })]) {
     await expect(app.store(db, denied, { handlers: {} }).procedures["app-note"]({ title: "t" })).rejects.toMatchObject({ code: denied.kind === "user" ? "AUTH_DENIED" : "UNAUTHENTICATED" });
   }
   for (const options of [undefined, { handlers: {} }]) {
@@ -73,7 +74,7 @@ for (const target of ["bun-sqlite"] as const) test(`${target} caller-owned handl
   expect(await data.procedures["app-note"](result)).toBe(result);
   expect(await data.procedures["app-note"](result)).toBe(result);
   await expect(data.procedures["app-note"]({ title: "throw" })).rejects.toBe(error);
-  await expect(app.store(db, { ...caller, scopes: [] }, { handlers }).procedures["app-note"](result)).rejects.toMatchObject({ code: "AUTH_DENIED" });
+  await expect(app.store(db, fixtureCaller({ ...caller, scopes: [] }), { handlers }).procedures["app-note"](result)).rejects.toMatchObject({ code: "AUTH_DENIED" });
   expect(called).toBe(3);
 });
 

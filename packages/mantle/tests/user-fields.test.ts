@@ -1,0 +1,173 @@
+import { expect, test } from 'bun:test';
+import { Database } from 'bun:sqlite';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { userCaller, hasRole, fieldsOf, userBinds, modeOf, userRefs, isAll } from '../src/kernel/user-fields.js';
+import { binds } from '../src/kernel/binds.js';
+import { renderTerm } from '../src/kernel/store.js';
+import { dialect } from '../src/kernel/dialect/sqlite.js';
+import { isAdmin, hasAdminRole } from '../src/kernel/contracts.js';
+import { generateOrThrow, writeGenerated } from './apps/link.js';
+const fields = { region: { type: 'string' as const, multiple: true }, tier: { type: 'string' as const, multiple: false } };
+test('verified identities freeze values, discard unknown fields and lose authority when copied', () => {
+  const caller = userCaller({ id: 'member', role: 'vip,editor,vip', region: ['TW', 'TW'], tier: 'gold', ignored: 'secret' }, { fields, adminRoles: ['editor'] });
+  expect(caller.roles).toEqual(['vip', 'editor']); expect(fieldsOf(caller)).toEqual({ region: ['TW'], tier: 'gold' });
+  expect(isAdmin(caller)).toBe(true); expect(hasAdminRole(caller, 'editor')).toBe(true); expect(hasRole(caller, 'vip')).toBe(true);
+  const copy = { ...caller }; expect(isAdmin(copy)).toBe(false); expect(hasRole(copy, 'vip')).toBe(false); expect(fieldsOf(copy)).toEqual({});
+  expect(Object.isFrozen(caller)).toBe(true); expect(Object.isFrozen(caller.roles)).toBe(true); expect(Object.isFrozen(caller.fields)).toBe(true); expect(Object.isFrozen(caller.fields!.region)).toBe(true);
+  expect(modeOf({ kind: 'system', reason: 'fixture' })).toBe('trusted'); expect(() => modeOf({ kind: 'future' } as never)).toThrow('Unknown caller');
+  for (const value of ['', '\0', '\uD800', 'x'.repeat(257), Array(65).fill('TW'), true, Infinity])
+    expect(() => userCaller({ id: 'bad', region: value }, { fields })).toThrow();
+  for (const value of ['NULL', 'null', '  TW  ', '},{', 'q"u\\o,te{}', 'x'.repeat(256), '界'.repeat(85), Array.from({ length: 64 }, (_, i) => String(i))])
+    expect(() => userCaller({ id: 'ok', region: value }, { fields })).not.toThrow();
+  expect(() => userCaller({ id: 'bad', region: '界'.repeat(86) }, { fields })).toThrow();
+  expect(() => userCaller({ id: 'host:bad' })).toThrow();
+  expect(() => userRefs(true, 2)).toThrow('version');
+  expect(() => binds({userRefs:userRefs(true, 1)},[{k:'future'}] as never,caller)).toThrow('Unknown user-reference');
+  expect(() => renderTerm(dialect,['region','future',{k:'uid'}] as never,'r.','?1')).toThrow('Unknown row-policy');
+  const recipe = { k: 'user' as const, field: 'region', type: 'string' as const, multiple: true };
+  expect(() => userBinds(true)(recipe, { kind: 'anonymous' })).toThrow(expect.objectContaining({ code: 'UNAUTHENTICATED' }));
+  expect(() => userBinds(false)(recipe, userCaller({ id: 'empty', region: [] }, { fields }))).toThrow(expect.objectContaining({ code: 'AUTH_DENIED' }));
+  const every = userCaller({ id: 'every', region: { all: true } }, { fields }); expect(isAll(every, 'region')).toBe(true); expect(isAll({ ...every }, 'region')).toBe(false);
+  expect(() => userBinds(true)(recipe, every)).toThrow('does not lift a restrict');
+  expect(() => userCaller({ id: 'bad', tier: ['gold'] }, { fields })).toThrow('one value');
+  expect(userBinds(false)(recipe, userCaller({ id: 'odd', region: ['NULL', '},{', 'q"u\\o'] }, { fields }))).toBe('{"NULL","},{","q\\"u\\\\o"}');
+});
+
+const schema = JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Schema', metadata: { name: 'orders' }, spec: { title: 'Orders', schema: { type: 'object', required: ['region', 'tier'], properties: { region: { type: 'string' }, tier: { type: 'string' } } }, indexes: [['region', 'id']] } });
+const view = (name: string, sql: string, restrict?: Record<string, string>) => JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'View', metadata: { name }, spec: { surface: 'internal', sql, ...(restrict ? { restrict } : {}) } });
+const code = (run: () => Promise<unknown>) => run().then(() => 'ok', (e: { code?: string }) => e.code ?? String(e));
+test('caller references are refused in SQL and restrict is validated', async () => {
+  for (const sql of ["SELECT id FROM orders WHERE region IN auth.user('region')", "SELECT auth.user('region') FROM orders", "SELECT id FROM orders WHERE NOT(region IN (auth.user('region')))", "SELECT id FROM orders WHERE region <> auth.user('region')", "SELECT id FROM orders WHERE (region = auth.user('region')) IS NOT TRUE", "SELECT id FROM orders ORDER BY auth.hasRole('vip')", "SELECT id FROM orders WHERE NOT EXISTS(SELECT id FROM orders WHERE region IN (auth.user('region')))", "SELECT id FROM orders WHERE auth.role() = 'vip'"])
+    await expect(generateOrThrow('bun-sqlite', [{ sourceId: 'deny.yaml', text: schema+'\n---\n'+view('denied', sql) }])).rejects.toThrow(/USER_REF_SCOPE_ONLY|AUTH_ROLE_REMOVED/);
+  for (const restrict of <Record<string, string>[]>[{ other: "region IN auth.user('region')" }, { orders: "missing IN auth.user('region')" }, { orders: "region = auth.user('region')" }, { orders: 'region = auth.uid()' }, { orders: "region IN auth.user('region') OR tier IN auth.user('tier')" }])
+    await expect(generateOrThrow('bun-sqlite', [{ sourceId: 'restrict.yaml', text: schema+'\n---\n'+view('restricted', 'SELECT id FROM orders', restrict) }]), JSON.stringify(restrict)).rejects.toThrow();
+});
+test('field scope covers Store reads, native writes, autofill and partitioned uniqueness', async () => {
+  const scoped = JSON.parse(schema); scoped.spec.scope = "region IN auth.user('region')"; scoped.spec.uniqueIndexes = [['tier']];
+  const sources = [{ sourceId: 'scope.yaml', text: JSON.stringify(scoped)+'\n---\n'+view('scoped', 'SELECT id, region, tier FROM orders ORDER BY region, id') }];
+  const files = await generateOrThrow('bun-sqlite', sources), dir = await mkdtemp(resolve(import.meta.dir, 'apps/.generated/field-scope-')), db = new Database(':memory:');
+  try {
+    await writeGenerated(dir, files); const app = await import(resolve(dir, 'generated.ts')); db.exec(files['schema.sql']!);
+    const system = app.store(db, { kind: 'system', reason: 'fixture' }).collection('orders');
+    const a = await system.insert({ region: 'TW', tier: 'gold' }), b = await system.insert({ region: 'JP', tier: 'gold' });
+    const caller = userCaller({ id: 'member', region: 'TW' }, { fields, adminRoles: [] }), own = app.store(db, caller).collection('orders');
+    expect((await app.views.scoped(db, caller, {})).map((row: { region: string }) => row.region)).toEqual(['TW']);
+    expect(await own.findById(b.id)).toBeNull(); expect(await own.count()).toBe(1);
+    expect(await code(() => app.store(db, { ...caller }).collection('orders').count())).toBe('AUTH_DENIED');
+    const created = await own.insert({ tier: 'silver' }); expect(created.region).toBe('TW');
+    await expect(Promise.resolve(own.insert({ region: 'JP', tier: 'outside' }))).rejects.toMatchObject({ code: 'AUTH_DENIED' });
+    await expect(Promise.resolve(own.insert({ region: 'TW', tier: 'gold' }))).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(Promise.resolve(own.update(a.id, { region: 'JP' }, { lock: 1 }))).rejects.toThrow('not writable');
+    await expect(Promise.resolve(own.update(b.id, { tier: 'outside' }, { lock: 1 }))).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(Promise.resolve(own.delete(b.id, { lock: 1 }))).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect((await system.findById(b.id)).tier).toBe('gold');
+  } finally { db.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test('scope wraps SQL relations; { all: true } drops only the scope term, never a restrict',async()=>{
+ const scoped=JSON.parse(schema);scoped.spec.scope="region IN auth.user('region')";scoped.spec.uniqueIndexes=[['tier']];
+ const sqls={cte:'WITH visible AS (SELECT id,region FROM orders) SELECT id,region FROM visible ORDER BY id',derived:'SELECT id,region FROM (SELECT id,region FROM orders) o ORDER BY id',left:'SELECT a.id,a.region,b.id AS joined FROM orders a LEFT JOIN orders b ON a.id=b.id ORDER BY a.id',exists:'SELECT id,region FROM orders a WHERE EXISTS(SELECT id FROM orders b WHERE b.id=a.id) ORDER BY id',window:'SELECT id,region,row_number() OVER(ORDER BY id) AS position FROM orders ORDER BY id',restricted:'WITH visible AS (SELECT id,region FROM orders) SELECT id,region FROM visible v ORDER BY id'};
+ const procedure=(name:string,sql:string)=>JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Procedure',metadata:{name},spec:{title:name,input:{type:'object',additionalProperties:false},output:{type:'object'},handler:{sql}}});
+ const text=[JSON.stringify(scoped),...Object.entries(sqls).map(([name,sql])=>view(name,sql,name==='restricted'?{orders:"region IN auth.user('region')"}:undefined)),procedure('seed',"INSERT INTO orders(region,tier) VALUES ('TW','gold') ON CONFLICT(tier) DO UPDATE SET tier=excluded.tier RETURNING id")].join('\n---\n'),files=await generateOrThrow('bun-sqlite',[{sourceId:'matrix.yaml',text}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/scope-matrix-')),db=new Database(':memory:');
+ try{await writeGenerated(dir,files);const app=await import(resolve(dir,'generated.ts'));db.exec(files['schema.sql']!);const system={kind:'system',reason:'fixture'} as const;
+  await app.store(db,system).collection('orders').insert({region:'TW',tier:'gold'});await app.store(db,system).collection('orders').insert({region:'JP',tier:'gold'});
+  const member=userCaller({id:'member',region:'TW'},{fields}),admin=userCaller({id:'admin',role:'admin',region:{all:true}},{fields});
+  for(const name of Object.keys(sqls)){const own=await app.views[name](db,member,{});expect(own.length).toBe(1);expect(own.every((row:any)=>row.region==='TW')).toBe(true);expect(name==='restricted'?await code(()=>app.views[name](db,admin,{})):(await app.views[name](db,admin,{})).length).toBe(name==='restricted'?'AUTH_DENIED':2);expect(await code(()=>app.views[name](db,{...admin},{}))).toBe('AUTH_DENIED');}
+  expect(await app.store(db,member).collection('orders').count()).toBe(1);expect(await app.store(db,admin).collection('orders').count()).toBe(2);
+  await expect(app.procedures.seed(db,member,{})).rejects.toMatchObject({code:'AUTH_DENIED'});expect((await app.procedures.seed(db,system,{})).results[0]).toHaveLength(1);
+  await expect(generateOrThrow('bun-sqlite',[{sourceId:'readonly.yaml',text:JSON.stringify(scoped)+'\n---\n'+procedure('bad',"INSERT INTO orders(region,tier) VALUES ('TW','gold') ON CONFLICT(tier) DO UPDATE SET region=excluded.region RETURNING id")}])).rejects.toThrow('scoped column');
+  await expect(generateOrThrow('bun-sqlite',[{sourceId:'anti.yaml',text:JSON.stringify(scoped)+'\n---\n'+view('anti',"SELECT a.id FROM orders a LEFT JOIN orders b ON a.id=b.id AND b.region IN auth.user('region') WHERE b.id IS NULL")}])).rejects.toThrow('USER_REF_SCOPE_ONLY');
+  await expect(generateOrThrow('bun-sqlite',[{sourceId:'unsupported-set.yaml',text:JSON.stringify(scoped)+'\n---\n'+view('set','SELECT id FROM orders UNION ALL SELECT id FROM orders')}])).rejects.toThrow('SQL_UNSUPPORTED');
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test('no-user-reference generated bytes stay pinned on every target',async()=>{
+ const {createHash}=await import('node:crypto'),{generateFromSources}=await import('../src/infrastructure/generate.js');
+ const sources=[{sourceId:'ordinary.yaml',text:JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Schema',metadata:{name:'records'},spec:{title:'Records',lifecycle:'operational',scope:'ownerId = auth.uid()',indexes:[['ownerId','at','id']],schema:{type:'object',required:['ownerId','at','title'],properties:{ownerId:{type:'string'},at:{type:'string',format:'date-time'},title:{type:'string'}}}}})+'\n---\n'+JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'View',metadata:{name:'records-list'},spec:{title:'Records',surface:'public',requires:{auth:{all:['ctx.user']}},sql:'SELECT id, at, title FROM records ORDER BY at,id'}})}];
+ const hashes={'bun-sqlite':'5fb47cd60e415ac078bff0e64e42838f6e891d565cf7c8af49ea53211b84f37f','bun-postgres':'a8198dd83f8e474884889b1e8f585bb60b4a20131a7c8c8fca55bc95ec0003d2','cloudflare-d1':'20e365c4de1a485c42f5ab985c22dce39279cb687f1ddc87aedbccf895f32019','cloudflare-postgres':'a8198dd83f8e474884889b1e8f585bb60b4a20131a7c8c8fca55bc95ec0003d2'};
+ for(const target of Object.keys(hashes) as (keyof typeof hashes)[]){const result=await generateFromSources({target,sources:{sources}});expect(result.ok).toBe(true);if(result.ok)expect(createHash('sha256').update(JSON.stringify(Object.entries(result.files).sort(([a],[b])=>a.localeCompare(b)))).digest('hex')).toBe(hashes[target]);}
+});
+
+test('translation parent scope remains inside EXISTS when the child field is { all: true }',async()=>{
+ const manifest=(kind:string,name:string,spec:object)=>JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind,metadata:{name},spec});
+ const text=[manifest('Schema','parents',{title:'Parents',lifecycle:'publishing',scope:"region IN auth.user('region')",indexes:[['region','slug']],uniqueIndexes:[['slug']],schema:{type:'object',required:['region','slug','title'],properties:{region:{type:'string'},slug:{type:'string'},title:{type:'string'}}}}),manifest('Schema','children',{title:'Children',lifecycle:'publishing',localized:true,translates:{parent:'parents',on:'slug'},scope:"region IN auth.user('zone')",indexes:[['region','slug']],schema:{type:'object',required:['region','slug','locale','title'],properties:{region:{type:'string'},slug:{type:'string'},locale:{type:'string'},title:{type:'string'}}}}),manifest('View','translated',{title:'Translations',surface:'public',sql:'SELECT id,title FROM children ORDER BY id'})].join('\n---\n');
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'parent-scope.yaml',text}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/parent-scope-')),db=new Database(':memory:');
+ try{await writeGenerated(dir,files);const app=await import(resolve(dir,'generated.ts')),sys={kind:'system',reason:'fixture'} as const;db.exec(files['schema.sql']!);
+  const parent=await app.store(db,sys).collection('parents').insert({region:'JP',slug:'foreign',title:'Parent'});await app.procedures['parents.publish'](db,sys,{id:parent.id,expectedVersion:1});
+  const child=await app.store(db,sys).collection('children').insert({region:'TW',slug:'foreign',locale:'en',title:'Child'});
+  const admin=userCaller({id:'admin',role:'admin',region:'TW',zone:{all:true}},{fields:{...fields,zone:{type:'string',multiple:true}}});
+  await expect(app.procedures['children.publish'](db,admin,{id:child.id,expectedVersion:1})).rejects.toMatchObject({code:'CONFLICT'});
+  await app.procedures['children.publish'](db,sys,{id:child.id,expectedVersion:1});expect(await app.views.translated(db,admin,{})).toEqual([]);
+  const {translationLocales}=await import(resolve(dir,'translations.ts'));expect(await translationLocales(db,admin,'parents',[{id:parent.id,slug:'foreign'}])).toEqual({[parent.id]:[]});
+  expect(await translationLocales(db,sys,'parents',[{id:parent.id,slug:'foreign'}])).toEqual({[parent.id]:['en']});
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test('partitioned unique keys cannot prove a multi-region join non-fanning',async()=>{
+ const scoped=JSON.parse(schema);scoped.spec.scope="region IN auth.user('region')";scoped.spec.uniqueIndexes=[['tier']];const other={...scoped,metadata:{name:'otherorders'}};
+ const v=JSON.parse(view('joined','SELECT a.id,a.tier FROM orders a JOIN otherorders b ON a.tier=b.tier ORDER BY a.id'));v.spec.surface='admin';v.spec.requires={auth:{all:['ctx.admin']}};
+ for(const target of ['bun-sqlite','cloudflare-d1','bun-postgres','cloudflare-postgres'] as const)await expect(generateOrThrow(target,[{sourceId:'fanout.yaml',text:[scoped,other,v].map(m=>JSON.stringify(m)).join('\n---\n')}])).rejects.toThrow('Fanning join');
+});
+
+test('numeric user fields bind finite numbers and inferred enum/type conflicts are refused',async()=>{
+ const numeric=JSON.parse(schema);numeric.spec.schema.properties.amount={type:'number'};
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'numeric.yaml',text:JSON.stringify(numeric)+'\n---\n'+view('amounts','SELECT id FROM orders ORDER BY id',{orders:"amount IN auth.user('amount')"})}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/numeric-fields-')),db=new Database(':memory:');
+ try{await writeGenerated(dir,files);const app=await import(resolve(dir,'generated.ts'));db.exec(files['schema.sql']!);await app.store(db,{kind:'system',reason:'fixture'}).collection('orders').insert({region:'TW',tier:'gold',amount:1.5});const c=userCaller({id:'numbers',amount:[1.5,2]},{fields:{amount:{type:'number',multiple:true}}});expect(await app.views.amounts(db,c,{})).toHaveLength(1);expect(()=>userCaller({id:'bad',amount:NaN},{fields:{amount:{type:'number',multiple:true}}})).toThrow('finite');
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+ await expect(generateOrThrow('bun-sqlite',[{sourceId:'conflict.yaml',text:JSON.stringify(numeric)+'\n---\n'+view('conflicting','SELECT id FROM orders',{orders:"region IN auth.user('same')"})+'\n---\n'+view('conflicting2','SELECT id FROM orders',{orders:"amount IN auth.user('same')"})}])).rejects.toThrow('USER_FIELD_CONFLICT');
+});
+
+test('unrelated { all: true } fields stay independent in one SQL per target',async()=>{
+ const manifests:any[]=[];
+ for(let i=0;i<5;i++){const m=JSON.parse(schema);m.metadata.name='partition'+i;m.spec.scope=`region IN auth.user('r${i}')`;manifests.push(m,JSON.parse(view('partition'+i,`SELECT id,region FROM partition${i} ORDER BY id`)));}
+ manifests.push(JSON.parse(view('combined','SELECT a.id,a.region,b.region AS otherregion FROM partition0 a JOIN partition1 b ON a.tier=b.tier ORDER BY a.id')));
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'independent.yaml',text:manifests.map(m=>JSON.stringify(m)).join('\n---\n')}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/independent-scopes-')),db=new Database(':memory:');
+ try{await writeGenerated(dir,files);const app=await import(resolve(dir,'generated.ts'));db.exec(files['schema.sql']!);
+  for(let i=0;i<5;i++)for(const region of ['TW','JP'])await app.store(db,{kind:'system',reason:'fixture'}).collection('partition'+i).insert({region,tier:'gold'});
+  const names=['r0','r1','r2','r3','r4'],c=(all:string)=>userCaller({id:'admin',...Object.fromEntries(names.map(n=>[n,all.split(',').includes(n)?{all:true}:'TW']))},{fields:Object.fromEntries(names.map(n=>[n,{type:'string' as const,multiple:true}]))});
+  for(let i=0;i<5;i++){expect((await app.views['partition'+i](db,c('r0,r1,r2,r3,r4'),{}))).toHaveLength(2);expect((await app.views['partition'+i](db,c('r0'),{}))).toHaveLength(i===0?2:1);}
+  expect(await app.views.combined(db,c('r0,r2'),{})).toHaveLength(2);expect(await app.views.combined(db,c('r1,r3'),{})).toHaveLength(2);expect(await app.views.combined(db,c('r0,r1,r2,r3,r4'),{})).toHaveLength(4);
+  expect(files['generated.ts']).not.toContain('Escapes');expect(files['generated.ts']!.match(/\/\*s:r\d\*\//g)?.length).toBeGreaterThanOrEqual(7);
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test('valid user-field names that match Object prototype members infer and bind normally',async()=>{
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'prototype-field.yaml',text:schema+'\n---\n'+view('prototype-fields','SELECT id FROM orders ORDER BY id',{orders:"tier IN auth.user('constructor') AND region IN auth.user('toString')"})}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/prototype-fields-')),db=new Database(':memory:');
+ try{await writeGenerated(dir,files);const app=await import(resolve(dir,'generated.ts'));db.exec(files['schema.sql']!);await app.store(db,{kind:'system',reason:'fixture'}).collection('orders').insert({region:'TW',tier:'gold'});
+  const caller=userCaller({id:'member',constructor:'gold',toString:['TW']},{fields:{constructor:{type:'string' as const,multiple:false},toString:{type:'string' as const,multiple:true}}});expect(await app.views['prototype-fields'](db,caller,{})).toHaveLength(1);expect(await code(()=>app.views['prototype-fields'](db,{...caller},{}))).toBe('AUTH_DENIED');
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test('two scope dimensions: { all: true } on one keeps the other, through Views, pages, Store and INSERT…SELECT',async()=>{
+ const two=JSON.parse(schema);two.spec.scope="region IN auth.user('region') AND tier IN auth.user('tier')";two.spec.indexes=[['region','tier','id']];
+ const fields2={region:{type:'string' as const,multiple:true},tier:{type:'string' as const,multiple:true}};
+ const procedure=JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Procedure',metadata:{name:'copy-gold'},spec:{title:'Copy',input:{type:'object',additionalProperties:false},output:{type:'object'},handler:{sql:"INSERT INTO orders(region,tier) SELECT region,'copy' FROM orders WHERE tier='gold' RETURNING id"}}});
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'two.yaml',text:[JSON.stringify(two),view('listed','SELECT id,region,tier FROM orders ORDER BY id'),procedure].join('\n---\n')}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/two-scopes-')),db=new Database(':memory:');
+ try{await writeGenerated(dir,files);const app=await import(resolve(dir,'generated.ts')),{default:page}=await import(resolve(dir,'paged/views/listed.ts'));db.exec(files['schema.sql']!);const sys={kind:'system',reason:'fixture'} as const;
+  for(const [region,tier] of [['TW','gold'],['TW','silver'],['JP','gold'],['JP','silver']])await app.store(db,sys).collection('orders').insert({region,tier});
+  const c=(region:unknown,tier:unknown)=>userCaller({id:'u',region,tier},{fields:fields2});
+  const rows=async(caller:any)=>(await app.views.listed(db,caller,{})).map((r:any)=>r.region+r.tier).sort();
+  expect(await rows(c('TW','gold'))).toEqual(['TWgold']);
+  expect(await rows(c({all:true},'gold'))).toEqual(['JPgold','TWgold']);
+  expect(await rows(c('TW',{all:true}))).toEqual(['TWgold','TWsilver']);
+  expect(await rows(c({all:true},{all:true}))).toHaveLength(4);
+  const first=await page(db,c({all:true},'gold'),{},{limit:1});expect(first.nextCursor).toBeString();
+  const second=await page(db,c({all:true},'gold'),{},{limit:1,cursor:first.nextCursor});
+  expect([...first.rows,...second.rows].map((r:any)=>r.tier)).toEqual(['gold','gold']);
+  expect(await app.store(db,c({all:true},'silver')).collection('orders').count()).toBe(2);
+  await expect(app.procedures['copy-gold'](db,c({all:true},'gold'),{})).rejects.toMatchObject({code:'AUTH_DENIED'});
+  expect(files['generated.ts']!.match(/\/\*s:(region|tier)\*\//g)?.length).toBeGreaterThanOrEqual(2);
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test('scope markers cannot be forged, restrict columns are not SET-able, cached Views refuse field scope',async()=>{
+ const scoped=JSON.parse(schema);scoped.spec.scope="region IN auth.user('region')";
+ for(const sql of ["SELECT id, '/*s:region*/' AS a FROM orders","SELECT id AS \"x*/\" FROM orders"])
+  await expect(generateOrThrow('bun-sqlite',[{sourceId:'forge.yaml',text:JSON.stringify(scoped)+'\n---\n'+view('forged',sql)}])).rejects.toThrow("'/*' or '*/'");
+ const move=JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Procedure',metadata:{name:'move'},spec:{title:'Move',input:{type:'object',properties:{id:{type:'string'},tier:{type:'string'}},additionalProperties:false},output:{type:'object'},restrict:{orders:"tier IN auth.user('tier')"},handler:{sql:'UPDATE orders SET tier = input.tier WHERE id = input.id RETURNING id'}}});
+ await expect(generateOrThrow('bun-sqlite',[{sourceId:'move.yaml',text:schema+'\n---\n'+move}])).rejects.toThrow(/never writable|must be lowered/);
+ const publishing=JSON.parse(JSON.stringify(scoped));publishing.spec.lifecycle='publishing';
+ const cached=JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'View',metadata:{name:'cached'},spec:{surface:'public',cache:{sharedMaxAge:60},sql:'SELECT id FROM orders'}});
+ await expect(generateOrThrow('bun-sqlite',[{sourceId:'cache.yaml',text:JSON.stringify(publishing)+'\n---\n'+cached}])).rejects.toThrow('field-scoped');
+});

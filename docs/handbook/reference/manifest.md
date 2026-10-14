@@ -8,4 +8,4 @@ Titles and descriptions accept a string or locale map, such as `{ en: Products, 
 
 Author SQL in PostgreSQL syntax. Generation renders it for postgres or sqlite, including bound inputs and compiled row policy. SQL native columns use `id`, `version`, `created_at`, `updated_at`, `author_id`, plus `status` / `published_at` for publishing. Store uses storage names too. Manifest index declarations use authored field/native names (`createdAt`), which compile to storage names.
 
-Use `input.<name>`, `auth.uid()`, `auth.role()`, `now()` and supported `mantle.*` functions. Only declared relations and allowed SQL constructs may be referenced. See [Schema](schema.md), [View](view.md), [Procedure](procedure.md), [Trigger](trigger.md) and [CLI](../start/project-and-cli.md).
+Use `input.<name>`, `auth.uid()`, `now()` and supported `mantle.*` functions. Only declared relations and allowed SQL constructs may be referenced. See [Schema](schema.md), [View](view.md), [Procedure](procedure.md), [Trigger](trigger.md) and [CLI](../start/project-and-cli.md).

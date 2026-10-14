@@ -1,8 +1,10 @@
+import { fixtureCaller as mintFixtureCaller } from "./apps/fixtures.js";
 /** The same native state/visibility checks run on SQLite, PostgreSQL and local D1. */
 import assert from "node:assert/strict";
-export async function verifyTranslations(app:any,locales:any,db:any):Promise<void> {
+export async function verifyTranslations(app:any,locales:any,db:any,factory?:Parameters<typeof mintFixtureCaller>[1]):Promise<void> {
+ const fixtureCaller = <T extends Parameters<typeof mintFixtureCaller>[0]>(caller:T):T => mintFixtureCaller(caller,factory);
  const state=async(table:string,id:string)=>{const text=`SELECT status,version FROM ${table} WHERE id = ?`;return db.batch?(await db.prepare(text).bind(id).all()).results[0]:db.unsafe?(await db.unsafe(text.replace("?","$1"),[id]))[0]:db.query(text).all(id)[0];};
- const admin={kind:"user",subject:"a",role:"admin",admin:true,scopes:[],credential:"session",credentialId:null,clientId:null},store=app.store(db,admin),other=app.store(db,{...admin,subject:"b"});
+ const admin=fixtureCaller({kind:"user",subject:"a",role:"admin",admin:true,scopes:[],credential:"session",credentialId:null,clientId:null}),store=app.store(db,admin),other=app.store(db,fixtureCaller({...admin,subject:"b"}));
  const parent=await store.collection("posts").insert({slug:"shared",title:"parent",cover:"parent-cover"}),child=await store.collection("translations").insert({slug:"shared",locale:"zh_TW",title:"child"});assert.equal(child.locale,"zh_TW");
  const foreign=await other.collection("posts").insert({slug:"shared",title:"foreign",cover:"foreign-cover"});await other.procedures["posts.publish"]({id:foreign.id,expectedVersion:1});const foreignChild=await other.collection("translations").insert({slug:"shared",locale:"fr",title:"private foreign"});await other.procedures["translations.publish"]({id:foreignChild.id,expectedVersion:1});
  const system={kind:"system",reason:"translation tenant regression"},systemStore=app.store(db,system);
@@ -19,7 +21,7 @@ export async function verifyTranslations(app:any,locales:any,db:any):Promise<voi
  assert.equal(Number((await state("posts",parent.id)).version),2);assert.equal((await state("translations",child.id)).status,"draft");
  const sibling=await store.collection("posts").insert({slug:"shared",title:"sibling",cover:"sibling-cover"});await store.procedures["posts.unpublish"]({id:parent.id,expectedVersion:2});await assert.rejects(store.procedures["translations.publish"]({id:child.id,expectedVersion:3}),{code:"CONFLICT"});await store.procedures["posts.publish"]({id:sibling.id,expectedVersion:1});await store.procedures["translations.publish"]({id:child.id,expectedVersion:3});
  const page=[{id:parent.id,slug:"shared"},{id:"missing",slug:"unknown"}];assert.deepEqual(await locales(db,admin,"posts",page),{[parent.id]:["zh_TW"],missing:[]});assert.deepEqual(await locales(db,{kind:"anonymous"},"posts",page),{[parent.id]:[],missing:[]});
- const reader={...admin,role:null,admin:false},read=app.store(db,reader),preview=app.store(db,{kind:"system",reason:"translation preview"});
+ const reader=fixtureCaller({...admin,role:null,admin:false}),read=app.store(db,reader),preview=app.store(db,{kind:"system",reason:"translation preview"});
  const visible=async(expected:boolean)=>{
   assert.equal(!!await read.collection("translations").findById(child.id),expected);
   assert.equal((await read.collection("translations").find()).rows.length,expected?1:0);
@@ -38,7 +40,7 @@ export async function verifyTranslations(app:any,locales:any,db:any):Promise<voi
  assert.equal((await state("translations",child.id)).status,"published");assert.ok(await store.collection("translations").findById(child.id));assert.ok(await preview.collection("translations").findById(child.id));
  await store.procedures["posts.publish"]({id:sibling.id,expectedVersion:3});await visible(true);
  await store.procedures["posts.archive"]({id:sibling.id,expectedVersion:4});await visible(false);assert.ok(await store.collection("translations").findById(child.id));
- await store.procedures["translations.unpublish"]({id:child.id,expectedVersion:4});assert.deepEqual(await locales(db,{...admin,role:null,admin:false},"posts",page),{[parent.id]:[],missing:[]});
+ await store.procedures["translations.unpublish"]({id:child.id,expectedVersion:4});assert.deepEqual(await locales(db,fixtureCaller({...admin,role:null,admin:false}),"posts",page),{[parent.id]:[],missing:[]});
  if(store.transaction){
   const p=await store.collection("posts").insert({slug:"reset",title:"tracker"}),c=await store.collection("translations").insert({slug:"reset",locale:"fr",title:"tracker"});await store.procedures["posts.publish"]({id:p.id,expectedVersion:1});
   await store.transaction(async(tx:any)=>{await assert.rejects(tx.procedures["translations.publish"]({id:c.id,expectedVersion:99}),{code:"CONFLICT"});await tx.procedures["posts.unpublish"]({id:p.id,expectedVersion:2});});

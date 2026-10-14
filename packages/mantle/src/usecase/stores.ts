@@ -10,6 +10,7 @@ import { nextMode } from "../domain/visibility.js";
 import { declaredType, inputType, nativeType } from "../domain/columns.js";
 import { q } from "../domain/entry.js";
 import { expand, SCOPE, TTL, type Fact, type Rules } from "../kernel/store.js";
+import { userScopeTerm } from '../build/compiler.js';
 
 // Types the typed Store compares and writes as plain bind values. Fixed numerics are scaled integers on SQLite; geo is two columns.
 const SCALAR = new Set(["text", "real", "float8", "integer", "int4", "int8", "bool", "timestamptz", "date"]);
@@ -40,6 +41,7 @@ export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, n
     const inherited = parent ? Object.keys(parent.fields).filter(c => c !== parent.scope && !Object.hasOwn(s.fields,c)).flatMap(c => parent.fields[c] === "geo" ? [`${c}_lat`, `${c}_lng`] : [c]) : [];
     const inheritedType = (c:string) => parent?.fields[c] ?? "real";
     const fact: Fact = {
+      ...(s.userScopes?.length ? { u: s.userScopes.map(u => userScopeTerm(u, true)) } : {}),
       ...(s.scope ? { s: s.scope } : {}), ...(s.ttl ? { ttl: [s.ttl, s.ttlSeconds ?? 0] as const } : {}), ...(s.publishing ? { pub: 1 as const } : {}),
       ...(ts.length ? { ts } : {}), ...(dates.length ? { d: dates } : {}),
       ...(s.search?.length ? { search: s.search } : {}),
@@ -54,9 +56,9 @@ export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, n
     const of = (columns: string[], value: (c: string) => string) => `{ ${columns.map(c => `${key(c)}: ${value(c)};`).join(" ")} }`;
     const union = (columns: string[]) => columns.map(c => q(c)).join(" | ") || "never";
     const scalar = (c: string) => SCALAR.has(type(c));
-    const writable = declared.filter(c => scalar(c) || type(c) === "json");
+    const writable = declared.filter(c => !(s.userScopes ?? []).some(u => u.column === c) && (scalar(c) || type(c) === "json"));
     const input = (c: string) => `${inputType(type(c))}${nonNull(c) ? "" : " | null"}`;
-    tables.push(`${key(s.name)}: { row: ${of([...names, ...geo], c => c === "id" ? "string" : nativeType(geo.includes(c) ? "real" : type(c), isSqlite, nonNull(c)))}${inherited.length ? ` & { ${inherited.map(c=>`${key(c)}?: ${nativeType(inheritedType(c),isSqlite)};`).join(" ")} }` : ""}; fields: ${of(names.filter(scalar), c => inputType(type(c)))}; set: ${of(writable, input)}; required: ${union(s.publishing ? [] : writable.filter(c => required.has(s.names?.[c] ?? c)))}; order: ${union(["id", ...names.filter(c => c !== "id" && scalar(c) && indexed.has(c) && (nonNull(c) || s.publishing && c === "published_at"))])} }`);
+    tables.push(`${key(s.name)}: { row: ${of([...names, ...geo], c => c === "id" ? "string" : nativeType(geo.includes(c) ? "real" : type(c), isSqlite, nonNull(c)))}${inherited.length ? ` & { ${inherited.map(c=>`${key(c)}?: ${nativeType(inheritedType(c),isSqlite)};`).join(" ")} }` : ""}; fields: ${of(names.filter(scalar), c => inputType(type(c)))}; set: ${of(writable, input)}${s.userScopes?.length ? `; insert: ${of([...writable, ...s.userScopes.map(u => u.column)], input)}` : ""}; required: ${union(s.publishing ? [] : writable.filter(c => required.has(s.names?.[c] ?? c)))}; order: ${union(["id", ...names.filter(c => c !== "id" && scalar(c) && indexed.has(c) && (nonNull(c) || s.publishing && c === "published_at"))])} }`);
     facts.push(`${q(s.name)}: ${q(fact)}`);
   }
   return { tables: `{ ${tables.join("; ")} }`, rules: q(rules), facts: `{ ${facts.join(", ")} }` };

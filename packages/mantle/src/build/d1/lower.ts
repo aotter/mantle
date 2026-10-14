@@ -137,6 +137,7 @@ export const d1Lowering: PolicyLowering = {
     return { FuncCall: out };
   },
   cast: lowerCast,
+  anyOf: (x, set) => sql('__x IN (SELECT value FROM json_each(__set))', { __x: x, __set: set }),
   sublink(out) {
     if (out.subLinkType === 'ANY_SUBLINK') delete out.operName; // `x = ANY (subquery)` is `x IN (subquery)`; SQLite has no ANY
     return { SubLink: out };

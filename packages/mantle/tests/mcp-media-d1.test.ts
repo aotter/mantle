@@ -27,13 +27,13 @@ spec: {surface: public, sql: 'SELECT id FROM entries ORDER BY id'}
   if(!generated.ok)throw Error(JSON.stringify(generated.diagnostics));
   await writeGenerated(dir,generated.files);
   const {unstable_splitSqlQuery}=await import("wrangler");
-  await writeFile(join(dir,"worker.ts"),`import {mcp} from './mcp.js';
+  await writeFile(join(dir,"worker.ts"),`import {userCaller} from '${resolve(base,"src/kernel/user-fields.ts")}';import {mcp} from './mcp.js';
 import {site} from './site.js';
 import {wire} from ${JSON.stringify(resolve(base,"src/kernel/contracts.ts"))};
 import {mediaError} from ${JSON.stringify(resolve(base,"src/kernel/media.ts"))};
 import {r2MediaStorage} from ${JSON.stringify(resolve(base,"src/kernel/r2-media.ts"))};
 let reads=0;
-const caller={kind:'user',subject:'native-admin',role:'admin', admin: true,scopes:[],credential:'session',credentialId:null,clientId:null};
+const caller=userCaller({id:'native-admin',role:'admin'});
 const storage=env=>r2MediaStorage({bucket:env.MEDIA,endpoint:${JSON.stringify(origin)},publicBase:${JSON.stringify(origin)},signer:{async sign(url){return{url};}}});
 const handle=mcp({db:env=>({prepare(sql){const statement=env.DB.prepare(sql);return{original:statement,bind(...values){const bound=statement.bind(...values);return{original:bound,all(){reads++;return bound.all();}};}}},batch(statements){return env.DB.batch(statements.map(s=>s.original));}}),caller:request=>request.headers.get('x-test-caller')==='anonymous'?{kind:'anonymous'}:request.headers.get('x-test-caller')==='member'?{...caller,role:'member',admin:false}:caller,media:storage});
 export default{async fetch(request,env){const url=new URL(request.url),key=url.pathname.slice(1);

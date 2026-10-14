@@ -1,3 +1,4 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 import {expect, test} from "bun:test";
 import {Database} from "bun:sqlite";
 import {SQL} from "bun";
@@ -15,7 +16,7 @@ metadata: {name: values}
 spec:
  title: Values
  lifecycle: operational
- scope: {ownerId: 'auth.uid()'}
+ scope: 'ownerId = auth.uid()'
  indexes: [[ownerId, amount, id]]
  schema:
   type: object
@@ -63,7 +64,7 @@ kind: View
 metadata: {name: proto-${kind}}
 spec: {surface: public, sql: 'SELECT id,${field} AS "__proto__" FROM values ORDER BY id'}
 `).join('');
-const caller:any={kind:"user",subject:"a",role:null,credential:"api-key",credentialId:null,clientId:null,scopes:["mcp"]};
+const caller:any=fixtureCaller({kind:"user",subject:"a",role:null,credential:"api-key",credentialId:null,clientId:null,scopes:["mcp"]});
 
 test("selected scalar conversion is static, copies rows and preserves native computed/missing/null values",async()=>{
  const raw=Object.assign(Object.create({inherited:"42"}),{safe:42n,large:9007199254740993n,unsafeNumber:9007199254740992,json:'{"x":true}',bool:1,nil:null,computed:9007199254740993n});
@@ -91,7 +92,7 @@ spec: {surface: internal, sql: 'WITH p AS (SELECT amount,flag,payload FROM value
  if(!direct.ok)throw Error(JSON.stringify(direct.diagnostics));
  expect(outputConversions(direct.plan,"direct-cte","bun-postgres")).toEqual([["amount","int"]]);
  expect(outputConversions(direct.plan,"direct-cte","cloudflare-d1")).toEqual([["amount","int"],["flag","bool"],["payload","json"]]);
- expect(()=>checkOrigin(new Request("https://app.test/api/edit",{method:"POST",headers:{origin:"https://evil.test"}}),{...caller,credential:"session"})).toThrow("Cross-origin");
+ expect(()=>checkOrigin(new Request("https://app.test/api/edit",{method:"POST",headers:{origin:"https://evil.test"}}),fixtureCaller({...caller,credential:"session"}))).toThrow("Cross-origin");
 });
 
 async function verify(target:"bun-sqlite"|"bun-postgres",db:any,run:(sql:string)=>Promise<any>|any,bigint=false){

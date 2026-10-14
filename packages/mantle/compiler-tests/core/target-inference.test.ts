@@ -21,7 +21,7 @@ metadata: { name: notes }
 spec:
   title: Notes
   lifecycle: operational
-  scope: { owner: auth.uid() }
+  scope: "owner = auth.uid()"
   indexes: [[owner]]
   schema:
     type: object

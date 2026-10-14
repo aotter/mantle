@@ -3,16 +3,21 @@
  * its AST, and a runtime that never compiles (a generated Store) renders them to its own SQL, so the rules are spelled once, here.
  */
 import type { SqlSchemaDef } from "../model/SqlIr.js";
+import type { UserScope } from "../model/UserFields.js";
 
 /** `caller` preserves Core visibility; `admin` additionally hides publishing drafts from non-admin callers. */
 export type RowMode = "caller" | "public" | "trusted" | "admin";
 /** A value an engine binds. Inside a term a `const` is part of the rule (printed inline); in a write it is an input. */
-export type RowValue = { readonly k: "uid" | "role" | "admin" | "now" | "version" } | { readonly k: "cutoff"; readonly seconds: number } | { readonly k: "const"; readonly value: string };
+export type RowValue = { readonly k: "uid" | "admin" | "now" | "version" } | { readonly k: "cutoff"; readonly seconds: number } | { readonly k: "const"; readonly value: string } | { readonly k: "user"; readonly field: string; readonly multiple: boolean; readonly type: "string" | "number"; readonly scope?: true };
 /** `eq`: `column = value`. `ttl`: `column IS NULL OR column > value`. `admin`: published, or the bound caller holds the admin layer. */
-export type RowTerm = readonly [column: string, op: "eq" | "ttl", value: RowValue] | readonly [column: string, op: "admin", value: RowValue, published: string] | readonly [column: string, op: "parent", value: RowValue, parent: RowParent];
+export type RowTerm = readonly [column: string, op: "eq" | "ttl", value: RowValue] | readonly [column: string, op: "admin", value: RowValue, published: string] | readonly [column: string, op: "parent", value: RowValue, parent: RowParent] | readonly [column: string, op: "in", value: Extract<RowValue, { k: 'user' }>];
 /** One correlated parent row must satisfy every visibility term; admin previews may omit this requirement. */
 export interface RowParent { readonly table: string; readonly terms: readonly RowTerm[]; readonly scope?: readonly [parent: string, child: string]; readonly admin?: true; }
-export type RowSchema = Pick<SqlSchemaDef, "scope" | "ttl" | "ttlSeconds" | "publishing" | "translates">;
+export type RowSchema = Pick<SqlSchemaDef, "scope" | "userScopes" | "ttl" | "ttlSeconds" | "publishing" | "translates">;
+/** `swappable`: a Schema scope term, which `{ all: true }` drops at run time; a target's restrict term is never swappable. */
+export function userScopeTerm(scope: UserScope, swappable = false): Extract<RowTerm, readonly [string, 'in', ...unknown[]]> {
+  return [scope.column, "in", { k: "user" as const, field: scope.field, type: scope.type, multiple: true, ...(swappable ? { scope: true as const } : {}) }];
+}
 export interface RowWrite {
   /** An insert's columns the policy fills, in order. `newId` is a new entry id. */
   readonly fills: readonly (readonly [column: string, value: RowValue | "newId"])[];
@@ -30,7 +35,7 @@ export function rowPolicy(s: RowSchema, mode: RowMode, schemas?: Readonly<Record
   if (s.translates && (mode === "public" || mode === "admin")) {
     const table = s.translates.parent.toLowerCase(), schema = schemas?.[table];
     if (!schema) throw new Error(`Translation parent ${table} is unavailable to rowPolicy.`);
-    parent = [[s.translates.on.toLowerCase(), "parent", { k: "admin" }, { table, terms: rowPolicy(schema, "public", schemas), ...(schema.scope && s.scope ? { scope: [schema.scope, s.scope] as const } : {}), ...(mode === "admin" ? { admin: true as const } : {}) }]];
+    parent = [[s.translates.on.toLowerCase(), "parent", { k: "admin" }, { table, terms: rowPolicy(schema, schema.userScopes?.length && mode === "admin" ? "admin" : "public", schemas), ...(schema.scope && s.scope ? { scope: [schema.scope, s.scope] as const } : {}), ...(mode === "admin" && !schema.userScopes?.length ? { admin: true as const } : {}) }]];
   }
 
   return [
@@ -38,6 +43,7 @@ export function rowPolicy(s: RowSchema, mode: RowMode, schemas?: Readonly<Record
     ...(s.ttl ? [[s.ttl, "ttl", { k: "cutoff", seconds: s.ttlSeconds! }] as const] : []),
     ...(s.publishing && (mode === "public" || mode === "admin") ? [mode === "public" ? ["status", "eq", { k: "const", value: PUBLISHED }] as const : ["status", "admin", { k: "admin" }, PUBLISHED] as const] : []),
     ...parent,
+    ...(mode !== "trusted" ? (s.userScopes ?? []).map(u => userScopeTerm(u, true)) : []),
 
   ];
 }
@@ -51,7 +57,7 @@ export function writePolicy(s: RowSchema, kind: "insert" | "update" | "delete", 
   const uid: RowValue = { k: "uid" };
   return {
     // a scoped Schema always gets a generated id: a caller-chosen id would collide with (and reveal) another owner's row
-    fills: [...(s.scope ? [[s.scope, uid] as const] : []), ["created_at", NOW], ["updated_at", NOW], ["author_id", uid], ...(o.idGiven && !s.scope ? [] : [["id", "newId"] as const])],
+    fills: [...(s.scope ? [[s.scope, uid] as const] : []), ["created_at", NOW], ["updated_at", NOW], ["author_id", uid], ...(o.idGiven && !s.scope && !s.userScopes?.length ? [] : [["id", "newId"] as const])],
     sets: sets.slice(0, 2),
   };
 }

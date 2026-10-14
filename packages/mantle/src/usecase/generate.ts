@@ -1,3 +1,4 @@
+import { userReferences } from "../domain/userReferences.js";
 /** Canonical lowered programs become ordinary target-specific TypeScript, never a runtime plan. */
 import { parseNumeric, type JsonSchema, type LoweredStatement } from "../build/compiler.js";
 import type { GenerateDiagnostic, GenerateInput, GenerateResult } from "../domain/model.js";
@@ -42,6 +43,7 @@ export function generate(input: GenerateInput): GenerateResult {
   refuseDeclarations({ target, plan, lowered, viewKeys, newId }, diagnostics);
   const refuse = (path: string, message: string) => { diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message }); };
   const isSqlite = sqlite(target);
+  const user = userReferences(plan, isSqlite);
   const expected = isSqlite ? "@aotter/mantle/d1" : "@aotter/mantle/postgres";
   if (lowered.dialect.name !== expected || plan.dialect.name !== expected) refuse("target", `Target '${target}' needs canonical '${expected}' compilation and lowering.`);
   const driver = driverFor(target);
@@ -97,8 +99,8 @@ export function generate(input: GenerateInput): GenerateResult {
     const callerStep = step(c, path, fieldNames), trustedStep = mode === "caller" ? step(trusted!, path, fieldNames) : callerStep;
     declarations.push(`export type View${index}Input = ${queryInputType(view.input ?? { type: "object", additionalProperties: false }, [c, ...(trusted ? [trusted] : [])])};`, `export type View${index}Row = { ${output.join(" ")} };`, `export type View${index}WireRow = { ${keys.map(key => `readonly ${q(key)}: ${boundaryType(plan, name, key) ? wireType(boundaryType(plan, name, key)) : `View${index}Row[${q(key)}]`};`).join(" ")} };`,
       `const ${fn}Caller = ${callerStep} as const;`, ...(trustedStep !== callerStep ? [`const ${fn}Trusted = ${trustedStep} as const;`] : []),
-      `async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path),
-      `  const m = ${trustedStep !== callerStep ? `caller.kind === "system" ? ${fn}Trusted : ` : ""}${fn}Caller;`, `  return DRIVER.read(db, m.sql, binds(D, m.binds, caller, raw));`, "}");
+      `async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), ...(user.used ? ['  USER.modeOf(caller);'] : []),
+      `  const m = ${trustedStep !== callerStep ? `${user.used ? 'USER.modeOf(caller) === "trusted"' : 'caller.kind === "system"'} ? ${fn}Trusted : ` : ""}${fn}Caller;`, `  return DRIVER.read(db, ${user.used ? "USER.scoped(m.sql, caller)" : "m.sql"}, binds(D, m.binds, caller, raw));`, "}");
     views.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("view", name)} };`);
     entries[`views/${encodeURIComponent(name)}.ts`] = entry("view", name, `View${index}Input as Input, View${index}Row as Row, View${index}WireRow as WireRow`);
@@ -114,8 +116,8 @@ export function generate(input: GenerateInput): GenerateResult {
     const same = steps(modes.caller) === steps(modes.trusted);
     declarations.push(`export type Procedure${index}Input = ${queryInputType(procedure.input, [...modes.caller, ...modes.trusted])};`,
       `const ${fn}Caller = ${steps(modes.caller)};`, ...(same ? [] : [`const ${fn}Trusted = ${steps(modes.trusted)};`]),
-      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`, ...auth(procedure.requires, path),
-      `  return { results: await DRIVER.procedure(db, bound(D, ${same ? "" : `caller.kind === "system" ? ${fn}Trusted : `}${fn}Caller, caller, raw), ${q(path)}) };`, "}");
+      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`, ...auth(procedure.requires, path), ...(user.used ? ['  USER.modeOf(caller);'] : []), ...(procedure.trustedOnly ? [`  deny(caller, USER.modeOf(caller) === "trusted", ${q(path)});`] : []),
+      `  return { results: await DRIVER.procedure(db, bound(D, ${user.used ? "USER.scopedAll(" : ""}${same ? "" : `${user.used ? 'USER.modeOf(caller) === "trusted"' : 'caller.kind === "system"'} ? ${fn}Trusted : `}${fn}Caller${user.used ? ", caller)" : ""}, caller, raw), ${q(path)}) };`, "}");
     procedures.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input`, `export type { Output } from "${base}contracts";\n`);
@@ -126,18 +128,18 @@ export function generate(input: GenerateInput): GenerateResult {
   const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, refuse, !!site), ...emitAdminDescriptors({plan,adminExtensions,admin},diagnostics), ...emitAdminBindings(input,refuse), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";
-  const code = [...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [
+  const code = [...(Object.keys(plan.access?.userFields ?? {}).length ? [`export const userFields = ${q(plan.access!.userFields)} as const;`] : []), ...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [
     `export type Tables = ${stores.tables};`, `const RULES = ${stores.rules} as const;`,
     ...(hasHandlers ? [`const storeProcedures = { ${[...procedures, ...refProcedures].join(", ")} };`] : []),
-    `const initStore = () => createStore<Database, Tables, typeof DRIVER, { views: typeof views; procedures: typeof ${storeProcedures} }${hasHandlers ? ", { handlers: Handlers }" : ""}>(DIALECT.dialect, DRIVER, RULES, ${stores.facts}, { views, procedures: ${storeProcedures} });`,
+    `const initStore = () => createStore<Database, Tables, typeof DRIVER, { views: typeof views; procedures: typeof ${storeProcedures} }${hasHandlers ? ", { handlers: Handlers }" : ""}>(${user.used ? "{...DIALECT.dialect, ...USER_VALUES}" : "DIALECT.dialect"}, DRIVER, RULES, ${stores.facts}, { views, procedures: ${storeProcedures} });`,
     `let makeStore: ReturnType<typeof initStore>;`,
     `export function store${hasHandlers ? "<const H extends Handlers>" : ""}(db: Database, caller: Caller${hasHandlers ? ", options: { handlers: H & Record<Exclude<keyof H, keyof Handlers>, never> }" : ""}): ReturnType<typeof makeStore> { return (makeStore ??= initStore())(db, caller${hasHandlers ? ", options" : ""}); }`,
   ] : [])].join("\n");
   const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
-  const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny", ...(/\bisAdmin\(/.test(code) ? ["isAdmin"] : []), ...(/\bhasAdminRole\(/.test(code) ? ["hasAdminRole"] : [])] : []), ...(procedures.length ? ["type Output"] : [])];
+  const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny", ...(/\bisAdmin\(/.test(code) ? ["isAdmin"] : [])] : []), ...(procedures.length ? ["type Output"] : [])];
   const dbType = isSqlite ? databaseImport(target) : "";
-  return { ok: true, refProcedures: refNames, files: generatedFiles({ ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
+  return { ok: true, refProcedures: refNames, files: generatedFiles({ ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", user.code, dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
     ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...(stores ? [`import { createStore } from "${base}store";`] : []),
     `import { ${procedures.length ? "binds, bound" : "binds"} } from "${base}binds";`,
-    `const D = { ${[...values].sort().map(v => `${v}: DIALECT.${v}`).join(", ")} };`, code].filter(Boolean).join("\n") + "\n" }) };
+    `const D = { ${[...values].sort().map(v => `${v}: DIALECT.${v}`).concat(user.values ? [user.values] : []).join(", ")} };`, code].filter(Boolean).join("\n") + "\n" }) };
 }

@@ -24,7 +24,7 @@ const sources=[
   manifest("View","totals",{surface:"admin",sql:"SELECT sum(priority) AS total FROM tasks"}),
   manifest("View","public-tasks",{surface:"public",sql:"SELECT id,title FROM tasks ORDER BY id"}),
   manifest("View","internal-tasks",{surface:"internal",sql:"SELECT id,title FROM tasks ORDER BY id"}),
-  manifest("Procedure","mark-done",{title:"Complete",description:"Complete a task.",requires:{auth:{all:[{"ctx.admin":["admin"]}]}},input:{type:"object",properties:{entryId:{type:"string"},expectedVersion:{type:"integer"}},required:["entryId","expectedVersion"]},output:{type:"object"},target:{schema:"tasks",id:"entryId",version:"expectedVersion"},handler:{sql:"UPDATE tasks SET state='done',priority=CASE WHEN priority>1 THEN priority-1 ELSE priority END WHERE id=input.entryId AND version=input.expectedVersion AND state='todo' RETURNING id,state"}}),
+  manifest("Procedure","mark-done",{title:"Complete",description:"Complete a task.",requires:{auth:{all:["ctx.admin"]}},input:{type:"object",properties:{entryId:{type:"string"},expectedVersion:{type:"integer"}},required:["entryId","expectedVersion"]},output:{type:"object"},target:{schema:"tasks",id:"entryId",version:"expectedVersion"},handler:{sql:"UPDATE tasks SET state='done',priority=CASE WHEN priority>1 THEN priority-1 ELSE priority END WHERE id=input.entryId AND version=input.expectedVersion AND state='todo' RETURNING id,state"}}),
   manifest("Procedure","notify-task",{input:{type:"object",properties:{entryId:{type:"string"},message:{type:"string"}},required:["entryId"]},output:{type:"object"},target:{schema:"tasks",id:"entryId"},handler:{ref:"notify"},uiSchema:{fields:{message:{widget:"audit/color",options:{palette:"brand"}}}}}),
   manifest("Trigger","notify-http",{source:{kind:"http",method:"POST",path:"/api/notify"},target:{procedure:"notify-task"}}),
   manifest("Trigger","complete-mcp",{source:{kind:"mcp",surface:"admin"},target:{procedure:"mark-done"}}),
@@ -50,7 +50,7 @@ test("Admin projections match 0.2 collections, operations, SQL graph and MCP cat
 });
 
 test("sortableFields skips the scope column exactly as the server's Admin order does",async()=>{
-  const plan=await planOf([manifest("Schema","notes",schema({owner:{type:"string"},title:{type:"string"}},["owner","title"],{scope:{owner:"auth.uid()"},indexes:[["owner","title"]]}))]),notes=plan.schemas.notes!;
+  const plan=await planOf([manifest("Schema","notes",schema({owner:{type:"string"},title:{type:"string"}},["owner","title"],{scope:"owner = auth.uid()",indexes:[["owner","title"]]}))]),notes=plan.schemas.notes!;
   expect(Object.keys(adminOrder(notes))).toEqual(["id","updated_at","title"]);
   expect(collectionOf(notes,Object.values(plan.schemas)).sortableFields).toEqual(["title"]);
 });

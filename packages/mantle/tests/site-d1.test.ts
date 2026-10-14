@@ -1,6 +1,6 @@
 import {test,expect} from "bun:test";
 import {mkdtemp,rm,writeFile,readFile,open} from "node:fs/promises";
-import {join} from "node:path";
+import {join,resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {spawn} from "node:child_process";
 import {once} from "node:events";
@@ -12,8 +12,8 @@ import {loadFixtureSources,writeGenerated} from "./apps/link.js";
  try{
  const generated=await generateFromSources({target:"cloudflare-d1",sources:{sources:await loadFixtureSources()},site:{brand:"D1",media:{purposes:[{name:"cover",required:["png"],maxBytes:{"image/png":100}}]}}});if(!generated.ok)throw Error(JSON.stringify(generated.diagnostics));await writeGenerated(dir,generated.files);
  const {unstable_splitSqlQuery}=await import("wrangler");
- const source=`import {site} from './site.js';
- const caller={kind:'user' as const,subject:'admin',admin:true,role:'admin' as any,scopes:[],credential:'session' as const,credentialId:null,clientId:null};
+ const source=`import {userCaller} from '${resolve(import.meta.dir,"../src/kernel/user-fields.ts")}';import {site} from './site.js';
+ const caller=userCaller({id:'admin',role:'admin'});
  const storage={async createUpload(a:any){return {capabilities:a.variants.map((v:any)=>({...v,method:'PUT' as const,uploadUrl:'https://upload.test/'+a.uploadGroupId,storageKey:'uploads/'+a.uploadGroupId}))}},async commitUpload(a:any){return {id:a.uploadGroupId,createdAt:a.now,variants:a.variants.map((v:any)=>({mimeType:v.mimeType,role:v.role,storageKey:a.uploadGroupId,publicUrl:'https://media.test/'+a.uploadGroupId,byteSize:90}))}},async deleteObject(){}};
  export default {async fetch(request:Request,env:any){if(new URL(request.url).pathname==='/health')return new Response('ready');try{for(const sql of ${JSON.stringify(unstable_splitSqlQuery(generated.files["schema.sql"]!))})await env.DB.prepare(sql).run();
  const s=site(env.DB,caller);await s.updateSettings({title:'Durable D1'});const media=s.media(storage);const u=await media.createUpload({filename:'x.png',purpose:'cover',variants:[{mimeType:'image/png',byteSize:90,role:'primary'}]});const a=await media.commitUpload(u.uploadGroupId);const repeated=await media.commitUpload(u.uploadGroupId);const list=await media.list({search:a.id});await media.update(a.id,{alt:'D1 alt'});const changed=await media.get(a.id);const deleted=await media.delete(a.id);return Response.json({title:(await s.read()).title,id:a.id===repeated.id,pending:(await env.DB.prepare('SELECT count(*) AS n FROM pending_media_uploads').all()).results[0].n,rows:list.rows.length,alt:changed.alt,deleted,remaining:(await media.list({})).rows.length});}catch(error){return Response.json({error:String(error),stack:(error as Error).stack},{status:500});}}};`;

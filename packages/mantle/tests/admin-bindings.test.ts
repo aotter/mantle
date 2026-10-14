@@ -1,3 +1,4 @@
+import { sdkFixtureCaller as fixtureCaller } from "./apps/fixtures.js";
 import {test,expect} from "bun:test";
 import {Database} from "bun:sqlite";
 import {SQL} from "bun";
@@ -12,21 +13,21 @@ import {generateFromSources} from "../src/infrastructure/generateAuth.js";
 import {writeGenerated} from "./apps/link.js";
 import {encodeDate,encodeTimestamptz} from "../src/kernel/scalars.js";
 import {encodeCursor} from "../src/kernel/paging.js";
-const source={sourceId:"records.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"records"},spec:{title:"Records",lifecycle:"publishing",schema:{type:"object",required:["ownerId","label","kind"],properties:{ownerId:{type:"string"},label:{type:"string"},kind:{type:"string",enum:["a","b"]},flag:{type:"boolean"},data:{type:"object"},expiry:{type:"string",format:"date-time"}}},scope:{ownerId:"auth.uid()"},indexes:[["ownerId","label","id"]],ttl:{field:"expiry",expireAfterSeconds:0}}})};
+const source={sourceId:"records.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"records"},spec:{title:"Records",lifecycle:"publishing",schema:{type:"object",required:["ownerId","label","kind"],properties:{ownerId:{type:"string"},label:{type:"string"},kind:{type:"string",enum:["a","b"]},flag:{type:"boolean"},data:{type:"object"},expiry:{type:"string",format:"date-time"}}},scope:"ownerId = auth.uid()",indexes:[["ownerId","label","id"]],ttl:{field:"expiry",expireAfterSeconds:0}}})};
 const oneofManifest=()=>{const manifest=JSON.parse(source.text);manifest.metadata.name="oneofrecords";manifest.spec.lifecycle="operational";manifest.spec.schema.properties.kind={type:"string",oneOf:[{const:"a",title:"A"},{const:"b",title:"B"}]};manifest.spec.indexes=[["kind"],["ownerId"]];manifest.spec.uiSchema={list:{filterField:"kind"}};return manifest;};
 const oneofSource={sourceId:"oneof.json",text:JSON.stringify(oneofManifest())};
 const instantKeys=["2026-10-13T08:00:00.000001+08:00","2026-10-13T00:00:00.000001Z","2026-10-13T00:00:00.000002Z"];
 const enumSource=(name:string,format:string|undefined,values:string[])=>{const m=oneofManifest();m.metadata.name=name;m.spec.schema.properties.kind={type:"string",...(format?{format}:{}),enum:values};return {sourceId:name+".json",text:JSON.stringify(m)};};
 const temporalSources=[enumSource("instantchoices","date-time",instantKeys),enumSource("daychoices","date",["2026-10-13","2026-10-14"]),enumSource("quotedchoices",undefined,["a'quote"] )];
 
-const caller=(subject:string)=>({kind:"user" as const,subject,role:"admin" as const,admin:true,scopes:[],credential:"session" as const,credentialId:null,clientId:null});
+const caller=(subject:string)=>(fixtureCaller({kind:"user" as const,subject,role:"admin" as const,admin:true,scopes:[],credential:"session" as const,credentialId:null,clientId:null}));
 const ordinaryOwnerSource={sourceId:'ordinary-owner.json',text:JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Schema',metadata:{name:'ordinaryowners'},spec:{title:'Ordinary owners',lifecycle:'operational',schema:{type:'object',required:['ownerId','label'],properties:{ownerId:{type:'string'},label:{type:'string'}}},indexes:[['ownerId','id']]}})};
-const overlaySources=[{name:'overlayparents',spec:{title:'Parents',lifecycle:'publishing',indexes:[['slug']],schema:{type:'object',required:['ownerId','slug','title'],properties:{ownerId:{type:'string'},slug:{type:'string'},title:{type:'string'},cover:{type:'string'}}}}},{name:'overlaychildren',spec:{title:'Children',lifecycle:'publishing',localized:true,translates:{parent:'overlayparents',on:'slug'},scope:{ownerId:'auth.uid()'},indexes:[['ownerId','slug']],schema:{type:'object',required:['ownerId','slug','locale','title'],properties:{ownerId:{type:'string'},slug:{type:'string'},locale:{type:'string'},title:{type:'string'}}}}}].map(({name,spec})=>({sourceId:name+'.json',text:JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Schema',metadata:{name},spec})}));
+const overlaySources=[{name:'overlayparents',spec:{title:'Parents',lifecycle:'publishing',indexes:[['slug']],schema:{type:'object',required:['ownerId','slug','title'],properties:{ownerId:{type:'string'},slug:{type:'string'},title:{type:'string'},cover:{type:'string'}}}}},{name:'overlaychildren',spec:{title:'Children',lifecycle:'publishing',localized:true,translates:{parent:'overlayparents',on:'slug'},scope:'ownerId = auth.uid()',indexes:[['ownerId','slug']],schema:{type:'object',required:['ownerId','slug','locale','title'],properties:{ownerId:{type:'string'},slug:{type:'string'},locale:{type:'string'},title:{type:'string'}}}}}].map(({name,spec})=>({sourceId:name+'.json',text:JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Schema',metadata:{name},spec})}));
 async function writeBindings(dir:string,files:Readonly<Record<string,string>>){
  const helper=join(dir,"native-admin.ts");
  const source=await readFile(resolve(import.meta.dir,"../../mantle-admin/src/server/native.ts"),"utf8");
  const linked=Object.fromEntries(Object.entries(files).map(([name,text])=>[name,text.replaceAll('"@aotter/mantle-admin/server/native"','"./'+(name.startsWith("admin/")?"../":"")+'native-admin.js"')]));
- await writeGenerated(dir,{...linked,"native-admin.ts":source.replaceAll('"@aotter/mantle/','"@aotter/mantle/')});
+ await writeGenerated(dir,{...linked,"native-admin.ts":source},false);
 }
 async function fixture(){const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-bindings-"));const result=await generateFromSources({target:"bun-sqlite",sources:{sources:[source]},admin:true});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));await writeBindings(dir,result.files);const {adminBindings}=await import(join(dir,"admin-bindings.ts"));const db=new Database(":memory:");db.exec(result.files["schema.sql"]!);return {dir,db,files:result.files,bindings:adminBindings()};}
 test("selected Admin emits factories, indexed null ordering, scoped batch filters and independent statistics branches in one round trip",async()=>{
@@ -66,7 +67,7 @@ test("unselected generation has no Admin package import or deployment indexes",a
  }finally{await db.unsafe(`DROP SCHEMA IF EXISTS ${namespace} CASCADE`);await db.close();await rm(dir,{recursive:true,force:true});}
 },30000);
 
-const board={sourceId:"board.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name:"board"},spec:{surface:"admin",requires:{auth:{all:[{"ctx.admin":["admin"]}]}},sql:"SELECT id,label,kind,flag FROM records ORDER BY id",uiSchema:{list:{searchFields:["label"],filterFields:["kind","flag"]}}}})};
+const board={sourceId:"board.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name:"board"},spec:{surface:"admin",requires:{auth:{all:["ctx.admin"]}},sql:"SELECT id,label,kind,flag FROM records ORDER BY id",uiSchema:{list:{searchFields:["label"],filterFields:["kind","flag"]}}}})};
 for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`Admin ${pg?"PostgreSQL":"SQLite"} admin View native fragments page search/filter on scoped rows`,async()=>{
  const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-view-")),db=pg?new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}):new Database(":memory:"),namespace="admin_view_"+crypto.randomUUID().replaceAll("-","");
  const run=(sql:string,values:unknown[]=[])=>pg?(db as SQL).unsafe(sql,values as any[]):Promise.resolve((db as Database).query(sql).all(...values as any[]));
@@ -77,13 +78,13 @@ for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:
  const {adminBindings}=await import(join(dir,"admin-bindings.ts")),view=adminBindings().views[0];let cursor:string|undefined;const ids:string[]=[];
  do{const {input,...paging}=view.query(new URLSearchParams({search:"%_","filter.kind":"a",limit:"1",...(cursor?{cursor}:{})}));const page=await view.page(db,caller("A"),input,paging);ids.push(...page.rows.map((r:any)=>r.id));cursor=page.nextCursor;}while(cursor);expect(ids).toEqual(["r0","r2"]);
  const {input,...paging}=view.query(new URLSearchParams({"filter.flag":"false",limit:"500"}));const page=await view.page(db,caller("A"),input,paging);expect(page.rows.map((r:any)=>r.id)).toEqual(["r3","r4","r5"]);
- expect(()=>view.query(new URLSearchParams({"filter.flag":"no"}))).toThrow();expect(view.allows({...caller("A"),role:null})).toBe(false);
+ expect(()=>view.query(new URLSearchParams({"filter.flag":"no"}))).toThrow();expect(view.allows(fixtureCaller({...caller("A"),role:null}))).toBe(false);
  }finally{if(pg){await run(`DROP SCHEMA IF EXISTS ${namespace} CASCADE`);await(db as SQL).close();}else(db as Database).close();await rm(dir,{recursive:true,force:true});}
 },30000);
 
-const tupleSchema={sourceId:"tuple-schema.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"ordered"},spec:{title:"Ordered",lifecycle:"operational",scope:{ownerId:"auth.uid()"},schema:{type:"object",required:["ownerId","kind","rank","label","at"],properties:{ownerId:{type:"string"},kind:{type:"string"},rank:{type:"integer"},label:{type:"string"},at:{type:"string",format:"date-time"}}},indexes:[["ownerId","kind","rank","id"],["ownerId","at","id"]]}})};
-const datedSchema={sourceId:"dated.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"dated"},spec:{title:"Dated",lifecycle:"operational",scope:{ownerId:"auth.uid()"},schema:{type:"object",required:["ownerId","day"],properties:{ownerId:{type:"string"},day:{type:"string",format:"date"}}},indexes:[["ownerId","day","id"]]}})};
-const tupleView=(name:string,sql:string,list:object={})=>({sourceId:name+".json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name},spec:{surface:"admin",requires:{auth:{all:[{"ctx.admin":["admin"]}]}},input:{type:"object",properties:{minimum:{type:"integer"}},required:["minimum"]},sql,uiSchema:{list}}})});
+const tupleSchema={sourceId:"tuple-schema.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"ordered"},spec:{title:"Ordered",lifecycle:"operational",scope:"ownerId = auth.uid()",schema:{type:"object",required:["ownerId","kind","rank","label","at"],properties:{ownerId:{type:"string"},kind:{type:"string"},rank:{type:"integer"},label:{type:"string"},at:{type:"string",format:"date-time"}}},indexes:[["ownerId","kind","rank","id"],["ownerId","at","id"]]}})};
+const datedSchema={sourceId:"dated.json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"dated"},spec:{title:"Dated",lifecycle:"operational",scope:"ownerId = auth.uid()",schema:{type:"object",required:["ownerId","day"],properties:{ownerId:{type:"string"},day:{type:"string",format:"date"}}},indexes:[["ownerId","day","id"]]}})};
+const tupleView=(name:string,sql:string,list:object={})=>({sourceId:name+".json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name},spec:{surface:"admin",requires:{auth:{all:["ctx.admin"]}},input:{type:"object",properties:{minimum:{type:"integer"}},required:["minimum"]},sql,uiSchema:{list}}})});
 for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`Admin ${pg?"PostgreSQL":"SQLite"} complete three-key/grouped aliases, temporal binds and cursor authority`,async()=>{
  const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-tuples-")),db=pg?new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}):new Database(":memory:"),namespace="tuples_"+crypto.randomUUID().replaceAll("-","");
  const run=(sql:string,values:unknown[]=[])=>pg?(db as SQL).unsafe(sql,values as any[]):Promise.resolve((db as Database).query(sql).all(...values as any[]));
@@ -122,7 +123,7 @@ test("generated selected Admin factories conform to the actual public server int
 kind: Procedure
 metadata: {name: app-test}
 spec:
-  requires: {auth: {all: [{ctx.admin: [admin]}]}}
+  requires: {auth: {all: [ctx.admin]}}
   input: {type: object, properties: {label: {type: string}}, required: [label], additionalProperties: false}
   output: {type: object, properties: {label: {type: string}}, required: [label]}
   handler: {ref: app.test}
@@ -183,8 +184,8 @@ webmcpRoutes({tools:[]},tools,undefined);
  let worker:ReturnType<typeof spawn>|undefined,log:Awaited<ReturnType<typeof open>>|undefined;
  try{
  const result=await generateFromSources({target:"cloudflare-d1",admin:true,sources:{sources:[source,ordinaryOwnerSource,...overlaySources,tupleSchema,oneofSource,...temporalSources,tupleView("trio","SELECT id,kind,rank,label FROM ordered WHERE rank>=input.minimum ORDER BY kind,rank,id",{filterFields:["kind","rank"],searchFields:["label"]}),tupleView("groups","SELECT kind,MIN(rank) AS low FROM ordered WHERE rank>=input.minimum GROUP BY kind ORDER BY kind,low")]}});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));await writeBindings(dir,result.files);
- await writeFile(join(dir,"worker.ts"),`import {adminBindings,statisticsView} from './admin-bindings.js';import {nativeEntryGet,nativeEntryPage,nativeEntryProcedure} from './native-admin.js';
-export default{async fetch(request:Request,env:{DB:any}){if(new URL(request.url).pathname==='/health')return new Response('ready');let calls=0;const db={prepare(sql:string){calls++;return env.DB.prepare(sql);},batch:env.DB.batch.bind(env.DB)};try{const args:any=await request.json(),bindings=adminBindings(),caller=args.caller;let result;if(args.kind==='validation'){const schema=bindings.schemas.find(s=>s.name===args.name)!;result=schema.validate(args.input,args.full);}else if(args.kind==='write'){const s=bindings.schemas.find(s=>s.name===args.name)!;if(args.verb==='create')result=await nativeEntryProcedure(s.binding,bindings.adapter,db,caller,"create",s.values(s.validate(args.input,false)));else if(args.verb==='patch')result=await nativeEntryProcedure(s.binding,bindings.adapter,db,caller,"patch",s.values(s.validate(args.input,false)),args.id,args.version);else result=await nativeEntryProcedure(s.binding,bindings.adapter,db,caller,"remove",{},args.id,args.version);}else if(args.kind==='entries'){const schema=bindings.schemas.find(s=>s.name===args.name)!,q=schema.query(new URLSearchParams(args.params));result=q?await nativeEntryPage(schema.binding,bindings.adapter,()=>db,caller,q):{rows:[],cursor:null};}else if(args.kind==='statistics')result=await statisticsView(db,caller,args.name,args.input);else{const view=bindings.views.find(v=>v.name===args.name)!,{input,...paging}=view.query(new URLSearchParams(args.params));result=await view.page(db,caller,input as never,paging);}return Response.json({result,calls});}catch(error){return Response.json({error:{code:(error as any).code,message:String(error)},calls},{status:400});}}};`);
+ await writeFile(join(dir,"worker.ts"),`import {adminBindings,statisticsView} from './admin-bindings.js';import {nativeEntryGet,nativeEntryPage,nativeEntryProcedure} from './native-admin.js';import {fixtureCaller} from '${resolve(import.meta.dir,'apps/fixtures.ts')}';import {userCaller} from '@aotter/mantle/user-fields';
+export default{async fetch(request:Request,env:{DB:any}){if(new URL(request.url).pathname==='/health')return new Response('ready');let calls=0;const db={prepare(sql:string){calls++;return env.DB.prepare(sql);},batch:env.DB.batch.bind(env.DB)};try{const args:any=await request.json(),bindings=adminBindings(),caller=fixtureCaller(args.caller,userCaller);let result;if(args.kind==='validation'){const schema=bindings.schemas.find(s=>s.name===args.name)!;result=schema.validate(args.input,args.full);}else if(args.kind==='write'){const s=bindings.schemas.find(s=>s.name===args.name)!;if(args.verb==='create')result=await nativeEntryProcedure(s.binding,bindings.adapter,db,caller,"create",s.values(s.validate(args.input,false)));else if(args.verb==='patch')result=await nativeEntryProcedure(s.binding,bindings.adapter,db,caller,"patch",s.values(s.validate(args.input,false)),args.id,args.version);else result=await nativeEntryProcedure(s.binding,bindings.adapter,db,caller,"remove",{},args.id,args.version);}else if(args.kind==='entries'){const schema=bindings.schemas.find(s=>s.name===args.name)!,q=schema.query(new URLSearchParams(args.params));result=q?await nativeEntryPage(schema.binding,bindings.adapter,()=>db,caller,q):{rows:[],cursor:null};}else if(args.kind==='statistics')result=await statisticsView(db,caller,args.name,args.input);else{const view=bindings.views.find(v=>v.name===args.name)!,{input,...paging}=view.query(new URLSearchParams(args.params));result=await view.page(db,caller,input as never,paging);}return Response.json({result,calls});}catch(error){return Response.json({error:{code:(error as any).code,message:String(error)},calls},{status:400});}}};`);
  const config=join(state,"wrangler.json"),persist=join(state,"state"),wrangler=join(base,"node_modules/wrangler/bin/wrangler.js"),env={...process.env,WRANGLER_SEND_METRICS:"false",NO_PROXY:"127.0.0.1,localhost",no_proxy:"127.0.0.1,localhost"};
  await writeFile(config,JSON.stringify({name:"mantle-admin-local",main:join(dir,"worker.ts"),compatibility_date:"2026-09-28",compatibility_flags:["nodejs_compat"],d1_databases:[{binding:"DB",database_name:"mantle-admin-local",database_id:"00000000-0000-0000-0000-000000000001"}]}));
  const seed=`;INSERT INTO overlayparents(id,version,created_at,updated_at,status,ownerid,slug,title,cover) VALUES ('op',1,0,0,'published','public owner','shared','parent title','cover');INSERT INTO overlaychildren(id,version,created_at,updated_at,status,ownerid,slug,locale,title) VALUES ('oc',1,0,0,'published','A','shared','fr','child title');INSERT INTO records(id,version,created_at,updated_at,status,ownerid,label,kind) VALUES ('a',1,1000000,0,'draft','A',NULL,'a'),('b',1,1000000,0,'draft','A','same','a'),('c',1,1000000,0,'published','A','same','b'),('foreign',1,1000000,0,'published','B','other','a');
@@ -333,7 +334,7 @@ test('Admin generated private aliases preserve authored cursor-like fields and C
 for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`Admin ${pg?'PostgreSQL':'SQLite'} preserves a public ownerId field used as another Schema's scope`,async()=>{
  const dir=await mkdtemp(join(import.meta.dir,'apps/.admin-scope-names-')),db=pg?new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}):new Database(':memory:'),namespace='admin_scope_'+crypto.randomUUID().replaceAll('-',''),target=pg?'bun-postgres':'bun-sqlite';
  try{
- const bare=await generateFromSources({target,sources:{sources:[source,ordinaryOwnerSource]}});if(!bare.ok)throw Error(JSON.stringify(bare.diagnostics));await writeGenerated(join(dir,'bare'),bare.files);
+ const bare=await generateFromSources({target,sources:{sources:[source,ordinaryOwnerSource]}});if(!bare.ok)throw Error(JSON.stringify(bare.diagnostics));await writeGenerated(join(dir,'bare'),bare.files,false);
  if(pg){await(db as SQL).unsafe(`CREATE SCHEMA ${namespace}`);await(db as SQL).unsafe(`SET search_path TO ${namespace}`);await(db as SQL).unsafe(bare.files['schema.sql']!);}else(db as Database).exec(bare.files['schema.sql']!);
  const {store}=await import(join(dir,'bare/generated.ts')),collection=store(db,caller('A')).collection('ordinaryowners'),row=await collection.insert({ownerid:'public value',label:'baseline'});expect((await collection.findById(row.id)).ownerid).toBe('public value');
  const result=await generateFromSources({target,admin:true,sources:{sources:[source,ordinaryOwnerSource]}});if(!result.ok)throw Error(JSON.stringify(result.diagnostics));await writeBindings(dir,result.files);
@@ -399,5 +400,32 @@ test("public developer View pages use REST public visibility with the signed-in 
   const ordinary=(await import(join(dir,"views/owned.ts"))).default;
   expect(page.rows).toEqual(await ordinary(db,caller("A"),{}));expect(page.rows).toEqual([{id:"own",label:"own"}]);
   expect(preview.allows({kind:"anonymous"})).toBe(false);
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test('native Admin enforces field scope and { all: true } variants for entries, views and writes',async()=>{
+ const m=JSON.parse(source.text);m.spec.scope="ownerId IN auth.user('region')";m.spec.uniqueIndexes=[['label']];
+ const {userCaller}=await import('@aotter/mantle/user-fields');
+ const unrelated={...m,metadata:{name:'otherrecords'},spec:{...m.spec,scope:"ownerId IN auth.user('zone')"}};
+ const docs=[{sourceId:'field-admin.json',text:JSON.stringify(m)+'\n---\n'+JSON.stringify(unrelated)+'\n---\n'+JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'View',metadata:{name:'regional'},spec:{title:'Regional',surface:'admin',requires:{auth:{all:['ctx.admin']}},sql:'SELECT id,label FROM records ORDER BY id'}})}];
+ const result=await generateFromSources({target:'bun-sqlite',sources:{sources:docs},admin:true});expect(result.ok).toBe(true);if(!result.ok)throw Error(JSON.stringify(result.diagnostics));
+ const dir=await mkdtemp(join(import.meta.dir,'apps/.admin-field-')),db=new Database(':memory:');
+ try{await writeBindings(dir,result.files);const {adminBindings}=await import(join(dir,'admin-bindings.ts')),native=await import(join(dir,'native-admin.ts')),bindings=adminBindings(),s=bindings.schemas[0],adapter=bindings.adapter;db.exec(result.files['schema.sql']!);
+  const sys={kind:'system',reason:'seed'} as const;
+  const create=(c:any,input:any)=>native.nativeEntryProcedure(s.binding,adapter,db,c,'create',s.values(s.validate(input,true)));
+  const a=await create(sys,{ownerId:'TW',label:'same',kind:'a'}),b=await create(sys,{ownerId:'JP',label:'same',kind:'a'});
+  const identity=(id:string,role:string,region:unknown='TW')=>userCaller({id,role,region,zone:'Z'},{fields:{region:{type:'string',multiple:true},zone:{type:'string',multiple:false}}});
+  const scoped=identity('local','admin'),escaped=identity('wide','admin',{all:true}),member=identity('member','orgadmin');
+  expect((await native.nativeEntryPage(s.binding,adapter,()=>db,scoped,{order:'id:asc',input:{},limit:50})).rows).toHaveLength(1);
+  expect((await native.nativeEntryPage(s.binding,adapter,()=>db,escaped,{order:'id:asc',input:{},limit:50})).rows).toHaveLength(2);
+  expect(await native.nativeEntryGet(s.binding,adapter,db,member,b.id)).toBeNull();await expect(native.nativeEntryGet(s.binding,adapter,db,{...escaped},a.id)).rejects.toMatchObject({code:'AUTH_DENIED'});
+  expect((await bindings.views[0].page(db,scoped,{},{})).rows).toHaveLength(1);expect((await bindings.views[0].page(db,escaped,{},{})).rows).toHaveLength(2);
+  const filled=await create(scoped,{label:'auto',kind:'a'});expect(filled.ownerid).toBe('TW');
+  await expect(create(scoped,{ownerId:'JP',label:'foreign',kind:'a'})).rejects.toMatchObject({code:'AUTH_DENIED'});
+  await expect(native.nativeEntryProcedure(s.binding,adapter,db,escaped,'patch',{ownerid:'JP'},a.id,a.version)).rejects.toMatchObject({code:'AUTH_DENIED'});
+  // The scope term's parameter keeps its own bind in patch statements (shared AST nodes are never renumbered twice).
+  expect((await native.nativeEntryProcedure(s.binding,adapter,db,scoped,'patch',{label:'renamed'},a.id,a.version)).label).toBe('renamed');
+  expect((await native.nativeEntryProcedure(s.binding,adapter,db,escaped,'patch',{label:'again'},a.id,Number(a.version)+1)).label).toBe('again');
+  expect(result.files['admin-bindings.ts']).not.toContain('"adminRole"');
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
 });

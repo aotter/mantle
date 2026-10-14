@@ -250,9 +250,9 @@ export interface SchemaManifestSpec {
   readonly lifecycle?: LifecycleMode;
   /** Logical expiry policy. Physical removal requires an explicit sweep. */
   readonly ttl?: { readonly field: string; readonly expireAfterSeconds: number };
-  /** Caller identity scope for Store operations: one field bound to `auth.uid()`.
-   *  The field must be required and indexed first. */
-  readonly scope?: Readonly<Record<string, "auth.uid()">>;
+  /** The Schema's row template (ADR-0046 amendment): AND-joined `column = auth.uid()` /
+   *  `column IN auth.user('field')` terms, enforced on every read and write of the Schema. */
+  readonly scope?: string;
 }
 
 export interface TranslatesBinding {
@@ -321,6 +321,8 @@ export interface ViewManifestSpec {
    *  vocabulary: `ctx.user`, `ctx.admin`, `ctx.auth`, and
    *  `ctx.auth.scope`; an optional guard names one consumer Procedure. */
   readonly requires?: AuthorizationRequirements;
+  /** Extra row terms per Schema this target reads (ADR-0046): AND-ed onto that Schema's scope; never widens. */
+  readonly restrict?: Readonly<Record<string, string>>;
   /** Caller-supplied parameters, read in `sql` as `input.<name>`. MUST be
    *  `type: "object"` with declared `properties`. `limit` and `cursor` are
    *  reserved: the runtime owns them for pagination. */
@@ -351,6 +353,8 @@ export interface ProcedureManifestSpec {
    *  `requires.guard.procedure`; static predicates are closed to
    *  `ctx.user`, `ctx.admin`, `ctx.auth`, and `ctx.auth.scope`. */
   readonly requires?: AuthorizationRequirements;
+  /** Extra row terms per Schema this target reads (ADR-0046): AND-ed onto that Schema's scope; never widens. */
+  readonly restrict?: Readonly<Record<string, string>>;
   /** JSON Schema for the request body. */
   readonly input: JsonSchema;
   /** Admin-only field widget choices. Does not affect input validation
@@ -418,15 +422,11 @@ export interface AuthorizationRequirements {
 export type AuthPredicate =
   | CtxUserPredicate
   | "ctx.admin"
-  | CtxAdminPredicate
   | CtxAuthPredicate
   | CtxAuthScopePredicate;
 export type CtxUserPredicate = "ctx.user";
 /** Requires any verified credential normalized into HandlerContext.auth. */
 export type CtxAuthPredicate = "ctx.auth";
-export interface CtxAdminPredicate {
-  readonly "ctx.admin": readonly AdminRole[];
-}
 /** Requires one opaque, consumer-owned scope. Repeat under `all` for
  *  multiple required scopes. */
 export interface CtxAuthScopePredicate {

@@ -74,7 +74,7 @@ function checkCoreCloudflareFree() {
  * `auth` may not import Better Auth, one that is not `mcp` may not import the MCP SDK, and so on.
  */
 function checkNextFolderImports() {
-  const folders = {kernel:[],auth:["kernel"],bun:["kernel"],domain:["build","kernel"],usecase:["build","domain","kernel"],infrastructure:["build","domain","usecase","kernel"],build:[]};
+  const folders = {testing:["kernel"],kernel:[],auth:["kernel"],bun:["kernel"],domain:["build","kernel"],usecase:["build","domain","kernel"],infrastructure:["build","domain","usecase","kernel"],build:[]};
   const root = join(ROOT,"packages/mantle/src");
   for (const [folder,reach] of Object.entries(folders)) for (const file of listFiles(join(root,folder),p=>p.endsWith(".ts"))) {
     for (const spec of importSpecifiers(file)) {

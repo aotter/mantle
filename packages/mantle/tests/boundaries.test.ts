@@ -5,7 +5,7 @@ import ts from "typescript";
 const root = resolve(import.meta.dir, "../src");
 // auth and native hosts are optional application entries beside infrastructure.
 // build is the private compiler: only generator layers (domain, usecase, infrastructure) may import it, never runtime code.
-const ranks: Record<string, number> = { kernel: 0, build: 1, domain: 1, usecase: 2, auth: 3, bun: 3, infrastructure: 3 };
+const ranks: Record<string, number> = { kernel: 0, testing: 1, build: 1, domain: 1, usecase: 2, auth: 3, bun: 3, infrastructure: 3 };
 const compilerUsers = new Set(["build", "domain", "usecase", "infrastructure"]);
 async function files(path: string): Promise<string[]> {
   const entries = await readdir(path, { withFileTypes: true });
@@ -20,7 +20,8 @@ test("Next imports point inward; kernel only imports transaction context from no
       const name = statement.moduleSpecifier.text;
       if (name.startsWith(".")) {
         const imported = relative(root, resolve(dirname(file), name)).split("/")[0]!;
-        if (imported === "..") expect(layer, `${file}: compiler assembly belongs to infrastructure`).toBe("infrastructure");
+        if (imported === "testing") expect(layer, `${file}: testing helpers must stay outside production entries`).toBe("testing");
+        else if (imported === "..") expect(layer, `${file}: compiler assembly belongs to infrastructure`).toBe("infrastructure");
         else if (imported === "build") expect(compilerUsers.has(layer), `${file}: runtime code must not import the compiler`).toBe(true);
         else expect(ranks[imported] ?? Infinity, `${file}: ${name}`).toBeLessThanOrEqual(ranks[layer]!);
       } else if (layer === "kernel") {

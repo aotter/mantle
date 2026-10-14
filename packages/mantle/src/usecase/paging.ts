@@ -1,3 +1,4 @@
+import { userReferences } from "../domain/userReferences.js";
 /** Selected View boundary: Core prints keyset SQL once; bare operations retain native rows. */
 import { parseNumeric, type RuntimePlan, type PlanLowered, type SqlNode } from "../build/compiler.js";
 import { outputConversions } from "../domain/columns.js";
@@ -10,6 +11,7 @@ import { recipesOf } from "../domain/recipes.js";
 export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: string, refuse: (path: string, message: string) => void, proofs?: Readonly<Record<string, PagingProof | undefined>>, boundary = false): Record<string, string> {
   const files: Record<string, string> = {}, base = "@aotter/mantle/";
   const sqlite = isSqlite(target);
+  const user = userReferences(plan, sqlite);
   const driver = driverFor(target);
   for (const [name, view] of Object.entries(plan.views)) {
     if (boundary && (view.surface === "internal" || !outputConversions(plan,name,target as Target).some(([,type])=>type==="int"))) continue;
@@ -45,16 +47,16 @@ export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: stri
       return `{ binds: ${q(recipes)}, first: ${page(first)}, next: ${page(next ?? first)} }`;
     });
     const auth = authLines(view.requires,path);
-    const spec = [`path: ${q(path)}`, `cap: ${cap}`, `sqlite: ${sqlite}`, `cursor: ${q(kinds)}`, `keys: ${c.nkeys}`, `values: {${values.size ? ` ${[...values].sort().join(", ")} ` : ""}}`, "read", `caller: ${variants[0]}`, ...(trusted ? [`trusted: ${variants[1]}`] : []), ...(auth.length ? [`auth: (caller: Caller) => {\n${auth.join("\n")}\n  }`] : [])];
-    files[`paged/${boundary ? "wire/" : ""}views/${encodeURIComponent(name)}.ts`] = `import { page, type Paged } from "${base}paging";
-import { ${auth.length ? "deny, isAdmin, hasAdminRole, " : ""}type Caller } from "${base}contracts";
+    const spec = [`path: ${q(path)}`, `cap: ${cap}`, `sqlite: ${sqlite}`, `cursor: ${q(kinds)}`, `keys: ${c.nkeys}`, `values: {${user.used ? [...values].sort().concat(user.values).join(", ") : values.size ? ` ${[...values].sort().join(", ")} ` : ""}}`, "read", `caller: ${variants[0]}`, ...(trusted ? [`trusted: ${variants[1]}`] : []), ...(auth.length ? [`auth: (caller: Caller) => {\n${auth.join("\n")}\n  }`] : [])];
+    files[`paged/${boundary ? "wire/" : ""}views/${encodeURIComponent(name)}.ts`] = `${user.code ? user.code+"\n" : ""}import { page, type Paged } from "${base}paging";
+import { ${auth.length ? "deny, isAdmin, " : ""}type Caller } from "${base}contracts";
 ${databaseImport(target)}
 import { read } from "${base}driver/${driver}";
 ${values.size ? `import { ${[...values].sort().join(", ")} } from "${base}dialect/${sqlite ? "sqlite" : "postgres"}";\n` : ""}import type { Input, Row } from "${boundary ? "../../../" : "../../"}views/${encodeURIComponent(name)}.js";
 const spec: Paged<Database> = {
   ${spec.join(",\n  ")},
 };
-export default (db: Database, caller: Caller, input: Input, options?: { limit?: number; cursor?: string }) => page<Database, Row>(spec, db, caller, input, options);
+export default (db: Database, caller: Caller, input: Input, options?: { limit?: number; cursor?: string }) => page<Database, Row>(${user.used ? "{ ...spec, caller: USER.scopedAll(spec.caller, caller) }" : "spec"}, db, caller, input, options);
 `;
   }
   return files;

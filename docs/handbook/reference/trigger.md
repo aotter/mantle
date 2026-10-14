@@ -13,7 +13,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: close-ticket }
 spec:
-  requires: { auth: { all: [{ ctx.admin: [admin] }] } }
+  requires: { auth: { all: [ctx.admin] } }
   input: { type: object, required: [id, version], properties: { id: { type: string }, version: { type: integer } }, additionalProperties: false }
   output: { type: object }
   handler: { sql: 'UPDATE tickets SET closed=true WHERE id=input.id AND version=input.version RETURNING id,closed' }

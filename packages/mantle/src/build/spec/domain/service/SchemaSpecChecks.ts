@@ -5,6 +5,7 @@ import { checkSchemaAdminUi } from "./SchemaAdminUiChecker.js";
 import { checkSchemaIndexes, schemaIndexDiagnosticCode } from "./SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "./SchemaSearchChecker.js";
 import { MAX_TTL_SECONDS, isTtlSeconds } from "./SqlTypes.js";
+import { parseRowTemplate } from "../model/UserFields.js";
 
 export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
   const s = m.spec as unknown as Record<string, unknown>;
@@ -110,19 +111,22 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
     ? Object.keys(properties)
     : [];
   if (s["scope"] !== undefined) {
-    const scope = s["scope"];
-    if (!scope || typeof scope !== "object" || Array.isArray(scope) || Object.keys(scope).length !== 1) {
-      throw new ManifestParseError("Schema.spec.scope must bind exactly one field to auth.uid()", idx, "/spec/scope");
+    const template = parseRowTemplate(s["scope"]);
+    if (typeof template === "string") throw new ManifestParseError(`Schema.spec.scope: ${template}`, idx, "/spec/scope");
+    const columns = [...(template.owner ? [template.owner] : []), ...template.terms.map(t => t.column)];
+    for (const field of columns) {
+      const property = properties && typeof properties === "object" && !Array.isArray(properties)
+        ? (properties as Record<string, Record<string, unknown>>)[field] : undefined;
+      const owner = field === template.owner;
+      if (!property || (owner ? property["type"] !== "string" : !["string", "integer", "number"].includes(property["type"] as string)) || property["nullable"] === true || property["oneOf"] !== undefined ||
+        !Array.isArray(schema["required"]) || !schema["required"].includes(field)) {
+        throw new ManifestParseError(`Schema.spec.scope column '${field}' must be a required, non-nullable ${owner ? "string" : "string or number"} property`, idx, "/spec/scope");
+      }
     }
-    const [field, ref] = Object.entries(scope)[0]!;
-    const property = properties && typeof properties === "object" && !Array.isArray(properties)
-      ? (properties as Record<string, Record<string, unknown>>)[field] : undefined;
-    if (ref !== "auth.uid()" || !property || property["type"] !== "string" || property["nullable"] === true || property["oneOf"] !== undefined ||
-      !Array.isArray(schema["required"]) || !schema["required"].includes(field) ||
-      ![...(m.spec.uniqueIndexes ?? []), ...(m.spec.indexes ?? [])].some((index) => index[0] === field)) {
-      throw new ManifestParseError("Schema.spec.scope requires a required string field with a leftmost index and the exact auth.uid() reference", idx, "/spec/scope");
+    if (![...(m.spec.uniqueIndexes ?? []), ...(m.spec.indexes ?? [])].some((index) => columns.every((field, i) => index[i] === field))) {
+      throw new ManifestParseError(`Schema.spec.scope needs an index beginning with its scoped columns [${columns.join(", ")}]`, idx, "/spec/scope");
     }
-    if ((m.spec.uniqueIndexes ?? []).some((index) => index[0] !== field)) {
+    if (!template.terms.length && (m.spec.uniqueIndexes ?? []).some((index) => index[0] !== columns[0])) {
       throw new ManifestParseError("Scoped Schema unique indexes must begin with the scope field", idx, "/spec/uniqueIndexes");
     }
   }

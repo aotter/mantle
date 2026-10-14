@@ -1,12 +1,19 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 /**
  * resolveCaller / authLoader against a REAL Better Auth instance: emailOTP sign-in, admin plugin (role/banned), jwt and
  * oauthProvider, on the native d1Adapter over a bun:sqlite D1 shim. The auth handler is also served over a local HTTP
  * port, because Better Auth's resource client verifies access tokens against the instance's JWKS URL (baseURL + /jwks).
  */
+import { mkdtemp, rm } from "node:fs/promises";
+import { resolve } from "node:path";
+import { generateOrThrow, writeGenerated } from "./apps/link.js";
+import { authenticatedAs } from "../src/testing/index.js";
+import { fieldsOf } from "../src/kernel/user-fields.js";
+import type { BetterAuthOptions } from "better-auth/types";
 import { afterAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { betterAuth } from "better-auth/minimal";
-import { admin as adminFunction, emailOTP, jwt } from "better-auth/plugins";
+import { admin as adminFunction, customSession, emailOTP, jwt } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -24,16 +31,16 @@ afterAll(() => { for (const server of servers) server.stop(true); });
 
 type App = Awaited<ReturnType<typeof makeApp>>;
 
-async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean } = {}) {
+async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean; additionalFields?: NonNullable<BetterAuthOptions["user"]>["additionalFields"]; derivedRegion?: boolean; localOnly?: boolean } = {}) {
   const sqlite = new Database(":memory:");
   sqlite.run("PRAGMA foreign_keys = ON");
   const otps: { email: string; otp: string }[] = [];
   const statements: string[] = [], native = d1Shim(sqlite);
   // Serve the handler first: baseURL (and so the JWKS URL and token issuer) must name the real port.
   let handle: (request: Request) => Promise<Response> = async () => new Response("not ready", { status: 503 });
-  const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: request => handle(request) });
-  servers.push(server);
-  const origin = `http://127.0.0.1:${server.port}`;
+  const server = options.localOnly ? undefined : Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: request => handle(request) });
+  if (server) servers.push(server);
+  const origin = `http://127.0.0.1:${server?.port ?? 3000}`;
   // baseURL carries the base path: the resource client derives the JWKS URL and the expected issuer from it as-is.
   const baseURL = `${origin}/api/auth`;
   const cache = new Map<string, string>();
@@ -41,6 +48,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
   const ac = createAccessControl(defaultStatements);
   let boundAuth: AuthInstance;
   const betterAuthOptions = {
+    user: { additionalFields: options.additionalFields },
     databaseHooks: oauthGrantHooks(() => boundAuth),
     ...(options.sessionCache ? { verification: { storeInDatabase: true }, session: { storeSessionInDatabase: true }, secondaryStorage: { get: async (key: string) => cache.get(key) ?? null, set: async (key: string, value: string) => { if (cacheBroken) throw new Error("cache unavailable"); cache.set(key, value); }, delete: async (key: string) => { if (cacheBroken) throw new Error("cache unavailable"); cache.delete(key); }, getAndDelete: async () => { throw new Error("verification must remain in database"); }, increment: async () => { throw new Error("verification must remain in database"); } } } : {}),
     baseURL,
@@ -52,6 +60,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
       ...(options.sessionTokenName ? { cookies: { session_token: { name: options.sessionTokenName } } } : {}),
     },
     plugins: [
+      ...(options.derivedRegion ? [customSession(async ({ user, session }) => ({ user: { ...user, region: ['TW'] }, session }))] : []),
       emailOTP({ sendVerificationOTP: async ({ email, otp }) => { otps.push({ email, otp }); } }),
       options.customAdmin ? adminFunction({ adminRoles: ["admin"], ac, roles: { admin: ac.newRole(defaultStatements) } }) : adminFunction(),
       jwt({ disableSettingJwtHeader: true }),
@@ -106,7 +115,7 @@ describe("resolveCaller: session cookie", () => {
     const { cookie, userId } = await app.signIn();
     const sessionId = (app.sqlite.query("SELECT id FROM session WHERE userId = ?").get(userId) as { id: string }).id;
     const caller = await resolveCaller(app.request({ cookie }), app.loader);
-    expect(caller).toEqual({ kind: "user", subject: userId, role: "user", admin: false, scopes: [], credential: "session", credentialId: sessionId, clientId: null });
+    expect(caller).toEqual(fixtureCaller({ kind: "user", subject: userId, role: "user", admin: false, scopes: [], credential: "session", credentialId: sessionId, clientId: null }));
     expect(app.loads()).toBe(1);
   });
 
@@ -476,7 +485,7 @@ describe("OAuth grant revocation and consent routes", () => {
   });
   test("app-owned credential hook precedes OAuth/cookies and never falls back after denial", async () => {
     const app = await makeApp(); const { cookie } = await app.signIn();
-    const credential = { kind: "user", subject: "api-user", role: null, scopes: ["mcp"], credential: "api-key", credentialId: "key-id", clientId: null } as const;
+    const credential = fixtureCaller({ kind: "user", subject: "api-user", role: null, scopes: ["mcp"], credential: "api-key", credentialId: "key-id", clientId: null } as const);
     expect(await resolveCaller(app.request({ cookie, authorization: "Bearer invalid" }), app.loader, { scopes: ["mcp"], resolveCredential: () => credential })).toEqual({ ...credential, admin: false });
     await expect(resolveCaller(app.request({ cookie }), app.loader, { scopes: ["other"], resolveCredential: () => credential })).rejects.toMatchObject({ code: "AUTH_DENIED" });
     await expect(resolveCaller(app.request({ cookie }), app.loader, { resolveCredential: () => { throw new ContractError("UNAUTHENTICATED", "Invalid key."); } })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
@@ -495,6 +504,58 @@ describe("OAuth grant revocation and consent routes", () => {
     expect(await rewritten.json()).toMatchObject({ application_type: "native" });
     for (const body of [{ redirect_uris: ["http://localhost/cb", "https://evil.test/cb"] }, { redirect_uris: ["http://127.0.0.1/cb"], application_type: "web" }, { redirect_uris: [] }, { redirect_uris: ["http://localhost.evil.test/cb"] }]) {
       const req = request(body); expect(await loopbackClientsAreNative(req)).toBe(req);
+    }
+  });
+});
+
+describe("verified user field sources", () => {
+  const fields = { region: { type: "string", multiple: true } } as const;
+  test("session and test callers carry generated fields into a scoped View; copies are denied", async () => {
+    const app = await makeApp({ localOnly: true, additionalFields: { region: { type: "string[]", required: false, input: false } } });
+    const { cookie, userId } = await app.signIn();
+    await expect(app.auth.api.updateUser({ headers: new Headers({ cookie }), body: { region: { all: true } } as never })).rejects.toThrow("region is not allowed");
+    const { internalAdapter } = await app.auth.$context;
+    expect((await internalAdapter.findUserById(userId) as Record<string, unknown>).region).toBeNull();
+    await internalAdapter.updateUser(userId, { region: ['TW'] } as never);
+    const manifests = [
+      { apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Schema', metadata: { name: 'orders' }, spec: { title: 'Orders', scope: "region IN auth.user('region')", schema: { type: 'object', required: ['region'], properties: { region: { type: 'string' } } }, indexes: [['region', 'id']] } },
+      { apiVersion: 'cms.mantle.aotter.net/v2', kind: 'View', metadata: { name: 'orders' }, spec: { surface: 'internal', sql: 'SELECT id, region FROM orders ORDER BY id' } },
+    ];
+    const files = await generateOrThrow('bun-sqlite', [{ sourceId: 'fields.yaml', text: manifests.map(m => JSON.stringify(m)).join('\n---\n') }]);
+    const dir = await mkdtemp(resolve(import.meta.dir, 'apps/.generated/auth-fields-'));
+    try {
+      await writeGenerated(dir, files);
+      const generated = await import(resolve(dir, 'generated.ts'));
+      expect(generated.userFields).toEqual(fields);
+      app.sqlite.exec(files['schema.sql']!);
+      for (const region of ['TW', 'JP']) await generated.store(app.sqlite, { kind: 'system', reason: 'fixture' }).collection('orders').insert({ region });
+      const caller = await resolveCaller(app.request({ cookie }), app.loader, { fields: generated.userFields });
+      expect(fieldsOf(caller)).toEqual({ region: ['TW'] });
+      const testCaller = authenticatedAs({ id: userId, region: ['TW'] }, { fields: generated.userFields });
+      for (const original of [caller, testCaller]) {
+        expect((await generated.views.orders(app.sqlite, original, {})).map((row: { region: string }) => row.region)).toEqual(['TW']);
+        await expect(generated.views.orders(app.sqlite, { ...original }, {})).rejects.toMatchObject({ code: 'AUTH_DENIED' });
+      }
+      const service = authenticatedAs({ id: userId, region: { all: true } }, { fields, credential: 'api-key' });
+      expect(fieldsOf(await resolveCaller(app.request(), app.loader, { fields, resolveCredential: () => service }))).toEqual({ region: ['TW'] });
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+  test("unsafe and missing sources fail before session resolution, even with customSession", async () => {
+    for (const input of [true, undefined, 'missing'] as const) {
+      const app = await makeApp({ localOnly: true, additionalFields: input === 'missing' ? undefined : { region: { type: 'string', required: false, ...(input === true ? { input } : {}) } }, derivedRegion: input === true });
+      const { cookie } = await app.signIn();
+      for (let i = 0; i < 2; i++) {
+        const error = await resolveCaller(app.request({ cookie }), app.loader, { fields }).catch(error => error);
+        expect(error.code).toBe('AUTH_CONFIGURATION_ERROR');
+        expect(error.message).toContain("'region'");
+      }
+    }
+  });
+  test("customSession supplies server-derived fields", async () => {
+    for (const sessionCache of [false, true]) {
+      const app = await makeApp({ localOnly: true, derivedRegion: true, sessionCache });
+      const { cookie } = await app.signIn();
+      expect(fieldsOf(await resolveCaller(app.request({ cookie }), app.loader, { fields }))).toEqual({ region: ['TW'] });
     }
   });
 });

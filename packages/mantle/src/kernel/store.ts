@@ -1,10 +1,11 @@
+import { modeOf } from "./user-fields.js";
 /**
  * Generic Store over Core's rowPolicy/writePolicy rules and per-Schema Facts (scope, TTL, publishing, dates).
  * Generated types own storage column names, values, filters and writable columns; the dialect quotes names and binds values.
  * Runtime refuses unsafe limits, system/scope writes, undefined values. It applies row rules, not requires.
  */
 import { binds as evaluate, encode, type Bound, type Recipe } from "./binds.js";
-import { ContractError, type Caller, type Row } from "./contracts.js";
+import { ContractError, isAdmin, type Caller, type Row } from "./contracts.js";
 import type { Dialect } from "./dialect/common.js";
 import { condition } from "./where.js";
 
@@ -12,7 +13,7 @@ import { decodeCursor, encodeCursor } from "./paging.js";
 export { decodeCursor, encodeCursor };
 
 /** `eq`: `column = value`; `ttl`: `column IS NULL OR column > value` (Core's `RowTerm`). */
-export type Term = readonly [column: string, op: "eq" | "ttl", value: Recipe] | readonly [column: string, op: "admin", value: Recipe, published: string] | readonly [column: string, op: "parent", value: Recipe, parent: ParentPolicy];
+export type Term = readonly [column: string, op: "eq" | "ttl", value: Recipe] | readonly [column: string, op: "admin", value: Recipe, published: string] | readonly [column: string, op: "parent", value: Recipe, parent: ParentPolicy] | readonly [column: string, op: "in", value: Extract<Recipe, { k: 'user' }>];
 export interface ParentPolicy { readonly table: string; readonly terms: readonly Term[]; readonly scope?: readonly [parent: string, child: string]; readonly admin?: true; }
 /** Core's row rules for a Schema with the placeholder columns `SCOPE` and `TTL`; `expand` puts a Schema's own in. */
 export interface Rules {
@@ -28,6 +29,7 @@ export interface Rules {
 }
 /** What a Schema adds to the rules. The table is the collection's name. */
 export interface Fact {
+  readonly u?: readonly Extract<Term, readonly [string, 'in', ...unknown[]]>[];
   /** The scope column. */
   readonly s?: string;
   /** The TTL column and its seconds. */
@@ -49,19 +51,26 @@ const SYSTEM = ["id", "version", "created_at", "updated_at", "author_id", "statu
 /** A Schema's rules: the shared ones with its scope and TTL put in, and a term dropped where it has none. The generator proves this equals Core's for every Schema. */
 export function expand(r: Rules, f: Fact) {
   const all = <T extends readonly [string, ...any[]]>(l: readonly T[]): T[] => l.flatMap(([c, ...t]) => (c = c === SCOPE ? f.s! : c === TTL ? f.ttl?.[0]! : c === "status" && !f.pub ? "" : c) ? [[c, ...t.map(v => v.k === "cutoff" ? { ...v, seconds: f.ttl![1] } : v)] as unknown as T] : []);
-  return { caller: [...all(r.caller), ...(f.parent ? [f.parent.visible] : [])], trusted: all(r.trusted), fills: all(r.fills), sets: all(r.sets), lock: r.lock };
+  return { caller: [...all(r.caller), ...(f.parent ? [f.parent.visible] : []), ...(f.u ?? [])], trusted: all(r.trusted), fills: all(r.fills), sets: all(r.sets), lock: r.lock };
 }
 
-export function renderTerm(d: Pick<Dialect, "ident">, t: Term, prefix: string, placeholder: string | ((recipe: Recipe) => string)): string {
+export function renderTerm(d: Pick<Dialect, "ident" | 'anyOf'>, t: Term, prefix: string, placeholder: string | ((recipe: Recipe) => string)): string {
   const literal = (v: string) => `'${v.replaceAll("'", "''")}'`;
   const param = (r: Recipe) => typeof placeholder === "string" ? placeholder : placeholder(r);
+  if (t[1] === 'in') {
+    const kept = d.anyOf!(prefix + d.ident(t[0]), param(t[2]), t[2].type);
+    // The same two forms the SQL compiler prints for a Schema scope term (see `scoped`); one parameter either way.
+    return t[2].scope ? `(/*s:${t[2].field}*/${kept}/*|*/(${kept} OR 1 = 1)/*;*/)` : kept;
+  }
   if (t[1] === "parent") {
     const [column, , value, parent] = t, alias = prefix === "_mantle_parent." || prefix === d.ident("_mantle_parent") + "." ? "_mantle_parent_" : "_mantle_parent";
     const conditions = [`${alias}.${d.ident(column)} = ${prefix}${d.ident(column)}`, ...(parent.scope ? [`${alias}.${d.ident(parent.scope[0])} = ${prefix}${d.ident(parent.scope[1])}`] : []), ...parent.terms.map(t => renderTerm(d, t, alias + ".", param))];
     const exists = `EXISTS (SELECT 1 FROM ${d.ident(parent.table)} ${alias} WHERE ${conditions.join(" AND ")})`;
     return parent.admin ? `(${param(value)} = 1 OR ${exists})` : exists;
   }
-  const [column, op, value, published] = t, c = prefix + d.ident(column), bound = param(value);
+  const [column, op, value, published] = t;
+  if (op !== 'eq' && op !== 'ttl' && op !== 'admin') throw new ContractError('USER_REFS_VERSION', 'Unknown row-policy operator.');
+  const c = prefix + d.ident(column), bound = param(value);
   if (op === "admin") return `(${c} = ${literal(published!)} OR ${bound} = 1)`;
   return op === "ttl" ? `(${c} IS NULL OR ${c} > ${bound})` : `${c} = ${bound}`;
 }
@@ -73,9 +82,10 @@ export interface Driver<H> {
 }
 
 /** What the generator knows of a collection: its row, its filterable columns, its writable columns, which of those an insert must give, and the NOT NULL indexed columns `orderBy` may name. */
-export interface Table { readonly row: object; readonly fields: object; readonly set: object; readonly required: string; readonly order: string }
+export interface Table { readonly row: object; readonly fields: object; readonly set: object; readonly required: string; readonly order: string; readonly insert?: object }
 type RowOf<T extends Table> = Readonly<T["row"]>;
-type Insert<T extends Table> = Readonly<Pick<T["set"], Extract<T["required"], keyof T["set"]>> & Partial<T["set"]>>;
+type InsertFields<T extends Table> = T extends { readonly insert: object } ? T['insert'] : T['set'];
+type Insert<T extends Table> = Readonly<Pick<InsertFields<T>, Extract<T["required"], keyof InsertFields<T>>> & Partial<InsertFields<T>>>;
 export type Operators<T> = { readonly eq?: T | null; readonly ne?: T | null; readonly gt?: T; readonly gte?: T; readonly lt?: T; readonly lte?: T; readonly in?: readonly T[]; readonly notIn?: readonly T[]; readonly like?: string; readonly isNull?: boolean };
 /** Conditions are ANDed; a bare value is `eq` (null is IS NULL). */
 export type Where<F> = { readonly [K in keyof F]?: F[K] | null | Operators<F[K]> };
@@ -105,8 +115,8 @@ type BoundOperations<O> = { [K in keyof O]: { [N in keyof O[K]]: O[K][N] extends
 type Tx<T extends Record<string, Table>, O> = Pick<Store<T>, "collection"> & BoundOperations<O>;
 type Interactive<T extends Record<string, Table>, O> = { transaction<R>(fn: (tx: Tx<T, O>) => Promise<R>, options?: TransactionOptions): Promise<R> };
 
-interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; readonly from: string; readonly projection: string; byId?: string; select?: string }
-interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; returning?: string; readonly policy: (Policy | undefined)[] }
+interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; readonly from: string; readonly projection: string; readonly terms: readonly Term[]; byId?: string; select?: string }
+interface Prepared { readonly name: string; readonly f: Fact; /** the scope column, lower case (SQLite folds column names) */ readonly scope?: string; readonly x: ReturnType<typeof expand>; readonly from: string; readonly ts: readonly string[]; readonly d: readonly string[]; returning?: string; readonly policy: Map<string, Policy> }
 
 export function createStore<H, T extends Record<string, Table>, D extends Driver<H> = Driver<H>, O extends Operations<H> = {}, C extends object = never>(d: Dialect, drv: D, rules: Rules, facts: { readonly [K in keyof T]: Fact }, operations?: O): (db: H, caller: Caller, ...options: [C] extends [never] ? [] : [options: C]) => Store<T> & BoundOperations<O> & (D extends Required<Pick<Driver<H>, "transaction">> ? Interactive<T, O> : {}) {
   const prepared = new Map<string, Prepared>();
@@ -114,7 +124,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     let p = prepared.get(name);
     if (!p) {
       const f = facts[name]!;
-      prepared.set(name, p = { name, f, scope: f.s?.toLowerCase(), x: expand(rules, f), from: ` FROM ${d.ident(name)} r`, ts: ["created_at", "updated_at", ...f.ts ?? []], d: f.d ?? [], policy: [] });
+      prepared.set(name, p = { name, f, scope: f.s?.toLowerCase(), x: expand(rules, f), from: ` FROM ${d.ident(name)} r`, ts: ["created_at", "updated_at", ...f.ts ?? []], d: f.d ?? [], policy: new Map() });
     }
     return p;
   };
@@ -122,18 +132,31 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
   const wires = (p: Prepared, prefix: string) => [p.ts, p.d].flatMap((columns, i) => columns.map(c => `${(i ? d.wireDate : d.wireTimestamp)(prefix + d.ident(c)).join("")} AS ${d.ident(c)}`)).join(", ");
   const ID = d.ident("id");
   /** The row rules of one mode, numbered from 1; the SQL is rendered once per mode. */
-  const policy = (p: Prepared, trusted: boolean, terms: readonly Term[]): Policy => {
-    if (p.policy[+trusted]) return p.policy[+trusted]!;
+  const policy = (p: Prepared, trusted: boolean, terms: readonly Term[], caller: Caller): Policy => {
+    const bits: string[] = [];
+    const select = (terms: readonly Term[]): Term[] => terms.flatMap(term => {
+      if (term[1] === 'in') {
+        // `{ all: true }` drops this field's term; a missing value is refused when the term binds, before SQL runs.
+        const all = !!d.isAll?.(caller, term[2].field); bits.push(all ? '1' : '0');
+        // The Store drops the term itself, so it renders only the filter form.
+        return all ? [] : [[term[0], term[1], { ...term[2], scope: undefined }] as Term];
+      }
+      return [term[1] === 'parent' ? [term[0], term[1], term[2], {...term[3], terms: select(term[3].terms)}] as Term : term];
+    });
+    terms = select(terms);
+    const parentTerms = p.f.parent ? select(trusted ? p.f.parent.trusted : p.f.parent.caller) : [];
+    const cacheKey = String(+trusted)+bits.join('');
+    const cached = p.policy.get(cacheKey); if (cached) return cached;
     const recipes: Recipe[] = [], param = (r: Recipe) => (recipes.push(r), d.param(recipes.length));
     const sql = terms.map(t => renderTerm(d, t, "r.", param)).join(" AND ");
     let from = p.from, projection = "";
     const parent = p.f.parent;
     if (parent) {
-      const alias = "_mantle_merge", conditions = [`${alias}.${d.ident(parent.on)} = r.${d.ident(parent.on)}`, ...(parent.scope ? [`${alias}.${d.ident(parent.scope[0])} = r.${d.ident(parent.scope[1])}`] : []), ...(trusted ? parent.trusted : parent.caller).map(t => renderTerm(d, t, alias + ".", param))];
+      const alias = "_mantle_merge", conditions = [`${alias}.${d.ident(parent.on)} = r.${d.ident(parent.on)}`, ...(parent.scope ? [`${alias}.${d.ident(parent.scope[0])} = r.${d.ident(parent.scope[1])}`] : []), ...parentTerms.map(t => renderTerm(d, t, alias + ".", param))];
       from += ` LEFT JOIN ${d.ident(parent.table)} ${alias} ON ${alias}.${ID} = (SELECT ${alias}.${ID} FROM ${d.ident(parent.table)} ${alias} WHERE ${conditions.join(" AND ")} ORDER BY ${alias}.${d.ident("created_at")} DESC, ${alias}.${ID} DESC LIMIT 1)`;
       projection = parent.fields.map(c => `${(parent.ts.includes(c) ? d.wireTimestamp(alias + "." + d.ident(c)).join("") : parent.d.includes(c) ? d.wireDate(alias + "." + d.ident(c)).join("") : alias + "." + d.ident(c))} AS ${d.ident(c)}`).join(", ");
     }
-    return p.policy[+trusted] = { sql, recipes, from, projection };
+    const preparedPolicy = { sql, recipes, from, projection, terms }; p.policy.set(cacheKey, preparedPolicy); return preparedPolicy;
   };
 
   return ((db: H, caller: Caller, options?: object) => make(db, caller, false, options)) as never;
@@ -179,7 +202,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
   }
 
   function collection(db: H, caller: Caller, p: Prepared, write: (build: () => Bound, project: (rows: Row[]) => unknown, path: string) => Write<unknown>) {
-    const trusted = caller.kind === "system", { f, x } = p, terms = trusted ? x.trusted : x.caller, pol = policy(p, trusted, terms), no = (message: string) => new ContractError("INPUT_VALIDATION_FAILED", `${p.name}: ${message}`);
+    const trusted = modeOf(caller) === "trusted", { f, x } = p, terms = trusted ? x.trusted : x.caller, pol = policy(p, trusted, terms, caller), no = (message: string) => new ContractError("INPUT_VALIDATION_FAILED", `${p.name}: ${message}`);
     /** A value as the engine stores it, as a placeholder. Date-times and dates are known from the fact; a JSON object is told by its JS type (a boolean binds as it is on every driver). */
     const put = (values: unknown[], column: string, v: unknown): string => {
       const type = p.ts.includes(column) ? "timestamptz" : p.d.includes(column) ? "date" : v !== null && typeof v === "object" && !(v instanceof Date) ? "json" : "";
@@ -235,16 +258,16 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       const values: unknown[] = [], ms = Date.now(), into = d.ident(p.name);
       const push = (v: unknown) => (values.push(v), d.param(values.length));
       const recipe = (r: Recipe) => push(evaluate(d, [r], caller, { version: lock }, ms)[0]);
-      const given = (set: object) => Object.entries(set).map(([name, v]) => {
+      const given = (set: object, insert = false) => Object.entries(set).map(([name, v]) => {
         // SQLite matches column names without case, so compare folded
         const key = name.toLowerCase();
-        if (SYSTEM.includes(key) || key === p.scope) throw no(`${name} is not writable`);
+        if (SYSTEM.includes(key) || key === p.scope || !insert && !!f.u?.some(u => u[0] === key)) throw no(`${name} is not writable`);
         // a driver binds undefined as NULL: an update would silently clear the column
         if (v === undefined) throw no(`${name} is undefined`);
         return [d.ident(name), put(values, name, v)] as const;
       });
       /** `WHERE id = ? AND <the caller's row rules> AND version = ?` */
-      const guard = (id: string) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...terms, x.lock].map(t => renderTerm(d, t, t[1] === "parent" ? d.ident(p.name) + "." : "", recipe))].join(" AND ")}`;
+      const guard = (id: string) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...pol.terms, x.lock].map(t => renderTerm(d, t, t[1] === "parent" ? d.ident(p.name) + "." : "", recipe))].join(" AND ")}`;
       const step = (sql: string): Bound => ({ sql, binds: values, row: true });
       return { given, recipe, guard, step, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
     };
@@ -263,8 +286,9 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       },
       insert(set: object) { return write(() => {
         if (f.s && caller.kind === "anonymous") throw new ContractError("UNAUTHENTICATED", "A scoped insert requires an authenticated caller.", `${p.name}/insert`);
+        if (f.u?.length) set = d.scopeInsert!(f.u.map(u => ({ column: u[0], field: u[2].field, type: u[2].type })), caller, set);
         const w = writer(), names: string[] = [], marks: string[] = [];
-        for (const [name, mark] of w.given(set)) { names.push(name); marks.push(mark); }
+        for (const [name, mark] of w.given(set, true)) { names.push(name); marks.push(mark); }
         for (const [column, v] of x.fills) { names.push(d.ident(column)); marks.push(v === "newId" ? rules.newId : w.recipe(v)); }
         return w.step(`INSERT INTO ${w.into} (${names.join(", ")}) VALUES (${marks.join(", ")})${w.returning()}`);
       }, rows => clean(rows)[0], `${p.name}/insert`); },

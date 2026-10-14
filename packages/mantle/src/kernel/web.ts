@@ -53,11 +53,8 @@ export function web<Database, E>(options: { db: Database; caller: Caller | ((req
   };
   const read = async (entry: NonNullable<ReturnType<typeof match>>, ctx: Awaited<ReturnType<typeof context>>) => (await query(entry.page.view, ctx.db, ctx.caller, entry.params)).rows[0];
   const response = async (request: Request, body: string, type: string, caller: Caller) => {
-    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
-    const etag = '"' + Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, "0")).join("") + '"';
-    const headers = { "content-type": type + "; charset=utf-8", "cache-control": caller.kind === "anonymous" ? (options.cacheControl ?? "public, max-age=60") : "private, no-store", etag };
-    const cached = request.headers.get("if-none-match")?.split(",").some(tag => tag.trim() === "*" || tag.trim().replace(/^W\//, "") === etag);
-    return new Response(cached || request.method === "HEAD" ? null : body, { status: cached ? 304 : 200, headers });
+    const { webResponse } = await import('./web-response.js');
+    return webResponse(request, body, type, caller.kind === "anonymous" ? (options.cacheControl ?? "public, max-age=60") : "private, no-store");
   };
   return {
     async fetch(request: Request, env?: E): Promise<Response | undefined> {

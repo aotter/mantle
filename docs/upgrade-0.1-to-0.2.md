@@ -74,7 +74,7 @@ camelCase names.)
 
 | 0.1.x | 0.2.0 |
 |---|---|
-| `scope: { owner: $ctx.user.id }` | `scope: { owner: auth.uid() }`. The field is a required string, the leftmost column of an index (`indexes: [[owner]]`), and the first column of every `uniqueIndexes` entry. Store fills it; a write never sets it |
+| `scope: { owner: $ctx.user.id }` | `scope: "owner = auth.uid()"`. The field is a required string, the leftmost column of an index (`indexes: [[owner]]`), and the first column of every `uniqueIndexes` entry. Store fills it; a write never sets it |
 | `x-mantle-bind: ctx.user` on a field only its owner may see | remove the bind; add `scope` as above |
 | any other `x-mantle-bind: ctx.user` | remove the bind; every write that sets the field sets it to `auth.uid()`, never to an input |
 | `x-mantle-bind: ctx.staff` | remove the bind; set it to `auth.uid()` in writes whose Procedure requires `ctx.admin` |

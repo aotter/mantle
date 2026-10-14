@@ -6,7 +6,8 @@ import { MANTLE_VERSION } from "../version.js";
 import { schemaColumns } from "./allowlist.js";
 import { writeTarget } from "./ast.js";
 import { compileProgram } from "./compile.js";
-import type { Compiled, Mode } from "./policy.js";
+import type { Compiled, Mode, PolicyOpts } from "./policy.js";
+type Lowerable = Pick<Program, "inputs" | "ir"> & { readonly restrict?: PolicyOpts["restrict"] };
 import { pageShape, pagedOf, type Paged, type Program } from "./run.js";
 
 type Env = { readonly dialect: MantleDialect; readonly schemas: Readonly<Record<string, StorageSchema>> };
@@ -38,11 +39,11 @@ const message = (e: unknown) => (e instanceof Error ? e.message.split("\n")[0]! 
 const printer = (dialect: MantleDialect) => dialect.print!.bind(dialect);
 
 /** One View under one mode, printed, with its paged statements for the default shapes (no cursor, and a cursor whose every key is non-null). Undefined when the runtime would refuse the View. */
-export function lowerView(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mode, columns = schemaColumns(env.schemas), warn?: Warn, at = "", project?: Project, pageQuery?: (ast: N) => N): LoweredView | undefined {
+export function lowerView(env: Env, p: Lowerable, mode: Mode, columns = schemaColumns(env.schemas), warn?: Warn, at = "", project?: Project, pageQuery?: (ast: N) => N): LoweredView | undefined {
   const print = printer(env.dialect);
   let c: Compiled;
   try {
-    [c] = compileProgram(p.ir, { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "view", mode }) as [Compiled];
+    [c] = compileProgram(p.ir, { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "view", mode, restrict: p.restrict }) as [Compiled];
   } catch (e) {
     warn?.(`${at} (${mode}): ${message(e)}`);
     return undefined;
@@ -62,10 +63,10 @@ export function lowerView(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mod
 }
 
 /** One inline Procedure under one mode (flavour "all", with the plan's after hooks as `returning`), printed. Undefined when the runtime would refuse it. */
-export function lowerProcedure(env: Env, p: Pick<Program, "inputs" | "ir">, mode: Mode, returning: ReadonlySet<string> | undefined, columns = schemaColumns(env.schemas), warn?: Warn, at = "", project?: Project): LoweredStatement[] | undefined {
+export function lowerProcedure(env: Env, p: Lowerable, mode: Mode, returning: ReadonlySet<string> | undefined, columns = schemaColumns(env.schemas), warn?: Warn, at = "", project?: Project): LoweredStatement[] | undefined {
   try {
     const print = printer(env.dialect);
-    return compileProgram(p.ir, { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "procedure", mode, returning }).map((c) => stmtOf(c, print(project?.(c.ast) ?? c.ast, env.schemas)));
+    return compileProgram(p.ir, { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "procedure", mode, returning, restrict: p.restrict }).map((c) => stmtOf(c, print(project?.(c.ast) ?? c.ast, env.schemas)));
   } catch (e) {
     warn?.(`${at} (${mode}): ${message(e)}`);
     return undefined;
@@ -83,13 +84,13 @@ export function lowerPlan(plan: Body, dialect: MantleDialect, options: LoweringO
 
   const views = Object.entries(plan.views).flatMap(([name, v]) => {
     const modes = v.surface === "public" ? (["public"] as const) : (["caller", "trusted"] as const);
-    const lowered = Object.fromEntries(modes.flatMap((mode) => { const x = lowerView(env, { inputs: v.inputs, ir: v.stmts }, options.mode?.(mode) ?? mode, columns, warn, `plan#/views/${name}`, options.project && ((ast, page) => options.project!(ast, "view", name, page)), options.pageQuery && (ast => options.pageQuery!(ast, name))); return x ? [[mode, x]] : []; }));
+    const lowered = Object.fromEntries(modes.flatMap((mode) => { const x = lowerView(env, { inputs: v.inputs, ir: v.stmts, restrict: v.restrict }, options.mode?.(mode) ?? mode, columns, warn, `plan#/views/${name}`, options.project && ((ast, page) => options.project!(ast, "view", name, page)), options.pageQuery && (ast => options.pageQuery!(ast, name))); return x ? [[mode, x]] : []; }));
     return Object.keys(lowered).length ? [[name, lowered]] : [];
   });
   const procedures = Object.entries(plan.procedures).flatMap(([name, proc]) => {
     if (!("sql" in proc.handler)) return [];
     const { inputs } = proc, ir = proc.handler.sql.stmts;
-    const lowered = Object.fromEntries(PROCEDURE_MODES.flatMap((mode) => { const x = lowerProcedure(env, { inputs, ir }, options.mode?.(mode) ?? mode, returning, columns, warn, `plan#/procedures/${name}`, options.project && (ast => options.project!(ast, "procedure", name))); return x ? [[mode, x]] : []; }));
+    const lowered = Object.fromEntries(PROCEDURE_MODES.flatMap((mode) => { const x = lowerProcedure(env, { inputs, ir, restrict: proc.restrict }, proc.trustedOnly ? "trusted" : options.mode?.(mode) ?? mode, returning, columns, warn, `plan#/procedures/${name}`, options.project && (ast => options.project!(ast, "procedure", name))); return x ? [[mode, x]] : []; }));
     return Object.keys(lowered).length ? [[name, lowered]] : [];
   });
   return { lowered: { mantle: MANTLE_VERSION, dialect: { name: dialect.name, version: dialect.version, key: dialect.lowerKey ?? "" }, views: Object.fromEntries(views), procedures: Object.fromEntries(procedures) }, warnings };

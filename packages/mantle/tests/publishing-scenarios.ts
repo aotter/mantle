@@ -1,9 +1,10 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 /** Identical publishing checks on the official SQLite, D1 and PostgreSQL handles. */
 import assert from "node:assert/strict";
 import { user } from "./apps/fixtures.js";
 
 export async function verifyPublishing(app: any, db: any): Promise<{ checks: number }> {
-  const anonymous = { kind: "anonymous" }, admin = { ...user("admin"), role: "admin", admin: true }, system = { kind: "system", reason: "test" };
+  const anonymous = { kind: "anonymous" }, admin = fixtureCaller({ ...user("admin"), role: "admin", admin: true }), system = { kind: "system", reason: "test" };
   const table = app.store(db, admin).collection("posts"), draft = await table.insert({ title: "Hello" });
   assert.equal(draft.status, "draft"); assert.equal(draft.published_at, null);
   assert.equal((await app.views["posts-public"](db, admin, {})).length, 0);
@@ -57,7 +58,7 @@ export async function verifyPublishing(app: any, db: any): Promise<{ checks: num
   const publishedTime = edited.published_at;
   assert.equal(typeof publishedTime, "string");
   const scoped = await app.store(db, admin).collection("scoped_posts").insert({ title: "Scoped" });
-  const foreignAdmin = { ...user("foreign"), role: "admin", admin: true };
+  const foreignAdmin = fixtureCaller({ ...user("foreign"), role: "admin", admin: true });
   assert.equal(await app.store(db, foreignAdmin).collection("scoped_posts").count(), 0);
   await assert.rejects(app.procedures["scoped_posts.publish"](db, foreignAdmin, { id: scoped.id, expectedVersion: 1 }), { code: "CONFLICT" });
   await app.procedures["scoped_posts.publish"](db, admin, { id: scoped.id, expectedVersion: 1 });

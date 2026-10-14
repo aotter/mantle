@@ -25,7 +25,7 @@ metadata: { name: orders }
 spec:
   title: Orders
   lifecycle: operational
-  scope: { owner: auth.uid() }
+  scope: "owner = auth.uid()"
   uiSchema: { list: { primaryField: itemId, columns: [qty, orderStatus] } }
   indexes: [[owner, createdAt, id]]
   schema:
@@ -100,7 +100,7 @@ kind: View
 metadata: { name: sales-by-item }
 spec:
   surface: internal
-  requires: { auth: { all: [{ ctx.admin: [admin] }] } }
+  requires: { auth: { all: [ctx.admin] } }
   input:
     type: object
     required: [afterUnits, afterName, cap]
@@ -121,5 +121,5 @@ kind: View
 metadata: { name: recent-activity }
 spec:
   surface: admin
-  requires: { auth: { all: [{ ctx.admin: [admin] }] } }
+  requires: { auth: { all: [ctx.admin] } }
   sql: SELECT kind, subject, detail FROM activity ORDER BY created_at DESC, id DESC LIMIT 50

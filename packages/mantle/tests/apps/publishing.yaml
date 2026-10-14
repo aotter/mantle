@@ -29,7 +29,7 @@ metadata: {name: scoped_posts}
 spec:
   title: Scoped posts
   lifecycle: publishing
-  scope: {owner: auth.uid()}
+  scope: "owner = auth.uid()"
   indexes: [[owner]]
   schema:
     type: object

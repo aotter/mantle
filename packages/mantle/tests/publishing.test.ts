@@ -1,3 +1,4 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { resolve } from "node:path";
@@ -35,8 +36,8 @@ test("SQLite public visibility composes through joins, LEFT JOINs, subqueries an
     expect((await app.views["posts-subquery"](db, anonymous, {})).map((r: any) => r.id)).toEqual([published.id]);
     expect(Number((await app.views["posts-count"](db, anonymous, {}))[0].count)).toBe(1);
     expect((await app.views["posts-time"](db, anonymous, {}))[0].published_at).toMatch(/Z$/);
-    for (const role of [null, "admin", "owner", "custom-role"]) {
-      const caller = { kind: "user", subject: "reader", role, admin: role === "admin", scopes: [], credential: "session", credentialId: null, clientId: null };
+    for (const role of [null, "admin", "owner", "customRole"]) {
+      const caller = fixtureCaller({ kind: "user", subject: "reader", role, admin: role === "admin", scopes: [], credential: "session", credentialId: null, clientId: null });
       const view = await app.views["posts-admin"](db, caller, {}), store = await app.store(db, caller).collection("posts").find();
       expect(view.map((r: any) => r.id)).toEqual(store.rows.map((r: any) => r.id));
       expect(view.length).toBe(role === "admin" ? 2 : 1);
@@ -78,7 +79,7 @@ test("Core and Store read only the admin layer for custom role names", async () 
     const app = await import(resolve(path, "generated.ts")); db.exec(files["schema.sql"]!);
     await app.store(db, { kind: "system", reason: "test" }).collection("posts").insert({ title: "Draft" });
     for (const [role, expected] of [["reviewer", 1], ["admin", 0]] as const) {
-      const caller = { kind: "user", subject: "reader", role, admin: role === "reviewer", scopes: [], credential: "session", credentialId: null, clientId: null };
+      const caller = fixtureCaller({ kind: "user", subject: "reader", role, admin: role === "reviewer", scopes: [], credential: "session", credentialId: null, clientId: null });
       expect((await app.views["posts-admin"](db, caller, {})).length).toBe(expected);
       expect(await app.store(db, caller).collection("posts").count()).toBe(expected);
     }

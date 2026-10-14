@@ -48,6 +48,8 @@ export async function bundle(entry: string, outdir: string): Promise<Metafile> {
     conditions: ["workerd", "worker", "browser"], mainFields: ["module", "main"],
     external: ["cloudflare:*", "node:*"], minify: true, metafile: true, chunkNames: "chunks/[name]-[hash]",
   });
+  if (Object.keys(result.metafile.inputs).some(input => /(?:^|\/)mantle\/(?:src|dist)\/testing\//.test(resolve(input).replaceAll("\\", "/"))))
+    throw new Error("@aotter/mantle/testing is only for tests and cannot be bundled for production.");
   guardStartup(result.metafile, entry);
   return result.metafile;
 }

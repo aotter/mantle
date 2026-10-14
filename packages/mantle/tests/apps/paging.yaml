@@ -3,7 +3,7 @@ kind: Schema
 metadata: {name: positions}
 spec:
   title: Positions
-  scope: {owner: auth.uid()}
+  scope: "owner = auth.uid()"
   indexes: [[owner, session, block, position], [owner, at]]
   schema:
     type: object
@@ -101,7 +101,7 @@ metadata: {name: sessions}
 spec:
   title: Sessions
   indexes: [[owner]]
-  scope: {owner: auth.uid()}
+  scope: "owner = auth.uid()"
   schema:
     type: object
     required: [owner, label]

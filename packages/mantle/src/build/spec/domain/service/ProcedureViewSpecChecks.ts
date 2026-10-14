@@ -1,6 +1,6 @@
 /** View.spec and Procedure.spec: input, cache, handler binding, and the `requires` authorization predicate. */
 import type { DiagnosticCode } from "../../kernel/diagnostic.js";
-import { PROCEDURE_MCP_ANNOTATION_KEYS, PROCEDURE_TARGET_KEYS, VIEW_INPUT_RESERVED, isAdminRole, type AuthPredicate, type JsonSchema, type ProcedureManifest, type ViewManifest } from "../model/ManifestGrammar.js";
+import { PROCEDURE_MCP_ANNOTATION_KEYS, PROCEDURE_TARGET_KEYS, VIEW_INPUT_RESERVED, type AuthPredicate, type JsonSchema, type ProcedureManifest, type ViewManifest } from "../model/ManifestGrammar.js";
 import { ManifestParseError, V01_VIEW_SURFACES, rejectUnknownKeys, validateLocalizedText } from "./ManifestFieldChecks.js";
 import { checkFormUiSchema, checkViewAdminUi } from "./SchemaAdminUiChecker.js";
 import { validateJsonSchema } from "./SchemaSpecChecks.js";
@@ -9,7 +9,7 @@ export function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "description", "uiSchema", "sql", "surface", "cache", "requires", "input"],
+    ["title", "description", "uiSchema", "sql", "surface", "cache", "requires", "restrict", "input"],
     idx,
     "/spec",
   );
@@ -58,9 +58,9 @@ function validateViewCache(raw: unknown, view: ViewManifest, idx: number): void 
     );
   }
   // SQL eligibility is checked on the expanded IR by compilePlan.
-  if (view.spec.surface !== "public" || view.spec.requires) {
+  if (view.spec.surface !== "public" || view.spec.requires || view.spec.restrict) {
     throw new ManifestParseError(
-      "View.spec.cache requires an unguarded public View",
+      "View.spec.cache requires an unguarded public View without restrict",
       idx,
       "/spec/cache",
       "VIEW_CACHE_INVALID",
@@ -98,7 +98,7 @@ export function validateProcedureSpec(m: ProcedureManifest, idx: number): Proced
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "description", "requires", "input", "uiSchema", "output", "handler", "mcp", "target"],
+    ["title", "description", "requires", "restrict", "input", "uiSchema", "output", "handler", "mcp", "target"],
     idx,
     "/spec",
   );
@@ -283,28 +283,14 @@ function validateAuthPredicate(
       return;
     }
     if ("ctx.admin" in o) {
-      rejectUnknownKeys(o, ["ctx.admin"], idx, pointer);
-      const roles = o["ctx.admin"];
-      if (!Array.isArray(roles) || roles.length === 0 || roles.some((r) => typeof r !== "string")) {
-        throw new ManifestParseError(
-          `${path}: 'ctx.admin' value must be a non-empty array of role-name strings`,
-          idx,
-        );
-      }
-      const badRole = (roles as readonly string[]).find((r) => !isAdminRole(r));
-      if (badRole !== undefined) {
-        throw new ManifestParseError(
-          `${path}: 'ctx.admin' role '${badRole}' must match ^[a-z][a-zA-Z0-9_]{0,62}$`,
-          idx,
-          undefined,
-          "AUTH_PREDICATE_NOT_IN_ENUM",
-        );
-      }
-      return;
+      throw new ManifestParseError(
+        `${path}: role lists in requires ('ctx.admin: [...]') are withdrawn; use 'ctx.admin' (any admin) and decide per-target roles in the application's authorize(target, caller) seam`,
+        idx,
+      );
     }
   }
   throw new ManifestParseError(
-    `${path} must be 'ctx.user', 'ctx.auth', 'ctx.admin', { 'ctx.auth.scope': <scope> }, or { 'ctx.admin': [<role>, ...] }; got ${JSON.stringify(p)}`,
+    `${path} must be 'ctx.user', 'ctx.auth', 'ctx.admin', or { 'ctx.auth.scope': <scope> }; got ${JSON.stringify(p)}`,
     idx,
   );
 }

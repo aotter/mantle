@@ -1,5 +1,6 @@
 /** Deployment compiler leaves. Optional request surfaces are never constructed. */
 export { compilePlan, viewOutputs } from "./spec/infrastructure/sql/compilePlan.js";
+export { userScopeTerm } from './spec/domain/service/SqlRowPolicy.js';
 export { DiagnosticError } from "./spec/kernel/diagnostic.js";
 export { enumOptions, parseNumeric, NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, mcpTools, mcpToolNameSegment, resolveLocalizedText, assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired } from "./spec/domain/index.js";
 export type { ManifestSourceSet } from "./spec/domain/service/ManifestParser.js";

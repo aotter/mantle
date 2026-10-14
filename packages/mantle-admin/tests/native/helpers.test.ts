@@ -1,7 +1,8 @@
+import { sdkFixtureCaller as fixtureCaller } from "../../../mantle/tests/apps/fixtures.js";
 import {test,expect} from "bun:test";
 import {nativePage,nativeText,nativeStatistics,entriesQuery,type NativeAdapter,type NativePageMode,type NativeCollection} from "../../src/server/native.js";
 import type {Caller} from "@aotter/mantle/contracts";
-const caller:Caller={kind:"user",subject:"tenant-a",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null};
+const caller:Caller=fixtureCaller({kind:"user",subject:"tenant-a",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null});
 test("native page uses Core tuple cursor, preserves binding positions and caps effective page",async()=>{
  const reads:{sql:string,values:unknown[]}[]=[];
  const adapter:NativeAdapter<null>={sqlite:false,values:{},param:n=>"$"+n,escapeLike:s=>s.replace(/[%_]/g,"\\$&"),read:(_db,sql,values)=>{reads.push({sql,values});return Array.from({length:3},(_,i)=>({_k0:i,_k1:"id"+i,_k2:i%2===0,title:"row"+i}));}};
@@ -12,7 +13,7 @@ test("native page uses Core tuple cursor, preserves binding positions and caps e
  expect(reads[0]).toEqual({sql:"FIRST WHERE (enabled=$3) AND (category=$4) AND (title LIKE $5) LIMIT $6",values:["tenant-a","x",true,"news","%100\\%%",3]});
  await nativePage(spec,adapter,null,caller,input,{cursor:result.nextCursor,match});
  expect(reads[1]).toEqual({sql:"NEXT AND (enabled=$6) AND (category=$7) AND (title LIKE $8) LIMIT $9",values:["tenant-a","x",1,"id1",false,true,"news","%100\\%%",3]});
- for(const [who,selection]of[[{...caller,subject:"tenant-b"},match],[caller,{...match,filters:{enabled:false,category:"news"}}]]as const){await expect(nativePage(spec,adapter,null,who,input,{cursor:result.nextCursor,match:selection})).rejects.toMatchObject({code:"INPUT_VALIDATION_FAILED",path:"admin/views/posts/cursor"});}expect(reads).toHaveLength(2);
+ for(const [who,selection]of[[fixtureCaller({...caller,subject:"tenant-b"}),match],[caller,{...match,filters:{enabled:false,category:"news"}}]]as const){await expect(nativePage(spec,adapter,null,who,input,{cursor:result.nextCursor,match:selection})).rejects.toMatchObject({code:"INPUT_VALIDATION_FAILED",path:"admin/views/posts/cursor"});}expect(reads).toHaveLength(2);
  const forged=encodeURIComponent(JSON.stringify([1,"id1",JSON.stringify([spec.path,caller,input,match.filters,match.search])]));await expect(nativePage(spec,adapter,null,caller,input,{cursor:forged,match})).rejects.toMatchObject({path:"admin/views/posts/cursor"});expect(reads).toHaveLength(2);
 });
 test("native helpers reject NUL JSON keys, bucket overflow and intersect scoped batch filters",async()=>{
