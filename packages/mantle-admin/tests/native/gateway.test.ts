@@ -47,9 +47,11 @@ test('Admin gateway enforces layers, draft scope, contract errors, stale writes 
     const local = admin(bindings.metadata, bindings.views, bindings.operations, { ...options, gateway: undefined });
     expect((await local(new Request('https://app.test/admin/api/me'), {}, { props: { mantle: mantleProps() } }))!.status).toBe(412);
     for (const props of [{}, { other: true }]) for (const headers of [{ cookie: 'app-session' }, { authorization: 'Bearer app-token' }]) {
-      expect((await local(new Request('https://app.test/admin/api/me', { headers }), {}, { props }))!.status).toBe(412);
       expect((await api(new Request('https://app.test/admin/api/me', { headers }), {}, { props }))!.status).toBe(401);
     }
+    // Workers pass `ctx.props` as `{}` on ordinary requests: only `props.mantle` is the host contract.
+    const plain = admin(bindings.metadata, bindings.views, bindings.operations, { ...options, gateway: undefined, caller: () => ({ kind: 'anonymous' as const }) });
+    for (const props of [{}, { other: true }]) expect((await plain(new Request('https://app.test/admin/api/me'), {}, { props }))!.status).not.toBe(412);
     const denied = admin(bindings.metadata, bindings.views, bindings.operations, { ...options, authorize: () => false });
     const refusal = await denied(new Request('https://app.test/admin/api/entries?collection=records'), {}, { props: { mantle: mantleProps() } }); expect(refusal!.status).toBe(403); expect((await refusal!.json()).error.code).toBe('AUTH_DENIED');
     expect(resolves).toBe(0);

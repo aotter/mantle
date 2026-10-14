@@ -132,9 +132,11 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
     const local = { ...options, gateway: undefined };
     expect((await rest(local)(request('/api/views/public-records'), {}, { props: { mantle: mantleProps() } })).status).toBe(412);
     expect((await mcp(local)(request('/mcp', 'POST', '{}'), {}, { props: { mantle: mantleProps() } })).status).toBe(412);
-    for (const props of [{}, { other: true }]) for (const headers of [{ cookie: 'app-session' }, { authorization: 'Bearer app-token' }]) {
-      expect((await rest(local)(request('/api/views/public-records', 'GET', undefined, headers), {}, { props })).status).toBe(412);
-      expect((await mcp(local)(request('/mcp', 'POST', '{}', headers), {}, { props })).status).toBe(412);
+    // Workers pass `ctx.props` as `{}` on ordinary requests: only `props.mantle` is the host contract.
+    const plain = { ...local, caller: () => ({ kind: 'anonymous' as const }) };
+    for (const props of [{}, { other: true }]) {
+      expect((await rest(plain)(request('/api/views/public-records'), {}, { props })).status).not.toBe(412);
+      expect((await mcp(plain)(request('/mcp', 'POST', '{}'), {}, { props })).status).not.toBe(412);
     }
     const { web } = await import(resolve(dir, 'web.ts'));
     const webOptions = { gateway: options.gateway, db, caller: options.caller, origin: 'https://app.test', title: 'Records', description: 'Scoped records', pages: { '/records': { view: 'public-records', list: 'public-records', markdown: 'title' } } };
@@ -152,10 +154,11 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
     for (const headers of [{ cookie: 'app-session' }, { authorization: 'Bearer app-token' }]) {
       expect((await site.fetch(request('/records.md', 'GET', undefined, headers), {})).status).toBe(401);
       expect((await site.fetch(request('/records.md', 'GET', undefined, headers), {}, { props: {} })).status).toBe(401);
-      expect((await localSite.fetch(request('/records.md', 'GET', undefined, headers), {}, { props: {} })).status).toBe(412);
     }
     const malformedWeb = await site.fetch(request('/records.md'), {}, { props: { mantle: mantleProps({ dryRun: true }) } }); expect(malformedWeb.status).toBe(412);
     expect(resolves).toBe(0);
+    // Workers pass `ctx.props` as `{}` on ordinary requests: only `props.mantle` is the host contract.
+    for (const props of [{}, { other: 1 }]) expect((await localSite.fetch(request('/records.md'), {}, { props })).status).not.toBe(412);
   } finally { db.close(); await rm(dir, { recursive: true, force: true }); }
 });
 

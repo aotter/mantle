@@ -48,13 +48,13 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         observe(options.onRefusal, { at: Date.now(), status: result.status, reason: "credential" });
       }
       if (result.status === 401) scope ??= requiredScopes.join(" ");
-      if (options.gateway || ctx?.props !== undefined) return (await import("./host-caller.js")).hostFailure(error, resolved, `mcp ${path}`);
+      if (options.gateway || (!!ctx?.props && Object.hasOwn(ctx.props, "mantle"))) return (await import("./host-caller.js")).hostFailure(error, resolved, `mcp ${path}`);
       return surfaceFailure(error, bare ? undefined : 'Bearer ' + (scope ? (result.status === 403 ? 'error="insufficient_scope", ' : '') + 'scope="' + scope + '", ' : '') + 'resource_metadata="' + (options.resourceMetadata ?? url.origin + '/.well-known/oauth-protected-resource/mcp') + '"', `mcp ${path}`);
     };
     let resolved: Caller | undefined;
     let caller: Caller;
     try {
-      caller = resolved = options.gateway || ctx?.props !== undefined
+      caller = resolved = options.gateway || (!!ctx?.props && Object.hasOwn(ctx.props, "mantle"))
         ? (await import("./host-caller.js")).gatewayCaller(ctx, options.gateway, options.fields)
         : await surfaceCaller(request, env, options.caller ?? (() => ({ kind: "anonymous" })), readOnly);
       if (caller.kind === "anonymous" && (surface === "admin" || selected.length > 0 && selected.every(tool => tool.closed))) throw new ContractError("UNAUTHENTICATED", "Authentication is required.", "mcp");

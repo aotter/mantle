@@ -42,7 +42,7 @@ export function web<Database, E>(options: { db: Database; caller?: Caller | ((re
     const pattern = path.split(/(\{[^{}]+\})/).map(part => part.startsWith("{") ? (keys.push(part.slice(1, -1)), "([^/]+)") : part.replace(/[.*+?^$()|[\]\\]/g, "\\$&")).join("");
     return { path, page, keys, pattern: new RegExp("^" + pattern + "$") };
   }).sort((a, b) => a.keys.length - b.keys.length);
-  const context = async (request: Request, env: E, ctx?: RequestContext) => ({ db: options.db, caller: options.gateway || ctx?.props !== undefined
+  const context = async (request: Request, env: E, ctx?: RequestContext) => ({ db: options.db, caller: options.gateway || (!!ctx?.props && Object.hasOwn(ctx.props, "mantle"))
     ? (await import("./host-caller.js")).gatewayCaller(ctx, options.gateway, options.fields)
     : typeof options.caller === "function" ? await options.caller(request, env, { readOnly: ["GET", "HEAD"].includes(request.method) }) : options.caller ?? { kind: "anonymous" as const } });
   const urlFor = (path: string, row: Record<string, unknown>, view: string) => origin.origin + path.replace(/\{([^{}]+)\}/g, (_, key: string) => {
@@ -63,7 +63,7 @@ export function web<Database, E>(options: { db: Database; caller?: Caller | ((re
     async fetch(request: Request, env?: E, execution?: RequestContext): Promise<Response | undefined> {
       let caller: Caller | undefined;
       try {
-        if (!options.gateway && execution?.props !== undefined) await context(request, env as E, execution);
+        if (!options.gateway && (!!execution?.props && Object.hasOwn(execution.props, "mantle"))) await context(request, env as E, execution);
         if (request.method !== "GET" && request.method !== "HEAD") return;
         const path = new URL(request.url).pathname, index = path === "/llms.txt" || path === "/sitemap.xml";
         const entry = !index && path.endsWith(".md") ? match(path.slice(0, -3)) : undefined, markdown = entry?.page.markdown;
@@ -90,11 +90,11 @@ export function web<Database, E>(options: { db: Database; caller?: Caller | ((re
         const row = await read(entry!, ctx); if (!row) return notFound();
         const body = row[markdown!]; if (body == null) return notFound(); if (typeof body !== "string") throw new TypeError("Markdown field must return text.");
         return response(request, body, "text/markdown", ctx.caller);
-      } catch (error) { if (options.gateway || execution?.props !== undefined) return (await import("./host-caller.js")).hostFailure(error, caller, "web"); const { status, error: body } = wire(error); return Response.json({ error: body }, { status, headers: NO_STORE }); }
+      } catch (error) { if (options.gateway || (!!execution?.props && Object.hasOwn(execution.props, "mantle"))) return (await import("./host-caller.js")).hostFailure(error, caller, "web"); const { status, error: body } = wire(error); return Response.json({ error: body }, { status, headers: NO_STORE }); }
     },
     async head(request: Request, env?: E, execution?: RequestContext): Promise<string> {
       try {
-        if (!options.gateway && execution?.props !== undefined) await context(request, env as E, execution);
+        if (!options.gateway && (!!execution?.props && Object.hasOwn(execution.props, "mantle"))) await context(request, env as E, execution);
         const path = new URL(request.url).pathname, entry = match(path); if (!entry) return "";
         const ctx = await context(request, env as E, execution), row = await read(entry, ctx); if (!row) return "";
         const canonical = validUrl(entry.path, row, entry.page.view); if (!canonical) return "";
