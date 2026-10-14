@@ -1,12 +1,13 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 /** The same search contract runs on all four native hosts. */
 import assert from "node:assert/strict";
 export async function verifySearch(app: any, db: any) {
-  const owner = {kind:"user",subject:"search-owner",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null};
+  const owner = fixtureCaller({kind:"user",subject:"search-owner",role:"admin", admin: true,scopes:[],credential:"session",credentialId:null,clientId:null});
   const store=app.store(db,owner), collection=store.collection("search_records");
   const a=await collection.insert({title:"Alpha%_one",body:"Alpha twice"});
   const b=await collection.insert({title:'Beta "OR" quote',body:"小籠包"});
   const c=await collection.insert({title:"a\\b",body:null});
-  const foreign=await app.store(db,{...owner,subject:"search-other"}).collection("search_records").insert({title:"Alpha foreign"});
+  const foreign=await app.store(db,fixtureCaller({...owner,subject:"search-other"})).collection("search_records").insert({title:"Alpha foreign"});
   const expired=await collection.insert({title:"Alpha expired",expiresat:"2000-01-01T00:00:00Z"});
   for (const row of [foreign, expired]) assert.equal((await collection.find({search:row.id})).rows.length, 0);
   let checks=0;

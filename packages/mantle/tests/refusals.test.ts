@@ -110,6 +110,6 @@ test("old authorization keys fail with the admin replacement",async()=>{
   expect(result.length).toBeGreaterThan(0);
   for(const diagnostic of result){expect(diagnostic.message).toContain("ctx.staff");expect(diagnostic.message).toContain("ctx.admin");expect(diagnostic.message).toContain("replace");}
  }
- const valid=await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"admin.yaml",text:[...base,doc("View","admin-view",{surface:"admin",sql:"SELECT id FROM notes ORDER BY id",requires:{auth:{all:[{"ctx.admin":["editor","customRole_2"]},"ctx.admin"]}}})].join("\n---\n")}]}});
+ const valid=await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"admin.yaml",text:[...base,doc("View","admin-view",{surface:"admin",sql:"SELECT id FROM notes ORDER BY id",requires:{auth:{all:["ctx.admin"]}}})].join("\n---\n")}]}});
  expect(valid.ok).toBe(true);
 });

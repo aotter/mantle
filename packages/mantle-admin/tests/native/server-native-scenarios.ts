@@ -1,17 +1,18 @@
+import { sdkFixtureCaller as fixtureCaller } from "../../../mantle/tests/apps/fixtures.js";
 import assert from "node:assert/strict";
 import { admin as adminFunction} from "../../src/server/index.js";
 import {extensionOptions} from "../../src/server/extensions.js";
 import {nativeEntryGet,nativeEntryPage,nativeEntryProcedure} from "../../src/server/native.js";
 import {entries} from "../../src/server/entries.js";
 import {ContractError} from "@aotter/mantle/contracts";
-export const admin={kind:"user" as const,subject:"owner-a",role:"admin", admin: true,scopes:[],credential:"session" as const,credentialId:null,clientId:null};
+export const admin=fixtureCaller({kind:"user" as const,subject:"owner-a",role:"admin", admin: true,scopes:[],credential:"session" as const,credentialId:null,clientId:null});
 export const manifest=`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: notes}
 spec:
  title: Notes
  lifecycle: operational
- scope: {owner: auth.uid()}
+ scope: "owner = auth.uid()"
  indexes: [[owner, title]]
  schema: {type: object, required: [owner, title], properties: {owner: {type: string}, title: {type: string}, _k0: {type: string}, _k1: {type: string}}}
 ---
@@ -21,7 +22,7 @@ metadata: {name: posts}
 spec:
  title: Posts
  lifecycle: publishing
- scope: {owner: auth.uid()}
+ scope: "owner = auth.uid()"
  indexes: [[owner,title]]
  schema: {type: object, required: [owner,title], properties: {owner: {type: string}, title: {type: string}}}
 `;
@@ -30,7 +31,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: {name: edit-note}
 spec:
- requires: {auth: {all: [{ctx.admin: [admin]}]}}
+ requires: {auth: {all: [ctx.admin]}}
  input: {type: object, properties: {id: {type: string}, title: {type: string}}, required: [id,title], additionalProperties: false}
  output: {type: object, properties: {title: {type: string}}, required: [title]}
  handler: {ref: app.editNote}
@@ -50,7 +51,7 @@ export const handlers={"edit-note":async(ctx:any,input:{id:string;title:string})
 export async function verifyAdminBindings(bindings:any,handle:any,reads:()=>number){
  const specs=bindings.schemas,adapter=bindings.adapter,notes=specs.find((schema:any)=>schema.name==="notes");let providers=0;
  const create=(caller:typeof admin,title:string)=>nativeEntryProcedure(notes.binding,adapter,handle,caller,"create",notes.values(notes.validate({title,_k0:"field-key:"+title,_k1:"field-id:"+title},true)));
- const a=await create(admin,"first"),b=await create({...admin,subject:"owner-b"},"other owner");
+ const a=await create(admin,"first"),b=await create(fixtureCaller({...admin,subject:"owner-b"}),"other owner");
    const fetch=adminFunction(bindings.metadata,bindings.views,bindings.operations,{db:()=>{providers++;return handle;},caller:()=>admin,handlers,routes:entries(specs,adapter)});
    const ask=(path:string,method="GET",body?:unknown)=>fetch(new Request("https://app.test/admin/api"+path,{method,headers:{origin:"https://app.test"},body:body===undefined?undefined:JSON.stringify(body)}),{});
    let before=reads();
@@ -70,7 +71,7 @@ export async function verifyAdminBindings(bindings:any,handle:any,reads:()=>numb
    assert.equal((await ask("/operations/edit-note","POST",{id:a.id}))?.status,400);assert.equal(providers,beforeProviders);assert.equal(reads(),before);
    const ref=await ask("/operations/edit-note","POST",{id:a.id,title:"ref changed"});assert.equal(ref?.status,200);assert.deepEqual(await ref!.json(),{ok:true,output:{title:"ref changed"}});assert.equal(reads()-before,1);
    before=reads();assert.equal((await ask("/operations/edit-note","POST",{id:b.id,title:"foreign write"}))?.status,404);assert.equal(reads()-before,1);
-   assert.equal((await nativeEntryGet(notes.binding,adapter,handle,{...admin,subject:"owner-b"},b.id)).title,"other owner");
+   assert.equal((await nativeEntryGet(notes.binding,adapter,handle,fixtureCaller({...admin,subject:"owner-b"}),b.id)).title,"other owner");
    before=reads();const providerBeforeStats=providers;
    assert.equal((await ask("/collections/notes/statistics?range=unknown"))?.status,400);assert.equal(providers,providerBeforeStats);assert.equal(reads(),before);
    const statistics=await ask("/collections/notes/statistics?range=1h");assert.equal(statistics?.status,200);const counts=await statistics!.json();assert.equal(counts.total,1);assert.equal(counts.buckets.reduce((sum:number,bucket:any)=>sum+bucket.count,0),1);assert.equal(reads()-before,1);
@@ -88,7 +89,7 @@ export async function verifyAdminBindings(bindings:any,handle:any,reads:()=>numb
  assert.equal(firstPage.rows.length+secondPage.rows.length,2);for(const row of [...firstPage.rows,...secondPage.rows])assert.deepEqual([row._k0,row._k1],authored.get(String(row.id)));
  let invalidProviders=0;before=reads();
  const provider=()=>{invalidProviders++;return handle;};
- await assert.rejects(()=>nativeEntryPage(notes.binding,adapter,provider,{...admin,subject:"owner-b"},{...q,cursor:firstPage.nextCursor}),(error:any)=>error.code==="INPUT_VALIDATION_FAILED");
+ await assert.rejects(()=>nativeEntryPage(notes.binding,adapter,provider,fixtureCaller({...admin,subject:"owner-b"}),{...q,cursor:firstPage.nextCursor}),(error:any)=>error.code==="INPUT_VALIDATION_FAILED");
  const foreignFilter=notes.query(new URLSearchParams({sort:"id",limit:"1",filter_field:"title",filter_value:"second",cursor:firstPage.nextCursor}));
  await assert.rejects(()=>nativeEntryPage(notes.binding,adapter,provider,admin,foreignFilter),(error:any)=>error.code==="INPUT_VALIDATION_FAILED");assert.equal(invalidProviders,0);assert.equal(reads(),before);
  const forgedId=JSON.parse(decodeURIComponent(firstPage.nextCursor));forgedId[0]="another-id";

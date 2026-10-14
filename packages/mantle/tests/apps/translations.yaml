@@ -4,7 +4,7 @@ metadata: {name: posts}
 spec:
  title: Posts
  lifecycle: publishing
- scope: {owner: auth.uid()}
+ scope: "owner = auth.uid()"
  indexes: [[owner, slug]]
  schema:
   type: object
@@ -19,7 +19,7 @@ spec:
  lifecycle: publishing
  localized: true
  translates: {parent: posts, on: slug}
- scope: {owner: auth.uid()}
+ scope: "owner = auth.uid()"
  uniqueIndexes: [[owner,slug,locale]]
  schema:
   type: object

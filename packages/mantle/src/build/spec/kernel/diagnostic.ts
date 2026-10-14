@@ -27,6 +27,13 @@ export type Phase = "validate" | "test" | "boot" | "runtime";
  * (type), so adding a code is one edit.
  */
 export const DIAGNOSTIC_CODES = [
+  "AUTH_ROLE_REMOVED",
+  "USER_FIELD_VALUES_UNENUMERATED",
+  "USER_FIELD_INVALID",
+  "USER_FIELD_CONFLICT",
+  "USER_FIELD_POSITION",
+  "USER_REF_SCOPE_ONLY",
+  "USER_SCOPE_PUBLIC_ANON_EMPTY",
   "RESOURCE_EXHAUSTED",
   "RESOURCE_UNAVAILABLE",
   "RATE_LIMITED",

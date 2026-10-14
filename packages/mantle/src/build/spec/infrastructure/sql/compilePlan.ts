@@ -14,6 +14,9 @@ import { parseManifestSources, type ManifestSourceSet } from "../../domain/servi
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 import * as d1 from "../../../d1/compile/index.js";
 import { compileSql, relationNames, type SqlDialect } from "./compileSql.js";
+import { parseRowTemplate, type UserFieldSpec } from "../../domain/model/UserFields.js";
+import { registerUserField } from "../../domain/service/UserReferences.js";
+import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
 
 export type CompilePlanResult =
   | { readonly ok: true; readonly plan: RuntimePlan }
@@ -103,8 +106,18 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
 /** Compile a linked manifest set to the sealed plan. Every refusal is reported, one per SQL source. */
 export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlDialect = d1): Promise<CompilePlanResult> {
   const schemas: Record<string, PlanSchema> = {};
+  const userFields: Record<string, UserFieldSpec> = Object.create(null);
+  const diagnostics: Diagnostic[] = [];
   for (const { manifest: m } of linked.schemas) {
-    const scope = Object.keys(m.spec.scope ?? {})[0]?.toLowerCase();
+    const template = m.spec.scope === undefined ? undefined : parseRowTemplate(m.spec.scope);
+    const scope = template && typeof template === "object" ? template.owner?.toLowerCase() : undefined;
+    const userScopes = template && typeof template === "object" ? template.terms.map(({ column, field }) => {
+      const property = m.spec.schema.properties?.[column];
+      const type = property?.type === "string" ? "string" as const : "number" as const;
+      try { registerUserField(userFields, field, { type, multiple: true, ...(property?.enum ? { enum: property.enum as (string | number)[] } : {}) }); }
+      catch (error) { if (!(error instanceof SqlRefusal)) throw error; diagnostics.push(validateDiagnostic({ code: error.code, severity: "error", path: `schemas/${m.metadata.name}/scope`, message: error.message })); }
+      return { column: column.toLowerCase(), field, type };
+    }) : [];
     const props = m.spec.schema.properties ?? {};
     const lower = (xs: readonly string[]) => xs.map((x) => x.toLowerCase());
     schemas[m.metadata.name.toLowerCase()] = {
@@ -114,6 +127,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       ...(m.spec.uiSchema ? { uiSchema: m.spec.uiSchema } : {}),
       ...(m.spec.localized ? { localized: true } : {}),
       ...(scope ? { scope } : {}),
+      ...(userScopes.length ? { userScopes } : {}),
       ...(m.spec.ttl ? { ttl: m.spec.ttl.field.toLowerCase(), ttlSeconds: m.spec.ttl.expireAfterSeconds } : {}),
       publishing: m.spec.lifecycle === "publishing",
       schema: m.spec.schema,
@@ -125,7 +139,6 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       ...(m.spec.indexes?.length ? { indexes: m.spec.indexes.map((cols) => cols.map(indexColumn)) } : {}),
     };
   }
-  const diagnostics: Diagnostic[] = [];
   // ADR-0037 decision 3: the Views a FROM may name, by name with `-` as `_`; an internal View without input or requires becomes native SQL
   const refs: Record<string, { select?: SqlNode; refusal?: string }> = {};
   const refName = (name: string) => name.toLowerCase().replace(/-/g, "_");
@@ -240,11 +253,76 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     if ("ref" in p.spec.handler) { procedures[p.metadata.name] = { ...common, ...(p.spec.target ? { target: p.spec.target } : {}), handler: { ref: p.spec.handler.ref } }; continue; }
     const plan = (await compile("procedure", p.spec.handler.sql, p.spec.input, source, "/spec/handler/sql"))?.plan;
     const target = p.spec.target ?? (plan ? inferTarget(p, plan.stmts) : undefined);
-    if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), handler: { sql: plan, source: p.spec.handler.sql } };
+    for (const stmt of plan?.stmts ?? []) {
+      const write = stmt.UpdateStmt ?? stmt.InsertStmt, columns = write ? (schemas[write.relation.relname]?.userScopes ?? []).map(u => u.column) : [];
+      const sets = stmt.UpdateStmt?.targetList ?? stmt.InsertStmt?.onConflictClause?.targetList ?? [];
+      if (sets.some((set: SqlNode) => columns.includes(set.ResTarget.name.toLowerCase()))) diagnostics.push(validateDiagnostic({code:'USER_FIELD_POSITION',severity:'error',path:`procedures/${p.metadata.name}/handler/sql`,message:'The scoped column is never writable through SET.'}));
+    }
+    if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), ...(plan.stmts.some(stmt => stmt.InsertStmt && schemas[stmt.InsertStmt.relation.relname]?.userScopes?.length) ? { trustedOnly: true as const } : {}), handler: { sql: plan, source: p.spec.handler.sql } };
   }
   if (diagnostics.length) return { ok: false, diagnostics };
+  // `restrict`: extra row terms a target puts on the Schemas its SQL reads. Same grammar as `scope`; AND-ed, so it never widens.
+  const touched = (node: unknown, includeCtes = false, found = new Set<string>()): Set<string> => {
+    if (!node || typeof node !== "object") return found;
+    const n = node as SqlNode, rel = includeCtes || n.RangeVar?.mantle !== "cte" ? n.RangeVar?.relname : undefined;
+    if (rel) found.add(rel);
+    for (const kind of ["InsertStmt", "UpdateStmt", "DeleteStmt"]) if (n[kind]?.relation?.relname) found.add(n[kind].relation.relname);
+    Object.values(node).forEach(child => touched(child, includeCtes, found)); return found;
+  };
+  const restrictOf = (kind: "views" | "procedures", name: string, raw: Readonly<Record<string, string>> | undefined, stmts: unknown) => {
+    if (!raw) return undefined;
+    const read = touched(stmts), out: Record<string, { owner?: string; terms: { column: string; field: string; type: "string" | "number" }[] }> = {};
+    for (const [key, text] of Object.entries(raw)) {
+      const table = key.toLowerCase(), schema = schemas[table], path = `${kind}/${name}/restrict/${key}`;
+      const fail = (message: string) => { diagnostics.push(validateDiagnostic({ code: "USER_FIELD_CONFLICT", severity: "error", path, message })); };
+      if (!schema || !read.has(table)) { fail(`restrict key '${key}' is not a Schema this target's SQL reads.`); continue; }
+      const template = parseRowTemplate(text);
+      if (typeof template === "string") { fail(`restrict: ${template}`); continue; }
+      const column = (c: string) => Object.keys(schema.fields).find(f => f === c.toLowerCase());
+      // `= auth.uid()` must read a column the system stamps from the caller, or a writer could claim someone else's rows.
+      const owner = template.owner?.toLowerCase();
+      if (owner && owner !== "author_id" && owner !== schema.scope) { fail(`restrict '${template.owner} = auth.uid()': use author_id (stamped from the caller on insert) or the Schema's own '= auth.uid()' scope column; '${template.owner}' is writable.`); continue; }
+      const terms = template.terms.flatMap(({ column: c, field }) => {
+        const found = column(c); if (!found) { fail(`restrict column '${c}' is not a field of '${schema.name}'.`); return []; }
+        const property = schema.schema?.properties?.[schema.names?.[found] ?? c], type = property?.type === "string" ? "string" as const : "number" as const;
+        try { registerUserField(userFields, field, { type, multiple: true, ...(property?.enum ? { enum: property.enum as (string | number)[] } : {}) }); }
+        catch (error) { if (!(error instanceof SqlRefusal)) throw error; fail(error.message); }
+        return [{ column: found, field, type }];
+      });
+      out[table] = { ...(owner ? { owner } : {}), terms };
+    }
+    return Object.keys(out).length ? out : undefined;
+  };
+  for (const { manifest: v } of linked.views) { const view = views[v.metadata.name], restrict = view && restrictOf("views", v.metadata.name, v.spec.restrict, view.stmts); if (restrict) views[v.metadata.name] = { ...view!, restrict }; }
+  for (const { manifest: p } of linked.procedures) {
+    const proc = procedures[p.metadata.name];
+    if (p.spec.restrict && proc && "ref" in proc.handler) { diagnostics.push(validateDiagnostic({ code: "USER_FIELD_CONFLICT", severity: "error", path: `procedures/${p.metadata.name}/restrict`, message: "restrict applies to SQL Procedures; a ref handler restricts rows through its scoped ctx.store." })); continue; }
+    const restrict = proc && "sql" in proc.handler && restrictOf("procedures", p.metadata.name, p.spec.restrict, proc.handler.sql.stmts);
+    if (restrict) procedures[p.metadata.name] = { ...proc!, restrict };
+  }
   const triggers: Record<string, PlanTrigger> = Object.fromEntries(linked.triggers.map(({ manifest: t }) => [t.metadata.name, { source: t.spec.source, procedure: t.spec.target.procedure }]));
-  const sealed = { version: RUNTIME_PLAN_VERSION, dialect: { name: dialect.name, version: dialect.version }, schemas, views, procedures, triggers };
+  const warnings: string[] = [];
+  for (const [field, spec] of Object.entries(userFields)) if (!spec.enum) warnings.push(`USER_FIELD_VALUES_UNENUMERATED: '${field}' has no enum; no generated list of all values is available.`);
+  const scopedFields = (schema: string) => (schemas[schema]?.userScopes ?? []).map(u => u.field).sort().join(",");
+  for (const [name, view] of Object.entries(views)) {
+    const read = [...touched(view.stmts, true)].filter(schema => schemas[schema]);
+    if (view.surface === "public" && read.some(schema => schemas[schema]!.userScopes?.length))
+      warnings.push(`USER_SCOPE_PUBLIC_ANON_EMPTY: public View '${name}' reads field-scoped data; anonymous callers are refused (UNAUTHENTICATED).`);
+    if (view.surface === "admin" && read.some(schema => schemas[schema]!.userScopes?.length))
+      warnings.push(`USER_SCOPE_ADMIN_VALUES: admin View '${name}' reads field-scoped data; admins without values for those fields see no rows.`);
+    const sets = new Set(read.filter(schema => schemas[schema]!.userScopes?.length).map(scopedFields));
+    if (sets.size > 1) warnings.push(`USER_SCOPE_JOIN_DROPS: View '${name}' joins Schemas scoped by different fields (${[...sets].join(" / ")}); rows outside any caller set are dropped.`);
+  }
+  // A Schema that references a field-scoped Schema must carry that Schema's terms, or it would expose rows the referenced scope hides.
+  for (const [name, schema] of Object.entries(schemas)) for (const [field, property] of Object.entries(schema.schema?.properties ?? {})) {
+    const raw = (property as Record<string, unknown>)["x-mantle-ref"], ref = typeof raw === "string" ? raw : (raw as { schema?: string } | undefined)?.schema;
+    const target = ref ? schemas[ref.toLowerCase()] : undefined;
+    for (const term of target ? target.userScopes ?? [] : []) if (!(schema.userScopes ?? []).some(u => u.field === term.field))
+      diagnostics.push(validateDiagnostic({ code: "USER_FIELD_CONFLICT", severity: "error", path: `schemas/${schema.name}/scope`, message: `'${schema.name}.${field}' references '${target!.name}', which is scoped by auth.user('${term.field}'); scope '${schema.name}' by the same field so its rows cannot expose what that scope hides.` }));
+  }
+  if (diagnostics.length) return { ok: false, diagnostics };
+  const sealed = { version: RUNTIME_PLAN_VERSION, dialect: { name: dialect.name, version: dialect.version }, schemas, views, procedures, triggers,
+    ...(Object.keys(userFields).length ? { access: { roles: [], userFields, warnings } } : {}) };
   return { ok: true, plan: { ...sealed, fingerprint: await planFingerprint(sealed) } };
 }
 

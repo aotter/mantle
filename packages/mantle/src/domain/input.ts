@@ -15,6 +15,6 @@ export function conversions(properties: JsonSchema["properties"], binds: Lowered
 
 /** Only build-time authorization assembly; generated queries retain their existing predicates. @internal */
 export const authLines = (requires: RuntimePlan["views"][string]["requires"], path: string): string[] => (requires?.auth?.all ?? []).map((p,index)=>{
-  const allowed=typeof p === "string" ? p === "ctx.admin" ? 'isAdmin(caller)' : 'caller.kind === "user"' : "ctx.auth.scope" in p ? `caller.kind === "user" && caller.scopes.includes(${q(p["ctx.auth.scope"])})` : `${q(p["ctx.admin"])}.some(role => hasAdminRole(caller, role))`;
+  const allowed=typeof p === "string" ? p === "ctx.admin" ? 'isAdmin(caller)' : 'caller.kind === "user"' : `caller.kind === "user" && caller.scopes.includes(${q(p["ctx.auth.scope"])})`;
   return `  deny(caller, ${allowed}, ${q(`${path}/requires/auth/all/${index}`)});`;
 });

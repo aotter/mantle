@@ -1,3 +1,4 @@
+import { modeOf } from "./user-fields.js";
 /** Keyset paging for a generated View boundary: Core printed the first and next page SQL; this binds, checks the cursor and trims. */
 import type { Caller } from "./contracts.js";
 import { binds, type Recipe, type Values } from "./binds.js";
@@ -72,7 +73,7 @@ export async function page<Database, Row>(spec: Paged<Database>, db: Database, c
   const requested = options.limit ?? Math.min(50, cap);
   if (!Number.isInteger(requested) || requested < 1) invalid("limit must be a positive integer.", path + "/limit");
   const limit = Math.min(requested, cap, MAX_PAGE_SIZE);
-  const m = caller.kind === "system" && spec.trusted ? spec.trusted : spec.caller;
+  const m = (modeOf(caller) === "trusted" ? spec.trusted : undefined) ?? spec.caller;
   const values = binds(spec.values, m.binds, caller, input as Readonly<Record<string, unknown>>);
   let keys: unknown[] | undefined;
   if (options.cursor !== undefined) {

@@ -4,16 +4,18 @@
 import { SqlRefusal as Refused, type SqlNode as N } from '../../spec/domain/index.js';
 import type { RelationPosition } from './positions.js';
 import type { StorageSchema as SchemaDef } from '../dialect.js';
-import { classify, rowPolicy, writePolicy, type RowMode as Mode, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
+import { classify, rowPolicy, userScopeTerm, writePolicy, type RowMode as Mode, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
 import { S, num, op, ref as col, target as res } from './ast.js';
+import type { PlanRestrict } from '../../spec/domain/model/RuntimePlan.js';
 
 type Schemas = Record<string, SchemaDef>;
 
 /** A bind a dialect's lowering adds; the dialect resolves it (`MantleDialect.bind`). */
 export type DialectBind = { readonly k: 'dialect'; readonly [key: string]: unknown };
 export type BindSpec =
-  | { k: 'uid' } | { k: 'now' } | { k: 'role' } | { k: 'admin' } | { k: 'cutoff'; seconds: number } | { k: 'const'; value: unknown }
+  | { k: 'uid' } | { k: 'now' } | { k: 'admin' } | { k: 'cutoff'; seconds: number } | { k: 'const'; value: unknown }
   | { k: 'input'; name: string; type: string }
+  | { k: 'user'; field: string; type: 'string' | 'number'; multiple: boolean; scope?: true }
   | DialectBind
   | { k: 'version' }
   | { k: 'cursor'; i: number };
@@ -27,6 +29,8 @@ export type PolicyOpts = {
   schemas: Schemas;
   inputs: Record<string, string>;
   mode?: Mode;
+  /** The target's `restrict` terms per Schema (lower-case name): AND-ed onto its row policy for non-trusted callers. */
+  restrict?: PlanRestrict;
   /** add `AND version = ?` (the version checked by the publishing lifecycle) to a row op's WHERE */
   lockVersion?: boolean;
   /** the status an update moves the entry to (the lifecycle decided it is legal); SQL cannot write `status` */
@@ -56,6 +60,7 @@ export interface LoweringScope {
 
 /** The pieces of a physical statement only the dialect can spell. Each takes the node already rewritten by Core, except where noted. */
 export interface PolicyLowering {
+  anyOf?(x: N, set: N, type: 'string' | 'number'): N;
   /** `input.<name>`: the bind, as the engine reads a value of this Mantle type */
   input(param: N, type: string): N;
   /** A function call, before rewriting (`f` is its name without `pg_catalog.`): its lowering, or undefined to keep it a call. */
@@ -131,6 +136,13 @@ function param$(c: C, spec: BindSpec): N {
 
 /** A term of `rowPolicy` as a predicate on alias `a`. A constant inside a term is part of the rule, so it prints inline. */
 function term(c: C, a: string, t: RowTerm): N {
+  if (t[1] === 'in') {
+    const value = t[2];
+    if (value.k !== 'user' || !c.lower.anyOf) throw new Refused('SQL_UNSUPPORTED', 'User scope needs native set lowering.');
+    const kept = c.lower.anyOf(col(a, t[0]), param$(c, value), value.type);
+    // Both scope forms read the same parameter, preserving numbering and PostgreSQL type.
+    return value.scope ? { Raw: { parts: [`/*s:${value.field}*/`, kept, '/*|*/', or(structuredClone(kept), op('=', num(1), num(1))), '/*;*/'] } } : kept;
+  }
   if (t[1] === "parent") {
     const [column, , value, parent] = t, alias = a === "_mantle_parent" ? "_mantle_parent_" : "_mantle_parent";
     const exists = { SubLink: { subLinkType: "EXISTS_SUBLINK", subselect: { SelectStmt: { targetList: [res(num(1))], fromClause: [{ RangeVar: { relname: parent.table, alias: { aliasname: alias }, inh: true, relpersistence: "p", mantle: "system" } }], whereClause: and(op("=", col(alias, column), col(a, column)), ...(parent.scope ? [op("=", col(alias, parent.scope[0]), col(a, parent.scope[1]))] : []), ...parent.terms.map(t => term(c, alias, t))), limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } } } };
@@ -142,8 +154,11 @@ function term(c: C, a: string, t: RowTerm): N {
   return kind === 'ttl' ? or({ NullTest: { arg: col(a, column), nulltesttype: 'IS_NULL' } }, op('>', col(a, column), value)) : op('=', col(a, column), value);
 }
 /** Where a Schema's visibility rule is rendered (`rowPolicy` spells it). `a` is the alias (or table) the predicate reads through. */
-function visible(s: SchemaDef, a: string, c: C): N | undefined {
-  return c.unsafeNoVisibility ? undefined : and(...rowPolicy(s, c.mode ?? 'caller', c.schemas).map((t) => term(c, a, t)));
+function visible(s: SchemaDef, a: string, c: C, table?: string): N | undefined {
+  if (c.unsafeNoVisibility) return undefined;
+  const r = table !== undefined && c.mode !== 'trusted' ? c.restrict?.[table.toLowerCase()] : undefined;
+  const extra: RowTerm[] = r ? [...(r.owner ? [[r.owner, 'eq', { k: 'uid' }] as const] : []), ...r.terms.map(u => userScopeTerm(u))] : [];
+  return and(...[...rowPolicy(s, c.mode ?? 'caller', c.schemas), ...extra].map((t) => term(c, a, t)));
 
 }
 /** A write's `SET` items beyond the author's own. */
@@ -181,7 +196,7 @@ function wrap(rv: N, c: C): N {
   return {
     RangeSubselect: {
       alias: { aliasname: a },
-      subquery: { SelectStmt: { targetList: targets, fromClause: [{ RangeVar: { relname: rv.relname, inh: true, relpersistence: 'p', mantle: 'system' } }], whereClause: visible(s, rv.relname, c), limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } },
+      subquery: { SelectStmt: { targetList: targets, fromClause: [{ RangeVar: { relname: rv.relname, inh: true, relpersistence: 'p', mantle: 'system' } }], whereClause: visible(s, rv.relname, c, rv.relname), limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } },
     },
   };
 }
@@ -215,7 +230,7 @@ function lowerFunc(n: N, c: C): N {
   const f = n.funcname.map((x: N) => x.String.sval).join('.').replace(/^pg_catalog\./, '');
   switch (f) {
     case 'auth.uid': return param$(c, { k: 'uid' });
-    case 'auth.role': return param$(c, { k: 'role' });
+    case 'auth.role': throw new Refused('AUTH_ROLE_REMOVED', 'auth.role() is removed; decide per-target permission in the application\'s authorize(target, caller) seam.');
     case 'now': { const p = param$(c, { k: 'now' }); return c.lower.system?.(p, 'timestamptz') ?? p; }
   }
   return c.lower.func(f, n, scopeOf(c)) ?? c.lower.call(deep(n, c, 'FuncCall'));
@@ -223,6 +238,7 @@ function lowerFunc(n: N, c: C): N {
 
 // ---- traversal --------------------------------------------------------------------------------------
 const H: Record<string, (n: N, c: C) => N> = {
+  A_Expr: (n, c) => ({ A_Expr: deep(n, c, 'A_Expr') }),
   ColumnRef: (n, c) => {
     const f = n.fields.map((x: N) => x.String?.sval);
     if (f[0] !== 'input' || f.length !== 2) return { ColumnRef: n };
@@ -405,11 +421,13 @@ function update(n: N, c: C): N {
   const s = c.schemas[String(n.relation.relname).toLowerCase()]!, a = alias$(n.relation);
   c.seen?.add('update-target');
   dmlScope(n.relation, c);
+  const restricted = c.mode !== 'trusted' ? c.restrict?.[String(n.relation.relname).toLowerCase()]?.terms ?? [] : [];
+  if ([...(s.userScopes ?? []), ...restricted].some(u => n.targetList.some((target: N) => String(target.ResTarget.name).toLowerCase() === u.column))) throw new Refused('USER_FIELD_POSITION', 'The scoped column is never writable through SET.');
   const out = deep(n, c, 'UpdateStmt');
   c.sel.pop();
   const w = writePolicy(s, 'update', { status: c.status, lock: c.lockVersion });
   out.targetList.push(...sets(w, c));
-  out.whereClause = and(out.whereClause, visible(s, a, c), w.lock && term(c, a, w.lock));
+  out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock));
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { UpdateStmt: out };
 }
@@ -420,12 +438,13 @@ function del(n: N, c: C): N {
   const out = deep(n, c, 'DeleteStmt');
   c.sel.pop();
   const w = writePolicy(s, 'delete', { lock: c.lockVersion });
-  out.whereClause = and(out.whereClause, visible(s, a, c), w.lock && term(c, a, w.lock));
+  out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock));
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { DeleteStmt: out };
 }
 function insert(n: N, c: C): N {
   const s = c.schemas[String(n.relation.relname).toLowerCase()]!;
+  if (s.userScopes?.length && c.mode !== 'trusted') throw new Refused('USER_FIELD_POSITION', 'Procedure INSERT/upsert into a field-scoped Schema requires trusted mode; use its scoped Store.');
   c.seen?.add('insert-target');
   const out = deep(n, c, 'InsertStmt');
   const named = (x: string) => n.cols.some((r: N) => r.ResTarget.name === x);
@@ -445,10 +464,13 @@ function insert(n: N, c: C): N {
     // every unique index of a scoped Schema leads with the scope field: an author may name it in the target or leave it out
     const named = (oc.infer?.indexElems ?? []).some((e: N) => String(e.IndexElem?.name ?? '').toLowerCase() === s.scope);
     if (s.scope && oc.infer && !named) oc.infer.indexElems.unshift({ IndexElem: { name: s.scope, ordering: 'SORTBY_DEFAULT', nulls_ordering: 'SORTBY_NULLS_DEFAULT' } });
+    if (oc.infer) (s.userScopes ?? []).forEach((u, i) => { if (!(oc.infer.indexElems ?? []).some((e: N) => String(e.IndexElem?.name ?? '').toLowerCase() === u.column))
+      oc.infer.indexElems.splice((s.scope ? 1 : 0) + i, 0, { IndexElem: { name: u.column, ordering: 'SORTBY_DEFAULT', nulls_ordering: 'SORTBY_NULLS_DEFAULT' } }); });
     if (oc.action === 'ONCONFLICT_UPDATE') {
+      if (s.userScopes?.some(u => oc.targetList.some((target: N) => String(target.ResTarget.name).toLowerCase() === u.column))) throw new Refused('USER_FIELD_POSITION', 'The scoped column is never writable through SET.');
       c.seen?.add('conflict-update');
       oc.targetList.push(...sets(w, c));
-      oc.whereClause = and(oc.whereClause, visible(s, n.relation.relname, c)); // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one
+      oc.whereClause = and(oc.whereClause, visible(s, n.relation.relname, c, n.relation.relname)); // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one
     }
   }
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));

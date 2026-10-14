@@ -6,6 +6,7 @@ import { escapeLike, ident, likeEscape, type Dialect } from "./common.js";
 export { ident, escapeLike, likeEscape };
 
 export const param = (n: number): string => `?${n}`;
+export const anyOf = (column: string, placeholder: string): string => `${column} IN (SELECT value FROM json_each(${placeholder}))`;
 export const like = (): string => "LIKE"; // SQLite's LIKE already ignores ASCII case
 /** A write that broke a UNIQUE index or the id's UNIQUE (bun:sqlite and D1 word it the same). */
 export const unique = (error: unknown): boolean => /UNIQUE constraint failed/.test(String((error as Error)?.message));
@@ -30,4 +31,4 @@ export function search(table: string, fields: readonly string[], alias: string, 
   const phrase = `'"' || replace(${query}, '"', '""') || '"'`;
   return `CASE WHEN length(${query}) >= 3 THEN ${alias}._rid IN (SELECT rowid FROM ${fts} WHERE ${fts} = ${phrase}) ELSE (${searchLike(fields.map(field => `${alias}.${ident(field)}`), query, "LIKE")}) END`;
 }
-export const dialect: Dialect = { param, ident, escapeLike, likeEscape, like, search, wireTimestamp, wireDate, now, cutoff, timestamp, date, cast };
+export const dialect: Dialect = { param, ident, escapeLike, likeEscape, like, search, wireTimestamp, wireDate, now, cutoff, timestamp, date, cast, anyOf };

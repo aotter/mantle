@@ -90,7 +90,7 @@ export const corpus: Item[] = [
     { sql: "SELECT CAST(stock AS text) AS t, round(stock) AS i, CAST(stock AS float8) AS f, stock <> 0 AS b, CAST('false' AS bool) AS bf, CAST('yes' AS bool) AS bt, stock::text || 'x' AS c FROM items WHERE id = 'a'" }),
   v('literal-casts', "SELECT '2026-03-08 10:00:00+00'::timestamptz AS ts, date '2026-03-08' AS d, interval '36 hours' AS iv, interval '90 minutes' AS im, '12.34'::numeric(12, 2) AS n, CAST('2026-03-08T10:00:00.123456Z' AS timestamptz) AS us FROM items WHERE id = 'a'",
     [{ ts: us(2026, 3, 8, 10), d: Date.UTC(2026, 2, 8) / 86_400_000, iv: 129_600_000_000, im: 5_400_000_000, n: 1234, us: us(2026, 3, 8, 10) + 123456 }]),
-  v('mantle-refs', 'SELECT auth.uid() AS uid, auth.role() AS role, now() AS now, input.x AS x FROM items WHERE id = \'a\'', [{ uid: 'o1', role: 'admin', admin: true, now: NOW, x: 3 }], { x: 'int8' }, { x: 3 }),
+  v('mantle-refs', 'SELECT auth.uid() AS uid, now() AS now, input.x AS x FROM items WHERE id = \'a\'', [{ uid: 'o1', now: NOW, x: 3 }], { x: 'int8' }, { x: 3 }),
   v('date-trunc', "SELECT date_trunc('hour', now()) AS h, date_trunc('day', now()) AS d, date_trunc('week', now()) AS w, date_trunc('month', now()) AS m, date_trunc('year', now()) AS y FROM items WHERE id = 'a'",
     [{ h: NOW, d: NOW, w: us(2026, 9, 28), m: us(2026, 9, 1), y: us(2026, 1, 1) }]), // site time zone UTC here; DST cases are in cases/types.ts
   v('extract', "SELECT extract(year FROM now()) AS y, extract(month FROM now()) AS mo, extract(day FROM now()) AS d, extract(dow FROM now()) AS dow, extract(hour FROM now()) AS h FROM items WHERE id = 'a'",
@@ -121,6 +121,6 @@ export const typedRows: Readonly<Record<string, unknown[][]>> = {
     { cat: 'y', n: 1, d: 1, s: 9, lo: 9, hi: 9, av: 9, names: ['cherry'], cats: ['y'], obj: { c: 9 } }]],
   casts: [[{ t: '5', i: 5, f: 5, b: true, bf: false, bt: true, c: '5x' }]],
   'literal-casts': [[{ ts: iso(2026, 3, 8, 10), d: '2026-03-08', iv: 129_600_000_000, im: 5_400_000_000, n: '12.34', us: iso(2026, 3, 8, 10, '123456') }]],
-  'mantle-refs': [[{ uid: 'o1', role: 'admin', admin: true, now: iso(2026, 9, 29), x: 3 }]],
+  'mantle-refs': [[{ uid: 'o1', now: iso(2026, 9, 29), x: 3 }]],
   'date-trunc': [[{ h: iso(2026, 9, 29), d: iso(2026, 9, 29), w: iso(2026, 9, 28), m: iso(2026, 9, 1), y: iso(2026, 1, 1) }]],
 };

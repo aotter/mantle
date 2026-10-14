@@ -1,6 +1,6 @@
 # View
 
-A View requires `surface: public | admin | internal` and one `sql` SELECT. Optional keys include title, description, input, requires, uiSchema (admin only), and cache. The app imports its generated typed function and supplies a native handle, verified Caller and driver-ready input.
+A View requires `surface: public | admin | internal` and one `sql` SELECT. Optional keys include title, description, input, requires, restrict, uiSchema (admin only), and cache. The app imports its generated typed function and supplies a native handle, verified Caller and driver-ready input.
 
 ## SQL
 
@@ -9,6 +9,10 @@ PostgreSQL syntax is parsed and checked at generation. Reads may reference decla
 SQLite supports the compiler's subset: scalar expressions, comparisons, AND/OR/NOT, CASE, COALESCE, supported casts, INNER/LEFT JOIN, subqueries, grouping/aggregates, supported windows, ordered LIMIT, date operations and declared Mantle search/geo functions. PostgreSQL additionally supports recursive CTEs, lateral relations, more window/aggregate forms, ILIKE and jsonb operators where the allowlist permits them. Unsupported SQL fails with a source position; generation is the authority for each target.
 
 OFFSET, arbitrary functions/relations, DDL and transaction control are not a read escape hatch. Use keyset paging. Select latitude/longitude explicitly instead of native geo projections.
+
+## Restrict
+
+`restrict` narrows one target by Schema: `restrict: { orders: "region IN auth.user('region')" }`. Each key is a Schema the SQL reads; each value uses the [scope](schema.md#field-scope) grammar, and a `= auth.uid()` term only on `author_id` or that Schema's own owner column. The effective rule is the Schema's scope AND the restrict. `{ all: true }` never lifts a restrict term: such a caller is refused with `AUTH_DENIED`. A View with `restrict` cannot use a shared cache.
 
 ## Search and totals
 

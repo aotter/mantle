@@ -1,3 +1,4 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 import {test,expect} from "bun:test";
 import {Database} from "bun:sqlite";
 import {SQL} from "bun";
@@ -33,7 +34,7 @@ test("locale page reads stay at 50 keys and 500 child rows without per-parent re
  const files=await generateOrThrow("bun-sqlite",await loadFixtureSources("translations.yaml")),dir=await mkdtemp(join(tmpdir(),"mantle-locale-page-")),db=new Database(":memory:");
  try {
   await writeGenerated(dir,files);db.exec(files["schema.sql"]!);const app=await import(join(dir,"generated.ts")),{translationLocales}=await import(join(dir,"translations.ts"));
-  const caller={kind:"user",subject:"a",role:"admin",admin:true,scopes:[],credential:"session",credentialId:null,clientId:null},store=app.store(db,caller),parents=[];
+  const caller=fixtureCaller({kind:"user",subject:"a",role:"admin",admin:true,scopes:[],credential:"session",credentialId:null,clientId:null}),store=app.store(db,caller),parents=[];
   for(let i=0;i<51;i++)parents.push(await store.collection("posts").insert({slug:"p"+i,title:"parent"}));
   for(let i=0;i<605;i++)db.query("INSERT INTO translations(id,version,created_at,updated_at,owner,slug,locale,title) VALUES (?,1,0,0,'a','p0',?,'t')").run("bulk-"+String(i).padStart(4,"0"),"custom-"+i);
   const queries:string[]=[],handle={query(sql:string){queries.push(sql);return db.query(sql);}};
@@ -52,7 +53,7 @@ test("selected translation helper shakes out publishing operations",async()=>{
 
 test("scoped translations refuse different or missing child scope columns",async()=>{
  const {generateFromSources}=await import("../src/infrastructure/generate.js"),[source]=await loadFixtureSources("translations.yaml"),parts=source!.text.split("---");
- for(const child of [parts[1]!.replaceAll("owner","tenant"),parts[1]!.replace(" scope: {owner: auth.uid()}\n","").replaceAll("owner,","").replace("owner: {type: string}, ","")]){
+ for(const child of [parts[1]!.replaceAll("owner","tenant"),parts[1]!.replace(' scope: "owner = auth.uid()"\n',"").replaceAll("owner,","").replace("owner: {type: string}, ","")]){
   const result=await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"scope.yaml",text:[parts[0],child,parts[2]].join("---")}]}});
   expect(result.ok).toBe(false);if(result.ok)throw Error("unsafe translation scope generated");
   expect(result.diagnostics).toContainEqual(expect.objectContaining({code:"GENERATE_UNSUPPORTED",path:"schemas/translations/translates",message:expect.stringContaining("same child scope column 'owner'")}));

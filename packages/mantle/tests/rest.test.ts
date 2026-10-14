@@ -1,3 +1,4 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 import {test,expect} from "bun:test";
 import {Database} from "bun:sqlite";
 import {mkdtemp,rm} from "node:fs/promises";
@@ -30,7 +31,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: {name: edit}
 spec:
- requires: {auth: {all: [{ctx.admin: [admin]}]}}
+ requires: {auth: {all: [ctx.admin]}}
  input: {type: object, required: [id,title,version], properties: {id: {type: string}, title: {type: string}, version: {type: integer}}, additionalProperties: false}
  output: {type: object}
  handler: {sql: 'UPDATE notes SET title=input.title WHERE id=input.id AND version=input.version RETURNING id,title'}
@@ -42,7 +43,7 @@ spec:
  source: {kind: http, method: PUT, path: '/api/notes/{id}'}
  target: {procedure: edit}
 `;
-const user=(role:string|null="admin",credential="api-key")=>({kind:"user",subject:"s",role,admin: role === "admin",scopes:[],credential,credentialId:null,clientId:null});
+const user=(role:string|null="admin",credential: import("../src/kernel/contracts.js").CredentialKind="api-key")=>(fixtureCaller({kind:"user",subject:"s",role,admin: role === "admin",scopes:[],credential,credentialId:null,clientId:null}));
 test("REST selected routes: paging, validation, auth, OCC, method, composition and session origin",async()=>{
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"rest.yaml",text:source}]);
  expect(files["rest.ts"]).not.toContain("secret.js");

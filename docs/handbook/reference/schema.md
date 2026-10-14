@@ -9,7 +9,7 @@ metadata: { name: orders }
 spec:
   title: Orders
   lifecycle: operational
-  scope: { owner: auth.uid() }
+  scope: "owner = auth.uid()"
   uniqueIndexes: [[owner, orderNumber]]
   searchableFields: [orderNumber]
   checks: ["qty > 0"]
@@ -46,7 +46,7 @@ Generated types constrain Store fields and writes; Store does not interpret a JS
 
 Schemas default to operational. Publishing opts into draft/published/archived and generated admin/system transitions. Store cannot assign system columns or scope; generated policy fills them. See [lifecycle and locales](../concepts/lifecycle-and-locales.md).
 
-Scope is one required string bound to `auth.uid()`, leading an index and every unique index. User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
+Scope accepts at most one required owner string bound to `auth.uid()` and one required non-null string user-field partition, each leading an index. Owner and field columns prefix every unique index in that order. User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
 
 `localized` and `translates: { parent, on }` declare a translation child. Parent visibility and publication are retained, with matching scope where needed. Locale values stay plain strings.
 
@@ -63,3 +63,11 @@ The runtime never creates, alters or checks tables. Initial DDL is for an empty 
 `fields.<name>.widget/options` select supported controls or extension contributions; `list.primaryField`, columns/cells and enum `filterField` select list presentation; `nav.standalone/parentField` control child navigation; panels select record sidebars. Generation validates these against declared fields/indexes and selected extension declarations. Root `readOnly` disables generic Admin writes, not declared Procedures. `x-mantle-ref` relates a field to another Schema id or single-field unique field.
 
 See [Admin](../guides/admin-ui.md), [extensions](../guides/admin-extensions.md) and [diagnostics](diagnostics.md).
+
+### Field scope
+
+`scope` is one predicate of terms joined by `AND`: at most one `<column> = auth.uid()` and any number of `<column> IN auth.user('<field>')`, for example `scope: "tenant = auth.uid() AND region IN auth.user('region')"`. Scoped columns are required, non-null, and lead an index. The scope protects every SQL relation, Store, REST/MCP and native Admin access.
+
+A caller whose value for a field is `{ all: true }` drops that field's term only; the other terms still apply. Generated SQL holds one statement per target and selects the form for each caller at run time; values are always bound parameters. Neither roles nor the admin layer widen a field scope or a translation parent's visibility. A Schema whose `x-mantle-ref` points to a field-scoped Schema must carry the same scope terms.
+
+For inserts, one allowed partition autofills a missing value; multiple values require an explicit allowed partition, and missing/empty values fail with `AUTH_DENIED`. Callers holding `{ all: true }` and system callers always provide an explicit partition. Procedure INSERT/upsert is trusted-only; use the scoped Store for user writes. The partition is never writable through SET, including upsert and native Admin patch. Reads and writes to an excluded id behave like a missing row. SQLite binds a JSON array; PostgreSQL binds a quoted, escaped array. Public Views over field scope warn that anonymous callers are refused.

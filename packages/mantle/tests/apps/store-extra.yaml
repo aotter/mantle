@@ -4,7 +4,7 @@ metadata: {name: session_notes}
 spec:
   title: Expiring notes
   lifecycle: operational
-  scope: {owner: auth.uid()}
+  scope: "owner = auth.uid()"
   ttl: {field: expiresAt, expireAfterSeconds: 0}
   indexes: [[owner, body]]
   schema:

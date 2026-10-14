@@ -1,3 +1,4 @@
+import { userReferences } from "../domain/userReferences.js";
 /** Selected application bindings: compiled checks/native SQL; only the app depends on Admin adapters. */
 import {collectionOf} from "../build/compiler.js";
 import { enumOptions, type JsonSchema } from "../build/compiler.js";
@@ -25,7 +26,7 @@ function adminProperty(property:JsonSchema):JsonSchema {
 }
 function checks(s: Schema, full: boolean): JsonSchema {
   const properties = Object.fromEntries(Object.entries(s.schema.properties ?? {}).filter(([name]) => name.toLowerCase() !== s.scope&&s.fields[name.toLowerCase()]!=="geo").map(([name,property])=>[name,adminProperty(property)]));
-  return {...s.schema,properties,required:full ? (s.schema.required ?? []).filter(name=>Object.hasOwn(properties,name)) : [],additionalProperties:false};
+  return {...s.schema,properties,required:full ? (s.schema.required ?? []).filter(name=>Object.hasOwn(properties,name) && !(s.userScopes ?? []).some(u => u.column === name.toLowerCase())) : [],additionalProperties:false};
 }
 const allowed = (requires: Parameters<typeof authLines>[0], path: string) => {
   const lines = authLines(requires,path);
@@ -44,8 +45,9 @@ function sqlConstants(value:unknown):{code:string;constants:string[]} {
 export function emitAdminBindings(input: GenerateInput, refuse: (path:string,message:string)=>void): Record<string,string> {
   if (!input.admin) return {};
   const {plan,lowered,target}=input, sqlite=isSqlite(target), refs=Object.values(plan.procedures).some(p=>"ref" in p.handler), files:Record<string,string>={};
-  const imports=[databaseImport(target),'import {wireRows,type Caller,type Row} from "@aotter/mantle/contracts";','import {deny,isAdmin,hasAdminRole} from "@aotter/mantle/contracts";','import {invalid} from "@aotter/mantle/surface";',...(refs?['import type {Handlers} from "./generated.js";']:[]),'import {bootstrap,allCollections} from "./admin-descriptors.js";','import type {View,Operation} from "@aotter/mantle-admin/server";','import type {EntrySchema} from "@aotter/mantle-admin/server/entries";'];
-  imports.push('import {nativePage,nativeStatistics,nativeText} from "@aotter/mantle-admin/server/native";',`import * as D from "@aotter/mantle/dialect/${sqlite?"sqlite":"postgres"}";`,`import {read,procedure} from "@aotter/mantle/driver/${target==="bun-sqlite"?"bun-sqlite":target==="cloudflare-d1"?"d1":"postgres"}";`,`const adapter={read,procedure,values:${sqlite?"D":`{...D,timestamp:(v:Parameters<typeof D.timestamp>[0])=>{if(typeof v==="string"&&/^0000-/.test(v.trim()))invalid("PostgreSQL timestamps require a nonzero year.","admin/input");return D.timestamp(v);},date:(v:string)=>{if(/^0000-/.test(v.trim()))invalid("PostgreSQL dates require a nonzero year.","admin/input");return D.date(v);}}`},param:D.param,escapeLike:D.escapeLike,sqlite:${sqlite}} as const;`);
+  const user = userReferences(plan, sqlite);
+  const imports=[...(user.used ? [user.code] : []), databaseImport(target),'import {wireRows,type Caller,type Row} from "@aotter/mantle/contracts";','import {deny,isAdmin} from "@aotter/mantle/contracts";','import {invalid} from "@aotter/mantle/surface";',...(refs?['import type {Handlers} from "./generated.js";']:[]),'import {bootstrap,allCollections} from "./admin-descriptors.js";','import type {View,Operation} from "@aotter/mantle-admin/server";','import type {EntrySchema} from "@aotter/mantle-admin/server/entries";'];
+  imports.push('import {nativePage,nativeStatistics,nativeText} from "@aotter/mantle-admin/server/native";',`import * as D from "@aotter/mantle/dialect/${sqlite?"sqlite":"postgres"}";`,`import {read,procedure} from "@aotter/mantle/driver/${target==="bun-sqlite"?"bun-sqlite":target==="cloudflare-d1"?"d1":"postgres"}";`,`const adapter={read,procedure,values:${sqlite ? (user.used ? "{...D,...USER_VALUES}" : "D") :`{...D,${user.used ? "...USER_VALUES," : ""}timestamp:(v:Parameters<typeof D.timestamp>[0])=>{if(typeof v==="string"&&/^0000-/.test(v.trim()))invalid("PostgreSQL timestamps require a nonzero year.","admin/input");return D.timestamp(v);},date:(v:string)=>{if(/^0000-/.test(v.trim()))invalid("PostgreSQL dates require a nonzero year.","admin/input");return D.date(v);}}`},param:D.param,escapeLike:D.escapeLike,sqlite:${sqlite}} as const;`);
   const schemas:string[]=[], views:string[]=[], adminViews:string[]=[], operations:string[]=[], pageSpecs:string[]=[];
   for (const [n,s] of Object.values(plan.schemas).entries()) {
     const schemaPath=`schemas/${s.name}/admin`, declared=Object.keys(s.fields).filter(f=>f!==s.scope), writable=declared.filter(f=>scalar(s.fields[f])||s.fields[f]==="json");
@@ -103,7 +105,7 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
     if(filterTransforms.some(t=>t.includes("encode")))imports.push('import {encodeDate,encodeTimestamptz} from "@aotter/mantle/scalars";');
     const filterReads=Object.entries(filters).map(([field,s])=>{const type=[s.type].flat().find(t=>t&&t!=="null");return `if(params.has(${q("filter."+field)})&&params.get(${q("filter."+field)})!=="")filters[${q(field)}]=${type==="boolean"?`params.get(${q("filter."+field)})==="true"?true:params.get(${q("filter."+field)})==="false"?false:invalid("Expected true or false.",${q("views/"+name)})`:["number","integer"].includes(type??"")?`Number(params.get(${q("filter."+field)}))`:`params.get(${q("filter."+field)})!`};`;});
     const cursorKinds=(input.paging?.[name]?.types??[]).map(type=>type==="bool"?"bool":type==="integer"||type==="int8"?"int":type==="int4"?"int4":type.startsWith("numeric(")?"numeric":type==="real"||type==="float8"?"float":type==="date"?"date":type==="timestamptz"?"timestamp":"text");
-    const modes=Object.fromEntries(Object.entries(pageData).map(([mode,p])=>[mode,{...p,binds:recipesOf(p, Object.keys(v.input?.properties??{}),message=>refuse(`views/${name}/admin`,message))}]));
+    const modes=Object.fromEntries(Object.entries({caller:pageData.caller,trusted:pageData.trusted}).map(([mode,p])=>[mode,{...p,binds:recipesOf(p, Object.keys(v.input?.properties??{}),message=>refuse(`views/${name}/admin`,message))}]));
     pageSpecs.push(`const viewPage${n}=${q({path:"views/"+name,cap:v.stmts[0]?.SelectStmt.limitCount?.A_Const?.ival?.ival??500,cursorKinds,...modes})} as const;`);
     imports.push(`const allowsView${n}=${allowed(v.requires,`views/${name}`)};`);
     if(v.surface==="admin")adminViews.push(`view${n}`);

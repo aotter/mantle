@@ -1,3 +1,4 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 import { expect, test, spyOn } from "bun:test";
 import { mcp, type Tool } from "../src/kernel/mcp.js";
 import { ContractError } from "../src/kernel/contracts.js";
@@ -16,7 +17,7 @@ const refused = (build: () => unknown, fragment: string) => {
 };
 const resource = (uri: string, renders: string[] = []): McpAppResource => ({ uri, name: uri.slice(5), html: "<h1>App</h1>", renders });
 const handle = (apps?: Parameters<typeof mcp<unknown, null>>[1]["apps"]) => mcp(tools, {
-  db: () => null, caller: () => ({ kind: "user", subject: "u", role: "admin", admin: true, scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null }), apps,
+  db: () => null, caller: () => (fixtureCaller({ kind: "user", subject: "u", role: "admin", admin: true, scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null })), apps,
 });
 const call = async (api: ReturnType<typeof handle>, method: string, params: Record<string, unknown> = {}, surface = "public", ui: boolean | null = true) => {
   const response = await api(new Request(`https://app.test/mcp${surface === "admin" ? "/admin/" : "/"}`, {
@@ -119,7 +120,7 @@ test("App bindings are checked once per endpoint and render failures never expos
 
 test("the admin tool table loads only for an admin caller", async () => {
   let loads = 0, role: string | null = "admin", kind: "user" | "anonymous" = "anonymous";
-  const api = mcp<unknown, null>(() => { loads++; return tools; }, { db: () => null, caller: () => kind === "anonymous" ? { kind } : { kind, subject: "u", role, admin: role === "admin", scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null } });
+  const api = mcp<unknown, null>(() => { loads++; return tools; }, { db: () => null, caller: () => kind === "anonymous" ? { kind } : fixtureCaller({ kind, subject: "u", role, admin: role === "admin", scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null }) });
   const list = () => api(new Request("https://app.test/mcp/admin", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }), {});
   expect((await list())!.status).toBe(401);
   kind = "user"; role = "reader";

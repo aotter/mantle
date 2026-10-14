@@ -108,7 +108,8 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
   const wireLowered = lower(true).lowered;
   if (postgres) {
     const seen = new Set<LoweredStatement>();
-    for (const [kind, all] of [["views", lowered.views], ["views", wireLowered.views], ["procedures", lowered.procedures]] as const) for (const [name, modes] of Object.entries(all)) {
+    const plans = [lowered, wireLowered];
+    for (const plan of plans) for (const [kind, all] of [["views", plan.views], ["procedures", plan.procedures]] as const) for (const [name, modes] of Object.entries(all)) {
       for (const statement of Object.values(modes).flat() as LoweredStatement[]) if (!seen.has(statement)) { seen.add(statement); castInputs(statement, `${kind}/${name}`, refusals);
         if ("paged" in statement) for (const page of Object.values((statement as import("../build/compiler.js").LoweredView).paged)) {
           const inputPage = { ...statement, sql:page.sql };
@@ -131,5 +132,5 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
   if (!result.ok) return result;
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.admin ? adminIndexes(compiled.plan.schemas, !postgres) : []), ...(schema?.() ?? [])];
   const { "site-schema.sql": siteSql = "", ...files } = result.files;
-  return { ...result, warnings: outputNameWarnings(compiled.plan), files: { ...files, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
+  return { ...result, warnings: [...outputNameWarnings(compiled.plan), ...(compiled.plan.access?.warnings ?? [])], files: { ...files, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
 }

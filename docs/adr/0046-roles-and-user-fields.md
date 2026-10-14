@@ -1,6 +1,6 @@
 # ADR-0046: Roles and user fields in SQL scope
 
-**Status:** Accepted for 0.2.0 (2026-10-14, issue #1492).
+**Status:** Accepted for 0.2.0 (2026-10-14, issue #1492), amended the same day by the section "Amendment: enforcement only", which takes precedence over the sections it names.
 
 **Date:** 2026-10-13
 
@@ -34,6 +34,97 @@ Mantle needs one rule shape that works in three places:
 3. A managed host or gateway authenticates its own people in front of the application and
    supplies the same user shape. The application never learns how the host computed
    it.
+
+## Amendment: enforcement only (2026-10-14)
+
+**Principle.** Mantle enforces row access and verifies forwarded calls. It does not decide which values a caller holds.
+- Deciding values belongs to the identity system or gateway in front of the application.
+- *Roles decide what a caller may call; caller values decide which rows it sees.* Each Schema has exactly one row template, so nothing merges and a role never widens rows.
+- A gateway built on Mantle itself must be able to implement its decisions with Mantle's own primitives.
+
+This amendment takes precedence over the sections listed under "Superseded".
+
+### Caller values
+- A caller carries `roles` and `fields`. `roles` is Better Auth's `user.role`, split exactly as Better Auth splits it. Role names may contain `-`, and a malformed role string fails fast, naming the role.
+- A field value is one of:
+  - a string;
+  - a number;
+  - an array of strings or numbers;
+  - the typed state `{ all: true }`, which is never a magic string.
+- Values are validated (§2), branded and deep-frozen. Anonymous callers carry none.
+- Each field's type, enum and arity come from the columns it is compared with. Two uses that disagree fail with `USER_FIELD_CONFLICT`.
+
+### Schema `scope`: one row template
+A Schema's `scope` is one predicate string with a fixed grammar. Conditions are joined with AND only:
+
+```
+predicate := term [AND term ...]
+term      := <column> = auth.uid()
+           | <column> IN auth.user('<field>')
+```
+
+```yaml
+scope: "region IN auth.user('region') AND store IN auth.user('stores')"
+```
+
+- **Enforcement.** The scope applies to every read and write of the Schema, at all the positions listed in §4: Views, joins, subqueries, CTEs, the Store, the Admin generic routes and export, paging, translation parents, and UPDATE/DELETE.
+- **Writes.** Inserts must fall inside the caller's set. Scoped columns are never SET. Uniqueness is partitioned by the scoped columns. A row outside the set behaves as missing.
+- **Per term:**
+  - an array lowers to `IN`;
+  - `{ all: true }` drops that term only, so the other terms still apply;
+  - a missing or empty value means no row. The kernel refuses this before any SQL runs, and correctness never relies on NULL semantics.
+- **`= auth.uid()` columns are stamped by the system.** They are filled from the caller and never writable.
+- **References.** A Schema whose `x-mantle-ref` points to a scoped Schema must carry that Schema's scope terms. Otherwise generate fails and names the missing term.
+- **No roles in row rules.** The role escape (`auth.hasRole(...) OR …`) is withdrawn.
+
+### `restrict` on Views and Procedures
+```yaml
+restrict: { orders: "owner = auth.uid()" }
+```
+- The grammar is the same, but only value terms are allowed, keyed by a Schema that the target's SQL reads. An unknown key fails generate.
+- The effective rule is `scope AND restrict`, so `restrict` never widens.
+- `{ all: true }` drops scope terms only. It never drops a `restrict` term.
+
+### SQL
+`auth.user()` and `auth.hasRole()` are refused in View and Procedure SQL with `USER_REF_SCOPE_ONLY`, whose message points to `restrict`. `auth.role()` stays removed.
+
+### Calls
+- Better Auth `adminRoles` decides the admin layer, and `requires: ctx.admin` means any admin.
+- Per-target permission goes through one optional seam, `authorize(target, caller) => boolean | Promise<boolean>`.
+  - Mantle calls it after its own gates and before any SQL, on every surface: REST, MCP (including tool listing), web and the Admin generic routes.
+  - When it returns false, the call fails with 403.
+
+### Generate warnings
+- An admin-surface target reads a scoped Schema (admins without values see nothing).
+- A View joins Schemas scoped by different fields (rows outside either set are dropped).
+
+### Gateways (§6–§7, extended)
+- **Gateway mode.** An application can declare that it runs behind a trusted gateway. It then accepts only gateway-signed calls (`props.mantle`) on every surface, and refuses its own sessions.
+- **Read-only execution** for previews, tests and CI.
+  - Queries run; writes are answered with the count of rows they would affect, rewritten as a `SELECT`.
+  - Procedures with `handler.ref` are refused.
+  - Events are marked as read-only.
+- **`onAccess(event)` hook**, fired on every path, including denials, with:
+  - the target and caller;
+  - the outcome and reason;
+  - the resolved terms per Schema;
+  - the row count;
+  - a read-only flag.
+- **`describeApp(plan)`** is computable before deploy. It lists:
+  - the targets: id, `targetHash`, surface and input schema;
+  - each Schema's scope terms and each target's `restrict` terms, with field types and enums;
+  - a diff of scope and `restrict` terms between two plans, so that widening is visible.
+
+### Testing
+`authenticatedAs(user)`.
+
+### Superseded
+- §1 and §1a: `auth.hasRole` in scope or SQL, and role lists in `requires`.
+- §3: SQL references.
+- §4: the single-field scope shape and the role escape; replaced by the predicate above.
+- §5, §8, §9 and §10: wherever they conflict with this amendment.
+
+Everything else stands.
 
 ## Decision
 
@@ -250,18 +341,11 @@ for groups or teams) feeds the same references.
   it can see and reports a field that has no stored or derived source
   (`USER_FIELD_UNSOURCED`, a warning).
 
-The handbook gives Better Auth recipes for common shapes (roles with the admin plugin,
-a region field, team membership as a field, a small plugin for groups). Agents working
-on a self-hosted application are pointed to them.
+The handbook shows how fields are filled from Better Auth (`additionalFields` with `input: false`, and `customSession`).
 
 **A host (section 6).** A host supplies its own people as admin callers of the same shape. Members of a
 hosted application still sign in through the application's own Better Auth, so member
 roles and fields come from the same configuration everywhere.
-
-A self-hosted application can reach the same model as a managed host: a Better Auth
-plugin with groups and attribute mapping that sets `user.role` and fields produces the
-same callers. A host adds operation and governance around it, not a different
-mechanism.
 
 **Tests and local development (section 10).** Test tools build users of the same shape.
 
@@ -428,15 +512,13 @@ These paths ignore scope by design. The handbook lists them:
   - The mechanism is open source: the SQL references,
     enforcement, the Better Auth wiring, the host contract, the test tools and the
     conformance suite.
-  - Deciding who holds which roles and field values (groups, attribute mapping, grants,
-    audit) belongs to whoever operates the application. Self-hosted, that is the
-    application's own Better Auth configuration and plugins; a self-hosted application
-    that builds those plugins reaches the same model a managed host offers.
+  - Deciding who holds which roles and field values belongs to the identity system or
+    gateway in front of the application, not to Mantle.
   - The same references serve members and admins.
 - **Authors and agents.** An author declares nothing new and writes rules with names
   agents already know: Better Auth's `user.role` and `user.<field>`, and the
   `hasRole` predicate. What a self-hosted application can supply depends on its Better
-  Auth setup, and the handbook recipes cover it. What a host can supply is the host's
+  Auth setup. What a host can supply is the host's
   documentation to publish.
 - **Breaking changes for the unreleased 0.2:**
   - `auth.role()` removed in favour of `auth.hasRole()`;

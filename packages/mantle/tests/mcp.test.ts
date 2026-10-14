@@ -1,3 +1,5 @@
+import { sdkFixtureCaller } from "./apps/fixtures.js";
+import { fixtureCaller } from "./apps/fixtures.js";
 import {expect,test,spyOn} from "bun:test";
 import {Database} from "bun:sqlite";
 import {resolve} from "node:path";
@@ -34,7 +36,7 @@ kind: Trigger
 metadata: {name: add-item-mcp}
 spec: {source: {kind: mcp, surface: public}, target: {procedure: add-item}}
 `;
-const user={kind:"user",subject:"u",role:"admin", admin: true,scopes:["mcp"],credential:"oauth",credentialId:null,clientId:null};
+const user=fixtureCaller({kind:"user",subject:"u",role:"admin", admin: true,scopes:["mcp"],credential:"oauth",credentialId:null,clientId:null});
 test("official SDK initializes, lists only surface tools, calls shared validation/paging, refuses auth and cookie writes",async()=>{
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"mcp.yaml",text:source}]);
  const dir=await mkdtemp(resolve(import.meta.dir,".mcp-")),db=new Database(":memory:");
@@ -54,9 +56,9 @@ test("official SDK initializes, lists only surface tools, calls shared validatio
   const ok=await call("tools/call",{name:"add_item",arguments:{title:"Hello"}});expect(ok.data.result.isError).toBeUndefined();expect(ok.readOnly).toBe(false);
   const page=await call("tools/call",{name:"items",arguments:{limit:1}});expect(page.data.result.structuredContent.rows[0].title).toBe("Hello");expect(page.readOnly).toBe(true);
   caller=user;expect((await call("tools/list",{},"/mcp/admin")).data.result.tools.map((t:any)=>t.name)).toEqual(["admin_items"]);
-  caller={...user,role:null,admin:false}; const roleDenied=await call("tools/list",{},"/mcp/admin");expect(roleDenied.response.status).toBe(403);expect(roleDenied.response.headers.has("www-authenticate")).toBe(false);
-  caller={...user,scopes:[]}; const scopeDenied=await call("tools/list");expect(scopeDenied.response.status).toBe(403);expect(scopeDenied.response.headers.get("www-authenticate")).toContain('error="insufficient_scope", scope="mcp"');
-  caller={...user,credential:"session"};expect((await call("tools/call",{name:"add_item",arguments:{title:"CSRF"}},"/mcp",{origin:"https://evil.test"})).data.result.isError).toBe(true);
+  caller=fixtureCaller({...user,role:null,admin:false}); const roleDenied=await call("tools/list",{},"/mcp/admin");expect(roleDenied.response.status).toBe(403);expect(roleDenied.response.headers.has("www-authenticate")).toBe(false);
+  caller=fixtureCaller({...user,scopes:[]}); const scopeDenied=await call("tools/list");expect(scopeDenied.response.status).toBe(403);expect(scopeDenied.response.headers.get("www-authenticate")).toContain('error="insufficient_scope", scope="mcp"');
+  caller=fixtureCaller({...user,credential:"session"});expect((await call("tools/call",{name:"add_item",arguments:{title:"CSRF"}},"/mcp",{origin:"https://evil.test"})).data.result.isError).toBe(true);
   expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({n:1});
   expect(await handle(new Request("https://app.test/other"),{})).toBeUndefined();
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
@@ -123,16 +125,16 @@ test("generated publishing transitions are validated admin tools; public Views u
 });
 
 test("ref MCP Procedures require typed caller-owned handlers and enforce requires before dispatch",async()=>{
- const text=source.replace("handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",'requires: {auth: {all: [ctx.user, {ctx.admin: [admin]}, {ctx.auth.scope: items:write}]}}\n  handler: {ref: app.addItem}');
+ const text=source.replace("handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",'requires: {auth: {all: [ctx.user, ctx.admin, {ctx.auth.scope: items:write}]}}\n  handler: {ref: app.addItem}');
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"ref-mcp.yaml",text}]);const dir=await mkdtemp(resolve(import.meta.dir,".mcp-ref-")),db=new Database(":memory:");
- let caller:any=user,calls=0;
+ let caller:any=sdkFixtureCaller(user),calls=0;
  try {
   await writeGenerated(dir,files,false);db.exec(files["schema.sql"]!);const {mcp}=await import(resolve(dir,"mcp.ts"));
   const handle=mcp({db:()=>db,caller:()=>caller,handlers:{'add-item':async(ctx:any,input:any)=>{calls++;expect(ctx.caller.subject).toBe('u');await ctx.store.collection('items').insert(input);return {title:input.title};}}});
   const call=async()=>{const response=await handle(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'add_item',arguments:{title:'Ref'}}})}),{});const text=await response.text();return {response,data:JSON.parse(text.startsWith('event:')?text.split('data: ')[1].split('\n')[0]:text)};};
   const scopeDenied=await call();expect(scopeDenied.response.status).toBe(403);expect(scopeDenied.response.headers.get('www-authenticate')).toContain('items:write');expect(calls).toBe(0);
-  caller={...user,scopes:['mcp','items:write'],role:'contributor'};expect((await call()).data.result.isError).toBe(true);expect(calls).toBe(0);
-  caller={...user,scopes:['mcp','items:write']};expect((await call()).data.result.structuredContent).toEqual({title:'Ref'});expect(calls).toBe(1);
+  caller=sdkFixtureCaller({...user,scopes:['mcp','items:write'],role:'contributor',admin:false});expect((await call()).data.result.isError).toBe(true);expect(calls).toBe(0);
+  caller=sdkFixtureCaller({...user,scopes:['mcp','items:write']});expect((await call()).data.result.structuredContent).toEqual({title:'Ref'});expect(calls).toBe(1);
   const {default:ts}=await import('typescript');const {writeFile}=await import('node:fs/promises');const usage=resolve(dir,'usage.ts');
   await writeFile(usage,`import {mcp} from './mcp.js';\nconst options={db:()=>({} as never),caller:()=>({kind:'anonymous' as const})};\n// @ts-expect-error ref handlers are required\nmcp(options);\nmcp({...options,handlers:{'add-item':async(ctx,input)=>{ctx.store.collection('items');return {title:input.title};}}});\n// @ts-expect-error wrong ref key\nmcp({...options,handlers:{wrong:async()=>({})}});\n`);
   const program=ts.createProgram([usage],{strict:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,skipLibCheck:true,types:[],noEmit:true});
@@ -173,7 +175,7 @@ spec: {source: {kind: mcp, surface: admin}, target: {procedure: publish-items}}
 test("MCP parity advertises localized metadata and native SQL output; callbacks cannot change execution",async()=>{
  const text=source.replace("spec: {surface: public, sql:","spec: {title: {en: Items, zh: 項目}, surface: public, sql:").replace("  output: {type: object}","  title: {en: Add item, zh: 新增項目}\n  description: {en: Add a row, zh: 新增資料}\n  mcp: {readOnlyHint: false, destructiveHint: true, openWorldHint: false}\n  output: {type: object}");
  const files=await generateOrThrow('bun-sqlite',[{sourceId:'parity.yaml',text}]);const dir=await mkdtemp(resolve(import.meta.dir,'.mcp-parity-')),db=new Database(':memory:');
- let caller:any={...user,scopes:['custom']};const observations:any[]=[],refusals:any[]=[];
+ let caller:any=fixtureCaller({...user,scopes:['custom']});const observations:any[]=[],refusals:any[]=[];
  try {
   await writeGenerated(dir,files);db.exec(files['schema.sql']!);const {mcp}=await import(resolve(dir,'mcp.ts'));
   const handle=mcp({db:()=>db,caller:()=>caller,locale:'zh',instructions:'Use these tools.',serverInfo:{name:'example',title:'Example',version:'7'},requiredScopes:['custom'],resourceMetadata:'https://proxy.test/resource',onObservation:(event:any)=>{observations.push(event);if(event.kind==='invocation'){expect(Object.isFrozen(event.caller)).toBe(true);expect(Object.isFrozen(event.caller.scopes)).toBe(true);}return Promise.reject(new Error('ignored listener'));},onRefusal:(event:any)=>{refusals.push(event);throw Error('ignored listener');}});
@@ -185,9 +187,9 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
   const ok=await call('tools/call',{name:'add_item',arguments:{title:'Works'}});expect(ok.data.result.structuredContent.results[0][0].id).toBeString();
   const bad=await call('tools/call',{name:'add_item',arguments:{title:''}});expect(bad.data.result.isError).toBe(true);expect(bad.data.result.structuredContent).toBeUndefined();
   expect(observations.filter(event=>event.phase==='completion').map(event=>event.outcome)).toEqual(['succeeded','failed']);
-  caller={...user,scopes:[]};const denied=await call('tools/list');expect(denied.response.status).toBe(403);expect(denied.response.headers.get('www-authenticate')).toContain('scope="custom"');expect(denied.response.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/resource"');
+  caller=fixtureCaller({...user,scopes:[]});const denied=await call('tools/list');expect(denied.response.status).toBe(403);expect(denied.response.headers.get('www-authenticate')).toContain('scope="custom"');expect(denied.response.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/resource"');
   caller={kind:'anonymous'};expect((await call('initialize',{},'/mcp/admin')).response.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/resource"');
-  caller={...user,credential:'session'};await call('tools/call',{name:'add_item',arguments:{title:'CSRF'}},'/mcp',{origin:'https://evil.test'});
+  caller=fixtureCaller({...user,credential:'session'});await call('tools/call',{name:'add_item',arguments:{title:'CSRF'}},'/mcp',{origin:'https://evil.test'});
   expect(refusals.map(event=>event.reason)).toEqual(['credential','credential','origin']);expect(db.query('SELECT COUNT(*) n FROM items').get()).toEqual({n:1});
   for(const locale of [undefined,'constructor','toString','fr']) {
    const response=await mcp({db:()=>db,caller:()=>caller,locale})(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})}),{});

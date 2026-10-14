@@ -95,12 +95,12 @@ describe("validateManifests()", () => {
   it("requires scope to bind one required, indexed string field to auth.uid()", () => {
     const scoped = schema("sessions", {
       schema: { type: "object", properties: { ownerId: { type: "string" }, slug: { type: "string" } }, required: ["ownerId"] },
-      indexes: [["ownerId"]], scope: { ownerId: "auth.uid()" },
+      indexes: [["ownerId"]], scope: "ownerId = auth.uid()",
     });
     expect(validateManifests({ manifests: [scoped] }).errorCount).toBe(0);
     for (const spec of [
       { ...scoped.spec, indexes: [] },
-      { ...scoped.spec, scope: { ownerId: "$ctx.user.id" } }, // the 0.1.x spelling
+      { ...scoped.spec, scope: { ownerId: "$ctx.user.id" } as never }, // the 0.1.x spelling
       { ...scoped.spec, schema: { ...scoped.spec.schema, properties: { ownerId: { type: "string", "x-mantle-bind": "ctx.admin" } } } },
       { ...scoped.spec, uniqueIndexes: [["slug"]] },
     ]) {
@@ -559,7 +559,7 @@ spec:
       input: { type: "object", required: ["token"], properties: { token: { type: "string" } } },
     } }, trigger] }).diagnostics.map((d) => d.code)).toContain("SCHEDULE_INPUT_INVALID");
     expect(validateManifests({ manifests: [{ ...procedure, spec: { ...procedure.spec,
-      requires: { auth: { all: [{ "ctx.admin": ["owner"] }] } },
+      requires: { auth: { all: ["ctx.admin"] } },
     } }, trigger] }).diagnostics.map((d) => d.code)).toContain("SCHEDULE_AUTH_INVALID");
     expect(parseManifests(JSON.stringify({ ...trigger, spec: { ...trigger.spec,
       source: { kind: "schedule", cron: "0 2 * * 0" }, // POSIX: 0 is Sunday
@@ -653,7 +653,7 @@ spec:
     expect(result.diagnostics[0]?.message).toContain("non-empty string");
   });
 
-  it("rejects View.requires.auth.all with an invalid role name", () => {
+  it("rejects role lists in View.requires.auth.all", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: secretView }
@@ -662,10 +662,10 @@ spec:
   sql: 'SELECT id FROM "posts"'
   requires:
     auth:
-      all: [{ "ctx.admin": ["bad-role"] }]
+      all: [{ "ctx.admin": ["editor"] }]
 `;
     const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.code)).toContain("AUTH_PREDICATE_NOT_IN_ENUM");
+    expect(result.diagnostics[0]?.message).toContain("withdrawn");
   });
 
   it("rejects unsupported View auth keys", () => {
@@ -692,7 +692,7 @@ spec:
   sql: 'SELECT id FROM "posts"'
   requires:
     auth:
-      all: [{ "ctx.admin": [editor], owns: posts }]
+      all: [{ "ctx.auth.scope": "posts:read", owns: posts }]
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics[0]).toMatchObject({
@@ -719,6 +719,7 @@ spec:
   it.each([
     ["admin", "surface: admin\n  sql: SELECT 1"],
     ["guarded", "surface: public\n  sql: SELECT 1\n  requires: can-read"],
+    ["restricted", "surface: public\n  sql: SELECT 1\n  restrict: { posts: \"region IN auth.user('region')\" }"],
   ])("rejects shared cache on a %s View", (_case, body) => {
     const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -883,40 +884,6 @@ spec:
     ["from: posts", "INVALID_MANIFEST_ENVELOPE"],
   ])("rejects %s", (spec, code) => {
     expect(parseView(spec).diagnostics[0]?.code).toBe(code);
-  });
-});
-
-describe("parseManifests() — ctx.admin role-name enforcement", () => {
-  it("rejects ctx.admin with an invalid role name", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: secret }
-spec:
-  input: { type: object }
-  output: { type: object }
-  requires:
-    auth:
-      all: [{ "ctx.admin": ["bad-role"] }]
-  handler: { ref: secretFn }
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.code)).toContain("AUTH_PREDICATE_NOT_IN_ENUM");
-  });
-
-  it("accepts ctx.admin with application-owned roles", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: editor }
-spec:
-  input: { type: object }
-  output: { type: object }
-  requires:
-    auth:
-      all: [{ "ctx.admin": ["owner", "editor"] }]
-  handler: { ref: editorFn }
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics).toEqual([]);
   });
 });
 

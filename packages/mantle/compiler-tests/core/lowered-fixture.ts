@@ -8,7 +8,7 @@ metadata: { name: items }
 spec:
   title: Items
   lifecycle: operational
-  scope: { owner: auth.uid() }
+  scope: "owner = auth.uid()"
   indexes: [[owner]]
   uniqueIndexes: [[owner, name]]
   checks: ["stock >= 0"]

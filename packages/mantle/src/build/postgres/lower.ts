@@ -114,6 +114,7 @@ export function pgLowering(timeZone: string): PolicyLowering {
       return undefined;
     },
     call: (out) => ({ FuncCall: out }),
+    anyOf: (x, set, type) => sql(`__x = ANY(CAST(CAST(__set AS text) AS ${pgType(type === 'number' ? 'real' : 'text')}[]))`, { __x: x, __set: set }),
     cast(n, scope) {
       const t = n.typeName.names.at(-1).String.sval as string;
       const a = n.arg?.A_Const;

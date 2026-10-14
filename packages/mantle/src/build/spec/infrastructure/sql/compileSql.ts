@@ -9,6 +9,7 @@ import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
 import * as d1 from "../../../d1/compile/index.js";
 import { parsePgSql } from "./PgQueryParser.js";
 import { refuseForEveryDialect } from "./frontEnd.js";
+import { refuseUserReferences, USER_REF_SCOPE_ONLY } from "../../domain/service/UserReferences.js";
 
 /** A dialect's compile side, as `<dialect>/compile` exports it (ADR-0035 decision 3). */
 export interface SqlDialect {
@@ -131,8 +132,13 @@ function stripLocations(v: unknown): SqlNode[] {
  */
 export async function compileSql(sql: string, ctx: SqlContext, dialect: SqlDialect = d1): Promise<CompileSqlResult> {
   try {
+    // `x IN auth.user('f')` is not PostgreSQL syntax, so name the rule before the parser reports a syntax error.
+    if (/\bIN\s+auth\.user\s*\(/i.test(sql)) throw new SqlRefusal("USER_REF_SCOPE_ONLY", USER_REF_SCOPE_ONLY);
     const parsed = await parsePgSql(sql);
+    // Generated SQL marks Schema scope terms with comments; a literal or identifier must not be able to forge one.
+    if (/\/\*|\*\//.test(JSON.stringify(parsed.stmts))) throw new SqlRefusal("SQL_UNSUPPORTED", "String literals and identifiers cannot contain '/*' or '*/'.");
     const tagged = tagRelations(parsed.stmts) as SqlNode[];
+    refuseUserReferences(tagged);
     refuseForEveryDialect(tagged, ctx, parsed.locations);
     const stmts = expandViews(tagged, ctx.views ?? {}, dialect.name === d1.name) as SqlNode[];
     dialect.accepts(stmts, { ...ctx, source: sql }, parsed.locations);

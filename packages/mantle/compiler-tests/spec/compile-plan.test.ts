@@ -13,7 +13,7 @@ spec:
   title: Notes
   lifecycle: operational
   indexes: [[ownerId]]
-  scope: { ownerId: auth.uid() }
+  scope: "ownerId = auth.uid()"
   schema:
     type: object
     required: [ownerId]
@@ -47,7 +47,7 @@ describe("compilePlan", () => {
   });
 
   it("carries a View's cache.sharedMaxAge into the plan", async () => {
-    const res = await compile(`${SCHEMA.replace("  lifecycle: operational\n", "").replace("  scope: { ownerId: auth.uid() }\n", "")}---
+    const res = await compile(`${SCHEMA.replace("  lifecycle: operational\n", "").replace('  scope: "ownerId = auth.uid()"\n', "")}---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: v }
@@ -74,7 +74,7 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
     const check = (text: string) => compilePlan({ sources: [{ sourceId: "memory:cache", text }] }, dialect);
     for (const [sql, extra] of [
       ["SELECT now() AS at", ""], ["SELECT pg_catalog.now() AS at", ""],
-      ["SELECT auth.uid() AS caller", ""], ["SELECT auth.role() AS role", ""],
+      ["SELECT auth.uid() AS caller", ""],
       ["SELECT body FROM records", "  lifecycle: operational\n"],
       ["SELECT body FROM records", "  ttl: { field: expires, expireAfterSeconds: 0 }\n"],
     ]) {

@@ -21,7 +21,7 @@ function columns(s: StorageSchema): Column[] {
 
 function indexes(name: string, s: StorageSchema) {
   return [
-    ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: s.scope && u[0] !== s.scope ? [s.scope, ...u] : [...u] })),
+    ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: s.userScopes?.length ? [...new Set([...(s.scope ? [s.scope] : []), ...s.userScopes.map(x => x.column), ...u])] : s.scope && u[0] !== s.scope ? [s.scope, ...u] : [...u] })),
     ...(s.indexes ?? []).map((cols, i) => ({ name: `_mantle_ix_${name}_${i}`, unique: false, columns: [...cols] })),
     // Admin's default list order (updated_at descending, then the id tiebreak), served by a backward scan (ADR-0039 decision 2)
     // ponytail: every Schema pays this index on UPDATE; a write-hot table that is never listed could opt out once one is measured; a large existing table is better served by CREATE INDEX CONCURRENTLY (outside the convergence transaction) with the same name and columns, which is the upgrade path

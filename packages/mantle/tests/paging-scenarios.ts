@@ -1,6 +1,7 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 /** Independent native output and query-count oracle shared by SQLite, PostgreSQL and actual D1. */
 export async function verifyPaging(pages: Record<string, Function>, db: unknown, native: (sql: string) => Promise<any[]>, counted: () => number, pg: boolean) {
-  const caller = {kind:"user",subject:"a",role:null,scopes:[],credential:"api-key",credentialId:null,clientId:null} as const;
+  const caller = fixtureCaller({kind:"user",subject:"a",role:null,scopes:[],credential:"api-key",credentialId:null,clientId:null} as const);
   const check = (yes: boolean, message: string) => {if (!yes) throw Error(message);};
   for (const name of ["ordered", "mixed", "grouped", "grouped-time", "window-groups", "joined"]) {
     let expected = await native((name === "ordered" || name === "mixed") ? `SELECT id FROM positions WHERE owner='a' AND session='s' ORDER BY ${name === "mixed" ? "block DESC" : "block"},position,id` : name === "joined" ? `SELECT id FROM positions WHERE owner='a' ORDER BY at DESC,id ${pg?"DESC":"ASC"}` : name === "grouped" ? "SELECT day,count(*) AS total FROM positions WHERE owner='a' GROUP BY day ORDER BY day DESC" : `SELECT day,count(*) AS total FROM positions WHERE owner='a' ${name === "window-groups" ? "AND id <> '0000'" : ""} GROUP BY day ORDER BY max(at) DESC,day ${pg?"DESC":"ASC"}`);

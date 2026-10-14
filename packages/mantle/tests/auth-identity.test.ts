@@ -1,3 +1,4 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 import { guardAuthAdminRequest } from "../src/auth/admin.js";
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -15,7 +16,7 @@ import { authLoader, resolveCaller } from "../src/auth/caller.js";
 import { authOptions as templateOptions, handleAuth } from "./apps/auth/template.js";
 import { d1Shim } from "./apps/d1-shim.js";
 const ac = createAccessControl(defaultStatements);
-const admin: Caller = { kind: "user", subject: "s", role: "admin", admin: true, scopes: [], credential: "session", credentialId: "session", clientId: null };
+const admin: Caller = fixtureCaller({ kind: "user", subject: "s", role: "admin", admin: true, scopes: [], credential: "session", credentialId: "session", clientId: null });
 const secret = "auth-identity-test-secret-01234567890123456789";
 const resources: {
     close(): unknown;
@@ -103,8 +104,8 @@ test("native member keysets forward/backward, scoped search, admin exclusion and
     await expect(a.directory.listMembers({ search: "x", cursor: p.nextCursor! })).rejects.toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
     expect((await a.directory.listMembers({ search: "%" })).items.map(x => x.id)).toEqual(["m4"]);
     await expect(a.directory.setUserRole("s", null)).rejects.toMatchObject({ code: "AUTH_DENIED" });
-    await expect(d1Identity(a.d1, a.auth, { ...admin, role: "owner", admin: false }, new Headers()).listMembers()).rejects.toMatchObject({ code: "AUTH_DENIED" });
-    await expect(d1Identity(a.d1, a.auth, { ...admin, credential: "oauth" }, new Headers()).listMembers()).rejects.toMatchObject({ code: "AUTH_DENIED" });
+    await expect(d1Identity(a.d1, a.auth, fixtureCaller({ ...admin, role: "owner", admin: false }), new Headers()).listMembers()).rejects.toMatchObject({ code: "AUTH_DENIED" });
+    await expect(d1Identity(a.d1, a.auth, fixtureCaller({ ...admin, credential: "oauth" }), new Headers()).listMembers()).rejects.toMatchObject({ code: "AUTH_DENIED" });
 });
 test("D1 bootstrap promotes one contender atomically; invitation revocation guards signed-in users", async () => {
     const a = await app();
@@ -371,7 +372,7 @@ test("configured comma-separated admins stay out of members and retain the last-
     expect(await a.directory.setUserRole("member", null)).toBe(true);
     expect(await a.directory.setUserRole("custom", null)).toBe(true);
     // Remove the session actor through a different trusted caller; only the last-admin guard can stop this.
-    const other = d1Identity(a.d1, a.auth, { ...admin, subject: "other" } as Caller, a.headers);
+    const other = d1Identity(a.d1, a.auth, fixtureCaller({ ...admin, subject: "other" }) as Caller, a.headers);
     await expect(other.setUserRole("s", null)).rejects.toMatchObject({ code: "CONFLICT" });
     const bootstrap = d1BootstrapAdmin(a.d1, { match: "email", value: "member@example.test" }, a.auth);
     await bootstrap({ id: "member", email: "member@example.test", emailVerified: true });

@@ -1,3 +1,4 @@
+import { modeOf } from "@aotter/mantle/user-fields";
 /** Selected generated native adapters: constants and compiled predicates, never a manifest interpreter. */
 import { ContractError, isAdmin, deny, type Caller, type Row } from "@aotter/mantle/contracts";
 import { binds, bound, type Recipe, type Step, type Bound, type Values } from "@aotter/mantle/binds";
@@ -5,6 +6,10 @@ import { query as readQuery } from "@aotter/mantle/validation";
 import { invalid } from "@aotter/mantle/surface";
 import { checkPageLimit, page, decodeNullableCursor, encodeCursor, validCursor, type CursorKind, type Pages } from "@aotter/mantle/paging";
 import type {EntryPageQuery, EntryScalar} from "./entries.js";
+const selectMode = <T>(spec: {readonly caller:T;readonly trusted:T}, caller:Caller, d: Values):T => {
+    const m = modeOf(caller) === 'trusted' ? spec.trusted : spec.caller;
+    return d.scopedAll ? d.scopedAll(m, caller) : m;
+};
 export interface NativeAdapter<Database> {
     readonly read: (db: Database, sql: string, values: unknown[]) => PromiseLike<Row[]> | Row[];
     readonly values: Values;
@@ -17,7 +22,7 @@ export async function nativeStatistics<Database>(specs: Readonly<Record<string, 
     if (!Object.hasOwn(specs, collection)) invalid("Unknown collection.", "admin/statistics");
     const spec = specs[collection]!, {from, to, bucketMs} = args;
     if (!spec.statistics || ![from, to, bucketMs].every(Number.isSafeInteger) || from < 0 || to <= from || bucketMs <= 0 || to - from > 20 * 86400000 || Math.ceil((to - from) / bucketMs) > 480 || Math.max(to, bucketMs) > Number.MAX_SAFE_INTEGER / 1000) invalid("Statistics require <=20 days and <=480 buckets.", "admin/statistics");
-    const m = spec.caller, values = binds(adapter.values, m.binds, caller);
+    const m = selectMode(spec, caller, adapter.values), values = binds(adapter.values, m.binds, caller);
     const policy = m.policy ? " WHERE (" + m.policy + ")" : "";
     const totalQuery = `SELECT -1 AS bucket, NULL AS subtype, count(*) AS count ${m.from}${policy}`;
     const parameter = (value: unknown) => {values.push(value); return adapter.param(values.length);};
@@ -80,7 +85,7 @@ export async function nativePage<Database>(spec: {
     cursor?: string;
     match?: Record<string, unknown>;
 }) {
-    const m = caller.kind === "system" ? spec.trusted : spec.caller;
+    const m = selectMode(spec, caller, adapter.values);
     const match = options.match as {
         search?: string;
         filters?: Record<string, string | number | boolean>;
@@ -129,12 +134,13 @@ export interface NativeEntryMode {
     readonly from: string;
     readonly policy: string;
     readonly binds: readonly Recipe[];
-    readonly fields: Readonly<Record<string, {readonly column: string; readonly insert: string; readonly update: string}>>;
+    readonly fields: Readonly<Record<string, {readonly column: string; readonly insert: string; readonly update?: string}>>;
     readonly create: {readonly prefix: string; readonly between: string; readonly suffix: string; readonly binds: readonly Recipe[]; readonly columns: readonly string[]; readonly values: readonly string[]; readonly returning: string};
     readonly patch: {readonly prefix: string; readonly binds: readonly Recipe[]; readonly sets: readonly string[]; readonly where: string; readonly returning: string};
     readonly remove: Step;
 }
 export interface NativeEntryProcedures {
+    readonly userScopes?: readonly { readonly column: string; readonly field: string; readonly type: "string" | "number" }[];
     readonly path: string;
     readonly marker: string;
     readonly scoped?: boolean;
@@ -155,7 +161,7 @@ export interface NativeCollection extends NativeEntryProcedures {
 export async function nativeEntryGet<Database>(spec: NativeCollection, adapter: NativeAdapter<Database>, db: Database, caller: Caller, id: string): Promise<Row | null> {
     if (typeof id !== "string" || !id) invalid("An entry id is required.", spec.path);
     if (!adapter.sqlite) nativeText(id);
-    const m = caller.kind === "system" ? spec.trusted : spec.caller, values = binds(adapter.values, m.binds, caller);
+    const m = selectMode(spec, caller, adapter.values), values = binds(adapter.values, m.binds, caller);
     values.push(id);
     const where = [m.policy, `${spec.id} = ${adapter.param(values.length)}`].filter(Boolean).map(term => "(" + term + ")").join(" AND ");
     return (await adapter.read(db, `SELECT ${m.projection} ${m.from} WHERE ${where} LIMIT 1`, values))[0] ?? null;
@@ -164,9 +170,11 @@ export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures
 export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures, adapter: NativeProcedureAdapter<Database>, db: Database, caller: Caller, verb: "patch", data: Row, id: string, version: number | string): Promise<Row>;
 export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures, adapter: NativeProcedureAdapter<Database>, db: Database, caller: Caller, verb: "remove", data: Row, id: string, version: number | string): Promise<void>;
 export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures, adapter: NativeProcedureAdapter<Database>, db: Database, caller: Caller, verb: "create" | "patch" | "remove", data: Row, id?: string, version?: number | string): Promise<Row | void> {
-    const m = caller.kind === "system" ? spec.trusted : spec.caller, context = {id, version};
+    const m = selectMode(spec, caller, adapter.values), context = {id, version};
     if (verb === "create" && spec.scoped && caller.kind === "anonymous") throw new ContractError("UNAUTHENTICATED", "A scoped insert requires an authenticated caller.", spec.path);
     if (verb !== "create" && (typeof id !== "string" || !id || !exactVersion(version))) invalid("An id and exact version are required.", spec.path);
+    if (spec.userScopes?.length && verb === "create") data = adapter.values.scopeInsert!(spec.userScopes, caller, data) as Row;
+    if (spec.userScopes?.length && verb === "patch" && Object.keys(data).some(key => spec.userScopes!.some(u => u.column === key.toLowerCase()))) throw new ContractError("AUTH_DENIED", "The scoped column is never writable through SET.", spec.path);
     if (!adapter.sqlite) {nativeText(context); nativeText(data);}
     if (verb === "remove") {
         await adapter.procedure(db, bound(adapter.values, [m.remove], caller, context), spec.path);
@@ -180,7 +188,7 @@ export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures
     const values = binds(adapter.values, c.binds, caller, context);
     const fragments = present.map(({fragment, value}) => {
         values.push(value);
-        return (verb === "create" ? fragment.insert : fragment.update).replaceAll(spec.marker, adapter.param(values.length));
+        return (verb === "create" ? fragment.insert : fragment.update!).replaceAll(spec.marker, adapter.param(values.length));
     });
     const sql = verb === "create"
         ? m.create.prefix + [...m.create.columns, ...present.map(({fragment}) => fragment.column)].join(", ") + m.create.between + [...m.create.values, ...fragments].join(", ") + m.create.suffix + m.create.returning
@@ -196,7 +204,7 @@ export async function nativeEntryPage<Database>(spec: NativeCollection, adapter:
     if (!field.kind) invalid("Unknown cursor type.", spec.path);
     const limit = query.limit ?? 50;
     checkPageLimit(limit, spec.path);
-    const m = caller.kind === "system" ? spec.trusted : spec.caller, filters = query.match?.filters ?? {}, search = query.match?.search;
+    const m = selectMode(spec, caller, adapter.values), filters = query.match?.filters ?? {}, search = query.match?.search;
     const operation = JSON.stringify([spec.path, caller, query.input, filters, search ?? null, query.order]);
     const cursor = query.cursor === undefined ? undefined : decodeNullableCursor(query.cursor, spec.path + "/cursor", operation);
     if (!adapter.sqlite) {nativeText(query.input); nativeText(filters); nativeText(cursor);}

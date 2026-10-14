@@ -5,7 +5,7 @@ spec:
   title: Search records
   lifecycle: operational
   searchableFields: [title, body]
-  scope: {owner: auth.uid()}
+  scope: "owner = auth.uid()"
   indexes: [[owner]]
   ttl: {field: expiresAt, expireAfterSeconds: 0}
   schema:

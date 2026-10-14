@@ -18,7 +18,7 @@ export function adminPaging(plan:RuntimePlan,dialect:MantleDialect,proofs:Readon
     const list=(v.uiSchema?.list??{}) as {filterFields?:string[];searchFields?:string[]};
     const modes=v.surface==="public" ? ["public","public"] as const : [nextMode("caller"),"trusted"] as const;
     const pages=modes.map(mode=>{
-      const [c]=compileProgram(v.stmts,{dialect,schemas:plan.schemas,inputs:v.inputs,kind:"view",mode});
+      const [c]=compileProgram(v.stmts,{dialect,schemas:plan.schemas,inputs:v.inputs,kind:"view",mode,restrict:v.restrict});
       if(!c)throw Error(`No compiled Admin View: ${name}`);
       const keys=c.ast.SelectStmt.sortClause?.length??0;
       if(keys!==proof.types.length)throw Error(`Incomplete Admin cursor proof: ${name}`);
@@ -45,7 +45,7 @@ export function adminPaging(plan:RuntimePlan,dialect:MantleDialect,proofs:Readon
 }
 
 /** Only selected build-time Admin work; the ordinary generator remains unchanged. */
-export async function adminBindingsOf(plan:RuntimePlan,dialect:MantleDialect,paging:Readonly<Record<string,PagingProof|undefined>>,wire:Dialect,refusals:GenerateDiagnostic[]){
+export async function adminBindingsOf(plan:RuntimePlan,dialect:MantleDialect,paging:Readonly<Record<string,PagingProof|undefined>>,wire:Dialect,refusals:GenerateDiagnostic[]):Promise<{ok:true;adminPages:Record<string,{caller:AdminPage;trusted:AdminPage}>|undefined;adminEntries:Record<string,unknown>}>{
   let adminPages:ReturnType<typeof adminPaging>|undefined;
   try{adminPages=adminPaging(plan,dialect,paging,(ast,names,nkeys,name)=>{
     const keys=[...names,...Array.from({length:nkeys},(_,i)=>`_k${i}`)];

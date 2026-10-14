@@ -2,7 +2,7 @@
 import type { LoweredStatement } from "../build/compiler.js";
 import type { Recipe } from "../kernel/binds.js";
 
-const KINDS = new Set(["uid", "role", "admin", "now", "cutoff", "const", "input", "version"]);
+const KINDS = new Set(["uid", "admin", "user", "now", "cutoff", "const", "input", "version"]);
 /** @internal */
 export function recipesOf(statement: Pick<LoweredStatement,"binds">, fields: readonly string[], refuse: (message: string) => void, values?: Set<string>): Recipe[] {
   return statement.binds.map(b => {

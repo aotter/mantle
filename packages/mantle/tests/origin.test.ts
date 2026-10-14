@@ -1,6 +1,7 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 import {test,expect} from "bun:test";
 import {checkOrigin,type Caller} from "../src/kernel/contracts.js";
-const session:Caller={kind:"user",subject:"s",role:null,scopes:[],credential:"session",credentialId:null,clientId:null};
+const session:Caller=fixtureCaller({kind:"user",subject:"s",role:null,scopes:[],credential:"session",credentialId:null,clientId:null});
 test("shared origin rule rejects ambient cross-origin writes and preserves explicit credentials",()=>{
  const request=(method:string,headers?:Record<string,string>)=>new Request("https://app.test/api/items",{method,headers});
  for(const headers of [{} as Record<string,string>,{origin:"https://evil.test"},{"sec-fetch-site":"same-site"},{"sec-fetch-site":"cross-site",origin:"https://app.test"}]) expect(()=>checkOrigin(request("POST",headers),session)).toThrow(expect.objectContaining({code:"AUTH_DENIED",path:"request:origin"}));

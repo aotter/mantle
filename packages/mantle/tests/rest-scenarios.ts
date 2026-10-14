@@ -1,3 +1,4 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 /** One response/state oracle shared by actual SQLite, D1 and PostgreSQL REST hosts. */
 import assert from "node:assert/strict";
 export async function verifyRest(fetch: (request: Request) => Promise<Response | undefined>): Promise<void> {

@@ -1,3 +1,4 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 import {expect,test} from "bun:test";
 import {Database} from "bun:sqlite";
 import {mkdtemp,mkdir,rm,writeFile} from "node:fs/promises";
@@ -78,7 +79,7 @@ test("dynamic web output walks pages, trusts SQL visibility, escapes output and 
     const etag=md.headers.get("etag");expect((await site.fetch(request("/posts/a%26b).md",{headers:{"if-none-match":"W/"+etag}}))).status).toBe(304);
     db.query("UPDATE posts SET body='changed' WHERE id='1'").run();const changed=await site.fetch(request("/posts/a%26b).md",{headers:{"if-none-match":etag}}));expect(changed.status).toBe(200);expect(changed.headers.get("etag")).not.toBe(etag);
     expect((await site.fetch(request("/posts/%xx.md"))).status).toBe(400);expect(await site.head(request("/posts/%xx"))).toBe("");expect(await site.head(request("/posts/x"))).toBe("");expect(await site.head(request("/posts/%61%26b)"))).toBe(await site.head(request("/posts/a&b)")));
-    let resolved=0;const dynamic=web({db,caller:(req:Request,env:{admin:boolean})=>{resolved++;return env.admin?{kind:"user",subject:"s",role:"editor",scopes:[],credential:"session",credentialId:null,clientId:null}:{kind:"anonymous"};},origin:"https://site.test",title:"Blog",description:"x",pages:{"/posts/{slug}":{view:"post-by-slug",markdown:"body"}}});
+    let resolved=0;const dynamic=web({db,caller:(req:Request,env:{admin:boolean})=>{resolved++;return env.admin?fixtureCaller({kind:"user",subject:"s",role:"editor",scopes:[],credential:"session",credentialId:null,clientId:null}):{kind:"anonymous"};},origin:"https://site.test",title:"Blog",description:"x",pages:{"/posts/{slug}":{view:"post-by-slug",markdown:"body"}}});
     expect((await dynamic.fetch(request("/posts/a%26b).md"),{admin:true})).headers.get("cache-control")).toBe("private, no-store");expect(resolved).toBe(1);
     db.query("INSERT INTO posts(id,version,created_at,updated_at,slug,title,body,visible) VALUES ('md',1,0,0,'readme.md','Readme','# Readme',1)").run();expect(await site.fetch(request("/posts/readme.md"))).toBeUndefined();expect(await (await site.fetch(request("/posts/readme.md.md"))).text()).toBe("# Readme");
     db.query("INSERT INTO posts(id,version,created_at,updated_at,slug,title,body,visible) VALUES ('null',1,0,0,'null','Null',NULL,1)").run();const nullMd=await site.fetch(request("/posts/null.md"));expect(nullMd.status).toBe(404);expect(nullMd.headers.get("cache-control")).toBe("no-store");
@@ -128,7 +129,7 @@ test("publishing SQL keeps drafts out of all web outputs",async()=>{
     await writeGenerated(dir,result.files);db.exec(result.files["schema.sql"]!);
     for(const [id,status] of [["draft","draft"],["public","published"]] as const)db.query("INSERT INTO posts(id,version,created_at,updated_at,slug,title,body,visible,status) VALUES (?,1,0,0,?,?,?,1,?)").run(id,id,id,"# "+id,status);
     const {web}=await import(join(dir,"web.ts"));
-    for(const caller of [{kind:"anonymous"},{kind:"user",subject:"editor",role:"editor",scopes:[],credential:"session",credentialId:null,clientId:null}]){
+    for(const caller of [{kind:"anonymous"},fixtureCaller({kind:"user",subject:"editor",role:"editor",scopes:[],credential:"session",credentialId:null,clientId:null})]){
       const site=web({db,caller,origin:"https://site.test",title:"Blog",description:"Summary",pages:{"/posts/{slug}":{view:"post-by-slug",list:"posts",markdown:"body"}}});
       for(const path of ["/llms.txt","/sitemap.xml"]){const response=await site.fetch(new Request("https://site.test"+path));expect(response.status).toBe(200);const body=await response.text();expect(body).toContain("public");expect(body).not.toContain("draft");}
       expect((await site.fetch(new Request("https://site.test/posts/draft.md"))).status).toBe(404);

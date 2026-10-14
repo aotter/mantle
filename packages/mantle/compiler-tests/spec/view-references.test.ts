@@ -7,7 +7,7 @@ import * as pgCompile from "../../src/build/postgres/compile/index.js";
 const doc = (kind: string, name: string, spec: string) => `apiVersion: cms.mantle.aotter.net/v2\nkind: ${kind}\nmetadata: { name: ${name} }\nspec:\n${spec}`;
 const NOTES = doc("Schema", "notes", `  title: Notes
   lifecycle: operational
-  scope: { owner: auth.uid() }
+  scope: "owner = auth.uid()"
   schema:
     type: object
     required: [owner]

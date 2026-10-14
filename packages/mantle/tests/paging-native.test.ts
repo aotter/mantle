@@ -1,3 +1,4 @@
+import { fixtureCaller } from "./apps/fixtures.js";
 import {test,expect} from "bun:test";
 import {Database} from "bun:sqlite";
 import {SQL} from "bun";
@@ -96,7 +97,7 @@ for (const target of ["bun-sqlite","bun-postgres"] as const) (target === "bun-po
  const paged=(await import(join(dir,"paged/views/integer-groups.ts"))).default, sqlite=target==="bun-sqlite", db:any=sqlite?new Database(":memory:"):new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}),schema="paging_integer_"+crypto.randomUUID().replaceAll("-","");
  try {
   if(sqlite){db.exec(files["schema.sql"]!);db.exec(pagingSeed(false));}else{await db.unsafe(`CREATE SCHEMA ${schema}`);await db.unsafe(`SET search_path TO ${schema}`);await db.unsafe(files["schema.sql"]!);await db.unsafe(pagingSeed(true));}
-  const caller={kind:"user",subject:"a",role:null,scopes:[],credential:"api-key",credentialId:null,clientId:null} as const;
+  const caller=fixtureCaller({kind:"user",subject:"a",role:null,scopes:[],credential:"api-key",credentialId:null,clientId:null} as const);
   const first=await paged(db,caller,{},{limit:1}), tuple=JSON.parse(decodeURIComponent(first.nextCursor!));
   expect(first.rows[0].literal).toBe("literal?1");
   const cursor=(text:boolean)=>encodeURIComponent(JSON.stringify(tuple.map((value:any,i:number)=>i<2?(text?String(value):Number(value)):value)));
@@ -125,7 +126,7 @@ for(const target of ["bun-sqlite","bun-postgres","cloudflare-d1","cloudflare-pos
  const db=new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}),schema="paging_temporal_"+crypto.randomUUID().replaceAll("-","");
  try{
   await db.unsafe(`CREATE SCHEMA ${schema}`);await db.unsafe(`SET search_path TO ${schema}`);await db.unsafe(files["schema.sql"]!);await db.unsafe(pagingSeed(true));
-  const caller={kind:"user",subject:"a",role:null,scopes:[],credential:"api-key",credentialId:null,clientId:null} as const;
+  const caller=fixtureCaller({kind:"user",subject:"a",role:null,scopes:[],credential:"api-key",credentialId:null,clientId:null} as const);
   for(const name of ["temporal-literal","date-literal"]){
    const paged=(await import(join(dir,`paged/views/${name}.ts`))).default;
    let reads=0;const counted={unsafe:(sql:string,values:any[])=>{reads++;return db.unsafe(sql,values);}};
