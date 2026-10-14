@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { renderDataValue, type FieldSchema } from "../src/index.js";
+import { renderDataValue, fieldLabel, propertyDescription, formatMoneyMinor, dateFromFieldValue, type FieldSchema } from "../src/index.js";
 import { SchemaFields } from "../src/kit/index.js";
 
 const schema: FieldSchema = {
@@ -21,6 +21,12 @@ describe("SchemaFields", () => {
     const html = render();
     expect(html).toContain("決定");
     expect(html).toMatch(/= .*123\.45/);
+    expect(formatMoneyMinor(128000, "USD")).not.toBe(formatMoneyMinor(128000, "TWD"));
+    for (const currency of [undefined, "NOT_A_CURRENCY"]) expect(formatMoneyMinor(128000, currency)).toBe(new Intl.NumberFormat().format(1280));
+    expect(formatMoneyMinor("128000", "USD")).toBeNull();
+    expect(dateFromFieldValue(1786405800000)?.getTime()).toBe(1786405800000);
+    expect(dateFromFieldValue("2026-08-12T09:30:00.000Z")?.toISOString()).toBe("2026-08-12T09:30:00.000Z");
+    expect(dateFromFieldValue("invalid")).toBeUndefined();
   });
 
   it("lets a host render a field itself, and falls back to a textarea for markdown without one", () => {
@@ -87,6 +93,12 @@ describe("resolveLocalizedText", () => {
     expect(resolveLocalizedText(t, "fr")).toBe("Item");
     expect(resolveLocalizedText({ "zh-TW": "品項", ja: "品目" }, "fr", "ja")).toBe("品目");
     expect(resolveLocalizedText({ "zh-TW": "品項" }, "fr")).toBe("品項");
+    expect(resolveLocalizedText("Plain", "en")).toBe("Plain");
+    expect(resolveLocalizedText(undefined, "en")).toBeNull();
+    expect(["orderStatus", "subtotal_minor", "cover-asset-id"].map(fieldLabel)).toEqual(["Order Status", "Subtotal Minor", "Cover Asset Id"]);
+    expect(propertyDescription({ description: "Plain" }, "en", null)).toBe("Plain");
+    expect(propertyDescription({ description: { "zh-TW": "說明" } }, "en", "zh-TW")).toBe("說明");
+    expect(propertyDescription(undefined, "en", null)).toBeUndefined();
   });
 });
 

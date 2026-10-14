@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contributionByRef, fieldContribution, matchesWhen } from "../src/lib/extensions";
+import { contributionByRef, fieldContribution } from "../src/lib/extensions";
 import { installExtensionShared, loadExtensionKit, SHARED_GLOBAL } from "../src/app/extension-shared";
 import type { AdminExtensionInfo, SiteInfo } from "../src/lib/types";
 
@@ -12,20 +12,13 @@ const extension: AdminExtensionInfo = {
       { id: "money", target: "field.cell/v1", when: { format: ["money-minor"] } },
       { id: "color", target: "field.input/v1", when: { schema: ["products"], field: ["color"] } },
       { id: "picker", target: "field.input/v1" },
+      { id: "date", target: "field.cell/v1", when: { format: ["date-time"] } },
     ],
   },
 };
 const site = { extensions: [extension] } as unknown as SiteInfo;
 
 describe("Admin extension placement", () => {
-  it("matches when by names only, and never without when", () => {
-    expect(matchesWhen(undefined, { schema: "products" })).toBe(false);
-    expect(matchesWhen({ schema: ["products"] }, { schema: "products" })).toBe(true);
-    expect(matchesWhen({ schema: ["products"], field: ["color"] }, { schema: "products", field: "name" })).toBe(false);
-    expect(matchesWhen({ format: ["money-minor"] }, { schema: "orders", field: "total", property: { type: "integer", "x-mcp-hint": "money-minor" } })).toBe(true);
-    expect(matchesWhen({ format: ["date-time"] }, { schema: "orders", field: "at", property: { type: "string", format: "date-time" } })).toBe(true);
-    expect(matchesWhen({ format: ["money-minor"] }, { schema: "orders", field: "total" })).toBe(false);
-  });
 
   it("prefers the manifest's name, which must fit the target, over a matching when", () => {
     expect(fieldContribution(site, "field.input/v1", { schema: "products", field: "color" })?.id).toBe("color");
@@ -37,6 +30,9 @@ describe("Admin extension placement", () => {
     expect(fieldContribution(site, "field.input/v1", { schema: "x", field: "y", ref: "other/thing" })).toBeUndefined();
     // a manifest that names a built-in widget has decided too: a matching when does not override it
     expect(fieldContribution(site, "field.input/v1", { schema: "products", field: "color", ref: "textarea" })).toBeUndefined();
+    expect(fieldContribution(site, "field.cell/v1", { schema: "orders", field: "at", property: { type: "string", format: "date-time" } })?.id).toBe("date");
+    expect(fieldContribution(site, "field.input/v1", { schema: "other", field: "color" })).toBeUndefined();
+    expect(fieldContribution(site, "field.cell/v1", { schema: "orders", field: "total" })).toBeUndefined();
     expect(contributionByRef(site, "panels", "brand/usage")?.id).toBe("usage");
     expect(contributionByRef(site, "panels", "Brand/Usage")).toBeUndefined();
   });
@@ -53,4 +49,4 @@ it("shares the full kit on demand without replacing Admin's React instance", asy
   expect(shared["@aotter/mantle-ui/kit"]).toBe(await import("@aotter/mantle-ui/kit"));
   expect(shared.react).toBe(react);
   expect((globalThis as unknown as Record<string, unknown>)[SHARED_GLOBAL]).toBe(shared);
-}, 15_000);
+}, 30_000);

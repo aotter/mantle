@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { checkTranslatesReferences } from "../../src/build/spec/domain/service/CrossSchemaChecker.js";
 import { parseManifests } from "./parse.js";
 import { validateManifests } from "./parse.js";
 import type { SchemaManifest } from "../../src/build/spec/domain/model/ManifestGrammar.js";
@@ -16,7 +15,7 @@ function schema(name: string, spec: Partial<SchemaManifest["spec"]>): SchemaMani
       title: name,
       schema: {
         type: "object",
-        properties: { slug: { type: "string" }, title: { type: "string" } },
+        properties: { slug: { type: "string" }, title: { type: "string" }, ...(spec.localized ? { locale: { type: "string" } } : {}) },
       },
       ...spec,
     } as SchemaManifest["spec"],
@@ -24,15 +23,6 @@ function schema(name: string, spec: Partial<SchemaManifest["spec"]>): SchemaMani
 }
 
 describe("checkTranslatesReferences — TRANSLATES_PARENT_UNKNOWN", () => {
-  it("flags a translates.parent that doesn't resolve to any declared Schema", () => {
-    const child = schema("post-translations", {
-      localized: true,
-      translates: { parent: "ghost", on: "slug" },
-    });
-    const diags = checkTranslatesReferences([child], "validate");
-    const codes = diags.map((d) => d.code);
-    expect(codes).toContain("TRANSLATES_PARENT_UNKNOWN");
-  });
 
   it("includes candidates in the diagnostic for did-you-mean suggestions", () => {
     const parent = schema("posts", {});
@@ -40,7 +30,7 @@ describe("checkTranslatesReferences — TRANSLATES_PARENT_UNKNOWN", () => {
       localized: true,
       translates: { parent: "post", on: "slug" }, // typo: missing 's'
     });
-    const diags = checkTranslatesReferences([parent, child], "validate");
+    const diags = validateManifests({ manifests: [parent, child] }).diagnostics;
     const d = diags.find((x) => x.code === "TRANSLATES_PARENT_UNKNOWN");
     expect(d?.candidates).toContain("posts");
     expect(d?.suggestion).toBe("posts");
@@ -54,7 +44,7 @@ describe("checkTranslatesReferences — TRANSLATES_PARENT_IS_LOCALIZED", () => {
       localized: true,
       translates: { parent: "posts", on: "slug" },
     });
-    const diags = checkTranslatesReferences([parent, child], "validate");
+    const diags = validateManifests({ manifests: [parent, child] }).diagnostics;
     expect(diags.map((d) => d.code)).toContain("TRANSLATES_PARENT_IS_LOCALIZED");
   });
 });
@@ -74,22 +64,13 @@ describe("checkTranslatesReferences — TRANSLATES_FIELD_NOT_IN_PARENT", () => {
       localized: true,
       translates: { parent: "products", on: "slug" }, // parent has no slug
     });
-    const diags = checkTranslatesReferences([parent, child], "validate");
+    const diags = validateManifests({ manifests: [parent, child] }).diagnostics;
     expect(diags.map((d) => d.code)).toContain("TRANSLATES_FIELD_NOT_IN_PARENT");
   });
 
 });
 
 describe("checkTranslatesReferences — happy path (parent + child correctly wired)", () => {
-  it("emits no diagnostics", () => {
-    const parent = schema("products", {});
-    const child = schema("product-translations", {
-      localized: true,
-      translates: { parent: "products", on: "slug" },
-    });
-    const diags = checkTranslatesReferences([parent, child], "boot");
-    expect(diags).toEqual([]);
-  });
 
   it("parses and validates the shipped parent/translation golden manifest", () => {
     const yaml = readFileSync(
@@ -101,18 +82,5 @@ describe("checkTranslatesReferences — happy path (parent + child correctly wir
     expect(validateManifests({
       manifests: parsed.manifests,
     }).diagnostics).toEqual([]);
-  });
-});
-
-describe("phase tagging", () => {
-  it("tags diagnostics with the requested phase", () => {
-    const child = schema("post-translations", {
-      localized: true,
-      translates: { parent: "ghost", on: "slug" },
-    });
-    const validateDiags = checkTranslatesReferences([child], "validate");
-    const bootDiags = checkTranslatesReferences([child], "boot");
-    expect(validateDiags[0]?.phase).toBe("validate");
-    expect(bootDiags[0]?.phase).toBe("boot");
   });
 });

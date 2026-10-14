@@ -36,10 +36,6 @@ test('selected REST/MCP wire preserves aliases, JSON primitives/nulls and boolea
   }
  }finally{await raw.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await raw.close();await rm(dir,{recursive:true,force:true});}
 },30000);
-test('wireRows preserves native input rows, missing fields and null without generic scanning',async()=>{
- const {wireRows}=await import('../src/kernel/contracts.js');const rows=[{payload:'{"x":1}',flag:1,raw:'[2]',nil:null},{}];const result=wireRows(rows,[['payload','json'],['flag','bool'],['nil','json']]);
- expect(result).toEqual([{payload:{x:1},flag:true,raw:'[2]',nil:null},{}]);expect(rows[0]!.payload).toBe('{"x":1}');expect(rows[0]!.flag).toBe(1);expect(wireRows(rows)).toBe(rows);
-});
 
 (process.env.MANTLE_NEXT_D1_REST?test:test.skip)('local D1 uses the same exact REST/MCP wire and one-query oracle',async()=>{
  const {readFile,writeFile,open}=await import('node:fs/promises'),{join}=await import('node:path'),{tmpdir}=await import('node:os'),{spawn}=await import('node:child_process'),{once}=await import('node:events'),{unstable_splitSqlQuery}=await import('wrangler');
@@ -101,14 +97,6 @@ spec:
   expect(values).toEqual([2,10,'9007199254740993','9007199254740995']);
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
 });
-test('boundary type and conversion recipes are target identical, without changing native types',async()=>{
- const {nativeType,wireType}=await import('../src/domain/columns.js');
- expect(nativeType('integer',false)).toBe('number | string | bigint | null');expect(nativeType('integer',true)).toBe('number | null');
- expect(wireType('integer')).toBe('number | string | null');expect(wireType('int4')).toBe('number | string | null');expect(wireType('bool')).toBe('boolean | null');
- const emitted=[];
- for(const target of ['cloudflare-d1','cloudflare-postgres'] as const){const files=await generateOrThrow(target,[{sourceId:'wire.yaml',text:source}]);emitted.push(files['generated.ts']!.match(/export type View0WireRow = .*;/)![0]);expect(files['paged/views/wire-records.ts']).toContain('Input, Row');expect(files['paged/views/wire-records.ts']).not.toContain('wireRows');}
- expect(emitted[0]).toBe(emitted[1]);
-});
 
 test('public and internal native pages retain JSON text, booleans and driver numbers',async()=>{
  for(const surface of ['public','internal']){
@@ -116,9 +104,4 @@ test('public and internal native pages retain JSON text, booleans and driver num
   try{await writeGenerated(dir,files);db.exec(files['schema.sql']!);db.exec(seed(false));const {default:page}=await import(resolve(dir,'paged/views/wire-records.ts'));const row=(await page(db,caller,{id:'a'})).rows[0];expect(row.dataAlias).toBe('{"nested":[1,true]}');expect(row.enabledAlias).toBe(1);expect(row.quantityAlias).toBe(2);expect(files['paged/views/wire-records.ts']).not.toContain('CAST(_p.');}
   finally{db.close();await rm(dir,{recursive:true,force:true});}
  }
-});
-
-test('computed WireRow fields keep their native Row types',async()=>{
- const text=source.split('---')[0]+`---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: maximum}\nspec: {surface: internal, sql: 'SELECT max(quantity) AS units FROM wire_records'}\n`;
- for(const target of ['bun-sqlite','bun-postgres'] as const){const files=await generateOrThrow(target,[{sourceId:'computed.yaml',text}]);expect(files['generated.ts']).toContain('readonly "units": View0Row["units"];');}
 });

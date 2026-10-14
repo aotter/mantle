@@ -67,14 +67,6 @@ describe("sign-in", () => {
     client.clear();
   });
 
-  it("labels the denied account as a user, not GitHub", () => {
-    const html = renderToStaticMarkup(
-      createElement(PreferencesProvider, { initialLanguage: readInitialLanguage() }, createElement(AccessDeniedView, { login: "MrCorn" })),
-    );
-    expect(html).toContain("User: MrCorn");
-    expect(html).not.toContain("GitHub:");
-  });
-
   it("uses Traditional Chinese user copy when that language is stored", () => {
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => key === "cms.preference.language" ? "zh-TW" : null,

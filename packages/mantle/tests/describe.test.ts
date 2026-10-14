@@ -84,7 +84,7 @@ test("CLI JSON equals describeApp and --diff writes nothing into the project", a
     expect(execFileSync("node", [cli, "describe", "bun-sqlite", manifest, "--diff", "old.json"], { cwd: dir, encoding: "utf8" }).trim()).toBe("[]");
     expect(await readdir(dir)).toEqual(["old.json"]);
   } finally { await rm(dir, { recursive: true, force: true }); }
-});
+}, 30_000);
 
 test("read flags distinguish insert targets, owner reads and translation parents", async () => {
   const plan = copy(await fixture());

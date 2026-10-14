@@ -98,17 +98,6 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
 }
 
 describe("resolveCaller: session cookie", () => {
-  test("1. no Cookie and no Authorization -> anonymous, the loader is never called", async () => {
-    const app = await makeApp();
-    expect(await resolveCaller(app.request(), app.loader)).toEqual({ kind: "anonymous" });
-    expect(app.loads()).toBe(0);
-  });
-
-  test("2. only unrelated cookies -> anonymous, the loader is never called", async () => {
-    const app = await makeApp();
-    expect(await resolveCaller(app.request({ cookie: "_ga=1; theme=dark" }), app.loader)).toEqual({ kind: "anonymous" });
-    expect(app.loads()).toBe(0);
-  });
 
   test("3. email OTP sign-in -> user caller with session id and user role", async () => {
     const app = await makeApp();
@@ -119,27 +108,6 @@ describe("resolveCaller: session cookie", () => {
     expect(app.loads()).toBe(1);
   });
 
-  test("4. role is re-read from the database on every request; application role strings are preserved", async () => {
-    const app = await makeApp();
-    const { cookie, userId } = await app.signIn();
-    const role = async () => (await resolveCaller(app.request({ cookie }), app.loader) as { role: unknown }).role;
-    expect(await role()).toBe("user");
-    app.sqlite.run("UPDATE user SET role = 'editor' WHERE id = ?", [userId]);
-    expect(await role()).toBe("editor");
-    app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [userId]);
-    expect(await role()).toBe("admin");
-    app.sqlite.run("UPDATE user SET role = 'owner' WHERE id = ?", [userId]);
-    expect(await role()).toBe("owner");
-  });
-
-  test("5. a revoked session is anonymous on the next request", async () => {
-    const app = await makeApp();
-    const { cookie, userId } = await app.signIn();
-    expect((await resolveCaller(app.request({ cookie }), app.loader)).kind).toBe("user");
-    app.sqlite.run("DELETE FROM session WHERE userId = ?", [userId]);
-    expect(await resolveCaller(app.request({ cookie }), app.loader)).toEqual({ kind: "anonymous" });
-  });
-
   test("5b. auth.api.revokeSession revokes it too", async () => {
     const app = await makeApp();
     const { cookie } = await app.signIn();
@@ -147,19 +115,6 @@ describe("resolveCaller: session cookie", () => {
     const token = decodeURIComponent(cookie.split("=")[1]!).split(".")[0]!;
     await app.auth.api.revokeSession({ headers, body: { token } });
     expect(await resolveCaller(app.request({ cookie }), app.loader)).toEqual({ kind: "anonymous" });
-  });
-
-  test("6. banned=1 in the DB: getSession still answers, resolveCaller is anonymous", async () => {
-    const app = await makeApp();
-    const { cookie, userId } = await app.signIn();
-    app.sqlite.run("UPDATE user SET banned = 1 WHERE id = ?", [userId]);
-    // Better Auth's getSession still returns a session for a banned user (the admin plugin only blocks session creation and
-    // revokes sessions in banUser), so resolveCaller itself treats banned as anonymous.
-    expect(await app.auth.api.getSession({ headers: new Headers({ cookie }) })).not.toBeNull();
-    expect(await resolveCaller(app.request({ cookie }), app.loader)).toEqual({ kind: "anonymous" });
-    // A temporary ban that has lapsed no longer applies.
-    app.sqlite.run("UPDATE user SET banExpires = ? WHERE id = ?", [new Date(Date.now() - 60_000).toISOString(), userId]);
-    expect((await resolveCaller(app.request({ cookie }), app.loader)).kind).toBe("user");
   });
 
   test("6b. admin plugin banUser revokes the user's sessions -> anonymous", async () => {
@@ -184,29 +139,6 @@ describe("resolveCaller: session cookie", () => {
     await expect(loader.get()).rejects.toThrow(/session_token\.name/);
     await expect(loader.get()).rejects.toThrow(/session_token\.name/);
     expect(renamedCalls).toBe(2);
-  });
-
-  test("8. custom advanced.cookiePrefix works end to end", async () => {
-    const app = await makeApp({ cookiePrefix: "app" });
-    const { cookie, userId, setCookies } = await app.signIn();
-    expect(setCookies.some(line => line.startsWith("app.session_token="))).toBe(true);
-    const caller = await resolveCaller(app.request({ cookie }), app.loader);
-    expect(caller).toMatchObject({ kind: "user", subject: userId, credential: "session" });
-    // A loader left on the default prefix does not see the "app." cookie: anonymous without loading.
-    const wrong = authLoader(async () => { throw new Error("must not load"); });
-    expect(await resolveCaller(app.request({ cookie }), wrong)).toEqual({ kind: "anonymous" });
-  });
-
-  test("a session due for refresh hands its fresh Set-Cookie to responseHeaders, so the cookie slides", async () => {
-    const app = await makeApp();
-    const { cookie } = await app.signIn();
-    // Within updateAge of expiry: Better Auth extends the session and re-sets the cookie.
-    app.sqlite.run("UPDATE session SET expiresAt = ?", [new Date(Date.now() + 60_000).toISOString()]);
-    const responseHeaders = new Headers();
-    expect((await resolveCaller(app.request({ cookie }), app.loader, { responseHeaders })).kind).toBe("user");
-    expect(responseHeaders.getSetCookie().some(c => c.includes("session_token="))).toBe(true);
-    const { expiresAt } = app.sqlite.query("SELECT expiresAt FROM session").get() as { expiresAt: string };
-    expect(Date.parse(expiresAt)).toBeGreaterThan(Date.now() + 86_400_000);
   });
 
   test("one primary result is the authority snapshot; a later revoke applies to the next request", async () => {

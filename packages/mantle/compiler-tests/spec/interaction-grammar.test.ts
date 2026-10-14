@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   requiredMantleRefFields,
-  resolveMantleRef,
   type Manifest,
   type ProcedureManifest,
   type SchemaManifest,
@@ -56,18 +55,6 @@ function review(spec: Partial<ProcedureManifest["spec"]> = {}): ProcedureManifes
 function errors(manifests: Manifest[]) {
   return validateManifests({ manifests }).diagnostics.filter((d) => d.severity === "error");
 }
-
-describe("resolveMantleRef", () => {
-  it("normalizes the string form to an id reference and passes the object form through", () => {
-    expect(resolveMantleRef({ "x-mantle-ref": "posts" })).toEqual({ schema: "posts", field: "id" });
-    expect(resolveMantleRef({ "x-mantle-ref": { schema: "posts", field: "slug" } })).toEqual({ schema: "posts", field: "slug" });
-  });
-
-  it.each([[{}], [{ "x-mantle-ref": "" }], [{ "x-mantle-ref": { schema: "posts" } }], [{ "x-mantle-ref": ["posts"] }], [null]])(
-    "returns null for %j",
-    (property) => expect(resolveMantleRef(property)).toBeNull(),
-  );
-});
 
 describe("x-mantle-ref object form", () => {
   it("accepts id and a single-field unique index as the target field", () => {

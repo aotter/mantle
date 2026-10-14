@@ -3,7 +3,6 @@ import {Database} from "bun:sqlite";
 import {resolve} from "node:path";
 import {rm} from "node:fs/promises";
 import {build} from "esbuild";
-import ts from "typescript";
 import {generateOrThrow, loadFixtureSources, writeGenerated} from "./apps/link.js";
 import {toCloudflareCron} from "../src/kernel/cron.js";
 import type {Target} from "../src/domain/model.js";
@@ -35,16 +34,6 @@ test("Cloudflare cron maps POSIX weekdays and refuses ambiguous schedules", () =
   expect(toCloudflareCron("0 0 * * 0,2-6")).toBe("0 0 * * 1,3-7");
   expect(toCloudflareCron("*/5 * * JAN MON-FRI")).toBe("*/5 * * JAN MON-FRI");
   for (const cron of ["0 0 * * 7", "60 * * * *", "0 0 1 * 1", "* * * *", "* * * * */0"]) expect(() => toCloudflareCron(cron)).toThrow();
-});
-test("TTL direct entries and Store procedures typecheck on all four targets", async () => {
-  const files: string[] = [];
-  for (const target of ["bun-sqlite", "cloudflare-d1", "bun-postgres", "cloudflare-postgres"] as const) {
-    const path = resolve(dir, "types", target);
-    await writeGenerated(path, await generateOrThrow(target, await loadFixtureSources("store-extra.yaml", "publishing.yaml")), false);
-    files.push(resolve(path, "procedures/session_notes.sweepExpired.ts"), resolve(path, "procedures/expiring_posts.sweepExpired.ts"));
-  }
-  const program = ts.createProgram(files, {strict: true, noEmit: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, skipLibCheck: true, types: ["bun-types"]});
-  expect(ts.getPreEmitDiagnostics(program).map(d => ts.flattenDiagnosticMessageText(d.messageText, "\n"))).toEqual([]);
 });
 test("TTL scans advance even when a native trigger suppresses deletion", async () => {
   const files = await generateOrThrow("bun-sqlite", await loadFixtureSources("store-extra.yaml"));

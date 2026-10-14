@@ -17,6 +17,9 @@ const REQUIRED_TRANSLATED_KEYS = new Set([
   "common.toggleSidebar",
   "common.yes",
   "common.no",
+  "ops.details",
+  "ops.conditionConflict",
+  "ops.uniqueConflict",
   "nav.build",
   "nav.docs",
   "nav.localizedContent",
@@ -47,15 +50,15 @@ describe("Required Admin translations", () => {
     expect(t("en", "admin.page.body")).not.toContain("Only site owners");
   });
 
-  for (const { value } of ADMIN_LANGUAGES) {
-    it(`has every required ${value} message`, () => {
+  it("every declared language has the required messages and matching placeholders", () => {
+    for (const { value } of ADMIN_LANGUAGES) {
       const messages = STRINGS[value] as Record<string, string>;
       expect(translatedKeys.filter((key) => !(key in messages))).toEqual([]);
       for (const key of translatedKeys) {
         expect(placeholders(messages[key])).toEqual(placeholders(STRINGS.en[key as keyof typeof STRINGS.en]));
       }
-    });
-  }
+    }
+  });
 });
 
 function placeholders(message: string): Array<string> {

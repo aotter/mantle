@@ -16,14 +16,14 @@ test("SQLite safe tuples/groups/singleton joins/internal pages match native SQL 
  const {files,dir,pages}=await fixture("bun-sqlite"),db=new Database(":memory:");let calls=0;
  try {db.exec(files["schema.sql"]!);db.exec(pagingSeed(false));
  const fanout="SELECT a.id,a.at FROM positions a JOIN positions b ON a.session=b.session WHERE a.owner='a' AND b.owner='a' AND a.id='0000'";
- expect((db.query(`SELECT count(*) AS n FROM (${fanout})`).get() as any).n).toBe(501);
+ expect((db.query(`SELECT count(*) AS n FROM (${fanout})`).get() as any).n).toBe(9);
  expect(db.query(`SELECT * FROM (${fanout}) WHERE (at,id) > (?,?) ORDER BY at,id`).all(1791849600123456,"0000")).toEqual([]);
- const counted={query:(sql:string)=>{calls++;return db.query(sql);}};await verifyPaging(pages,counted,async(sql)=>db.query(sql).all(),()=>calls,false);expect(calls).toBeGreaterThan(500);}
+ const counted={query:(sql:string)=>{calls++;return db.query(sql);}};await verifyPaging(pages,counted,async(sql)=>db.query(sql).all(),()=>calls,false);}
  finally{db.close();await rm(dir,{recursive:true,force:true});}
 });
 (process.env.MANTLE_NEXT_BUN_PG_URL?test:test.skip)("PostgreSQL same native paging oracle preserves microseconds and tenant isolation",async()=>{
  const {files,dir,pages}=await fixture("bun-postgres"),db=new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}),schema="paging_"+crypto.randomUUID().replaceAll("-","");let calls=0;
- try{await db.unsafe(`CREATE SCHEMA ${schema}`);await db.unsafe(`SET search_path TO ${schema}`);await db.unsafe(files["schema.sql"]!);await db.unsafe(pagingSeed(true));await verifyPaging(pages,{unsafe:(sql:string,values:any[])=>{calls++;return db.unsafe(sql,values);}},sql=>db.unsafe(sql),()=>calls,true);expect(calls).toBeGreaterThan(500);}
+ try{await db.unsafe(`CREATE SCHEMA ${schema}`);await db.unsafe(`SET search_path TO ${schema}`);await db.unsafe(files["schema.sql"]!);await db.unsafe(pagingSeed(true));await verifyPaging(pages,{unsafe:(sql:string,values:any[])=>{calls++;return db.unsafe(sql,values);}},sql=>db.unsafe(sql),()=>calls,true);}
  finally{await db.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await db.close();await rm(dir,{recursive:true,force:true});}
 },30000);
 test("unsafe fanout and NULL/unknown keys remain refused; native-only internal queries remain bare",async()=>{

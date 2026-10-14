@@ -94,6 +94,7 @@ test("public View and exact URL input names are typechecked on every target",asy
   await mkdir(join(import.meta.dir,"apps/.generated/"),{recursive:true});
   const dir=await mkdtemp(join(import.meta.dir,"apps/.generated/","web-types-"));
   try {
+    const roots:string[]=[];
     for(const target of ["bun-sqlite","bun-postgres","cloudflare-d1","cloudflare-postgres"] as const){
       const destination=join(dir,target);await writeGenerated(destination,await generateOrThrow(target,[{sourceId:"blog.yaml",text:source}]),false);
       const check=join(destination,"check.ts");await writeFile(check,`import {web} from './web.js';
@@ -114,9 +115,10 @@ web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'post-by-slug'}}})
 // @ts-expect-error unknown markdown column
 web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',markdown:'unknown'}}});
 `);
-      const program=ts.createProgram([check],{strict:true,noEmit:true,skipLibCheck:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,types:["bun-types"],allowImportingTsExtensions:true});
-      expect(ts.getPreEmitDiagnostics(program).map(d=>ts.flattenDiagnosticMessageText(d.messageText,"\n"))).toEqual([]);
+      roots.push(check);
     }
+    const program=ts.createProgram(roots,{strict:true,noEmit:true,skipLibCheck:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,types:["bun-types"],typeRoots:[join(import.meta.dir,"../node_modules/@types"),join(import.meta.dir,"../node_modules")],allowImportingTsExtensions:true});
+    expect(ts.getPreEmitDiagnostics(program).map(d=>ts.flattenDiagnosticMessageText(d.messageText,"\n"))).toEqual([]);
   }finally{await rm(dir,{recursive:true,force:true});}
 },30000);
 

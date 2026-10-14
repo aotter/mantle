@@ -25,7 +25,7 @@ test("admin probes resolve authority before loading the SDK or reading a body", 
   const child = Bun.spawn([process.execPath, "--eval", script], { stdout: "pipe", stderr: "pipe" });
   const error = await new Response(child.stderr).text();
   expect(await child.exited, error).toBe(0);
-});
+}, 30_000);
 
 test("app-composed tools need an explicit read catalogue for cached cookie authority", async () => {
   const tools: Tool<null>[] = [

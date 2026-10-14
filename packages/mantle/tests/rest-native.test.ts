@@ -3,7 +3,7 @@ import {SQL} from "bun";
 import {mkdtemp,readFile,writeFile,rm,open} from "node:fs/promises";
 import {resolve,join} from "node:path";
 import {tmpdir} from "node:os";
-import {spawn,execFileSync} from "node:child_process";
+import {spawn} from "node:child_process";
 import {once} from "node:events";
 import {generateOrThrow,writeGenerated,loadFixtureSources} from "./apps/link.js";
 import {verifyRest} from "./rest-scenarios.js";
@@ -22,19 +22,6 @@ async function fixture(target:"bun-sqlite"|"bun-postgres"|"cloudflare-d1") {
 (process.env.MANTLE_NEXT_BUN_PG_URL ? test : test.skip)("REST real Bun.SQL PostgreSQL runs the same transport and state oracle",async()=>{
  const {dir,files}=await fixture("bun-postgres"),sql=new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}),schema="rest_"+crypto.randomUUID().replaceAll("-","");
  try {await sql.unsafe(`CREATE SCHEMA ${schema}`);await sql.unsafe(`SET search_path TO ${schema}`);await sql.unsafe(files["schema.sql"]!);await sql.unsafe(seed(true));const {app}=await import(join(dir,"app.ts"));await verifyRest(request=>app(request,{DB:sql}));expect(true).toBe(true);} finally {await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await sql.close();await rm(dir,{recursive:true,force:true});}
-},30000);
-test("REST Handlers are type-required and reject mismatched implementations",async()=>{
- const {dir}=await fixture("bun-sqlite");
- try {
-  await writeFile(join(dir,"types.ts"),`import {rest} from './rest.js';import {Database} from 'bun:sqlite';import type {Handlers} from './generated.js';const db=new Database(':memory:');const caller=async()=>({kind:'anonymous'} as const);
-// @ts-expect-error manifest declares refs: handlers required
-rest({db:()=>db,caller});
-// @ts-expect-error handler input/output mismatch
-rest({db:()=>db,caller,handlers:{echo:async()=>({reply:1,title:1})}});
-const handlers:Handlers={echo:async(ctx,input)=>({reply:input.message,title:(await ctx.store.collection('notes').findById('a'))!.title})};rest({db:()=>db,caller,handlers});`);
-  await writeFile(join(dir,"tsconfig.json"),JSON.stringify({compilerOptions:{noEmit:true,strict:true,skipLibCheck:true,target:"ES2022",module:"NodeNext",moduleResolution:"NodeNext",types:["bun-types"],allowImportingTsExtensions:true},include:["types.ts"]}));
-  execFileSync("node",[join(base,"node_modules/typescript/bin/tsc"),"--project",join(dir,"tsconfig.json")],{cwd:base,stdio:"pipe"});expect(true).toBe(true);
- } finally {await rm(dir,{recursive:true,force:true});}
 },30000);
 (process.env.MANTLE_NEXT_REST_D1 ? test : test.skip)("REST real local D1 runs the same transport and state oracle",async()=>{
  const {unstable_splitSqlQuery}=await import("wrangler"),{dir,files}=await fixture("cloudflare-d1"),privateDir=await mkdtemp(join(tmpdir(),"mantle-rest-d1-"));

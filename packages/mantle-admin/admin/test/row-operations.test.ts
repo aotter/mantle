@@ -4,7 +4,6 @@ import {
   collectionOperationsFor,
   createOperationController,
   operationFormSchema,
-  rowValues,
 } from "../src/features/content/row-operations";
 import { idempotencyFields } from "../src/features/ops/interaction-dialog";
 import { globalOperations } from "../src/features/ops/operations-view";
@@ -42,11 +41,6 @@ describe("row operation form", () => {
     expect(automatic).toEqual(["operationId"]);
     expect(Object.keys(form.properties ?? {})).toEqual(["delta"]);
     expect(form.required).toEqual(["delta"]);
-  });
-
-  it("feeds the controller the listed row: id, version and fields", () => {
-    expect(rowValues({ id: "p1", collection: "inventory", version: 4, data_preview: { sku: "A" } }))
-      .toEqual({ sku: "A", id: "p1", version: 4 });
   });
 });
 

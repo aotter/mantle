@@ -155,6 +155,10 @@ webmcpRoutes({tools:[]},tools,{});
 mcp(options);
 // @ts-expect-error generated REST requires ref handlers
 rest(options);
+// @ts-expect-error REST must reject mismatched handler output
+rest({...options,handlers:{'app-test':async()=>({label:1})}});
+// @ts-expect-error MCP must reject a wrong ref key
+mcp({...options,handlers:{wrong:async()=>({})}});
 // @ts-expect-error handlers are required for the selected application
 adminBindings();
 // @ts-expect-error missing typed ref implementation

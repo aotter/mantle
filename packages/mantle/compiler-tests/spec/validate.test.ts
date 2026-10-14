@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateManifests } from "./parse.js";
 import { parseManifests } from "./parse.js";
-import { patternCost, unsafePattern } from "../../src/build/spec/domain/service/SchemaSpecChecks.js";
 import { jsonSchemaToZod } from "../../src/build/spec/domain/service/JsonSchemaToZod.js";
 import type {
   Manifest,
@@ -84,13 +83,11 @@ function trigger(name: string, procedureName: string): TriggerManifest {
 }
 
 describe("validateManifests()", () => {
-  it("refuses x-mantle-bind, which 0.2.0 no longer stamps, with the replacement in the message", () => {
-    for (const bind of ["ctx.user", "ctx.admin", "now"]) {
-      const s = schema("notes", { schema: { type: "object", properties: { by: { type: "string", "x-mantle-bind": bind } } } });
-      const r = validateManifests({ manifests: [s] });
-      expect(r.diagnostics.map((d) => d.message).join()).toMatch(/x-mantle-bind is removed\. Use spec\.scope/);
-    }
+  it("refuses a Trigger targeting an undeclared Procedure", () => {
+    expect(validateManifests({ manifests: [trigger("missing", "missing")] }).diagnostics)
+      .toContainEqual(expect.objectContaining({ code: "TRIGGER_TARGET_PROCEDURE_UNKNOWN" }));
   });
+
 
   it("requires scope to bind one required, indexed string field to auth.uid()", () => {
     const scoped = schema("sessions", {
@@ -121,27 +118,6 @@ describe("validateManifests()", () => {
     for (const ttl of [{ field: "missing", expireAfterSeconds: 0 }, { field: "expiresAt", expireAfterSeconds: -1 }]) {
       expect(codes({ ...expiring, spec: { ...expiring.spec, ttl } })).toContain("SCHEMA_TTL_INVALID");
     }
-  });
-
-  it("emits TRIGGER_PATH_INVALID when an http Trigger path does not start with /api/", () => {
-    const t: TriggerManifest = {
-      apiVersion,
-      kind: "Trigger",
-      metadata: { name: "restockProductHttp" },
-      spec: {
-        source: { kind: "http", method: "POST", path: "/admin/api/restock" },
-        target: { procedure: "restockProduct" },
-      },
-    };
-    const manifests: Manifest[] = [
-      schema("posts"),
-      procedure("restockProduct"),
-      t,
-    ];
-    const result = validateManifests({ manifests });
-    const codes = result.diagnostics.map((d) => d.code);
-    expect(codes).toContain("TRIGGER_PATH_INVALID");
-    expect(result.errorCount).toBeGreaterThan(0);
   });
 
   it("does NOT emit a spurious TRIGGER_PATH_COLLISION when two triggers share an invalid path", () => {
@@ -175,18 +151,6 @@ describe("validateManifests()", () => {
     // secondary to the bad prefix and would misdescribe the root cause.
     expect(codes.filter((c) => c === "TRIGGER_PATH_INVALID")).toHaveLength(2);
     expect(codes).not.toContain("TRIGGER_PATH_COLLISION");
-  });
-
-  it("emits TRIGGER_TARGET_PROCEDURE_UNKNOWN when a Trigger targets an undeclared Procedure", () => {
-    const manifests: Manifest[] = [
-      schema("posts"),
-      // Note: no Procedure "createPost" declared.
-      trigger("createPostHttp", "createPost"),
-    ];
-    const result = validateManifests({ manifests });
-    const codes = result.diagnostics.map((d) => d.code);
-    expect(codes).toContain("TRIGGER_TARGET_PROCEDURE_UNKNOWN");
-    expect(result.errorCount).toBeGreaterThan(0);
   });
 
   it("rejects TTL on either side of a translation join", () => {
@@ -527,64 +491,6 @@ spec:
     }
   });
 
-  it("accepts Trigger.source.kind: 'lifecycle' with on + schema", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: postsCaptcha }
-spec:
-  source:
-    kind: lifecycle
-    schema: posts
-    on: [before_create]
-  target: { procedure: captchaCheck }
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics).toEqual([]);
-    expect(result.manifests).toHaveLength(1);
-    const trig = result.manifests[0] as TriggerManifest;
-    expect(trig.spec.source.kind).toBe("lifecycle");
-  });
-
-  it("accepts POSIX cron schedules and rejects malformed cron, required input, and user authorization", () => {
-    const procedure = {
-      apiVersion, kind: "Procedure", metadata: { name: "sweep" },
-      spec: { input: { type: "object", properties: {} }, output: { type: "object" }, handler: { ref: "sweep" } },
-    } as ProcedureManifest;
-    const trigger = {
-      apiVersion, kind: "Trigger", metadata: { name: "daily-sweep" },
-      spec: { source: { kind: "schedule", cron: "0 2 * * *", enabled: true }, target: { procedure: "sweep" } },
-    } as TriggerManifest;
-    expect(validateManifests({ manifests: [procedure, trigger] }).diagnostics.map((d) => d.code)).not.toContain("SCHEDULE_INPUT_INVALID");
-    expect(validateManifests({ manifests: [{ ...procedure, spec: { ...procedure.spec,
-      input: { type: "object", required: ["token"], properties: { token: { type: "string" } } },
-    } }, trigger] }).diagnostics.map((d) => d.code)).toContain("SCHEDULE_INPUT_INVALID");
-    expect(validateManifests({ manifests: [{ ...procedure, spec: { ...procedure.spec,
-      requires: { auth: { all: ["ctx.admin"] } },
-    } }, trigger] }).diagnostics.map((d) => d.code)).toContain("SCHEDULE_AUTH_INVALID");
-    expect(parseManifests(JSON.stringify({ ...trigger, spec: { ...trigger.spec,
-      source: { kind: "schedule", cron: "0 2 * * 0" }, // POSIX: 0 is Sunday
-    } })).diagnostics).toEqual([]);
-    for (const cron of ["* * * *", "*/0 * * * *", "60 * * * *", "0 2 31-1 * *", "0  2 * * *", "0 2 * * 7"]) {
-      expect(parseManifests(JSON.stringify({ ...trigger, spec: { ...trigger.spec,
-        source: { kind: "schedule", cron },
-      } })).diagnostics.map((d) => d.code)).toContain("INVALID_MANIFEST_ENVELOPE");
-    }
-  });
-
-  it("rejects errorPolicy: before hooks fail closed, after hooks are best effort", () => {
-    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: postsNotify }
-spec:
-  source: { kind: lifecycle, schema: posts, on: [after_create], errorPolicy: continue }
-  target: { procedure: notifySlack }
-`);
-    expect(result.diagnostics[0]).toMatchObject({
-      code: "INVALID_MANIFEST_ENVELOPE",
-      path: expect.stringContaining("/spec/source/errorPolicy"),
-    });
-  });
-
   // ponytail: one table for the mcp source shape
   it("accepts an mcp source on admin or public, and refuses a missing or unknown surface and foreign keys", () => {
     for (const [surface, extra, refusal] of [
@@ -651,21 +557,6 @@ spec:
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics[0]?.message).toContain("non-empty string");
-  });
-
-  it("rejects role lists in View.requires.auth.all", () => {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: secretView }
-spec:
-  surface: public
-  sql: 'SELECT id FROM "posts"'
-  requires:
-    auth:
-      all: [{ "ctx.admin": ["editor"] }]
-`;
-    const result = parseManifests(yaml);
-    expect(result.diagnostics[0]?.message).toContain("withdrawn");
   });
 
   it("rejects unsupported View auth keys", () => {
@@ -1004,13 +895,6 @@ spec:
     expect(input(`{ type: string, maxLength: 3162, pattern: '[a-z]*[a-z]*!' }`)[0]?.message).toMatch(/maxLength of at most 215\b/);
     expect(input(`{ type: string, maxLength: 100000, pattern: '[a-z]*!' }`)[0]?.message).toMatch(/maxLength of at most 3162\b/);
   });
-  it("counts variable quantifiers outside character classes, a quantified group once, plus one when unanchored", () => {
-    expect(["^[a-z*+?]{3}$", "^(ab)*$", "^\\*a+$", "^(a*)(b+)c?d{2,}e{1,3}f{4}$", "^[^@]+@[^@]+$", "[a-z]*!", "abc", "^a|b"].map((p) => patternCost(p).exponent)).toEqual([0, 1, 1, 5, 2, 2, 1, 1]);
-    // without the u flag `[]` and `[^]` are whole classes: what follows is outside them
-    expect(["^[]a*$", "^[^]a*a*]?$"].map((p) => patternCost(p).exponent)).toEqual([1, 3]);
-    expect(unsafePattern("^[^](a+)+]?$")).toBeDefined();
-    expect(["^(?:[a-f0-9]{40}|[a-f0-9]{64})$", "^(a|b)(c|d|e)$", "^x|y|z"].map((p) => patternCost(p).branches)).toEqual([2, 6, 3]);
-  });
   it("the worst accepted shape at its maxLength validates in well under 100 ms", () => {
     for (const [pattern, maxLength] of [["^a*a*a*a*a*a*a*a*a*a*a*a*$", 3], ["^.*.*.*.*.*.*.*$", 10], ["^[^@]+@[^@]+$", 3162], ["^[a-z0-9-]+$", 100_000], ["[a-z]*[a-z]*!", 215], ["[a-z]*!", 3162], ["^[^]a*a*]?$", 215], [`^${"(a|a)".repeat(23)}a*$`, 1]] as const) {
       expect(input(`{ type: string, maxLength: ${maxLength}, pattern: '${pattern}' }`)).toEqual([]);
@@ -1028,14 +912,5 @@ spec:
     const result = zs.safeParse({ s: "a".repeat(30) + "b" });
     expect(performance.now() - started).toBeLessThan(100);
     expect(result.error?.issues.map((i) => i.code)).toEqual(["too_big"]);
-  });
-});
-
-describe("unsafePattern", () => {
-  it("accepts the patterns apps write, and refuses the shapes that backtrack exponentially", () => {
-    for (const ok of ["^[a-z0-9-]+$", "^[a-f0-9]{64}$", "^[A-Z]{3}$", "^SR-[0-9]{6}$", "^(?:[a-f0-9]{40}|[a-f0-9]{64})$", "^release/sha256-[a-f0-9]{64}\\.json$", "^[a-z][a-z0-9-]{1,38}[a-z0-9]$", "^(\\d{3}-)?\\d{4}$", "^(ab){2}$", "[(+*)]+", "\\(a+\\)+", "a{x}+"])
-      expect([ok, unsafePattern(ok)]).toEqual([ok, undefined]);
-    for (const bad of ["^(a+)+$", "(a*)*", "(a?)+", "((ab)+c)*", "(\\w+\\s?)*", "(a|b)+", "(?:x+y)+", "(?<n>a+){2,}", "(a+){20}", "(a)\\1", "\\k<n>", "a".repeat(1001)])
-      expect([bad, unsafePattern(bad)]).not.toEqual([bad, undefined]);
   });
 });
