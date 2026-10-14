@@ -187,7 +187,7 @@ spec:
   output: { type: object }
   handler:
     sql: |
-      INSERT INTO events (title, startsAt, capacity, closed) VALUES (input.title, input.startsAt, input.capacity, false) RETURNING id
+      INSERT INTO events (title, startsAt, capacity, closed, seats_taken) VALUES (input.title, input.startsAt, input.capacity, false, 0) RETURNING id
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
