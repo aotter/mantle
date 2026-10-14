@@ -8,5 +8,5 @@ export const siteDefaults = {
   title: "Recipes",
   description: "Home recipes in Traditional Chinese and English.",
   locales: ["zh-TW", "en"],
-  media: { purposes: [{ name: "cover", required: ["primary"], maxBytes: { primary: 5_000_000 } }] },
+  media: { purposes: [{ name: "cover", required: ["image/jpeg,image/png,image/webp"], maxBytes: { "image/jpeg": 5_000_000, "image/png": 5_000_000, "image/webp": 5_000_000 } }] },
 } satisfies SiteDefaults;

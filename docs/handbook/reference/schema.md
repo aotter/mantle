@@ -25,6 +25,8 @@ spec:
 
 ## Fields and storage
 
+A string `pattern` needs a `maxLength`: generation bounds each regex's backtracking and, when it refuses one (`INVALID_PATTERN`), names the largest `maxLength` it accepts. Anchor patterns with `^` and avoid nested quantifiers such as `(-[a-z0-9]+)*`.
+
 | Field | sqlite | postgres |
 | --- | --- | --- |
 | string | TEXT | text |

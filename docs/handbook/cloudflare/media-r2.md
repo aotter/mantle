@@ -11,6 +11,15 @@ Callers of any credential kind; the Admin handler must additionally keep its
 cookie-session-only gate and the shared session-mutation origin check. The optional module is absent from
 a Worker that does not import it.
 
+Each media purpose in `siteDefaults.media.purposes` lists mime **slots** and a byte cap per full mime type:
+
+```ts
+{ name: "cover", required: ["image/jpeg,image/png,image/webp"], maxBytes: { "image/jpeg": 5_000_000, "image/png": 5_000_000, "image/webp": 5_000_000 } }
+```
+
+`required` entries use `<input accept>` grammar (full mime, comma list, or a subtype shorthand such as `webp`);
+`maxBytes` must cover every mime the slots allow, keyed by the full mime type.
+
 OSS applications own their R2 binding, public bucket URL and S3 credentials.
 Mantle Cloud supplies that wiring by default; the OSS package has no Cloud API
 or credential management. Import `r2MediaStorage` from `@aotter/mantle/media/r2`:
@@ -58,3 +67,7 @@ storage with the durable `media_assets.variants` keys. Attempt-isolated copies
 may remain after an uncertain outcome; never delete the winning asset's keys or
 expire all `committed/` objects indiscriminately. The group UUID remains the
 reconciliation and retry id.
+
+Admin's `media` option takes a `MediaStorage` value, so build it where `env` is available (for example once per
+Worker in the fetch handler). Uploads use presigned S3 PUT URLs: `wrangler dev --local` has an R2 binding but no S3
+endpoint, so test the upload flow against a real bucket; local tests can cover everything up to the signed URL.
