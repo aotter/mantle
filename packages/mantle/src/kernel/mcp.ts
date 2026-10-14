@@ -1,5 +1,5 @@
 /** MCP request handling for a generated tool table; the official SDK loads on the first MCP request. */
-import type { Caller } from "./contracts.js";
+import type { Caller, Target, Authorize } from "./contracts.js";
 import type { Conversions } from "./surface.js";
 import { linkApps, linkSurface, resourcesOf } from "./mcp-apps.js";
 export { callTool, callToolLazy } from "./mcp-call.js";
@@ -8,6 +8,7 @@ export type { McpApps, McpAppResource } from "./mcp-apps.js";
 /** Options of a generated `mcp(...)`; it adds required `handlers` when the app declares ref Procedures. */
 export interface Options<Env, Database> {
   apps?: Readonly<Partial<Record<"public" | "admin", import("./mcp-apps.js").McpApps | readonly import("./mcp-apps.js").McpApps[]>>>;
+  authorize?: Authorize;
   db: (env: Env) => Database;
   caller: (request: Request, env: Env, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>;
   locale?: string;
@@ -30,6 +31,9 @@ type Paging = { limit?: number; cursor?: string };
 /** One tool: a paged View (`page`) or a Procedure (`run`, a write), on the public or admin surface. */
 export interface Tool<Database, Handlers = never> {
   readonly name: string;
+  readonly target?: Target;
+  /** Generated requires guard, used before application authorization. */
+  readonly check?: (caller: Caller) => void;
   readonly surface: string;
   readonly title?: LocalizedText;
   readonly description: LocalizedText;

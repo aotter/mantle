@@ -1,4 +1,5 @@
 /** Request-only MCP implementation, excluded from Worker startup. */
+import { authorized, authorizeTarget } from "./authorization.js";
 import { isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceError, surfaceFailure, wire, type Caller } from "./contracts.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
 import type { Tools, Options } from "./mcp.js";
@@ -73,6 +74,26 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
     }
     const app = options.apps?.[surface];
     const links = app ? (apps[surface] = linkSurface(app, selected, apps[surface])).links : undefined;
+    if (options.authorize) {
+      try {
+        for (const message of Array.isArray(parsedBody) ? parsedBody : [parsedBody]) {
+          if (message?.method !== "tools/call") continue;
+          const tool = selected.find(tool => tool.name === message.params?.name);
+          if (!tool) continue;
+          tool.check?.(caller);
+          await authorizeTarget(options.authorize, tool.target ?? { kind: tool.page ? "view" : "procedure", name: tool.name }, caller);
+        }
+        if ((Array.isArray(parsedBody) ? parsedBody : [parsedBody]).some(message => message?.method === "tools/list")) {
+          const visible = [];
+          for (const tool of selected) {
+            if (caller.kind === "anonymous" && tool.closed || caller.kind === "user" && caller.credential === "oauth" && tool.scopes?.some(scope => !caller.scopes.includes(scope))) continue;
+            try { tool.check?.(caller); } catch (error) { if (error instanceof ContractError && ["AUTH_DENIED", "UNAUTHENTICATED"].includes(error.code)) continue; throw error; }
+            if (await authorized(options.authorize, tool.target ?? { kind: tool.page ? "view" : "procedure", name: tool.name }, caller)) visible.push(tool);
+          }
+          selected = visible;
+        }
+      } catch (error) { return challenge(error); }
+    }
     const handler = createMcpHandler(() => {
       const schema = (value: unknown) => fromJsonSchema(value as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } });
       const server = new McpServer({ name: "aotter.mantle", version: "0.2.0", ...options.serverInfo }, { capabilities: { tools: { listChanged: false } }, ...(options.instructions ? { instructions: options.instructions } : {}) });

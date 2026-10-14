@@ -1,10 +1,11 @@
 /** REST request handling for a generated route table: matching, body and parameter decoding, dispatch and errors. */
-import { ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller } from "./contracts.js";
+import { ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller, type Target, type Authorize } from "./contracts.js";
 import { decode, invalid, type Conversions } from "./surface.js";
 
 type Paging = { limit?: number; cursor?: string };
 /** Options of a generated `rest(...)`; it adds required `handlers` when the app declares ref Procedures. */
 export interface Options<Env, Database> {
+  authorize?: Authorize;
   db: (env: Env) => Database;
   caller: (request: Request, env: Env, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>;
 }
@@ -15,6 +16,9 @@ export interface Options<Env, Database> {
  */
 export interface Route<Database, Handlers = never, Env = unknown> {
   readonly method: string;
+  readonly target?: Target;
+  /** Generated requires guard, used before application authorization. */
+  readonly check?: (caller: Caller) => void;
   /** A selected native surface can preserve the Request and return its own Response. */
   readonly handle?: (request: Request, env: Env, getDb: () => Database, caller: Caller, params: Record<string, string>, handlers: Handlers, input?: Record<string, unknown>) => Promise<unknown>;
   /** Selected raw APIs may declare a different body limit; JSON routes default to one million bytes. */
@@ -67,8 +71,7 @@ function router<Env, Database, Handlers>(routes: readonly Route<Database, Handle
 export function rest<Env, Database, Handlers = never>(routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database> & { handlers?: Handlers }): (request: Request, env: Env) => Promise<Response | undefined> {
   return router(routes, options, async (route, request, env, caller, params) => {
     const { dispatch } = await import("./rest-dispatch.js");
-    const data = await dispatch(route, request, () => options.db(env), caller, params, options.handlers as Handlers);
-    return request.method === "HEAD" ? new Response(null, {headers}) : Response.json(data, {headers});
+    return dispatch(route, request, () => options.db(env), caller, params, options);
   });
 }
 
