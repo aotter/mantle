@@ -1,6 +1,7 @@
-import { realpathSync, rmSync } from "node:fs";
+import { readFileSync, realpathSync, rmSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { build, type Metafile } from "esbuild";
+import { extraRoles, staleInputs } from "./inputs.js";
 
 /** Only static imports run at startup; dynamic imports remain separate uploaded modules. */
 export function startupGraph(metafile: Metafile, entry: string): string[] {
@@ -58,6 +59,13 @@ export async function bundle(entry: string, outdir: string): Promise<Metafile> {
   });
   if (Object.keys(result.metafile.inputs).some(input => /(?:^|\/)mantle\/(?:src|dist)\/testing\//.test(resolve(input).replaceAll("\\", "/"))))
     throw new Error("@aotter/mantle/testing is only for tests and cannot be bundled for production.");
+  // A build is what `wrangler dev` and deploys run: generated code must match the manifests it came from.
+  for (const input of Object.keys(result.metafile.inputs).filter(input => /(?:^|\/)generated\.ts$/.test(input))) {
+    const stale = staleInputs(resolve(input));
+    if (stale.length) throw new Error(`Generated output in ${relative(process.cwd(), resolve(input, ".."))} is stale (${stale.join("; ")}). Run your generate script (mantle generate ...) and rebuild.`);
+  }
+  const roles = Object.keys(result.metafile.inputs).filter(input => !/node_modules|(?:^|\/)generated\//.test(input) && /\.[cm]?[jt]s$/.test(input)).flatMap(input => extraRoles(readFileSync(input, "utf8")));
+  if (roles.length) console.warn(`note: Better Auth roles beyond admin and user: ${[...new Set(roles)].join(", ")}. Mantle grants by the admin layer and app code; keep extra roles only if the app needs them.`);
   guardStartup(result.metafile, entry);
   return result.metafile;
 }
