@@ -239,7 +239,7 @@ tabs. Set `Schema.spec.uiSchema.nav.standalone: true` to put a required-ref chil
 at the top level instead. With multiple eligible references, set
 `nav.parentField` to the chosen reference field.
 
-Operational collections have no generic create or draft: officers add records through a Procedure placed with `collectionAction` (the list header shows its button and input form), so every write is a declared, validated program.
+Operational collections have no generic create or draft: officers add records through a Procedure placed with `collectionAction` (the list header shows its button and input form), so every write is a declared, validated program. For a user-field scoped Schema, SQL INSERT is system-only, so that Procedure is a ref handler that inserts through `ctx.store` ([procedure.md](../reference/procedure.md)).
 
 Admin operations are Procedures exposed by an admin MCP Trigger. Declare
 `Procedure.spec.uiSchema.collectionAction: <schema-name>` to show the operation
