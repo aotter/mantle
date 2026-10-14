@@ -17,7 +17,7 @@ export const userOf = (caller: Caller): Readonly<User> | undefined => users.get(
 /** @deprecated Use `userOf`; it covers every credential, not only sessions. */
 export const sessionUserOf = userOf;
 /** The admin plugin's ban, lapsed once `banExpires` has passed (as the plugin reads it at sign-in). */
-const isBanned = (user: User) => !!user.banned && (user.banExpires == null || new Date(user.banExpires).getTime() > Date.now());
+export const isBanned = (user: User) => !!user.banned && (user.banExpires == null || new Date(user.banExpires).getTime() > Date.now());
 /** The application's `betterAuth()` instance, as far as Caller resolution reads it. */
 export interface AuthInstance {
   readonly options: BetterAuthOptions;
