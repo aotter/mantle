@@ -1,13 +1,12 @@
 import { userReferences } from "../domain/userReferences.js";
 /** Translation helpers use generated SQL policy, never a request-time manifest. */
-import { rowPolicy, type RuntimePlan, type PlanSchema } from "../build/compiler.js";
+import { rowPolicy, type RuntimePlan, type PlanSchema, type RowMode } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
 import type { Dialect } from "../kernel/dialect/common.js";
 import { renderTerm } from "../kernel/store.js";
 import {dialect as SQLITE} from "../kernel/dialect/sqlite.js";
 import {dialect as POSTGRES} from "../kernel/dialect/postgres.js";
 import {declaredType} from "../domain/columns.js";
-import { nextMode } from "../domain/visibility.js";
 import { driverFor, isSqlite, q } from "../domain/entry.js";
 /** The parent is checked by the same atomic UPDATE that publishes the child. */
 export function publishedParent(plan: RuntimePlan, child: PlanSchema, d: Dialect, recipes: object[], trusted: boolean): string {
@@ -31,12 +30,12 @@ export function emitTranslations(plan:RuntimePlan,target:Target):Record<string,s
     const entries=types.map(child=>{
       const on=child.translates!.on.toLowerCase(),type=declaredType(child.fields,on);
       const key="t."+d.ident(on),projection=type==="timestamptz"?d.wireTimestamp(key).join(""):type==="date"?d.wireDate(key).join(""):key;
-      const lower = (mode:ReturnType<typeof nextMode> | 'trusted') => {
+      const lower = (mode:RowMode) => {
         const terms=rowPolicy(plan.schemas[child.name]!,mode,plan.schemas),recipes:object[]=[];
         const where=terms.map(term=>renderTerm(d,term,"t.",recipe=>(recipes.push(recipe),d.param(recipes.length)))).join(" AND ");
         return `{where:${q(where)},binds:${q(recipes)}}`;
       };
-      return `{on:${q(on)},type:${q(type ?? "text")},sql:${q(`SELECT t.id AS _id, ${projection} AS _key, t.locale FROM ${d.ident(child.name)} t`)},caller:${lower(nextMode('caller'))},trusted:${lower('trusted')}}`;
+      return `{on:${q(on)},type:${q(type ?? "text")},sql:${q(`SELECT t.id AS _id, ${projection} AS _key, t.locale FROM ${d.ident(child.name)} t`)},caller:${lower('caller')},trusted:${lower('trusted')}}`;
     });
     const columns=[...new Set(types.map(s=>s.translates!.on.toLowerCase()))];
     declarations.push(`${q(schema.name)}: Pick<Tables[${q(schema.name)}]["row"],${["id",...columns.filter(c=>c!==schema.scope)].map(value=>q(value)).join("|")}>${schema.scope&&columns.includes(schema.scope)?` & {readonly ${q(schema.scope)}?:string|null}`:""};`);

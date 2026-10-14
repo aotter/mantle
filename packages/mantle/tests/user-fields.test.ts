@@ -10,9 +10,20 @@ import { renderTerm } from '../src/kernel/store.js';
 import { dialect } from '../src/kernel/dialect/sqlite.js';
 import { isAdmin, hasAdminRole } from '../src/kernel/contracts.js';
 import { generateOrThrow, writeGenerated } from './apps/link.js';
-import { compilePlan, compileProgram, d1Dialect, postgresCompiler, postgresDialect, sqliteCompiler } from '../src/build/compiler.js';
+import { compilePlan, compileProgram, d1Dialect, postgresCompiler, postgresDialect, rowPolicy, sqliteCompiler } from '../src/build/compiler.js';
 await mkdir(resolve(import.meta.dir, 'apps/.generated'), { recursive: true });
 const fields = { region: { type: 'string' as const, multiple: true }, tier: { type: 'string' as const, multiple: false } };
+test('row mode is required and caller visibility is admin visibility', () => {
+  const s = { publishing: true }, ctx = { dialect: d1Dialect, schemas: {}, inputs: {}, kind: 'view' as const };
+  expect(rowPolicy(s, 'caller')).toEqual(rowPolicy(s, 'admin'));
+  expect(rowPolicy(s, 'caller')).toContainEqual(['status', 'admin', { k: 'admin' }, 'published']);
+  // @ts-expect-error A missing mode must never acquire caller visibility.
+  expect(() => rowPolicy(s)).toThrow('explicit row mode');
+  if (false) {
+    // @ts-expect-error Compilation also requires an explicit mode.
+    compileProgram([], ctx);
+  }
+});
 test('verified identities freeze values, discard unknown fields and lose authority when copied', () => {
   const caller = userCaller({ id: 'member', role: 'vip,editor,vip', region: ['TW', 'TW'], tier: 'gold', ignored: 'secret' }, { fields, adminRoles: ['editor'] });
   expect(caller.roles).toEqual(['vip', 'editor']); expect(fieldsOf(caller)).toEqual({ region: ['TW'], tier: 'gold' });
@@ -73,14 +84,14 @@ test('restricted Procedure INSERT variants refuse caller compilation while trust
 });
 
 test('upsert SET refuses restrict columns with the same diagnostic as UPDATE', async () => {
-  for (const postgres of [false, true]) for (const sql of ["UPDATE orders SET region = 'JP' WHERE id = 'one' RETURNING id", "INSERT INTO orders(region,tier) VALUES ('TW','gold') ON CONFLICT(id) DO UPDATE SET region=excluded.region RETURNING id"]) {
+  for (const mode of ['caller','admin'] as const) for (const postgres of [false, true]) for (const sql of ["UPDATE orders SET region = 'JP' WHERE id = 'one' RETURNING id", "INSERT INTO orders(region,tier) VALUES ('TW','gold') ON CONFLICT(id) DO UPDATE SET region=excluded.region RETURNING id"]) {
     const p = JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Procedure', metadata: { name: 'move' }, spec: { title: 'Move', input: { type: 'object', additionalProperties: false }, output: { type: 'object' }, restrict: { orders: "region IN auth.user('region')" }, handler: { sql } } });
     const result = await compilePlan({ sources: [{ sourceId: 'upsert.yaml', text: schema+'\n---\n'+p }] }, postgres ? postgresCompiler : sqliteCompiler, 'operational');
     if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
     const proc = result.plan.procedures.move!;
     if (!('sql' in proc.handler)) throw Error('Expected SQL Procedure');
     const { stmts } = proc.handler.sql;
-    expect(() => compileProgram(stmts, { dialect: postgres ? postgresDialect() : d1Dialect, schemas: result.plan.schemas, inputs: proc.inputs, kind: 'procedure', mode: 'caller', restrict: proc.restrict })).toThrow(expect.objectContaining({ code: 'USER_FIELD_POSITION', message: 'The scoped column is never writable through SET.' }));
+    expect(() => compileProgram(stmts, { dialect: postgres ? postgresDialect() : d1Dialect, schemas: result.plan.schemas, inputs: proc.inputs, kind: 'procedure', mode, restrict: proc.restrict })).toThrow(expect.objectContaining({ code: 'USER_FIELD_POSITION', message: 'The scoped column is never writable through SET.' }));
   }
 });
 

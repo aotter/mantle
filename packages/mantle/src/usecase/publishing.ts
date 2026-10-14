@@ -1,5 +1,4 @@
 /** Opt-in lifecycle: one atomic, version-guarded statement per transition, with Core's row rules. */
-import { nextMode } from "../domain/visibility.js";
 import { rowPolicy, type JsonSchema, type RuntimePlan } from "../build/compiler.js";
 import { dialect as sqlite } from "../kernel/dialect/sqlite.js";
 import { dialect as postgres } from "../kernel/dialect/postgres.js";
@@ -28,7 +27,7 @@ export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declaration
         const conditions = [`id = ${d.param(2)}`, `version = ${d.param(3)}`, `status IN (${from.map(v => `'${v}'`).join(", ")})`];
         // Same visibility as Store and Admin writes, translation parent included (a child under an out-of-set parent is missing);
         // the status term is replaced by the transition's own `status IN (...)`.
-        for (const term of rowPolicy(schema, trusted ? "trusted" : nextMode("caller"), plan.schemas)) if (term[1] !== "admin")
+        for (const term of rowPolicy(schema, trusted ? "trusted" : "caller", plan.schemas)) if (term[1] !== "admin")
           conditions.push(renderTerm(d, term, "", recipe => (recipes.push(recipe), d.param(recipes.length))));
         if (verb === "publish") for (const field of s.schema.required ?? []) {
           const column = Object.keys(s.fields).find(c => (s.names?.[c] ?? c) === field);

@@ -1,5 +1,5 @@
 /** Selected Admin queries/procedures: Core checks, rewrites and prints every native fragment at generation. */
-import {enumOptions,type RuntimePlan,type SqlNode} from "../build/compiler.js";
+import {enumOptions,protectedColumns,type RuntimePlan,type SqlNode} from "../build/compiler.js";
 import type { MantleDialect } from "../build/compiler.js";
 import { parsePgSql } from "../build/compiler.js";
 import { compileProgram } from "../build/compiler.js";
@@ -7,7 +7,6 @@ import { adminOrder } from "../domain/adminOrder.js";
 import { declaredType } from "../domain/columns.js";
 import { wireScalars, wireReturning } from "../domain/wireScalars.js";
 import { recipesOf } from "../domain/recipes.js";
-import { nextMode } from "../domain/visibility.js";
 import type { Dialect } from "../kernel/dialect/common.js";
 import type { GenerateDiagnostic } from "../domain/model.js";
 
@@ -30,7 +29,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
     // Compiler scope names belong only to relations this generated query can reference.
     const schemas:Record<string,Schema>=Object.create(null);let relation:Schema|undefined=s;
     while(relation&&!Object.hasOwn(schemas,relation.name)){schemas[relation.name]=relation;relation=relation.translates?plan.schemas[relation.translates.parent.toLowerCase()]:undefined;}
-    const ctx=(kind:"view"|"procedure",trusted:boolean,inputs:Record<string,string>)=>({dialect,schemas,inputs,kind,mode:trusted?"trusted" as const:nextMode("caller")});
+    const ctx=(kind:"view"|"procedure",trusted:boolean,inputs:Record<string,string>)=>({dialect,schemas,inputs,kind,mode:trusted?"trusted" as const:"admin" as const});
     const select=`SELECT ${columns.map(c=>`${wire.ident(s.name)}.${wire.ident(c)}`).join(",")} FROM ${wire.ident(s.name)}`;
     const base=await parse(select);
     const project=(ast:SqlNode,names:readonly string[],keys:readonly string[])=>{
@@ -82,7 +81,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
       const inputs={...Object.fromEntries(writable.map(f=>[f,s.fields[f]!])),id:"text"};
       const returning=columns.map(wire.ident).join(",");
       const insertAst=writable.length?(await parse(`INSERT INTO ${wire.ident(s.name)} (${writable.map(wire.ident).join(",")}) VALUES (${writable.map(f=>`input.${wire.ident(f)}`).join(",")}) RETURNING ${returning}`))[0]!:{InsertStmt:{relation:{RangeVar:{relname:s.name,mantle:"table",inh:true,relpersistence:"p"}}.RangeVar,cols:[],selectStmt:{SelectStmt:{valuesLists:[{List:{items:[]}}]}},returningClause:{exprs:columns.map(f=>({ResTarget:{val:ref(f)}}))}}};
-      const updateFields = writable.filter(field => !(s.userScopes ?? []).some(u => u.column === field));
+      const updateFields = writable.filter(field => !protectedColumns(s).includes(field));
       const updateAst=(await parse(`UPDATE ${wire.ident(s.name)} SET ${updateFields.length?updateFields.map(f=>`${wire.ident(f)}=input.${wire.ident(f)}`).join(","):"id=input.id"} WHERE id=input.id RETURNING ${returning}`))[0]!;
       if(!updateFields.length)updateAst.UpdateStmt.targetList=[];
       const deleteAst=(await parse(`DELETE FROM ${wire.ident(s.name)} WHERE id=input.id RETURNING id`))[0]!;
@@ -91,7 +90,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
         const rewrite=(n:SqlNode)=>{if(n.ParamRef){const b=c.binds[n.ParamRef.number-1]!;if(b.k==="input"&&writable.includes(String(b.name))){delete n.ParamRef;n.Raw={parts:[wire.cast(markerText,String(b.type))]};return;}n.ParamRef.number=fixed.indexOf(b)+1;}for(const v of Object.values(n))if(v&&typeof v==="object")Array.isArray(v)?v.forEach(rewrite):rewrite(v);};rewrite(rewritten);return {ast:rewritten,binds:recipesOf({binds:fixed},["id"],message=>{throw Error(message);})};};
       const create=write(insertAst),patch=write(updateAst),remove=write(deleteAst),entryFields:Record<string,unknown>=Object.create(null);
       const insert=create.ast.InsertStmt,update=patch.ast.UpdateStmt;
-      for(const [i,field]of writable.entries())entryFields[field]={column:wire.ident(field),insert:expr(insert.selectStmt.SelectStmt.fromClause[0].RangeSubselect.subquery.SelectStmt.valuesLists[0].List.items[i]),...(!(s.userScopes ?? []).some(u => u.column === field) ? {update:wire.ident(field)+" = "+expr(update.targetList[updateFields.indexOf(field)].ResTarget.val)} : {})};
+      for(const [i,field]of writable.entries())entryFields[field]={column:wire.ident(field),insert:expr(insert.selectStmt.SelectStmt.fromClause[0].RangeSubselect.subquery.SelectStmt.valuesLists[0].List.items[i]),...(!protectedColumns(s).includes(field) ? {update:wire.ident(field)+" = "+expr(update.targetList[updateFields.indexOf(field)].ResTarget.val)} : {})};
       const returnSQL=(ast:SqlNode)=>" RETURNING "+ast.returningClause.exprs.map((t:SqlNode)=>expr(t.ResTarget.val)+(t.ResTarget.name?" AS "+wire.ident(t.ResTarget.name):"")).join(",");
       return {projection,from,policy:policy?expr(policy):"",binds:recipesOf(compiled,[],message=>{throw Error(message);}),fields:entryFields,create:{prefix:print(create.ast).slice(0,print(create.ast).indexOf(" ("))+" (",between:") VALUES (",suffix:")",binds:create.binds,columns:insert.cols.slice(writable.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)),values:insert.selectStmt.SelectStmt.targetList.slice(writable.length?1:0).map((t:SqlNode)=>expr(t.ResTarget.val)),returning:returnSQL(insert)},patch:{prefix:print(patch.ast).slice(0,print(patch.ast).indexOf(" SET "))+" SET ",binds:patch.binds,sets:update.targetList.slice(updateFields.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)+" = "+expr(t.ResTarget.val)),where:" WHERE "+expr(update.whereClause),returning:returnSQL(update)},remove:{sql:print(remove.ast),binds:remove.binds,row:true}};
     }));

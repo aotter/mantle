@@ -9,14 +9,13 @@ import { viewOutputs, compileProgram } from "../build/compiler.js";
 import { pagedOf } from "../build/compiler.js";
 import type { MantleDialect } from "../build/compiler.js";
 import {castCursor,type PagingProof} from "../domain/paging.js";
-import { nextMode } from "../domain/visibility.js";
 import type {AdminPage} from "../domain/model.js";
 export function adminPaging(plan:RuntimePlan,dialect:MantleDialect,proofs:Readonly<Record<string,PagingProof|undefined>>,project:(ast:SqlNode,names:readonly string[],keys:number,name:string)=>SqlNode):Record<string,{caller:AdminPage;trusted:AdminPage}>{
   const all:Record<string,{caller:AdminPage;trusted:AdminPage}>=Object.create(null);
   for(const [name,v]of Object.entries(plan.views).filter(([,v])=>v.surface!=="internal")){
     const proof=proofs[name];if(!proof || proof.reason)throw Error(proof?.reason ?? `Unproved Admin paging: ${name}`);
     const list=(v.uiSchema?.list??{}) as {filterFields?:string[];searchFields?:string[]};
-    const modes=v.surface==="public" ? ["public","public"] as const : [nextMode("caller"),"trusted"] as const;
+    const modes=v.surface==="public" ? ["public","public"] as const : ["caller","trusted"] as const;
     const pages=modes.map(mode=>{
       const [c]=compileProgram(v.stmts,{dialect,schemas:plan.schemas,inputs:v.inputs,kind:"view",mode,restrict:v.restrict});
       if(!c)throw Error(`No compiled Admin View: ${name}`);
