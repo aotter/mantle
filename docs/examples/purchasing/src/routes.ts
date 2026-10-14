@@ -1,5 +1,7 @@
 import { ContractError, type Caller } from "@aotter/mantle/contracts";
+import { store } from "../generated/generated.js";
 import confirmOrder from "../generated/procedures/confirm-order.js";
+import { handlers } from "./handlers.js";
 
 const MAX_BODY = 64 * 1024, MAX_SKEW_SECONDS = 300;
 
@@ -20,12 +22,16 @@ export async function appRoutes(request: Request, env: Env, _context: { caller: 
   let body: { reference?: unknown; orderId?: unknown };
   try { body = JSON.parse(new TextDecoder().decode(raw)); } catch { return new Response(null, { status: 400 }); }
   if (typeof body.reference !== "string" || typeof body.orderId !== "string") return new Response(null, { status: 400 });
+  // Trusted path: a system caller, after the signature proved the sender.
+  const system: Caller = { kind: "system", reason: "supplier callback" };
   try {
-    // Trusted path: a system caller, after the signature proved the sender.
-    await confirmOrder(env.DB, { kind: "system", reason: "supplier callback" }, { id: body.reference, supplierOrderId: body.orderId });
+    await confirmOrder(env.DB, system, { id: body.reference, supplierOrderId: body.orderId });
   } catch (error) {
-    if (error instanceof ContractError && error.code === "CONFLICT") return new Response(null, { status: 409 }); // not 'ordered' (or a replay)
-    throw error;
+    if (!(error instanceof ContractError && error.code === "CONFLICT")) throw error;
+    // A replay of a callback already applied succeeds again, so the supplier stops retrying.
+    const current = await store(env.DB, system, { handlers }).collection("requests").findById(body.reference);
+    if (current?.requeststatus === "confirmed" && current.supplierorderid === body.orderId) return new Response(null, { status: 204 });
+    return new Response(null, { status: 409 }); // unknown request, another order id, or not approved/ordered
   }
   return new Response(null, { status: 204 });
 }

@@ -28,6 +28,9 @@ spec:
   uiSchema: { list: { primaryField: title, columns: [department, amount, requestStatus], filterField: requestStatus } }
   schema:
     type: object
+    # Admin reads requests but cannot edit them generically: a generic edit could move requestStatus back to
+    # 'submitted' and spend the budget twice. Every change goes through the guarded Procedures below.
+    readOnly: true
     additionalProperties: false
     required: [title, amount, department, requestStatus]
     properties:
@@ -47,6 +50,7 @@ spec:
   uiSchema: { list: { primaryField: department, columns: [amount, remainingAfter, requestId] } }
   schema:
     type: object
+    readOnly: true # written only by approve-request-write
     additionalProperties: false
     required: [requestId, department, amount, remainingAfter]
     properties:
@@ -95,6 +99,16 @@ spec:
     WHERE requestStatus = 'submitted' AND created_at < input.before
     ORDER BY created_at, id LIMIT 100
 ---
+# Approved but not yet ordered (the supplier call failed): the cron retries these.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: approved-requests }
+spec:
+  surface: internal
+  sql: |
+    SELECT id, title, amount FROM requests WHERE requestStatus = 'approved'
+    ORDER BY created_at, id LIMIT 20
+---
 # Selecting from budgets refuses a department that has no budget, so approval always has a budget row to deduct.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -115,6 +129,30 @@ spec:
     sql: |
       INSERT INTO requests (title, amount, department, requestStatus)
       SELECT input.title, input.amount, b.department, 'submitted' FROM budgets b WHERE b.department = input.department
+      RETURNING id, version
+---
+# The requester may change the amount while the request is still 'submitted'. The version moves on, so an admin
+# approving the version they reviewed before the change gets a 409 and looks again.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: change-amount }
+spec:
+  title: Change the amount of my request
+  requires: { auth: { all: [ctx.user] } }
+  restrict: { requests: "author_id = auth.uid()" }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion, amount]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: integer }
+      amount: { type: integer, minimum: 1 }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE requests SET amount = input.amount
+      WHERE id = input.id AND version = input.expectedVersion AND requestStatus = 'submitted'
       RETURNING id, version
 ---
 # Admin-only. The ref handler runs the write below, then places the supplier order and emails the requester.
@@ -199,12 +237,12 @@ spec:
       WHERE id = input.id AND version = input.expectedVersion AND requestStatus = 'submitted'
       RETURNING id, title, author_id AS "authorId"
 ---
-# Called by the approve handler once the supplier accepted the order.
+# Called after the supplier accepted the order: by the approve handler (admin caller) and by the cron retry (system
+# caller). System callers satisfy no `requires` predicate, so it has none; no Trigger exposes it.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: mark-ordered }
 spec:
-  requires: { auth: { all: [ctx.admin] } }
   input:
     type: object
     additionalProperties: false
@@ -220,6 +258,7 @@ spec:
       RETURNING id
 ---
 # Called only by POST /callbacks/supplier (src/routes.ts) as a system caller after the signature checks out.
+# The callback can arrive before mark-ordered ran, so 'approved' is accepted too.
 # No Trigger exposes it; system callers satisfy no `requires` predicate, so it has none.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -235,8 +274,10 @@ spec:
   output: { type: object }
   handler:
     sql: |
-      UPDATE requests SET requestStatus = 'confirmed'
-      WHERE id = input.id AND supplierOrderId = input.supplierOrderId AND requestStatus = 'ordered'
+      UPDATE requests SET requestStatus = 'confirmed', supplierOrderId = input.supplierOrderId
+      WHERE id = input.id AND (
+        (requestStatus = 'ordered' AND supplierOrderId = input.supplierOrderId)
+        OR requestStatus = 'approved')
       RETURNING id
 ---
 apiVersion: cms.mantle.aotter.net/v2
@@ -245,6 +286,13 @@ metadata: { name: submit-request-http }
 spec:
   source: { kind: http, method: POST, path: /api/requests }
   target: { procedure: submit-request }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: change-amount-http }
+spec:
+  source: { kind: http, method: POST, path: '/api/requests/{id}/amount' }
+  target: { procedure: change-amount }
 ---
 # Admin MCP tools: an AI agent connected to /mcp/admin can approve or reject.
 apiVersion: cms.mantle.aotter.net/v2

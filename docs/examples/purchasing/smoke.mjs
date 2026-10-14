@@ -7,12 +7,14 @@ import { smoke } from "./smoke-kit.mjs";
 
 const SECRET = "local-supplier-secret", DAILY = "0 9 * * *", DAY_US = 86_400 * 1_000_000;
 
-// A stand-in supplier API: accepts an order and answers with its order id.
+// A stand-in supplier API: accepts an order and answers with its order id, or 503 while `supplierDown`.
 const received = [];
+let supplierDown = false;
 const supplier = createServer((request, response) => {
   let body = "";
   request.on("data", chunk => { body += chunk; });
   request.on("end", () => {
+    if (supplierDown) return response.writeHead(503).end();
     received.push({ ...JSON.parse(body), idempotencyKey: request.headers["idempotency-key"] });
     response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ orderId: `SUP-${received.length}` }));
   });
@@ -23,6 +25,7 @@ try {
   await smoke(async ({ owner, call, mcp, signIn, sql, cron, waitForLog, step, logs }) => {
     const query = sql;
     const row = async id => (await query(`SELECT requeststatus AS status, version, supplierorderid AS "supplierOrderId" FROM requests WHERE id = '${id}'`))[0];
+    const statusAndOrder = async id => { const { status, supplierOrderId } = await row(id); return { status, supplierOrderId }; };
     const remaining = async department => (await query(`SELECT remaining FROM budgets WHERE department = '${department}'`))[0].remaining;
     const ledgerRows = () => query("SELECT requestid AS \"requestId\", amount, remainingafter AS \"remainingAfter\" FROM ledger");
     const operation = (cookie, name, body) => call("POST", `/admin/api/operations/${name}`, { cookie, body });
@@ -47,11 +50,12 @@ try {
     const monitors = await submit(alice, "Monitors", 1500, "Design");
     const chairs = await submit(alice, "Chairs", 300, "Design");
     const desk = await submit(bob, "Desk", 400, "Engineering");
+    const projector = await submit(bob, "Projector", 600, "Engineering");
     assert.equal(await submit(bob, "Rocket", 10, "Space"), undefined);
-    assert.equal((await query("SELECT count(*) AS n FROM requests"))[0].n, 4);
+    assert.equal((await query("SELECT count(*) AS n FROM requests"))[0].n, 5);
     const mine = (await call("GET", "/api/views/my-requests", { cookie: alice })).body.rows;
     assert.deepEqual(mine.map(r => r.title).sort(), ["Chairs", "Laptop", "Monitors"]);
-    assert.deepEqual((await call("GET", "/api/views/my-requests", { cookie: bob })).body.rows.map(r => r.title), ["Desk"]);
+    assert.deepEqual((await call("GET", "/api/views/my-requests", { cookie: bob })).body.rows.map(r => r.title).sort(), ["Desk", "Projector"]);
     step("employees submit requests (unknown department creates nothing) and see only their own");
 
     const version = async id => (await row(id)).version;
@@ -81,15 +85,20 @@ try {
     assert.equal((await ledgerRows()).length, 0);
     step("over budget: remaining >= 0 fails statement 2, so the status change and ledger insert roll back too");
 
-    // The version a reviewer saw, read the way the client reads it.
-    const seen = await version(monitors);
-    const edited = await call("PATCH", `/admin/api/entries/${monitors}?collection=requests`, { cookie: carol, body: { expectedVersion: seen, data: { amount: 900 } } });
-    assert.equal(edited.status, 200, JSON.stringify(edited.body));
+    const seen = await version(monitors); // the version the admin reviewed
+    const generic = await call("PATCH", `/admin/api/entries/${monitors}?collection=requests`, { cookie: admin, body: { expectedVersion: seen, data: { requestStatus: "approved" } } });
+    assert.ok(generic.status >= 400 && generic.status < 500, JSON.stringify(generic.body));
+    assert.deepEqual([(await row(monitors)).status, await version(monitors)], ["submitted", seen]);
+    const changeAmount = (cookie, expectedVersion) => call("POST", `/api/requests/${monitors}/amount`, { cookie, body: { expectedVersion, amount: 900 } });
+    assert.equal((await changeAmount(bob, seen)).status, 409);
+    const changed = await changeAmount(alice, seen);
+    assert.equal(changed.status, 200, JSON.stringify(changed.body));
+    assert.equal((await changeAmount(alice, seen)).status, 409);
     const stale = await operation(admin, "approve-request", { id: monitors, expectedVersion: seen });
     assert.equal(stale.status, 409, JSON.stringify(stale.body));
     assert.equal((await row(monitors)).status, "submitted");
     assert.equal(await remaining("Design"), 1000);
-    step("expectedVersion: after another admin edits the request, approving the version first seen is 409 and changes nothing");
+    step("Admin cannot edit requests generically; once the requester changes the amount, approving the reviewed version is 409");
 
     const lock = (await call("GET", "/api/views/my-requests", { cookie: alice })).body.rows.find(r => r.id === laptop).version;
     const race = await Promise.all([admin, carol].map(cookie => operation(cookie, "approve-request", { id: laptop, expectedVersion: lock })));
@@ -101,33 +110,44 @@ try {
     assert.deepEqual(received, [{ reference: laptop, item: "Laptop", amount: 1200, idempotencyKey: laptop }]);
     assert.deepEqual(await row(laptop), { status: "ordered", version: lock + 2, supplierOrderId: "SUP-1" });
     await waitForLog(/purchasing\.approved → alice@example\.test[\s\S]*?Approved: Laptop/);
+    step("approval places the supplier order (status 'ordered') and emails the requester");
+
+    supplierDown = true;
     const viaAi = await mcp("/mcp/admin", admin, "approve_request", { id: desk, expectedVersion: await version(desk) });
     assert.equal(viaAi.body.result.isError, undefined, JSON.stringify(viaAi.body));
-    assert.equal((await row(desk)).status, "ordered");
-    assert.equal(await remaining("Engineering"), 3400);
+    assert.equal((await operation(carol, "approve-request", { id: projector, expectedVersion: await version(projector) })).status, 200);
+    assert.deepEqual([(await row(desk)).status, (await row(projector)).status], ["approved", "approved"]);
+    assert.equal(await remaining("Engineering"), 2800);
     await waitForLog(/purchasing\.approved → bob@example\.test[\s\S]*?Approved: Desk/);
-    step("approval places the supplier order (status 'ordered') and emails the requester; the admin MCP tool approves too");
+    step("the admin MCP tool approves too; with the supplier down, approvals still commit and stay 'approved'");
 
     assert.equal((await signed({ reference: laptop, orderId: "SUP-1" }, "wrong-secret")).status, 401);
     const tampered = await call("POST", "/callbacks/supplier", { body: JSON.stringify({ reference: laptop, orderId: "SUP-1" }),
       headers: { "x-supplier-timestamp": String(Math.floor(Date.now() / 1000)), "x-supplier-signature": "0".repeat(64) } });
     assert.equal(tampered.status, 401);
     assert.equal((await row(laptop)).status, "ordered");
-    assert.equal((await signed({ reference: laptop, orderId: "SUP-2" })).status, 409);
+    assert.equal((await signed({ reference: laptop, orderId: "SUP-9" })).status, 409);
     assert.equal((await signed({ reference: laptop, orderId: "SUP-1" })).status, 204);
     assert.equal((await row(laptop)).status, "confirmed");
-    assert.equal((await signed({ reference: laptop, orderId: "SUP-1" })).status, 409);
-    step("supplier callback: bad signatures are 401 with no change; a signed one confirms; a wrong order id or replay is 409");
+    assert.equal((await signed({ reference: laptop, orderId: "SUP-1" })).status, 204);
+    assert.equal((await signed({ reference: monitors, orderId: "SUP-1" })).status, 409);
+    // The callback can beat mark-ordered: an 'approved' request is confirmed and keeps the supplier's order id.
+    assert.equal((await signed({ reference: desk, orderId: "SUP-EARLY" })).status, 204);
+    assert.deepEqual(await statusAndOrder(desk), { status: "confirmed", supplierOrderId: "SUP-EARLY" });
+    step("supplier callback: bad signatures are 401 with no change; a signed one confirms (also before 'ordered'); a replay is 204; a wrong order id or a submitted request is 409");
 
     const late = await submit(bob, "Whiteboard", 150, "Engineering");
     await query(`UPDATE requests SET created_at = created_at - ${4 * DAY_US} WHERE id = '${late}'`);
     const before = logs().length;
+    supplierDown = false;
     assert.equal(await cron(DAILY), 200);
     for (const to of [owner, "carol@example.test"])
       await waitForLog(new RegExp(`purchasing\\.reminder → ${to.replace(/[.+]/g, "\\$&")}[\\s\\S]*?Whiteboard`));
     const reminder = logs().slice(before);
     assert.ok(!reminder.includes("Monitors"), "a request submitted today is not in the reminder");
-    step("daily cron emails every admin about requests pending more than 3 days, and only those");
+    assert.deepEqual(received.map(order => order.reference), [laptop, projector]);
+    assert.deepEqual(await statusAndOrder(projector), { status: "ordered", supplierOrderId: "SUP-2" });
+    step("daily cron retries the failed supplier order (system caller) and emails every admin about requests pending more than 3 days, and only those");
   }, { vars: { SUPPLIER_API_URL: `http://127.0.0.1:${supplier.address().port}/orders`, SUPPLIER_WEBHOOK_SECRET: SECRET } });
 } finally {
   supplier.close();
