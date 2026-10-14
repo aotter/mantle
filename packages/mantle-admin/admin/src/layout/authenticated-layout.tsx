@@ -221,17 +221,6 @@ export function buildNavGroups(
   const primaryCollections = collections.filter(isPrimaryNavCollection);
   const contentCollections = primaryCollections.filter((c) => c.lifecycle === "publishing");
   const operationalCollections = primaryCollections.filter((c) => c.lifecycle !== "publishing");
-  const navItem = (c: Collection): NavItem => {
-    const item = collectionNavItem(c, language, canonical);
-    const descendants = (parent: Collection, seen: Set<string>): NavLink[] => collections
-      .filter(child => child.parent?.collection === parent.name && !child.translates && !isPrimaryNavCollection(child) && !seen.has(child.name))
-      .flatMap(child => [{ title: resolveLocalizedText(child.title, language, canonical) ?? fieldLabel(child.name), url: `/admin/c/${encodeURIComponent(child.name)}` }, ...descendants(child, new Set([...seen, child.name]))]);
-    const links = descendants(c, new Set([c.name]));
-    if (!links.length) return item;
-    if ("items" in item) return { ...item, items: [...item.items, ...links] };
-    const { url: _url, ...group } = item;
-    return { ...group, items: [item, ...links] };
-  };
   const homeGroup: NavGroupData = {
     items: [
       {
@@ -247,14 +236,14 @@ export function buildNavGroups(
 
   const contentGroup: NavGroupData = {
     title: t(language, "nav.content"),
-    items: contentCollections.map(navItem),
+    items: contentCollections.map((c) => collectionNavItem(c, language, canonical)),
   };
 
   const recordsGroup: NavGroupData | null =
     operationalCollections.length > 0
       ? {
           title: t(language, "nav.operations"),
-          items: operationalCollections.map(navItem),
+          items: operationalCollections.map((c) => collectionNavItem(c, language, canonical)),
         }
       : null;
 
