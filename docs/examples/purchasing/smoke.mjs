@@ -63,11 +63,11 @@ try {
     assert.match((await call("GET", "/sign-in?return=%2Frequests")).body, /sign-in\/email-otp/);
     const page = (await call("GET", "/requests", { cookie: bob })).body;
     assert.match(page, /Projector/); assert.doesNotMatch(page, /Laptop/); assert.match(page, /<option>Design<\/option>/);
-    const form = { cookie: bob, headers: { "content-type": "application/x-www-form-urlencoded" } };
-    assert.match((await call("POST", "/requests", { ...form, body: "title=Whiteboard&amount=80&department=Engineering" })).body, /Whiteboard/);
-    assert.match((await call("POST", "/requests", { ...form, body: "title=Pens&amount=0&department=Design" })).body, /Not submitted/);
-    await query("DELETE FROM requests WHERE title = 'Whiteboard'");
-    step("the /requests page sends anonymous visitors to /sign-in; a signed-in employee submits by form and sees only their own");
+    // Writes go through the REST Trigger the page's form names, never through the page itself.
+    assert.match(page, /<form action="\/api\/requests" method="post"/);
+    assert.equal((await call("POST", "/requests", { cookie: bob })).status, 404);
+    assert.equal((await call("POST", "/api/requests", { cookie: bob, body: { title: "Pens", amount: 0, department: "Design" } })).status, 400);
+    step("the /requests page sends anonymous visitors to /sign-in, lists only the employee's own requests and submits to the REST Trigger");
 
     assert.equal((await operation(admin, "open-budget", { department: "Marketing", remaining: 500 })).status, 200);
     assert.equal((await operation(admin, "open-budget", { department: "Design", remaining: 1 })).status, 409);
