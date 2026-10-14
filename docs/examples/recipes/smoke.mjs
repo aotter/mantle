@@ -71,8 +71,12 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   assert.equal(enData.name, "Scallion Pancake");
   assert.equal(enData.inLanguage, "en");
   assert.equal(enData.totalTime, "PT25M"); // merged from the parent row
+  assert.match(zhData.datePublished, /^\d{4}-/); assert.match(zhData.dateModified, /^\d{4}-/);
+  assert.ok(en.body.includes(`<meta property="og:url" content="${origin}/en/recipes/scallion-pancake">`));
+  assert.ok(en.body.includes(`<meta property="og:type" content="article">`));
+  assert.ok(en.body.includes(`<meta property="og:locale" content="en">`) && en.body.includes(`<meta property="og:locale:alternate" content="zh_TW">`));
   assert.match(en.body, /<section id="quick-answer"><h2>How long does it take\?<\/h2><p>About 25 minutes in total; serves 2.<\/p><\/section>/);
-  step("JSON-LD Recipe parses with the recipe name; the short answer block is present");
+  step("JSON-LD Recipe parses with name and dates; Open Graph url/type/locale; the short answer block is present");
 
   const md = await call("GET", "/en/recipes/scallion-pancake.md");
   assert.equal(md.status, 200);

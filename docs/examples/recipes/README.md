@@ -13,12 +13,8 @@ plain app-owned HTML with the head tags search and answer engines read, plus Mar
   publishes only while its parent is published, and its reads merge the parent's `total_minutes`, `servings` and
   `cover_url` (`src/routes.ts` `read`).
 - Visitor pages in `src/routes.ts` (routing, reads) and `src/pages.ts` (rendering), always read as an anonymous caller:
-  - `/{locale}/` list and `/{locale}/recipes/{slug}` detail with `<title>`, meta description, canonical and Open Graph;
-  - hreflang alternates for each published locale plus `x-default`, `<html lang>` and a language switcher;
-  - JSON-LD `Recipe` (`totalTime`, `recipeIngredient`, `recipeInstructions`);
-  - a short answer block (`#quick-answer`, "How long does it take?");
-  - `/{locale}/recipes/{slug}.md` Markdown alternate, linked from the HTML head;
-  - `/llms.txt` listing every published recipe per locale.
+  - every item of [public pages](../../handbook/guides/public-pages.md): head tags, Open Graph, JSON-LD `Recipe`, the
+    short answer block, hreflang and `x-default`, per-language Markdown alternates, `llms.txt`, sitemap and robots.
 - Cover images on R2: `wrangler.jsonc` (the shell's file plus the `MEDIA` bucket and two vars), `src/site-config.ts`
   (media purpose `cover`) and `src/media.ts` (`r2MediaStorage`). See "Cover images" below to switch it on.
 
