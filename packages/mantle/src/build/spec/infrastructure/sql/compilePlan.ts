@@ -184,6 +184,8 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   const order: LinkedView[] = [];
   const state = new Map<string, "visiting" | "done">();
   const reads = new Map(await Promise.all(linked.views.map(async (x) => [x.manifest.metadata.name, [...await relationNames(x.manifest.spec.sql)].filter((r) => readable.has(r))] as const)));
+  const procedureReads = new Map(await Promise.all(linked.procedures.flatMap(({ manifest: p }) => { const sql = (p.spec.handler as { sql?: string }).sql; return sql === undefined ? [] : [(async () => [sql, [...await relationNames(sql)].filter((r) => readable.has(r))] as const)()]; })));
+  const viewRefs = (sql: string): readonly string[] => reads.get(linked.views.find(x => x.manifest.spec.sql === sql)?.manifest.metadata.name ?? "") ?? procedureReads.get(sql) ?? [];
   const visit = (x: LinkedView, path: string[]): void => {
     const name = x.manifest.metadata.name;
     if (state.get(name) === "done") return;
@@ -293,11 +295,24 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     }
     return Object.keys(out).length ? out : undefined;
   };
-  for (const { manifest: v } of linked.views) { const view = views[v.metadata.name], restrict = view && restrictOf("views", v.metadata.name, v.spec.restrict, view.stmts); if (restrict) views[v.metadata.name] = { ...view!, restrict }; }
+  // A restricted View stays restricted when another target reads it: that target carries the View's restrict too
+  // (AND-ed onto every relation of the Schema it names). `order` lists a View after the Views it reads.
+  type Restrict = NonNullable<PlanView["restrict"]>;
+  const inherit = (own: Restrict | undefined, sql: string | undefined, path: string): Restrict | undefined => {
+    const merged: Record<string, { owner?: string; terms: { column: string; field: string; type: "string" | "number" }[] }> = Object.fromEntries(Object.entries(own ?? {}).map(([k, r]) => [k, { ...r, terms: [...r.terms] }]));
+    for (const ref of sql === undefined ? [] : viewRefs(sql)) for (const [table, r] of Object.entries(views[refOf.get(ref)!.manifest.metadata.name]?.restrict ?? {})) {
+      const into = merged[table] ??= { terms: [] };
+      if (r.owner && into.owner && r.owner !== into.owner) { diagnostics.push(validateDiagnostic({ code: "USER_FIELD_CONFLICT", severity: "error", path, message: `reads Views whose restrict on '${table}' names different owner columns.` })); continue; }
+      if (r.owner) into.owner = r.owner;
+      for (const t of r.terms) if (!into.terms.some(x => x.column === t.column && x.field === t.field)) into.terms.push(t);
+    }
+    return Object.keys(merged).length ? merged : undefined;
+  };
+  for (const { manifest: v } of order) { const view = views[v.metadata.name], restrict = view && inherit(restrictOf("views", v.metadata.name, v.spec.restrict, view.stmts), v.spec.sql, `views/${v.metadata.name}/restrict`); if (restrict) views[v.metadata.name] = { ...view!, restrict }; }
   for (const { manifest: p } of linked.procedures) {
     const proc = procedures[p.metadata.name];
     if (p.spec.restrict && proc && "ref" in proc.handler) { diagnostics.push(validateDiagnostic({ code: "USER_FIELD_CONFLICT", severity: "error", path: `procedures/${p.metadata.name}/restrict`, message: "restrict applies to SQL Procedures; a ref handler restricts rows through its scoped ctx.store." })); continue; }
-    const restrict = proc && "sql" in proc.handler && restrictOf("procedures", p.metadata.name, p.spec.restrict, proc.handler.sql.stmts);
+    const restrict = proc && "sql" in proc.handler && inherit(restrictOf("procedures", p.metadata.name, p.spec.restrict, proc.handler.sql.stmts) || undefined, (p.spec.handler as { sql?: string }).sql, `procedures/${p.metadata.name}/restrict`);
     if (restrict) procedures[p.metadata.name] = { ...proc!, restrict };
   }
   const triggers: Record<string, PlanTrigger> = Object.fromEntries(linked.triggers.map(({ manifest: t }) => [t.metadata.name, { source: t.spec.source, procedure: t.spec.target.procedure }]));
