@@ -12,7 +12,7 @@ export const handlers: Handlers = {
     try {
       // `member` comes from the verified caller, never from request input; uniqueIndexes [eventId, member] refuses a second seat.
       // The Caller carries no name; read Better Auth's user row (default table name) for the officers' list.
-      const user = await db.prepare(`SELECT name, email FROM "user" WHERE id = ?`).bind(caller.subject).first<{ name: string | null; email: string }>();
+      const user = (await db.prepare(`SELECT name, email FROM "user" WHERE id = ?`).bind(caller.subject).all()).results[0] as { name?: string | null; email?: string } | undefined;
       return await store.procedures["register-write"]({ eventId, member: caller.subject, memberName: user?.name || user?.email || caller.subject });
     } catch (error) {
       if (String((error as Error)?.message).includes("MANTLE_CHECK events: seats_taken <= capacity"))
