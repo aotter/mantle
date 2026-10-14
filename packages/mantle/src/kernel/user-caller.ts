@@ -36,7 +36,7 @@ export function userCaller(user: Readonly<Record<string, unknown>> & { readonly 
   readonly fields?: UserFields; readonly adminRoles?: readonly string[]; readonly credential?: CredentialKind;
   readonly credentialId?: string | null; readonly clientId?: string | null; readonly scopes?: readonly string[]; readonly issuer?: string;
 } = {}): Extract<Caller, { kind: "user" }> {
-  if (typeof user.id !== 'string' || !user.id || user.id.startsWith("host:") || user.id.startsWith("system:")) return invalid("User subjects must be non-empty strings without reserved prefixes.");
+  if (typeof user.id !== 'string' || !user.id || /^(host|system):/i.test(user.id)) return invalid("User subjects must be non-empty strings without reserved prefixes.");
   const roles = rolesFrom(user.role);
   const fields: Record<string, UserValue> = Object.create(null);
   for (const [field, spec] of Object.entries(options.fields ?? {})) {

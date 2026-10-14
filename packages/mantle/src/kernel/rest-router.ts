@@ -8,7 +8,7 @@ const fail: (message: string) => never = message => invalid(message, "rest");
 export function router<Env, Database, Handlers>(routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database>, send: (route: Route<Database, Handlers, Env>, request: Request, env: Env, caller: Caller, params: Record<string, string>) => Promise<Response>): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
   return async (request, env, ctx) => {
     let caller: Caller | undefined;
-    const forwarded = options.gateway || ctx?.props && Object.hasOwn(ctx.props, "mantle");
+    const forwarded = options.gateway || ctx?.props !== undefined;
     try {
       if (forwarded) caller = (await import("./host-caller.js")).gatewayCaller(ctx, options.gateway, options.fields);
       const original = new URL(request.url).pathname;

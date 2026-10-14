@@ -233,7 +233,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             return;
         let caller: Caller | undefined;
         try {
-            caller = options.gateway || ctx?.props && Object.hasOwn(ctx.props, "mantle")
+            caller = options.gateway || ctx?.props !== undefined
                 ? (await import("@aotter/mantle/host-caller")).gatewayCaller(ctx, options.gateway, options.fields ?? metadata.userFields)
                 : await surfaceCaller(request, env, options.caller ?? (() => ({ kind: "anonymous" })));
             if (caller.kind === "anonymous")
@@ -268,7 +268,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             return response;
         }
         catch (error) {
-            return options.gateway || ctx?.props && Object.hasOwn(ctx.props, "mantle") ? (await import("@aotter/mantle/host-caller")).hostFailure(error, caller, "admin") : surfaceFailure(error);
+            return options.gateway || ctx?.props !== undefined ? (await import("@aotter/mantle/host-caller")).hostFailure(error, caller, "admin") : surfaceFailure(error);
         }
     };
 }

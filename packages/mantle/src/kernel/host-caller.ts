@@ -13,6 +13,7 @@ export interface HostProps {
   readonly authenticatedAs: "snapshot" | "fresh";
   readonly credential: "session" | "oauth";
   readonly requestId: string;
+  /** Reserved controls: v1 refuses these keys until supported. */
   readonly target?: string;
   readonly targetHash?: string;
   readonly bodyDigest?: string;
@@ -31,8 +32,7 @@ export function hostCaller(props: unknown, options: { readonly tenant: string; r
   if (!record(props)) return hostContract("Expected host contract v1.");
   const keys = "v tenant layer user authenticatedAs credential requestId target targetHash bodyDigest dryRun".split(" ");
   if (Object.keys(props).some(key => !keys.includes(key)) || props.v !== 1 || !text(props.tenant) || props.tenant !== options.tenant || !["admin", "member"].includes(props.layer as string) || !["snapshot", "fresh"].includes(props.authenticatedAs as string) || !["session", "oauth"].includes(props.credential as string) || !text(props.requestId) || !record(props.user)) return hostContract("Malformed host contract or tenant mismatch.");
-  for (const key of ["target", "targetHash", "bodyDigest"]) if (Object.hasOwn(props, key) && !text(props[key])) return hostContract(`Invalid '${key}'.`, key);
-  if (Object.hasOwn(props, "dryRun") && props.dryRun !== true) return hostContract("Invalid dryRun.", "dryRun");
+  for (const key of ["dryRun", "target", "targetHash", "bodyDigest"]) if (Object.hasOwn(props, key)) return hostContract(`Reserved field '${key}' is not supported in v1.`, key);
   const user = props.user;
   if (!text(user.id)) return hostContract("Invalid user id.", "id");
   for (const key of ["role", "email", "name"]) if (Object.hasOwn(user, key) && typeof user[key] !== "string") return hostContract(`Invalid user '${key}'.`, key);
@@ -40,7 +40,7 @@ export function hostCaller(props: unknown, options: { readonly tenant: string; r
   for (const [field, value] of Object.entries(user)) {
     if (["id", "role", "email", "name"].includes(field)) continue;
     if (value == null || !validUserFieldName(field)) return hostContract(`Invalid user field '${field}'.`, field);
-    try { valueOf(value, options.fields?.[field] ?? { type: typeof (Array.isArray(value) ? value[0] : value) === "number" ? "number" : "string", multiple: true }, field); }
+    try { valueOf(value, (options.fields && Object.hasOwn(options.fields, field) ? options.fields[field] : undefined) ?? { type: typeof (Array.isArray(value) ? value[0] : value) === "number" ? "number" : "string", multiple: true }, field); }
     catch (error) { return hostContract((error as Error).message, field); }
   }
   let base: ReturnType<typeof userCaller>;
@@ -67,7 +67,4 @@ export function hostFailure(error: unknown, caller?: Caller, where?: string): Re
 }
 
 export { isHostCaller } from "./caller-identity.js";
-/** Only branded host identities may carry freshness authority. */
-export function checkFresh(caller: Caller, readOnly: boolean, target?: string): void {
-  if (!readOnly && isHostCaller(caller) && "authenticatedAs" in caller && caller.authenticatedAs === "snapshot") throw new ContractError("STALE_CALLER", "Snapshot callers cannot write.", target, { status: 403 });
-}
+export { checkFresh } from "./caller-identity.js";

@@ -1,4 +1,4 @@
-import { modeOf } from "./caller-identity.js";
+import { modeOf, checkFresh } from "./caller-identity.js";
 /**
  * Generic Store over Core's rowPolicy/writePolicy rules and per-Schema Facts (scope, TTL, publishing, dates).
  * Generated types own storage column names, values, filters and writable columns; the dialect quotes names and binds values.
@@ -165,10 +165,10 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     type Pending = { build: () => Bound; project: (rows: Row[]) => unknown; promise?: Promise<any>; claimed?: boolean };
     const pending = new WeakMap<Write<unknown>, Pending>();
     const write = (build: Pending["build"], project: Pending["project"], path: string): Write<unknown> => {
-      const state: Pending = { build, project };
+      const state: Pending = { build: () => { checkFresh(caller, false, path); return build(); }, project };
       const value: Write<unknown> = { then: (yes, no) => {
         if (!state.promise) {
-          state.promise = state.claimed ? Promise.reject(new Error("Write has already been batched.")) : Promise.resolve().then(async () => project((await drv.procedure(db, [build()], path))[0]!));
+          state.promise = state.claimed ? Promise.reject(new Error("Write has already been batched.")) : Promise.resolve().then(async () => project((await drv.procedure(db, [state.build()], path))[0]!));
           state.claimed = true;
         }
         return state.promise.then(yes, no);

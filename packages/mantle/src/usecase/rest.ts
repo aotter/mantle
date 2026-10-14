@@ -39,7 +39,7 @@ export function emitRest(plan: RuntimePlan, lowered: PlanLowered, target: Target
       const type=[procedure.input?.properties?.[key!]?.type].flat().find(t=>t&&t!=="null");
       return type==="integer"||type==="number"?[[key,"number"]]:type==="boolean"?[[key,"boolean"]]:[];
     }));
-    procedures.push(`{ ${route(method,path)}, target: ${q({kind:"procedure",name})}${!ref && lowered.procedures[name]?.caller?.every(s=>s.kind==="read") ? ", readOnly: true" : ""}${guard(procedure.requires,`procedures/${name}`)}${Object.keys(params).length?`, params: ${q(params)}`:""}, validate: validate${id}${convert(conversions(procedure.input?.properties,lowered.procedures[name]?.caller?.flatMap(s=>s.binds) ?? [],target))}, run: ${ref?`(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)`:`procedure${id}`} }`);
+    procedures.push(`{ ${route(method,path)}, target: ${q({kind:"procedure",name})}${!ref && (lowered.procedures[name]?.caller?.length ?? 0) > 0 && lowered.procedures[name]?.caller?.every(s=>s.kind==="read") ? ", readOnly: true" : ""}${guard(procedure.requires,`procedures/${name}`)}${Object.keys(params).length?`, params: ${q(params)}`:""}, validate: validate${id}${convert(conversions(procedure.input?.properties,lowered.procedures[name]?.caller?.flatMap(s=>s.binds) ?? [],target))}, run: ${ref?`(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)`:`procedure${id}`} }`);
   }
   if (hasWire) imports.push('import { wireRows } from "@aotter/mantle/contracts";');
   const list = (items:string[]) => items.length ? `[\n${items.map(item=>"    "+item+",\n").join("")}  ]` : "[]";

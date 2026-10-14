@@ -116,7 +116,7 @@ export function generate(input: GenerateInput): GenerateResult {
     const same = steps(modes.caller) === steps(modes.trusted);
     declarations.push(`export type Procedure${index}Input = ${queryInputType(procedure.input, [...modes.caller, ...modes.trusted])};`,
       `const ${fn}Caller = ${steps(modes.caller)};`, ...(same ? [] : [`const ${fn}Trusted = ${steps(modes.trusted)};`]),
-      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`, ...auth(procedure.requires, path), ...(user.used ? ['  USER.modeOf(caller);'] : []), ...(procedure.trustedOnly ? [`  deny(caller, USER.modeOf(caller) === "trusted", ${q(path)});`] : []),
+      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`, ...(modes.caller.some(s => s.kind !== "read") ? [`  if ("authenticatedAs" in caller && caller.authenticatedAs === "snapshot") (await import("@aotter/mantle/host-caller")).checkFresh(caller, false, ${q(path)});`] : []), ...auth(procedure.requires, path), ...(user.used ? ['  USER.modeOf(caller);'] : []), ...(procedure.trustedOnly ? [`  deny(caller, USER.modeOf(caller) === "trusted", ${q(path)});`] : []),
       `  return { results: await DRIVER.procedure(db, bound(D, ${user.used ? "USER.scopedAll(" : ""}${same ? "" : `${user.used ? 'USER.modeOf(caller) === "trusted"' : 'caller.kind === "system"'} ? ${fn}Trusted : `}${fn}Caller${user.used ? ", caller)" : ""}, caller, raw), ${q(path)}) };`, "}");
     procedures.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
