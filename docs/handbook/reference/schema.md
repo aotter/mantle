@@ -54,7 +54,7 @@ Owner and field columns prefix every unique index in that order. User reads/writ
 
 ## Indexes, checks and search
 
-Indexes are ordered composite scalar/native columns. Required operational fields are NOT NULL; publishing drafts may be incomplete. Store sortable types use indexed/non-null columns, with explicit nullable published_at support.
+Indexes are ordered composite scalar/native columns. A paged View's `ORDER BY` must match an index on the base Schema after any fixed equality prefix, ending with `id` as the tiebreak: `ORDER BY createdAt DESC, id DESC` needs `indexes: [[createdAt, id]]` (generation reports `Missing index for ORDER BY ...` otherwise). Required operational fields are NOT NULL; publishing drafts may be incomplete. Store sortable types use indexed/non-null columns, with explicit nullable published_at support.
 
 `uniqueIndexes` accept declared fields only, never native entry columns such as `authorId`. For per-member uniqueness, declare a required string `member` field, write `member: caller.subject` in a handler, and use `uniqueIndexes: [[member, orderNumber]]`; do not take `member` from client input.
 
@@ -88,3 +88,7 @@ Use a domain name for your own fields (`requestStatus`, `submittedAt`). Views re
 can index them without declaring them; `uniqueIndexes` cannot include them. `status` and `published_at` belong to
 the publishing lifecycle; `version` backs `expectedVersion`; `author_id` is the verified creator used by
 `restrict: { <schema>: "author_id = auth.uid()" }`.
+
+A seed or other SQL that inserts rows outside Mantle (`wrangler d1 execute --file seed.sql`) sets the native columns
+itself: `id` (text, unique) and `created_at` (integer microseconds since the Unix epoch, e.g. `1767225600000000`);
+`updated_at` and `version` have defaults. Procedures and the Store fill them for you.
