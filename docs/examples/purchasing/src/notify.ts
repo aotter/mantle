@@ -1,5 +1,4 @@
 import { ConsoleEmailSender, type EmailSender } from "@aotter/mantle/email";
-import { readIdentity } from "@aotter/mantle/auth/identity";
 import { env } from "cloudflare:workers";
 
 // AGENT: replace with a real sender before deploying (Cloudflare `send_email` binding, docs/handbook/guides/email.md).
@@ -7,7 +6,8 @@ import { env } from "cloudflare:workers";
 export const sender: EmailSender = new ConsoleEmailSender();
 
 // Recipients come from Better Auth through Mantle's server-side read (no session, no SQL on Better Auth's tables).
-const identity = async () => readIdentity((await import("./auth.js")).createAuth(env));
+// Loaded lazily: Better Auth stays out of the Worker's startup graph.
+const identity = async () => (await import("@aotter/mantle/auth/identity")).readIdentity((await import("./auth.js")).createAuth(env));
 
 /** Active admins (Better Auth adminRoles / adminUserIds). */
 export async function adminEmails(): Promise<string[]> {
