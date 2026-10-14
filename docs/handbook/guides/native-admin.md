@@ -92,6 +92,7 @@ routes. Send JSON with `Content-Type: application/json`.
 | `PATCH /entries/{id}?collection=<schema>` | Body `{ data, expectedVersion }`; sends the observed version, not the next one. Publishing entries must be drafts. |
 | `POST /entries/{id}/publish?collection=<schema>` | Body `{ expectedVersion }`; validates required data before publishing. |
 | `POST /entries/{id}/unpublish?collection=<schema>` | Body `{ expectedVersion }`; returns the entry to draft. |
+| `POST /operations/{name}` | Body is the Procedure's input; runs an Admin operation (a Procedure with `requires: ctx.admin` or a `target`). |
 | `GET /views/{name}` | Generated admin View query parameters plus `limit`/`cursor`; returns `{ rows, nextCursor? }`. |
 | `GET /me` | Returns `{ userId, role, admin, login, image }` for the signed-in caller. |
 

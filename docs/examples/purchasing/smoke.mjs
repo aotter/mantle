@@ -2,7 +2,6 @@
 // optimistic concurrency, one-transaction approval with a budget check, supplier order + signed callback, emails, cron.
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { smoke } from "./smoke-kit.mjs";
 
@@ -19,19 +18,10 @@ const supplier = createServer((request, response) => {
   });
 });
 await new Promise(resolve => supplier.listen(0, "127.0.0.1", resolve));
-// smoke-kit passes only the shell's variables; the supplier's reach the Worker through .dev.vars (restored afterwards).
-const saved = existsSync(".dev.vars") ? readFileSync(".dev.vars", "utf8") : undefined;
-writeFileSync(".dev.vars", `SUPPLIER_API_URL=http://127.0.0.1:${supplier.address().port}/orders\nSUPPLIER_WEBHOOK_SECRET=${SECRET}\n`);
 
 try {
-  await smoke(async ({ origin, owner, call, mcp, signIn, sql, step, logs }) => {
-    const waitForLog = async pattern => {
-      for (let i = 0; i < 40; i++) { if (pattern.test(logs())) return; await new Promise(resolve => setTimeout(resolve, 100)); }
-      assert.fail(`no log line matching ${pattern}`);
-    };
-    // sql() blocks Node while wrangler runs; yield afterwards so fetch drops keep-alive sockets the server closed meanwhile
-    // (otherwise the next request can fail with ECONNRESET).
-    const query = async command => { const rows = sql(command); await new Promise(resolve => setTimeout(resolve, 50)); return rows; };
+  await smoke(async ({ owner, call, mcp, signIn, sql, cron, waitForLog, step, logs }) => {
+    const query = sql;
     const row = async id => (await query(`SELECT requeststatus AS status, version, supplierorderid AS "supplierOrderId" FROM requests WHERE id = '${id}'`))[0];
     const remaining = async department => (await query(`SELECT remaining FROM budgets WHERE department = '${department}'`))[0].remaining;
     const ledgerRows = () => query("SELECT requestid AS \"requestId\", amount, remainingafter AS \"remainingAfter\" FROM ledger");
@@ -132,15 +122,13 @@ try {
     const late = await submit(bob, "Whiteboard", 150, "Engineering");
     await query(`UPDATE requests SET created_at = created_at - ${4 * DAY_US} WHERE id = '${late}'`);
     const before = logs().length;
-    // smoke-kit's cron() requests /__scheduled, which this wrangler (4.129) no longer serves; this is its current path.
-    assert.equal((await fetch(`${origin}/cdn-cgi/local/scheduled?cron=${encodeURIComponent(DAILY)}`)).status, 200);
+    assert.equal(await cron(DAILY), 200);
     for (const to of [owner, "carol@example.test"])
       await waitForLog(new RegExp(`purchasing\\.reminder → ${to.replace(/[.+]/g, "\\$&")}[\\s\\S]*?Whiteboard`));
     const reminder = logs().slice(before);
     assert.ok(!reminder.includes("Monitors"), "a request submitted today is not in the reminder");
     step("daily cron emails every admin about requests pending more than 3 days, and only those");
-  });
+  }, { vars: { SUPPLIER_API_URL: `http://127.0.0.1:${supplier.address().port}/orders`, SUPPLIER_WEBHOOK_SECRET: SECRET } });
 } finally {
   supplier.close();
-  if (saved === undefined) rmSync(".dev.vars", { force: true }); else writeFileSync(".dev.vars", saved);
 }

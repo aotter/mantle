@@ -77,3 +77,12 @@ See [Admin](../guides/admin-ui.md), [extensions](../guides/admin-extensions.md) 
 A caller whose value for a field is `{ all: true }` drops that field's term only; the other terms still apply. Generated SQL holds one statement per target and selects the form for each caller at run time; values are always bound parameters. Neither roles nor the admin layer widen a field scope or a translation parent's visibility. A Schema whose `x-mantle-ref` points to a field-scoped Schema must carry the same scope terms.
 
 For inserts, one allowed partition autofills a missing value; multiple values require an explicit allowed partition, and missing/empty values fail with `AUTH_DENIED`. Callers holding `{ all: true }` and system callers always provide an explicit partition. Procedure INSERT/upsert is trusted-only; use the scoped Store for user writes. The partition is never writable through SET, including upsert and native Admin patch. An excluded id behaves like a missing row: reads return not found; Store update/delete and row-classified Procedure UPDATE/DELETE affecting zero rows return HTTP 409 (`CONFLICT`). Native Admin's visible-row pre-read returns 404 for either id. SQLite binds a JSON array; PostgreSQL binds a quoted, escaped array. Public Views over field scope warn that anonymous callers are refused.
+
+## Reserved entry columns
+
+Every Schema row has native columns that a Schema must not declare as data properties: `id`, `status`, `version`,
+`createdAt`, `updatedAt` and `authorId` (SQL `id`, `status`, `version`, `created_at`, `updated_at`, `author_id`).
+Use a domain name for your own fields (`requestStatus`, `submittedAt`). Views read native columns and `spec.indexes`
+can index them without declaring them; `uniqueIndexes` cannot include them. `status` and `published_at` belong to
+the publishing lifecycle; `version` backs `expectedVersion`; `author_id` is the verified creator used by
+`restrict: { <schema>: "author_id = auth.uid()" }`.

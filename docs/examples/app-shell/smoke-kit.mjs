@@ -2,16 +2,18 @@
 // Usage in smoke.mjs:
 //   import { smoke } from "./smoke-kit.mjs";
 //   await smoke(async ({ call, mcp, signIn, owner, step }) => { const admin = await signIn(owner); ... step("..."); });
+//   Extra Worker variables: await smoke(scenario, { vars: { SUPPLIER_API_URL: "http://127.0.0.1:9999" } });
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 const database = "mantle-app"; // wrangler.jsonc d1_databases[0].database_name
 const env = { ...process.env, WRANGLER_SEND_METRICS: "false" };
 
-export async function smoke(scenario) {
+export async function smoke(scenario, { vars = {} } = {}) {
   const port = 18000 + Math.floor(Math.random() * 1000), origin = `http://127.0.0.1:${port}`, owner = "owner@example.test";
   const state = mkdtempSync(join(tmpdir(), "mantle-smoke-"));
   // Deployment DDL is explicit: nothing at runtime creates tables.
@@ -20,7 +22,7 @@ export async function smoke(scenario) {
     assert.equal(applied.status, 0, applied.stdout + applied.stderr);
   }
   const wrangler = spawn("pnpm", ["exec", "wrangler", "dev", "--local", "--ip", "127.0.0.1", "--port", String(port), "--inspector-port", "0", "--persist-to", state, "--test-scheduled",
-    "--var", `PUBLIC_ORIGIN:${origin}`, "--var", `ADMIN_EMAIL:${owner}`, "--var", "BETTER_AUTH_SECRET:local-smoke-secret-0123456789abcdef"],
+    "--var", `PUBLIC_ORIGIN:${origin}`, "--var", `ADMIN_EMAIL:${owner}`, "--var", "BETTER_AUTH_SECRET:local-smoke-secret-0123456789abcdef", ...Object.entries(vars).flatMap(([name, value]) => ["--var", `${name}:${value}`])],
   // its own process group: pnpm does not pass a signal on to wrangler and workerd
   { env: { ...env, CI: "1" }, stdio: ["ignore", "pipe", "pipe"], detached: true });
   let logs = "";
@@ -59,14 +61,18 @@ export async function smoke(scenario) {
     assert.equal(signed.status, 200, JSON.stringify(signed.body));
     return signed.headers.getSetCookie().map(c => c.split(";")[0]).join("; ");
   };
-  /** Run SQL against the local D1 (inspect state or inject a failure). */
-  const sql = command => {
-    const result = spawnSync("pnpm", ["exec", "wrangler", "d1", "execute", database, "--local", "--persist-to", state, "--command", command, "--json"], { encoding: "utf8", env });
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    return JSON.parse(result.stdout)[0].results;
+  /** Run SQL against the local D1 (inspect state or inject a failure). Async, so the server's sockets stay serviced. */
+  const sql = async command => {
+    const { stdout } = await promisify(execFile)("pnpm", ["exec", "wrangler", "d1", "execute", database, "--local", "--persist-to", state, "--command", command, "--json"], { encoding: "utf8", env });
+    return JSON.parse(stdout)[0].results;
   };
-  /** Fire the Worker's scheduled() handler (wrangler --test-scheduled). */
-  const cron = async expression => (await fetch(`${origin}/__scheduled?cron=${encodeURIComponent(expression)}`)).status;
+  /** Fire the Worker's scheduled() handler (wrangler dev --test-scheduled). */
+  const cron = async expression => (await fetch(`${origin}/cdn-cgi/local/scheduled?cron=${encodeURIComponent(expression)}`)).status;
+  /** Wait until the wrangler log (console.log from the Worker, e.g. ConsoleEmailSender) matches. */
+  const waitForLog = async pattern => {
+    for (let i = 0; i < 40; i++) { if (pattern.test(logs)) return; await new Promise(resolve => setTimeout(resolve, 100)); }
+    assert.fail(`no log line matching ${pattern}`);
+  };
   const step = name => console.log(`ok - ${name}`);
   try {
     for (let attempt = 0; ; attempt++) {
@@ -75,7 +81,7 @@ export async function smoke(scenario) {
       if (attempt > 240) throw new Error("the Worker did not start");
       await new Promise(resolve => setTimeout(resolve, 250));
     }
-    await scenario({ origin, owner, call, mcp, signIn, sql, cron, step, logs: () => logs });
+    await scenario({ origin, owner, call, mcp, signIn, sql, cron, waitForLog, step, logs: () => logs });
     console.log("smoke passed");
   } catch (error) {
     console.error(logs.slice(-4000));

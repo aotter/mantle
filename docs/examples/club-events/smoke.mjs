@@ -21,7 +21,7 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step }) => {
   const alice = await signIn("alice@example.test");
   const events = async cookie => Object.fromEntries((await call("GET", "/api/views/events", { cookie })).body.rows.map(e => [e.title, e]));
   const { Hike: hike, Workshop: workshop, "Members' dinner": dinner } = await events(alice);
-  const seatsOf = async id => sql(`SELECT seats_left FROM events WHERE id = '${id}'`)[0].seats_left;
+  const seatsOf = async id => (await sql(`SELECT seats_left FROM events WHERE id = '${id}'`))[0].seats_left;
   const mine = async cookie => (await call("GET", "/api/views/my-registrations", { cookie })).body.rows;
 
   const registered = await call("POST", "/api/registrations", { cookie: alice, body: { eventId: hike.id } });
@@ -44,7 +44,7 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step }) => {
   assert.deepEqual(await mine(bob), []);
   const foreign = await call("POST", "/api/registrations/cancel", { cookie: bob, body: { id: aliceHike.id } });
   assert.equal(foreign.status, 409, JSON.stringify(foreign.body));
-  assert.equal(sql(`SELECT count(*) AS n FROM registrations WHERE id = '${aliceHike.id}'`)[0].n, 1);
+  assert.equal((await sql(`SELECT count(*) AS n FROM registrations WHERE id = '${aliceHike.id}'`))[0].n, 1);
   assert.equal(await seatsOf(hike.id), 2);
   step("another member neither sees nor cancels it: cancel is 409, the row and seats_left are unchanged (restrict)");
 
@@ -53,7 +53,7 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step }) => {
   const race = await Promise.all(racers.map(cookie => call("POST", "/api/registrations", { cookie, body: { eventId: workshop.id } })));
   assert.deepEqual(race.map(r => r.status).sort(), [200, 409, 409, 409], JSON.stringify(race.map(r => r.body)));
   assert.equal(await seatsOf(workshop.id), 0);
-  assert.equal(sql(`SELECT count(*) AS n FROM registrations WHERE eventId = '${workshop.id}'`)[0].n, 1);
+  assert.equal((await sql(`SELECT count(*) AS n FROM registrations WHERE eventId = '${workshop.id}'`))[0].n, 1);
   step("four members race for the last seat: exactly one wins, seats_left is 0, the losers' inserts rolled back");
 
   const cancelled = await call("POST", "/api/registrations/cancel", { cookie: alice, body: { id: aliceHike.id } });
