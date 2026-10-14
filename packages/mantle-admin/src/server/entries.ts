@@ -1,3 +1,4 @@
+import { binds } from "@aotter/mantle/binds";
 /** Selected Admin entry transport over generated native Views and Procedures. No schema or SQL interpreter. */
 import { ContractError, type Target, type Row, type Caller } from "@aotter/mantle/contracts";
 import { invalid } from "@aotter/mantle/surface";
@@ -231,6 +232,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
     return routes.map(route => ({...route, prepare: async ctx => {
         const raw = route.method === "GET" || route.method === "DELETE" ? {} : await json(ctx);
         const schema = schemaOf(route.path.startsWith("/collections/") ? ctx.params.name : route.method === "POST" && route.path === "/entries" ? raw.collection : ctx.url.searchParams.get("collection"));
+        binds(adapter.values, schema.binding.caller.binds, ctx.caller);
         if (route.method === "GET") { await readable(schema, ctx); schema.query(ctx.url.searchParams); return; }
         writable(schema);
         if (route.method === "POST" && route.path === "/entries") {

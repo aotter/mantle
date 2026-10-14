@@ -74,8 +74,7 @@ export function nativeRest<Env, Database, Handlers = never>(routes: readonly Rou
     if (access?.dryRun) throw new ContractError("DRY_RUN_UNSUPPORTED", "Opaque native route.", route.id, {status: 412});
     let initialized = false, db: Database;
     const getDb = () => { if (!initialized) { db = options.db(env); initialized = true; } return db; };
-    const boundRequest = route.rawBody ? (await import("./json-body.js")).replay(request) : request;
-    const output = await route.handle!(boundRequest, env, getDb, caller, params, options.handlers as Handlers, input);
+    const output = await route.handle!(request, env, getDb, caller, params, options.handlers as Handlers, input);
     return output instanceof Response ? output : Response.json(output, {headers});
   });
 }

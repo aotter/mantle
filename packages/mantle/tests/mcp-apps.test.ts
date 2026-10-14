@@ -57,7 +57,7 @@ test("request-bound tool tables revalidate changed names and never dispatch the 
  const request=(name:string)=>new Request("https://app.test/mcp",{method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/call",params:{name,arguments:{},_meta:meta}})});
  const response=await api(request("public_rows"),{changed:false,value:"first"}),body=await response!.text();expect(body).toContain('"value":"first"');expect(invoked).toBe(1);expect(checks).toBe(1);
  const second=await api(request("public_rows"),{changed:false,value:"second"});expect(await second!.text()).toContain('"value":"second"');expect(invoked).toBe(2);expect(checks).toBe(1);
- await expect(api(request("public_other"),{changed:true,value:"never"})).rejects.toThrow("which this endpoint does not serve");expect(checks).toBe(1);/* the catalogue is read once; the changed names are what get revalidated */expect(invoked).toBe(2);
+ const rejected=await api(request("public_other"),{changed:true,value:"never"});expect(rejected!.status).toBe(500);expect(await rejected!.json()).toMatchObject({error:{code:"INTERNAL_ERROR"}});expect(checks).toBe(1);/* the catalogue is read once; the changed names are what get revalidated */expect(invoked).toBe(2);
 });
 
 test("clients that declare no MCP Apps support see no App resources or App-only tools", async () => {

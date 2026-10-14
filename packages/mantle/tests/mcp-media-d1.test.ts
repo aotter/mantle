@@ -27,7 +27,7 @@ spec: {surface: public, sql: 'SELECT id FROM entries ORDER BY id'}
   if(!generated.ok)throw Error(JSON.stringify(generated.diagnostics));
   await writeGenerated(dir,generated.files);
   const {unstable_splitSqlQuery}=await import("wrangler");
-  await writeFile(join(dir,"worker.ts"),`import {userCaller} from '${resolve(base,"src/kernel/user-fields.ts")}';import {mcp} from './mcp.js';
+  await writeFile(join(dir,"worker.ts"),`import {userCaller} from '${resolve(base,"src/kernel/user-caller.ts")}';import {mcp} from './mcp.js';
 import {site} from './site.js';
 import {wire} from ${JSON.stringify(resolve(base,"src/kernel/contracts.ts"))};
 import {mediaError} from ${JSON.stringify(resolve(base,"src/kernel/media.ts"))};

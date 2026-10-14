@@ -6,17 +6,14 @@ export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
 
 export interface Gateway { readonly tenant: string }
 export interface RequestContext { readonly props?: unknown }
+/** Gateway mode or the one execution prop carrying forwarded authority. */
+export const forwarded = (ctx?: RequestContext, gateway?: Gateway): boolean => !!(gateway || ctx?.props && Object.hasOwn(ctx.props, "mantle"));
 /** Generated gateway metadata is loaded only after a forwarded request. */
-export interface AccessPolicy { readonly owner?: string; readonly terms: readonly { readonly field: string }[] }
 export interface AccessTarget {
   readonly targetHash: string;
-  readonly scope: Readonly<Record<string, AccessPolicy>>;
-  readonly restrict: Readonly<Record<string, AccessPolicy>>;
-  readonly readOnly: boolean;
   readonly opaque: boolean;
-  readonly hostCallable: boolean;
-  readonly requires: { readonly all: readonly (string | { readonly "ctx.auth.scope": string })[]; readonly guard?: string };
-  readonly variants?: readonly (AccessTarget & { readonly id: string })[];
+  readonly guard?: string;
+  readonly variants?: readonly (Pick<AccessTarget, "opaque" | "guard"> & { readonly id: string })[];
 }
 export interface AccessEvent {
   readonly v: 1;
@@ -27,8 +24,6 @@ export interface AccessEvent {
   readonly outcome: "allow" | "deny" | "error";
   readonly reason?: string;
   readonly field?: string;
-  readonly terms: readonly { readonly schema: string; readonly field: string; readonly via: "scope" | "restrict"; readonly values: readonly (string | number)[] | "all" }[];
-  readonly rowCount?: number;
   readonly dryRun: boolean;
 }
 export interface GatewayOptions {
@@ -54,7 +49,6 @@ type IdentityCaller = {
   readonly requestId?: string;
   readonly target?: string;
   readonly targetHash?: string;
-  readonly bodyDigest?: string;
   readonly dryRun?: boolean;
 };
 export type Caller =
@@ -74,18 +68,10 @@ export const isUser = (caller: Caller): boolean => caller.kind === "user" || isA
 export const hasAdminRole = (caller: Caller, name: string): boolean => isAdmin(caller) && hasRole(caller, name);
 
 /** Only the core transport failures; other codes carry their own status, and unknown codes remain server errors. */
-export function statusOf(code: string): number {
-  switch (code) {
-    case "INPUT_VALIDATION_FAILED": return 400;
-    case "UNAUTHENTICATED": return 401;
-    case "AUTH_DENIED": return 403;
-    case "NOT_FOUND": return 404;
-    case "METHOD_NOT_ALLOWED": return 405;
-    case "CONFLICT": return 409;
-    case "OUTCOME_UNKNOWN": return 503;
-    default: return 500;
-  }
-}
+export const statusOf = (code: string): number => ({ __proto__: null,
+  INPUT_VALIDATION_FAILED: 400, UNAUTHENTICATED: 401, AUTH_DENIED: 403, NOT_FOUND: 404,
+  METHOD_NOT_ALLOWED: 405, CONFLICT: 409, OUTCOME_UNKNOWN: 503,
+} as Record<string, number | null>)[code] ?? 500;
 
 /** Redact native errors at the selected boundary; the bare query preserves their identity. */
 export function wire(error: unknown): { status: number; error: { code: string; message: string; path: string; [field: string]: unknown } } {

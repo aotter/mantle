@@ -24,9 +24,8 @@ export async function dispatch<Database, Handlers, Env>(route: Route<Database, H
     if (access?.dryRun) return access.response();
     data = await route.run!(getDb(), caller, input as never, options.handlers as Handlers);
   }
-  const count = data && typeof data === "object" ? "rows" in data && Array.isArray(data.rows) ? data.rows.length : "results" in data && Array.isArray(data.results) ? data.results.reduce((n: number, rows: unknown[]) => n + rows.length, 0) : undefined : undefined;
   const headers = { "cache-control": "private, no-store" };
   const response = request.method === "HEAD" ? new Response(null, {headers}) : Response.json(data, {headers});
-  access?.finish(undefined, count);
+  access?.finish();
   return response;
 }

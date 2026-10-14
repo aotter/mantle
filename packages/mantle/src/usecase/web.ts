@@ -2,15 +2,18 @@
 import type { RuntimePlan, PlanLowered } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
 import { databaseImport, q } from "../domain/entry.js";
-import { conversions } from "../domain/input.js";
+import { authLines, conversions } from "../domain/input.js";
 export function emitWeb(plan: RuntimePlan, lowered: PlanLowered, target: Target): Record<string,string> {
   const views=Object.entries(plan.views).filter(([,v])=>v.surface==="public");
   const table=views.map(([name,v],i)=>{
     const binds=lowered.views[name]?.public?.binds??[], convert=conversions(v.input?.properties,binds,target);
     const booleans=Object.keys(v.input?.properties??{}).filter(field=>binds.some(b=>b.k==="input"&&String(b.name).toLowerCase()===field.toLowerCase()&&String(b.type)==="bool"));
-    return `[${q(name)}, { query: input${i}, page: async (db, caller, input, paging) => (await import("./paged/views/${encodeURIComponent(name)}.js")).default(db, caller, input, paging)${convert?`, convert: ${convert}`:""}${booleans.length?`, booleans: ${q(booleans)}`:""} }]`;
+    const check = authLines(v.requires, `views/${name}`, binds, !target.endsWith("postgres"));
+    return `[${q(name)}, { ${check.length ? `check: (caller) => {${check.join("")}}, ` : ""}query: input${i}, page: async (db, caller, input, paging) => (await import("./paged/views/${encodeURIComponent(name)}.js")).default(db, caller, input, paging)${convert?`, convert: ${convert}`:""}${booleans.length?`, booleans: ${q(booleans)}`:""} }]`;
   });
   return {"web.ts": [
+    ...(plan.access ? ['import { userBinds } from "@aotter/mantle/user-fields";'] : []),
+    ...([...Object.values(plan.views)].some(v => v.requires?.auth?.all.length) ? ['import { deny, isAdmin, isUser } from "@aotter/mantle/contracts";'] : []),
     ...views.flatMap(([n],i)=>[`import { query as input${i} } from "./validation/views/${encodeURIComponent(n)}.js";`,`import type { Row as Row${i} } from "./views/${encodeURIComponent(n)}.js";`]),
     'import { web as site, type Options, type Page } from "@aotter/mantle/web";',
     databaseImport(target),

@@ -8,7 +8,7 @@ import {once} from "node:events";
 import {generateOrThrow,writeGenerated,loadFixtureSources} from "./apps/link.js";
 import {verifyRest} from "./rest-scenarios.js";
 const base=resolve(import.meta.dir,".."),caller=`async(request:Request)=>request.headers.get("x-role")?userCaller({id:"s",role:request.headers.get("x-role")==="none"?null:request.headers.get("x-role")},{adminRoles:["admin"],credential:(request.headers.get("x-credential")||"api-key") as "api-key"}):{kind:"anonymous" as const}`;
-const composition=`import {userCaller} from '${resolve(base,'src/kernel/user-fields.ts')}';import {rest} from './rest.js';import type {Handlers} from './generated.js';
+const composition=`import {userCaller} from '${resolve(base,'src/kernel/user-caller.ts')}';import {rest} from './rest.js';import type {Handlers} from './generated.js';
 const handlers:Handlers={echo:async(ctx,input)=>({reply:input.message,title:(await ctx.store.collection("notes").findById("a"))!.title})};
 export const app=rest({db:(env:{DB:any})=>env.DB,caller:${caller},handlers});`;
 function seed(pg:boolean):string {

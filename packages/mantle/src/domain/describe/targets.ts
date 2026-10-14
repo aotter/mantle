@@ -22,7 +22,6 @@ export interface TargetDefinition {
   readSchemas: string[];
   readOnly: boolean;
   opaque: boolean;
-  hostCallable: boolean;
   trustedOnly: boolean;
   behavior: unknown;
   variants: TargetDefinition[];
@@ -115,27 +114,6 @@ export const adminRoutes = [
   "GET /admin", "GET /members", "PATCH /admin/:id/role", "POST /admin/invitations", "DELETE /admin/invitations/:id",
 ] as const;
 
-/** Tool inputs flatten path parameters, query selectors and JSON body fields. */
-function adminInput(route: string, dependencies: TargetDefinition[], plan: RuntimePlan): JsonSchema {
-  const properties: Record<string, JsonSchema> = Object.fromEntries([...route.matchAll(/:([a-zA-Z]+)/g)].map(([, name]) => [name!, { type: "string" }]));
-  const required = Object.keys(properties);
-  const version: JsonSchema = { anyOf: [{ type: "integer", minimum: 0 }, { type: "string", pattern: "^[0-9]+$" }] };
-  if (route.includes("/entries")) properties.collection = { type: "string" };
-  if (route.includes("/statistics")) properties.range = { type: "string", enum: ["1h", "24h", "7d", "20d"] };
-  if (route.includes("/entries") && !route.startsWith("GET")) properties.expectedVersion = version;
-  if (route === "POST /entries" || route === "PATCH /entries/:id") {
-    properties.data = { type: "object", anyOf: Object.entries(plan.schemas).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, s]) => ({ ...s.schema, required: [], properties: Object.fromEntries(Object.entries(s.schema.properties ?? {}).filter(([name]) => name.toLowerCase() !== s.scope)) })) };
-  }
-  if (route === "GET /entries" || route === "GET /entries/export" || route === "GET /members" || route === "GET /media") Object.assign(properties, {
-    limit: { type: "integer", minimum: 1, maximum: route === "GET /members" ? 100 : 500 }, cursor: { type: "string" }, search: { type: "string" },
-  });
-  if (route === "PATCH /admin/:id/role" || route === "POST /admin/invitations") properties.role = { type: ["string", "null"] };
-  if (route === "POST /admin/invitations") properties.email = { type: "string" };
-  if (route === "POST /media/uploads") Object.assign(properties, { filename: { type: "string" }, purpose: { type: "string" }, variants: { type: "array", items: { type: "object" } } });
-  if (route.startsWith("PATCH /media")) Object.assign(properties, { alt: { type: "string", maxLength: 1000 }, caption: { type: "string", maxLength: 1000 } });
-  return { type: "object", properties, ...(required.length ? { required } : {}), ...(dependencies.length ? { anyOf: dependencies.map(d => ({ type: "object", properties: { [route.includes("/webmcp/") ? "tool" : "name"]: { type: "string", const: route.includes("/webmcp/") ? d.name : d.id.slice(d.kind === "view" ? 5 : 10) }, input: d.inputSchema } })) } : {}) };
-}
-
 export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
   const out: TargetDefinition[] = [];
   const tools = [...mcpTools(plan, "public"), ...mcpTools(plan, "admin")];
@@ -158,7 +136,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
         title, description: resolveLocalizedText(p.description, "en", "en") ?? title,
         inputSchema: tool?.inputSchema ?? view?.input ?? proc?.input ?? objectInput,
         annotations: tool?.annotations ?? {}, requires: p.requires, restrict: inspected.restrict,
-        schemas: inspected.schemas, readSchemas: inspected.readSchemas, readOnly: !inspected.opaque && inspected.readOnly, opaque: inspected.opaque, hostCallable: !proc?.trustedOnly, trustedOnly: !!proc?.trustedOnly,
+        schemas: inspected.schemas, readSchemas: inspected.readSchemas, readOnly: !inspected.opaque && inspected.readOnly, opaque: inspected.opaque, trustedOnly: !!proc?.trustedOnly,
         variants: [], behavior: { declaration: p, dependencies: inspected.dependencies },
       });
     }
@@ -170,7 +148,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
       restrict: mergeRestrict(dependencies.map(d => d.restrict), false),
       schemas: [...new Set(dependencies.flatMap(d => d.schemas))].sort(), readSchemas: [...new Set(dependencies.flatMap(d => d.readSchemas))].sort(),
       readOnly: dependencies.length > 0 && dependencies.every(d => d.readOnly) && (!admin || id.startsWith("admin:GET ") || id === "admin:POST /operations/:name" || id === "admin:POST /webmcp/:tool"),
-      opaque: dependencies.some(d => d.opaque), hostCallable: dependencies.every(d => d.hostCallable), trustedOnly: dependencies.some(d => d.trustedOnly),
+      opaque: dependencies.some(d => d.opaque), trustedOnly: dependencies.some(d => d.trustedOnly),
       variants: dependencies, behavior: dependencies.map(d => ({ id: d.id, behavior: d.behavior, surfaces: d.surfaces, triggers: d.triggers, input: d.inputSchema, requires: d.requires, restrict: d.restrict, trustedOnly: d.trustedOnly })),
     });
   };
@@ -202,7 +180,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
     const deps = route.includes("/views/:") ? declarations.filter(d => d.kind === "view" && (route.includes("/developer/") || plan.views[d.id.slice(5)]?.surface === "admin"))
       : route.includes("/operations/:") ? declarations.filter(d => adminOperations.has(d.id)) : route === "POST /webmcp/:tool" ? declarations.filter(d => mcpTools(plan, "admin").some(t => `${t.kind}:${t.source}` === d.id)).concat(generated) : [];
     const generic = route.includes("/entries") || route.includes("/statistics") || route === "GET /bootstrap";
-    addRoute(`admin:${route}`, deps, adminInput(route, deps, plan));
+    addRoute(`admin:${route}`, deps, deps.length ? { ...objectInput, anyOf: deps.map(d => ({ type: "object", properties: { [route.includes("/webmcp/") ? "tool" : "name"]: { type: "string", const: route.includes("/webmcp/") ? d.name : d.id.slice(d.kind === "view" ? 5 : 10) } } })) } : objectInput);
     const d = out.at(-1)!;
     if (generic) {
       const operation = route === "POST /entries" ? "create" : route === "DELETE /entries/:id" ? "delete" : route.startsWith("GET ") ? undefined : route.endsWith("/publish") ? "publish" : "update";

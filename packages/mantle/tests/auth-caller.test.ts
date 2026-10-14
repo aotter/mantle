@@ -8,7 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { authenticatedAs } from "../src/testing/index.js";
-import { fieldsOf } from "../src/kernel/user-fields.js";
+import { fieldsOf } from "../src/kernel/caller-identity.js";
 import type { BetterAuthOptions } from "better-auth/types";
 import { afterAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";

@@ -13,11 +13,10 @@ export const gatewaySource = [
 export const mantleProps = (overrides: Partial<HostProps> = {}): HostProps => ({ v: 1, tenant: 'example', layer: 'admin', user: { id: 'person', role: 'editor', region: ['TW'], stores: ['A'] }, authenticatedAs: 'fresh', credential: 'oauth', requestId: 'request-1', target: 'fixture', targetHash: 'fixture', ...overrides });
 export const invalidProps = () => [null, {}, { ...mantleProps(), v: 2 }, mantleProps({ tenant: 'other' }), { ...mantleProps(), layer: 'owner' }, { ...mantleProps(), requestId: '' }, { ...mantleProps(), user: { id: 'person', region: true } }];
 
-/** Bind fixture requests using the exact generated report and raw bytes. */
-export async function pinned(props: unknown, targets: Record<string, {targetHash: string}>, id: string, body = "") {
+/** Bind fixture requests using the exact generated report. */
+export async function pinned(props: unknown, targets: Record<string, {targetHash: string}>, id: string) {
   if (!props || typeof props !== 'object') return props;
   const p = props as HostProps;
   if (p.layer === 'member' && p.target === undefined && p.targetHash === undefined) return props;
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body)));
-  return {...p, target: !p.target || p.target === 'fixture' ? id : p.target, targetHash: !p.targetHash || p.targetHash === 'fixture' ? targets[id]?.targetHash ?? 'unknown' : p.targetHash, bodyDigest: p.bodyDigest ?? btoa(String.fromCharCode(...digest)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')};
+  return {...p, target: !p.target || p.target === 'fixture' ? id : p.target, targetHash: !p.targetHash || p.targetHash === 'fixture' ? targets[id]?.targetHash ?? 'unknown' : p.targetHash};
 }

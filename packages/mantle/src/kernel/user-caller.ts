@@ -2,13 +2,11 @@
 import { ContractError } from "./contract-error.js";
 import type { Caller, CredentialKind } from "./contracts.js";
 import type { AllValues, UserField, UserFields, UserValue } from "./user-fields.js";
+import { validUserFieldName } from "./user-field-name.js";
 import { identities } from "./caller-identity.js";
 export const isAllValues = (value: unknown): value is AllValues => !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && (value as { all?: unknown }).all === true;
-const name = /^[a-z][a-zA-Z0-9_]{0,62}$/;
 /** Role names follow Better Auth's role strings; `-` is allowed. */
 const roleName = /^[a-z][a-zA-Z0-9_-]{0,62}$/;
-const reserved = " id email emailVerified name image createdAt updatedAt role banned banReason banExpires ";
-export const validUserFieldName = (field: string): boolean => name.test(field) && !reserved.includes(' '+field+' ') && !field.startsWith("mantle");
 const invalid = (message: string): never => { throw new ContractError("USER_FIELD_INVALID", message, "auth:user", { status: 400 }); };
 export function valueOf(value: unknown, spec: UserField, field: string): UserValue {
   if (isAllValues(value)) return Object.freeze({ all: true });

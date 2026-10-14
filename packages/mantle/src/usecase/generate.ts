@@ -40,7 +40,7 @@ const typeOf = (s: JsonSchema | undefined): string => {
 export function generate(input: GenerateInput): GenerateResult {
   const { target, plan, lowered, viewKeys, newId, adminExtensions, site, admin, paging } = input;
   const diagnostics: GenerateDiagnostic[] = [];
-  refuseDeclarations({ target, plan, lowered, viewKeys, newId }, diagnostics);
+  refuseDeclarations({ plan }, diagnostics);
   const refuse = (path: string, message: string) => { diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message }); };
   const isSqlite = sqlite(target);
   const user = userReferences(plan, isSqlite);
@@ -125,7 +125,7 @@ export function generate(input: GenerateInput): GenerateResult {
   emitTtl(plan, isSqlite, declarations, procedures, entries, refuse);
   emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers);
-  const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, refuse, !!site), ...emitAdminDescriptors({plan,adminExtensions,admin},diagnostics), ...emitAdminBindings(input,refuse), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
+  const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target, input.description), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, input.description, refuse, !!site), ...emitAdminDescriptors({plan,adminExtensions,admin},diagnostics), ...emitAdminBindings(input,refuse), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";
   const code = [...(Object.keys(plan.access?.userFields ?? {}).length ? [`export const userFields = ${q(plan.access!.userFields)} as const;`] : []), ...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [

@@ -1,5 +1,6 @@
+import type { AppDescription } from "../domain/describe/index.js";
 /** Emit the selected MCP boundary; the official transport loads on its first request. */
-import { mcpToolNameSegment, type RuntimePlan, type PlanLowered } from "../build/compiler.js";
+import { mcpToolNameSegment, type RuntimePlan, type PlanLowered, type LoweredStatement } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
 import { emitMcpMedia, mediaDefinitions } from "./mcp-media.js";
 import { emitValidation } from "./validation.js";
@@ -7,20 +8,20 @@ import { databaseImport, q } from "../domain/entry.js";
 import { authLines, conversions } from "../domain/input.js";
 import { publishingInput } from "./publishing.js";
 import { boundaryPage, outputConversions } from "../domain/columns.js";
-export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target, refuse: (path: string, message: string) => void, media = false): Record<string, string> {
+export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target, description: AppDescription, refuse: (path: string, message: string) => void, media = false): Record<string, string> {
   if (!Object.values(plan.views).some(view=>view.surface!=="internal") && !Object.values(plan.triggers).some(trigger=>trigger.source.kind==="mcp")) return {};
   const reads: { name: string; surface: string }[] = [];
-  const imports: string[] = [], tools: { fields: string[]; schema: string }[] = [];
+  const imports: string[] = plan.access ? ['import { userBinds } from "@aotter/mantle/user-fields";'] : [], tools: { fields: string[]; schema: string }[] = [];
   const files:Record<string,string> = media ? emitMcpMedia(refuse) : {};
   let hasRef=false,hasWire=false;
   const names = new Set<string>(media ? mediaDefinitions().map(tool=>"admin:"+tool.name) : []);
 
-  const guard = (requires: RuntimePlan["views"][string]["requires"], path: string) => {
-    const lines = authLines(requires, path);
+  const guard = (requires: RuntimePlan["views"][string]["requires"], path: string, binds: LoweredStatement["binds"] = [], trustedOnly = false) => {
+    const lines = authLines(requires, path, binds, !target.endsWith("postgres"), trustedOnly);
     return lines.length ? `, check: (caller) => {${lines.join("")}}` : "";
   };
   const refs = Object.values(plan.procedures).some(p => "ref" in p.handler);
-  if ([...Object.values(plan.views), ...Object.values(plan.procedures)].some(p => p.requires?.auth?.all.length) || Object.values(plan.schemas).some(s => s.publishing)) imports.push('import { deny, isAdmin, isUser } from "@aotter/mantle/contracts";');
+  if (Object.values(plan.procedures).some(p => p.trustedOnly) || [...Object.values(plan.views), ...Object.values(plan.procedures)].some(p => p.requires?.auth?.all.length) || Object.values(plan.schemas).some(s => s.publishing)) imports.push('import { deny, isAdmin, isUser } from "@aotter/mantle/contracts";');
   const add = (name: string, kind: "views" | "procedures", surface: string, operation:Pick<RuntimePlan["views"][string],"input"|"title"|"description"|"requires">=kind === "views" ? plan.views[name]! : plan.procedures[name]!, tool=mcpToolNameSegment(name)) => {
     if (kind === "views") reads.push({name:tool,surface});
     const ref=kind === "procedures" && !!plan.procedures[name] && "ref" in plan.procedures[name]!.handler;
@@ -44,7 +45,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
     const annotations=kind === "views" ? {readOnlyHint:true} : procedure?.mcp;
     const wire = kind === "views" ? outputConversions(plan, name, target) : [];
     hasWire ||= wire.length > 0;
-    const fields=[...(!ref && kind === "procedures" && statements.length > 0 && statements.every(s=>s?.kind === "read") ? ["readOnly: true"] : []),`target: ${q({kind:kind === "views" ? "view" : "procedure",name})}${guard(operation.requires,`${kind}/${name}`)}`,`name: ${q(tool)}`,`surface: ${q(surface)}`,...(operation.title?[`title: ${q(operation.title)}`]:[]),`description: ${q(operation.description ?? operation.title ?? name)}`,"inputSchema",...(output?[`outputSchema: ${q(output)}`]:[]),...(annotations?[`annotations: ${q(annotations)}`]:[]),...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: ${kind === "views" ? `validate${index}` : `async (raw) => (await import("./validation/procedures/${file}.js")).validate(raw)`}`,...(convert?[`convert: ${convert}`]:[]),
+    const fields=[...(description.targets.find(t => t._meta.id === `${kind === "views" ? "view" : "procedure"}:${name}`)?._meta.readOnly ? ["readOnly: true"] : []),`target: ${q({kind:kind === "views" ? "view" : "procedure",name})}${guard(operation.requires,`${kind}/${name}`, binds, procedure?.trustedOnly)}`,`name: ${q(tool)}`,`surface: ${q(surface)}`,...(operation.title?[`title: ${q(operation.title)}`]:[]),`description: ${q(operation.description ?? operation.title ?? name)}`,"inputSchema",...(output?[`outputSchema: ${q(output)}`]:[]),...(annotations?[`annotations: ${q(annotations)}`]:[]),...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: ${kind === "views" ? `validate${index}` : `async (raw) => (await import("./validation/procedures/${file}.js")).validate(raw)`}`,...(convert?[`convert: ${convert}`]:[]),
       ...(kind === "views" ? [`path: ${q(`views/${name}`)}`,`page: ${boundaryPage(`run${index}`, wire)}`] : [`run: ${ref ? `(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)` : `async (db, caller, input) => (await import("./procedures/${file}.js")).default(db, caller, input)`}`])];
     tools.push({ fields, schema });
   };

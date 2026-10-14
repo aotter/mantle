@@ -11,7 +11,7 @@ export async function hash(value: unknown): Promise<string> {
 export function hashDefinition(plan: RuntimePlan, d: TargetDefinition): Promise<string> {
   return hash({ id: d.id, surfaces: d.surfaces, triggers: d.triggers, behavior: d.behavior, input: d.inputSchema, requires: d.requires, restrict: d.restrict,
     dialect: plan.dialect, schemas: Object.fromEntries(d.schemas.map(name => [name, plan.schemas[name]])),
-    userFields: plan.access?.userFields, readOnly: d.readOnly, opaque: d.opaque, hostCallable: d.hostCallable, trustedOnly: d.trustedOnly });
+    userFields: plan.access?.userFields, readOnly: d.readOnly, opaque: d.opaque, trustedOnly: d.trustedOnly });
 }
 /** Opt-in runtime export. No compiler, parser, database or Node API is loaded. */
 export async function targetHash(plan: RuntimePlan, targetId: string): Promise<string> {

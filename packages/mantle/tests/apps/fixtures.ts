@@ -1,6 +1,6 @@
 import type { Caller } from "../../src/kernel/contracts.js";
-import { userCaller } from '../../src/kernel/user-fields.js';
-import { userCaller as sdkUserCaller } from '@aotter/mantle/user-fields';
+import { userCaller } from '../../src/kernel/user-caller.js';
+import { authenticatedAs as sdkUserCaller } from '@aotter/mantle/testing';
 let callerFactory = userCaller;
 /** Native packed-driver scenarios must mint identity with their selected package module. */
 export const fixtureCallerFactory = (factory: typeof userCaller): void => { callerFactory = factory; };

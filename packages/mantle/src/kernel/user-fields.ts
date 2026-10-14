@@ -11,10 +11,6 @@ export interface UserField { readonly type: "string" | "number"; readonly multip
 export type UserFields = Readonly<Record<string, UserField>>;
 import { valueFor, isHostCaller } from "./caller-identity.js";
 import { isAllValues } from "./user-caller.js";
-export { isAllValues } from "./user-caller.js";
-export { validUserFieldName } from "./user-caller.js";
-export { userCaller } from "./user-caller.js";
-export { isHostCaller, rolesOf, fieldsOf, hasRole, isAdminCaller } from "./caller-identity.js";
 /** Whether the caller holds `{ all: true }` for a field: its row-template term is dropped. */
 export const isAll = (caller: Caller, field: string): boolean => isAllValues(valueFor(caller, field));
 const SCOPE_TERM = /\/\*s:(\w+)\*\/([^]*?)\/\*\|\*\/([^]*?)\/\*;\*\//g;

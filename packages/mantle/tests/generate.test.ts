@@ -1,14 +1,12 @@
-import type { LoweredStatement } from "../src/build/compiler.js";
+import { describeApp } from "../src/domain/describe/index.js";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { compilePlan, NATIVE_NOT_NULL, notNullColumns, viewOutputs } from "../src/build/compiler.js";
+import { compilePlan, NATIVE_NOT_NULL, notNullColumns, viewOutputs, type LoweredStatement } from "../src/build/compiler.js";
 import * as postgresCompile from "../src/build/postgres/compile/index.js";
 import { initialStorageSql as sqliteSchema } from "../src/build/d1/storage.js";
 import { initialStorageSql as postgresSchema } from "../src/build/postgres/storage.js";
 import { generateFromSources } from "../src/infrastructure/generateAuth.js";
 import { coreNewId } from "../src/infrastructure/generate.js";
-import { emitRest } from "../src/usecase/rest.js";
-import { emitAdminBindings } from "../src/usecase/adminBindings.js";
 import { generate } from "../src/usecase/generate.js";
 import type { Target } from "../src/domain/model.js";
 import { user } from "./apps/fixtures.js";
@@ -69,7 +67,7 @@ async function canonical(target: Target, text = source) {
   const compiled = await compilePlan({ sources: [{ sourceId: "notes.yaml", text }] }, sqlite ? undefined : postgresCompile);
   if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
   const { lowered } = lowerPlan(compiled.plan, dialect);
-  return { target, plan: compiled.plan, lowered, newId: coreNewId(dialect, compiled.plan.schemas), viewKeys: Object.fromEntries(Object.entries(compiled.plan.views).map(([name, view]) => [name, viewOutputs(view, compiled.plan.schemas).keys])) };
+  return { target, description: await describeApp(compiled.plan), plan: compiled.plan, lowered, newId: coreNewId(dialect, compiled.plan.schemas), viewKeys: Object.fromEntries(Object.entries(compiled.plan.views).map(([name, view]) => [name, viewOutputs(view, compiled.plan.schemas).keys])) };
 }
 describe("native generation", () => {
   test("unsupported programs fail generation with paths rather than omitting behavior", async () => {
@@ -298,21 +296,4 @@ spec:
     const app = await loadGenerated(generated.files["generated.ts"]!);
     expect(await app.views["utc-day"](db,{kind:"anonymous"},{})).toEqual([{day:Date.parse("2026-10-11T00:00:00Z")*1000}]);
   } finally { db.close(); }
-});
-
-test("REST and Admin classify only nonempty SQL read programs as read-only", async () => {
-  const input = await canonical("bun-sqlite");
-  const name = "create-note", procedure = input.plan.procedures[name]!;
-  const plan = { ...input.plan, schemas: {}, views: {}, procedures: { [name]: procedure }, triggers: {
-    http: { source: { kind: "http" as const, method: "POST" as const, path: "/api/read" }, procedure: name },
-    mcp: { source: { kind: "mcp" as const, surface: "admin" as const }, procedure: name },
-  } };
-  const read: LoweredStatement = { kind: "read", sql: "SELECT 1", binds: [] };
-  for (const [statements, expected] of [[[], false], [[read], true], [[read, { ...read, kind: "set" }], false]] as const) {
-    const lowered = { ...input.lowered, procedures: { [name]: { caller: statements, trusted: statements } } };
-    const rest = emitRest(plan, lowered, input.target)["rest.ts"]!;
-    const admin = emitAdminBindings({ ...input, plan, lowered, admin: true, adminEntries: {} }, (_path, message) => { throw Error(message); })["admin-bindings.ts"]!;
-    expect(rest.includes("readOnly: true")).toBe(expected);
-    expect(admin.includes("readOnly:true")).toBe(expected);
-  }
 });

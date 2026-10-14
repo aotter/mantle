@@ -1,6 +1,6 @@
 import type { GatewayOptions } from "@aotter/mantle/contracts";
 /** Optional Admin API: generated data and native calls, with one fresh admin session per request. */
-import { deny, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller, type Target, type Authorize, type Gateway, type RequestContext } from "@aotter/mantle/contracts";
+import { forwarded, deny, isAdmin, ContractError, checkOrigin, surfaceCaller, type Caller, type Target, type Authorize, type Gateway, type RequestContext } from "@aotter/mantle/contracts";
 import { nativeRest, body, type Route as RestRoute } from "@aotter/mantle/rest";
 import { sessionUserOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
@@ -106,6 +106,7 @@ export interface Metadata {
 }
 export interface View<Database> {
     readonly name: string;
+    readonly check?: (caller: Caller) => void;
     readonly allows: (caller: Caller) => boolean;
     /** Generated query validation also owns selected search/filter inputs. */
     readonly query: (params: URLSearchParams) => {
@@ -128,6 +129,7 @@ export interface View<Database> {
 export interface Operation<Database, Handlers> {
     readonly readOnly?: boolean;
     readonly name: string;
+    readonly check?: (caller: Caller) => void;
     readonly allows: (caller: Caller) => boolean;
     readonly validate: (raw: unknown) => Record<string, unknown>;
     readonly convert?: Conversions;
@@ -197,11 +199,12 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                     return view.row ? {...page, rows: page.rows.map(view.row)} : page;
                 }, columns);
             } },
-        { method: "GET", path: "/views/{name}", prepare: async c => { const view = views.find(v => v.name === c.params.name); if (!view) throw missing(); deny(c.caller, view.allows(c.caller), "views/" + view.name); if (options.authorize) await checkTarget({kind:"view",name:view.name}, c.caller); const input = {...view.query(c.url.searchParams).input}; convert(input, view.convert); }, run: c => viewPage(c) },
+        { method: "GET", path: "/views/{name}", prepare: async c => { const view = views.find(v => v.name === c.params.name); if (!view) throw missing(); deny(c.caller, view.allows(c.caller), "views/" + view.name); view.check?.(c.caller); if (options.authorize) await checkTarget({kind:"view",name:view.name}, c.caller); const input = {...view.query(c.url.searchParams).input}; convert(input, view.convert); }, run: c => viewPage(c) },
         ...(metadata.developerConsole === undefined ? [] : [{ method: "GET" as const, path: "/developer/views/{name}", run: (c: Context<Env, Database>) => viewPage(c, true) }]),
         { method: "POST", path: "/operations/{name}", prepare: async c => {
             const operation = operations.find(p => p.name === c.params.name); if (!operation) throw missing();
             deny(c.caller, operation.allows(c.caller), "procedures/" + operation.name);
+            operation.check?.(c.caller);
             if (options.authorize) await checkTarget({kind:"procedure",name:operation.name}, c.caller);
             convert(operation.validate(await json(c)), operation.convert);
         }, run: async (c) => {
@@ -244,7 +247,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
         const matched = table.find(r => r.method === request.method && r.pattern.test(path));
         try {
             await access?.select(matched?.id ?? `admin:${request.method} ${path.slice(10)}`);
-            caller = options.gateway || (!!ctx?.props && Object.hasOwn(ctx.props, "mantle"))
+            caller = forwarded(ctx, options.gateway)
                 ? (await import("@aotter/mantle/host-caller")).gatewayCaller(ctx, options.gateway, options.fields ?? metadata.userFields)
                 : await surfaceCaller(request, env, options.caller ?? (() => ({ kind: "anonymous" })));
             await access?.select(matched?.id ?? `admin:${request.method} ${path.slice(10)}`, caller);
@@ -254,14 +257,14 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 if (options.gateway) throw new ContractError("AUTH_DENIED", "Admin layer required.", "admin");
                 return Response.json({ error: { code: "AUTH_DENIED", message: "Admin needs a signed-in admin session.", path: "admin" }, minimumRole: "admin" }, { status: 403, headers: { "cache-control": "private, no-store" } });
             }
+            const operation = options.gateway ? /^\/admin\/api\/operations\/([^/]+)\/?$/.exec(path) : null;
+            const readOnly = ["GET", "HEAD", "OPTIONS"].includes(request.method) || request.method === "POST" && !!operation && operations.some(p => p.name === decodeURIComponent(operation[1]!) && p.readOnly === true);
             if (options.gateway) {
                 const { checkFresh } = await import("@aotter/mantle/host-caller");
-                const operation = /^\/admin\/api\/operations\/([^/]+)\/?$/.exec(path);
-                const readOnly = ["GET", "HEAD", "OPTIONS"].includes(request.method) || request.method === "POST" && !!operation && operations.some(p => p.name === decodeURIComponent(operation[1]!) && p.readOnly === true);
                 const view = /\/views\/([^/]+)/.exec(path);
                 const variant = operation ? `procedure:${decodeURIComponent(operation[1]!)}` : view ? `view:${decodeURIComponent(view[1]!)}` : undefined;
-                await access?.select(matched?.id ?? `admin:${request.method} ${path.slice(10)}`, caller, variant);
-                if (matched) await access?.check(request, readOnly, matched.bodyLimit, variant);
+                await access?.select(matched?.id ?? `admin:${request.method} ${path.slice(10)}`, caller);
+                if (matched) await access?.check(readOnly, variant);
                 if (!matched) checkFresh(caller, readOnly, path);
             }
             checkOrigin(request, caller);
@@ -284,22 +287,14 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 await route.prepare(c);
                 return access.response();
             }
-            const response = await nativeRest(table, { db: options.db, caller: () => caller!, handlers: options.handlers })(request, env);
+            const response = await nativeRest(table.map(r => r === matched ? {...r, readOnly} : r), { accessTargets: options.accessTargets ?? metadata.accessTargets, gateway: options.gateway, fields: options.fields ?? metadata.userFields, db: options.db, caller: () => caller!, handlers: options.handlers })(request, env, ctx);
             if (!response) throw missing();
-            if (options.gateway && response.status >= 400) {
-                const payload = await response.clone().json().catch(() => null) as { error?: { code: string; path?: string; target?: string; field?: string } } | null;
-                const error = payload?.error ?? { code: [401, 403].includes(response.status) ? "AUTH_DENIED" : "INTERNAL_ERROR" };
-                access?.finish(new ContractError(error.code, "", "", {status:response.status, fields:error.field ? {field:error.field} : undefined}));
-                const failure = (await import("@aotter/mantle/host-caller")).hostFailure(new ContractError(error.code, "", error.target ?? error.path ?? "", { status: response.status, fields: error.field ? { field: error.field } : undefined }), caller, "admin");
-                if (response.headers.has("allow")) failure.headers.set("allow", response.headers.get("allow")!);
-                return failure;
-            }
-            access?.finish();
+            await access?.finishResponse(response);
             return response;
         }
         catch (error) {
             access?.finish(error);
-            return options.gateway || (!!ctx?.props && Object.hasOwn(ctx.props, "mantle")) ? (await import("@aotter/mantle/host-caller")).hostFailure(error, caller, "admin") : surfaceFailure(error);
+            return (await import("@aotter/mantle/host-caller")).hostFailure(error, caller, "admin");
         }
     };
 }

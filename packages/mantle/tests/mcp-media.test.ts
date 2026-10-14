@@ -46,7 +46,7 @@ for(const target of ["bun-sqlite","bun-postgres"] as const) (target === "bun-sql
  await rpc("tools/call",{name:names[0],arguments:{}},"/mcp/admin",undefined,mcp(options));expect(readOnly).toBe(false);
  const gateway=mcp({...options,gateway:{tenant:"example"},media:()=>storage});
  const {targets}=await import(join(dir,"access-targets.ts"));
- const forward=async(request:Request,env:unknown)=>{const body=await request.clone().text(),name=JSON.parse(body).params.name;return gateway(request,env,{props:{mantle:await pinned(mantleProps({authenticatedAs:"snapshot"}),targets,"admin:tool:"+name,body)}});};
+ const forward=async(request:Request,env:unknown)=>{const body=await request.clone().text(),name=JSON.parse(body).params.name;return gateway(request,env,{props:{mantle:await pinned(mantleProps({authenticatedAs:"snapshot"}),targets,"admin:tool:"+name)}});};
  const beforeCalls=calls,policy=await rpc("tools/call",{name:names[0],arguments:{}},"/mcp/admin",undefined,forward);
  expect(policy.response.status).toBe(200);expect(policy.data.result.structuredContent.purposes[0].name).toBe("cover");
  const stale=await rpc("tools/call",{name:names[1],arguments:{}},"/mcp/admin",undefined,forward);expect(stale.response.status).toBe(403);expect(stale.data.error.code).toBe("STALE_CALLER");expect(calls).toBe(beforeCalls);
