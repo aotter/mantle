@@ -20,11 +20,9 @@ uses admin); host project credentials are not application credentials. Upload ca
   `@aotter/mantle/web` REST contract; browser code on static hosts uses
   same-origin fetch, not a server surface imported into the browser. Do not install the historical standalone
   `@aotter/mantle-web` or claim Core supplies an HTML renderer. Application-owned `service.fetch` may render HTML; follow the selected host's static/template and pairing restrictions.
-- Public content needs real per-URL HTML with semantic body text, title,
-  description, canonical, Open Graph, sitemap.xml, robots.txt and appropriate
-  JSON-LD. Include authorship and publication/update dates where applicable.
-  Client-side-only metadata or an SPA shell is not sufficient for SEO/AEO/GEO.
-  For public content on static hosts disable SPA fallback and check unknown URLs
+- Public content follows the installed `docs/handbook/guides/public-pages.md`
+  (the one list of head tags, JSON-LD, languages, Markdown, sitemap, robots and
+  `llms.txt`). For public content on static hosts disable SPA fallback and check unknown URLs
   return 404. Follow the selected host's permanent origin contract. Missing
   final origin blocks origin-dependent checks.
   Structured data must match visible content; do not fabricate facts or promise
