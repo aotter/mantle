@@ -45,6 +45,8 @@ Other handles may adapt to the same [structural driver contracts](../guides/adap
 `--auth`, `--site`, `--admin-extensions` modules). `mantle bundle`, which Wrangler runs for `wrangler dev` and every
 deploy, refuses to build when an input changed since, so stale generated code cannot run; regenerate and rebuild.
 Commit it with the other generated files.
+The bundle also prints notes, never errors, for SQL in the app's own code against Better Auth's tables (read users
+through `userOf(caller)` or `readIdentity(auth)` instead) and for Better Auth roles beyond `admin` and `user`.
 
 `generated.ts` exports typed queries and Store. Direct `views/<encoded-name>.ts` and `procedures/<encoded-name>.ts` entries export an operation and its types. Proved pageable Views also have `paged/views/*`; boundary checks live in `validation/*`. `admin-descriptors.ts`, `rest.ts` and `web.ts` are always emitted. Manifest exposure selects `mcp.ts`; `admin-bindings.ts` and `admin/*` require `--admin`. Auth and site are explicit options.
 

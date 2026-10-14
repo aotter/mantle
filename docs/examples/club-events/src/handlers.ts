@@ -16,7 +16,8 @@ export const handlers: Handlers = {
       const user = userOf(caller);
       return await store.procedures["register-write"]({ eventId, member: caller.subject, memberName: user?.name || user?.email || caller.subject });
     } catch (error) {
-      if (String((error as Error)?.message).includes("MANTLE_CHECK events: seats_taken <= capacity"))
+      // register-write's only Schema check is the capacity one.
+      if (error instanceof ContractError && error.code === "CONFLICT" && error.message.startsWith("A check of the Schema failed"))
         throw new ContractError("CONFLICT", "The event is full.", "procedures/register");
       throw error;
     }

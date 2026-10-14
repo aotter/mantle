@@ -66,7 +66,7 @@ The runtime never creates, alters or checks tables. Initial DDL is for an empty 
 
 ## Admin uiSchema
 
-A property marked `readOnly: true` in the JSON Schema is server-maintained (a counter, a total): Admin's generic create stores its `default` whatever the input says, Admin edits refuse it, and only Procedures change it afterwards. JSON Schema defaults are applied by Admin and the Store, not by the database: a SQL Procedure that inserts the row sets the field itself. A root `readOnly: true` makes the whole Schema read-only in Admin.
+A property marked `readOnly: true` in the JSON Schema is server-maintained (a counter, a total): Admin's generic create stores its `default` whatever the input says, Admin edits ignore it, and only Procedures (or server code through the Store) change it afterwards. JSON Schema defaults are applied by Admin and the Store, not by the database: a SQL Procedure that inserts the row sets the field itself. A root `readOnly: true` makes the whole Schema read-only in Admin.
 
 `fields.<name>.widget/options` select supported controls or extension contributions; `list.primaryField`, columns/cells and enum `filterField` select list presentation; `nav.standalone/parentField` control child navigation; panels select record sidebars. Generation validates these against declared fields/indexes and selected extension declarations. JSON Schema root `schema.readOnly: true` disables generic Admin writes, not declared Procedures; `uiSchema.readOnly` is rejected with `SCHEMA_UI_INVALID`. `x-mantle-ref` relates a field to another Schema id or single-field unique field.
 
