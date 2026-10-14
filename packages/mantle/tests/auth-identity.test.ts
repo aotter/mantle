@@ -202,7 +202,9 @@ async function lastAdmin(a: Awaited<ReturnType<typeof app>>) {
     const [last] = await adminIds();
     expect(await adminIds()).toHaveLength(1);
     await expect(a.directory.setUserRole(last!, null)).rejects.toMatchObject({ code: "CONFLICT" });
+    const kept = await a.ctx.internalAdapter.createSession(last!);
     await expect(a.directory.deleteUser(last!)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await a.ctx.internalAdapter.findSession(kept.token)).not.toBeNull();
     expect(await adminIds()).toEqual([last!]);
     expect(await a.ctx.internalAdapter.findUserById(last!)).not.toBeNull();
     // with another admin member promoted, either can go; a plain member is never blocked
