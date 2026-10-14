@@ -174,6 +174,23 @@ adminBindings(); mcp(options); rest(options);
 webmcpRoutes({tools:[]},tools);
 webmcpRoutes({tools:[]},tools,undefined);
 `);roots.push(plainConsumer);
+ // A field-scoped app passes its generated metadata (with userFields) straight to admin().
+ const scoped=join(dir,"scoped"),scopedResult=await generateFromSources({target:"cloudflare-d1",admin:true,sources:{sources:[{sourceId:"scoped.yaml",text:`apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: notes}
+spec:
+  title: Notes
+  lifecycle: operational
+  scope: "area IN auth.user('area')"
+  indexes: [[area, id]]
+  schema: {type: object, required: [area, title], properties: {area: {type: string, enum: [north, south]}, title: {type: string}}}
+`}]}});
+ if(!scopedResult.ok)throw Error(JSON.stringify(scopedResult.diagnostics));await writeGenerated(scoped,scopedResult.files,false);
+ const scopedConsumer=join(scoped,"consumer.ts");await writeFile(scopedConsumer,`import {adminBindings} from './admin-bindings.js';
+import {admin} from '@aotter/mantle-admin/server';
+const b=adminBindings();
+admin(b.metadata,b.views,b.operations,{db:()=>null!,caller:()=>({kind:'anonymous' as const})});
+`);roots.push(scopedConsumer);
  const kernel=resolve(import.meta.dir,"../src/kernel"),admin=resolve(import.meta.dir,"../../mantle-admin/src/server"),paths={"@aotter/mantle/*":[kernel+"/*.ts"],"@aotter/mantle/contracts":[kernel+"/contracts.ts"],"@aotter/mantle/rest":[process.env.MANTLE_ADMIN_SOURCE_REST??kernel+"/rest.ts"],"@aotter/mantle-admin/server":[admin+"/index.ts"],"@aotter/mantle-admin/server/*":[admin+"/*.ts"]};
  const program=ts.createProgram(roots,{strict:true,noEmit:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,skipLibCheck:true,paths,types:["node","bun-types"],typeRoots:[resolve(import.meta.dir,"../node_modules/@types"),resolve(import.meta.dir,"../node_modules")]});expect(ts.getPreEmitDiagnostics(program).map(d=>`${d.file?.fileName} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText," ")}`).join("\n")).toBe("");
  }finally{await rm(dir,{recursive:true,force:true});}
