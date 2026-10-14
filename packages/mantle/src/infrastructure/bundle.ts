@@ -1,7 +1,7 @@
 import { readFileSync, realpathSync, rmSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { build, type Metafile } from "esbuild";
-import { extraRoles, staleInputs } from "./inputs.js";
+import { authTableSql, extraRoles, staleInputs } from "./inputs.js";
 
 /** Only static imports run at startup; dynamic imports remain separate uploaded modules. */
 export function startupGraph(metafile: Metafile, entry: string): string[] {
@@ -64,7 +64,12 @@ export async function bundle(entry: string, outdir: string): Promise<Metafile> {
     const stale = staleInputs(resolve(input));
     if (stale.length) throw new Error(`Generated output in ${relative(process.cwd(), resolve(input, ".."))} is stale (${stale.join("; ")}). Run your generate script (mantle generate ...) and rebuild.`);
   }
-  const roles = Object.keys(result.metafile.inputs).filter(input => !/node_modules|(?:^|\/)generated\//.test(input) && /\.[cm]?[jt]s$/.test(input)).flatMap(input => extraRoles(readFileSync(input, "utf8")));
+  const appSources = Object.keys(result.metafile.inputs).filter(input => !/node_modules|(?:^|\/)generated\//.test(input) && /\.[cm]?[jt]s$/.test(input)).map(input => [input, readFileSync(input, "utf8")] as const);
+  for (const [input, source] of appSources) {
+    const tables = authTableSql(source);
+    if (tables.length) console.warn(`note: ${input} queries Better Auth's ${tables.join(", ")} table with SQL. Read users through userOf(caller) or readIdentity(auth) (@aotter/mantle/auth, @aotter/mantle/auth/identity), which follow each instance's table mapping and ban state.`);
+  }
+  const roles = appSources.flatMap(([, source]) => extraRoles(source));
   if (roles.length) console.warn(`note: Better Auth roles beyond admin and user: ${[...new Set(roles)].join(", ")}. Mantle grants by the admin layer and app code; keep extra roles only if the app needs them.`);
   guardStartup(result.metafile, entry);
   return result.metafile;

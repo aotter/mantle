@@ -28,3 +28,8 @@ export function staleInputs(generatedModule: string): string[] {
 export function extraRoles(source: string): string[] {
   return [...source.matchAll(/["']?([A-Za-z][\w-]*)["']?\s*:\s*ac\.newRole\(/g)].map(m => m[1]!).filter(role => role !== "admin" && role !== "user");
 }
+
+/** Better Auth tables an app's own code queries with SQL (`FROM "user"`, `JOIN session` ...), for a one-line note. */
+export function authTableSql(source: string): string[] {
+  return [...new Set([...source.matchAll(/\b(?:FROM|JOIN|UPDATE|INTO)\s+"?(user|session|account|verification)"?(?=[\s;),`'"]|$)/gi)].map(m => m[1]!.toLowerCase()))];
+}
