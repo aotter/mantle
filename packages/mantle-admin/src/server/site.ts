@@ -22,6 +22,7 @@ export function siteRoutes<Env, Database>(options: Options<Env, Database>): Rout
         return site(context).media(options.media);
     };
     const identity = async <K extends keyof IdentityMethods>(context: Context<Env, Database>, key: K): Promise<IdentityMethods[K]> => {
+        if ((await import("@aotter/mantle/host-caller")).isHostCaller(context.caller)) throw new ContractError("AUTH_DENIED", "Host callers cannot manage members.", "admin");
         const directory = await options.identity?.directory?.(context), method = directory?.[key];
         if (!method)
             throw new ContractError("IDENTITY_NOT_CONFIGURED", "This identity operation is not configured.", "admin", { status: 501 });

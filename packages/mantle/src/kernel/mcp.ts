@@ -1,5 +1,5 @@
 /** MCP request handling for a generated tool table; the official SDK loads on the first MCP request. */
-import type { Caller, Target, Authorize } from "./contracts.js";
+import type { Caller, Target, Authorize, Gateway, RequestContext } from "./contracts.js";
 import type { Conversions } from "./surface.js";
 import { linkApps, linkSurface, resourcesOf } from "./mcp-apps.js";
 export { callTool, callToolLazy } from "./mcp-call.js";
@@ -9,8 +9,10 @@ export type { McpApps, McpAppResource } from "./mcp-apps.js";
 export interface Options<Env, Database> {
   apps?: Readonly<Partial<Record<"public" | "admin", import("./mcp-apps.js").McpApps | readonly import("./mcp-apps.js").McpApps[]>>>;
   authorize?: Authorize;
+  gateway?: Gateway;
+  fields?: import("./user-fields.js").UserFields;
   db: (env: Env) => Database;
-  caller: (request: Request, env: Env, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>;
+  caller?: (request: Request, env: Env, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>;
   locale?: string;
   instructions?: string;
   serverInfo?: { name?: string; title?: string; version?: string; icons?: { src: string; mimeType?: string; sizes?: string[]; theme?: "light" | "dark" }[] };
@@ -30,6 +32,7 @@ type LocalizedText = string | Readonly<Record<string, string>>;
 type Paging = { limit?: number; cursor?: string };
 /** One tool: a paged View (`page`) or a Procedure (`run`, a write), on the public or admin surface. */
 export interface Tool<Database, Handlers = never> {
+  readonly readOnly?: boolean;
   readonly name: string;
   readonly target?: Target;
   /** Generated requires guard, used before application authorization. */
@@ -44,7 +47,7 @@ export interface Tool<Database, Handlers = never> {
   readonly closed?: boolean;
   /** OAuth scopes the requirement names. */
   readonly scopes?: readonly string[];
-  readonly validate: (raw: unknown) => Record<string, unknown>;
+  readonly validate: (raw: unknown) => Record<string, unknown> | Promise<Record<string, unknown>>;
   readonly convert?: Conversions;
   /** A View tool: its operation path and paged boundary. */
   readonly path?: string;
@@ -56,20 +59,24 @@ export interface Tool<Database, Handlers = never> {
 export type Tools<Env, Database, Handlers = never> = readonly Tool<Database, Handlers>[] | ((request: Request, env: Env) => readonly Tool<Database, Handlers>[] | Promise<readonly Tool<Database, Handlers>[]>);
 
 /** The selected MCP routes; all request work loads only when an MCP request arrives. */
-export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env) => Promise<Response | undefined> {
+export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
   let serve: ReturnType<typeof import("./mcp-handler.js").handler<Env, Database, Handlers>> | undefined;
   // a bad App configuration fails here, not on the first request
   const linked: Partial<Record<string, ReturnType<typeof linkSurface>>> = {};
-  const apps: NonNullable<Options<Env, Database>["apps"]> = { ...options.apps && Object.fromEntries(Object.entries(options.apps).map(([surface, app]) => [surface, resourcesOf(app)])) };
-  options = { ...options, apps };
+  const apps: Partial<Record<"public" | "admin", ReturnType<typeof resourcesOf>>> = {};
   for (const surface of ["public", "admin"] as const) {
-    const app = apps[surface];
-    if (app) typeof tools === "function" ? linkApps(app) : linked[surface] = linkSurface(app, tools.filter(tool => tool.surface === surface));
+    const declared = options.apps?.[surface];
+    if (declared) {
+      const app = resourcesOf(declared);
+      apps[surface] = app;
+      typeof tools === "function" ? linkApps(app) : linked[surface] = linkSurface(app, tools.filter(tool => tool.surface === surface));
+    }
   }
-  return async (request, env) => {
+  options = { ...options, apps };
+  return async (request, env, ctx) => {
     if (!/^\/mcp(?:\/admin)?\/*$/.test(new URL(request.url).pathname)) return;
     const { handler } = await import("./mcp-handler.js");
     serve ??= handler(tools, options, linked, reads);
-    return serve(request, env);
+    return serve(request, env, ctx);
   };
 }

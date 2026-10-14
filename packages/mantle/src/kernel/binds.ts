@@ -2,7 +2,7 @@
  * Core's bind recipes (`BindSpec` in the policy rewriter), evaluated for one call. Generated Views, generated
  * Procedures and the Store all bind through this one function. Input recipes carry the authored field name; `version` reads the Store's lock from `input`.
  */
-import { isAdmin, type Caller } from "./contracts.js";
+import { deny, isAdmin, type Caller } from "./contracts.js";
 import type { Dialect } from "./dialect/common.js";
 
 export type Recipe =
@@ -31,7 +31,7 @@ export function binds(d: Values, recipes: readonly Recipe[], caller: Caller, inp
   const out: unknown[] = [];
   for (const r of recipes) {
     switch (r.k) {
-      case "uid": out.push(caller.kind === "user" ? caller.subject : caller.kind === "system" ? `system:${caller.reason}` : null); break;
+      case "uid": if (caller.kind === "host") deny(caller, isAdmin(caller), ""); out.push("subject" in caller ? caller.subject : caller.kind === "system" ? `system:${caller.reason}` : null); break;
       case "admin": out.push(isAdmin(caller) ? 1 : 0); break;
       case "now": out.push(d.now!(ms ||= Date.now())); break;
       case "cutoff": out.push(d.cutoff!(ms ||= Date.now(), r.seconds)); break;

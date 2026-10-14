@@ -1,49 +1,44 @@
 /** Boundary primitives only. No plan, SQL interpreter or resource ownership. */
-import { hasRole, isAdminCaller } from "./user-fields.js";
+import { ContractError } from "./contract-error.js";
+export { ContractError } from "./contract-error.js";
+import { hasRole, isAdminCaller as isAdmin } from "./caller-identity.js";
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
 
+export interface Gateway { readonly tenant: string }
+export interface RequestContext { readonly props?: unknown }
+
+type IdentityCaller = {
+  /** Application subject key: opaque, stable, unique across issuers. Never an email. */
+  readonly subject: string;
+  readonly issuer?: string;
+  readonly role: string | null;
+  /** Informational; only the private identity brand grants the admin layer. */
+  readonly admin?: boolean;
+  readonly roles?: readonly string[];
+  readonly fields?: Readonly<Record<string, import("./user-fields.js").UserValue>>;
+  readonly scopes: readonly string[];
+  readonly credential: CredentialKind;
+  /** Opaque record id or token JTI, never the raw credential. */
+  readonly credentialId: string | null;
+  readonly clientId: string | null;
+  readonly authenticatedAs?: "snapshot" | "fresh";
+  readonly requestId?: string;
+};
 export type Caller =
   | { readonly kind: "anonymous" }
-  | {
-      readonly kind: "user";
-      /** Application subject key: opaque, stable, unique across issuers. Never an email. */
-      readonly subject: string;
-      /** Informational. */
-      readonly issuer?: string;
-      readonly role: string | null;
-      /** Privileged layer, classified from Better Auth admin plugin configuration. */
-      readonly admin?: boolean;
-      readonly roles?: readonly string[];
-      readonly fields?: Readonly<Record<string, string | number | readonly (string | number)[] | { readonly all: true }>>;
-      readonly scopes: readonly string[];
-      readonly credential: CredentialKind;
-      /** Opaque record id or token JTI, never the raw credential. */
-      readonly credentialId: string | null;
-      readonly clientId: string | null;
-    }
+  | (IdentityCaller & { readonly kind: "user" })
+  | (IdentityCaller & { readonly kind: "host"; readonly authenticatedAs: "snapshot" | "fresh"; readonly requestId: string })
   | { readonly kind: "system"; readonly reason: string };
-
 
 /** A selected boundary's application authorization target. */
 export type Target = { kind: "view" | "procedure" | "schema"; name: string; action?: "read" | "create" | "update" | "delete" };
 export type Authorize = (target: Target, caller: Caller) => boolean | Promise<boolean>;
 
 /** Privilege never follows a member role name. Only the original verified identity carries the admin layer. */
-export const isAdmin = (caller: Caller): caller is Extract<Caller, { kind: "user" }> & { readonly admin: true } => isAdminCaller(caller);
+export { isAdmin };
+/** Both authenticated layers pass ctx.user; the host layer still needs its original brand. */
+export const isUser = (caller: Caller): boolean => caller.kind === "user" || isAdmin(caller);
 export const hasAdminRole = (caller: Caller, name: string): boolean => isAdmin(caller) && hasRole(caller, name);
-
-export class ContractError extends Error {
-  /** HTTP status for codes outside the core set `statusOf` maps. */
-  declare readonly status?: number;
-  /** Extra wire fields, after `code`, `message` and `path`. */
-  declare readonly fields?: Record<string, unknown>;
-  constructor(readonly code: string, message: string, readonly path = "", options?: ErrorOptions & { status?: number; fields?: Record<string, unknown> }) {
-    super(message, options);
-    this.name = "ContractError";
-    if (options?.status) this.status = options.status;
-    if (options?.fields) this.fields = options.fields;
-  }
-}
 
 /** Only the core transport failures; other codes carry their own status, and unknown codes remain server errors. */
 export function statusOf(code: string): number {
@@ -89,7 +84,7 @@ export function wireRows(rows: readonly Row[], fields: WireColumns = []): readon
 export type Output = { readonly results: ReadonlyArray<ReadonlyArray<Row>> };
 /** Deny unless `allowed`: a user is AUTH_DENIED, anyone else UNAUTHENTICATED. */
 export function deny(caller: Caller, allowed: boolean, path: string): void {
-  if (!allowed) throw new ContractError(caller.kind === "user" ? "AUTH_DENIED" : "UNAUTHENTICATED", "Authorization predicate not satisfied.", path);
+  if (!allowed) throw new ContractError("subject" in caller ? "AUTH_DENIED" : "UNAUTHENTICATED", "Authorization predicate not satisfied.", path);
 }
 /** CONFLICT for a write the database refused: a unique-index clash, or a row statement that did not change exactly one row. */
 export const conflict = (path: string, unique: boolean, cause?: unknown): ContractError =>
@@ -111,7 +106,7 @@ export type Unsafe = Pick<Postgres, "unsafe">;
 
 /** A cookie is ambient authority; bearer credentials deliberately supplied by the app are not. */
 export function checkOrigin(request: Request, caller: Caller): void {
-  if (caller.kind !== "user" || caller.credential !== "session" || ["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
+  if (!("credential" in caller) || caller.credential !== "session" || ["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
   const site = request.headers.get("sec-fetch-site"), origin = request.headers.get("origin");
   if ((!site && !origin) || (site && site !== "same-origin" && site !== "none") || (origin && origin !== new URL(request.url).origin))
     throw new ContractError("AUTH_DENIED", "Cross-origin session mutation rejected.", "request:origin");

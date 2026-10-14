@@ -20,7 +20,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
     return lines.length ? `, check: (caller) => {${lines.join("")}}` : "";
   };
   const refs = Object.values(plan.procedures).some(p => "ref" in p.handler);
-  if ([...Object.values(plan.views), ...Object.values(plan.procedures)].some(p => p.requires?.auth?.all.length) || Object.values(plan.schemas).some(s => s.publishing)) imports.push('import { deny, isAdmin } from "@aotter/mantle/contracts";');
+  if ([...Object.values(plan.views), ...Object.values(plan.procedures)].some(p => p.requires?.auth?.all.length) || Object.values(plan.schemas).some(s => s.publishing)) imports.push('import { deny, isAdmin, isUser } from "@aotter/mantle/contracts";');
   const add = (name: string, kind: "views" | "procedures", surface: string, operation:Pick<RuntimePlan["views"][string],"input"|"title"|"description"|"requires">=kind === "views" ? plan.views[name]! : plan.procedures[name]!, tool=mcpToolNameSegment(name)) => {
     if (kind === "views") reads.push({name:tool,surface});
     const ref=kind === "procedures" && !!plan.procedures[name] && "ref" in plan.procedures[name]!.handler;
@@ -28,8 +28,11 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
     const statements=kind === "views" ? [lowered.views[name]?.public ?? lowered.views[name]?.caller] : lowered.procedures[name]?.caller ?? [];
     const binds=statements.flatMap(statement=>statement?.binds??[]);
     const index = tools.length, file = encodeURIComponent(name);
-    imports.push(`import { validate as validate${index} } from "./validation/${kind}/${file}.js";`);
-    if (kind === "views" || !ref) imports.push(`import run${index} from "./${kind === "views" ? outputConversions(plan,name,target).some(([,type])=>type==="int") ? "paged/wire/views" : "paged/views" : kind}/${file}.js";`);
+    if (kind === "views") imports.push(`import { validate as validate${index} } from "./validation/${kind}/${file}.js";`);
+    if (kind === "views") {
+      const module = `./${outputConversions(plan,name,target).some(([,type])=>type==="int") ? "paged/wire/views" : "paged/views"}/${file}.js`;
+      imports.push(`const run${index}: typeof import(${q(module)}).default = async (...args) => (await import(${q(module)})).default(...args);`);
+    }
     // The kernel adds a View tool's `limit` and `cursor` paging properties.
     const schema = q(kind === "views" ? operation.input ?? {type:"object",additionalProperties:false} : operation.input);
     if (kind === "views" && ("limit" in (operation.input?.properties ?? {}) || "cursor" in (operation.input?.properties ?? {}))) refuse(`views/${name}`, "MCP View input reserves limit and cursor for paging.");
@@ -41,8 +44,8 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
     const annotations=kind === "views" ? {readOnlyHint:true} : procedure?.mcp;
     const wire = kind === "views" ? outputConversions(plan, name, target) : [];
     hasWire ||= wire.length > 0;
-    const fields=[`target: ${q({kind:kind === "views" ? "view" : "procedure",name})}${guard(operation.requires,`${kind}/${name}`)}`,`name: ${q(tool)}`,`surface: ${q(surface)}`,...(operation.title?[`title: ${q(operation.title)}`]:[]),`description: ${q(operation.description ?? operation.title ?? name)}`,"inputSchema",...(output?[`outputSchema: ${q(output)}`]:[]),...(annotations?[`annotations: ${q(annotations)}`]:[]),...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: validate${index}`,...(convert?[`convert: ${convert}`]:[]),
-      ...(kind === "views" ? [`path: ${q(`views/${name}`)}`,`page: ${boundaryPage(`run${index}`, wire)}`] : [`run: ${ref ? `(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)` : `run${index}`}`])];
+    const fields=[...(!ref && kind === "procedures" && statements.length > 0 && statements.every(s=>s?.kind === "read") ? ["readOnly: true"] : []),`target: ${q({kind:kind === "views" ? "view" : "procedure",name})}${guard(operation.requires,`${kind}/${name}`)}`,`name: ${q(tool)}`,`surface: ${q(surface)}`,...(operation.title?[`title: ${q(operation.title)}`]:[]),`description: ${q(operation.description ?? operation.title ?? name)}`,"inputSchema",...(output?[`outputSchema: ${q(output)}`]:[]),...(annotations?[`annotations: ${q(annotations)}`]:[]),...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: ${kind === "views" ? `validate${index}` : `async (raw) => (await import("./validation/procedures/${file}.js")).validate(raw)`}`,...(convert?[`convert: ${convert}`]:[]),
+      ...(kind === "views" ? [`path: ${q(`views/${name}`)}`,`page: ${boundaryPage(`run${index}`, wire)}`] : [`run: ${ref ? `(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)` : `async (db, caller, input) => (await import("./procedures/${file}.js")).default(db, caller, input)`}`])];
     tools.push({ fields, schema });
   };
   for (const [name, view] of Object.entries(plan.views)) if (view.surface !== "internal") add(name,"views",view.surface);
@@ -70,8 +73,8 @@ export type Options<Env = unknown> = McpOptions<Env, Database>${refs ? " & { han
 export const tools: readonly Tool<Database${refs ? ", Handlers" : ""}>[] = [
 ${tools.map(({ fields, schema }) => `  { ${fields.map(field => field === "inputSchema" ? `inputSchema: ${shared.get(schema) ?? schema}` : field).join(", ")} },`).join("\n")}
 ];
-export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env) => Promise<Response | undefined> {
-  return serve<Env, Database${refs ? ", Handlers" : ""}>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/admin" ? (await import("./mcp-media.js")).mediaTools${refs ? "<Handlers>" : ""}(() => options.media!(env)) : [])]` : "tools"}, options, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaDefinitions().filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"admin"})))} : [])]` : q(reads)});
+export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env, ctx?: import("@aotter/mantle/contracts").RequestContext) => Promise<Response | undefined> {
+  return serve<Env, Database${refs ? ", Handlers" : ""}>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/admin" ? (await import("./mcp-media.js")).mediaTools${refs ? "<Handlers>" : ""}(() => options.media!(env)) : [])]` : "tools"}, ${plan.access ? `{...options, fields: ${q(plan.access.userFields)}}` : "options"}, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaDefinitions().filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"admin"})))} : [])]` : q(reads)});
 }
 `};
 }

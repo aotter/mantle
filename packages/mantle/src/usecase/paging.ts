@@ -49,7 +49,7 @@ export function emitPaging(plan: RuntimePlan, lowered: PlanLowered, target: stri
     const auth = authLines(view.requires,path);
     const spec = [`path: ${q(path)}`, `cap: ${cap}`, `sqlite: ${sqlite}`, `cursor: ${q(kinds)}`, `keys: ${c.nkeys}`, `values: {${user.used ? [...values].sort().concat(user.values).join(", ") : values.size ? ` ${[...values].sort().join(", ")} ` : ""}}`, "read", `caller: ${variants[0]}`, ...(trusted ? [`trusted: ${variants[1]}`] : []), ...(auth.length ? [`auth: (caller: Caller) => {\n${auth.join("\n")}\n  }`] : [])];
     files[`paged/${boundary ? "wire/" : ""}views/${encodeURIComponent(name)}.ts`] = `${user.code ? user.code+"\n" : ""}import { page, type Paged } from "${base}paging";
-import { ${auth.length ? "deny, isAdmin, " : ""}type Caller } from "${base}contracts";
+import { ${auth.length ? "deny, isAdmin, isUser, " : ""}type Caller } from "${base}contracts";
 ${databaseImport(target)}
 import { read } from "${base}driver/${driver}";
 ${values.size ? `import { ${[...values].sort().join(", ")} } from "${base}dialect/${sqlite ? "sqlite" : "postgres"}";\n` : ""}import type { Input, Row } from "${boundary ? "../../../" : "../../"}views/${encodeURIComponent(name)}.js";

@@ -1,4 +1,4 @@
-import { modeOf } from "./user-fields.js";
+import { modeOf } from "./caller-identity.js";
 /**
  * Generic Store over Core's rowPolicy/writePolicy rules and per-Schema Facts (scope, TTL, publishing, dates).
  * Generated types own storage column names, values, filters and writable columns; the dialect quotes names and binds values.

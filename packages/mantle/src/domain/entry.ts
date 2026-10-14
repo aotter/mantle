@@ -13,8 +13,8 @@ export const entry = (kind: string, name: string, types: string, extra = "") => 
 export const q = JSON.stringify;
 /** Whether a target's database is SQLite (bun:sqlite or D1). @internal */
 export const isSqlite = (target: string): boolean => target === "bun-sqlite" || target === "cloudflare-d1";
-/** A View's paged boundary and validated query reader, imported as `page<index>` and `<query><index>`. @internal */
-export const viewImports = (name: string, index: number, query = "query"): string[] => [`import page${index} from "./paged/views/${encodeURIComponent(name)}.js";`, `import { query as ${query}${index} } from "./validation/views/${encodeURIComponent(name)}.js";`];
+/** A View's lazy paged boundary and validated query reader, bound as `page<index>` and `<query><index>`. @internal */
+export const viewImports = (name: string, index: number, query = "query"): string[] => [`const page${index}: typeof import("./paged/views/${encodeURIComponent(name)}.js").default = async (...args) => (await import("./paged/views/${encodeURIComponent(name)}.js")).default(...args);`, `import { query as ${query}${index} } from "./validation/views/${encodeURIComponent(name)}.js";`];
 /** A generated host handle import, shared by the optional boundaries. @internal */
 export const driverFor = (target: string): "bun-sqlite" | "d1" | "postgres" => target === "bun-sqlite" ? "bun-sqlite" : target === "cloudflare-d1" ? "d1" : "postgres";
 export const databaseImport = (target: string): string => driverFor(target) === "postgres" ? 'import type { Postgres as Database } from "@aotter/mantle/contracts";' : `import type { Handle as Database } from "@aotter/mantle/driver/${driverFor(target)}";`;

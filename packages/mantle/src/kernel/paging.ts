@@ -1,4 +1,4 @@
-import { modeOf } from "./user-fields.js";
+import { modeOf } from "./caller-identity.js";
 /** Keyset paging for a generated View boundary: Core printed the first and next page SQL; this binds, checks the cursor and trims. */
 import type { Caller } from "./contracts.js";
 import { binds, type Recipe, type Values } from "./binds.js";

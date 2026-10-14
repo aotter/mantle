@@ -1,17 +1,12 @@
 /** Optional Admin API: generated data and native calls, with one fresh admin session per request. */
-import { deny, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller, type Target, type Authorize } from "@aotter/mantle/contracts";
+import { deny, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller, type Target, type Authorize, type Gateway, type RequestContext } from "@aotter/mantle/contracts";
 import { nativeRest, body, type Route as RestRoute } from "@aotter/mantle/rest";
 import { sessionUserOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
 import { convert, type Conversions } from "@aotter/mantle/surface";
 import { siteInfo, type MantleSite, type MediaStorage } from "@aotter/mantle/site";
 import { csv } from "./csv.js";
-export type Admin = Extract<Caller, {
-    kind: "user";
-}> & {
-    readonly admin: true;
-    readonly credential: "session";
-};
+export type Admin = (Extract<Caller, { kind: "user" }> & { readonly admin: true; readonly credential: "session" }) | (Extract<Caller, { kind: "host" }> & { readonly admin: true });
 export interface Context<Env, Database> {
     request: Request;
     url: URL;
@@ -63,11 +58,13 @@ export interface IdentityMethods {
 }
 export interface Options<Env, Database> {
     authorize?: Authorize;
+    gateway?: Gateway;
+    fields?: import("@aotter/mantle/user-fields").UserFields;
     locale?: string;
     /** Read-only developer preview bindings, including public Views. */
     developerViews?: readonly View<Database>[];
     db: (env: Env) => Database;
-    caller: (request: Request, env: Env) => Caller | Promise<Caller>;
+    caller?: (request: Request, env: Env) => Caller | Promise<Caller>;
     getUser?: (subject: string, request: Request, env: Env) => Promise<{
         githubLogin?: string | null;
         name?: string | null;
@@ -94,6 +91,7 @@ export interface Descriptor {
     readonly [key: string]: unknown;
 }
 export interface Metadata {
+    readonly userFields?: import("@aotter/mantle/user-fields").UserFields;
     /** Generated requires guards for metadata targets beyond callable Admin routes. */
     readonly allows?: (target: Target, caller: Caller) => boolean;
     readonly collections: readonly Descriptor[];
@@ -125,6 +123,7 @@ export interface View<Database> {
     readonly row?: (row: Record<string, unknown>) => Record<string, unknown>;
 }
 export interface Operation<Database, Handlers> {
+    readonly readOnly?: boolean;
     readonly name: string;
     readonly allows: (caller: Caller) => boolean;
     readonly validate: (raw: unknown) => Record<string, unknown>;
@@ -136,7 +135,7 @@ export { body };
 export const json = (context: Context<unknown, unknown>): Promise<Record<string, unknown>> => context.input ? Promise.resolve(context.input) : body(context.request);
 export function admin<Env, Database, Handlers = never>(metadata: Metadata, views: readonly View<Database>[], operations: readonly Operation<Database, Handlers>[], options: Options<Env, Database> & {
     handlers?: Handlers;
-}): (request: Request, env: Env) => Promise<Response | undefined> {
+}): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
     const sees = (items: readonly Descriptor[], routes: readonly {
         name: string;
         allows: (caller: Caller) => boolean;
@@ -228,16 +227,26 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 return new Response(result.body, { status: result.status, statusText: result.statusText, headers });
             } };
     });
-    return async (request, env) => {
+    return async (request, env, ctx) => {
         const path = new URL(request.url).pathname;
         if (path !== "/admin/api" && !path.startsWith("/admin/api/"))
             return;
+        let caller: Caller | undefined;
         try {
-            const caller = await surfaceCaller(request, env, options.caller);
+            caller = options.gateway || ctx?.props && Object.hasOwn(ctx.props, "mantle")
+                ? (await import("@aotter/mantle/host-caller")).gatewayCaller(ctx, options.gateway, options.fields ?? metadata.userFields)
+                : await surfaceCaller(request, env, options.caller ?? (() => ({ kind: "anonymous" })));
             if (caller.kind === "anonymous")
                 throw new ContractError("UNAUTHENTICATED", "Sign in to use Admin.", "admin");
-            if (!isAdmin(caller) || caller.credential !== "session")
+            if (!isAdmin(caller) || caller.kind !== "host" && caller.credential !== "session") {
+                if (options.gateway) throw new ContractError("AUTH_DENIED", "Admin layer required.", "admin");
                 return Response.json({ error: { code: "AUTH_DENIED", message: "Admin needs a signed-in admin session.", path: "admin" }, minimumRole: "admin" }, { status: 403, headers: { "cache-control": "private, no-store" } });
+            }
+            if (options.gateway) {
+                const { checkFresh } = await import("@aotter/mantle/host-caller");
+                const operation = /^\/admin\/api\/operations\/([^/]+)\/?$/.exec(path);
+                checkFresh(caller, ["GET", "HEAD", "OPTIONS"].includes(request.method) || request.method === "POST" && !!operation && operations.some(p => p.name === decodeURIComponent(operation[1]!) && p.readOnly === true), path);
+            }
             checkOrigin(request, caller);
             try {
                 decodeURIComponent(path);
@@ -247,10 +256,19 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             }
             if (/%2f|%5c|%00/i.test(path) || path.includes("\\"))
                 throw new ContractError("INPUT_VALIDATION_FAILED", "Malformed Admin path.", "admin");
-            return await nativeRest(table, { db: options.db, caller: () => caller, handlers: options.handlers })(request, env) ?? surfaceFailure(missing());
+            const response = await nativeRest(table, { db: options.db, caller: () => caller!, handlers: options.handlers })(request, env);
+            if (!response) throw missing();
+            if (options.gateway && response.status >= 400) {
+                const payload = await response.clone().json().catch(() => null) as { error?: { code: string; path?: string; target?: string; field?: string } } | null;
+                const error = payload?.error ?? { code: [401, 403].includes(response.status) ? "AUTH_DENIED" : "INTERNAL_ERROR" };
+                const failure = (await import("@aotter/mantle/host-caller")).hostFailure(new ContractError(error.code, "", error.target ?? error.path ?? "", { status: response.status, fields: error.field ? { field: error.field } : undefined }), caller, "admin");
+                if (response.headers.has("allow")) failure.headers.set("allow", response.headers.get("allow")!);
+                return failure;
+            }
+            return response;
         }
         catch (error) {
-            return surfaceFailure(error);
+            return options.gateway || ctx?.props && Object.hasOwn(ctx.props, "mantle") ? (await import("@aotter/mantle/host-caller")).hostFailure(error, caller, "admin") : surfaceFailure(error);
         }
     };
 }

@@ -99,7 +99,13 @@ restrict: { orders: "owner = auth.uid()" }
 - A View joins Schemas scoped by different fields (rows outside either set are dropped).
 
 ### Gateways (§6–§7, extended)
-- **Gateway mode.** An application can declare that it runs behind a trusted gateway. It then accepts only gateway-signed calls (`props.mantle`) on every surface, and refuses its own sessions.
+- **Gateway mode.** Selected REST, MCP and Admin boundaries accept `gateway: { tenant }` and receive the execution context as their third argument. The caller comes only from `ctx.props.mantle`; absent props mean anonymous. Application cookies, sessions and bearer tokens are ignored, without loading the application's auth instance.
+- **Host contract v1.** `hostCaller(props, { tenant, fields })` accepts `{ v: 1, tenant, layer: "admin" | "member", user: { id, role?, email?, name?, ...fields }, authenticatedAs: "snapshot" | "fresh", credential: "session" | "oauth", requestId, target?, targetHash?, bodyDigest?, dryRun?: true }`. Validate the entire shape and require an exact configured tenant match; malformed/version/tenant failures are `HOST_CONTRACT` (412). Roles and fields use ordinary caller validation, including arity and `{ all: true }`, and retain authority only on the original branded, frozen caller.
+- **Layers and subjects.** The admin layer produces `kind: "host"`, subject `'host:' + user.id`, and passes `ctx.admin`. The member layer produces `kind: "user"` and the unprefixed subject `user.id`; its roles never grant the admin layer. User subjects cannot start with `host:` or `system:`. Scope applies throughout, including Admin drafts. Member management refuses host-built callers with 403.
+- **Freshness.** Callers expose `authenticatedAs`, `credential` and `requestId`. A snapshot may read; any SQL write, Store/Admin mutation, publishing transition, member mutation or ref handler is refused before execution with `STALE_CALLER` (403). Statement kinds determine whether SQL Procedures write. Session writes retain origin checks according to `credential`.
+- **Errors.** Both host-built layers receive JSON `{ error: { code, field?, target? } }`: contract failures are 412, denials (including `authorize` and stale callers) are 403, and malformed bodies are 400. Host callers never receive 401. A needed missing or empty field fails before SQL with `HOST_CONTRACT` (412), naming the field.
+- **Tripwire.** Present `ctx.props.mantle` outside gateway mode is `HOST_CONTRACT` (412); an entry never silently ignores or honors it.
+- **Testing.** `hostAs(mantleProps)` from `@aotter/mantle/testing` accepts the same props JSON and preserves freshness on a branded caller.
 - **Read-only execution** for previews, tests and CI.
   - Queries run; writes are answered with the count of rows they would affect, rewritten as a `SELECT`.
   - Procedures with `handler.ref` are refused.
