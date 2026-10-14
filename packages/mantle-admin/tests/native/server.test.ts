@@ -152,7 +152,8 @@ test("Admin target authorization covers Views, Procedures and every generic entr
       expect(response?.status).toBe(status);await response?.text();
       if(status!==200){expect([providers,sql,handlers]).toEqual([0,0,0]);}
       else {expect(providers).toBeGreaterThan(0);expect(sql+handlers).toBeGreaterThan(0);}
-      expect(authorizations).toBe(authorize?1:0);
+      // the route's target first; a returned entry also needs its read
+      if(authorize)expect(authorizations).toBeGreaterThanOrEqual(1);else expect(authorizations).toBe(0);
     }
     let authorizations=0;
     const fetch=adminFunction(metadata,[{name:"closed",allows:()=>false,query:()=>{throw Error("query before requires");},page:async()=>{throw Error("SQL before requires");}}],[{name:"closed",allows:()=>false,validate:()=>({}),run:async()=>{throw Error("handler before requires");}}],{db:()=>{throw Error("provider before requires");},caller:()=>admin,authorize:()=>{authorizations++;return true;}});

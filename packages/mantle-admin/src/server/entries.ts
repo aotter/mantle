@@ -103,7 +103,8 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
     };
     /** After a committed write, related reads are best effort: a failed read must not turn a committed write into an error. */
     const editor = async (schema: EntrySchema<DB>, row: Row, ctx: Context<Env, DB>, written = false): Promise<any> => {
-        if (ctx.authorize && (!await ctx.authorize({kind: "schema", name: schema.name, action: "read"}) || !await ctx.authorize({kind: "schema", name: descriptor(schema).translates?.parent ?? schema.name, action: "read"})))
+        const inherited = descriptor(schema).translates?.parent;
+        if (ctx.authorize && (!await ctx.authorize({kind: "schema", name: schema.name, action: "read"}) || inherited && !await ctx.authorize({kind: "schema", name: inherited, action: "read"})))
             return {collection: schema.descriptor, entry: {id: row.id, version: row.version}, parentEntryId: null, parentEntryTitle: null, related: []};
         if (written) return editor(schema, row, ctx).catch(() => ({collection: schema.descriptor, entry: entry(schema, row), parentEntryId: null, parentEntryTitle: null, related: []}));
         const d = descriptor(schema), e = entry(schema, row), up = d.parent;
