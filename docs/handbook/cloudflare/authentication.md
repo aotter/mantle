@@ -24,10 +24,9 @@ Mantle reads the official admin plugin’s `adminRoles` when auth loads (default
 `@aotter/mantle/auth/hardening` supplies optional helpers:
 
 - `hashEmailOtp(secret, otp)` is keyed HMAC-SHA-256. Pass it as emailOTP's `storeOTP.hash`; an unkeyed hash permits enumeration of six-digit codes after a database leak.
-- `authHardening({ipAddressHeaders, baseURL, errorURL, plugins})` refuses missing host-trusted ingress headers and cross-origin error redirects. Rate limits are derived from the actual configured plugin ids: 10/min for emailOTP or magicLink, otherwise 100/min, per isolate. Use ingress limits for distributed quotas; never assume client X-Forwarded-For is trusted.
+- `authHardening({ipAddressHeaders, baseURL, errorURL})` refuses missing host-trusted ingress headers and cross-origin error redirects, and enables Better Auth's rate limiter with `storage: "database"`, which the Better Auth docs recommend for serverless: counts are shared across isolates, and Better Auth's defaults and plugin rules (for example 3 per minute per email-OTP path) set the limits. The generated schema includes the `rateLimit` table. Never assume client X-Forwarded-For is trusted.
 - `guardGithubLogin(user, context, trustedProviders)` goes in user create/update before-hooks. Only explicitly trusted provider callbacks can populate this field. GitHub maps `githubLogin: profile.login`; generic OAuth ids need trusted profile mappers.
 - `withAuthTasks(ctx.waitUntil.bind(ctx), () => auth.handler(request))` retains background sends/cleanup for the current request, with concurrent requests isolated. `authHardening` installs `retainAuthTask` as Better Auth's background handler. Failure logs are generic and contain no OTPs/credentials.
-- `sessionSecondaryStorage(cache, deploymentNamespace, () => auth.$context)` requires a bound primary database context and a unique namespace per deployment/database. Keep `session.storeSessionInDatabase` and `verification.storeInDatabase` true (enforced). The adapter reads live session/user rows through Better Auth's own adapter, and rebuilds its active-session index from the database. KV snapshot/index writes are best effort; stale or unavailable KV never supplies authorization or hides sessions from listing. This seam is an optional replica, **not an authorization fast path**: primary DB reads remain required. Verification consumption and atomic counters never use KV.
 - `authSetupIncomplete()` returns 503/no-store while secrets/providers are unconfigured; do not authenticate by fallback.
 
 Magic links use hashed tokens, 15-minute expiry and the same task retention. Email callbacks pass the first
@@ -143,7 +142,7 @@ Sign-out clears the session-token and cache cookies; pass SDK Set-Cookie headers
 through to the browser. A copied pre-sign-out cookie can remain usable for
 read-only snapshots until TTL, while fresh authority rejects revoked sessions.
 
-With secondaryStorage, disableCookieCache does not bypass KV. Caller keeps a primary authority check before any second SDK call refreshes/forwards cookies. Stale snapshots cannot revive deleted/expired primary sessions or retain obsolete role/ban state. Optional sessionSecondaryStorage also verifies primary authority; it adds reads rather than serving as an authorization cache.
+With secondaryStorage, disableCookieCache does not bypass KV. Caller keeps a primary authority check before any second SDK call refreshes/forwards cookies. Stale snapshots cannot revive deleted/expired primary sessions or retain obsolete role/ban state.
 
 `authRoutes` may be imported statically: its consent/provider integration loads
 only for a matching consent request, after Caller/origin/body guards. Optional

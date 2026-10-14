@@ -9,7 +9,7 @@ import { admin as adminFunction, emailOTP } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { d1Identity, d1BootstrapAdmin, postgresBootstrapAdmin, postgresIdentity } from "../src/auth/identity.js";
-import { type SessionCache, type SessionAuthority, authHardening, hashEmailOtp, guardGithubLogin, sessionSecondaryStorage, withAuthTasks, retainAuthTask, authSetupIncomplete } from "../src/auth/hardening.js";
+import { authHardening, hashEmailOtp, guardGithubLogin, withAuthTasks, retainAuthTask, authSetupIncomplete } from "../src/auth/hardening.js";
 import { d1Adapter, bunSqlAdapter } from "../src/auth/adapter.js";
 import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 import type { Caller, Postgres } from "../src/kernel/contracts.js";
@@ -18,6 +18,7 @@ import { authOptions as templateOptions, handleAuth } from "./apps/auth/template
 import { d1Shim } from "./apps/d1-shim.js";
 const ac = createAccessControl(defaultStatements);
 const admin: Caller = fixtureCaller({ kind: "user", subject: "s", role: "admin", admin: true, scopes: [], credential: "session", credentialId: "session", clientId: null });
+type SessionCache = { get(key: string): Promise<string | null>; set(key: string, value: string, ttl?: number): Promise<unknown>; delete(key: string): Promise<unknown> };
 const secret = "auth-identity-test-secret-01234567890123456789";
 const resources: {
     close(): unknown;
@@ -35,7 +36,7 @@ async function app(pg?: SQL, store?: {
     sqlite.run("PRAGMA foreign_keys=ON");
     let sent = "";
     const d1 = d1Shim(sqlite), options = { secret, baseURL: "http://localhost/api/auth", session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true }, database: pg ? bunSqlAdapter(pg) : d1Adapter(d1),
-        ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], plugins: [{ id: "email-otp" }], baseURL: "http://localhost" }),
+        ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], baseURL: "http://localhost" }),
         user: { ...(config.prefix ? { modelName: `${config.prefix}_people`, fields: { createdAt: "joined_at", emailVerified: "verified" } } : {}), additionalFields: (config.prefix ? {} : { githubLogin: { type: "string" as const, required: false } }) as NonNullable<BetterAuthOptions["user"]>["additionalFields"] },
         ...(config.prefix ? { session: { storeSessionInDatabase: true, modelName: `${config.prefix}_sessions` }, account: { modelName: `${config.prefix}_accounts` }, verification: { storeInDatabase: true, modelName: `${config.prefix}_proofs` } } : {}),
         plugins: [adminFunction({ defaultRole: config.defaultRole, schema: config.prefix ? { user: { fields: { role: "roles" } } } : undefined, adminRoles: [...adminRoles], ac, roles: { admin: ac.newRole({ user: [], session: [] }), editor: ac.newRole({ user: [], session: [] }), ...Object.fromEntries(adminRoles.map(role => [role, ac.newRole(defaultStatements)])), user: ac.newRole({ user: [], session: [] }), guest: ac.newRole({ user: [], session: [] }), vip: ac.newRole({ user: [], session: [] }), approver: ac.newRole({ user: [], session: [] }), operator: ac.newRole(defaultStatements), support: ac.newRole({ user: ["list"], session: [] }), denied: ac.newRole({ user: [], session: [] }) } }), emailOTP({ storeOTP: { hash: otp => hashEmailOtp(secret, otp) }, sendVerificationOTP: async ({ otp }) => { sent = otp; } })] };
@@ -45,15 +46,9 @@ async function app(pg?: SQL, store?: {
             await pg.unsafe(sql);
     else
         sqlite.exec(ddl.join(";"));
-    let getContext: SessionAuthority | undefined;
     if (store)
-        Object.assign(options, { secondaryStorage: sessionSecondaryStorage(store.cache, store.prefix, async () => {
-                if (!getContext)
-                    throw Error("not initialized");
-                return getContext();
-            }), session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true } });
+        Object.assign(options, { secondaryStorage: { get: (k: string) => store.cache.get(`${store.prefix}:${k}`), set: (k: string, v: string, ttl?: number) => store.cache.set(`${store.prefix}:${k}`, v, ttl), delete: (k: string) => store.cache.delete(`${store.prefix}:${k}`) }, session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true } });
     const auth = betterAuth(options);
-    getContext = () => auth.$context;
     const ctx = await auth.$context;
     await ctx.internalAdapter.createUser({ id: "s", email: "s@example.test", name: "Admin", emailVerified: true, role: adminRoles.join(","), githubLogin: null }, { method: "admin" });
     await auth.api.sendVerificationOTP({ body: { email: "s@example.test", type: "sign-in" } });
@@ -67,9 +62,7 @@ test("keyed OTP hash, trusted ingress, profile guard and setup fail closed", asy
     expect(await hashEmailOtp(secret, "123456")).not.toBe(await hashEmailOtp("other", "123456"));
     expect(() => authHardening({ ipAddressHeaders: [], baseURL: "https://x.test" })).toThrow("ipAddressHeaders");
     expect(() => authHardening({ ipAddressHeaders: ["trusted"], baseURL: "https://x.test", errorURL: "https://evil.test" })).toThrow("same-origin");
-    expect(authHardening({ ipAddressHeaders: ["trusted"], baseURL: "https://x.test", plugins: [{ id: "email-otp" }] }).rateLimit).toMatchObject({ enabled: true, max: 10, window: 60 });
-    expect(authHardening({ ipAddressHeaders: ["trusted"], baseURL: "https://x.test", plugins: [{ id: "magic-link" }] }).rateLimit).toMatchObject({ max: 10 });
-    expect(authHardening({ ipAddressHeaders: ["trusted"], baseURL: "https://x.test", plugins: [{ id: "jwt" }] }).rateLimit).toMatchObject({ max: 100 });
+    expect(authHardening({ ipAddressHeaders: ["trusted"], baseURL: "https://x.test" }).rateLimit).toEqual({ enabled: true, storage: "database" });
     expect(guardGithubLogin({ githubLogin: "admin" }, { path: "/update-user" })).toEqual({ data: { githubLogin: null } });
     expect(guardGithubLogin({ githubLogin: "trusted" }, { path: "/callback/:id", params: { id: "github" } })).toBeUndefined();
     expect(guardGithubLogin({ githubLogin: "spoof" }, { path: "/callback/:id", params: { id: "other" } })).toEqual({ data: { githubLogin: null } });
@@ -77,21 +70,11 @@ test("keyed OTP hash, trusted ingress, profile guard and setup fail closed", asy
     expect(r.status).toBe(503);
     expect(r.headers.get("cache-control")).toBe("no-store");
 });
-test("request-scoped waitUntil isolates concurrent sends and session cache excludes verification/counters", async () => {
+test("request-scoped waitUntil isolates concurrent sends", async () => {
     const retained: Promise<unknown>[][] = [[], []];
     await Promise.all(retained.map((list, i) => withAuthTasks(p => list.push(p), async () => { await Promise.resolve(); retainAuthTask(Promise.resolve(i)); })));
     expect(retained.map(x => x.length)).toEqual([1, 1]);
     await Promise.all(retained.flat());
-    const map = new Map<string, string>(), cache = sessionSecondaryStorage({ get: async (k) => map.get(k) ?? null, set: async (k, v) => { map.set(k, v); }, delete: async (k) => { map.delete(k); } }, "deployment-a", async () => { throw Error("verification must never query primary"); });
-    await cache.set("verification:otp", "secret", 60);
-    expect(await cache.get("verification:otp")).toBeNull();
-    expect(map.size).toBe(0);
-    await cache.set("session", "value", 1);
-    expect(map.get("deployment-a:session")).toBe("value");
-    await cache.delete("session");
-    expect(map.size).toBe(0);
-    await expect(cache.increment!("count", 60)).rejects.toThrow("atomic");
-    await expect(cache.getAndDelete!("otp")).rejects.toThrow("verification");
 });
 test("native member keysets forward/backward, scoped search and Better Auth access control", async () => {
     const a = await app();
@@ -310,60 +293,6 @@ test("shared admin guard is lazy outside admin and checks mutation origin", asyn
     const member = fixtureCaller({ ...admin, role: "user", admin: false });
     for (const endpoint of ["has-permission", "stop-impersonating"])
         await guardAuthAdminRequest(new Request(`https://x.test/api/auth/admin/${endpoint}`, { method: "POST", headers: { origin: "https://x.test" } }), () => member);
-});
-test("authority-bound KV cannot resurrect expired sessions and session listing rebuilds a missing index", async () => {
-    const values = new Map<string, string>();
-    let broken = false;
-    const cache: SessionCache = { get: async (k) => values.get(k) ?? null, set: async (k, v) => {
-            if (broken)
-                throw Error("optional KV down");
-            values.set(k, v);
-        }, delete: async (k) => {
-            if (broken)
-                throw Error("optional KV down");
-            values.delete(k);
-        } };
-    const a = await app(undefined, { cache, prefix: "expiry-proof" });
-    const before = a.sqlite.query(`SELECT id,token FROM session WHERE "userId"='s'`).get() as {
-        id: string;
-        token: string;
-    };
-    values.delete("expiry-proof:active-sessions-s");
-    expect(await a.auth.api.listSessions({ headers: a.headers })).toHaveLength(1);
-    for (const [key, raw] of values) {
-        try {
-            const parsed = JSON.parse(raw);
-            if (parsed.session?.id === before.id) {
-                parsed.session.expiresAt = new Date(Date.now() + 60000).toISOString();
-                values.set(key, JSON.stringify(parsed));
-            }
-        }
-        catch { }
-    }
-    a.sqlite.run('UPDATE session SET "expiresAt"=? WHERE id=?', [new Date(Date.now() - 60000).toISOString(), before.id]);
-    broken = true;
-    const raw = await a.auth.handler(new Request("http://localhost/api/auth/get-session", { headers: a.headers }));
-    expect(raw.status).toBe(200);
-    expect(await raw.json()).toBeNull();
-    const after = a.sqlite.query('SELECT "expiresAt" FROM session WHERE id=?').get(before.id) as {
-        expiresAt: string;
-    } | null;
-    expect(!after || Date.parse(after.expiresAt) < Date.now()).toBe(true);
-    expect(await resolveCaller(new Request("http://localhost/private", { headers: a.headers }), authLoader(async () => a.auth), { responseHeaders: new Headers() })).toEqual({ kind: "anonymous" });
-});
-test("authority cache plus joined caller guard and two-session listing have explicit database counts", async () => {
-    const values = new Map<string, string>();
-    const a = await app(undefined, { prefix: "counts", cache: { get: async (k) => values.get(k) ?? null, set: async (k, v) => { values.set(k, v); }, delete: async (k) => { values.delete(k); } } });
-    await a.ctx.internalAdapter.createSession("s", false);
-    let reads = 0;
-    const one = a.ctx.adapter.findOne.bind(a.ctx.adapter), many = a.ctx.adapter.findMany.bind(a.ctx.adapter);
-    a.ctx.adapter.findOne = async (...args) => { reads++; return one(...args); };
-    a.ctx.adapter.findMany = async (...args) => { reads++; return many(...args); };
-    expect(await resolveCaller(new Request("http://localhost/private", { headers: a.headers }), authLoader(async () => a.auth))).toMatchObject({ role: "admin", admin: true });
-    expect(reads).toBe(3);
-    reads = 0;
-    expect(await a.ctx.internalAdapter.listSessions("s")).toHaveLength(2);
-    expect(reads).toBe(3);
 });
 test("generated auth member index follows the user's native table and createdAt mapping", () => {
     const ddl = authSchemaSql({ user: { modelName: "people", fields: { createdAt: "joined_at" } } }, "postgres").join(";");

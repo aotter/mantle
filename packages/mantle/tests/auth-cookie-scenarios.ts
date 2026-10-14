@@ -5,7 +5,6 @@ import { betterAuth } from "better-auth/minimal";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { admin, emailOTP, jwt } from "better-auth/plugins";
 import { authLoader, resolveCaller, type AuthInstance } from "../src/auth/caller.js";
-import { sessionSecondaryStorage } from "../src/auth/hardening.js";
 import { verifyAuthRequestClasses } from "./auth-request-classes.js";
 import { verifyOAuthResources } from "./auth-resource-scenarios.js";
 import { authSchemaSql } from "../src/infrastructure/authSchema.js";
@@ -14,8 +13,8 @@ type Run = (text: string, values?: unknown[]) => Promise<Record<string, unknown>
 export async function verifyCookieCaller(database: BetterAuthOptions["database"], dialect: "sqlite" | "postgres", run: Run, statements: string[]) {
   const reads = () => statements.filter(text => /^\s*(SELECT|WITH)\b/i.test(text)).length;
   const counts: Record<string, number> = {};
-  for (const variant of ["native", "renamed", "secondary", "authority", "fallback"] as const) {
-    const renamed = variant === "renamed", cached = variant === "secondary" || variant === "authority";
+  for (const variant of ["native", "renamed", "secondary", "fallback"] as const) {
+    const renamed = variant === "renamed", cached = variant === "secondary";
     const prefix = `cookie_${variant}_`, cache = new Map<string, string>();
     const u = `${prefix}user`, s = `${prefix}session`;
     const field = (name: string) => renamed ? `mapped_${name}` : name;
@@ -28,9 +27,7 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
       user: { modelName: u, ...(renamed ? { fields: { name: field("name"), email: field("email"), emailVerified: field("emailVerified"), createdAt: field("createdAt"), updatedAt: field("updatedAt"), image: field("image") } } : {}) },
       session: { modelName: s, cookieCache: { enabled: true, maxAge: 60, refreshCache: false, version: "read-60-v1" }, ...(cached ? { storeSessionInDatabase: true } : {}), ...(renamed ? { fields: { userId: field("userId"), token: field("token"), expiresAt: field("expiresAt"), createdAt: field("createdAt"), updatedAt: field("updatedAt"), ipAddress: field("ipAddress"), userAgent: field("userAgent") } } : {}) },
       account: { modelName: `${prefix}account` }, verification: { modelName: `${prefix}verification`, storeInDatabase: true },
-      ...(cached ? { secondaryStorage: variant === "authority"
-        ? sessionSecondaryStorage({ get: async key => cache.get(key) ?? null, set: async (key, value) => { cache.set(key, value); }, delete: async key => { cache.delete(key); } }, prefix, () => auth.$context)
-        : { get: async key => cache.get(key) ?? null, set: async (key, value) => { cache.set(key, value); }, delete: async key => { cache.delete(key); }, getAndDelete: async () => { throw Error("verification stays in the primary database"); }, increment: async () => { throw Error("verification stays in the primary database"); } } } : {}),
+      ...(cached ? { secondaryStorage: { get: async key => cache.get(key) ?? null, set: async (key, value) => { cache.set(key, value); }, delete: async key => { cache.delete(key); }, getAndDelete: async () => { throw Error("verification stays in the primary database"); }, increment: async () => { throw Error("verification stays in the primary database"); } } } : {}),
       advanced: { database: { ...(variant === "fallback" ? { joins: false } : {}) }, cookiePrefix: prefix },
       // Better Auth's admin plugin mutates its shared schema when fields are renamed; reset every field per fixture.
       plugins: [admin({ schema: { user: { fields: { role: field("role"), banned: field("banned"), banReason: field("banReason"), banExpires: field("banExpires") } } } }), emailOTP({ sendVerificationOTP: async value => { otp = value.otp; } }), ...(variant === "native" ? [jwt({ disableSettingJwtHeader: true }), oauthProvider({ loginPage: "/login", consentPage: "/consent", resources: ["http://localhost:3000/mcp"] })] : [])],
@@ -59,7 +56,7 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
       counts[`${variant}:${name}`] = reads();
       return { caller, responseHeaders: responseHeaders ?? new Headers() };
     };
-    const expected = (variant === "authority" ? 2 : cached ? 1 : variant === "fallback" ? 2 : 1) + 1;
+    const expected = (cached ? 1 : variant === "fallback" ? 2 : 1) + 1;
     assert.equal((await check("fresh", expected)).caller.kind, "user");
     const readSnapshot = async (name: string, suppliedCookie = cookie, expectedReads = cached ? expected : 1, freshLoader = loader) => {
       statements.length = 0;
@@ -128,7 +125,7 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
       assert.equal(writer.kind === "user" && writer.role, "admin"); assert.equal(reads(), expected);
       counts[`${variant}:write-current-role`] = reads();
     }
-    assert.equal((await check("headers", variant === "authority" ? 4 : expected, new Headers())).caller.kind, "user");
+    assert.equal((await check("headers", expected, new Headers())).caller.kind, "user");
     assert.equal(statements.some(text => /^UPDATE /i.test(text)), false, "fresh responseHeaders do not refresh or add an UPDATE");
     await run(`UPDATE "${u}" SET "${field("banned")}" = ${dialect === "postgres" ? "true" : "1"} WHERE id = ${dialect === "postgres" ? "$1" : "?"}`, [id]);
     assert.deepEqual((await check("banned", expected)).caller, { kind: "anonymous" });
@@ -144,7 +141,7 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
     assert.equal((await resolveCaller(request(cookie), loader)).kind, "user");
     assert.equal(reads(), expected);
     assert.equal(statements.some(text => /^UPDATE /i.test(text)), false, "without responseHeaders a due cookie must not refresh");
-    const refresh = await check("refresh", variant === "authority" ? 6 : expected, new Headers());
+    const refresh = await check("refresh", expected, new Headers());
     assert.equal(refresh.caller.kind, "user");
     assert.ok(refresh.responseHeaders.getSetCookie().some(line => line.includes("session_token=")));
     assert.equal(statements.filter(text => /^UPDATE /i.test(text)).length, 1);
@@ -173,10 +170,6 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
     const signedAgain = await post("/sign-in/email-otp", { email: `${variant}@example.test`, otp });
     assert.equal(signedAgain.status, 200);
     const newCookie = signedAgain.headers.getSetCookie().map(line => line.split(";")[0]).join("; ");
-    if (variant === "authority") {
-      for (const key of cache.keys()) if (key.endsWith("active-sessions-" + id)) cache.delete(key);
-      assert.equal((await (await auth.$context).internalAdapter.listSessions(id)).length, 1, "missing KV index rebuilds from primary sessions");
-    }
     assert.equal((await resolveCaller(request(newCookie), loader)).kind, "user");
     await run(`DELETE FROM "${u}" WHERE id = ${dialect === "postgres" ? "$1" : "?"}`, [id]);
     statements.length = 0;
