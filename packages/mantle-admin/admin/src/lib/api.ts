@@ -17,8 +17,8 @@ export class ApiError extends Error {
 }
 
 /** The server's refusal in a response body: Admin's routes answer `{ error }`, an operation's result `{ diagnostic }`. */
-export function refusalOf(body: unknown): { code?: string; message?: string } | undefined {
-  const b = body as { error?: { code?: string; message?: string }; diagnostic?: { code?: string; message?: string } } | null;
+export function refusalOf(body: unknown): { code?: string; message?: string; path?: string } | undefined {
+  const b = body as { error?: { code?: string; message?: string; path?: string }; diagnostic?: { code?: string; message?: string; path?: string } } | null;
   return b?.error ?? b?.diagnostic ?? undefined;
 }
 

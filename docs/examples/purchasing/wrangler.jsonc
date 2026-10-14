@@ -6,6 +6,9 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "vars": {
+    "EMPLOYEE_DOMAIN": "example.com"
+  },
   "secrets": {
     "required": [
       "BETTER_AUTH_SECRET",

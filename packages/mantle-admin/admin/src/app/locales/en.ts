@@ -550,6 +550,7 @@ export default {
     "media.noRequiredVariants": "The media policy has no required image variants.",
     "media.prepareFailed": "The image could not be prepared for upload.",
     "media.encoderUnsupported": "This site's media policy requires an image format this browser cannot produce ({mime}). Contact the site developer to update the policy.",
+    "ops.error.refused": "Refused; nothing was changed. {message}",
     "ops.error.executionFailed": "The operation ran but failed to complete.",
     "ops.error.detailsLabel": "Show details",
     "ops.success": "{name} completed.",

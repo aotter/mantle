@@ -2,7 +2,7 @@ import { isAdminPreview } from "../app/frame-policy";
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, Check, Copy, ExternalLink, type LucideIcon } from "lucide-react";
-import { ApiError } from "../lib/api";
+import { ApiError, refusalOf } from "../lib/api";
 import { cn } from "../lib/utils";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Card } from "@aotter/mantle-ui/kit";
@@ -122,6 +122,17 @@ export function OperationErrorBox({ error }: { error: unknown }): React.ReactEle
   const is401 = useUnauthorizedRedirect(error);
   if (is401) return null;
   const detail = error instanceof Error ? error.message : String(error);
+  // A 4xx refusal is the server declining the input (validation, a check, a stale version): nothing ran, and its
+  // message plus the field it names is what the operator needs. Only failures keep the generic line.
+  const refusal = error instanceof ApiError && error.status < 500 ? refusalOf(error.body) : undefined;
+  if (refusal?.message) {
+    const field = /\/input\/([^/]+)$/.exec(refusal.path ?? "")?.[1];
+    return (
+      <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+        {t(language, "ops.error.refused", { message: field ? `${field}: ${refusal.message}` : refusal.message })}
+      </div>
+    );
+  }
   return (
     <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
       <p>{t(language, "ops.error.executionFailed")}</p>
