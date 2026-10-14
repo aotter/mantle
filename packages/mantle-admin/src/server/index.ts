@@ -245,12 +245,13 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
         let caller: Caller | undefined;
         const access = options.gateway ? (await import("@aotter/mantle/host-access")).accessRequest(ctx, {...options, accessTargets: options.accessTargets ?? metadata.accessTargets}) : undefined;
         const matched = table.find(r => r.method === request.method && r.pattern.test(path));
+        const targetId = matched?.id ?? `admin:${request.method} ${path.slice(10)}`;
         try {
-            await access?.select(matched?.id ?? `admin:${request.method} ${path.slice(10)}`);
+            await access?.select(targetId);
             caller = forwarded(ctx, options.gateway)
                 ? (await import("@aotter/mantle/host-caller")).gatewayCaller(ctx, options.gateway, options.fields ?? metadata.userFields)
                 : await surfaceCaller(request, env, options.caller ?? (() => ({ kind: "anonymous" })));
-            await access?.select(matched?.id ?? `admin:${request.method} ${path.slice(10)}`, caller);
+            await access?.select(targetId, caller);
             if (caller.kind === "anonymous")
                 throw new ContractError("UNAUTHENTICATED", "Sign in to use Admin.", "admin");
             if (!isAdmin(caller) || caller.kind !== "host" && caller.credential !== "session") {
@@ -263,7 +264,6 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 const { checkFresh } = await import("@aotter/mantle/host-caller");
                 const view = /\/views\/([^/]+)/.exec(path);
                 const variant = operation ? `procedure:${decodeURIComponent(operation[1]!)}` : view ? `view:${decodeURIComponent(view[1]!)}` : undefined;
-                await access?.select(matched?.id ?? `admin:${request.method} ${path.slice(10)}`, caller);
                 if (matched) await access?.check(readOnly, variant);
                 if (!matched) checkFresh(caller, readOnly, path);
             }

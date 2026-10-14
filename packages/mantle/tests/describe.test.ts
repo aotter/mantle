@@ -76,11 +76,12 @@ test("CLI JSON equals describeApp and --diff writes nothing into the project", a
     const compiled = await compilePlan(sources, sqliteCompiler, "operational");
     if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
     const report = await describeApp(compiled.plan);
-    const json = execFileSync("node", [cli, "describe", manifest], { cwd: dir, encoding: "utf8" });
+    expect(() => execFileSync("node", [cli, "describe", manifest], { cwd: dir, stdio: "pipe" })).toThrow("mantle describe <target>");
+    const json = execFileSync("node", [cli, "describe", "bun-sqlite", manifest], { cwd: dir, encoding: "utf8" });
     expect(JSON.parse(json)).toEqual(report);
     expect(await readdir(dir)).toEqual([]);
     await writeFile(join(dir, "old.json"), json);
-    expect(execFileSync("node", [cli, "describe", manifest, "--diff", "old.json"], { cwd: dir, encoding: "utf8" }).trim()).toBe("[]");
+    expect(execFileSync("node", [cli, "describe", "bun-sqlite", manifest, "--diff", "old.json"], { cwd: dir, encoding: "utf8" }).trim()).toBe("[]");
     expect(await readdir(dir)).toEqual(["old.json"]);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

@@ -9,15 +9,15 @@ import { writeArtifacts } from "./artifacts.js";
 import type { Target } from "../domain/model.js";
 
 const targets: readonly Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
-const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>] [--admin-extensions <module>] [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>]\n       mantle bundle <entry> <outdir>\n       mantle describe [<target>] <manifest>... [--json] [--diff <old.json>]";
+const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>] [--admin-extensions <module>] [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>]\n       mantle bundle <entry> <outdir>\n       mantle describe <target> <manifest>... [--diff <old.json>]";
 try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-    json: { type: "boolean" }, diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, "admin-extensions": { type: "string" }, auth: { type: "string" }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" },
+    diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, "admin-extensions": { type: "string" }, auth: { type: "string" }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" },
   } });
   const command = positionals[0] === "bundle" || positionals[0] === "generate" || positionals[0] === "describe" ? positionals.shift()! : "generate";
   if (command === "describe") {
-    const target = targets.includes(positionals[0] as Target) ? positionals.shift()! : "bun-sqlite";
-    if (!positionals.length) throw new Error(usage);
+    const target = positionals.shift();
+    if (!target || !targets.includes(target as Target) || !positionals.length) throw new Error(usage);
     const { compilePlan, sqliteCompiler, postgresCompiler } = await import("../build/compiler.js");
     const { describeApp, diffApp } = await import("../domain/describe/index.js");
     const sources = await Promise.all(positionals.map(async path => ({ sourceId: path, text: await readFile(path, "utf8") })));

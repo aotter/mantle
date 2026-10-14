@@ -196,6 +196,19 @@ test('forwarded pinning, dry runs and access decisions share one boundary', asyn
     for (const [overrides,code] of [[{target:'procedure:write'},'TARGET_MISMATCH'],[{targetHash:'old'},'TARGET_HASH_MISMATCH']] as const) {
       const response = await call({...await pinned(mantleProps(),targets,readId) as any,...overrides}); expect(response.status).toBe(412); expect((await response.json()).error.code).toBe(code); expect(events.at(-1)).toMatchObject({outcome:'error',reason:code});
     }
+    const { web } = await import(resolve(dir, 'web.ts'));
+    const site = web({...options, db, origin:'https://app.test', title:'Records', description:'', pages:{'/records':{view:'public-records',list:'public-records',markdown:'title'},'/plain':{view:'public-records'}}});
+    const snapshotCtx = {props:{mantle:await pinned(mantleProps({authenticatedAs:'snapshot'}),targets,writeId)}};
+    const post = new Request('https://app.test/api/write',{method:'POST',body:raw});
+    const eventCount = events.length;
+    const denied = (await site.fetch(post,{},snapshotCtx)) ?? await api(post,{},snapshotCtx);
+    expect(denied.status).toBe(403);
+    expect(events.slice(eventCount)).toEqual([expect.objectContaining({target:writeId,outcome:'deny',reason:'STALE_CALLER'})]);
+    for (const path of ['/unmatched','/unmatched.md','/plain.md']) {
+      const request = new Request('https://app.test'+path);
+      expect((await site.fetch(request,{},snapshotCtx)) ?? await api(request,{},snapshotCtx)).toBeUndefined();
+    }
+    expect(events.length).toBe(eventCount+1);
     const writeProps = await pinned(mantleProps(),targets,writeId) as any;
     const before = acquired;
     const dry = await call({...writeProps,dryRun:true},'/api/write',raw); expect(dry.status).toBe(200);
@@ -236,4 +249,25 @@ test('forwarded pinning, dry runs and access decisions share one boundary', asyn
     const rpcDry = await rpc('tools/call',{name:'write',arguments:JSON.parse(raw)},mantleProps({dryRun:true})); expect(rpcDry.status).toBe(200); const dryRpc = await rpcDry.text(); const dryData = JSON.parse(dryRpc.startsWith('event:') ? dryRpc.split('data: ')[1]!.split('\n')[0]! : dryRpc).result.structuredContent; expect(dryData.event).toEqual(events.at(-1)); expect(db.query('SELECT title FROM records').get()).toEqual({title:'original'});
     expect((await call(writeProps,'/api/write',raw)).status).toBe(200); expect(db.query('SELECT title FROM records').get()).toEqual({title:'changed'});
   } finally {db.close(); await rm(dir,{recursive:true,force:true});}
+});
+
+test('MCP media writes refuse dry runs before acquiring a database or running tools', async () => {
+  const { compilePlan, sqliteCompiler } = await import('../src/build/compiler.js');
+  const { describeApp } = await import('../dist/domain/describe/index.js');
+  const { mediaDefinitions } = await import('../src/domain/generated-tools.js');
+  const { handler } = await import('../src/kernel/mcp-handler.js');
+  const compiled = await compilePlan({sources:[{sourceId:'gateway.yaml',text:gatewaySource}]},sqliteCompiler,'operational');
+  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+  const report = await describeApp(compiled.plan);
+  const targets = Object.fromEntries(report.targets.map(t => [t._meta.id,t._meta]));
+  const tools = mediaDefinitions().map(tool => ({...tool,surface:'admin' as const,readOnly:tool.annotations.readOnlyHint,validate:()=>({}),run:async()=>{throw Error('Media write ran');}}));
+  const api = handler(tools,{gateway:{tenant:'example'},accessTargets:async()=>targets,db:()=>{throw Error('Database acquired');}});
+  for (const tool of tools.filter(t => !t.readOnly)) {
+    const id = `admin:tool:${tool.name}`;
+    expect(targets[id]).toMatchObject({readOnly:false,opaque:true});
+    const props = await pinned(mantleProps({dryRun:true}),targets,id);
+    const response = await api(new Request('https://app.test/mcp/admin',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:tool.name,arguments:{}}})}),{}, {props:{mantle:props}});
+    expect(response!.status).toBe(412);
+    expect(await response!.json()).toMatchObject({error:{code:'DRY_RUN_UNSUPPORTED'}});
+  }
 });

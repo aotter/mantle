@@ -8,7 +8,7 @@ export const isAllValues = (value: unknown): value is AllValues => !!value && ty
 /** Role names follow Better Auth's role strings; `-` is allowed. */
 const roleName = /^[a-z][a-zA-Z0-9_-]{0,62}$/;
 const invalid = (message: string): never => { throw new ContractError("USER_FIELD_INVALID", message, "auth:user", { status: 400 }); };
-export function valueOf(value: unknown, spec: UserField, field: string): UserValue {
+function valueOf(value: unknown, spec: UserField, field: string): UserValue {
   if (isAllValues(value)) return Object.freeze({ all: true });
   const scalar = (value: unknown): string | number => {
     if (typeof value !== spec.type) return invalid(`User field '${field}' must contain ${spec.type} values.`);

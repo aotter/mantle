@@ -81,7 +81,6 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
     if (host) {
       try {
         if (Array.isArray(parsedBody)) throw new ContractError("INPUT_VALIDATION_FAILED", "Host calls cannot batch MCP messages.", "mcp");
-        if ("target" in caller && caller.target) await access?.select(caller.target, caller);
         if (isRecord(parsedBody) && typeof parsedBody.method === "string" && !["initialize", "tools/call"].includes(parsedBody.method)) throw new ContractError("AUTH_DENIED", "Host callers may only initialize or call a tool.", "mcp", {status: 403});
         if (isRecord(parsedBody) && parsedBody.method === "initialize") {
           const pinned = "target" in caller ? caller.target : undefined;
@@ -103,10 +102,6 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         if (!message || message.method !== "tools/call") continue;
         const tool = selected.find(tool => tool.name === message.params?.name);
         if (!tool) continue;
-        if (options.gateway) {
-          try { (await import("./host-caller.js")).checkFresh(caller, !!tool.page || tool.readOnly === true, tool.target ? tool.target.kind + "s/" + tool.target.name : tool.name); }
-          catch (error) { return challenge(error, undefined, true); }
-        }
         const scopes = tool.scopes ?? [];
         if (caller.kind === "anonymous" && tool.closed) return challenge(new ContractError("UNAUTHENTICATED", "Authentication is required.", "mcp"), union(requiredScopes, scopes));
         if (!options.gateway && caller.kind === "user" && caller.credential === "oauth" && scopes.some(scope => !caller.scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs additional scopes.", "mcp"), union(caller.scopes, scopes));

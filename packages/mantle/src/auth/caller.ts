@@ -59,6 +59,15 @@ export function authLoader<A extends AuthInstance>(load: () => Promise<A>, cooki
   };
 }
 
+function checkFieldSources(instance: AuthInstance, fields: UserFields | undefined): void {
+  for (const field of Object.keys(fields ?? {})) {
+    const additional = instance.options.user?.additionalFields;
+    const stored = additional && Object.hasOwn(additional, field) ? additional[field] : undefined;
+    if (!(stored ? stored.input === false : instance.options.plugins?.some(plugin => plugin.id === "custom-session")))
+      throw new ContractError("AUTH_CONFIGURATION_ERROR", `User field '${field}' requires an input: false additional field or a customSession source.`, "auth:user");
+  }
+}
+
 /**
  * The Caller for a request that is not public. Public routes must not call it.
  * - `Authorization: Bearer`: an OAuth access token verified by Better Auth's resource client for `audience`; an invalid
@@ -77,12 +86,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     if (supplied.kind !== "user" || supplied.credential === "session") throw new ContractError("UNAUTHENTICATED", "Invalid service credential.");
     if (lacks(supplied.scopes)) throw new ContractError("AUTH_DENIED", "The service credential lacks a required scope.");
     const instance = await auth.get();
-    for (const field of Object.keys(options.fields ?? {})) {
-      const additional = instance.options.user?.additionalFields;
-      const stored = additional && Object.hasOwn(additional, field) ? additional[field] : undefined;
-      if (!(stored ? stored.input === false : instance.options.plugins?.some(plugin => plugin.id === "custom-session")))
-        throw new ContractError("AUTH_CONFIGURATION_ERROR", `User field '${field}' requires an input: false additional field or a customSession source.`, "auth:user");
-    }
+    checkFieldSources(instance, options.fields);
     const context = options.fields && Object.keys(options.fields).length ? await instance.$context as import("@better-auth/core").AuthContext : undefined;
     const user = context ? await context.internalAdapter.findUserById(supplied.subject) : { id: supplied.subject, role: supplied.role };
     if (!user || isBanned(user)) throw new ContractError("UNAUTHENTICATED", "The service credential's user is not active.");
@@ -92,12 +96,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
   if (authorization && /^(bearer|dpop) /i.test(authorization)) {
     if (!options.audience) throw new ContractError("UNAUTHENTICATED", "This route does not accept access tokens.");
     const instance = await auth.get();
-    for (const field of Object.keys(options.fields ?? {})) {
-      const additional = instance.options.user?.additionalFields;
-      const stored = additional && Object.hasOwn(additional, field) ? additional[field] : undefined;
-      if (!(stored ? stored.input === false : instance.options.plugins?.some(plugin => plugin.id === "custom-session")))
-        throw new ContractError("AUTH_CONFIGURATION_ERROR", `User field '${field}' requires an input: false additional field or a customSession source.`, "auth:user");
-    }
+    checkFieldSources(instance, options.fields);
     const { oauthProviderResourceClient } = await import("@better-auth/oauth-provider/resource-client");
     const { createDpopReplayStore } = await import("better-auth/oauth2");
     const context = await instance.$context as import("@better-auth/core").AuthContext;
@@ -123,12 +122,7 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
   const { getSessionCookie, splitSetCookieHeader } = await import("better-auth/cookies");
   if (!getSessionCookie(request, { cookiePrefix: auth.cookiePrefix })) return { kind: "anonymous" };
   const instance = await auth.get();
-  for (const field of Object.keys(options.fields ?? {})) {
-    const additional = instance.options.user?.additionalFields;
-    const stored = additional && Object.hasOwn(additional, field) ? additional[field] : undefined;
-    if (!(stored ? stored.input === false : instance.options.plugins?.some(plugin => plugin.id === "custom-session")))
-      throw new ContractError("AUTH_CONFIGURATION_ERROR", `User field '${field}' requires an input: false additional field or a customSession source.`, "auth:user");
-  }
+  checkFieldSources(instance, options.fields);
   const mirror = !!instance.options.secondaryStorage;
   const cache = instance.options.session?.cookieCache;
   // Only an application-classified read may use Better Auth's bounded signed snapshot. KV remains primary-guarded.

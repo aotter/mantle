@@ -1,8 +1,8 @@
 # Describe
 
-`mantle describe [<target>] <manifest>...` compiles manifests and prints JSON.
-The default target is `bun-sqlite`; use the generation target for matching
-hashes. The command writes no project files. `--diff <old.json>` prints a JSON
+`mantle describe <target> <manifest>...` compiles manifests and prints JSON.
+An explicit target is required; use the generation target because hashes
+include the dialect. The command writes no project files. `--diff <old.json>` prints a JSON
 array of changes against a saved report.
 
 `describeApp(plan)` and `diffApp(a, b)` are exported by

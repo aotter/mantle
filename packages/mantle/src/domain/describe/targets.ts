@@ -173,7 +173,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
   for (const tool of mediaDefinitions()) {
     addRoute(`admin:tool:${tool.name}`, [], tool.inputSchema as JsonSchema);
     const d = out.at(-1)!;
-    Object.assign(d, { name: tool.name, readOnly: tool.annotations.readOnlyHint, annotations: tool.annotations, behavior: { tool, schemas: plan.schemas } });
+    Object.assign(d, { name: tool.name, readOnly: tool.annotations.readOnlyHint, opaque: !tool.annotations.readOnlyHint, annotations: tool.annotations, behavior: { tool, schemas: plan.schemas } });
     generated.push(d);
   }
   for (const route of adminRoutes) {

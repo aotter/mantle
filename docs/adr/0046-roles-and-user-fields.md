@@ -149,12 +149,12 @@ self-hosted, a host when hosted.
   metadata: `id email emailVerified name image createdAt updatedAt role banned banReason
   banExpires` and `mantle*`.
 - **`requires: ctx.admin`** (renamed from `ctx.staff`) accepts any role name.
-- `mantle describe` reports every use (section 9), so authors, agents and hosts read one
+- `mantle describe` reports every use, so authors, agents and hosts read one
   vocabulary. An application that uses none of these generates
   byte-identical code to today.
 
 A misspelled role never matches, so the rule fails closed. A host that compares the
-report with what it can supply catches the typo (section 9).
+report with what it can supply catches the typo.
 
 ### 1a. Two layers: admin and member
 
@@ -163,7 +163,7 @@ the way Better Auth does.
 
 - **Admin.** A caller holding one of Better Auth's admin plugin `adminRoles` is an admin.
   Mantle reads `adminRoles` from the admin plugin configuration; it has no setting of its
-  own. A host caller is an admin by definition (section 6). The previous `staff` role,
+  own. A host caller is an admin by definition. The previous `staff` role,
   `ctx.staff`, `/mcp/staff` and "staff" in Admin are renamed `admin`, `ctx.admin`,
   `/mcp/admin` and "admin"; Better Auth's default `adminRoles: ["admin"]` therefore
   works unchanged.
@@ -197,8 +197,7 @@ the way Better Auth does.
   256 bytes, and contain no NUL. An array holds at most 64 values; duplicates are
   removed. Fields the application never reads are dropped. An invalid value is an error
   (`USER_FIELD_INVALID`); values are never silently filtered.
-- `auth.uid()` is unchanged for users. For a host caller it is `'host:' + user.id`
-  (section 6).
+- `auth.uid()` is unchanged for users. For a host caller it is `'host:' + user.id`.
 
 ### 3. SQL references
 

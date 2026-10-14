@@ -18,7 +18,6 @@ export type Bound = { readonly sql: string; readonly binds: unknown[]; readonly 
 /** The dialect functions the recipes in use call; generated code passes only those. */
 export type Values = Partial<Pick<Dialect, "now" | "cutoff" | "timestamp" | "date">> & {
   readonly user?: (recipe: Extract<Recipe, { k: "user" }>, caller: Caller) => unknown;
-  readonly isAll?: (caller: Caller, field: string) => boolean;
   readonly scopeInsert?: Dialect['scopeInsert'];
   readonly userRefs?: (recipe: Recipe, caller: Caller) => unknown;
   /** Present only in apps with user fields: keeps, per caller, one printed form of each Schema scope term. */
