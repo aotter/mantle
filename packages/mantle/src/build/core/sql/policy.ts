@@ -4,7 +4,7 @@
 import { SqlRefusal as Refused, type SqlNode as N } from '../../spec/domain/index.js';
 import type { RelationPosition } from './positions.js';
 import type { StorageSchema as SchemaDef } from '../dialect.js';
-import { classify, rowPolicy, userScopeTerm, writePolicy, type RowMode as Mode, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
+import { classify, protectedColumns, rowPolicy, userScopeTerm, writePolicy, type RowMode as Mode, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
 import { S, num, op, ref as col, target as res } from './ast.js';
 import type { PlanRestrict } from '../../spec/domain/model/RuntimePlan.js';
 
@@ -421,8 +421,8 @@ function update(n: N, c: C): N {
   const s = c.schemas[String(n.relation.relname).toLowerCase()]!, a = alias$(n.relation);
   c.seen?.add('update-target');
   dmlScope(n.relation, c);
-  const restricted = c.mode !== 'trusted' ? c.restrict?.[String(n.relation.relname).toLowerCase()]?.terms ?? [] : [];
-  if ([...(s.userScopes ?? []), ...restricted].some(u => n.targetList.some((target: N) => String(target.ResTarget.name).toLowerCase() === u.column))) throw new Refused('USER_FIELD_POSITION', 'The scoped column is never writable through SET.');
+  const columns = protectedColumns(s, c.mode !== 'trusted' ? c.restrict?.[String(n.relation.relname).toLowerCase()] : undefined);
+  if (n.targetList.some((target: N) => columns.includes(String(target.ResTarget.name).toLowerCase()))) throw new Refused('USER_FIELD_POSITION', 'The scoped column is never writable through SET.');
   const out = deep(n, c, 'UpdateStmt');
   c.sel.pop();
   const w = writePolicy(s, 'update', { status: c.status, lock: c.lockVersion });
@@ -444,7 +444,11 @@ function del(n: N, c: C): N {
 }
 function insert(n: N, c: C): N {
   const s = c.schemas[String(n.relation.relname).toLowerCase()]!;
-  if (s.userScopes?.length && c.mode !== 'trusted') throw new Refused('USER_FIELD_POSITION', 'Procedure INSERT/upsert into a field-scoped Schema requires trusted mode; use its scoped Store.');
+  const columns = protectedColumns(s, c.mode !== 'trusted' ? c.restrict?.[String(n.relation.relname).toLowerCase()] : undefined);
+  if (n.onConflictClause?.action === 'ONCONFLICT_UPDATE' && n.onConflictClause.targetList.some((target: N) => columns.includes(String(target.ResTarget.name).toLowerCase()))) throw new Refused('USER_FIELD_POSITION', 'The scoped column is never writable through SET.');
+  // Owner columns are stamped from the caller on insert, so only value terms force a trusted insert.
+  const owner = c.mode !== 'trusted' ? c.restrict?.[String(n.relation.relname).toLowerCase()]?.owner : undefined;
+  if (columns.some(column => column !== owner) && c.mode !== 'trusted') throw new Refused('USER_FIELD_POSITION', 'Procedure INSERT/upsert into a field-scoped or restricted Schema requires trusted mode; use its scoped Store.');
   c.seen?.add('insert-target');
   const out = deep(n, c, 'InsertStmt');
   const named = (x: string) => n.cols.some((r: N) => r.ResTarget.name === x);
@@ -467,7 +471,6 @@ function insert(n: N, c: C): N {
     if (oc.infer) (s.userScopes ?? []).forEach((u, i) => { if (!(oc.infer.indexElems ?? []).some((e: N) => String(e.IndexElem?.name ?? '').toLowerCase() === u.column))
       oc.infer.indexElems.splice((s.scope ? 1 : 0) + i, 0, { IndexElem: { name: u.column, ordering: 'SORTBY_DEFAULT', nulls_ordering: 'SORTBY_NULLS_DEFAULT' } }); });
     if (oc.action === 'ONCONFLICT_UPDATE') {
-      if (s.userScopes?.some(u => oc.targetList.some((target: N) => String(target.ResTarget.name).toLowerCase() === u.column))) throw new Refused('USER_FIELD_POSITION', 'The scoped column is never writable through SET.');
       c.seen?.add('conflict-update');
       oc.targetList.push(...sets(w, c));
       oc.whereClause = and(oc.whereClause, visible(s, n.relation.relname, c, n.relation.relname)); // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one

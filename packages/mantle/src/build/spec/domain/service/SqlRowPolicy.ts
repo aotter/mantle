@@ -4,6 +4,7 @@
  */
 import type { SqlSchemaDef } from "../model/SqlIr.js";
 import type { UserScope } from "../model/UserFields.js";
+import type { PlanRestrict } from "../model/RuntimePlan.js";
 
 /** `caller` preserves Core visibility; `admin` additionally hides publishing drafts from non-admin callers. */
 export type RowMode = "caller" | "public" | "trusted" | "admin";
@@ -14,6 +15,10 @@ export type RowTerm = readonly [column: string, op: "eq" | "ttl", value: RowValu
 /** One correlated parent row must satisfy every visibility term; admin previews may omit this requirement. */
 export interface RowParent { readonly table: string; readonly terms: readonly RowTerm[]; readonly scope?: readonly [parent: string, child: string]; readonly admin?: true; }
 export type RowSchema = Pick<SqlSchemaDef, "scope" | "userScopes" | "ttl" | "ttlSeconds" | "publishing" | "translates">;
+/** Field scope and target restrictions protect these columns; owner scope is stamped separately by writePolicy. */
+export function protectedColumns(s: RowSchema, restrict?: PlanRestrict[string]): string[] {
+  return [...(s.userScopes ?? []).map(u => u.column), ...(restrict?.owner ? [restrict.owner] : []), ...(restrict?.terms ?? []).map(u => u.column)];
+}
 /** `swappable`: a Schema scope term, which `{ all: true }` drops at run time; a target's restrict term is never swappable. */
 export function userScopeTerm(scope: UserScope, swappable = false): Extract<RowTerm, readonly [string, 'in', ...unknown[]]> {
   return [scope.column, "in", { k: "user" as const, field: scope.field, type: scope.type, multiple: true, ...(swappable ? { scope: true as const } : {}) }];

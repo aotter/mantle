@@ -17,6 +17,7 @@ import { compileSql, relationNames, type SqlDialect } from "./compileSql.js";
 import { parseRowTemplate, type UserFieldSpec } from "../../domain/model/UserFields.js";
 import { registerUserField } from "../../domain/service/UserReferences.js";
 import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
+import { protectedColumns } from "../../domain/service/SqlRowPolicy.js";
 
 export type CompilePlanResult =
   | { readonly ok: true; readonly plan: RuntimePlan }
@@ -256,7 +257,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     const plan = (await compile("procedure", p.spec.handler.sql, p.spec.input, source, "/spec/handler/sql"))?.plan;
     const target = p.spec.target ?? (plan ? inferTarget(p, plan.stmts) : undefined);
     for (const stmt of plan?.stmts ?? []) {
-      const write = stmt.UpdateStmt ?? stmt.InsertStmt, columns = write ? (schemas[write.relation.relname]?.userScopes ?? []).map(u => u.column) : [];
+      const write = stmt.UpdateStmt ?? stmt.InsertStmt, columns = write ? protectedColumns(schemas[write.relation.relname]!) : [];
       const sets = stmt.UpdateStmt?.targetList ?? stmt.InsertStmt?.onConflictClause?.targetList ?? [];
       if (sets.some((set: SqlNode) => columns.includes(set.ResTarget.name.toLowerCase()))) diagnostics.push(validateDiagnostic({code:'USER_FIELD_POSITION',severity:'error',path:`procedures/${p.metadata.name}/handler/sql`,message:'The scoped column is never writable through SET.'}));
     }

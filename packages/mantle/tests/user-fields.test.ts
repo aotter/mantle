@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { Database } from 'bun:sqlite';
+import { Database, type SQLQueryBindings } from 'bun:sqlite';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { userCaller } from '../src/kernel/user-caller.js';
@@ -10,6 +10,7 @@ import { renderTerm } from '../src/kernel/store.js';
 import { dialect } from '../src/kernel/dialect/sqlite.js';
 import { isAdmin, hasAdminRole } from '../src/kernel/contracts.js';
 import { generateOrThrow, writeGenerated } from './apps/link.js';
+import { compilePlan, compileProgram, d1Dialect, postgresCompiler, postgresDialect, sqliteCompiler } from '../src/build/compiler.js';
 await mkdir(resolve(import.meta.dir, 'apps/.generated'), { recursive: true });
 const fields = { region: { type: 'string' as const, multiple: true }, tier: { type: 'string' as const, multiple: false } };
 test('verified identities freeze values, discard unknown fields and lose authority when copied', () => {
@@ -40,6 +41,49 @@ test('verified identities freeze values, discard unknown fields and lose authori
 const schema = JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Schema', metadata: { name: 'orders' }, spec: { title: 'Orders', schema: { type: 'object', required: ['region', 'tier'], properties: { region: { type: 'string' }, tier: { type: 'string' } } }, indexes: [['region', 'id']] } });
 const view = (name: string, sql: string, restrict?: Record<string, string>) => JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'View', metadata: { name }, spec: { surface: 'internal', sql, ...(restrict ? { restrict } : {}) } });
 const code = (run: () => Promise<unknown>) => run().then(() => 'ok', (e: { code?: string }) => e.code ?? String(e));
+test('restricted Procedure INSERT variants refuse caller compilation while trusted inserts and owner scope still work', async () => {
+  const procedure = (sql: string, restrict?: Record<string, string>) => JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Procedure', metadata: { name: 'seed' }, spec: { title: 'Seed', input: { type: 'object', additionalProperties: false }, output: { type: 'object' }, ...(restrict ? { restrict } : {}), handler: { sql } } });
+  const sqls = ["INSERT INTO orders(region,tier) VALUES ('TW','gold') RETURNING id", "INSERT INTO orders(region,tier) SELECT region,'copy' FROM orders RETURNING id", "INSERT INTO orders(region,tier) VALUES ('TW','gold') ON CONFLICT(id) DO NOTHING RETURNING id"];
+  const db = new Database(':memory:');
+  try {
+    db.exec((await generateOrThrow('bun-sqlite', [{ sourceId: 'orders.yaml', text: schema }]))['schema.sql']!);
+    for (const postgres of [false, true]) for (const restrict of [{ orders: "region IN auth.user('region')" }]) for (const sql of sqls) {
+      const result = await compilePlan({ sources: [{ sourceId: 'insert.yaml', text: schema+'\n---\n'+procedure(sql, restrict) }] }, postgres ? postgresCompiler : sqliteCompiler, 'operational');
+      if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+      const p = result.plan.procedures.seed!;
+      if (!('sql' in p.handler)) throw Error('Expected SQL Procedure');
+      const { stmts } = p.handler.sql;
+      const ctx = { dialect: postgres ? postgresDialect() : d1Dialect, schemas: result.plan.schemas, inputs: p.inputs, kind: 'procedure' as const, restrict: p.restrict };
+      expect(() => compileProgram(stmts, { ...ctx, mode: 'caller' })).toThrow(expect.objectContaining({ code: 'USER_FIELD_POSITION', message: expect.stringContaining('use its scoped Store') }));
+      const [trusted] = compileProgram(stmts, { ...ctx, mode: 'trusted' });
+      expect(trusted!.verb).toBe('insert');
+      if (!postgres) expect(db.query(ctx.dialect.print!(trusted!.ast, ctx.schemas)).all(...binds(dialect, trusted!.binds as Parameters<typeof binds>[1], { kind: 'system', reason: 'fixture' }, {}) as SQLQueryBindings[])).not.toHaveLength(0);
+    }
+  } finally { db.close(); }
+  const owned = JSON.parse(schema); owned.spec.scope = 'owner = auth.uid()';
+  owned.spec.schema.properties.owner = { type: 'string' }; owned.spec.schema.required.push('owner'); owned.spec.indexes = [['owner', 'region', 'id']];
+  const files = await generateOrThrow('bun-sqlite', [{ sourceId: 'owner.yaml', text: JSON.stringify(owned)+'\n---\n'+procedure(sqls[0]!) }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, 'apps/.generated/owner-insert-')), ownerDb = new Database(':memory:');
+  try {
+    await writeGenerated(dir, files); const app = await import(resolve(dir, 'generated.ts')); ownerDb.exec(files['schema.sql']!);
+    const caller = userCaller({ id: 'owner' });
+    expect((await app.procedures.seed(ownerDb, caller, {})).results[0]).toHaveLength(1);
+    expect(ownerDb.query('SELECT owner,author_id FROM orders').all()).toEqual([{ owner: 'owner', author_id: 'owner' }]);
+  } finally { ownerDb.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test('upsert SET refuses restrict columns with the same diagnostic as UPDATE', async () => {
+  for (const postgres of [false, true]) for (const sql of ["UPDATE orders SET region = 'JP' WHERE id = 'one' RETURNING id", "INSERT INTO orders(region,tier) VALUES ('TW','gold') ON CONFLICT(id) DO UPDATE SET region=excluded.region RETURNING id"]) {
+    const p = JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Procedure', metadata: { name: 'move' }, spec: { title: 'Move', input: { type: 'object', additionalProperties: false }, output: { type: 'object' }, restrict: { orders: "region IN auth.user('region')" }, handler: { sql } } });
+    const result = await compilePlan({ sources: [{ sourceId: 'upsert.yaml', text: schema+'\n---\n'+p }] }, postgres ? postgresCompiler : sqliteCompiler, 'operational');
+    if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+    const proc = result.plan.procedures.move!;
+    if (!('sql' in proc.handler)) throw Error('Expected SQL Procedure');
+    const { stmts } = proc.handler.sql;
+    expect(() => compileProgram(stmts, { dialect: postgres ? postgresDialect() : d1Dialect, schemas: result.plan.schemas, inputs: proc.inputs, kind: 'procedure', mode: 'caller', restrict: proc.restrict })).toThrow(expect.objectContaining({ code: 'USER_FIELD_POSITION', message: 'The scoped column is never writable through SET.' }));
+  }
+});
+
 test('caller references are refused in SQL and restrict is validated', async () => {
   for (const sql of ["SELECT id FROM orders WHERE region IN auth.user('region')", "SELECT auth.user('region') FROM orders", "SELECT id FROM orders WHERE NOT(region IN (auth.user('region')))", "SELECT id FROM orders WHERE region <> auth.user('region')", "SELECT id FROM orders WHERE (region = auth.user('region')) IS NOT TRUE", "SELECT id FROM orders ORDER BY auth.hasRole('vip')", "SELECT id FROM orders WHERE NOT EXISTS(SELECT id FROM orders WHERE region IN (auth.user('region')))", "SELECT id FROM orders WHERE auth.role() = 'vip'"])
     await expect(generateOrThrow('bun-sqlite', [{ sourceId: 'deny.yaml', text: schema+'\n---\n'+view('denied', sql) }])).rejects.toThrow(/USER_REF_SCOPE_ONLY|AUTH_ROLE_REMOVED/);
@@ -168,4 +212,10 @@ test('a target that reads a restricted View carries its restrict',async()=>{
   expect((await app.procedures.touch(db,c,{})).results[0]).toHaveLength(1);
   expect(await code(()=>app.views.wrapper(db,userCaller({id:'a',region:{all:true}},{fields}),{}))).toBe('AUTH_DENIED');
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test('a caller Procedure may insert where the target restricts only the owner column',async()=>{
+ const own=JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'Procedure',metadata:{name:'add-own'},spec:{title:'Add',input:{type:'object',properties:{region:{type:'string'},tier:{type:'string'}},required:['region','tier'],additionalProperties:false},output:{type:'object'},restrict:{orders:'author_id = auth.uid()'},handler:{sql:'INSERT INTO orders (region, tier) VALUES (input.region, input.tier) RETURNING id'}}});
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'own.yaml',text:schema+'\n---\n'+own}]);
+ expect(files['generated.ts']).toContain('add-own');
 });
