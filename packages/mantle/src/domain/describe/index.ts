@@ -45,7 +45,7 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
     for (const [via, policies] of [["scope", scope], ["restrict", d.restrict]] as const) {
       for (const [name, policy] of Object.entries(policies)) {
         const schema = plan.schemas[name]!;
-        const fields = [...policy.terms.map(t => ({ field: t.field, type: t.type, op: "in" as const })), ...(policy.owner ? [{ field: "id", type: "string" as const, op: "eq" as const }] : [])];
+        const fields = [...policy.terms.map(t => ({ field: t.field, type: t.type, op: "in" as const }))];
         for (const term of fields) {
           const prior = userFields[term.field];
           userFields[term.field] = { via: prior?.via === "restrict" || via === "restrict" ? "restrict" : "scope", schemas: [...new Set([...(prior?.schemas ?? []), schema.name])].sort(), op: term.op, allAllowed: term.op === "in" && via === "scope" && prior?.allAllowed !== false };
@@ -62,8 +62,8 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
       requires: { all: d.surface === "admin" && !d.requires?.auth?.all.includes("ctx.admin") ? ["ctx.admin", ...(d.requires?.auth?.all ?? [])] : d.requires?.auth?.all ?? [], ...(d.requires?.guard ? { guard: d.requires.guard.procedure } : {}) },
     } };
   }));
-  // Fields used only by Schemas still belong to the application vocabulary.
-  for (const s of Object.values(plan.schemas)) for (const term of [...(s.userScopes ?? []).map(t => ({ field: t.field, type: t.type, op: "in" as const })), ...(s.scope ? [{ field: "id", type: "string" as const, op: "eq" as const }] : [])]) {
+  // Fields used only by Schemas still belong to the application vocabulary. The owner term (`= auth.uid()`) is not a user field: it shows as `scope.<schema>.owner`.
+  for (const s of Object.values(plan.schemas)) for (const term of [...(s.userScopes ?? []).map(t => ({ field: t.field, type: t.type, op: "in" as const }))]) {
     const a = access[term.field] ??= { ...(plan.access?.userFields[term.field] ?? { type: term.type, multiple: term.op === "in" }), op: term.op, scope: [], restrict: [] };
     if (!a.scope.includes(s.name)) a.scope.push(s.name);
   }

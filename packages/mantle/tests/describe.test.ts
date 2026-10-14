@@ -99,7 +99,8 @@ test("read flags distinguish insert targets, owner reads and translation parents
   expect(target(a, "procedure:insertOnly").ownerScoped).toBe(false);
   expect(target(a, "procedure:insertOnly").unscopedReads).toBe(false);
   expect(target(a, "view:notes-list").ownerScoped).toBe(true);
-  expect(target(a, "view:notes-list").userFields.id!.op).toBe("eq");
+  expect(a.access).not.toHaveProperty("id");
+  expect(target(a, "view:notes-list").userFields).not.toHaveProperty("id");
   const h = await targetHash(plan, "view:notes-list");
   delete plan.schemas.orders.scope;
   expect(await targetHash(plan, "view:notes-list")).not.toBe(h);
