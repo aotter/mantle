@@ -228,7 +228,24 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
                 return { affected: 1 };
             } },
     ];
-    return routes.map(route => ({...route, target: ctx => {
+    return routes.map(route => ({...route, prepare: async ctx => {
+        const raw = route.method === "GET" || route.method === "DELETE" ? {} : await json(ctx);
+        const schema = schemaOf(route.path.startsWith("/collections/") ? ctx.params.name : route.method === "POST" && route.path === "/entries" ? raw.collection : ctx.url.searchParams.get("collection"));
+        if (route.method === "GET") { await readable(schema, ctx); schema.query(ctx.url.searchParams); return; }
+        writable(schema);
+        if (route.method === "POST" && route.path === "/entries") {
+            const data = {...schema.defaults, ...Object.fromEntries(Object.entries(dataOf(raw)).filter(([,v]) => v !== null))};
+            schema.native?.(data); const values = schema.values(schema.validate(data, !schema.publishing));
+            if (schema.binding.userScopes?.length) adapter.values.scopeInsert!(schema.binding.userScopes, ctx.caller, values);
+        } else if (route.method === "PATCH") {
+            if (!exactVersion(raw.expectedVersion)) fail("expectedVersion is required.");
+            const data = dataOf(raw); schema.native?.(data); schema.validate(data, false);
+            if (schema.binding.userScopes?.some(t => Object.keys(data).some(k => k.toLowerCase() === t.column))) throw new ContractError("AUTH_DENIED", "Scoped columns cannot be changed.");
+        } else if (route.method === "POST") {
+            if (!schema.publishing) throw conflict("Only publishing collections have transitions.");
+            if (raw.expectedVersion !== undefined && !exactVersion(raw.expectedVersion)) fail("Invalid expectedVersion.");
+        }
+    }, target: ctx => {
         const schema = schemaOf(route.path.startsWith("/collections/") ? ctx.params.name : route.method === "POST" && route.path === "/entries" ? ctx.input?.collection : ctx.url.searchParams.get("collection"));
         if (route.path.endsWith("/publish") || route.path.endsWith("/unpublish") || route.path.endsWith("/archive")) return {kind:"procedure",name:schema.name + "." + route.path.split("/").at(-1)};
         const action: Target["action"] = route.method === "GET" ? "read" : route.method === "POST" ? "create" : route.method === "PATCH" ? "update" : "delete";

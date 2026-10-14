@@ -1,3 +1,5 @@
+import { describeApp } from "../domain/describe/index.js";
+import { targetHash } from "../domain/describe/target-hash.js";
 /** Build-time assembly only. None of these imports enter generated applications. */
 import { compilePlan, viewOutputs, sqliteCompiler, postgresCompiler, d1Dialect, postgresDialect, lowerPlan, sqliteSchema, postgresSchema, type AdminExtension, type ManifestSourceSet, type LoweredStatement, type RuntimePlan, type SqlNode } from "../build/compiler.js";
 import { wireReturning, wireScalars } from "../domain/wireScalars.js";
@@ -130,7 +132,13 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
     return { ok: false, diagnostics: [...refusals, ...diagnostics] };
   }
   if (!result.ok) return result;
+  const report = await describeApp(compiled.plan);
+  const accessTargets = Object.fromEntries(await Promise.all(report.targets.map(async ({ _meta: m }) => {
+    const policy = ({ scope, restrict, readOnly, opaque, hostCallable, requires }: typeof m | typeof m.variants[number]) => ({ scope, restrict, readOnly, opaque, hostCallable, requires });
+    return [m.id, { targetHash: await targetHash(compiled.plan, m.id), ...policy(m), ...(m.variants.length ? { variants: m.variants.map(v => ({ id: v.id, targetHash: m.targetHash, ...policy(v) })) } : {}) }];
+  })));
+  const gatewayFiles = generatedFiles({ "access-targets.ts": `import type { AccessTarget } from "@aotter/mantle/contracts";\nexport const targets: Readonly<Record<string, AccessTarget>> = ${JSON.stringify(accessTargets)};\n` });
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.admin ? adminIndexes(compiled.plan.schemas, !postgres) : []), ...(schema?.() ?? [])];
   const { "site-schema.sql": siteSql = "", ...files } = result.files;
-  return { ...result, warnings: [...outputNameWarnings(compiled.plan), ...(compiled.plan.access?.warnings ?? [])], files: { ...files, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
+  return { ...result, warnings: [...outputNameWarnings(compiled.plan), ...(compiled.plan.access?.warnings ?? [])], files: { ...files, ...gatewayFiles, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
 }

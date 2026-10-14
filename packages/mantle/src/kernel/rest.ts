@@ -1,10 +1,11 @@
 /** REST request handling for a generated route table: matching, body and parameter decoding, dispatch and errors. */
-import type { Caller, Target, Authorize, Gateway, RequestContext } from "./contracts.js";
+import type { Caller, Target, Authorize, Gateway, RequestContext, GatewayOptions } from "./contracts.js";
+import { ContractError } from "./contract-error.js";
 import { invalid, type Conversions } from "./surface.js";
 
 type Paging = { limit?: number; cursor?: string };
 /** Options of a generated `rest(...)`; it adds required `handlers` when the app declares ref Procedures. */
-export interface Options<Env, Database> {
+export interface Options<Env, Database> extends GatewayOptions {
   authorize?: Authorize;
   gateway?: Gateway;
   fields?: import("./user-fields.js").UserFields;
@@ -18,6 +19,8 @@ export interface Options<Env, Database> {
  */
 export interface Route<Database, Handlers = never, Env = unknown> {
   readonly method: string;
+  /** Describe route id; parameterized native routes supply their path template. */
+  readonly id?: string;
   /** Compiler-proved read-only Procedure; ref handlers never qualify. */
   readonly readOnly?: boolean;
   readonly target?: Target;
@@ -47,7 +50,7 @@ export async function body(request: Request, limit = 1_000_000): Promise<Record<
 }
 
 /** Shared matching/auth/error envelope; selected dispatch is supplied by the surface. */
-function router<Env, Database, Handlers>(routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database>, send: (route: Route<Database, Handlers, Env>, request: Request, env: Env, caller: Caller, params: Record<string, string>) => Promise<Response>): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
+function router<Env, Database, Handlers>(routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database>, send: (route: Route<Database, Handlers, Env>, request: Request, env: Env, caller: Caller, params: Record<string, string>, access?: ReturnType<typeof import("./host-access.js").accessRequest>) => Promise<Response>): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
   let handle: ReturnType<typeof import("./rest-router.js").router<Env, Database, Handlers>> | undefined;
   return async (request, env, ctx) => {
     handle ??= (await import("./rest-router.js")).router(routes, options, send);
@@ -57,20 +60,22 @@ function router<Env, Database, Handlers>(routes: readonly Route<Database, Handle
 
 /** Generated REST routes retain the native View/Procedure dispatch. */
 export function rest<Env, Database, Handlers = never>(routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database> & { handlers?: Handlers }): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
-  return router(routes, options, async (route, request, env, caller, params) => {
+  return router(routes, options, async (route, request, env, caller, params, access) => {
     const { dispatch } = await import("./rest-dispatch.js");
-    return dispatch(route, request, () => options.db(env), caller, params, options);
+    return dispatch(route, request, () => options.db(env), caller, params, options, access);
   });
 }
 
 /** A selected surface's raw/JSON handlers; its branches are absent from ordinary REST bundles. */
 export function nativeRest<Env, Database, Handlers = never>(routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database> & { handlers?: Handlers }): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
-  return router(routes, options, async (route, request, env, caller, params) => {
+  return router(routes, options, async (route, request, env, caller, params, access) => {
     if (Number(request.headers.get("content-length")) > (route.bodyLimit ?? 1_000_000)) fail(`Request body exceeds ${route.bodyLimit ?? 1_000_000} bytes.`);
     const input = route.rawBody || ["GET", "HEAD", "OPTIONS"].includes(request.method) ? undefined : await body(request, route.bodyLimit);
+    if (access?.dryRun) throw new ContractError("DRY_RUN_UNSUPPORTED", "Opaque native route.", route.id, {status: 412});
     let initialized = false, db: Database;
     const getDb = () => { if (!initialized) { db = options.db(env); initialized = true; } return db; };
-    const output = await route.handle!(request, env, getDb, caller, params, options.handlers as Handlers, input);
+    const boundRequest = route.rawBody ? (await import("./json-body.js")).replay(request) : request;
+    const output = await route.handle!(boundRequest, env, getDb, caller, params, options.handlers as Handlers, input);
     return output instanceof Response ? output : Response.json(output, {headers});
   });
 }

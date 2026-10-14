@@ -16,6 +16,6 @@ export function emitWeb(plan: RuntimePlan, lowered: PlanLowered, target: Target)
     databaseImport(target),
     `type App = { Rows: {${views.map(([n],i)=>`${q(n)}:Row${i}`).join(";")}}; Inputs: {${views.map(([n,v])=>`${q(n)}:${Object.keys(v.input?.properties??{}).map(k=>q(k)).join(" | ")||"never"}`).join(";")}}; List: ${views.filter(([,v])=>!v.input?.required?.length).map(([n])=>q(n)).join(" | ")||"never"} };`,
     "export function web<const P extends Record<string, Page<App>>, E = unknown>(options: Options<App, Database, P, E>) {",
-    `  return site<Database, E>(${plan.access ? `{...options, fields: ${q(plan.access.userFields)}}` : "options"}, [${table.join(", ")}]);`,
+    `  return site<Database, E>(${plan.access ? `{...options, fields: ${q(plan.access.userFields)}, accessTargets: () => import("./access-targets.js").then(m => m.targets)}` : '{...options, accessTargets: () => import("./access-targets.js").then(m => m.targets)}'}, [${table.join(", ")}]);`,
     "}"].join("\n")+"\n"};
 }

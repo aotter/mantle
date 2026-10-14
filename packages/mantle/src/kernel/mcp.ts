@@ -1,12 +1,12 @@
 /** MCP request handling for a generated tool table; the official SDK loads on the first MCP request. */
-import type { Caller, Target, Authorize, Gateway, RequestContext } from "./contracts.js";
+import type { Caller, Target, Authorize, Gateway, RequestContext, GatewayOptions } from "./contracts.js";
 import type { Conversions } from "./surface.js";
 import { linkApps, linkSurface, resourcesOf } from "./mcp-apps.js";
 export { callTool, callToolLazy } from "./mcp-call.js";
 export type { McpApps, McpAppResource } from "./mcp-apps.js";
 
 /** Options of a generated `mcp(...)`; it adds required `handlers` when the app declares ref Procedures. */
-export interface Options<Env, Database> {
+export interface Options<Env, Database> extends GatewayOptions {
   apps?: Readonly<Partial<Record<"public" | "admin", import("./mcp-apps.js").McpApps | readonly import("./mcp-apps.js").McpApps[]>>>;
   authorize?: Authorize;
   gateway?: Gateway;

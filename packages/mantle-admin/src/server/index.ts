@@ -1,3 +1,4 @@
+import type { GatewayOptions } from "@aotter/mantle/contracts";
 /** Optional Admin API: generated data and native calls, with one fresh admin session per request. */
 import { deny, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceFailure, type Caller, type Target, type Authorize, type Gateway, type RequestContext } from "@aotter/mantle/contracts";
 import { nativeRest, body, type Route as RestRoute } from "@aotter/mantle/rest";
@@ -20,6 +21,7 @@ export interface Context<Env, Database> {
 }
 export interface Route<Env, Database> {
     readonly target?: (context: Context<Env, Database>) => Target;
+    readonly prepare?: (context: Context<Env, Database>) => void | Promise<void>;
     readonly method: string;
     /** Relative to /admin/api; {name} captures one segment, {name*} captures a suffix. */
     readonly path: string;
@@ -56,7 +58,7 @@ export interface IdentityMethods {
     }>;
     revokeInvite(id: string): Promise<boolean>;
 }
-export interface Options<Env, Database> {
+export interface Options<Env, Database> extends GatewayOptions {
     authorize?: Authorize;
     gateway?: Gateway;
     fields?: import("@aotter/mantle/user-fields").UserFields;
@@ -91,6 +93,7 @@ export interface Descriptor {
     readonly [key: string]: unknown;
 }
 export interface Metadata {
+    readonly accessTargets?: GatewayOptions["accessTargets"];
     readonly userFields?: import("@aotter/mantle/user-fields").UserFields;
     /** Generated requires guards for metadata targets beyond callable Admin routes. */
     readonly allows?: (target: Target, caller: Caller) => boolean;
@@ -194,9 +197,14 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                     return view.row ? {...page, rows: page.rows.map(view.row)} : page;
                 }, columns);
             } },
-        { method: "GET", path: "/views/{name}", run: c => viewPage(c) },
+        { method: "GET", path: "/views/{name}", prepare: async c => { const view = views.find(v => v.name === c.params.name); if (!view) throw missing(); deny(c.caller, view.allows(c.caller), "views/" + view.name); if (options.authorize) await checkTarget({kind:"view",name:view.name}, c.caller); const input = {...view.query(c.url.searchParams).input}; convert(input, view.convert); }, run: c => viewPage(c) },
         ...(metadata.developerConsole === undefined ? [] : [{ method: "GET" as const, path: "/developer/views/{name}", run: (c: Context<Env, Database>) => viewPage(c, true) }]),
-        { method: "POST", path: "/operations/{name}", run: async (c) => {
+        { method: "POST", path: "/operations/{name}", prepare: async c => {
+            const operation = operations.find(p => p.name === c.params.name); if (!operation) throw missing();
+            deny(c.caller, operation.allows(c.caller), "procedures/" + operation.name);
+            if (options.authorize) await checkTarget({kind:"procedure",name:operation.name}, c.caller);
+            convert(operation.validate(await json(c)), operation.convert);
+        }, run: async (c) => {
                 const operation = operations.find(p => p.name === c.params.name && (options.authorize || p.allows(c.caller)));
                 if (operation && options.authorize) deny(c.caller, operation.allows(c.caller), "procedures/" + operation.name);
                 if (!operation)
@@ -217,7 +225,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             }
             return encodeURIComponent(segment).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         }).join("/");
-        return { method: route.method, pattern: new RegExp("^/admin/api" + path + "/?$"), keys, bodyLimit: route.bodyLimit, rawBody: route.rawBody, handle: async (request, env, getDb, caller, params, _handlers, input) => {
+        return { id: `admin:${route.method} ${route.path.replace(/\{([^}*]+)\*?\}/g, ":$1")}`, method: route.method, pattern: new RegExp("^/admin/api" + path + "/?$"), keys, bodyLimit: route.bodyLimit, rawBody: route.rawBody, handle: async (request, env, getDb, caller, params, _handlers, input) => {
                 const result = await runRoute(route, { request, url: new URL(request.url), env, get db() { return getDb(); }, caller: caller as Admin, params, input, ...(options.authorize ? { authorize: (target: Target) => import("@aotter/mantle/authorization").then(m => m.authorized(options.authorize!, target, caller)) } : {}) });
                 if (!(result instanceof Response))
                     return result;
@@ -232,10 +240,14 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
         if (path !== "/admin/api" && !path.startsWith("/admin/api/"))
             return;
         let caller: Caller | undefined;
+        const access = options.gateway ? (await import("@aotter/mantle/host-access")).accessRequest(ctx, {...options, accessTargets: options.accessTargets ?? metadata.accessTargets}) : undefined;
+        const matched = table.find(r => r.method === request.method && r.pattern.test(path));
         try {
+            await access?.select(matched?.id ?? `admin:${request.method} ${path.slice(10)}`);
             caller = options.gateway || (!!ctx?.props && Object.hasOwn(ctx.props, "mantle"))
                 ? (await import("@aotter/mantle/host-caller")).gatewayCaller(ctx, options.gateway, options.fields ?? metadata.userFields)
                 : await surfaceCaller(request, env, options.caller ?? (() => ({ kind: "anonymous" })));
+            await access?.select(matched?.id ?? `admin:${request.method} ${path.slice(10)}`, caller);
             if (caller.kind === "anonymous")
                 throw new ContractError("UNAUTHENTICATED", "Sign in to use Admin.", "admin");
             if (!isAdmin(caller) || caller.kind !== "host" && caller.credential !== "session") {
@@ -245,7 +257,12 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             if (options.gateway) {
                 const { checkFresh } = await import("@aotter/mantle/host-caller");
                 const operation = /^\/admin\/api\/operations\/([^/]+)\/?$/.exec(path);
-                checkFresh(caller, ["GET", "HEAD", "OPTIONS"].includes(request.method) || request.method === "POST" && !!operation && operations.some(p => p.name === decodeURIComponent(operation[1]!) && p.readOnly === true), path);
+                const readOnly = ["GET", "HEAD", "OPTIONS"].includes(request.method) || request.method === "POST" && !!operation && operations.some(p => p.name === decodeURIComponent(operation[1]!) && p.readOnly === true);
+                const view = /\/views\/([^/]+)/.exec(path);
+                const variant = operation ? `procedure:${decodeURIComponent(operation[1]!)}` : view ? `view:${decodeURIComponent(view[1]!)}` : undefined;
+                await access?.select(matched?.id ?? `admin:${request.method} ${path.slice(10)}`, caller, variant);
+                if (matched) await access?.check(request, readOnly, matched.bodyLimit, variant);
+                if (!matched) checkFresh(caller, readOnly, path);
             }
             checkOrigin(request, caller);
             try {
@@ -256,18 +273,32 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             }
             if (/%2f|%5c|%00/i.test(path) || path.includes("\\"))
                 throw new ContractError("INPUT_VALIDATION_FAILED", "Malformed Admin path.", "admin");
+            if (access?.dryRun) {
+                if (!matched) throw missing();
+                const route = routes[table.indexOf(matched)]!;
+                if (!route.prepare) throw new ContractError("DRY_RUN_UNSUPPORTED", "Opaque Admin work.", matched.id, {status:412});
+                const params = Object.fromEntries((matched.keys ?? []).map((key, i) => [key, decodeURIComponent(matched.pattern.exec(path)![i + 1]!)]));
+                const input = ["GET", "HEAD", "OPTIONS"].includes(request.method) ? undefined : await body(request, route.bodyLimit);
+                const c: Context<Env, Database> = {request, url:new URL(request.url), env, get db(): Database { throw new Error("Dry run attempted database acquisition"); }, caller:caller as Admin, params, input, ...(options.authorize ? {authorize:(target:Target)=>import("@aotter/mantle/authorization").then(m=>m.authorized(options.authorize!,target,caller!))} : {})};
+                if (options.authorize && route.target) await checkTarget(route.target(c), caller);
+                await route.prepare(c);
+                return access.response();
+            }
             const response = await nativeRest(table, { db: options.db, caller: () => caller!, handlers: options.handlers })(request, env);
             if (!response) throw missing();
             if (options.gateway && response.status >= 400) {
                 const payload = await response.clone().json().catch(() => null) as { error?: { code: string; path?: string; target?: string; field?: string } } | null;
                 const error = payload?.error ?? { code: [401, 403].includes(response.status) ? "AUTH_DENIED" : "INTERNAL_ERROR" };
+                access?.finish(new ContractError(error.code, "", "", {status:response.status, fields:error.field ? {field:error.field} : undefined}));
                 const failure = (await import("@aotter/mantle/host-caller")).hostFailure(new ContractError(error.code, "", error.target ?? error.path ?? "", { status: response.status, fields: error.field ? { field: error.field } : undefined }), caller, "admin");
                 if (response.headers.has("allow")) failure.headers.set("allow", response.headers.get("allow")!);
                 return failure;
             }
+            access?.finish();
             return response;
         }
         catch (error) {
+            access?.finish(error);
             return options.gateway || (!!ctx?.props && Object.hasOwn(ctx.props, "mantle")) ? (await import("@aotter/mantle/host-caller")).hostFailure(error, caller, "admin") : surfaceFailure(error);
         }
     };

@@ -9,7 +9,7 @@ import { binds } from '../src/kernel/binds.js';
 import { isAdmin, type Caller } from '../src/kernel/contracts.js';
 import { hostAs } from '../src/testing/index.js';
 import { generateOrThrow, writeGenerated } from './apps/link.js';
-import { gatewaySource, mantleProps, invalidProps } from './gateway-fixture.js';
+import { gatewaySource, mantleProps, invalidProps, pinned } from './gateway-fixture.js';
 
 const fields = { region: { type: 'string' as const, multiple: true, enum: ['TW', 'JP'] }, stores: { type: 'string' as const, multiple: false } };
 test('host contract shares validation, freezes identity, preserves layers and loses copied authority', () => {
@@ -30,10 +30,11 @@ test('host contract shares validation, freezes identity, preserves layers and lo
     expect(() => hostCaller({ ...mantleProps(), user }, { tenant: 'example', fields })).toThrow(expect.objectContaining({ code: 'HOST_CONTRACT' }));
 });
 
-test('v1 refuses every reserved control and validates only own field specs', () => {
-  for (const field of ['dryRun', 'target', 'targetHash', 'bodyDigest']) for (const value of [true, 'reserved', false, undefined]) {
-    expect(() => hostCaller({ ...mantleProps(), [field]: value }, { tenant: 'example' })).toThrow(expect.objectContaining({ code: 'HOST_CONTRACT', status: 412, fields: { field } }));
-  }
+test('v1 validates supported forwarding controls and own field specs', () => {
+  expect(hostCaller(mantleProps({dryRun: true, bodyDigest:'digest'}), {tenant:'example'})).toMatchObject({dryRun:true});
+  for (const field of ['target','targetHash','bodyDigest']) for (const value of [true, false, undefined])
+    expect(() => hostCaller({...mantleProps(), [field]:value}, {tenant:'example'})).toThrow(expect.objectContaining({code:'HOST_CONTRACT', fields:{field}}));
+  expect(() => hostCaller(mantleProps({dryRun: 'true' as any}), {tenant:'example'})).toThrow();
   const user = { ...mantleProps().user, constructor: 'unused' };
   expect(hostCaller(mantleProps({ layer: 'member', user }), { tenant: 'example', fields: { region: fields.region } }).subject).toBe('person');
   const inherited = Object.create({ constructor: { type: 'number', multiple: false } });
@@ -48,12 +49,13 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
     await writeGenerated(dir, files); db.exec(files['schema.sql']!);
     const app = await import(resolve(dir, 'generated.ts'));
     for (const [region, store] of [['TW', 'A'], ['JP', 'A'], ['TW', 'B']] as const) await app.store(db, { kind: 'system', reason: 'fixture' }).collection('records').insert({ region, store, title: region + store });
+    const { targets } = await import(resolve(dir, 'access-targets.ts'));
     const { rest } = await import(resolve(dir, 'rest.ts')), { mcp } = await import(resolve(dir, 'mcp.ts'));
     const options = { handlers: { touch: (ctx: any) => { touched++; return { subject: ctx.caller.subject }; } }, gateway: { tenant: 'example' }, db: () => { acquired++; return db; }, caller: () => { resolves++; throw Error('Local auth must not load'); }, authorize: (_target: unknown, caller: Caller) => { authorized = caller; return true; } };
     const api = rest(options), tools = mcp(options);
     const request = (path: string, method = 'GET', body?: string, headers = {}) => new Request('https://app.test' + path, { method, body, headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers } });
-    const restCall = (props: unknown, path = '/api/views/public-records', raw?: string, headers = {}) => api(request(path, raw === undefined ? 'GET' : 'POST', raw, headers), {}, { props: { mantle: props } });
-    const mcpCall = (props: unknown, name = 'public_records', args = {}, path = '/mcp', headers = {}) => tools(request(path, 'POST', JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }), headers), {}, { props: { mantle: props } });
+    const restCall = async (props: unknown, path = '/api/views/public-records', raw?: string, headers = {}) => api(request(path, raw === undefined ? 'GET' : 'POST', raw, headers), {}, { props: { mantle: await pinned(props, targets, `rest:${raw === undefined ? 'GET' : 'POST'} ${path}`, raw) } });
+    const mcpCall = async (props: unknown, name = 'public_records', args = {}, path = '/mcp', headers = {}) => { const raw = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }); const id = name.endsWith('_records') ? 'view:' + name.replace('_', '-') : 'procedure:' + name; return tools(request(path, 'POST', raw, headers), {}, { props: { mantle: await pinned(props, targets, id, raw) } }); };
     const rpcData = async (response: Response) => { const text = await response.text(); return JSON.parse(text.startsWith('event:') ? text.split('data: ')[1]!.split('\n')[0]! : text); };
     for (const layer of ['admin', 'member'] as const) {
       const props = mantleProps({ layer, user: { id: 'person', role: 'admin', region: ['TW'], stores: ['A'] } });
@@ -68,16 +70,8 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
     expect(acquired).toBe(before);
     for (const region of [undefined, []]) for (const call of [restCall, mcpCall]) {
       const user = { ...mantleProps().user }; if (region) user.region = region; else delete user.region;
-      const r = await call(mantleProps({ user })); expect(r.status).toBe(412); expect(await r.json()).toEqual({ error: { code: 'HOST_CONTRACT', field: 'region' } });
+      const r = await call(mantleProps({ user })); expect(r.status).toBe(412); expect((await r.json()).error).toMatchObject({ code: 'HOST_CONTRACT', field: 'region' });
     }
-    const beforeReserved = db.query("SELECT id,version FROM records WHERE region='TW' AND store='A'").get() as { id: string; version: number };
-    for (const field of ['dryRun', 'target', 'targetHash', 'bodyDigest']) {
-      const props = { ...mantleProps(), [field]: field === 'dryRun' ? true : 'views/public-records' };
-      for (const response of [await restCall(props, '/api/write', JSON.stringify({ ...beforeReserved, title: 'must not write' })), await mcpCall(props, 'touch')]) {
-        expect(response.status).toBe(412); expect(await response.json()).toEqual({ error: { code: 'HOST_CONTRACT', field } });
-      }
-    }
-    expect(touched).toBe(0); expect(db.query("SELECT title FROM records WHERE region='TW' AND store='A'").get()).toEqual({ title: 'TWA' });
     const constructorField = await restCall(mantleProps({ layer: 'member', user: { ...mantleProps().user, constructor: 'unused' } }));
     expect(constructorField.status).toBe(200);
     const snapshot = mantleProps({ authenticatedAs: 'snapshot' });
@@ -110,10 +104,10 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
       for (const [path, body] of [['/mcp/admin', rpc], ['/mcp', { ...rpc, params: { name: 'touch', arguments: {} } }]] as const) {
         const transportRequest = request(path, 'POST', JSON.stringify(body), headers);
         if ('accept' in headers && headers.accept === '') transportRequest.headers.delete('accept');
-        expect((await tools(transportRequest, {}, { props: { mantle: mantleProps() } })).status).toBe(status);
+        expect((await tools(transportRequest, {}, { props: { mantle: await pinned(mantleProps(), targets, path === '/mcp/admin' ? 'procedure:write' : 'procedure:touch', JSON.stringify(body)) } })).status).toBe(status);
       }
     }
-    for (const malformed of [{ ...rpc, jsonrpc: '1.0' }, { ...rpc, id: {} }, { ...rpc, params: [] }]) expect((await tools(request('/mcp/admin', 'POST', JSON.stringify(malformed)), {}, { props: { mantle: mantleProps() } })).status).toBe(400);
+    for (const malformed of [{ ...rpc, jsonrpc: '1.0' }, { ...rpc, id: {} }, { ...rpc, params: [] }]) expect((await tools(request('/mcp/admin', 'POST', JSON.stringify(malformed)), {}, { props: { mantle: await pinned(mantleProps(), targets, 'procedure:write', JSON.stringify(malformed)) } })).status).toBe(400);
     expect(acquired).toBe(beforeTransport); expect(touched).toBe(1);
     expect(db.query('SELECT title,version FROM records WHERE id=?').get(own.id)).toEqual({ title: 'TWA', version: own.version });
     const foreignSession = await restCall(mantleProps({ credential: 'session' }), '/api/write', JSON.stringify(input), { origin: 'https://foreign.test' }); expect(foreignSession.status).toBe(403);
@@ -123,7 +117,7 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
     const mcpWrite = await mcpCall(mantleProps(), 'write', { ...input, version: current.version }, '/mcp/admin');
     expect(mcpWrite.status).toBe(200); expect((await rpcData(mcpWrite)).result.isError).toBeUndefined();
     expect(db.query('SELECT version,title FROM records WHERE id=?').get(own.id)).toEqual({ version: current.version + 1, title: 'updated' });
-    const malformedRpc = await tools(request('/mcp', 'POST', JSON.stringify({ method: 'tools/call', params: { name: 'touch' } })), {}, { props: { mantle: mantleProps() } }); expect(malformedRpc.status).toBe(400); expect(touched).toBe(1);
+    const malformedRpc = await tools(request('/mcp', 'POST', JSON.stringify({ method: 'tools/call', params: { name: 'touch' } })), {}, { props: { mantle: await pinned(mantleProps(), targets, 'procedure:touch', JSON.stringify({ method: 'tools/call', params: { name: 'touch' } })) } }); expect(malformedRpc.status).toBe(400); expect(touched).toBe(1);
     const badBody = await restCall(mantleProps(), '/api/write', '{'); expect(badBody.status).toBe(400); expect((await badBody.json()).error.code).toBe('INPUT_VALIDATION_FAILED');
     for (const headers of [{ cookie: 'better-auth.session_token=ignored' }, { authorization: 'Bearer ignored' }]) {
       const r = await api(request('/api/write', 'POST', '{}', headers), {}); expect(r.status).toBe(401);
@@ -142,7 +136,7 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
     const webOptions = { gateway: options.gateway, db, caller: options.caller, origin: 'https://app.test', title: 'Records', description: 'Scoped records', pages: { '/records': { view: 'public-records', list: 'public-records', markdown: 'title' } } };
     const site = web(webOptions), localSite = web({ ...webOptions, gateway: undefined });
     for (const layer of ['admin', 'member'] as const) {
-      const ctx = { props: { mantle: mantleProps({ layer, authenticatedAs: 'snapshot' }) } };
+      const ctx = { props: { mantle: await pinned(mantleProps({ layer, authenticatedAs: 'snapshot' }), targets, 'view:public-records') } };
       for (const path of ['/llms.txt', '/sitemap.xml', '/records.md']) {
         const response = await site.fetch(request(path), {}, ctx); expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('private, no-store');
         const text = await response.text(); if (path !== '/sitemap.xml') expect(text).toContain('updated'); expect(text).not.toContain('JPA'); expect(text).not.toContain('TWB');
@@ -155,7 +149,7 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
       expect((await site.fetch(request('/records.md', 'GET', undefined, headers), {})).status).toBe(401);
       expect((await site.fetch(request('/records.md', 'GET', undefined, headers), {}, { props: {} })).status).toBe(401);
     }
-    const malformedWeb = await site.fetch(request('/records.md'), {}, { props: { mantle: mantleProps({ dryRun: true }) } }); expect(malformedWeb.status).toBe(412);
+    const dryWeb = await site.fetch(request('/records.md'), {}, { props: { mantle: await pinned(mantleProps({ dryRun: true }), targets, 'view:public-records') } }); expect(dryWeb.status).toBe(200); expect((await dryWeb.json()).dryRun).toBe(true);
     expect(resolves).toBe(0);
     // Workers pass `ctx.props` as `{}` on ordinary requests: only `props.mantle` is the host contract.
     for (const props of [{}, { other: 1 }]) expect((await localSite.fetch(request('/records.md'), {}, { props })).status).not.toBe(412);
@@ -177,4 +171,74 @@ test('snapshot publishing transitions refuse before changing rows', async () => 
     }
     expect(db.query('SELECT title,status,version FROM records').get()).toEqual({ title: 'draft', status: 'draft', version: own.version });
   } finally { db.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test('forwarded pinning, body binding, dry runs and access decisions share one boundary', async () => {
+  const files = await generateOrThrow('bun-sqlite', [{sourceId:'gateway.yaml',text:gatewaySource + '\n---\n' + JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'View',metadata:{name:'restricted-records'},spec:{surface:'public',restrict:{records:"region IN auth.user('region')"},sql:'SELECT id,title FROM records ORDER BY region,store,id'}})}]);
+  const dir = await mkdtemp(resolve(import.meta.dir, '.gateway-')), db = new Database(':memory:');
+  const events: any[] = []; let acquired = 0, touched = 0, allow = true;
+  try {
+    await writeGenerated(dir, files); db.exec(files['schema.sql']!);
+    const app = await import(resolve(dir,'generated.ts')), {rest} = await import(resolve(dir,'rest.ts')), {mcp} = await import(resolve(dir,'mcp.ts')), {targets} = await import(resolve(dir,'access-targets.ts'));
+    const row = await app.store(db,{kind:'system',reason:'fixture'}).collection('records').insert({region:'TW',store:'A',title:'original'});
+    const options = {gateway:{tenant:'example'},db:()=>{ acquired++; return db; },handlers:{touch:()=>{ touched++; return {}; }},authorize:()=>allow,onAccess:(e:any)=>{events.push(e);} };
+    const api = rest(options), tools = mcp(options);
+    const readId = 'rest:GET /api/views/public-records', writeId = 'rest:POST /api/write';
+    const raw = JSON.stringify({id:row.id,version:row.version,title:'changed'});
+    const call = async (props:unknown,path='/api/views/public-records',body?:string) => {
+      const before = events.length;
+      const response = await api(new Request('https://app.test'+path,{method:body===undefined?'GET':'POST',body}),{}, {props:{mantle:props}});
+      expect(events.length).toBe(before+1); return response;
+    };
+    expect((await call(undefined)).status).toBe(412); expect(events.at(-1)).toMatchObject({outcome:'error',reason:'HOST_CONTRACT'});
+    for (const missing of ['target','targetHash']) {
+      const props = {...await pinned(mantleProps(),targets,readId) as any}; delete props[missing];
+      const response = await call(props); expect(response.status).toBe(412); expect((await response.json()).error).toMatchObject({code:'HOST_CONTRACT',field:missing}); expect(events.at(-1)).toMatchObject({outcome:'error',reason:'HOST_CONTRACT',field:missing,target:readId});
+    }
+    for (const [overrides,code] of [[{target:'procedure:write'},'TARGET_MISMATCH'],[{targetHash:'old'},'TARGET_HASH_MISMATCH']] as const) {
+      const response = await call({...await pinned(mantleProps(),targets,readId) as any,...overrides}); expect(response.status).toBe(412); expect((await response.json()).error.code).toBe(code); expect(events.at(-1)).toMatchObject({outcome:'error',reason:code});
+    }
+    const writeProps = await pinned(mantleProps(),targets,writeId,raw) as any;
+    const badDigest = await call({...writeProps,bodyDigest:'wrong'},'/api/write',raw); expect(badDigest.status).toBe(400); expect((await badDigest.json()).error.code).toBe('BODY_DIGEST_MISMATCH');
+    const missingDigest = {...writeProps}; delete missingDigest.bodyDigest;
+    expect((await call(missingDigest,'/api/write',raw)).status).toBe(412);
+    const before = acquired;
+    const dry = await call({...writeProps,dryRun:true},'/api/write',raw); expect(dry.status).toBe(200);
+    const event = (await dry.json()).event; expect(event).toEqual(events.at(-1)); expect(event).toMatchObject({dryRun:true,outcome:'allow',caller:{kind:'host',subject:'host:person',layer:'admin'},target:writeId,targetHash:targets[writeId].targetHash});
+    expect(event.terms).toContainEqual({schema:'records',field:'region',via:'scope',values:['TW']}); expect(acquired).toBe(before); expect(db.query('SELECT title FROM records').get()).toEqual({title:'original'});
+    const invalidRaw = JSON.stringify({id:row.id,version:row.version,title:123});
+    const invalidDry = await call(await pinned(mantleProps({dryRun:true}),targets,writeId,invalidRaw),'/api/write',invalidRaw);
+    expect(invalidDry.status).toBe(400); expect(acquired).toBe(before); expect(events.at(-1)).toMatchObject({outcome:'error',reason:'INPUT_VALIDATION_FAILED',dryRun:true});
+    const ref = await pinned(mantleProps({dryRun:true}),targets,'rest:POST /api/touch','{}');
+    const unsupported = await call(ref,'/api/touch','{}'); expect(unsupported.status).toBe(412); expect((await unsupported.json()).error.code).toBe('DRY_RUN_UNSUPPORTED'); expect(touched).toBe(0);
+    expect((await call(await pinned(mantleProps(),targets,readId))).status).toBe(200); expect(events.at(-1)).toMatchObject({outcome:'allow',rowCount:1});
+    const member = mantleProps({layer:'member',target:undefined,targetHash:undefined}); delete (member as any).target; delete (member as any).targetHash;
+    expect((await call(member)).status).toBe(200); expect(events.at(-1)).toMatchObject({caller:{kind:'user',layer:'member'}});
+    expect((await call({...member,target:'view:wrong'})).status).toBe(412);
+    const all = await pinned(mantleProps({user:{...mantleProps().user,region:{all:true}}}),targets,readId);
+    expect((await call(all)).status).toBe(200); expect(events.at(-1).terms).toContainEqual({schema:'records',field:'region',via:'scope',values:'all'});
+    const restricted = await pinned(mantleProps({dryRun:true,user:{...mantleProps().user,region:{all:true}}}),targets,'rest:GET /api/views/restricted-records');
+    expect((await call(restricted,'/api/views/restricted-records')).status).toBe(403); expect(events.at(-1)).toMatchObject({outcome:'deny',reason:'AUTH_DENIED'});
+    expect(events.at(-1).terms).toContainEqual({schema:'records',field:'region',via:'restrict',values:'all'});
+    allow = false; expect((await call(await pinned(mantleProps(),targets,readId))).status).toBe(403); expect(events.at(-1)).toMatchObject({outcome:'deny',reason:'AUTH_DENIED'}); allow = true;
+    expect((await call({...writeProps,authenticatedAs:'snapshot'},'/api/write',raw)).status).toBe(403); expect(events.at(-1)).toMatchObject({outcome:'deny',reason:'STALE_CALLER'});
+    const throwing = rest({...options,onAccess:()=>{throw Error('listener');}});
+    expect((await throwing(new Request('https://app.test/api/views/public-records'),{}, {props:{mantle:await pinned(mantleProps(),targets,readId)}})).status).toBe(200);
+    const unresolved = rest({...options,onAccess:()=>new Promise<void>(()=>{})});
+    expect((await unresolved(new Request('https://app.test/api/views/public-records'),{}, {props:{mantle:await pinned(mantleProps(),targets,readId)}})).status).toBe(200);
+    const {nativeRest} = await import('../src/kernel/rest.js');
+    const uploadId = 'rest:POST /upload', uploadTargets = {[uploadId]:{targetHash:'upload-hash',scope:{},restrict:{},readOnly:false,opaque:true,hostCallable:true,requires:{all:['ctx.admin']}}};
+    let uploads = 0; const uploadBody = 'bound\0bytes';
+    const upload = nativeRest([{method:'POST',id:uploadId,pattern:/^\/upload$/,rawBody:true,handle:async request=>{uploads++; return {body:await request.text()};}}], {...options,accessTargets:async()=>uploadTargets});
+    const uploadProps = await pinned(mantleProps({target:uploadId,targetHash:'upload-hash'}),uploadTargets,uploadId,uploadBody);
+    const uploadRequest = () => new Request('https://app.test/upload',{method:'POST',body:uploadBody});
+    const uploaded = await upload(uploadRequest(),{}, {props:{mantle:uploadProps}}); expect(uploaded!.status).toBe(200); expect(await uploaded!.json()).toEqual({body:uploadBody});
+    const uploadDry = await upload(uploadRequest(),{}, {props:{mantle:{...uploadProps as any,dryRun:true}}}); expect(uploadDry!.status).toBe(412); expect(await uploadDry!.json()).toMatchObject({error:{code:'DRY_RUN_UNSUPPORTED'}}); expect(uploads).toBe(1);
+    const noGateway = rest({...options,gateway:undefined,caller:()=>userCaller(mantleProps().user,{fields:{...fields,stores:{type:'string',multiple:true}}})});
+    const beforeLocal = events.length; expect((await noGateway(new Request('https://app.test/api/views/public-records'),{})).status).toBe(200); expect(events.length).toBe(beforeLocal);
+    const rpc = async (method:string,params?:unknown,props=mantleProps()) => { const body=JSON.stringify({jsonrpc:'2.0',id:1,method,params}); return tools(new Request('https://app.test/mcp',{method:'POST',body,headers:{'content-type':'application/json',accept:'application/json, text/event-stream'}}),{}, {props:{mantle:await pinned(props,targets,method==='tools/call'?'procedure:write':'view:public-records',body)}}); };
+    const listed = await rpc('tools/list'); expect(listed.status).toBe(403); expect((await listed.json()).error.code).toBe('AUTH_DENIED'); expect(events.at(-1)).toMatchObject({outcome:'deny',reason:'AUTH_DENIED'});
+    const rpcDry = await rpc('tools/call',{name:'write',arguments:JSON.parse(raw)},mantleProps({dryRun:true})); expect(rpcDry.status).toBe(200); expect((await rpcDry.json()).event).toEqual(events.at(-1)); expect(db.query('SELECT title FROM records').get()).toEqual({title:'original'});
+    expect((await call(writeProps,'/api/write',raw)).status).toBe(200); expect(db.query('SELECT title FROM records').get()).toEqual({title:'changed'});
+  } finally {db.close(); await rm(dir,{recursive:true,force:true});}
 });

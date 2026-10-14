@@ -42,8 +42,26 @@ Values come from the original frozen Caller, which holds identity in a private W
 
 Selected `rest`, `mcp`, `admin` and `web` boundaries accept `gateway: { tenant: "example" }`. Forward the execution context: `api(request, env, ctx)` from `fetch(request, env, ctx)`. Set gateway mode on every boundary of the application, including web output (`web.fetch(request, env, ctx)` and `web.head(request, env, ctx)`). Only `ctx.props.mantle` supplies identity; absent props are anonymous. Application cookies and bearer tokens are ignored, and the application's auth instance is never loaded. Any present execution props prevent falling back to application credentials. Props on an entry without gateway mode fail with `HOST_CONTRACT` (412); the string-returning `web.head` throws this contract error.
 
-The v1 props contain `v: 1`, the configured `tenant`, `layer` (`admin` or `member`), `user` (`id`, optional `role`, `email`, `name` and user fields), `authenticatedAs` (`snapshot` or `fresh`), `credential` (`session` or `oauth`) and `requestId`. `dryRun`, `target`, `targetHash` and `bodyDigest` are reserved and refused in v1 with `HOST_CONTRACT` (412), naming the field, until dry runs and pinning are supported. `hostCaller(props, { tenant, fields })` from `@aotter/mantle/host-caller` validates and brands this shape. Generated boundaries supply inferred field types; manually composed boundaries may pass `fields`. Tests use `hostAs(props)` from `@aotter/mantle/testing` with the same JSON.
+The v1 props contain `v: 1`, the configured `tenant`, `layer` (`admin` or `member`), `user` (`id`, optional `role`, `email`, `name` and user fields), `authenticatedAs` (`snapshot` or `fresh`), `credential` (`session` or `oauth`) and `requestId`. `target` and `targetHash` are required for admin callers and optional for members. `bodyDigest` and the boolean `dryRun` are supported forwarding controls. `hostCaller(props, { tenant, fields })` from `@aotter/mantle/host-caller` validates and brands this shape. Generated boundaries supply inferred field types; manually composed boundaries may pass `fields`. Tests use `hostAs(props)` from `@aotter/mantle/testing` with the same JSON.
 
 Admin-layer callers have kind `host`, subject `host:<id>` and the admin layer. Member-layer callers have kind `user`, subject `<id>` and no admin privilege, regardless of role names. Both retain ordinary scope checks and expose freshness, credential and request id to application code. Admin-layer callers see drafts; member management refuses host-built callers with 403. Copies lose identity authority.
 
 Snapshots may read only: SQL writes, Store/Admin mutations, publishing transitions and ref handlers fail before execution with `STALE_CALLER` (403). SQL Procedure classification comes from compiled statement kinds. Session writes keep origin checks. Both layers receive `{ error: { code, field?, target? } }`: 412 for invalid contracts, tenant mismatches or missing/empty required fields (naming the field), 403 for denials, and 400 for malformed bodies; never 401.
+
+Pins use [describe](describe.md)'s `_meta.id`: `rest:<METHOD> <path>`, `admin:<METHOD> <path template>`, or the View/Procedure target for MCP and web. The route checks `target` and the generated target hash before execution: mismatches return 412 `TARGET_MISMATCH` or `TARGET_HASH_MISMATCH`. The generated `access-targets.ts` map loads only for gateway requests. Manually composed boundaries can supply an `accessTargets` loader returning the same metadata.
+
+A pinned write also requires `bodyDigest`: base64url SHA-256 of the exact request body bytes, with an empty body for GET/HEAD. The digest and JSON decoder share one bounded read. A wrong digest returns 400 `BODY_DIGEST_MISMATCH`. MCP host callers may use `initialize` and `tools/call` of their pinned tool; batches stay refused and `tools/list` returns 403 because the host provides its catalogue.
+
+`dryRun: true` runs target/hash/body checks, input and caller field validation, `requires`, `authorize`, freshness and term resolution, without SQL or side effects. It returns 200 `{ dryRun: true, event }`. Ref handlers, custom guards, uploads and opaque work return 412 `DRY_RUN_UNSUPPORTED`. Dry runs validate authority and input; they do not verify database state, row existence or OCC conflicts.
+
+Each boundary accepts `onAccess(event)`. Every forwarded request, including malformed contracts and denied requests in either layer, produces one event after its decision. Responses never await the hook; listener failures are swallowed and logged once per listener. Ordinary applications do not invoke it. The event is:
+
+```ts
+{ v: 1, requestId, target, targetHash,
+  caller: { kind, subject, layer },
+  outcome: "allow" | "deny" | "error", reason?, field?,
+  terms: [{ schema, field, via: "scope" | "restrict", values }],
+  rowCount?, dryRun }
+```
+
+`reason` is the error code. `values` is the caller's resolved string/number array, or `"all"` for `{ all: true }`; this state never lifts `restrict`. Owner terms use field `id`. Row count is present when available. A successful dry run returns the same event the hook receives.

@@ -1,5 +1,13 @@
 /** Request-only JSON reader: bound bytes before copying or parsing, independent of UTF-8 chunk boundaries. */
-export async function body(request: Request, limit: number, fail: (message: string) => never): Promise<Record<string, unknown>> {
+const bodies = new WeakMap<Request, Uint8Array>();
+/** Give a raw handler the already bound bytes without rereading the incoming stream. */
+export function replay(request: Request): Request {
+  const raw = bodies.get(request);
+  return raw && !["GET", "HEAD"].includes(request.method) ? new Request(request, {body: raw as Uint8Array<ArrayBuffer>}) : request;
+}
+/** Cache bounded raw bytes so gateway digest and JSON decoding share one read. */
+export async function bytes(request: Request, limit: number, fail: (message: string) => never): Promise<Uint8Array> {
+  const cached = bodies.get(request); if (cached) { if (cached.length > limit) fail(`Request body exceeds ${limit} bytes.`); return cached; }
   if (!Number.isSafeInteger(limit) || limit < 1) fail("Body limit must be a positive safe integer.");
   const reader = request.body?.getReader();
   let bytes = new Uint8Array(0), length = 0;
@@ -16,8 +24,12 @@ export async function body(request: Request, limit: number, fail: (message: stri
       bytes.set(value, length); length = end;
     }
   } finally { reader?.releaseLock(); }
+  const result = bytes.subarray(0, length); bodies.set(request, result); return result;
+}
+export async function body(request: Request, limit: number, fail: (message: string) => never): Promise<Record<string, unknown>> {
+  const raw = await bytes(request, limit, fail);
   let value: unknown;
-  try { value = JSON.parse(new TextDecoder().decode(bytes.subarray(0, length)).trim() || "{}"); } catch { fail("Expected a JSON body."); }
+  try { value = JSON.parse(new TextDecoder().decode(raw).trim() || "{}"); } catch { fail("Expected a JSON body."); }
   if (!value || typeof value !== "object" || Array.isArray(value)) fail("Expected a JSON object.");
   return value as Record<string, unknown>;
 }

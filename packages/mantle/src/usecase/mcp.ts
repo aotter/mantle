@@ -74,7 +74,7 @@ export const tools: readonly Tool<Database${refs ? ", Handlers" : ""}>[] = [
 ${tools.map(({ fields, schema }) => `  { ${fields.map(field => field === "inputSchema" ? `inputSchema: ${shared.get(schema) ?? schema}` : field).join(", ")} },`).join("\n")}
 ];
 export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env, ctx?: import("@aotter/mantle/contracts").RequestContext) => Promise<Response | undefined> {
-  return serve<Env, Database${refs ? ", Handlers" : ""}>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/admin" ? (await import("./mcp-media.js")).mediaTools${refs ? "<Handlers>" : ""}(() => options.media!(env)) : [])]` : "tools"}, ${plan.access ? `{...options, fields: ${q(plan.access.userFields)}}` : "options"}, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaDefinitions().filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"admin"})))} : [])]` : q(reads)});
+  return serve<Env, Database${refs ? ", Handlers" : ""}>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/admin" ? (await import("./mcp-media.js")).mediaTools${refs ? "<Handlers>" : ""}(() => options.media!(env)) : [])]` : "tools"}, ${plan.access ? `{...options, fields: ${q(plan.access.userFields)}, accessTargets: () => import("./access-targets.js").then(m => m.targets)}` : '{...options, accessTargets: () => import("./access-targets.js").then(m => m.targets)}'}, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaDefinitions().filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"admin"})))} : [])]` : q(reads)});
 }
 `};
 }

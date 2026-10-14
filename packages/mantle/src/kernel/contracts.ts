@@ -6,6 +6,35 @@ export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
 
 export interface Gateway { readonly tenant: string }
 export interface RequestContext { readonly props?: unknown }
+/** Generated gateway metadata is loaded only after a forwarded request. */
+export interface AccessPolicy { readonly owner?: string; readonly terms: readonly { readonly field: string }[] }
+export interface AccessTarget {
+  readonly targetHash: string;
+  readonly scope: Readonly<Record<string, AccessPolicy>>;
+  readonly restrict: Readonly<Record<string, AccessPolicy>>;
+  readonly readOnly: boolean;
+  readonly opaque: boolean;
+  readonly hostCallable: boolean;
+  readonly requires: { readonly all: readonly (string | { readonly "ctx.auth.scope": string })[]; readonly guard?: string };
+  readonly variants?: readonly (AccessTarget & { readonly id: string })[];
+}
+export interface AccessEvent {
+  readonly v: 1;
+  readonly requestId: string;
+  readonly target: string;
+  readonly targetHash: string;
+  readonly caller: { readonly kind: string; readonly subject: string; readonly layer: "admin" | "member" };
+  readonly outcome: "allow" | "deny" | "error";
+  readonly reason?: string;
+  readonly field?: string;
+  readonly terms: readonly { readonly schema: string; readonly field: string; readonly via: "scope" | "restrict"; readonly values: readonly (string | number)[] | "all" }[];
+  readonly rowCount?: number;
+  readonly dryRun: boolean;
+}
+export interface GatewayOptions {
+  readonly accessTargets?: () => Promise<Readonly<Record<string, AccessTarget>>>;
+  readonly onAccess?: (event: AccessEvent) => void | Promise<void>;
+}
 
 type IdentityCaller = {
   /** Application subject key: opaque, stable, unique across issuers. Never an email. */
@@ -23,6 +52,10 @@ type IdentityCaller = {
   readonly clientId: string | null;
   readonly authenticatedAs?: "snapshot" | "fresh";
   readonly requestId?: string;
+  readonly target?: string;
+  readonly targetHash?: string;
+  readonly bodyDigest?: string;
+  readonly dryRun?: boolean;
 };
 export type Caller =
   | { readonly kind: "anonymous" }

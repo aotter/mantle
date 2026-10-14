@@ -43,13 +43,13 @@ export interface AppDescription {
 
 /** A report of sealed declarations; no SQL or row values leave this function. */
 export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
-  const access: AppDescription["access"] = {};
+  const access: AppDescription["access"] = Object.create(null);
   const targets = await Promise.all(targetDefinitions(plan).map(async d => {
     const scope = Object.fromEntries(d.schemas.map(name => {
       const s = plan.schemas[name]!;
       return [name, { ...(s.scope ? { owner: s.scope } : {}), terms: s.userScopes ?? [] }];
     }));
-    const userFields: Record<string, FieldBinding> = {};
+    const userFields: Record<string, FieldBinding> = Object.create(null);
     for (const [via, policies] of [["scope", scope], ["restrict", d.restrict]] as const) {
       for (const [name, policy] of Object.entries(policies)) {
         const schema = plan.schemas[name]!;
