@@ -1,0 +1,8 @@
+# pnpm 10+ blocks dependency build scripts by default; wrangler needs these two. `packages` keeps pnpm 9 happy.
+packages: ["."]
+allowBuilds:
+  esbuild: true
+  workerd: true
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

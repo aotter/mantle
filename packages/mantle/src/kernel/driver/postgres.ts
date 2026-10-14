@@ -1,7 +1,7 @@
 /** Bun.SQL's PostgreSQL shape (`Postgres`); postgres.js satisfies it as it is. */
 import type { Bound } from "../binds.js";
 import type { TransactionOptions } from "../store.js";
-import { conflict, ContractError, type Postgres, type PostgresResult, type Row, type Unsafe } from "../contracts.js";
+import { checkConflict, conflict, ContractError, type Postgres, type PostgresResult, type Row, type Unsafe } from "../contracts.js";
 import { context, guard } from "./transaction-context.js";
 
 const transactions = new WeakSet<Postgres>();
@@ -40,7 +40,7 @@ export async function procedure(db: Postgres, steps: readonly Bound[], path: str
   const execute = async (handle: Unsafe) => {
     const results: Row[][] = [];
     for (const s of steps) {
-      const { rows, changes } = await run(handle, s.sql, s.binds).catch(error => { throw sqlstate(error) === "23505" ? conflict(path, true, error) : error; });
+      const { rows, changes } = await run(handle, s.sql, s.binds).catch(error => { throw sqlstate(error) === "23505" ? conflict(path, true, error) : checkConflict(path, error, sqlstate(error) === "23514") ?? error; });
       if (s.row && changes !== 1) throw conflict(path, false);
       results.push(rows);
     }

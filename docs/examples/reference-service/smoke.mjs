@@ -92,7 +92,7 @@ try {
   step("a signed-in buyer (not admin) orders 2: stock 8 -> 6 in one program");
 
   const tooMany = await call("POST", "/api/orders", { cookie: buyer, body: { itemId, qty: 99 } });
-  assert.equal(tooMany.status, 400, JSON.stringify(tooMany.body));
+  assert.equal(tooMany.status, 409, JSON.stringify(tooMany.body));
   assert.match(tooMany.body.error.message, /CHECK items: stock >= 0/);
   assert.equal(await stockOf(), 6);
   step("ordering 99 fails the stock >= 0 check in the second statement, and the order the first wrote is rolled back");

@@ -12,14 +12,8 @@ export async function recordOrders(db: Parameters<typeof store>[0], caller: Call
 }
 export const handlers: Handlers = {
   "place-order": async ({ db, caller, store: data }, input) => {
-    let output;
-    try { output = await data.procedures["place-order-write"](input); }
-    catch (error) {
-      // This application's declared stock check is a known business refusal.
-      if (String((error as Error)?.message).includes("MANTLE_CHECK items: stock >= 0"))
-        throw new ContractError("INPUT_VALIDATION_FAILED", "CHECK items: stock >= 0", "procedures/place-order");
-      throw error;
-    }
+    // The declared stock check refuses an oversell as a CONFLICT naming the check.
+    const output = await data.procedures["place-order-write"](input);
     await recordOrders(db, caller, output.results[0]!, "after_create");
     return output;
   },

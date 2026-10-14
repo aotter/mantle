@@ -110,6 +110,12 @@ export function deny(caller: Caller, allowed: boolean, path: string): void {
 /** CONFLICT for a write the database refused: a unique-index clash, or a row statement that did not change exactly one row. */
 export const conflict = (path: string, unique: boolean, cause?: unknown): ContractError =>
   new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : "Expected one affected row.", path, { cause });
+/** A Schema `checks` violation (Mantle's SQLite check trigger, or PostgreSQL SQLSTATE 23514) is a CONFLICT naming the check. */
+export const checkConflict = (path: string, error: unknown, violated = /MANTLE_CHECK /.test(String((error as Error)?.message))): ContractError | undefined => {
+  if (!violated) return undefined;
+  const message = String((error as Error)?.message ?? "");
+  return new ContractError("CONFLICT", `A check of the Schema failed: ${/MANTLE_CHECK [^\n'"]+/.exec(message)?.[0] ?? message}`, path, { cause: error });
+};
 
 /** One result of `unsafe`: the rows (typed by the generated function), plus the affected count. */
 export type PostgresResult = any[] & { readonly count: number | null };
