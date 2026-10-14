@@ -1,5 +1,5 @@
 /** Optional identity operations. Better Auth owns access control, writes and user hooks. */
-import { adminOptionsOf, type AuthInstance } from "./caller.js";
+import { adminOptionsOf, isBanned, type AuthInstance } from "./caller.js";
 import { authNames } from "./adapter.js";
 import { APIError } from "@better-auth/core/error";
 import type { AuthContext } from "@better-auth/core";
@@ -148,6 +148,28 @@ function directory(auth: IdentityAuth, _caller: Caller, headers: Headers, d: Dia
 export type IdentityDirectory = ReturnType<typeof directory>;
 export const d1Identity = (db: Reader, auth: IdentityAuth, caller: Caller, headers: Headers): IdentityDirectory => directory(auth, caller, headers, sqlite.dialect, (sql, v) => d1Read(db, sql, v));
 export const postgresIdentity = (db: Postgres, auth: IdentityAuth, caller: Caller, headers: Headers): IdentityDirectory => directory(auth, caller, headers, postgres.dialect, (sql, v) => pgRead(db, sql, v));
+/**
+ * Server-side reads of Better Auth users for code without a session (cron, system callers): no SQL against Better Auth's
+ * tables, each instance's own table mapping, banned users excluded. Read-only; writes stay with the caller-bound directory.
+ */
+export function readIdentity(auth: AuthInstance) {
+    const options = adminOptionsOf(auth), context = async () => await auth.$context as AuthContext;
+    const active = (user: User | null | undefined): Member | null => user && !isBanned(user as never) ? project(user) : null;
+    return {
+        /** The active user with this id, or null. */
+        user: async (id: string) => active(await (await context()).internalAdapter.findUserById(id) as User | null),
+        /** Active users in the admin layer (`adminRoles` and `adminUserIds`). */
+        admins: async () => {
+            const { adapter } = await context();
+            const found = new Map<string, User>();
+            for (const role of options.adminRoles)
+                for (const user of await adapter.findMany<User>({ model: "user", where: [{ field: "role", operator: "contains", value: role }] })) found.set(user.id, user);
+            if (options.adminUserIds.length)
+                for (const user of await adapter.findMany<User>({ model: "user", where: [{ field: "id", operator: "in", value: [...options.adminUserIds] }] })) found.set(user.id, user);
+            return [...found.values()].filter(user => adminLayerOf(user, options)).map(active).filter((user): user is Member => !!user);
+        },
+    };
+}
 export type BootstrapRule = { match: "email" | "github-login"; value: string };
 type BootstrapUser = { id: string; email?: string | null; githubLogin?: string | null; emailVerified?: boolean };
 const matches = (rule: BootstrapRule, user: BootstrapUser) => (rule.match === "email" ? user.emailVerified === true ? user.email : null : user.githubLogin)?.trim().toLowerCase() === rule.value.trim().toLowerCase();

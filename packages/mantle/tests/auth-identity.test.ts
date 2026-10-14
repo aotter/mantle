@@ -378,3 +378,15 @@ test("two mapped Better Auth instances share a database without crossing identit
     expect(await a.ctx.internalAdapter.findUserById("s")).toMatchObject({ role: "admin,approver" });
     expect((await b.directory.listUsers()).map(user => user.id)).toEqual(["s"]);
 });
+
+test("readIdentity reads active admins and users without a session or SQL", async () => {
+    const a = await app(undefined, undefined, ["admin", "manager"]);
+    const make = (id: string, role: string, extra: object = {}) => a.ctx.internalAdapter.createUser({ id, email: `${id}@example.test`, name: id, emailVerified: true, role, githubLogin: null, ...extra }, { method: "admin" });
+    await make("m1", "manager,approver"); await make("sa", "superadmin"); await make("u1", "user"); await make("b1", "admin", { banned: true });
+    const { readIdentity } = await import("../src/auth/identity.js");
+    const identity = readIdentity(a.auth as never);
+    expect((await identity.admins()).map(u => u.id).sort()).toEqual(["m1", "s"]);
+    expect((await identity.user("u1"))?.email).toBe("u1@example.test");
+    expect(await identity.user("b1")).toBeNull();
+    expect(await identity.user("missing")).toBeNull();
+});

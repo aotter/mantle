@@ -27,5 +27,5 @@ export async function scheduled(controller: ScheduledController, env: Env): Prom
   if (stale.length === 0) return;
   const text = `${stale.length} purchase request(s) have waited more than ${PENDING_DAYS} days:\n` +
     stale.map(r => `- ${r.title} (${r.department}, ${r.amount})`).join("\n");
-  for (const to of await adminEmails(env.DB)) await notify(to, "Purchase requests waiting for approval", text, "purchasing.reminder");
+  for (const to of await adminEmails()) await notify(to, "Purchase requests waiting for approval", text, "purchasing.reminder");
 }

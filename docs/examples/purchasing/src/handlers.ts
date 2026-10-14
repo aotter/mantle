@@ -6,7 +6,7 @@ import { placeOrder } from "./supplier.js";
 type Decided = { id: string; title: string; amount: number; authorId: string };
 
 export const handlers: Handlers = {
-  "approve-request": async ({ db, store }, input) => {
+  "approve-request": async ({ store }, input) => {
     let decided: Decided;
     try {
       // One transaction: the guarded status change, the budget deduction and the ledger row.
@@ -19,13 +19,13 @@ export const handlers: Handlers = {
     }
     // After commit: nothing below may turn the committed approval into an error response.
     const ordered = await placeOrder(store, decided);
-    await notifyUser(db, decided.authorId, `Approved: ${decided.title}`,
+    await notifyUser(decided.authorId, `Approved: ${decided.title}`,
       `Your purchase request "${decided.title}" was approved${ordered ? " and ordered from the supplier" : ""}.`, "purchasing.approved");
     return { id: decided.id, requestStatus: ordered ? "ordered" : "approved" };
   },
-  "reject-request": async ({ db, store }, input) => {
+  "reject-request": async ({ store }, input) => {
     const decided = (await store.procedures["reject-request-write"](input)).results[0]![0] as Decided;
-    await notifyUser(db, decided.authorId, `Rejected: ${decided.title}`,
+    await notifyUser(decided.authorId, `Rejected: ${decided.title}`,
       `Your purchase request "${decided.title}" was rejected.`, "purchasing.rejected");
     return { id: decided.id, requestStatus: "rejected" };
   },
