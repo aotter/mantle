@@ -1,6 +1,6 @@
 /** Optional identity operations. Better Auth owns access control, writes and user hooks. */
 import { adminOptionsOf, type AuthInstance } from "./caller.js";
-import { authNames, nativeAuthRead } from "./adapter.js";
+import { authNames } from "./adapter.js";
 import { APIError } from "@better-auth/core/error";
 import type { AuthContext } from "@better-auth/core";
 import { ContractError, type Caller, type Postgres } from "../kernel/contracts.js";
@@ -26,7 +26,7 @@ type Member = { id: string; email: string; name: string; role: string | null; gi
 const project = ({ id, email, name, role, githubLogin, emailVerified, createdAt }: User): Member => ({ id, email, name, role: role ?? null, githubLogin: githubLogin ?? null, emailVerified: Boolean(emailVerified), createdAt: new Date(createdAt) });
 const literal = (value: string) => "'" + value.replaceAll("'", "''") + "'";
 const adminSql = (d: Dialect, auth: Pick<AuthInstance, "options">) => {
-    const { column } = nativeAuthRead(auth.options), { adminRoles, adminUserIds } = adminOptionsOf(auth);
+    const { column } = authNames(auth.options), { adminRoles, adminUserIds } = adminOptionsOf(auth);
     const col = (field: string) => column("user", field);
     return '(' + [...adminRoles.map(role => `${d === sqlite.dialect ? "instr" : "strpos"}(',' || COALESCE(${col("role")}, '') || ',', ${literal(',' + role + ',')}) > 0`), ...adminUserIds.map(id => `${col("id")} = ${literal(id)}`), 'FALSE'].join(' OR ') + ')';
 };
@@ -40,7 +40,7 @@ async function api<T>(run: () => Promise<T>): Promise<T> {
 }
 function directory(auth: IdentityAuth, _caller: Caller, headers: Headers, d: Dialect, read: Read) {
     const options = adminOptionsOf(auth), roles = options.adminRoles, privileged = adminSql(d, auth);
-    const { table, column, has } = nativeAuthRead(auth.options), col = (field: string) => column("user", field);
+    const { table, column, has } = authNames(auth.options), col = (field: string) => column("user", field);
     const createdAt = d === sqlite.dialect ? col("createdAt") : postgres.wireTimestamp(col("createdAt")).join("");
     const grantRole = (role = roles[0]) => { if (!role || !roles.includes(role)) throw invalid("Role must be configured in Better Auth adminRoles."); return role; };
     const context = async () => await auth.$context as AuthContext;
