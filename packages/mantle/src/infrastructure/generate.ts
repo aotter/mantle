@@ -35,6 +35,18 @@ function castInputs(statement: LoweredStatement, path: string, refusals: Generat
   Object.assign(statement, { sql });
 }
 
+/** Operational records are added in Admin only through a Procedure placed with `uiSchema.collectionAction`; name the Schemas left without one. */
+function adminCreateWarnings(plan: RuntimePlan): string[] {
+  const placed = new Set(Object.values(plan.procedures).map(p => p.uiSchema?.["collectionAction"]).filter((name): name is string => typeof name === "string").map(name => name.toLowerCase()));
+  return Object.values(plan.schemas).filter(s => {
+    const required = new Set(s.schema.required ?? []);
+    // Folded children open from their parent; translations from their language tabs.
+    const folded = Object.entries(s.schema.properties ?? {}).some(([name, property]) => required.has(name) && typeof (property as { "x-mantle-ref"?: unknown })?.["x-mantle-ref"] === "string");
+    // Field-scoped rows belong to their members, who create them.
+    return !s.publishing && s.schema.readOnly !== true && !s.scope && !s.translates && !folded && !placed.has(s.name.toLowerCase());
+  }).map(s => `Schema '${s.name}' is operational and writable, but no Procedure places a create action on it, so Admin cannot add its records. Add a Procedure with uiSchema.collectionAction: ${s.name} and an admin MCP Trigger, or mark the Schema readOnly.`);
+}
+
 /** Warn about SQL's case folding without changing the authored output names. */
 function outputNameWarnings(plan: RuntimePlan): string[] {
   const warnings: string[] = [];
@@ -137,5 +149,5 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
   const gatewayFiles = generatedFiles({ "access-targets.ts": `import type { AccessTarget } from "@aotter/mantle/contracts";\nexport const targets: Readonly<Record<string, AccessTarget>> = ${JSON.stringify(accessTargets)};\n` });
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.admin ? adminIndexes(compiled.plan.schemas, !postgres) : []), ...(schema?.() ?? [])];
   const { "site-schema.sql": siteSql = "", ...files } = result.files;
-  return { ...result, warnings: [...outputNameWarnings(compiled.plan), ...(compiled.plan.access?.warnings ?? [])], files: { ...files, ...gatewayFiles, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
+  return { ...result, warnings: [...outputNameWarnings(compiled.plan), ...(request.admin ? adminCreateWarnings(compiled.plan) : []), ...(compiled.plan.access?.warnings ?? [])], files: { ...files, ...gatewayFiles, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
 }

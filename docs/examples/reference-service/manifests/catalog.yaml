@@ -47,6 +47,8 @@ spec:
   indexes: [[createdAt, id]]
   schema:
     type: object
+    # Written by the app's after-effects; Admin reads it.
+    readOnly: true
     required: [kind, subject]
     properties:
       kind: { type: string }

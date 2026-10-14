@@ -60,6 +60,7 @@ spec:
   title: Restock an item
   description: Add stock to an item by SKU, creating the item if it is new.
   requires: { auth: { all: [ctx.admin] } }
+  uiSchema: { collectionAction: items }
   input:
     type: object
     required: [sku, name, qty]
