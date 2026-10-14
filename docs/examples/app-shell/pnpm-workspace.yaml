@@ -1,0 +1,7 @@
+# pnpm 10+ blocks dependency build scripts by default; wrangler needs these two.
+allowBuilds:
+  esbuild: true
+  workerd: true
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

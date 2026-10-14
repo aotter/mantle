@@ -10,7 +10,7 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step }) => {
   const admin = await signIn(owner);
   assert.equal((await call("GET", "/admin/api/me", { cookie: admin })).body.role.split(",")[0], "admin");
   const create = async (title, seats, closed = false) => {
-    const created = await call("POST", "/admin/api/entries", { cookie: admin, body: { collection: "events", data: { title, startsAt: "2026-11-01T10:00:00Z", seats_left: seats, closed } } });
+    const created = await call("POST", "/admin/api/entries", { cookie: admin, body: { collection: "events", data: { title, startsAt: "2026-11-01T10:00:00Z", capacity: seats, closed } } });
     assert.equal(created.status, 200, JSON.stringify(created.body));
   };
   await create("Hike", 3);
@@ -21,7 +21,7 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step }) => {
   const alice = await signIn("alice@example.test");
   const events = async cookie => Object.fromEntries((await call("GET", "/api/views/events", { cookie })).body.rows.map(e => [e.title, e]));
   const { Hike: hike, Workshop: workshop, "Members' dinner": dinner } = await events(alice);
-  const seatsOf = async id => (await sql(`SELECT seats_left FROM events WHERE id = '${id}'`))[0].seats_left;
+  const seatsOf = async id => (await sql(`SELECT capacity - seats_taken AS seats_left FROM events WHERE id = '${id}'`))[0].seats_left;
   const mine = async cookie => (await call("GET", "/api/views/my-registrations", { cookie })).body.rows;
 
   const registered = await call("POST", "/api/registrations", { cookie: alice, body: { eventId: hike.id } });
@@ -74,5 +74,15 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step }) => {
   assert.deepEqual(all.body.items.map(r => r.data.eventId).sort(), [hike.id, workshop.id].sort());
   assert.equal((await call("GET", "/admin/api/entries?collection=registrations", { cookie: bob })).status, 403);
   assert.equal((await call("GET", "/admin/api/me", { cookie: bob })).status, 403);
-  step("officers see every member's registrations through Admin's API; a member gets 403 on Admin");
+  assert.ok(all.body.items.every(r => r.data.memberName && r.data.memberName !== r.data.member), JSON.stringify(all.body.items));
+  step("officers see every member's registrations, with names, through Admin's API; a member gets 403 on Admin");
+
+  const entry = async id => (await call("GET", `/admin/api/entries/${id}?collection=events`, { cookie: admin })).body.entry;
+  const before = await seatsOf(hike.id), version = (await entry(hike.id)).version;
+  const forced = await call("PATCH", `/admin/api/entries/${hike.id}?collection=events`, { cookie: admin, body: { data: { seats_taken: 0 }, expectedVersion: version } });
+  assert.ok(forced.status >= 400 && forced.status < 500, JSON.stringify(forced.body));
+  const shrunk = await call("PATCH", `/admin/api/entries/${hike.id}?collection=events`, { cookie: admin, body: { data: { capacity: 0 }, expectedVersion: version } });
+  assert.ok(shrunk.status >= 400 && shrunk.status < 500, JSON.stringify(shrunk.body));
+  assert.equal(await seatsOf(hike.id), before);
+  step("Admin cannot write the server-maintained seats_taken (readOnly), nor lower capacity below the seats taken");
 });

@@ -4,7 +4,7 @@ import type { MantleDialect } from "../build/compiler.js";
 import { parsePgSql } from "../build/compiler.js";
 import { compileProgram } from "../build/compiler.js";
 import { adminOrder } from "../domain/adminOrder.js";
-import { declaredType } from "../domain/columns.js";
+import { declaredType, serverOwned } from "../domain/columns.js";
 import { wireScalars, wireReturning } from "../domain/wireScalars.js";
 import { recipesOf } from "../domain/recipes.js";
 import type { Dialect } from "../kernel/dialect/common.js";
@@ -23,7 +23,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
   const print=(ast:SqlNode)=>dialect.print!(ast,plan.schemas);
   const expr=(value:SqlNode)=>print({SelectStmt:{targetList:[{ResTarget:{val:value}}],op:"SETOP_NONE",limitOption:"LIMIT_OPTION_DEFAULT"}}).replace(/^SELECT /,"");
   for(const s of Object.values(plan.schemas))try{
-    const columns=[...system(s),...fields(s)],writable=Object.keys(s.fields).filter(f=>f!==s.scope&&s.fields[f]!=="geo");
+    const columns=[...system(s),...fields(s)],writable=Object.keys(s.fields).filter(f=>f!==s.scope&&s.fields[f]!=="geo"&&!serverOwned(s.schema,f));
     const parent=s.translates&&plan.schemas[s.translates.parent.toLowerCase()];
     const types=columns.map(f=>declaredType(s.fields,f)??(f==="version"?"integer":f.endsWith("_lat")||f.endsWith("_lng")?"real":"text"));
     // Compiler scope names belong only to relations this generated query can reference.

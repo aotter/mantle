@@ -4,6 +4,9 @@ import type { Target } from "./model.js";
 import type { WireColumns } from "../kernel/contracts.js";
 
 /** A column's declared type, including the system version and timestamps. @internal */
+/** A JSON Schema `readOnly` property is server-maintained (counters, totals): Admin's generic writes never set it. */
+export const serverOwned = (schema: { readonly properties?: Readonly<Record<string, unknown>> }, column: string): boolean =>
+  Object.entries(schema.properties ?? {}).some(([name, property]) => name.toLowerCase() === column && (property as { readOnly?: unknown } | null)?.readOnly === true);
 export const declaredType = (fields: Readonly<Record<string, string>>, column: string): string | undefined =>
   fields[column] ?? (column === "version" ? "integer" : column === "created_at" || column === "updated_at" || column === "published_at" ? "timestamptz" : undefined);
 

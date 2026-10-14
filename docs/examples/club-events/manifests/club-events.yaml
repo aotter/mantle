@@ -5,18 +5,20 @@ metadata: { name: events }
 spec:
   title: Events
   lifecycle: operational
-  # Registering subtracts a seat in the same program as the insert: at 0 seats the check fails and the insert rolls back.
-  checks: ["seats_left >= 0"]
+  # Registering adds to seats_taken in the same program as the insert: past capacity the check fails and the insert rolls back.
+  # It also refuses an officer lowering capacity below the seats already taken.
+  checks: ["seats_taken <= capacity"]
   indexes: [[startsAt, id]]
-  uiSchema: { list: { primaryField: title, columns: [startsAt, seats_left, closed] } }
+  uiSchema: { list: { primaryField: title, columns: [startsAt, capacity, seats_taken, closed] } }
   schema:
     type: object
-    required: [title, startsAt, seats_left, closed]
+    required: [title, startsAt, capacity, closed]
     properties:
       title: { type: string, minLength: 1 }
       startsAt: { type: string, format: date-time }
-      # Officers enter the capacity here when they create the event; register/cancel keep it current.
-      seats_left: { type: integer, minimum: 0, title: Seats left }
+      capacity: { type: integer, minimum: 0, title: Capacity }
+      # readOnly: server-maintained. Admin's generic create/edit never writes it; only register/cancel change it.
+      seats_taken: { type: integer, minimum: 0, default: 0, readOnly: true, title: Seats taken }
       closed: { type: boolean, default: false }
 ---
 apiVersion: cms.mantle.aotter.net/v2
@@ -29,8 +31,8 @@ spec:
   # `member` is written by the register handler from the caller; native authorId cannot be in a unique index.
   uniqueIndexes: [[eventId, member]]
   indexes: [[authorId, createdAt, id]]
-  # Officers read registrations in Admin; generic edits would bypass seats_left, so writes go through the Procedures.
-  uiSchema: { list: { primaryField: eventId, columns: [member] } }
+  # Officers read registrations in Admin; generic edits would bypass seats_taken, so writes go through the Procedures.
+  uiSchema: { list: { primaryField: eventId, columns: [memberName] } }
   schema:
     type: object
     readOnly: true
@@ -38,6 +40,8 @@ spec:
     properties:
       eventId: { type: string, x-mantle-ref: events }
       member: { type: string }
+      # A snapshot of the member's name at sign-up, so officers see who registered (member is an opaque id).
+      memberName: { type: string, maxLength: 200 }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -47,7 +51,7 @@ spec:
   description: Upcoming club events with the seats still available.
   requires: { auth: { all: [ctx.user] } }
   sql: |
-    SELECT id, title, startsAt AS "startsAt", seats_left, closed FROM events ORDER BY startsAt, id
+    SELECT id, title, startsAt AS "startsAt", capacity - seats_taken AS seats_left, closed FROM events ORDER BY startsAt, id
 ---
 # Only the caller's own rows: restrict narrows registrations to author_id = the caller.
 apiVersion: cms.mantle.aotter.net/v2
@@ -92,11 +96,12 @@ spec:
     properties:
       eventId: { type: string }
       member: { type: string }
+      memberName: { type: string, maxLength: 200 }
   output: { type: object }
   handler:
     sql: |
-      INSERT INTO registrations (eventId, member) VALUES (input.eventId, input.member) RETURNING id, eventId AS "eventId";
-      UPDATE events SET seats_left = seats_left - 1 WHERE id = input.eventId RETURNING seats_left
+      INSERT INTO registrations (eventId, member, memberName) VALUES (input.eventId, input.member, input.memberName) RETURNING id, eventId AS "eventId";
+      UPDATE events SET seats_taken = seats_taken + 1 WHERE id = input.eventId RETURNING capacity - seats_taken AS seats_left
 ---
 # restrict: another member's registration is invisible here, so the UPDATE matches no row -> CONFLICT, nothing changes.
 apiVersion: cms.mantle.aotter.net/v2
@@ -116,7 +121,7 @@ spec:
   output: { type: object }
   handler:
     sql: |
-      UPDATE events SET seats_left = seats_left + 1 WHERE id = (SELECT eventId FROM registrations WHERE id = input.id) RETURNING seats_left;
+      UPDATE events SET seats_taken = seats_taken - 1 WHERE id = (SELECT eventId FROM registrations WHERE id = input.id) RETURNING capacity - seats_taken AS seats_left;
       DELETE FROM registrations WHERE id = input.id RETURNING id
 ---
 apiVersion: cms.mantle.aotter.net/v2

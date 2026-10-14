@@ -6,7 +6,7 @@ import type { GenerateInput } from "../domain/model.js";
 import { databaseImport, isSqlite, literal as q } from "../domain/entry.js";
 import { conversions, authLines } from "../domain/input.js";
 import { recipesOf } from "../domain/recipes.js";
-import { boundaryType, conversion } from "../domain/columns.js";
+import { boundaryType, conversion, serverOwned } from "../domain/columns.js";
 import { adminOrder } from "../domain/adminOrder.js";
 import { emitValidation } from "./validation.js";
 
@@ -50,7 +50,7 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
   imports.push('import {nativePage,nativeStatistics,nativeText} from "@aotter/mantle-admin/server/native";',`import * as D from "@aotter/mantle/dialect/${sqlite?"sqlite":"postgres"}";`,`import {read,procedure} from "@aotter/mantle/driver/${target==="bun-sqlite"?"bun-sqlite":target==="cloudflare-d1"?"d1":"postgres"}";`,`const adapter={read,procedure,values:${sqlite ? (user.used ? "{...D,...USER_VALUES}" : "D") :`{...D,${user.used ? "...USER_VALUES," : ""}timestamp:(v:Parameters<typeof D.timestamp>[0])=>{if(typeof v==="string"&&/^0000-/.test(v.trim()))invalid("PostgreSQL timestamps require a nonzero year.","admin/input");return D.timestamp(v);},date:(v:string)=>{if(/^0000-/.test(v.trim()))invalid("PostgreSQL dates require a nonzero year.","admin/input");return D.date(v);}}`},param:D.param,escapeLike:D.escapeLike,sqlite:${sqlite}} as const;`);
   const schemas:string[]=[], views:string[]=[], adminViews:string[]=[], operations:string[]=[], pageSpecs:string[]=[];
   for (const [n,s] of Object.values(plan.schemas).entries()) {
-    const schemaPath=`schemas/${s.name}/admin`, declared=Object.keys(s.fields).filter(f=>f!==s.scope), writable=declared.filter(f=>scalar(s.fields[f])||s.fields[f]==="json");
+    const schemaPath=`schemas/${s.name}/admin`, declared=Object.keys(s.fields).filter(f=>f!==s.scope), writable=declared.filter(f=>(scalar(s.fields[f])||s.fields[f]==="json")&&!serverOwned(s.schema,f));
     // Experimental geo collections remain readable; edits require a declared Procedure.
     const validators=emitValidation({views:{},procedures:{full:{input:checks(s,true)},partial:{input:checks(s,false)}}},(path,message)=>refuse(schemaPath+"/"+path,message));
     for(const mode of ["full","partial"]){const name=`validation/admin/${encodeURIComponent(s.name)}-${mode}.ts`;files[name]=validators[`validation/procedures/${mode}.ts`]!.replaceAll(`procedures/${mode}/input`,schemaPath+"/input");imports.push(`import {validate as ${mode}${n}} from "./${name.replace(/\.ts$/,".js")}";`);}
