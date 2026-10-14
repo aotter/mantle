@@ -232,12 +232,14 @@ Store keeps `find({ search })`, `first({ search })` and `count(where?)`. See [St
 
 ## Collection navigation and operation placement
 
-A Schema with a required `x-mantle-ref` folds under its parent collection.
-Its collection remains reachable at `/admin/c/<schema>` and appears as a child
-link in the parent's sidebar group; translation children remain on language
+A Schema with a required `x-mantle-ref` folds under its parent collection: it
+opens from the parent entry's workbench and stays out of the sidebar, while
+`/admin/c/<schema>` still lists it; translation children remain on language
 tabs. Set `Schema.spec.uiSchema.nav.standalone: true` to put a required-ref child
 at the top level instead. With multiple eligible references, set
 `nav.parentField` to the chosen reference field.
+
+Operational collections have no generic create or draft: officers add records through a Procedure placed with `collectionAction` (the list header shows its button and input form), so every write is a declared, validated program.
 
 Admin operations are Procedures exposed by an admin MCP Trigger. Declare
 `Procedure.spec.uiSchema.collectionAction: <schema-name>` to show the operation

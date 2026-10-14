@@ -164,3 +164,62 @@ metadata: { name: cancel-registration-http }
 spec:
   source: { kind: http, method: POST, path: /api/registrations/cancel }
   target: { procedure: cancel-registration }
+---
+# Officers add records through declared Procedures: operational collections have no generic create in Admin.
+# collectionAction puts the Procedure's button and input form in that collection's list header; the admin MCP
+# Trigger is what makes it an Admin operation (and lets the officers' AI do the same).
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: create-event }
+spec:
+  title: New event
+  description: Create a club event with its capacity.
+  requires: { auth: { all: [ctx.admin] } }
+  uiSchema: { collectionAction: events }
+  input:
+    type: object
+    required: [title, startsAt, capacity]
+    additionalProperties: false
+    properties:
+      title: { type: string, minLength: 1, maxLength: 200, title: Title }
+      startsAt: { type: string, format: date-time, title: Starts at }
+      capacity: { type: integer, minimum: 1, title: Capacity }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO events (title, startsAt, capacity, closed, seats_taken) VALUES (input.title, input.startsAt, input.capacity, false, 0) RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: add-member }
+spec:
+  title: Add a member
+  description: Let an email sign up as a club member.
+  requires: { auth: { all: [ctx.admin] } }
+  uiSchema: { collectionAction: members }
+  input:
+    type: object
+    required: [email]
+    additionalProperties: false
+    properties:
+      email: { type: string, format: email, maxLength: 254, title: Email }
+      name: { type: string, maxLength: 200, title: Name }
+  output: { type: object }
+  handler:
+    # Better Auth lowercases emails, so the list stores them lowercased too.
+    sql: |
+      INSERT INTO members (email, name) VALUES (lower(input.email), input.name) RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: create-event-admin }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: create-event }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: add-member-admin }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: add-member }

@@ -27,20 +27,26 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step, logs }) => {
   step("an email not on the members list cannot sign up: 403, no session cookie, no user row");
 
   for (const name of ["alice", "bob", "carol", "dave", "erin", "frank"]) {
-    const added = await call("POST", "/admin/api/entries", { cookie: admin, body: { collection: "members", data: { email: `${name}@example.test`, name } } });
+    const added = await call("POST", "/admin/api/operations/add-member", { cookie: admin, body: { email: `${name}@example.test`, name } });
     assert.equal(added.status, 200, JSON.stringify(added.body));
   }
-  const mixed = await call("POST", "/admin/api/entries", { cookie: admin, body: { collection: "members", data: { email: "Grace@example.test" } } });
-  assert.ok(mixed.status >= 400 && mixed.status < 500, JSON.stringify(mixed.body));
-  step("the officer adds members to the allowlist in Admin (a mixed-case email is refused by the lowercase check)");
+  const mixed = await call("POST", "/admin/api/operations/add-member", { cookie: admin, body: { email: "Grace@example.test" } });
+  assert.equal(mixed.status, 200, JSON.stringify(mixed.body));
+  assert.equal((await sql("SELECT email FROM members WHERE email = 'grace@example.test'")).length, 1);
+  step("the officer adds members through the add-member operation in Admin (a mixed-case email is stored lowercased)");
   const create = async (title, seats, closed = false) => {
-    const created = await call("POST", "/admin/api/entries", { cookie: admin, body: { collection: "events", data: { title, startsAt: "2026-11-01T10:00:00Z", capacity: seats, closed } } });
+    const created = await call("POST", "/admin/api/operations/create-event", { cookie: admin, body: { title, startsAt: "2026-11-01T10:00:00Z", capacity: seats } });
     assert.equal(created.status, 200, JSON.stringify(created.body));
+    if (!closed) return;
+    // Closing is an ordinary Admin edit: operational collections are editable, only creation needs a Procedure.
+    const id = created.body.output.results[0][0].id;
+    const { version } = (await call("GET", `/admin/api/entries/${id}?collection=events`, { cookie: admin })).body.entry;
+    assert.equal((await call("PATCH", `/admin/api/entries/${id}?collection=events`, { cookie: admin, body: { data: { closed: true }, expectedVersion: version } })).status, 200);
   };
   await create("Hike", 3);
   await create("Workshop", 1);
   await create("Members' dinner", 10, true);
-  step("an officer (admin) creates events with their seats in Admin");
+  step("an officer creates events through the create-event operation and closes one with an ordinary edit");
 
   const alice = await signIn("alice@example.test");
   const events = async cookie => Object.fromEntries((await call("GET", "/api/views/events", { cookie })).body.rows.map(e => [e.title, e]));

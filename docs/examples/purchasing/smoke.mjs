@@ -58,6 +58,12 @@ try {
     assert.deepEqual((await call("GET", "/api/views/my-requests", { cookie: bob })).body.rows.map(r => r.title).sort(), ["Desk", "Projector"]);
     step("employees submit requests (unknown department creates nothing) and see only their own");
 
+    assert.equal((await operation(admin, "open-budget", { department: "Marketing", remaining: 500 })).status, 200);
+    assert.equal((await operation(admin, "open-budget", { department: "Design", remaining: 1 })).status, 409);
+    assert.equal(await remaining("Marketing"), 500);
+    assert.equal((await operation(alice, "open-budget", { department: "Ops", remaining: 1 })).status, 403);
+    step("admins open a department budget from the Budgets list header (open-budget; a second one for the same department is 409); employees cannot");
+
     const version = async id => (await row(id)).version;
     assert.equal((await operation(alice, "approve-request", { id: laptop, expectedVersion: await version(laptop) })).status, 403);
     const publicTools = (await mcp("/mcp", alice)).body.result.tools.map(t => t.name);
