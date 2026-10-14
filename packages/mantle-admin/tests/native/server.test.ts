@@ -147,7 +147,7 @@ test("Admin target authorization covers Views, Procedures and every generic entr
       const adapter:NativeProcedureAdapter<{}>={...unused,read:()=>{sql++;return [row];},procedure:async()=>{sql++;return [[row]];}};
       const view={name:"recent",allows:()=>true,query:()=>({input:{}}),page:async()=>{handlers++;return {rows:[row]};}};
       const operation={name:"edit",allows:()=>true,validate:(r:unknown)=>r as Record<string,unknown>,run:async()=>{handlers++;return {ok:true};}};
-      const fetch=adminFunction({...metadata,developerConsole:{}},[view],[operation],{db:()=>{providers++;return {};},caller:()=>admin,developerViews:[view],routes:entries([schema],adapter),...(authorize?{authorize:(t:Target,c:Caller)=>{authorizations++;expect(t).toEqual(target);expect(c).toBe(admin);return authorize(t,c);}}:{})});
+      const fetch=adminFunction({...metadata,developerConsole:{}},[view],[operation],{db:()=>{providers++;return {};},caller:()=>admin,developerViews:[view],routes:entries([schema],adapter),...(authorize?{authorize:(t:Target,c:Caller)=>{if(++authorizations===1)expect(t).toEqual(target);else expect(t).toEqual({kind:"schema",name:"posts",action:"read"});expect(c).toBe(admin);return authorize(t,c);}}:{})});
       const response=await fetch(new Request("https://app.test/admin/api"+path,{method,body:input?JSON.stringify(input):undefined,headers:{origin:"https://app.test"}}),{});
       expect(response?.status).toBe(status);await response?.text();
       if(status!==200){expect([providers,sql,handlers]).toEqual([0,0,0]);}
