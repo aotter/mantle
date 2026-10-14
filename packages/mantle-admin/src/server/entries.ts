@@ -86,7 +86,13 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
         const fields = [d.list?.primaryField, "title", "name", "slug", ...(d.schema?.required ?? []).filter(f => [properties[f]?.type].flat().includes("string"))];
         return fields.map(f => f ? valueOf(row, f) : null).find(v => typeof v === "string" && v !== "") ?? null;
     };
+    /** A translation child's rows carry its parent's fields, so reading it also needs the parent's read. */
+    const readable = async (schema: EntrySchema<DB>, ctx: Context<Env, DB>) => {
+        const parent = ctx.authorize && descriptor(schema).translates?.parent;
+        if (parent && !await ctx.authorize!({kind: "schema", name: parent, action: "read"})) throw new ContractError("AUTH_DENIED", "Target is not authorized.", "schema/" + parent);
+    };
     const pageOf = async (schema: EntrySchema<DB>, ctx: Context<Env, DB>, params: URLSearchParams) => {
+        await readable(schema, ctx);
         const q = schema.query(params);
         return q ? nativeEntryPage(schema.binding, adapter, () => ctx.db, ctx.caller, q) : {rows: [] as Row[], nextCursor: undefined};
     };
@@ -97,6 +103,8 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
     };
     /** After a committed write, related reads are best effort: a failed read must not turn a committed write into an error. */
     const editor = async (schema: EntrySchema<DB>, row: Row, ctx: Context<Env, DB>, written = false): Promise<any> => {
+        if (ctx.authorize && (!await ctx.authorize({kind: "schema", name: schema.name, action: "read"}) || !await ctx.authorize({kind: "schema", name: descriptor(schema).translates?.parent ?? schema.name, action: "read"})))
+            return {collection: schema.descriptor, entry: {id: row.id, version: row.version}, parentEntryId: null, parentEntryTitle: null, related: []};
         if (written) return editor(schema, row, ctx).catch(() => ({collection: schema.descriptor, entry: entry(schema, row), parentEntryId: null, parentEntryTitle: null, related: []}));
         const d = descriptor(schema), e = entry(schema, row), up = d.parent;
         const parentCandidate = up && schemas.find(s => s.name === up.collection);
