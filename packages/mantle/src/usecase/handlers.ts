@@ -4,7 +4,7 @@ import { authLines as auth } from "../domain/input.js";
 import { q } from "../domain/entry.js";
 
 export function emitHandlers(
-  plan: RuntimePlan,
+  plan: RuntimePlan, interactive: boolean,
   typeOf: (schema: JsonSchema | undefined) => string,
   declarations: string[], procedures: string[],
 ): string[] {
@@ -12,7 +12,9 @@ export function emitHandlers(
   // An empty contract keeps app wiring (`handlers: Handlers = {}`) identical whether or not any ref Procedure exists.
   if (!refs.length) { declarations.push("export interface Handlers {}"); return []; }
   declarations.push(
-    'export interface HandlerContext { readonly caller: Caller; readonly db: Database; readonly store: Pick<ReturnType<typeof makeStore>, "collection" | "views" | "procedures"> }',
+    'export type HandlerStore = Pick<ReturnType<typeof makeStore>, "collection" | "views" | "procedures">;',
+    // D1 has no interactive transactions, so its handlers get no `transaction`: using one there fails typecheck.
+    `export interface HandlerContext { readonly caller: Caller; readonly db: Database; readonly store: HandlerStore;${interactive ? " readonly transaction: <R>(fn: (ctx: { readonly store: HandlerStore; readonly db: Database }) => Promise<R>) => Promise<R>;" : ""} }`,
     "export interface Handlers {",
     ...refs.map(({ name, index }) => `  readonly [${q(name)}]: (ctx: HandlerContext, input: Procedure${index}Input) => Promise<Procedure${index}Output>;`),
     "}",
@@ -29,7 +31,7 @@ export function emitHandlers(
       `  const handler = handlers && Object.hasOwn(handlers, ${q(name)}) ? handlers[${q(name)}] : undefined;`,
       `  if (!handler) throw new ContractError("HANDLER_NOT_REGISTERED", "Procedure handler is not registered.", ${q(path)});`,
       // TODO #1470: REST/MCP use shared generated validators at the boundary; bare calls stay typed.
-      "  return handler({ caller, db, store: context.store }, raw);",
+      `  return handler({ caller, db, store: context.store${interactive ? ", transaction: handlerTransaction(context.store, db)" : ""} }, raw);`,
       "}",
     );
     procedures.push(`[${q(name)}]: ${fn}`);

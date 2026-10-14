@@ -197,3 +197,32 @@ function check(db: Parameters<typeof store>[0], caller: Parameters<typeof store>
     expect(ts.getPreEmitDiagnostics(program).map(d => `${d.file?.fileName} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`).join("\n")).toBe("");
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 15_000);
+
+test("ctx.transaction makes a handler's writes atomic, joins an outer transaction, and is absent on D1", async () => {
+  const generated = await files("bun-sqlite");
+  const app = await loadGenerated(generated["generated.ts"]!);
+  const db = new Database(":memory:");
+  const failure = new Error("second write failed");
+  const titles = () => db.query("SELECT title FROM notes ORDER BY title").all().map((r: any) => r.title);
+  try {
+    db.exec(generated["schema.sql"]!);
+    const handlers = { "app-note": async (ctx: any, input: { title: string }) => {
+      const write = async ({ store }: { store: any }) => {
+        await store.collection("notes").insert(input);
+        if (input.title.startsWith("fail")) throw failure;
+        return input;
+      };
+      return input.title.endsWith("plain") ? write(ctx) : ctx.transaction(write);
+    } };
+    const data = app.store(db, caller, { handlers });
+    // Without ctx.transaction a handler's writes are not atomic: the first one stays.
+    await expect(data.procedures["app-note"]({ title: "fail plain" })).rejects.toBe(failure);
+    await expect(data.procedures["app-note"]({ title: "fail tx" })).rejects.toBe(failure);
+    expect(await data.procedures["app-note"]({ title: "ok tx" })).toEqual({ title: "ok tx" });
+    expect(titles()).toEqual(["fail plain", "ok tx"]);
+    // Called inside a caller's transaction, ctx.transaction joins it instead of refusing a nested one.
+    await expect(data.transaction(async (tx: any) => { await tx.procedures["app-note"]({ title: "joined" }); throw failure; })).rejects.toBe(failure);
+    expect(titles()).toEqual(["fail plain", "ok tx"]);
+  } finally { db.close(); }
+  expect((await files("cloudflare-d1"))["generated.ts"]).not.toContain("readonly transaction");
+});

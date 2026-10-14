@@ -79,7 +79,7 @@ export function generate(input: GenerateInput): GenerateResult {
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [], refProcedures: string[] = [];
   const entries: Record<string, string> = {};
   const base = "@aotter/mantle/";
-  const refNames = emitHandlers(plan, typeOf, declarations, refProcedures);
+  const refNames = emitHandlers(plan, target !== "cloudflare-d1", typeOf, declarations, refProcedures);
   const hasHandlers = refNames.length > 0;
   for (const [index, [name, view]] of Object.entries(plan.views).sort().entries()) {
     const path = `views/${name}`, fn = `view${index}`;
@@ -139,7 +139,7 @@ export function generate(input: GenerateInput): GenerateResult {
   const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny", ...(/\bisAdmin\(/.test(code) ? ["isAdmin"] : []), ...(/\bisUser\(/.test(code) ? ["isUser"] : [])] : []), ...(procedures.length ? ["type Output"] : [])];
   const dbType = isSqlite ? databaseImport(target) : "";
   return { ok: true, refProcedures: refNames, files: generatedFiles({ ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", user.code, dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
-    ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...(stores ? [`import { createStore } from "${base}store";`] : []),
+    ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...((names => names.length ? [`import { ${names.join(", ")} } from "${base}store";`] : [])([...(stores ? ["createStore"] : []), ...(hasHandlers && target !== "cloudflare-d1" ? ["handlerTransaction"] : [])])),
     `import { ${procedures.length ? "binds, bound" : "binds"} } from "${base}binds";`,
     `const D = { ${[...values].sort().map(v => `${v}: DIALECT.${v}`).concat(user.values ? [user.values] : []).join(", ")} };`, code].filter(Boolean).join("\n") + "\n" }) };
 }

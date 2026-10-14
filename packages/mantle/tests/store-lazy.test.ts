@@ -21,7 +21,7 @@ for (const target of ["bun-sqlite"] as const) test(`${target}: importing generat
     for (const handlers of [false, true]) {
       const counter = resolve(dir, handlers ? "ref-counter.ts" : "counter.ts");
       // Instrument only this fixture's import, without global mocks that could poison another suite.
-      await writeFile(counter, `import {createStore as native} from ${JSON.stringify(resolve(import.meta.dir, "../src/kernel/store.ts"))};export let calls=0;export function createStore(...args:any[]){calls++;return (native as any)(...args);}`);
+      await writeFile(counter, `import {createStore as native} from ${JSON.stringify(resolve(import.meta.dir, "../src/kernel/store.ts"))};export {handlerTransaction} from ${JSON.stringify(resolve(import.meta.dir, "../src/kernel/store.ts"))};export let calls=0;export function createStore(...args:any[]){calls++;return (native as any)(...args);}`);
       const files = await generateOrThrow(target, [...await loadFixtureSources(), ...(handlers ? [ref] : [])]);
       const app = await loadGenerated(files["generated.ts"]!.replace('"@aotter/mantle/store"', JSON.stringify(counter)));
       const probe = await import(counter);
