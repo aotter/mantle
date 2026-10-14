@@ -308,3 +308,32 @@ metadata: { name: reject-request-mcp }
 spec:
   source: { kind: mcp, surface: admin }
   target: { procedure: reject-request }
+---
+# Admins open a department's budget from the Budgets list header (operational collections have no generic create);
+# adjusting `remaining` later is an ordinary Admin edit.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: open-budget }
+spec:
+  title: Open a budget
+  description: Give a department a purchasing budget.
+  requires: { auth: { all: [ctx.admin] } }
+  uiSchema: { collectionAction: budgets }
+  input:
+    type: object
+    required: [department, remaining]
+    additionalProperties: false
+    properties:
+      department: { type: string, minLength: 1, maxLength: 100, title: Department }
+      remaining: { type: integer, minimum: 0, title: Budget }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO budgets (department, remaining) VALUES (input.department, input.remaining) RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: open-budget-admin }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: open-budget }
