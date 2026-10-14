@@ -90,6 +90,8 @@ package filters while iterating. PostgreSQL tests skip unless `MANTLE_PG_URL`
 names a disposable database; native Bun conformance is separate
 (`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14).
 
+Maintainers merge on a local `pnpm check` (judge by its exit code) plus review; CI does not gate their PRs, and a
+failure found later is fixed forward. PR CI runs only for PRs from outside the organization (forks, bots).
 PR CI builds once in each of two parallel jobs: typecheck plus boundaries,
 skills, plugin manifests, startup graphs/budgets and release/packed-consumer
 self-tests; and the three packages’ tests running concurrently. Both jobs use
@@ -100,9 +102,9 @@ app, example and config roots (including their imports). Run build first.
 Build before running package tests locally; `pnpm test` does not rebuild or pack.
 Package and upload bytes are reports; cold-start checks remain gates.
 
-Run the **Full checks** workflow (`.github/workflows/full-checks.yml`) before
-releases and after changes to drivers, auth, generator output or Admin UI: add
-the `full-checks` label to the PR (later pushes rerun it). It runs native
+Run the **Full checks** workflow (`.github/workflows/full-checks.yml`) by hand
+(Actions → Full checks → Run workflow on the branch) before releases, or when a change to drivers, auth,
+generator output or Admin UI may behave differently on Linux. It runs native
 four-target and Wrangler/D1 integrations, packed-consumer checks, doc examples,
 OSS plugin validation, the two Chrome sandbox-boundary tests (design preview
 and MCP App host bridge), and size reports. Run the boundaries locally with
