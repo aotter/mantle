@@ -7,7 +7,7 @@ capabilities the others do not; combine them for anything else.
 |---|---|
 | [App shell](./app-shell/README.md) | Better Auth (email OTP, `admin` + `user`), one Worker fetch, Admin, MCP, REST, local acceptance kit. No business manifests. |
 | [Recipes](./recipes/README.md) | Publishing (draft → publish), translations, visitor pages with SEO, JSON-LD, `llms.txt`, Markdown and hreflang alternates, R2 media. |
-| [Club events](./club-events/README.md) | Members who see and change only their own rows, no duplicates, capacity that never oversells, a handler that checks before writing, a member MCP tool. |
+| [Club events](./club-events/README.md) | Members who see and change only their own rows, no duplicates, capacity that never oversells, a handler that checks before writing, a member MCP tool, members-only sign-up. |
 | [Purchasing](./purchasing/README.md) | An internal workflow: guarded status transitions, admin-only approval (Admin and admin MCP), optimistic concurrency, several writes in one transaction, an external API with a signed callback, email and cron. |
 | [Generated website](./generated-web/README.md) | The smallest public site: list and detail pages, REST, `llms.txt`, sitemap, Markdown alternates. |
 
@@ -20,6 +20,7 @@ capabilities the others do not; combine them for anything else.
 | An approval step, or any state machine | purchasing's guarded `UPDATE ... WHERE requestStatus = ...` Procedures |
 | A third-party API that answers later (webhooks, callbacks) | purchasing's `src/routes.ts`: verify the raw request, then call a Procedure |
 | Public, multilingual, search- and AI-friendly pages | recipes' `src/routes.ts` |
+| Invite-only or members-only sign-up | club-events' `members` allowlist + `src/signup.ts` |
 | Notifications and reminders | purchasing's `EmailSender` call and `src/schedule.ts` |
 
 Every example uses two roles: `admin` (the admin layer) and `user`.

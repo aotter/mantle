@@ -28,6 +28,7 @@ pnpm smoke                     # when the copied example has smoke.mjs
 | `src/handlers.ts` | Code for each `handler: { ref }` Procedure. The Store it receives is bound to the same caller. |
 | `src/routes.ts` | App-owned routes: visitor pages, SEO files, webhooks and callbacks. |
 | `src/schedule.ts` | Cron work. Add the cron to `wrangler.jsonc` `triggers.crons`. |
+| `src/signup.ts` | `allowSignUp(env, email)`: who may create an account (allow-all by default). `auth.ts` calls it before Better Auth creates a user; `ADMIN_EMAIL` is always allowed. |
 | `src/auth.ts` | Better Auth options. Two roles only: `admin` (the admin layer) and `user`. Replace the console OTP sender before deploying. |
 | `smoke.mjs` | Your acceptance steps on `smoke-kit.mjs` (fresh local D1, OTP sign-in per user, REST/MCP/Admin calls). |
 

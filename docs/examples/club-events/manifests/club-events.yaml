@@ -43,6 +43,25 @@ spec:
       # A snapshot of the member's name at sign-up, so officers see who registered (member is an opaque id).
       memberName: { type: string, maxLength: 200 }
 ---
+# The sign-up allowlist: officers add members in Admin; src/signup.ts lets only these emails create an account.
+# No View or Trigger reads it, so it stays out of the public API and MCP.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: members }
+spec:
+  title: Members
+  lifecycle: operational
+  uniqueIndexes: [[email]]
+  # Better Auth lowercases emails; the check refuses a mixed-case entry that would never match.
+  checks: ["email = lower(email)"]
+  uiSchema: { list: { primaryField: email, columns: [name] } }
+  schema:
+    type: object
+    required: [email]
+    properties:
+      email: { type: string, format: email, maxLength: 254, title: Email }
+      name: { type: string, maxLength: 200, title: Name }
+---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: events }
