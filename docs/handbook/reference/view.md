@@ -12,7 +12,7 @@ OFFSET, arbitrary functions/relations, DDL and transaction control are not a rea
 
 ## Restrict
 
-`restrict` narrows one target by Schema: `restrict: { orders: "region IN auth.user('region')" }`. Each key is a Schema the SQL reads; each value uses the [scope](schema.md#field-scope) grammar, and a `= auth.uid()` term only on `author_id` or that Schema's own owner column. The effective rule is the Schema's scope AND the restrict. `{ all: true }` never lifts a restrict term: such a caller is refused with `AUTH_DENIED`. A View with `restrict` cannot use a shared cache.
+`restrict` narrows one target by Schema: `restrict: { orders: "region IN auth.user('region')" }`. Each key is a Schema the SQL reads; each value uses the [scope](schema.md#field-scope) grammar, and a `= auth.uid()` term only on `author_id` or that Schema's own owner column. The effective rule is the Schema's scope AND the restrict. `{ all: true }` never lifts a restrict term: such a caller is refused with `AUTH_DENIED`. A View or Procedure that reads a restricted View carries that View's restrict too, so composing never widens it. A View with `restrict` cannot use a shared cache.
 
 ## Search and totals
 

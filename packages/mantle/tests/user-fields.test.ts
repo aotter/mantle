@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { userCaller, hasRole, fieldsOf, userBinds, modeOf, userRefs, isAll } from '../src/kernel/user-fields.js';
 import { binds } from '../src/kernel/binds.js';
@@ -8,6 +8,7 @@ import { renderTerm } from '../src/kernel/store.js';
 import { dialect } from '../src/kernel/dialect/sqlite.js';
 import { isAdmin, hasAdminRole } from '../src/kernel/contracts.js';
 import { generateOrThrow, writeGenerated } from './apps/link.js';
+await mkdir(resolve(import.meta.dir, 'apps/.generated'), { recursive: true });
 const fields = { region: { type: 'string' as const, multiple: true }, tier: { type: 'string' as const, multiple: false } };
 test('verified identities freeze values, discard unknown fields and lose authority when copied', () => {
   const caller = userCaller({ id: 'member', role: 'vip,editor,vip', region: ['TW', 'TW'], tier: 'gold', ignored: 'secret' }, { fields, adminRoles: ['editor'] });
@@ -170,4 +171,20 @@ test('scope markers cannot be forged, restrict columns are not SET-able, cached 
  const publishing=JSON.parse(JSON.stringify(scoped));publishing.spec.lifecycle='publishing';
  const cached=JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'View',metadata:{name:'cached'},spec:{surface:'public',cache:{sharedMaxAge:60},sql:'SELECT id FROM orders'}});
  await expect(generateOrThrow('bun-sqlite',[{sourceId:'cache.yaml',text:JSON.stringify(publishing)+'\n---\n'+cached}])).rejects.toThrow('field-scoped');
+});
+
+test('a target that reads a restricted View carries its restrict',async()=>{
+ const M=(kind:string,name:string,spec:object)=>JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind,metadata:{name},spec});
+ const text=[schema,M('View','regional',{surface:'internal',restrict:{orders:"region IN auth.user('region')"},sql:'SELECT id, region FROM orders'}),
+  M('View','wrapper',{surface:'internal',sql:'SELECT id, region FROM regional ORDER BY id'}),
+  M('View','wrapper-of-wrapper',{surface:'internal',sql:'SELECT id FROM wrapper ORDER BY id'}),
+  M('Procedure','touch',{title:'Touch',input:{type:'object',additionalProperties:false},output:{type:'object'},handler:{sql:"UPDATE orders SET tier = 'seen' WHERE id IN (SELECT id FROM regional) RETURNING id"}})].join('\n---\n');
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'compose.yaml',text}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/compose-')),db=new Database(':memory:');
+ try{await writeGenerated(dir,files);const app=await import(resolve(dir,'generated.ts'));db.exec(files['schema.sql']!);
+  for(const region of ['TW','JP'])await app.store(db,{kind:'system',reason:'fixture'}).collection('orders').insert({region,tier:'gold'});
+  const c=userCaller({id:'u',region:'TW'},{fields});
+  for(const name of ['regional','wrapper','wrapper-of-wrapper'])expect(await app.views[name](db,c,{})).toHaveLength(1);
+  expect((await app.procedures.touch(db,c,{})).results[0]).toHaveLength(1);
+  expect(await code(()=>app.views.wrapper(db,userCaller({id:'a',region:{all:true}},{fields}),{}))).toBe('AUTH_DENIED');
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
 });
