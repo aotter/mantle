@@ -16,6 +16,6 @@ export async function guardAuthAdminRequest(request: Request, resolve: () => Cal
     // and Better Auth access control then decides each action.
     // Any signed-in user may ask about their own permissions or end an impersonation.
     const own = path === `${admin}/has-permission` || path === `${admin}/stop-impersonating`;
-    deny(caller, (own ? caller.kind === "user" : isAdmin(caller)) && caller.credential === "session", "auth:admin");
+    deny(caller, caller.kind === "user" && caller.credential === "session" && (own || isAdmin(caller)), "auth:admin");
     checkOrigin(request, caller);
 }
