@@ -6,7 +6,7 @@ export function webmcpRoutes<Env, Database, Handlers>(catalogue: {
     readonly tools: readonly {
         readonly name: string;
     }[];
-}, tools: readonly Tool<Database, Handlers>[], ...args: [Handlers] extends [never] ? [handlers?: undefined] : [handlers: NoInfer<Handlers>]): readonly Route<Env, Database>[] {
+}, tools: readonly Tool<Database, Handlers>[], ...args: [Handlers] extends [never] ? [handlers?: undefined] : [keyof Handlers] extends [never] ? [handlers?: NoInfer<Handlers>] : [handlers: NoInfer<Handlers>]): readonly Route<Env, Database>[] {
     const selected = tools.filter(tool => tool.surface === "admin" && catalogue.tools.some(item => item.name === tool.name));
     const toolOf = (name: string | undefined) => {
         const tool = selected.find(tool => tool.name === name);

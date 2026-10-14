@@ -189,7 +189,7 @@ async function check(db: Parameters<typeof store>[0], caller: Parameters<typeof 
     await writeFile(consumer, `import { store } from "./generated.js";
 function check(db: Parameters<typeof store>[0], caller: Parameters<typeof store>[1]) {
   store(db, caller);
-  // @ts-expect-error SQL-only Store has no handlers option
+  // App wiring is the same with or without ref Procedures: an empty Handlers object is accepted.
   store(db, caller, { handlers: {} });
 }`);
     roots.push(consumer);
