@@ -1,6 +1,6 @@
 /** Cloudflare D1: no interactive transactions, so a Procedure is one `batch` whose row checks go through `_mantle_assert`. */
 import type { Bound } from "../binds.js";
-import { conflict, type Row } from "../contracts.js";
+import { checkConflict, conflict, type Row } from "../contracts.js";
 import { unique } from "../dialect/sqlite.js";
 export { definitive } from "../dialect/sqlite.js";
 
@@ -19,7 +19,7 @@ export async function procedure(db: Handle, steps: readonly Bound[], path: strin
   });
   let out;
   try { out = await db.batch(batch); } catch (error) {
-    throw unique(error) ? conflict(path, true, error) : /CONFLICT op=\d/.test(String((error as Error)?.message)) ? conflict(path, false, error) : error;
+    throw unique(error) ? conflict(path, true, error) : /CONFLICT op=\d/.test(String((error as Error)?.message)) ? conflict(path, false, error) : checkConflict(path, error) ?? error;
   }
   return at.map(i => out[i]!.results);
 }

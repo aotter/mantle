@@ -1,6 +1,6 @@
 /** `bun:sqlite`: sync queries; interactive transactions queue all work on the same Database. */
 import type { Bound } from "../binds.js";
-import { conflict, ContractError, type Row } from "../contracts.js";
+import { checkConflict, conflict, ContractError, type Row } from "../contracts.js";
 import { unique } from "../dialect/sqlite.js";
 export { definitive } from "../dialect/sqlite.js";
 import { context, guard } from "./transaction-context.js";
@@ -41,7 +41,7 @@ export async function procedure(db: Handle, steps: readonly Bound[], path: strin
         // Bun's run().changes includes FTS maintenance writes; SQLite changes() counts the authored statement only.
         changes = s.row ? Number(handle.query("SELECT changes() AS n").all()[0]!.n) : 0;
       }
-    } catch (error) { throw unique(error) ? conflict(path, true, error) : error; }
+    } catch (error) { throw unique(error) ? conflict(path, true, error) : checkConflict(path, error) ?? error; }
     if (s.row && changes !== 1) throw conflict(path, false);
     return rows;
   });
