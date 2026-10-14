@@ -59,9 +59,9 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
       counts[`${variant}:${name}`] = reads();
       return { caller, responseHeaders: responseHeaders ?? new Headers() };
     };
-    const expected = variant === "authority" ? 2 : cached ? 1 : variant === "fallback" ? 2 : 1;
+    const expected = (variant === "authority" ? 2 : cached ? 1 : variant === "fallback" ? 2 : 1) + 1;
     assert.equal((await check("fresh", expected)).caller.kind, "user");
-    const readSnapshot = async (name: string, suppliedCookie = cookie, expectedReads = cached ? expected : 0, freshLoader = loader) => {
+    const readSnapshot = async (name: string, suppliedCookie = cookie, expectedReads = cached ? expected : 1, freshLoader = loader) => {
       statements.length = 0;
       const caller = await resolveCaller(request(suppliedCookie), freshLoader, { readOnly: true });
       assert.equal(reads(), expectedReads, `${variant}/${name}: ${statements.join("\n")}`);
@@ -69,7 +69,7 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
       assert.equal(statements.some(text => /^UPDATE /i.test(text)), false);
       return caller;
     };
-    assert.equal((await readSnapshot("read-first", cookie, cached ? expected : 0, authLoader(async () => auth as unknown as AuthInstance, prefix))).kind, "user");
+    assert.equal((await readSnapshot("read-first", cookie, cached ? expected : 1, authLoader(async () => auth as unknown as AuthInstance, prefix))).kind, "user");
     assert.equal((await readSnapshot("read-warm")).kind, "user");
     if (!cached) {
       const withoutCache = cookie.split("; ").filter(value => !value.split("=")[0]!.includes("session_data")).join("; ");
@@ -105,8 +105,8 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
     }
     if (variant === "native" || variant === "secondary") {
       // A fresh loader and a retained loader exercise the first request and warm dispatch separately.
-      await verifyAuthRequestClasses(() => authLoader(async () => betterAuth(options) as unknown as AuthInstance, prefix), cookie, statements, cached ? expected : 0, expected);
-      await verifyAuthRequestClasses(loader, cookie, statements, cached ? expected : 0, expected);
+      await verifyAuthRequestClasses(() => authLoader(async () => betterAuth(options) as unknown as AuthInstance, prefix), cookie, statements, cached ? expected : 1, expected);
+      await verifyAuthRequestClasses(loader, cookie, statements, cached ? expected : 1, expected);
       options.session!.cookieCache!.enabled = false;
       await verifyAuthRequestClasses(loader, cookie, statements, expected, expected);
       options.session!.cookieCache!.enabled = true;
@@ -122,13 +122,13 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
     assert.equal(role.kind === "user" && role.role, "admin");
     if (!cached) {
       const stale = await readSnapshot("read-stale-role");
-      assert.equal(stale.kind === "user" && stale.role, "user");
+      assert.equal(stale.kind === "user" && stale.role, "admin");
       statements.length = 0;
       const writer = await resolveCaller(new Request("http://localhost:3000/private", { method: "POST", headers: { cookie } }), loader);
       assert.equal(writer.kind === "user" && writer.role, "admin"); assert.equal(reads(), expected);
       counts[`${variant}:write-current-role`] = reads();
     }
-    assert.equal((await check("headers", variant === "authority" ? 3 : expected, new Headers())).caller.kind, "user");
+    assert.equal((await check("headers", variant === "authority" ? 4 : expected, new Headers())).caller.kind, "user");
     assert.equal(statements.some(text => /^UPDATE /i.test(text)), false, "fresh responseHeaders do not refresh or add an UPDATE");
     await run(`UPDATE "${u}" SET "${field("banned")}" = ${dialect === "postgres" ? "true" : "1"} WHERE id = ${dialect === "postgres" ? "$1" : "?"}`, [id]);
     assert.deepEqual((await check("banned", expected)).caller, { kind: "anonymous" });
@@ -144,7 +144,7 @@ export async function verifyCookieCaller(database: BetterAuthOptions["database"]
     assert.equal((await resolveCaller(request(cookie), loader)).kind, "user");
     assert.equal(reads(), expected);
     assert.equal(statements.some(text => /^UPDATE /i.test(text)), false, "without responseHeaders a due cookie must not refresh");
-    const refresh = await check("refresh", variant === "authority" ? 5 : expected, new Headers());
+    const refresh = await check("refresh", variant === "authority" ? 6 : expected, new Headers());
     assert.equal(refresh.caller.kind, "user");
     assert.ok(refresh.responseHeaders.getSetCookie().some(line => line.includes("session_token=")));
     assert.equal(statements.filter(text => /^UPDATE /i.test(text)).length, 1);

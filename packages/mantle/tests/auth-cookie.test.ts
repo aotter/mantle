@@ -10,7 +10,7 @@ test("real Better Auth cookie reads, refresh, revocation and field mapping on SQ
   db.exec("PRAGMA foreign_keys=ON");
   try {
     const counts = await verifyCookieCaller(d1Adapter({ prepare: text => { statements.push(text); return native.prepare(text); } }), "sqlite", async (text, values = []) => db.query(text).all(...values as never[]) as Record<string, unknown>[], statements);
-    expect(counts["native:fresh"]).toBe(1); expect(counts["native:read-first"]).toBe(0); expect(counts["native:read-warm"]).toBe(0); expect(counts["secondary:refresh"]).toBe(1);
+    expect(counts["native:fresh"]).toBe(2); expect(counts["native:read-first"]).toBe(1); expect(counts["native:read-warm"]).toBe(1); expect(counts["secondary:refresh"]).toBe(2);
   } finally { db.close(); }
 });
 
@@ -22,7 +22,7 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
   try {
     const handle = { unsafe: (text: string, values: unknown[]) => { statements.push(text); return sql.unsafe(text, values); }, begin: sql.begin.bind(sql) };
     const counts = await verifyCookieCaller(bunSqlAdapter(handle as never), "postgres", async (text, values = []) => [...await sql.unsafe(text, values)], statements);
-    expect(counts["native:fresh"]).toBe(1); expect(counts["renamed:refresh"]).toBe(1);
+    expect(counts["native:fresh"]).toBe(2); expect(counts["renamed:refresh"]).toBe(2);
   } finally { await sql.close(); await admin.unsafe(`DROP SCHEMA "${schema}" CASCADE`); await admin.close(); }
 }, 30000);
 
@@ -48,7 +48,7 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
     expect(ready).toBe(true);
     const response = await fetch(`http://127.0.0.1:${port}/verify`, { signal: AbortSignal.timeout(30000) }), result = await response.json() as { ok: boolean; counts: Record<string, number> };
     expect(result).toMatchObject({ ok: true }); expect(response.status).toBe(200);
-    expect(result.counts["native:fresh"]).toBe(1); expect(result.counts["native:read-first"]).toBe(0); expect(result.counts["native:read-warm"]).toBe(0); expect(result.counts["renamed:refresh"]).toBe(1); expect(result.counts["secondary:refresh"]).toBe(1);
+    expect(result.counts["native:fresh"]).toBe(2); expect(result.counts["native:read-first"]).toBe(1); expect(result.counts["native:read-warm"]).toBe(1); expect(result.counts["renamed:refresh"]).toBe(2); expect(result.counts["secondary:refresh"]).toBe(2);
   } finally {
     if (worker && worker.exitCode === null) { const ended = once(worker, "exit"); try { process.kill(-worker.pid!, "SIGTERM"); } catch {} await ended; }
     await log?.close(); await rm(dir, { recursive: true, force: true }); await rm(state, { recursive: true, force: true });

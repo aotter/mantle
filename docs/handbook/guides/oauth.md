@@ -3,11 +3,11 @@
 Auth remains app-owned. Install the existing optional Better Auth peers and
 create your `betterAuth()` instance with `jwt({ disableSettingJwtHeader: true })`
 and `oauthProvider` (or the provider's MCP preset). Append `oauthGrantExtension`
-**first** in its `extensions`, and merge `oauthGrantHooks(() => auth)` into
-`databaseHooks` alongside your user hooks. Both helpers come from
-`@aotter/mantle/auth/oauth`; the hook captures the consent ID when an authorization
-code is created. Refresh rotation preserves that ID; never replace it with a
-newly granted consent. Configure `consentPage: "/oauth/consent"`, loginPage,
+**first** in its `extensions`. The helper comes from
+`@aotter/mantle/auth/oauth` and binds issued access tokens to the current consent
+ID and Better Auth’s consent reference without changing `referenceId`.
+Configure
+`consentPage: "/oauth/consent"`, loginPage,
 resources, allowed/default client registration scopes, and public/native DCR
 explicitly. For MCP clients use the SDK's `mcp` preset, `allowPublicClientPrelogin:
 true`, and a `90d` registration client-secret expiration. The application selects
@@ -64,12 +64,15 @@ private/no-store. Connected-app redirects must be same-origin paths.
 
 `resolveCaller(request, loader, { audience, scopes })` verifies token signature,
 issuer, audience and request-bound DPoP through Better Auth, including a durable
-single-use proof reservation. It then reads consent, session and current user
-in one native JOIN on the same auth adapter handle. All of sub, azp, sid and mantle_consent_id must match;
+single-use proof reservation. It then checks the live consent and session and
+loads the current database user.
+All of sub, azp, sid, mantle_consent_id and the consent reference must match;
 the consent must cover the resource and every token scope, and the session must
 still be alive. `scopes` adds a resource-specific scope floor (403 when missing).
 Unbound legacy tokens fail closed. Disconnect deletes the grant first, revokes
-its access/refresh tokens and deletes pending authorization codes. Already-issued
+its access/refresh tokens. Tokens issued without an active consent fail closed.
+First-party `skip_consent` tokens instead require a live, enabled client with
+`skipConsent` and allowed scopes, plus a live user session. Already-issued
 JWTs fail on the next call, and reconsenting cannot revive the old JWT lineage.
 Database failures remain server errors, rather than silently authenticating.
 
@@ -78,7 +81,8 @@ For app-owned API keys/personal tokens, supply `resolveCredential(request)` in
 Caller or null when absent, and throw when presented but invalid. The same scope
 floor applies. Any non-Bearer/DPoP Authorization header (including Basic from a staging
 gateway), unless handled by the app-owned credential hook, is UNAUTHENTICATED
-and never falls back to a cookie. The application owns credential verification and live roles.
+and never falls back to a cookie. The application owns credential verification;
+Mantle loads live roles, bans and declared stored fields.
 
 For the 0.2 legacy-DCR cleanup policy, call `pruneLegacyOAuthClients(auth)` from
 an application-owned hourly scheduled job. It deletes only ownerless,

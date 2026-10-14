@@ -5,7 +5,7 @@ import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
-import type { AdminUser, MemberListResult, AdminRole } from "../../lib/types";
+import type { MemberListResult, AdminRole } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { formatTimestampMs } from "../content/field-render";
 import { Badge } from "@aotter/mantle-ui/kit";
@@ -50,11 +50,6 @@ export function MembersView(): React.ReactElement {
       return api.get<MemberListResult>(`/members?${query.toString()}`);
     },
   });
-  const me = useQuery<AdminUser>({
-    queryKey: ["me"],
-    queryFn: () => api.get<AdminUser>("/me"),
-    retry: false,
-  });
   const promote = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: AdminRole }) =>
       api.patch(`/admin/${encodeURIComponent(userId)}/role`, { role }),
@@ -63,7 +58,6 @@ export function MembersView(): React.ReactElement {
       void queryClient.invalidateQueries({ queryKey: ["admin"] });
     },
   });
-  const canPromote = me.data?.admin === true;
 
   return (
     <div>
@@ -92,8 +86,9 @@ export function MembersView(): React.ReactElement {
                   <TableHead>{t(language, "members.table.name")}</TableHead>
                   <TableHead>{t(language, "members.table.email")}</TableHead>
                   <TableHead>{t(language, "members.table.status")}</TableHead>
+                  <TableHead>{t(language, "admin.table.role")}</TableHead>
                   <TableHead>{t(language, "members.table.joined")}</TableHead>
-                  {canPromote ? <TableHead>{t(language, "members.table.teamAccess")}</TableHead> : null}
+                  <TableHead>{t(language, "members.table.teamAccess")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -107,21 +102,20 @@ export function MembersView(): React.ReactElement {
                         {t(language, member.emailVerified ? "members.verified" : "members.unverified")}
                       </Badge>
                     </TableCell>
+                    <TableCell>{(member.role ?? "").split(",").map(role => role.trim()).filter(Boolean).join(", ") || t(language, "admin.role.none")}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatTimestampMs(Date.parse(member.createdAt)) ?? "-"}
                     </TableCell>
-                    {canPromote ? (
-                      <TableCell>
-                        <Button
-                          variant="outline"
-                          disabled={promote.isPending}
-                          onClick={() => promote.mutate({ userId: member.id, role: "admin" })}
-                          aria-label={`${t(language, "members.promote")}: ${member.name}`}
-                        >
-                          {t(language, "members.promote")}
-                        </Button>
-                      </TableCell>
-                    ) : null}
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        disabled={promote.isPending}
+                        onClick={() => promote.mutate({ userId: member.id, role: members.data?.adminRoles?.[0] ?? "admin" })}
+                        aria-label={`${t(language, "members.promote")}: ${member.name}`}
+                      >
+                        {t(language, "members.promote")}
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

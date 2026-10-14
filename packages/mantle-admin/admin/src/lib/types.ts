@@ -170,6 +170,7 @@ export interface AdminIdentity {
 }
 
 export interface MemberUser {
+  role?: string | null;
   id: string;
   email: string;
   name: string;
@@ -178,6 +179,7 @@ export interface MemberUser {
 }
 
 export interface MemberListResult {
+  adminRoles?: string[];
   items: MemberUser[];
   previous_cursor: string | null;
   next_cursor: string | null;

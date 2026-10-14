@@ -5,8 +5,7 @@ import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { mcp } from "@better-auth/mcp";
 import { cimd } from "@better-auth/cimd";
-import { oauthGrantExtension, oauthGrantHooks } from "@aotter/mantle/auth/oauth";
-import type { AuthInstance } from "@aotter/mantle/auth";
+import { oauthGrantExtension } from "@aotter/mantle/auth/oauth";
 import { d1Adapter } from "@aotter/mantle/auth/adapter";
 import { d1BootstrapAdmin } from "@aotter/mantle/auth/identity";
 import { authHardening, hashEmailOtp } from "@aotter/mantle/auth/hardening";
@@ -14,7 +13,7 @@ import type { BetterAuthOptions } from "better-auth/types";
 
 const ac = createAccessControl(defaultStatements);
 /** Schema generation reads these options without constructing Better Auth. */
-export function authOptions(env: Env, getAuth?: () => AuthInstance) {
+export function authOptions(env: Env) {
   const origin = env.PUBLIC_ORIGIN || "https://example.invalid";
   const secret = env.BETTER_AUTH_SECRET || "schema-generation-placeholder-secret";
   const bootstrap = env.ADMIN_EMAIL ? d1BootstrapAdmin(env.DB, { match: "email", value: env.ADMIN_EMAIL }, () => ({ options: { plugins } })) : async () => {};
@@ -29,18 +28,14 @@ export function authOptions(env: Env, getAuth?: () => AuthInstance) {
     cimd({ fetchClientMetadataResource: (input, init) => fetch(input, { ...init, redirect: "manual" }), metadataProfile: "mcp-2026-07-28" }),
   ];
   return { database: d1Adapter(env.DB), secret, baseURL: origin, basePath: "/api/auth", plugins,
+    // The jwt plugin's cookie-to-JWT endpoint is unused; OAuth tokens come from the provider (Better Auth oauth-provider docs).
+    disabledPaths: ["/token"],
     ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], plugins, baseURL: origin, errorURL: "/admin/sign-in" }),
-    databaseHooks: { ...oauthGrantHooks(getAuth ?? (() => { throw new Error("Auth instance is not bound."); })), user: { create: { after: bootstrap }, update: { after: bootstrap } } },
+    databaseHooks: { user: { create: { after: bootstrap }, update: { after: bootstrap } } },
     session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true },
   } satisfies BetterAuthOptions;
 }
 export function createAuth(env: Env) {
   if (!env.BETTER_AUTH_SECRET || !env.PUBLIC_ORIGIN || !env.ADMIN_EMAIL) throw new Error("Authentication setup is incomplete.");
-  let current: AuthInstance | undefined;
-  const auth = betterAuth(authOptions(env, () => {
-    if (!current) throw new Error("Auth instance is not ready.");
-    return current;
-  }));
-  current = auth;
-  return auth;
+  return betterAuth(authOptions(env));
 }

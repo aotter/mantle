@@ -34,15 +34,6 @@ import { IdValue } from "../../ui/id-value";
 const EMAIL_SETUP_GUIDE_URL = "https://developers.cloudflare.com/email-service/";
 const EMAIL_SETUP_PROMPT = `Enable email sign-in for this Mantle site. Implement the Mantle EmailSender port with a transactional email provider. For Cloudflare, prefer an Email Service binding. Wire the app-owned Better Auth emailOTP or magicLink plugin to that sender, select its native auth schema when generating, keep credentials in Worker secrets, deploy, then verify that /api/auth/methods lists the method and a real email arrives.`;
 
-/** Admin management: list admin, assign roles, invite by
- *  email. The server enforces signed-in admin and the self-role-change guard; this view renders
- *  those denials, it does not re-derive them. */
-
-const ASSIGNABLE: ReadonlyArray<AdminRole | "none"> = [
-  "admin",
-  "none",
-];
-
 export function AdminView(): React.ReactElement {
   const { language } = usePreferences();
   const { search: locationSearch } = useAdminLocation();
@@ -55,9 +46,9 @@ export function AdminView(): React.ReactElement {
     queryFn: () => api.get<AdminUser>("/me"),
     retry: false,
   });
-  const admin = useQuery<{ users: AdminIdentity[] }>({
+  const admin = useQuery<{ users: AdminIdentity[]; adminRoles?: string[] }>({
     queryKey: ["admin"],
-    queryFn: () => api.get<{ users: AdminIdentity[] }>("/admin"),
+    queryFn: () => api.get<{ users: AdminIdentity[]; adminRoles?: string[] }>("/admin"),
     retry: false,
   });
   const authMethods = useQuery(authMethodsQueryOptions());
@@ -87,8 +78,9 @@ export function AdminView(): React.ReactElement {
     return <Skeleton className="h-64 w-full" />;
   }
 
-  const roleLabel = (role: AdminRole | "none"): string =>
-    role === "none" ? t(language, "admin.role.none") : role === "admin" ? t(language, "admin.role.admin") : role;
+  const adminRoles = admin.data.adminRoles ?? ["admin"];
+  const roleLabel = (role: AdminRole | "__none"): string =>
+    role === "__none" ? t(language, "admin.role.none") : role === "admin" ? t(language, "admin.role.admin") : role;
   const term = search.toLowerCase();
   const users = term
     ? admin.data.users.filter((user) =>
@@ -104,7 +96,7 @@ export function AdminView(): React.ReactElement {
       {setRole.isError ? <ErrorBox error={asRenderable(setRole.error)} /> : null}
       {revoke.isError ? <ErrorBox error={asRenderable(revoke.error)} /> : null}
       {authMethods.data && !hasEmailSignIn ? <EmailSignInSetup /> : null}
-      <InviteCard onInvited={refetch} />
+      <InviteCard onInvited={refetch} role={adminRoles[0]} />
       <ListQueryToolbar
         key={search}
         language={language}
@@ -126,9 +118,8 @@ export function AdminView(): React.ReactElement {
             {users.map((user) => {
               const isSelf = user.id === me.data?.userId;
               const invited = !user.emailVerified && !user.githubLogin;
-              const current: AdminRole | "none" = isAdminRole(user.role)
-                ? user.role
-                : "none";
+              const roles = (user.role ?? "").split(",").map(role => role.trim()).filter(Boolean);
+              const current = roles.find(role => adminRoles.includes(role)) ?? "__none";
               return (
                 <TableRow key={user.id}>
                   <TableCell><IdValue value={user.id} language={language} /></TableCell>
@@ -156,33 +147,28 @@ export function AdminView(): React.ReactElement {
                     )}
                   </TableCell>
                   <TableCell>
-                    {isSelf ? (
-                      <span className="text-muted-foreground">
-                        {roleLabel(current)} · {t(language, "admin.self")}
-                      </span>
-                    ) : (
-                      <Select
-                        value={current}
-                        disabled={setRole.isPending}
-                        onValueChange={(next) => {
-                          setRole.mutate({
-                            userId: user.id,
-                            role: isAdminRole(next) ? next : null,
-                          });
-                        }}
-                      >
-                        <SelectTrigger className="w-44">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ASSIGNABLE.map((role) => (
-                            <SelectItem key={role} value={role}>
-                              {roleLabel(role)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                    <Select
+                      value={current}
+                      disabled={setRole.isPending}
+                      onValueChange={(next) => {
+                        setRole.mutate({
+                          userId: user.id,
+                          role: next === "__none" ? null : next,
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="w-44">
+                        <SelectValue>{roles.map(roleLabel).join(", ") || roleLabel("__none")}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[...adminRoles, "__none"].map((role) => (
+                          <SelectItem key={role} value={role}>
+                            {roleLabel(role)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {isSelf ? <span className="text-muted-foreground">{t(language, "admin.self")}</span> : null}
                   </TableCell>
                 </TableRow>
               );
@@ -194,13 +180,13 @@ export function AdminView(): React.ReactElement {
   );
 }
 
-function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElement {
+function InviteCard({ onInvited, role }: { onInvited: () => void; role?: string }): React.ReactElement {
   const { language } = usePreferences();
   const site = useQuery(siteQueryOptions());
   const [email, setEmail] = React.useState("");
 
   const invite = useMutation({
-    mutationFn: () => api.post("/admin/invitations", { email, role: "admin" }),
+    mutationFn: () => api.post("/admin/invitations", { email, role }),
     onSuccess: () => {
       setEmail("");
       onInvited();
@@ -237,7 +223,7 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
         <div className="flex justify-end md:col-span-2">
           <Button
             type="submit"
-            disabled={invite.isPending || email.trim() === ""}
+            disabled={!role || invite.isPending || email.trim() === ""}
           >
             <UserPlus className="size-4" aria-hidden />
             {invite.isPending
@@ -289,8 +275,4 @@ function EmailSignInSetup(): React.ReactElement {
       </div>
     </SectionCard>
   );
-}
-
-function isAdminRole(value: string | null): value is AdminRole {
-  return value === "admin";
 }

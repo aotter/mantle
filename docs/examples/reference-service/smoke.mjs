@@ -67,7 +67,7 @@ try {
   step("explicit deployment DDL prepared a fresh D1; the public catalog is empty");
 
   const admin = await signIn(owner);
-  assert.equal((await call("GET", "/admin/api/me", { cookie: admin })).body.role, "admin");
+  assert.equal((await call("GET", "/admin/api/me", { cookie: admin })).body.role.split(",")[0], "admin");
   step("console email OTP signs in; verified ADMIN_EMAIL becomes admin");
   const resourceMetadata = await call("GET", "/.well-known/oauth-protected-resource/mcp");
   assert.equal(resourceMetadata.status, 200, JSON.stringify(resourceMetadata.body));

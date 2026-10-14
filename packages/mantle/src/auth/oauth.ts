@@ -10,29 +10,36 @@ const array = (value: unknown): string[] | null => {
   try { const parsed = typeof value === "string" ? JSON.parse(value) : value; return Array.isArray(parsed) && parsed.every(x => typeof x === "string") ? parsed : null; } catch { return null; }
 };
 
-/** Fail closed for legacy/unbound tokens; a newly granted consent cannot resurrect an old token lineage. */
+/** Fail closed for unbound tokens; reconsent cannot resurrect an issued JWT. */
 export async function assertActiveUserGrant(auth: AuthInstance, claims: Record<string, unknown>, audience: string | readonly string[]) {
-  const { sub, azp, sid, mantle_consent_id: id } = claims;
-  if (![sub, azp, sid, id].every(x => typeof x === "string" && x.length)) throw new ContractError("UNAUTHENTICATED", "OAuth token is not bound to a user session.");
-  const { exec, param, now, table, column, has } = nativeAuthRead(auth.options);
-  const c = (field: string) => `c.${column("oauthConsent", field)}`, s = (field: string) => `s.${column("session", field)}`, u = (field: string) => `u.${column("user", field)}`;
-  const user = (field: string) => `${has("user", field) ? u(field) : "NULL"} AS "${field}"`;
-  const { rows } = await exec(`SELECT ${c("resources")} AS resources, ${c("scopes")} AS scopes, ${u("id")} AS id, ${["role", "banned", "banExpires"].map(user).join(", ")}
-    FROM ${table("oauthConsent")} c JOIN ${table("session")} s ON ${s("id")} = ${param(1)} AND ${s("userId")} = ${c("userId")} AND ${s("expiresAt")} > ${param(2)}
-    JOIN ${table("user")} u ON ${u("id")} = ${c("userId")}
-    WHERE ${c("id")} = ${param(3)} AND ${c("userId")} = ${param(4)} AND ${c("clientId")} = ${param(5)}`, [sid, now(Date.now()), id, sub, azp]);
-  const grant = rows[0] as { id: string; resources: unknown; scopes: unknown; role: string | null; banned: boolean | null; banExpires: Date | string | number | null } | undefined;
-  const resources = array(grant?.resources), scopes = array(grant?.scopes);
+  const { sub, azp, sid, mantle_consent_id: id, mantle_consent_reference: reference, mantle_skip_consent: skip } = claims;
+  if (![sub, azp, sid].every(x => typeof x === "string" && x.length) || !(skip === true && id === null || typeof id === "string" && id.length)) throw new ContractError("UNAUTHENTICATED", "OAuth token is not bound to a user session.");
+  const { exec, param, now, table, column } = nativeAuthRead(auth.options);
+  const c = (field: string) => `c.${column("oauthConsent", field)}`, s = (field: string) => `s.${column("session", field)}`, client = (field: string) => `client.${column("oauthClient", field)}`;
+  const { rows } = await exec(`SELECT ${s("userId")} AS id, ${c("id")} AS "consentId", ${c("referenceId")} AS reference, ${c("resources")} AS resources, ${c("scopes")} AS scopes,
+      ${client("skipConsent")} AS "skipConsent", ${client("disabled")} AS disabled, ${client("scopes")} AS "clientScopes"
+    FROM ${table("oauthClient")} client JOIN ${table("session")} s ON ${s("id")} = ${param(1)} AND ${s("userId")} = ${param(2)} AND ${s("expiresAt")} > ${param(3)}
+    LEFT JOIN ${table("oauthConsent")} c ON ${c("id")} = ${param(4)} AND ${c("userId")} = ${s("userId")} AND ${c("clientId")} = ${client("clientId")}
+    WHERE ${client("clientId")} = ${param(5)}`, [sid, sub, now(Date.now()), id, azp]);
+  const grant = rows[0];
+  const provider = auth.options.plugins?.find(plugin => plugin.id === "oauth-provider") as { options?: { scopes?: string[] } } | undefined;
+  const firstParty = skip === true && id === null && !!grant?.skipConsent;
+  const resources = firstParty ? (typeof claims.aud === "string" ? [claims.aud] : array(claims.aud)) : array(grant?.resources);
+  const scopes = firstParty ? array(grant?.clientScopes) ?? provider?.options?.scopes : array(grant?.scopes);
   const requested = typeof audience === "string" ? [audience] : audience;
   const tokenAudiences = typeof claims.aud === "string" ? [claims.aud] : array(claims.aud) ?? [];
   const tokenScopes = typeof claims.scope === "string" ? claims.scope.split(/\s+/).filter(Boolean) : array(claims.scope);
-  if (!grant || !resources || !scopes || !tokenScopes || !requested.some(x => resources.includes(x) && tokenAudiences.includes(x)) || !tokenScopes.every(x => scopes.includes(x))) throw new ContractError("UNAUTHENTICATED", "OAuth authorization grant is no longer active.");
-  return grant;
+  if (!grant || grant.disabled || !firstParty && (!grant.consentId || (grant.reference ?? null) !== reference) || !resources || !scopes || !tokenScopes || !requested.some(x => resources.includes(x) && tokenAudiences.includes(x)) || !tokenScopes.every(x => scopes.includes(x))) throw new ContractError("UNAUTHENTICATED", "OAuth authorization grant is no longer active.");
+  return { id: grant.id as string };
 }
 
-/** Add to the application's oauthProvider/mcp options; source of the immutable consent claim. */
+/** Add first to oauthProvider/mcp extensions; Better Auth retains ownership of referenceId. */
 export const oauthGrantExtension: NonNullable<Parameters<typeof oauthProvider>[0]["extensions"]>[number] = {
-  claims: { accessToken: ({ referenceId }) => ({ mantle_consent_id: referenceId ?? null }) },
+  claims: { accessToken: async ({ ctx, user, client, referenceId }) => {
+    if (client.skipConsent) return { mantle_consent_id: null, mantle_skip_consent: true };
+    const consent = user && await ctx.context.adapter.findOne<{ id: string }>({ model: "oauthConsent", where: [pair("userId", user.id), pair("clientId", client.clientId), { field: "referenceId", value: referenceId ?? null }] });
+    return { mantle_consent_id: consent?.id ?? null, mantle_consent_reference: referenceId ?? null };
+  } },
 };
 
 /** A verification value that is an authorization code, with its user and client; else undefined. */
@@ -40,17 +47,6 @@ function authCode(text: string): { userId: string; query: { client_id: string } 
   let value;
   try { value = JSON.parse(text); } catch { return; }
   return value?.type === "authorization_code" && typeof value.userId === "string" && typeof value.query?.client_id === "string" ? value : undefined;
-}
-
-/** Merge this verification.create.before hook into app-owned betterAuth options, alongside its user hooks. */
-export function oauthGrantHooks(getAuth: () => AuthInstance): NonNullable<BetterAuthOptions["databaseHooks"]> {
-  return { verification: { create: { before: async verification => {
-    const value = authCode(verification.value);
-    if (!value) return;
-    const { adapter } = await getAuth().$context as AuthContext;
-    const consent = await adapter.findOne<{ id: string }>({ model: "oauthConsent", where: [pair("userId", value.userId), pair("clientId", value.query.client_id)] });
-    return { data: { value: JSON.stringify({ ...value, referenceId: consent?.id ?? "" }) } };
-  } } } };
 }
 
 export interface OAuthConsentRequest { readonly clientName: string; readonly redirectUri: string; readonly scopes: readonly string[]; readonly oauthQuery: string }
@@ -93,6 +89,7 @@ export function oauthConsents(auth: AuthInstance & { handler(request: Request): 
       // Delete first: even if cleanup fails, every issued JWT fails the live-grant check immediately.
       await db.deleteMany({ model: "oauthConsent", where });
       for (const model of ["oauthRefreshToken", "oauthAccessToken"]) await db.updateMany({ model, where: [...where, { field: "revoked", value: null }], update: { revoked: new Date() } });
+      // An unredeemed code would mint a new token lineage after reconsent.
       const code = (v: string) => { const x = authCode(v); return x?.userId === userId && x.query.client_id === consent.clientId; };
       const codes = [{ field: "value", operator: "contains" as const, value: JSON.stringify(userId) }, { field: "value", operator: "contains" as const, value: JSON.stringify(consent.clientId) }];
       for (let offset = 0; ;) {

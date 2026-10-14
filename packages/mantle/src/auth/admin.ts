@@ -12,6 +12,10 @@ export async function guardAuthAdminRequest(request: Request, resolve: () => Cal
     if (path !== admin && !path.startsWith(`${admin}/`))
         return;
     const caller = await resolve();
-    deny(caller, isAdmin(caller) && caller.credential === "session", "auth:admin");
+    // Mantle policy: only the admin layer reaches Better Auth admin endpoints (oauth-provider's /admin/oauth2/* admits any
+    // session by default); Better Auth access control then decides each action.
+    // Any signed-in user may ask about their own permissions or end an impersonation.
+    const own = path === `${admin}/has-permission` || path === `${admin}/stop-impersonating`;
+    deny(caller, caller.kind === "user" && caller.credential === "session" && (own || isAdmin(caller)), "auth:admin");
     checkOrigin(request, caller);
 }

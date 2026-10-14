@@ -12,7 +12,7 @@ import { getAuthTables } from "@better-auth/core/db";
 import type { OAuthOptions } from "@better-auth/oauth-provider";
 import { resourceSeeds } from "./resource-seeds.js";
 import { ContractError } from "../kernel/contracts.js";
-import { adminRolesOf } from "./caller.js";
+import { adminOptionsOf } from "./caller.js";
 import type { SQL } from "bun";
 import type { Dialect } from "../kernel/dialect/common.js";
 import * as postgres from "../kernel/dialect/postgres.js";
@@ -26,16 +26,19 @@ type Row = Record<string, unknown>;
 type Exec = (text: string, values: unknown[], protectAdmin?: boolean) => ReturnType<typeof bunSql.run>;
 const nativeReaders = new WeakMap<object, { exec: Exec; param(n: number): string; now(ms: number): Date | string }>();
 /** Selected auth queries share this adapter's handle, dialect and Better Auth's physical model/field mapping. */
-export function nativeAuthRead(options: BetterAuthOptions) {
-  const native = options.database && nativeReaders.get(options.database as object);
-  if (!native) throw new ContractError("AUTH_CONFIGURATION_ERROR", "OAuth requires Mantle's native auth database adapter.", "auth:database");
+/** Better Auth's table and column names for these options (modelName/fieldName mapping); needs no database. */
+export function authNames(options: BetterAuthOptions) {
   const schema = getAuthTables(options);
   return {
-    ...native,
     table: (model: string) => postgres.ident(schema[model]!.modelName),
     column: (model: string, field: string) => postgres.ident(schema[model]?.fields[field]?.fieldName ?? field),
     has: (model: string, field: string) => field === "id" || !!schema[model]?.fields[field],
   };
+}
+export function nativeAuthRead(options: BetterAuthOptions) {
+  const native = options.database && nativeReaders.get(options.database as object);
+  if (!native) throw new ContractError("AUTH_CONFIGURATION_ERROR", "OAuth requires Mantle's native auth database adapter.", "auth:database");
+  return { ...native, ...authNames(options) };
 }
 /** The slice of D1 the adapter calls (a real `D1Database` satisfies it). */
 export type D1Like = Reader;
@@ -80,7 +83,7 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
     const cols = (values: Row) => Object.entries(values).filter(([, v]) => v !== undefined);
     const assign = (s: Statement, values: Row, increment: Record<string, number> = {}) =>
       [...cols(values).map(([c, v]) => `${ident(c)} = ${s.bind(v)}`), ...Object.entries(increment).map(([c, n]) => `${ident(c)} = ${ident(c)} + ${s.bind(n)}`)].join(", ");
-    const roles = options ? adminRolesOf({ options }) : [];
+    const { adminRoles: roles, adminUserIds } = options ? adminOptionsOf({ options }) : { adminRoles: [] as string[], adminUserIds: [] as readonly string[] };
     const holdsAdmin = (role: unknown) => typeof role === "string" && role.split(",").some(role => roles.includes(role));
     const field = (name: string) => getFieldName({ model: "user", field: name });
     const protects = (modelKey: string, values?: Row) => modelKey === "user" && roles.length > 0 &&
@@ -88,7 +91,7 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
     const membership = (s: Statement, alias: string) => '(' + roles.map(role => `${d === sqlite ? "instr" : "strpos"}(',' || COALESCE(${alias}.${ident(field("role"))}, '') || ',', ${s.bind(',' + role + ',')}) > 0`).join(' OR ') + ')';
     const lastAdminGuard = (s: Statement, model: string) => {
       const table = ident(model), other = '"_mantle_other_admin"', no = d === sqlite ? '0' : 'FALSE';
-      return `(NOT ${membership(s, table)} OR EXISTS (SELECT 1 FROM ${table} ${other} WHERE ${membership(s, other)} AND ${other}.${idOf("user")} <> ${table}.${idOf("user")} AND COALESCE(${other}.${ident(field("banned"))}, ${no}) = ${no}))`;
+      return `(NOT ${membership(s, table)} OR EXISTS (SELECT 1 FROM ${table} ${other} WHERE (${membership(s, other)}${adminUserIds.map(id => ` OR ${other}.${idOf("user")} = ${s.bind(id)}`).join("")}) AND ${other}.${idOf("user")} <> ${table}.${idOf("user")} AND COALESCE(${other}.${ident(field("banned"))}, ${no}) = ${no}))`;
     };
     const mutation = async (model: string, modelKey: string, where: CleanedWhere[], values?: Row) => {
       const protect = protects(modelKey, values);

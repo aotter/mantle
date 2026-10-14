@@ -65,15 +65,15 @@ test("native list/editor/bootstrap and exports share a single admin resolution a
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
 },30000);
 
-test("resolved session supplies menu display fields with one authority read and no profile query",async()=>{
+test("resolved session supplies current menu display fields without a separate Admin profile query",async()=>{
  const {authLoader,resolveCaller}=await import("@aotter/mantle/auth");
  let reads=0,profiles=0,providers=0;
- const auth=authLoader(async()=>({options:{plugins:[{id:"admin"}]},$context:Promise.resolve({}),api:{getSession:async()=>{reads++;return {headers:null,response:{session:{id:"session"},user:{id:"admin",role:"admin",name:"Ada",image:"/avatar.png",githubLogin:"ada"}}};}}}));
+ const auth=authLoader(async()=>({options:{plugins:[{id:"admin"}]},$context:Promise.resolve({internalAdapter:{findUserById:async()=>{profiles++;return {id:"admin",role:"admin",name:"Ada",image:"/avatar.png",githubLogin:"ada"};}}}),api:{getSession:async()=>{reads++;return {headers:null,response:{session:{id:"session"},user:{id:"admin",role:"admin",name:"Ada",image:"/avatar.png",githubLogin:"ada"}}};}}}));
  const request=new Request("https://app.test/admin/api/me",{headers:{cookie:"better-auth.session_token=value"}});
  const caller=await resolveCaller(request,auth);
  const fetch=createAdmin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>{providers++;return null;},caller:()=>caller});
  expect(await(await fetch(request,{}))!.json()).toMatchObject({login:"ada",image:"/avatar.png"});
- expect(reads).toBe(1);expect(profiles).toBe(0);expect(providers).toBe(0);
+ expect(reads).toBe(1);expect(profiles).toBe(1);expect(providers).toBe(0);
 });
 
 test("generated extension metadata binds declarations and compiled settings checks",async()=>{

@@ -35,6 +35,8 @@ type IdentityCaller = {
   /** Application subject key: opaque, stable, unique across issuers. Never an email. */
   readonly subject: string;
   readonly issuer?: string;
+  /** Verified real actor during impersonation; retained only by the original identity. */
+  readonly impersonatedBy?: string;
   readonly role: string | null;
   /** Informational; only the private identity brand grants the admin layer. */
   readonly admin?: boolean;

@@ -6,7 +6,7 @@ import { validUserFieldName } from "./user-field-name.js";
 import { identities } from "./caller-identity.js";
 export const isAllValues = (value: unknown): value is AllValues => !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && (value as { all?: unknown }).all === true;
 /** Role names follow Better Auth's role strings; `-` is allowed. */
-const roleName = /^[a-z][a-zA-Z0-9_-]{0,62}$/;
+export const roleName = /^[a-z][a-zA-Z0-9_-]{0,62}$/;
 const invalid = (message: string): never => { throw new ContractError("USER_FIELD_INVALID", message, "auth:user", { status: 400 }); };
 function valueOf(value: unknown, spec: UserField, field: string): UserValue {
   if (isAllValues(value)) return Object.freeze({ all: true });
@@ -24,15 +24,19 @@ function valueOf(value: unknown, spec: UserField, field: string): UserValue {
   return Object.freeze([...new Set(value.map(scalar))]);
 }
 /** Better Auth stores roles comma-separated; split exactly as it does and fail fast on a name no manifest could match. */
-function rolesFrom(role: unknown): readonly string[] {
+export function rolesFrom(role: unknown): readonly string[] {
   if (role == null || role === "") return Object.freeze([]);
   if (typeof role !== "string") return invalid("User role must be comma-separated text.");
-  return Object.freeze([...new Set(role.split(",").map(part => roleName.test(part) ? part : invalid(`Invalid role '${part}' in '${role}': role names start with a lower-case letter and use letters, digits, '_' or '-'.`)))]);
+  return Object.freeze([...new Set(role.split(",").map(part => roleName.test(part) ? part : invalid(`Invalid role '${part}'.`)))]);
+}
+/** Better Auth's configured admin layer, independent of per-operation access control. */
+export function adminLayerOf(user: { id: string; role?: unknown }, options: { adminRoles?: readonly string[]; adminUserIds?: readonly string[] } = {}): boolean {
+  return !!options.adminUserIds?.includes(user.id) || rolesFrom(user.role).some(role => (options.adminRoles ?? ["admin"]).some(name => name.trim() === role));
 }
 /** Auth integration and test helpers validate a verified Better Auth-shaped user once. */
 export function userCaller(user: Readonly<Record<string, unknown>> & { readonly id: string }, options: {
-  readonly fields?: UserFields; readonly adminRoles?: readonly string[]; readonly credential?: CredentialKind;
-  readonly credentialId?: string | null; readonly clientId?: string | null; readonly scopes?: readonly string[]; readonly issuer?: string;
+  readonly fields?: UserFields; readonly adminRoles?: readonly string[]; readonly adminUserIds?: readonly string[]; readonly credential?: CredentialKind;
+  readonly credentialId?: string | null; readonly clientId?: string | null; readonly scopes?: readonly string[]; readonly issuer?: string; readonly impersonatedBy?: string;
 } = {}): Extract<Caller, { kind: "user" }> {
   if (typeof user.id !== 'string' || !user.id || /^(host|system):/i.test(user.id)) return invalid("User subjects must be non-empty strings without reserved prefixes.");
   const roles = rolesFrom(user.role);
@@ -42,10 +46,12 @@ export function userCaller(user: Readonly<Record<string, unknown>> & { readonly 
     if (Object.hasOwn(user, field) && user[field] !== undefined && user[field] !== null) fields[field] = valueOf(user[field], spec, field);
   }
   Object.freeze(fields);
-  const caller = Object.freeze({ kind: "user" as const, subject: user.id, role: typeof user.role === "string" ? user.role : null,
-    admin: roles.some(role => (options.adminRoles ?? ["admin"]).includes(role)), roles, fields,
+  const caller = { kind: "user" as const, subject: user.id, role: typeof user.role === "string" ? user.role : null,
+    admin: adminLayerOf(user, options), roles, fields,
     ...(options.issuer ? { issuer: options.issuer } : {}), scopes: Object.freeze([...(options.scopes ?? [])]),
-    credential: options.credential ?? "session", credentialId: options.credentialId ?? null, clientId: options.clientId ?? null });
-  identities.set(caller, Object.freeze({ roles, fields, admin: caller.admin }));
+    credential: options.credential ?? "session", credentialId: options.credentialId ?? null, clientId: options.clientId ?? null };
+  // The real actor is read from the brand, so a spread or forged copy never carries it.
+  if (options.impersonatedBy) Object.defineProperty(caller, "impersonatedBy", { get() { return identities.get(this)?.impersonatedBy; } });
+  identities.set(Object.freeze(caller), Object.freeze({ roles, fields, admin: caller.admin, ...(options.impersonatedBy ? { impersonatedBy: options.impersonatedBy } : {}) }));
   return caller;
 }
