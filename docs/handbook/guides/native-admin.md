@@ -52,14 +52,13 @@ const bindings = adminBindings({ handlers });
 const api = admin(bindings.metadata, bindings.views, bindings.operations, {
   db: (env: Env) => env.DB,
   caller: resolveRequestCaller,
-  handlers,
   routes: entries(bindings.schemas, bindings.adapter),
   developerViews: bindings.developerViews,
 });
 // In app-owned fetch: await api(request, env); undefined means fall through.
 ```
 
-Without ref Procedures, omit `handlers` and use `adminBindings()`. The app's
+Ref operations run with the handlers given to `adminBindings({ handlers })`; `admin()` needs no second copy. Without ref Procedures, omit `handlers` and use `adminBindings()`. The app's
 resolver verifies the caller; Admin accepts an admin cookie session classified from
 Better Auth’s admin plugin `adminRoles` (default `["admin"]`), and cookie writes
 retain the shared same-origin check. Comma-separated roles are supported.
