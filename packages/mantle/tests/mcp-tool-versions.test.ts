@@ -91,7 +91,7 @@ const expectListedHashes=(tools:readonly {name:string;title?:string;description?
  expect(tools.length).toBeGreaterThan(0);
  for(const {name,title,description,inputSchema,outputSchema,annotations} of tools){
   const [,text,version]=/^(.*) \(tool version ([0-9a-f]{8})\)$/s.exec(description!)!;
-  expect([name,versionOf({name,title,description:text,inputSchema,outputSchema,annotations})]).toEqual([name,version]);
+  expect([name,versionOf({name,title,description:text,inputSchema,outputSchema,annotations})]).toEqual([name,version!]);
  }
 };
 const withApp=async(files:Readonly<Record<string,string>>,run:(mcp:any,db:Database)=>Promise<void>)=>{
@@ -139,7 +139,7 @@ test("/mcp/admin over the official client: publishing and media tools carry mark
    expect(tools.map(t=>t.name)).toEqual(expect.arrayContaining(["publish_posts","archive_posts","get_media_upload_policy","create_media_upload"]));
    expectListedHashes(tools);
    const policy=await client.callTool({name:"get_media_upload_policy",arguments:{}});
-   expect(policy.isError).toBeFalsy();expect((policy.content as {text:string}[])[1]).toEqual({type:"text",text:`tool version ${version("get_media_upload_policy")}`});
+   expect(policy.isError).toBeFalsy();expect((policy.content as {type:string;text:string}[])[1]).toEqual({type:"text",text:`tool version ${version("get_media_upload_policy")}`});
    for(const [name,args] of [["publish_posts",{id:"",expectedVersion:1}],["create_media_upload",{filename:"x"}]] as const){
     const bad=await client.callTool({name,arguments:args});expect(bad.isError).toBe(true);
     const about=(bad.content as {text:string}[])[1]!.text;expect(about).toStartWith(`tool version ${version(name)}; input schema `);
