@@ -313,9 +313,13 @@ spec:
   (scope or restrict) never fixes an index prefix; only equality does. The statement is
   prepared for a set of values, so `ORDER BY createdAt` after `[region, createdAt]`
   reads and sorts all of the caller's rows on every page, for one value, several values
-  and `{ all: true }` alike; no per-value fan-out exists. Generate proves each caller
-  variant's SQL as it runs: its `ORDER BY` must be served by a declared index after the
-  columns that equality fixes, so no page sorts the caller's rows. It does not promise a
+  and `{ all: true }` alike; no per-value fan-out exists. Generate proves one statement per
+  View, the first variant lowering visits (public or caller, before trusted): its
+  `ORDER BY` must be served by a declared index after the columns that equality fixes. The
+  `{ all: true }` form is that statement with scope `IN` terms replaced by `OR 1 = 1`, and
+  restricts kept, so the proof holds for it too. Trusted reads drop scope terms
+  (`= auth.uid()` and user-field alike) and restrict terms, and are not proved; see
+  [generated surfaces](../handbook/reference/surface.md). The proof does not promise a
   bounded read: an index on the ordered columns alone is accepted, and a scoped caller then
   scans it and filters. A View the proof refuses names the bounded order; the handbook's
   [index prefixes](../handbook/reference/schema.md#index-prefixes-for-paged-views) lists

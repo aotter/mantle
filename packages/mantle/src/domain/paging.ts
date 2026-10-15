@@ -3,10 +3,15 @@ import { NATIVE_NOT_NULL, notNullColumns, type LoweredPage, type RuntimePlan, ty
 import { declaredType } from "./columns.js";
 
 type Field = { schema: PlanSchema; name: string; type: string; notNull: boolean; source: object };
-type Relation = { fields: Map<string, Field>; names: ReadonlySet<string>; single: boolean; unique: boolean; fixed: Set<string>; sets: Set<string>; restricted: Set<string> };
+type Relation = { fields: Map<string, Field>; names: ReadonlySet<string>; single: boolean; unique: boolean; fixed: Set<string>; sets: Set<string> };
 export type PagingProof = { types: string[]; single: boolean; reason?: string };
 const fieldName = (n: SqlNode) => n.ColumnRef?.fields?.at(-1)?.String?.sval;
 const scalar = (n: SqlNode): boolean => !!(n.ParamRef || n.A_Const || n.TypeCast && scalar(n.TypeCast.arg));
+// A user-field term lowers to the dialect's anyOf, `(col) IN (SELECT value FROM json_each((?)))` or `(col) = ANY(CAST(...(?)...))`.
+const anyOf = (raw: SqlNode) => raw?.length === 8 && raw[1]?.ColumnRef && raw[5]?.ParamRef && /^ (IN \(SELECT value FROM json_each\(|= ANY\()/.test(raw[3]);
+// A scope prints `/*s:field*/ kept /*|*/ kept OR 1 = 1 /*;*/`, so `{ all: true }` drops it; any other anyOf is a restrict, which it never lifts.
+const scopeTerm = (raw: SqlNode) => typeof raw?.[0] === "string" && raw[0].startsWith("/*s:");
+const restricts = (n: SqlNode): boolean => !!n && typeof n === "object" && (anyOf(n.Raw?.parts) || !scopeTerm(n.Raw?.parts) && Object.values(n).some(restricts));
 const aggregate = (n: SqlNode): boolean => !!n && !n.SubLink && !n.SelectStmt && (n.FuncCall && !n.FuncCall.over && ["count", "sum", "min", "max", "avg"].includes(n.FuncCall.funcname?.at(-1)?.String?.sval) || Object.values(n).some(v => v && typeof v === "object" && (Array.isArray(v) ? v.some(aggregate) : aggregate(v))));
 
 /** Only complete grouped tuples, base ids and non-fanning singleton joins are proved. */
@@ -55,7 +60,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
           const type = declaredType(schema.fields, name) ?? (name === "version" ? "integer" : "text");
           fields.set(name, { schema, name, type, notNull: NATIVE_NOT_NULL.has(name) || notNull.has(name), source });
         }
-        fact = { fields, names: new Set(fields.keys()), single: false, unique: true, fixed: new Set(), sets: new Set(), restricted: new Set() };
+        fact = { fields, names: new Set(fields.keys()), single: false, unique: true, fixed: new Set(), sets: new Set() };
       } else if (r?.mantle === "cte") fact = ctes.get(r.relname);
       else if (sub) fact = select(sub.subquery.SelectStmt, ctes)?.relation;
       if (fact) {
@@ -64,7 +69,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
         fact = { ...fact, fields: new Map([...fact.fields].map(([name, f]) => {
           if (!sources.has(f.source)) sources.set(f.source, {});
           return [name, { ...f, source: sources.get(f.source)! }];
-        })), fixed: new Set(fact.fixed), sets: new Set(fact.sets), restricted: new Set(fact.restricted) };
+        })), fixed: new Set(fact.fixed), sets: new Set(fact.sets) };
         aliases.set(r?.alias?.aliasname ?? r?.relname ?? sub.alias.aliasname, fact);
       }
       return fact;
@@ -76,7 +81,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       if (!r || base && !base.single && !r.single) return;
       if (!base || !r.single) base = r;
     }
-    base ??= { fields: new Map(), names: new Set(), single: true, unique: false, fixed: new Set(), sets: new Set(), restricted: new Set() };
+    base ??= { fields: new Map(), names: new Set(), single: true, unique: false, fixed: new Set(), sets: new Set() };
     const targets = new Map<string, SqlNode>((s.targetList ?? []).map((t: SqlNode) => [t.ResTarget.name ?? fieldName(t.ResTarget.val), t.ResTarget.val]));
     const resolve = (n: SqlNode, output = true): Field | undefined => {
       const fields = n?.ColumnRef?.fields;
@@ -93,18 +98,15 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       if (output && pos > 0) return resolve(s.targetList[pos - 1]?.ResTarget.val, false);
       return;
     };
-    const fixed = (n: SqlNode, scoped = false): void => {
-      if (n?.BoolExpr?.boolop === "AND_EXPR") n.BoolExpr.args.forEach((a: SqlNode) => fixed(a, scoped));
+    const fixed = (n: SqlNode): void => {
+      if (n?.BoolExpr?.boolop === "AND_EXPR") n.BoolExpr.args.forEach(fixed);
       // `col IN auth.user(field)` (a scope or restrict) never fixes a prefix (#1644): the plan is prepared for a set, so
-      // native ORDER BY after it reads and sorts all the caller's rows. It is only remembered for the refusal's guidance,
-      // with whether a restrict binds it: `{ all: true }` drops a scope's IN term (`kept OR 1 = 1`), never a restrict's.
-      // A scope prints `/*s:field*/ kept /*|*/ kept OR 1 = 1 /*;*/`; `kept` is the dialect's anyOf lowering,
-      // `(col) IN (SELECT value FROM json_each((?)))` or `(col) = ANY(CAST(...(?)...))`.
+      // native ORDER BY after it reads and sorts all the caller's rows. It is only remembered for the refusal's guidance.
       const raw = n?.Raw?.parts;
-      if (raw && typeof raw[0] === "string" && raw[0].startsWith("/*s:")) return fixed(raw[1], true);
-      if (raw?.length === 8 && raw[1]?.ColumnRef && raw[5]?.ParamRef && /^ (IN \(SELECT value FROM json_each\(|= ANY\()/.test(raw[3])) {
+      if (scopeTerm(raw)) return fixed(raw[1]);
+      if (anyOf(raw)) {
         const col = resolve(raw[1], false);
-        if (col && col.source === base!.fields.get("id")?.source) { base!.sets.add(col.name); if (!scoped) base!.restricted.add(col.name); }
+        if (col && col.source === base!.fields.get("id")?.source) base!.sets.add(col.name);
         return;
       }
       const e = n?.A_Expr;
@@ -149,14 +151,15 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
             const dir = (f: Field) => sorts[keys.indexOf(f)]!.SortBy.sortby_dir === "SORTBY_DESC" ? " DESC" : "";
             const sorted = [...lead.map(c => named(c) + dir(order[0]!)), ...order.map(f => named(f.name) + dir(f))].join(", ");
             const desc = order.some(f => dir(f)) ? ", read backwards; on PostgreSQL confirm with EXPLAIN that no Sort remains" : "";
-            const all = set.some(c => base!.restricted.has(c)) ? "" : `; for { all: true } callers only, index [${columns}, id]`;
-            return fail(`ORDER BY (${columns}) needs index [${index.map(named).join(", ")}] past ${set.map(c => `'${named(c)}'`).join(", ")}, which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows. Bounded: ${nullable.length ? `make ${nullable.map(c => `'${named(c)}'`).join(", ")} required, then ` : ""}ORDER BY ${sorted} (same index${desc})${all} (handbook: reference/schema.md#index-prefixes-for-paged-views).`);
+            // `{ all: true }` drops only scope terms: offer it an index past the equality-fixed columns, unless a restrict remains.
+            const all = restricts(ast) ? "" : `; for { all: true } callers only, index [${[...prefix.filter(c => base!.fixed.has(c)).map(named), columns].join(", ")}, id]`;
+            return fail(`ORDER BY (${columns}) needs index [${index.map(named).join(", ")}] past ${set.map(c => `'${named(c)}'`).join(", ")}, which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows. Bounded: ${nullable.length ? `make ${nullable.map(c => `'${named(c)}'`).join(", ")} required and non-null, then ` : ""}ORDER BY ${sorted} (same index${desc})${all} (handbook: reference/schema.md#index-prefixes-for-paged-views).`);
           }
         }
       }
     }
     const single = base.single || !group.length && (s.targetList ?? []).some((t: SqlNode) => aggregate(t.ResTarget.val)) || s.limitCount?.A_Const?.ival?.ival === 1 || base.unique && base.fixed.has("id");
-    return { relation: { fields, names: new Set(targets.keys()), single, unique: !group.length && base.unique && !!same(fields.get("id"), base.fields.get("id")), fixed: base.fixed, sets: base.sets, restricted: base.restricted }, keys: keys as Field[] };
+    return { relation: { fields, names: new Set(targets.keys()), single, unique: !group.length && base.unique && !!same(fields.get("id"), base.fields.get("id")), fixed: base.fixed, sets: base.sets }, keys: keys as Field[] };
   };
   const result = select(ast.SelectStmt);
   return result ? { types: result.keys.map(f => f.type), single: result.relation.single } : reason ? { types: [], single: false, reason } : undefined;

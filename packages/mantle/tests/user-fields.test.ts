@@ -256,9 +256,14 @@ test('#1644: an IN-scoped or IN-restricted prefix does not serve ORDER BY; the r
   // { all: true } never lifts a restrict, so the ORDER BY-only index is not offered.
   const byRestrict=await fails(target,inScoped(false),restricted);
   expect(byRestrict).toContain(`${head} Bounded: ORDER BY region, orderNo (same index) (handbook:`);
-  // A nullable restrict column cannot become an ORDER BY key: the refusal says to make it required first.
+  // { all: true } never lifts any restrict, so a restrict on another column suppresses the ORDER BY-only index too.
+  const store=JSON.parse(inScoped(true));store.spec.schema.required.push('store');store.spec.schema.properties.store={type:'string'};
+  const elsewhere=await fails(target,JSON.stringify(store),inView('listed','ORDER BY orderNo','public',{restrict:{orders:"store IN auth.user('store')"}}));
+  expect(elsewhere).toContain(`${head} Bounded: ORDER BY region, orderNo (same index) (handbook:`);
+  // A nullable restrict column cannot become an ORDER BY key: not required, or required but allowing null.
   const optional=JSON.parse(inScoped(false));optional.spec.schema.required=optional.spec.schema.required.filter((c:string)=>c!=='region');
-  expect(await fails(target,JSON.stringify(optional),restricted)).toContain("Bounded: make 'region' required, then ORDER BY region, orderNo (same index) (handbook:");
+  const nullable=JSON.parse(inScoped(false));nullable.spec.schema.properties.region={type:['string','null']};
+  for(const o of [optional,nullable])expect(await fails(target,JSON.stringify(o),restricted)).toContain("Bounded: make 'region' required and non-null, then ORDER BY region, orderNo (same index) (handbook:");
   // The suggested order keeps the authored direction, and every set-bound prefix column is named.
   expect(await fails(target,inScoped(true),inView('listed','ORDER BY orderNo DESC'))).toContain('ORDER BY region DESC, orderNo DESC (same index, read backwards; on PostgreSQL confirm with EXPLAIN that no Sort remains)');
   const two=JSON.parse(inScoped(true));two.spec.scope+=" AND store IN auth.user('store')";two.spec.indexes=[['region','store','orderNo','id']];two.spec.schema.required.push('store');two.spec.schema.properties.store={type:'string'};
@@ -266,8 +271,11 @@ test('#1644: an IN-scoped or IN-restricted prefix does not serve ORDER BY; the r
   // An equality-fixed column between the set-bound one and the order stays in the suggestion, and following it generates.
   const mid=JSON.parse(inScoped(true));mid.spec.indexes=[['region','tier','orderNo','id']];
   const tiered=(sql:string)=>[JSON.stringify(mid),inView('listed',sql,'public',{input:{type:'object',required:['tier'],properties:{tier:{type:'string'}}}})].join('\n---\n');
-  expect(await fails(target,tiered('WHERE tier = input.tier ORDER BY orderNo'))).toContain('ORDER BY region, tier, orderNo (same index)');
+  expect(await fails(target,tiered('WHERE tier = input.tier ORDER BY orderNo'))).toContain('ORDER BY region, tier, orderNo (same index); for { all: true } callers only, index [tier, orderNo, id] (handbook:');
   await generateOrThrow(target,[{sourceId:'n.yaml',text:tiered('WHERE tier = input.tier ORDER BY region, tier, orderNo')}]);
+  // The { all: true } index keeps the equality-fixed columns first, so following it generates.
+  mid.spec.indexes.push(['tier','orderNo','id']);
+  await generateOrThrow(target,[{sourceId:'t.yaml',text:tiered('WHERE tier = input.tier ORDER BY orderNo')}]);
   // An order no index serves keeps the plain message, in authored names.
   expect(await fails(target,inScoped(true),inView('listed','ORDER BY orderNo, tier'))).toContain('Missing index for ORDER BY (orderNo, tier): declare a Schema index');
  }

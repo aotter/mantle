@@ -60,9 +60,9 @@ Indexes are ordered composite scalar/native columns. A paged View's `ORDER BY` m
 
 Only equality fixes an index prefix: `col = input.x`, `col = 'literal'` and an `= auth.uid()` scope or restrict. A user-field term (`region IN auth.user('region')`, as a `scope` or `restrict`) binds a set of values, so it never fixes a prefix, even when the caller holds one value or `{ all: true }`: the statement is prepared for a set, and an `ORDER BY` after that column would read and sort all of the caller's rows on every page. With `scope: "region IN auth.user('region')"`, `indexes: [[region, orderNo, id]]` and `ORDER BY orderNo`, generation refuses the View, names the bounded order and links here. The bounded ways:
 
-- `ORDER BY region, orderNo`, served by the same index: rows come back grouped by region. `region DESC, orderNo DESC` reads it backwards; on PostgreSQL confirm with `EXPLAIN` that no Sort remains. Every column added to the `ORDER BY` must be required.
+- `ORDER BY region, orderNo`, served by the same index: rows come back grouped by region. `region DESC, orderNo DESC` reads it backwards; on PostgreSQL confirm with `EXPLAIN` that no Sort remains. Every column added to the `ORDER BY` must be required and non-null.
 - A View input bound with equality, `WHERE region = input.region ORDER BY orderNo`: the input fixes the prefix, and the scope still applies. Every set-bound column before the ordered ones needs its own equality.
-- For a scope only, an index on the ordered columns alone, `[orderNo, id]`, for `{ all: true }` callers. It is not bounded for scoped callers, who scan the index and filter, and it does not help a `restrict`, which [`{ all: true }` never lifts](view.md#restrict).
+- For `{ all: true }` callers, an index on the equality-fixed columns, then the ordered columns, then `id`: `[orderNo, id]` here, `[tier, orderNo, id]` with `WHERE tier = input.tier`. It is not bounded for scoped callers, who scan the index and filter, and it does not help a View with any `restrict`, which [`{ all: true }` never lifts](view.md#restrict).
 
 Declaring both indexes does not make one View bounded for every caller. System (trusted) reads drop scope terms, so a scope-first index such as `[owner, at]` is not a proved range scan for them.
 
