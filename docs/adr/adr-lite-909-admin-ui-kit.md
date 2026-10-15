@@ -1,6 +1,6 @@
 # ADR-lite 909: Mantle Admin UI kit export
 
-**Status:** Accepted; amended by [ADR-0029](0029-mcp-apps-interaction-contracts.md) (the kit moves to `@aotter/mantle-ui`, with a one-minor re-export from `@aotter/mantle-admin-ui/kit`)
+**Status:** Accepted; amended by [ADR-0029](0029-mcp-apps-interaction-contracts.md) (the kit moves to `@aotter/mantle-ui`, with a one-minor re-export from `@aotter/mantle-admin-ui/kit`); amended by [ADR-lite 1376 revision 4](adr-lite-1376-admin-extensions.md) (the Admin application, layout, data hooks and default components become public library surface; the prebuilt SPA goes away)
 
 ## Context
 
