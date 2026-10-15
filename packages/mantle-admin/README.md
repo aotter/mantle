@@ -82,6 +82,7 @@ with no generated metadata, Admin reads its collections, Views and operations
 from `/admin/api` at runtime. The application builds that entry when it has no `admin.tsx`.
 `components` replace or wrap named regions of Admin (`Shell`, `Sidebar`, `Home`, `cell:<schema>.<field>`, `input:<schema>.<field>`, ...)
 through `renderDefault`, and `plugins` compose such fragments; see the Native Admin guide, "Customising Admin".
+`pages` adds pages of the application's own at `/admin/p/<path>`.
 `nav` declares the sidebar groups the manifest uses (`ManifestNavGroup` in `generated/admin-client.ts`, checked by `tsc`) and adds `items` that lead to a collection, preset to a field's value, or to a View; see "Sidebar" in the same guide.
 `@aotter/mantle-admin/build` also exports the optional `adminVitePlugin()` for hot reload in a Vite dev server.
 

@@ -156,6 +156,7 @@ import { defineAdmin } from "@aotter/mantle-admin/app";
 import { admin } from "../generated/admin-client.js";
 
 export default defineAdmin(admin, {
+  pages: [{ path: "budget", title: "Budget", element: <BudgetPage />, nav: { group: "reports" } }],
   components: {
     // wrap: the built-in page below your own section
     Home: (props) => <><MyQueue />{props.renderDefault(props)}</>,
@@ -347,9 +348,9 @@ what an extension contributed. Alpha applications that used it change as follows
 
 | Removed | Use instead |
 | --- | --- |
-| `--admin-extensions <module>`, `adminExtensions`, `src/admin.ts`, generated `admin-extensions.ts` | Drop the flag from `generate` and `check` scripts and delete the module. `generate` now rejects the option. |
+| `--admin-extensions <module>`, `adminExtensions`, `src/admin.ts`, generated `admin-extensions.ts` | Drop the flag from `generate` and `check` scripts and delete the module. `generate` now rejects the option and removes the generated `admin-extensions.ts` (it is SDK-owned). |
 | `navGroups` in that module | `defineAdmin(admin, { nav: { groups } })` in `src/admin.tsx`, an object keyed by group id instead of an array: `{ id: "approvals", title, order }` becomes `approvals: { title, order }`. `tsc` refuses a group the manifest uses and `groups` omits. See [Sidebar](#sidebar). |
-| `defineAdminExtension`, `@aotter/mantle-admin/extension` | A React component in `defineAdmin({ components })`; see [Customising Admin](#customising-admin). |
+| `defineAdminExtension`, `@aotter/mantle-admin/extension` | React components in `defineAdmin`: `components` for the regions below, `pages` for whole pages; see [Customising Admin](#customising-admin) and [Sidebar](#sidebar). |
 | Field widget `widget: <extension>/<contribution>` and `options` | `"input:<schema>.<field>"` in `components`. `widget: textarea` stays. |
 | `list.cells` on a Schema or View | `"cell:<schema>.<field>"` or `"cell:view:<view>.<column>"` in `components`. |
 | `uiSchema.panels`, `record.sidebar/v1` and `home/v1` panels | `"record.aside:<schema>"` and the `Home` component. |
@@ -357,7 +358,8 @@ what an extension contributed. Alpha applications that used it change as follows
 | Handlers `api`, `settings` and `actions.run`, and the `/admin/api/x/<extension>/*` routes | Server work is a Procedure (writes), a View (reads) or an application route. Authorization stays on the server: a Procedure or View carries its own `requires`. |
 | `extensionBindings`, `extensionOptions`, `@aotter/mantle-admin/server/extensions`, the `extensions` and `navGroups` options of `admin()` and the `extensions` field of `/admin/api/site` | Delete them. |
 | The import map and `shared/*.js` shims in the built Admin | None: the application's bundle holds the one React there is. Drop any CSP hash for the import map. |
-| Extension pages (`/admin/x/<extension>/<page>`) and settings pages | An application route; `uiSchema.nav.group` places Schemas and Views, `nav.items` adds links to a collection or View. |
+| Extension pages (`/admin/x/<extension>/<page>`) | `defineAdmin({ pages: [{ path, title, element, nav }] })` at `/admin/p/<path>`; `nav: { group, order? }` replaces the page's `nav`. |
+| Extension settings pages (declared form, `settings` handlers) | A page in `pages` whose element reads and saves through a View and a Procedure that hold the settings, or an application route. |
 
 A manifest that still names a removed key fails `mantle generate` with `SCHEMA_UI_INVALID` or `VIEW_UI_INVALID` at the
 key's path. The `UI_EXTENSION_*` diagnostics no longer exist.
@@ -410,6 +412,11 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
   View input are typed from the generated manifest, so a misspelling or a wrong preset fails `tsc`. Several items may lead to
   one resource with different presets. An item whose collection or View the caller cannot see is not shown; showing or
   hiding one changes no permission, because the target's own route still decides.
+- `pages` adds a page of the application's own inside Admin's shell: `{ path, title, element, icon?, nav? }`. `path` is one
+  segment of lowercase letters, digits and hyphens, and the page is at `/admin/p/<path>`. `nav: { group, order? }` places it in
+  the sidebar with the other entries of that group (the same group ids as `nav.items`); without `nav` it keeps its route and
+  stays out of the sidebar. A page's `element` reads through the [data hooks](#typed-data-hooks) and writes through
+  Procedures; showing a page grants nothing, because each View or Procedure it calls authorizes on the server.
 
 ```tsx
 // src/admin.tsx
