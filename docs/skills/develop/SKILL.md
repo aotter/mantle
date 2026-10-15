@@ -44,6 +44,23 @@ row-menu hints, while the Procedure remains the authority. Required-ref child
 collections fold under their parent's sidebar group; use Schema
 `uiSchema.nav.standalone: true` for a top-level entry.
 
+## MCP contract changes
+
+Follow [MCP catalogue freshness](../../handbook/concepts/mcp-and-agents.md#catalogue-freshness).
+For every metadata or schema edit, including description-only changes to an
+unchanged tool name, compare actual authenticated `tools/list` locally and after
+deployment: names, descriptions, input and output schemas, for the intended
+Caller/surface/locale. Generated artifacts, package versions and successful tool
+results do not replace wire discovery. Also exercise affected calls and authority
+boundaries; record evidence without credentials.
+
+Use standard MCP discovery, not an app-specific well-known catalogue. Modern
+2026 private, zero-TTL hints are native defaults. Add the upstream SDK bus only
+when live modern subscription invalidation is needed; the app owns its lifetime
+and tenant boundary, and in-memory delivery does not cross Worker isolates or
+deployments. Keep the optional SDK lazy-loaded. A stale host needs rediscovery,
+not revoked grants, rotated secrets or forced logout.
+
 ## Database changes
 
 The runtime never creates, alters or checks tables. Boot and requests run no DDL, introspection or schema checks.

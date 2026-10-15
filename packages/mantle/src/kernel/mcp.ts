@@ -16,6 +16,10 @@ export interface Options<Env, Database> extends GatewayOptions {
   locale?: string;
   instructions?: string;
   serverInfo?: { name?: string; title?: string; version?: string; icons?: { src: string; mimeType?: string; sizes?: string[]; theme?: "light" | "dark" }[] };
+  /** Optional app-owned native event bus for modern subscriptions. Publish an app-wide, content-free
+   * tools_list_changed event after catalogue changes. Isolate tenants in separate buses; an in-memory bus
+   * only reaches connected listeners in its process, not other Workers or deployments. */
+  bus?: import("@modelcontextprotocol/server").ServerEventBus;
   requiredScopes?: readonly string[];
   resourceMetadata?: string;
   onObservation?: (event: McpObservation) => void | Promise<void>;

@@ -33,3 +33,20 @@ subpaths have no compatibility aliases. Pin only actually published versions,
 or explicitly use a matching workspace preview. Recheck member and Admin OTP,
 all affected native routes, private field visibility, OCC and unknown outcomes.
 Do not publish a package as part of an application dependency update.
+
+For MCP upgrades, follow [catalogue freshness](../../handbook/concepts/mcp-and-agents.md#catalogue-freshness).
+Capture actual authenticated `tools/list` before and after the local upgrade and
+again on the deployed service. Compare names, descriptions, `inputSchema` and
+`outputSchema` under the same intended Caller/surface/locale; metadata-only
+changes require this check too. Generated files, version strings and successful
+invocations cannot prove discovery parity. Retest affected calls and scoped
+visibility without including credentials in evidence.
+
+Standard discovery needs no app-specific well-known catalogue. Modern 2026
+private, zero-TTL cache hints are native; an optional app-owned upstream bus can
+invalidate modern subscriptions, with tenant boundaries and lazy SDK loading.
+Its in-memory delivery does not survive a deployment or cross Worker isolates;
+legacy stateless clients still have no live list-change capability. If a host
+keeps old schemas after correct deployed discovery, use host rediscovery/refresh.
+Preserve sessions and OAuth grants; never revoke them, rotate secrets or force
+logout merely to refresh tool metadata.

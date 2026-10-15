@@ -130,9 +130,9 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       } catch (error) { return challenge(error); }
     }
     // Host calls execute in the SDK callback, after transport validation.
-    const handler = createMcpHandler(() => {
+    const handler = createMcpHandler(({ era }) => {
       const schema = (value: unknown) => fromJsonSchema(value as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } });
-      const server = new McpServer({ name: "aotter.mantle", version: "0.2.0", ...options.serverInfo }, { capabilities: { tools: { listChanged: false } }, ...(options.instructions ? { instructions: options.instructions } : {}) });
+      const server = new McpServer({ name: "aotter.mantle", version: "0.2.0", ...options.serverInfo }, { capabilities: { tools: { listChanged: era === "modern" && options.bus !== undefined } }, ...(options.instructions ? { instructions: options.instructions } : {}) });
       if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
       const appMeta = links ? registerApps(server, links, parsedBody) : undefined;
       for (const tool of selected) {
@@ -162,7 +162,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       });
       }
       return server;
-    }, { legacy: "stateless", maxRequestBodySize: 1024 * 1024, onerror: error => console.error("[mantle mcp] request failed", error) });
+    }, { bus: options.bus, legacy: "stateless", maxRequestBodySize: 1024 * 1024, onerror: error => console.error("[mantle mcp] request failed", error) });
     const response = await handler.fetch(request, { parsedBody });
     if (host) {
       if (response.status >= 400) access?.finish(new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: response.status}));
