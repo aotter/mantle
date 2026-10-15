@@ -54,7 +54,17 @@ Owner and field columns prefix every unique index in that order. User reads/writ
 
 ## Indexes, checks and search
 
-Indexes are ordered composite scalar/native columns. A paged View's `ORDER BY` must match an index on the base Schema after any fixed equality prefix, ending with `id` as the tiebreak: `ORDER BY createdAt DESC, id DESC` needs `indexes: [[createdAt, id]]` (generation reports `Missing index for ORDER BY ...` otherwise). Required operational fields are NOT NULL; publishing drafts may be incomplete. Store sortable types use indexed/non-null columns, with explicit nullable published_at support.
+Indexes are ordered composite scalar/native columns. A paged View's `ORDER BY` must match an index on the base Schema after any fixed equality prefix ([index prefixes](#index-prefixes-for-paged-views)), ending with `id` as the tiebreak: `ORDER BY createdAt DESC, id DESC` needs `indexes: [[createdAt, id]]` (generation reports `Missing index for ORDER BY ...` otherwise). Required operational fields are NOT NULL; publishing drafts may be incomplete. Store sortable types use indexed/non-null columns, with explicit nullable published_at support.
+
+### Index prefixes for paged Views
+
+Only equality fixes an index prefix: `col = input.x`, `col = 'literal'` and an `= auth.uid()` scope or restrict. A user-field term (`region IN auth.user('region')`, as a `scope` or `restrict`) binds a set of values, so it never fixes a prefix, even when the caller holds one value or `{ all: true }`: the statement is prepared for a set, and an `ORDER BY` after that column would read and sort all of the caller's rows on every page. With `scope: "region IN auth.user('region')"`, `indexes: [[region, orderNo, id]]` and `ORDER BY orderNo`, generation refuses the View and names the bounded ways:
+
+- `ORDER BY region, orderNo`, served by the same index: rows come back grouped by region.
+- A View input bound with equality, `WHERE region = input.region ORDER BY orderNo`: the input fixes the prefix, and the scope still applies.
+- An index on the ordered columns alone, `[orderNo, id]`, for Views read by `{ all: true }` callers. It is not bounded for scoped callers, who scan the index and filter.
+
+Declaring both indexes does not make one View bounded for every caller. System (trusted) reads drop scope terms, so a scope-first index such as `[owner, at]` is not a proved range scan for them.
 
 `uniqueIndexes` accept declared fields only, never native entry columns such as `authorId`. For per-member uniqueness, declare a required string `member` field, write `member: caller.subject` in a handler, and use `uniqueIndexes: [[member, orderNumber]]`; do not take `member` from client input.
 

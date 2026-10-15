@@ -3,7 +3,7 @@ import { NATIVE_NOT_NULL, notNullColumns, type LoweredPage, type RuntimePlan, ty
 import { declaredType } from "./columns.js";
 
 type Field = { schema: PlanSchema; name: string; type: string; notNull: boolean; source: object };
-type Relation = { fields: Map<string, Field>; names: ReadonlySet<string>; single: boolean; unique: boolean; fixed: Set<string> };
+type Relation = { fields: Map<string, Field>; names: ReadonlySet<string>; single: boolean; unique: boolean; fixed: Set<string>; sets: Set<string> };
 export type PagingProof = { types: string[]; single: boolean; reason?: string };
 const fieldName = (n: SqlNode) => n.ColumnRef?.fields?.at(-1)?.String?.sval;
 const scalar = (n: SqlNode): boolean => !!(n.ParamRef || n.A_Const || n.TypeCast && scalar(n.TypeCast.arg));
@@ -55,7 +55,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
           const type = declaredType(schema.fields, name) ?? (name === "version" ? "integer" : "text");
           fields.set(name, { schema, name, type, notNull: NATIVE_NOT_NULL.has(name) || notNull.has(name), source });
         }
-        fact = { fields, names: new Set(fields.keys()), single: false, unique: true, fixed: new Set() };
+        fact = { fields, names: new Set(fields.keys()), single: false, unique: true, fixed: new Set(), sets: new Set() };
       } else if (r?.mantle === "cte") fact = ctes.get(r.relname);
       else if (sub) fact = select(sub.subquery.SelectStmt, ctes)?.relation;
       if (fact) {
@@ -64,7 +64,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
         fact = { ...fact, fields: new Map([...fact.fields].map(([name, f]) => {
           if (!sources.has(f.source)) sources.set(f.source, {});
           return [name, { ...f, source: sources.get(f.source)! }];
-        })), fixed: new Set(fact.fixed) };
+        })), fixed: new Set(fact.fixed), sets: new Set(fact.sets) };
         aliases.set(r?.alias?.aliasname ?? r?.relname ?? sub.alias.aliasname, fact);
       }
       return fact;
@@ -76,7 +76,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       if (!r || base && !base.single && !r.single) return;
       if (!base || !r.single) base = r;
     }
-    base ??= { fields: new Map(), names: new Set(), single: true, unique: false, fixed: new Set() };
+    base ??= { fields: new Map(), names: new Set(), single: true, unique: false, fixed: new Set(), sets: new Set() };
     const targets = new Map<string, SqlNode>((s.targetList ?? []).map((t: SqlNode) => [t.ResTarget.name ?? fieldName(t.ResTarget.val), t.ResTarget.val]));
     const resolve = (n: SqlNode, output = true): Field | undefined => {
       const fields = n?.ColumnRef?.fields;
@@ -95,14 +95,16 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
     };
     const fixed = (n: SqlNode): void => {
       if (n?.BoolExpr?.boolop === "AND_EXPR") n.BoolExpr.args.forEach(fixed);
-      // `col IN auth.user(field)` (a scope or restrict) is fixed like an equality, fanning out over the caller's values:
-      // ADR-0046 §Paging, cost elements × limit. A scope prints `/*s:field*/ kept /*|*/ kept OR 1 = 1 /*;*/`; `kept` is
-      // the dialect's anyOf lowering, `(col) IN (SELECT value FROM json_each((?)))` or `(col) = ANY(CAST(...(?)...))`.
+      // `col IN auth.user(field)` (a scope or restrict) never fixes a prefix (#1644): the plan is prepared for a set, so
+      // native ORDER BY after it reads and sorts all the caller's rows. It is only remembered for the refusal's guidance.
+      // `{ all: true }`'s `kept OR 1 = 1` only drops IN terms, so this caller proof bounds that variant too.
+      // A scope prints `/*s:field*/ kept /*|*/ kept OR 1 = 1 /*;*/`; `kept` is the dialect's anyOf lowering,
+      // `(col) IN (SELECT value FROM json_each((?)))` or `(col) = ANY(CAST(...(?)...))`.
       const raw = n?.Raw?.parts;
       if (raw && typeof raw[0] === "string" && raw[0].startsWith("/*s:")) return fixed(raw[1]);
       if (raw?.length === 8 && raw[1]?.ColumnRef && raw[5]?.ParamRef && /^ (IN \(SELECT value FROM json_each\(|= ANY\()/.test(raw[3])) {
         const col = resolve(raw[1], false);
-        if (col && col.source === base!.fields.get("id")?.source) base!.fixed.add(col.name);
+        if (col && col.source === base!.fields.get("id")?.source) base!.sets.add(col.name);
         return;
       }
       const e = n?.A_Expr;
@@ -133,17 +135,22 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
         if (order.length) {
           const schema = order[0]!.schema;
           if (order.some(f => f.source !== base!.fields.get("id")?.source)) return;
-          const indexed = [...(schema.indexes ?? []), ...(schema.unique ?? [])].some(index => {
+          const serving = (prefix: ReadonlySet<string>) => [...(schema.indexes ?? []), ...(schema.unique ?? [])].find(index => {
             let i = 0;
-            while (i < index.length && base!.fixed.has(index[i]!) && index[i] !== order[0]!.name) i++;
+            while (i < index.length && prefix.has(index[i]!) && index[i] !== order[0]!.name) i++;
             return order.every((f, n) => index[i + n] === f.name);
           });
-          if (!indexed) return fail(`Missing index for ORDER BY (${order.map(f => f.name).join(", ")}): declare a Schema index with these ordered columns after any fixed equality prefix.`);
+          if (!serving(base.fixed)) {
+            const index = serving(new Set([...base.fixed, ...base.sets])), named = (c: string) => schema.names?.[c] ?? c, columns = order.map(f => named(f.name)).join(", ");
+            if (!index) return fail(`Missing index for ORDER BY (${order.map(f => f.name).join(", ")}): declare a Schema index with these ordered columns after any fixed equality prefix.`);
+            const set = index.slice(0, index.indexOf(order[0]!.name)).filter(c => !base!.fixed.has(c)).map(named), first = set[0]!;
+            return fail(`ORDER BY (${columns}) is served by index [${index.map(named).join(", ")}] only after ${set.map(c => `'${c}'`).join(", ")}, which a user-field scope or restrict fixes to a set of values, not one value: every page would read and sort all of the caller's rows. Bounded ways: ORDER BY ${[...set, columns].join(", ")} (served by the same index); a View input bound with equality, e.g. WHERE ${first} = input.${first}, which fixes the prefix (the scope or restrict still applies); or, for Views read by { all: true } callers, an index on the ORDER BY columns alone, e.g. [${columns}] (not bounded for scoped callers).`);
+          }
         }
       }
     }
     const single = base.single || !group.length && (s.targetList ?? []).some((t: SqlNode) => aggregate(t.ResTarget.val)) || s.limitCount?.A_Const?.ival?.ival === 1 || base.unique && base.fixed.has("id");
-    return { relation: { fields, names: new Set(targets.keys()), single, unique: !group.length && base.unique && !!same(fields.get("id"), base.fields.get("id")), fixed: base.fixed }, keys: keys as Field[] };
+    return { relation: { fields, names: new Set(targets.keys()), single, unique: !group.length && base.unique && !!same(fields.get("id"), base.fields.get("id")), fixed: base.fixed, sets: base.sets }, keys: keys as Field[] };
   };
   const result = select(ast.SelectStmt);
   return result ? { types: result.keys.map(f => f.type), single: result.relation.single } : reason ? { types: [], single: false, reason } : undefined;

@@ -34,7 +34,7 @@ For transports, `paged/views/<name>.ts` returns `{ rows, nextCursor? }` with key
 [surface deltas](./docs/handbook/reference/surface.md) define the REST/MCP wire contract.
 Proved internal Views also get paging without a public route/tool: one SELECT
 per page, validated scalar cursor keys and hidden-key removal. Schema tuples
-need indexed order after fixed equality prefixes; complete groups and singleton
+need indexed order after fixed equality prefixes ([index prefixes](./docs/handbook/reference/schema.md#index-prefixes-for-paged-views)); complete groups and singleton
 joins are supported. Grouping still scans/aggregates its source: inspect EXPLAIN.
 Unsupported internal SQL retains its bare module.
 
