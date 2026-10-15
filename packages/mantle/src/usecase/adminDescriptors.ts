@@ -1,5 +1,5 @@
 /** Build-time projections only; generated exports are static, independently tree-shakable data. */
-import { DiagnosticError, BUILT_IN_NAV_GROUPS, navGroupProblems, navPlacementProblems, isPrimaryCollection, standaloneParentField, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
+import { DiagnosticError, BUILT_IN_NAV_GROUPS, navGroupProblems, navPlacementProblems, isPrimaryCollection, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
 import { advertised, emitValidation } from "./validation.js";
@@ -17,7 +17,7 @@ export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin
     const nav=(ui?.["nav"]??{}) as Record<string,unknown>,group=nav["group"];
     if(typeof group==="string"&&!groupIds.has(group))diagnostics.push({code:"SCHEMA_UI_INVALID",path:path+"/uiSchema/nav/group",message:`Unknown nav group '${group}': use content, operations, reports or more, or declare it in navGroups of the --admin-extensions module.`});
     // a child folded under its parent, or a translation on its parent's language tabs, has no sidebar entry to place
-    if(s&&!isPrimaryCollection(s,schemaList))for(const key of ["group","order","hidden"])if(nav[key]!==undefined)diagnostics.push({code:"SCHEMA_UI_INVALID",path:`${path}/uiSchema/nav/${key}`,message:s.translates?`Schema '${s.name}' has no sidebar entry to place: it is a translation, shown on its parent's language tabs.`:`Schema '${s.name}' has no sidebar entry to place: it is folded under its parent${standaloneParentField(s,schemaList)?"; nav.standalone: true lists it in the sidebar.":" and opens from its parent's workbench (standalone needs a required id reference)."}`});
+    if(s&&!isPrimaryCollection(s,schemaList))for(const key of ["group","order","hidden"])if(nav[key]!==undefined)diagnostics.push({code:"SCHEMA_UI_INVALID",path:`${path}/uiSchema/nav/${key}`,message:s.translates?`Schema '${s.name}' has no sidebar entry to place: it is a translation, shown on its parent's language tabs.`:`Schema '${s.name}' has no sidebar entry to place: it is folded under its parent${collectionOf(s,schemaList).parent?.parentField==="id"?"; nav.standalone: true lists it in the sidebar.":" and opens from its parent's workbench (standalone needs a required id reference)."}`});
   }
   for(const e of adminExtensions)for(const p of e.contributes.pages??[]){
     if(p.nav===undefined)continue; // without nav a page keeps its own route and stays out of the sidebar

@@ -447,17 +447,8 @@ function checkNav(
     };
   }
 
-  if (typeof parentField !== "string") {
-    return {
-      nav: null,
-      problem: problem(
-        "/spec/uiSchema/nav/parentField",
-        parentField,
-        `one of ${eligible.map((item) => item.field).join(", ")}`,
-        `Schema '${schema.metadata.name}' declares more than one required x-mantle-ref; nav.parentField is required.`,
-      ),
-    };
-  }
+  // ambiguous: the graph-time check reports it with the candidates and the line that keeps today's choice
+  if (typeof parentField !== "string") return { nav: null };
   const matched = eligible.find((item) => item.field === parentField);
   if (!matched) {
     return {
@@ -552,14 +543,20 @@ function eligibleIdRefs(schema: SchemaManifest, schemasByName: ReadonlyMap<strin
   return requiredMantleRefFields(schema.spec.schema).filter((r) => isFoldParent(schemasByName.get(r.collection))).map((r) => r.field);
 }
 
-/** The Schema a collection folds under, as the Admin descriptor resolves it: nav.parentField, else the first eligible `id` reference, else the first required reference to a fold parent. */
+/** The Schema a collection folds under, as the Admin descriptor resolves it. */
 function foldParentOf(schema: SchemaManifest | undefined, schemasByName: ReadonlyMap<string, SchemaManifest>): string | undefined {
   if (!schema || schema.spec.translates) return undefined;
-  const props = schema.spec.schema.properties ?? {};
-  const required = new Set(schema.spec.schema.required ?? []);
-  const refs = Object.keys(props).filter((f) => required.has(f) && isFoldParent(schemasByName.get(resolveMantleRef(props[f])?.schema ?? "")));
-  const field = declaredParentField(schema) ?? eligibleIdRefs(schema, schemasByName)[0] ?? refs[0];
-  return field === undefined ? undefined : resolveMantleRef(props[field])?.schema;
+  const field = foldParentField(schema.spec.schema, declaredParentField(schema), (name) => isFoldParent(schemasByName.get(name)));
+  return field === undefined ? undefined : resolveMantleRef(schema.spec.schema.properties?.[field])?.schema;
+}
+
+/** @internal The field a collection folds under its parent by, shared by the Admin descriptor and the cycle check:
+ *  the declared nav.parentField, else the first required `id` reference, else the first required reference, each to a Schema `isParent` accepts. */
+export function foldParentField(body: JsonSchema, declared: string | undefined, isParent: (name: string) => boolean): string | undefined {
+  const props = body.properties ?? {};
+  const required = new Set(body.required ?? []);
+  const refs = Object.keys(props).filter((f) => required.has(f) && isParent(resolveMantleRef(props[f])?.schema ?? ""));
+  return declared ?? requiredMantleRefFields(body).find((r) => isParent(r.collection))?.field ?? refs[0];
 }
 
 const NATIVE_LIST_FIELDS: ReadonlySet<string> = new Set(RESERVED_ENTRY_COLUMNS);

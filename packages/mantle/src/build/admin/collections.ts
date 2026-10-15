@@ -1,5 +1,5 @@
 /** Pure collection metadata, shared by Admin and the deployment compiler. */
-import { MCP_HINT_KEYWORD, NATIVE_NOT_NULL, requiredMantleRefFields, isMediaMcpHint, enumOptions, notNullColumns, resolveMantleRef, type JsonSchema, type PlanSchema } from "../spec/domain/index.js";
+import { MCP_HINT_KEYWORD, NATIVE_NOT_NULL, requiredMantleRefFields, foldParentField, isMediaMcpHint, enumOptions, notNullColumns, resolveMantleRef, type JsonSchema, type PlanSchema } from "../spec/domain/index.js";
 
 type Props = Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 export const propsOf = (s: JsonSchema) => (s.properties ?? {}) as Props;
@@ -15,16 +15,14 @@ export function adminIndexColumns(s: PlanSchema): string[] {
 export function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
   const names = new Set(schemas.filter((x) => !x.translates).map((x) => x.name));
   const props = propsOf(s.schema);
-  const required = new Set(s.schema.required ?? []);
   const ui = (s.uiSchema ?? {}) as Record<string, Record<string, unknown> | undefined>;
   const list = ui["list"] ?? {};
   const nav = ui["nav"];
   const filterField = list["filterField"] as string | undefined;
   // a required reference is composition: the child sits under its parent, the declared nav.parentField first, then an `id` reference, else one by a unique field
-  const refs = Object.keys(props).filter((f) => required.has(f) && names.has(resolveMantleRef(props[f])?.schema ?? ""));
   const byId = standaloneParentField(s, schemas);
   const declared = nav?.["parentField"] as string | undefined;
-  const parentField = declared ?? byId ?? refs[0];
+  const parentField = foldParentField(s.schema, declared, (name) => names.has(name));
   // a standalone list's parent picker scopes by the parent's entry id, so only an `id` reference composes there (the checker agrees)
   const navField = nav?.["standalone"] === true ? declared ?? byId : undefined;
   const navParent = navField ? resolveMantleRef(props[navField]) : null;

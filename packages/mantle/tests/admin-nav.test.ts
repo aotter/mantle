@@ -80,8 +80,10 @@ test("generate refuses a Schema with two required id references and no nav.paren
   expect(message).toContain("Schema 'lines'");
   expect(message).toContain("quoteId, customerId");
   expect(message).toContain("nav: { parentField: quoteId }");
-  // standalone no longer defaults to the first id reference either
-  expect(codes(await run([schema("quotes"), schema("customers"), twoRefs({ standalone: true })]))).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+  // standalone without parentField gets the same diagnostic, with the line to add
+  const standalone = await run([schema("quotes"), schema("customers"), twoRefs({ standalone: true })]);
+  expect(codes(standalone)).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+  expect(standalone.ok ? "" : standalone.diagnostics[0]!.message).toContain("nav: { parentField: quoteId }");
 });
 
 test("nav.parentField without standalone chooses the fold parent; the Schema stays folded", async () => {
@@ -97,6 +99,13 @@ test("one id reference plus a unique-field reference is not ambiguous, and paren
   const lines = (nav?: object) => doc("lines", { title: "Lines", lifecycle: "operational", ...(nav ? { uiSchema: { nav } } : {}), schema: { type: "object", required: ["quoteCode", "customerId"], properties: { quoteCode: { type: "string", "x-mantle-ref": { schema: "quotes", field: "code" } }, customerId: { type: "string", "x-mantle-ref": "customers" } } } });
   expect(parentOf(await run([quotes, schema("customers"), lines()]))).toBe('{"collection":"customers","parentField":"id","childField":"customerId"}');
   expect(parentOf(await run([quotes, schema("customers"), lines({ parentField: "quoteCode" })]))).toBe('{"collection":"quotes","parentField":"code","childField":"quoteCode"}');
+  // only references to existing Schemas count: one quotes id reference plus one to a missing Schema is not ambiguous, standalone included
+  const ghost = doc("lines", { title: "Lines", lifecycle: "operational", uiSchema: { nav: { standalone: true } }, schema: { type: "object", required: ["quoteId", "ghostId"], properties: { quoteId: { type: "string", "x-mantle-ref": "quotes" }, ghostId: { type: "string", "x-mantle-ref": "ghosts" } } } });
+  expect(parentOf(await run([schema("quotes"), ghost]))).toBe('{"collection":"quotes","parentField":"id","childField":"quoteId"}');
+  // folded by the unique-field reference: no standalone hint, since standalone would need an id reference
+  const placed = await run([quotes, schema("customers"), lines({ parentField: "quoteCode", order: 1 })]);
+  expect(codes(placed)).toEqual(["SCHEMA_UI_INVALID schemas/lines/uiSchema/nav/order"]);
+  expect(placed.ok ? "" : placed.diagnostics[0]!.message).not.toContain("nav.standalone: true");
 });
 
 test("generate refuses a parentField that is not a required reference, sits on a translation, or closes a parent cycle", async () => {
