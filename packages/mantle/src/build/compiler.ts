@@ -4,6 +4,7 @@ export { userScopeTerm } from './spec/domain/service/SqlRowPolicy.js';
 export { DiagnosticError } from "./spec/kernel/diagnostic.js";
 export { BUILT_IN_NAV_GROUPS, navGroupProblems, navPlacementProblems, type AdminNavGroup } from "./spec/domain/model/AdminNav.js";
 export { enumOptions, parseNumeric, NATIVE_NOT_NULL, notNullColumns, protectedColumns, rowPolicy, writePolicy, mcpTools, mcpToolNameSegment, resolveLocalizedText, assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired } from "./spec/domain/index.js";
+export { canonical, fnv } from "./spec/domain/service/PlanFingerprint.js";
 export type { ManifestSourceSet } from "./spec/domain/service/ManifestParser.js";
 export type { JsonSchema } from "./spec/domain/model/ManifestGrammar.js";
 export type { RuntimePlan, PlanSchema, PlanLowered, LoweredStatement, LoweredView, LoweredPage } from "./spec/domain/model/RuntimePlan.js";

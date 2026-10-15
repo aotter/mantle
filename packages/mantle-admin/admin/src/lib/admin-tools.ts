@@ -40,14 +40,14 @@ export interface AdminToolResult {
 /** Call an admin tool once on Admin's tool route (`POST /admin/api/webmcp/{tool}`), with the signed-in session. A refusal
  *  keeps its Mantle diagnostic, and nothing is retried: a write whose outcome is unknown must be re-read. */
 export async function callAdminTool(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ result: AdminToolResult; output: unknown }> {
-  let output: unknown;
+  let output: unknown, version: string | undefined;
   try {
-    output = (await api.post<{ output: unknown }>(`/webmcp/${encodeURIComponent(name)}`, input, { signal })).output;
+    ({ output, version } = await api.post<{ output: unknown; version?: string }>(`/webmcp/${encodeURIComponent(name)}`, input, { signal }));
   } catch (error) {
     // the diagnostic is the refusal; the body stays a plain, serialisable object
     if (error instanceof ApiError) throw new ApiError(error.message, error.status, refusalOf(error.body) ?? error.body);
     throw error;
   }
-  const result: AdminToolResult = { content: [{ type: "text", text: JSON.stringify(output) }], ...(output && typeof output === "object" && !Array.isArray(output) ? { structuredContent: output as Record<string, unknown> } : {}) };
+  const result: AdminToolResult = { content: [{ type: "text", text: JSON.stringify(output) }, ...(version ? [{ type: "text" as const, text: `tool version ${version}` }] : [])], ...(output && typeof output === "object" && !Array.isArray(output) ? { structuredContent: output as Record<string, unknown> } : {}) };
   return { result, output };
 }

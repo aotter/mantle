@@ -4,6 +4,7 @@ import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
 import { emitValidation } from "./validation.js";
 import { publishingInput, publishingTransitions } from "./publishing.js";
+import { versioned } from "./tool-version.js";
 
 const adminEnum = (p: JsonSchema): JsonSchema => { if(!p.oneOf) return p; const {oneOf,...rest}=p; return {...rest,enum:oneOf.map(c=>c.const)}; };
 
@@ -54,7 +55,7 @@ export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin
   const adminCatalogue=appCatalog(plan,"admin");
   const catalogues={public:appCatalog(plan,"public"),admin:{views:Object.fromEntries(Object.entries(adminCatalogue.views).map(([name,v])=>[name,{...v,actions:[...v.actions]}])),actions:{...adminCatalogue.actions}}};
   const snapshot=developerConsole(plan);
-  const webmcp={tools:adminTools.map(({name,source,kind,title,description,inputSchema,outputSchema,annotations})=>({name,target:{kind,name:source},...(title?{title:(kind==="view"?plan.views[source]:plan.procedures[source])!.title??title}:{}),description:(kind==="view"?plan.views[source]:plan.procedures[source])!.description??description,inputSchema,...(outputSchema?{outputSchema}:{}),...(annotations?{annotations}:{})})),routes:Object.fromEntries(adminTools.flatMap(t=>{
+  const webmcp={tools:adminTools.map(({name,source,kind,title,description,inputSchema,outputSchema,annotations})=>({target:{kind,name:source},...versioned({name,...(title?{title:(kind==="view"?plan.views[source]:plan.procedures[source])!.title??title}:{}),description:(kind==="view"?plan.views[source]:plan.procedures[source])!.description??description,inputSchema,...(outputSchema?{outputSchema}:{}),...(annotations?{annotations}:{})})})),routes:Object.fromEntries(adminTools.flatMap(t=>{
     if(t.kind==="view")return [[t.name,{path:"/admin/views/"+encodeURIComponent(t.source)}]];
     const target=plan.procedures[t.source]!.target;return target?[[t.name,{path:"/admin/c/"+encodeURIComponent(plan.schemas[target.schema.toLowerCase()]?.name??target.schema),entry:true}]]:[];
   })) as Record<string,{path:string;entry?:boolean}>};
@@ -69,7 +70,7 @@ export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin
 
     authorizations.procedures[name]={auth:{all:["ctx.admin"]}};
     const description=verb+" an entry in "+schema.name+".";
-    webmcp.tools.push({name:tool,target:{kind:"procedure",name},description,inputSchema:publishingInput,annotations:{readOnlyHint:false,destructiveHint:verb==="archive"}});
+    webmcp.tools.push({target:{kind:"procedure",name},...versioned({name:tool,description,inputSchema:publishingInput,annotations:{readOnlyHint:false,destructiveHint:verb==="archive"}})});
     webmcp.routes[tool]={path:"/admin/c/"+encodeURIComponent(schema.name),entry:true};
     snapshot.interfaces.callable.push({kind:"procedure",name:tool,target:name,surface:"admin",audience:"admin",title:null,description,input:publishingInput,output:null,trigger:null});
   }

@@ -138,6 +138,8 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       for (const tool of selected) {
         const meta = appMeta?.(tool.name);
         if (meta === false) continue;
+        // Not part of structured output: the version, and on failure the current input contract.
+        const about = (contract: boolean) => { const text = [tool.version && `tool version ${tool.version}`, contract && `input schema ${JSON.stringify(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema)}`].filter(Boolean).join("; "); return text ? [{ type: "text" as const, text }] : []; };
         server.registerTool(tool.name, { ...(meta ? { _meta: meta } : {}), ...(tool.title ? { title: text(tool.title, locale) } : {}), description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name, inputSchema: schema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) }, async (raw: unknown) => {
         const metadata = options.onObservation ? { kind: "invocation" as const, surface, invocationId: crypto.randomUUID(), tool: tool.name, caller: Object.freeze(caller.kind === "user" ? { ...caller, scopes: Object.freeze([...caller.scopes]) } : { ...caller }) } : undefined;
         const started = metadata ? performance.now() : 0;
@@ -148,14 +150,14 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
           if (tool.run && (!host || !tool.readOnly)) checkOrigin(request, caller);
           const data = await callTool(tool, raw as Record<string, unknown>, () => options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
           if (host) access?.finish();
-          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
+          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }, ...about(false)], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {
           if (host) access?.finish(error);
           const diagnostic = host ? (await (await import("./host-caller.js")).hostFailure(error, caller, `mcp ${tool.name}`).json() as {error: ReturnType<typeof surfaceError>["error"]}).error : surfaceError(error, `mcp ${tool.name}`).error;
           code = diagnostic.code; outcome = code === "AUTH_DENIED" || code === "UNAUTHENTICATED" ? "denied" : "failed";
           if (diagnostic.path === "request:origin") observe(options.onRefusal, { at: Date.now(), status: 403, reason: "origin" });
           const payload = { diagnostics: [diagnostic] };
-          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), isError: true, content: [{ type: "text" as const, text: JSON.stringify(payload) }], ...(tool.outputSchema ? {} : { structuredContent: payload }) };
+          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), isError: true, content: [{ type: "text" as const, text: JSON.stringify(payload) }, ...about(outcome === "failed")], ...(tool.outputSchema ? {} : { structuredContent: payload }) };
         } finally {
           if (metadata) observe(options.onObservation, { ...metadata, phase: "completion", at: Date.now(), outcome, durationMs: Math.max(0, performance.now() - started), ...(code ? { code } : {}) });
         }

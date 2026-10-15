@@ -234,6 +234,21 @@ with an output schema they omit `structuredContent` to avoid validating an error
 against a success schema. Without one they also expose diagnostic structured
 content. MCP adds no prompts or non-UI resources.
 
+### Tool versions
+
+Each generated tool (MCP, media, publishing and WebMCP) carries `version`, a
+short hash of its listed name, title, description, input and output schemas and
+annotations, computed by `mantle generate`; its description ends with
+`(tool version <version>)`, so an unchanged tool keeps a byte-identical
+description across deploys. MCP results add a second text block,
+`tool version <version>`; failures other than authorization refusals append
+`; input schema <JSON>`, the input schema the tool is listed with.
+`structuredContent` is unchanged. WebMCP calls return the version beside the
+output. Generated `mcp()` sets `serverInfo.version` to a hash of the whole
+generated catalogue unless `serverInfo.version` is given. Tools an application
+adds itself carry a version only if it sets one. Why: [MCP and
+agents](../concepts/mcp-and-agents.md#when-a-host-shows-old-tools).
+
 ### Declared View scalars on the wire
 
 REST and MCP View pages expose declared JSON columns as JSON values and declared

@@ -43,6 +43,8 @@ export interface Tool<Database, Handlers = never> {
   readonly outputSchema?: unknown;
   readonly annotations?: { readonly readOnlyHint?: boolean; readonly destructiveHint?: boolean; readonly openWorldHint?: boolean; readonly idempotentHint?: boolean };
   readonly inputSchema: unknown;
+  /** The listed definition's version; results carry it so a model holding an older definition can tell. */
+  readonly version?: string;
   /** Declares an auth requirement: anonymous callers are challenged. */
   readonly closed?: boolean;
   /** OAuth scopes the requirement names. */

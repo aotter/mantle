@@ -21,6 +21,10 @@ describe("Admin tool transport and routing", () => {
     expect(await callAdminTool("re/title", { id: "a", tags: ["x"], assignee: null })).toEqual({ output: { title: "x" }, result: { content: [{ type: "text", text: '{"title":"x"}' }], structuredContent: { title: "x" } } });
     expect(seen).toEqual([["/admin/api/webmcp/re%2Ftitle", "POST", JSON.stringify({ id: "a", tags: ["x"], assignee: null })]]);
   });
+  it("tells the model the deployed tool version the route reports", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ output: { title: "x" }, version: "0a1b2c3d" })));
+    expect((await callAdminTool("retitle", {})).result.content).toEqual([{ type: "text", text: '{"title":"x"}' }, { type: "text", text: "tool version 0a1b2c3d" }]);
+  });
   it("keeps the refusal's Mantle diagnostic as a plain body, and never retries", async () => {
     const diagnostic = { code: "CONFLICT", message: "Stale version" };
     const fetcher = vi.fn(async () => Response.json({ error: diagnostic }, { status: 409 }));
