@@ -53,7 +53,9 @@ export function mcpTools(plan: RuntimePlan, surface: "public" | "admin", locale 
     const title = text(v.title);
     add({
       name: mcpToolNameSegment(name), kind: "view", source: name, ...(title ? { title } : {}), description: text(v.description) ?? title ?? name,
-      inputSchema: { type: "object", properties: { ...props, limit: { type: "integer", minimum: 1, maximum: 500 }, cursor: { type: "string" } }, ...(v.input?.required ? { required: v.input.required } : {}) } as JsonSchema,
+      inputSchema: { type: "object", properties: { ...props, limit: { type: "integer", minimum: 1, maximum: 500 }, cursor: { type: "string" } }, ...(v.input?.required ? { required: v.input.required } : {}),
+        // Input rules stay: describe keeps them, AI tool catalogues turn them into sentences.
+        ...Object.fromEntries(["dependentRequired", "anyOf", "if", "then", "else"].flatMap((k) => v.input?.[k] === undefined ? [] : [[k, v.input[k]]])) } as JsonSchema,
       annotations: { readOnlyHint: true }, requires: v.requires,
     });
   }

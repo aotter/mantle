@@ -7,6 +7,7 @@ import * as compiler from "../src/build/d1/compile/index.js";
 import {collectionOf,developerConsole,rowPreconditions} from "../src/build/compiler.js";
 import {appCatalog} from "../src/build/compiler.js";
 import {emitAdminDescriptors} from "../src/usecase/adminDescriptors.js";
+import {describeApp} from "../src/domain/describe/index.js";
 import {generateFromSources} from "../src/infrastructure/generateAuth.js";
 import type {GenerateDiagnostic} from "../src/domain/model.js";
 import {loadGenerated,writeGenerated} from "./apps/link.js";
@@ -97,11 +98,18 @@ test("row preconditions derive AND equality/IN literals only from the declared t
   expect(m.operations[0].preconditions).toEqual([{field:"state",values:["todo"]}]);
 });
 
-test("WebMCP advertises Procedure input rules as description sentences; Admin operations keep them",async()=>{
+test("WebMCP advertises View and Procedure input rules as description sentences; Admin operations and describe keep them",async()=>{
   const input={type:"object",properties:{entryId:{type:"string"},expectedVersion:{type:"integer"},note:{type:"string"}},required:["entryId","expectedVersion"],dependentRequired:{note:["expectedVersion"]}};
-  const {loaded:m}=await metadata(await planOf(sources.map(s=>s.sourceId==="mark-done.json"?manifest("Procedure","mark-done",{...JSON.parse(s.text).spec,input}):s)));
+  const plan=await planOf([...sources.map(s=>s.sourceId==="mark-done.json"?manifest("Procedure","mark-done",{...JSON.parse(s.text).spec,input}):s),
+    manifest("View","titled",{surface:"admin",description:"Find tasks.",input:{type:"object",properties:{a:{type:"string"},b:{type:"string"}},anyOf:[{required:["a"]},{required:["b"]}]},sql:"SELECT id,title FROM tasks WHERE title = input.a OR title = input.b ORDER BY id"})]);
+  const {loaded:m}=await metadata(plan);
   const tool=m.webmcp.tools.find((t:any)=>t.name==="mark_done");
   expect(tool.description).toBe("Complete a task. 'expectedVersion' is required when 'note' is present.");
   expect(tool.inputSchema).not.toHaveProperty("dependentRequired");
   expect(m.operations[0].input).toEqual(input);
+  const view=m.webmcp.tools.find((t:any)=>t.name==="titled");
+  expect(view.description).toBe("Find tasks. At least one of 'a', 'b' is required.");
+  expect(view.inputSchema).not.toHaveProperty("anyOf");
+  const described=(await describeApp(plan)).targets.find(t=>t._meta.id==="view:titled")!;
+  expect(described.inputSchema).toMatchObject({anyOf:[{required:["a"]},{required:["b"]}]});
 });
