@@ -3,13 +3,15 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { expect, it } from "vitest";
+import { buildDefaultAdmin } from "./built-admin";
 import { tallSystemGraph, wideSystemGraph } from "./wide-system-graph";
 
 // #1666: the built Admin shows every node of a large system wiring graph, initially, after Fit View
 // and after automatic layout, and can still zoom in to a readable scale. A wide graph on a phone in
 // portrait and a tall graph on a short landscape canvas.
 it("fits the whole system wiring graph on narrow and short canvases", async () => {
-  const dist = resolve(import.meta.dirname, "../../dist/admin");
+  const built = await buildDefaultAdmin();
+  const dist = built.dist;
   let snapshot = {};
   const bridge = () => `<script>
     localStorage.setItem('cms.preference.language', 'en');
@@ -81,5 +83,6 @@ it("fits the whole system wiring graph on narrow and short canvases", async () =
   } finally {
     await browser.close();
     await new Promise<void>(resolve => server.close(() => resolve()));
+    built.remove();
   }
 }, 120_000);

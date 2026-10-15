@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -12,6 +12,13 @@ describe("@aotter/mantle-admin/app", () => {
     const app = await import(resolve(pkg, target.import));
     expect(Object.keys(app).sort()).toEqual(["MantleAdmin", "defineAdmin"]);
     expect(app.defineAdmin({})).toEqual({ meta: {} });
+  });
+
+  it("ships no prebuilt SPA: the application builds Admin", () => {
+    const { exports, scripts } = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")) as { exports: Record<string, unknown>; scripts: { build: string } };
+    expect(Object.keys(exports).filter(key => key.startsWith("./admin/"))).toEqual([]);
+    expect(scripts.build).not.toContain("dist/admin'");
+    expect(existsSync(resolve(pkg, "dist/admin"))).toBe(false);
   });
 
   it("types resolve for a NodeNext consumer", () => {

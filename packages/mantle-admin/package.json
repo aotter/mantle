@@ -1,7 +1,7 @@
 {
   "name": "@aotter/mantle-admin",
   "version": "0.2.0-alpha.7",
-  "description": "Admin SPA, extension client API, design preview and Admin MCP App; the SDK remains a peer.",
+  "description": "Admin app library and build, extension client API, design preview and Admin MCP App; the SDK remains a peer.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
@@ -39,9 +39,6 @@
       "types": "./dist/admin-preview/index.d.ts",
       "import": "./dist/admin-preview/index.js"
     },
-    "./admin/index.html": "./dist/admin/index.html",
-    "./admin/preview.html": "./dist/admin/preview.html",
-    "./admin/host-bridge.js": "./dist/admin/host-bridge.js",
     "./mcp-app": {
       "types": "./dist/mcp-app/index.d.ts",
       "import": "./dist/mcp-app/index.js"
@@ -128,7 +125,7 @@
   },
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
-    "build": "tsc -b tsconfig.lib.json && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config vite.app.config.ts && node scripts/emit-app-types.mjs && vite build --config vite.shared.config.ts && vite build --config vite.preview.config.ts && node -e \"import('./dist/build/index.js').then(m => m.buildAdmin({ outDir: 'dist/admin' }))\"",
+    "build": "tsc -b tsconfig.lib.json && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config vite.app.config.ts && node scripts/emit-app-types.mjs && vite build --config vite.shared.config.ts && vite build --config vite.preview.config.ts",
     "typecheck": "tsc -p tsconfig.mcp-app.json && tsc --noEmit -p admin/tsconfig.json",
     "test": "bun test tests/native/*.test.ts && vitest run",
     "test:browser": "MANTLE_BROWSER_TESTS=1 vitest run admin/test/preview-boundary.test.ts admin/test/atom-graph-browser.test.ts test/mcp-app-browser.test.ts",
