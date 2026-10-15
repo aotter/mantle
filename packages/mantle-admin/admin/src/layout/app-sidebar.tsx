@@ -13,6 +13,7 @@ import { Slot } from "../app/slots";
 import { useAdminLocation } from "../app/router";
 import { AppTitle } from "./app-title";
 import { NavGroup } from "./nav-group";
+import { isCollapsible, type NavLink } from "./types";
 import { NavUser } from "./nav-user";
 import { useShell } from "./shell-context";
 import type { SidebarProps } from "../app/slot-props";
@@ -24,6 +25,7 @@ export function AppSidebar({ brand, groups, footer }: SidebarProps): React.React
   // the workspace entry is the overview flow
   const pathname = location.pathname === "/admin/dev" ? "/admin/dev/overview/flow" : location.pathname;
   const search = location.search;
+  const links = groups.flatMap((g) => g.items.filter((item): item is NavLink => !isCollapsible(item)));
   return (
     <Sidebar
       side={direction === "rtl" ? "right" : "left"}
@@ -47,6 +49,7 @@ export function AppSidebar({ brand, groups, footer }: SidebarProps): React.React
           <NavGroup
             key={group.title ?? `g-${idx}`}
             group={group}
+            links={links}
             pathname={pathname}
             search={search}
           />

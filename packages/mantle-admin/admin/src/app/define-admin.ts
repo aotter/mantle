@@ -1,3 +1,4 @@
+import type * as React from "react";
 import type { AdminLayers, SlotComponent } from "./slots";
 import type { BrandProps, CellProps, CollectionListProps, HeaderProps, HomeProps, InputProps, ListActionsProps, RecordActionsProps, RecordAsideProps, RecordViewProps, ShellProps, SidebarProps, SurfaceProp } from "./slot-props";
 
@@ -10,7 +11,14 @@ export interface AdminTypes {
   readonly views: { readonly [name: string]: { readonly input: object; readonly row: object } };
   readonly collections: { readonly [name: string]: { readonly data: object } };
   readonly operations: { readonly [name: string]: { readonly input: object; readonly output: unknown } };
+  /** The sidebar groups beyond Admin's own that the manifest places items in (`uiSchema.nav.group`); any name when absent. */
+  readonly navGroups?: string;
+  /** Those `defineAdmin` must declare in `nav.groups`: `navGroups` minus any the legacy `--admin-extensions` module declares; none when absent. */
+  readonly requiredNavGroups?: string;
 }
+
+type CustomGroup<T extends AdminTypes> = T extends { readonly navGroups: infer G extends string } ? G : string;
+type RequiredGroup<T extends AdminTypes> = T extends { readonly requiredNavGroups: infer G extends string } ? G : never;
 
 /**
  * Generated Admin metadata for `defineAdmin`: the column names each View's rows carry in the browser where they differ from
@@ -90,8 +98,64 @@ export interface AdminMcpCsp {
   readonly baseUriDomains?: readonly string[];
 }
 
+/** Text, or a `{ locale: text }` map. */
+export type AdminText = string | Readonly<Record<string, string>>;
+
+/** Admin's own sidebar groups; project groups sort among the first three by `order` (content 10, operations 20, reports 30) and `more` is always last. */
+export type BuiltInNavGroup = "content" | "operations" | "reports" | "more";
+
+/** A project sidebar group: its title and its place among the others (default 50). */
+export interface AdminNavGroup {
+  readonly title: AdminText;
+  readonly order?: number;
+}
+
+type Scalar = string | number | boolean;
+type ScalarOf<V> = Extract<NonNullable<V>, Scalar>;
+/** One declared field of a collection and the value to list it by: the list filters on a single field. Any field name for the open shape the built-in entry has. */
+type NavFilter<D> = [keyof D] extends [never]
+  ? { readonly [field: string]: Scalar }
+  : { [F in keyof D & string]-?: [ScalarOf<D[F]>] extends [never] ? never : { readonly [P in F]: ScalarOf<D[F]> } & { readonly [Q in Exclude<keyof D & string, F>]?: never } }[keyof D & string];
+
+/** Where a sidebar item leads: a collection's list, preset to one field's value, or an admin View with its input. */
+export type AdminNavTarget<T extends AdminTypes = AdminTypes> =
+  | { [C in Collections<T>]: { readonly collection: C; readonly filter?: NavFilter<T["collections"][C]["data"]> } }[Collections<T>]
+  | { [V in Views<T>]: { readonly view: V; readonly input?: T["views"][V]["input"] } }[Views<T>];
+
+/**
+ * A sidebar entry added beside the ones `uiSchema.nav` produces. Several items may lead to one resource with different
+ * presets. An item whose collection or View the caller cannot see is not shown; showing or hiding one grants and denies nothing.
+ */
+export interface AdminNavItem<T extends AdminTypes = AdminTypes> {
+  readonly group: BuiltInNavGroup | CustomGroup<T>;
+  readonly title: AdminText;
+  /** Any icon component; the default is a folder for a collection and a chart for a View. */
+  readonly icon?: React.ElementType;
+  /** Position within the group; items without one follow those with one. */
+  readonly order?: number;
+  readonly to: AdminNavTarget<T>;
+}
+
+/** Declare a project group for every `uiSchema.nav.group` the manifest uses; `tsc` refuses a missing one, and refuses Admin's own group ids. */
+export type AdminNavGroups<T extends AdminTypes = AdminTypes> =
+  { readonly [K in RequiredGroup<T>]: AdminNavGroup } & { readonly [id: string]: AdminNavGroup } & { readonly [K in BuiltInNavGroup]?: never };
+
+/** `defineAdmin`'s `nav`. `groups` is required when the manifest uses a group Admin does not have. */
+export interface AdminNav<T extends AdminTypes = AdminTypes> {
+  readonly groups?: AdminNavGroups<T>;
+  readonly items?: readonly AdminNavItem<T>[];
+}
+
+/** Whether `defineAdmin` must be given `nav.groups`: not when the manifest needs none (the built-in entry's open shape too). */
+type NeedsGroups<T extends AdminTypes> = [RequiredGroup<T>] extends [never] ? false : true;
+
 /** What `defineAdmin` takes beside the generated metadata. */
-export interface AdminConfig<T extends AdminTypes = AdminTypes> {
+export type AdminConfig<T extends AdminTypes = AdminTypes> = AdminOptions<T> & (NeedsGroups<T> extends true ? { readonly nav: AdminNav<T> & { readonly groups: AdminNavGroups<T> } } : unknown);
+
+/** The options of `AdminConfig`, all optional. */
+export interface AdminOptions<T extends AdminTypes = AdminTypes> {
+  /** The sidebar: groups the manifest places items in, and items of the application's own. `uiSchema.nav` stays the default. */
+  readonly nav?: AdminNav<T>;
   /** Replace or wrap regions of Admin; applied after `plugins`, so these are outermost. */
   readonly components?: AdminComponents<T>;
   /** Fragments applied in order: each one's `renderDefault` is the plugin before it, or the built-in component. */
@@ -103,6 +167,8 @@ export interface AdminConfig<T extends AdminTypes = AdminTypes> {
 /** What an Admin entry default-exports and `<MantleAdmin>` renders. */
 export interface AdminDefinition {
   readonly meta: AdminMeta;
+  /** The sidebar groups and items, as `defineAdmin` was given them. */
+  readonly nav: { readonly groups: { readonly [id: string]: AdminNavGroup }; readonly items: readonly AdminNavItem[] };
   /** The components of each slot, nearest the built-in first. */
   readonly layers: AdminLayers;
   readonly mcp?: { readonly csp?: AdminMcpCsp };
@@ -112,10 +178,13 @@ export interface AdminDefinition {
  * Compose Admin from generated metadata. The result is plain data; it grants and denies nothing: showing, hiding or
  * replacing a region changes no server-side permission.
  */
-export function defineAdmin<T extends AdminTypes>(meta: AdminMeta<T>, config: AdminConfig<NoInfer<T>> = {}): AdminDefinition {
+export function defineAdmin<T extends AdminTypes>(
+  meta: AdminMeta<T>,
+  ...[config = {} as AdminConfig<NoInfer<T>>]: NeedsGroups<T> extends true ? [config: AdminConfig<NoInfer<T>>] : [config?: AdminConfig<NoInfer<T>>]
+): AdminDefinition {
   const layers: { [name: string]: SlotComponent<never>[] } = {};
   for (const components of [...(config.plugins ?? []).map(plugin => plugin.components), config.components]) {
     for (const [name, component] of Object.entries(components ?? {})) if (component) (layers[name] ??= []).push(component as SlotComponent<never>);
   }
-  return { meta: meta as AdminMeta, layers, ...(config.mcp ? { mcp: config.mcp } : {}) };
+  return { meta: meta as AdminMeta, nav: { groups: config.nav?.groups ?? {}, items: (config.nav?.items ?? []) as unknown as readonly AdminNavItem[] }, layers, ...(config.mcp ? { mcp: config.mcp } : {}) };
 }

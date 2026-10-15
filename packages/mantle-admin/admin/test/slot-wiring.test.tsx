@@ -3,11 +3,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SidebarProvider, TooltipProvider } from "@aotter/mantle-ui/kit";
 import { defineAdmin, type AdminMeta } from "../src/app/define-admin";
 import { PreferencesProvider } from "../src/app/preferences";
 import { AdminRouterProvider } from "../src/app/router";
+import { ProjectNavProvider, type ProjectNav } from "../src/app/project-nav";
 import { Slot, SurfaceProvider, type SlotProps } from "../src/app/slots";
 import type { SidebarProps } from "../src/app/slot-props";
 import { AppSidebar } from "../src/layout/app-sidebar";
@@ -48,6 +49,19 @@ describe("Admin's built-in components through their slots", () => {
     expect(withFooter).toContain("Requests");
   });
 
+  it("highlights only the preset item on a preset URL, not the default entry of the same collection", () => {
+    const at = (pathname: string, search: string) => {
+      vi.stubGlobal("window", { location: { pathname, search, href: `http://x${pathname}${search}`, origin: "http://x" }, addEventListener() {}, removeEventListener() {} });
+      try { return shell(<Slot name="Sidebar" Default={AppSidebar} props={{ brand: { title: "Acme" }, groups: [
+        { title: "Records", items: [{ title: "requests", url: "/admin/c/requests" }] },
+        { title: "Reports", items: [{ title: "Rejected", url: "/admin/c/requests?filter_field=status&filter_value=rejected" }] },
+      ] }} />, {}); } finally { vi.unstubAllGlobals(); }
+    };
+    const activeLabels = (html: string) => [...html.matchAll(/data-active="true"[^>]*>.*?<span[^>]*>([^<]*)<\/span>/g)].map((m) => m[1]);
+    expect(activeLabels(at("/admin/c/requests", "?filter_field=status&filter_value=rejected"))).toEqual(["Rejected"]);
+    expect(activeLabels(at("/admin/c/requests", ""))).toEqual(["requests"]);
+  });
+
   it("replaces the brand inside the built-in sidebar", () => {
     const html = shell(sidebar, defineAdmin(admin, { components: { Brand: (props) => <b>{props.title.toUpperCase()}</b> } }).layers);
     expect(html).toContain("<b>ACME</b>");
@@ -78,17 +92,17 @@ describe("Admin's built-in components through their slots", () => {
 });
 
 describe("the pages mount their slots", () => {
-  const layout = (layers: ReturnType<typeof defineAdmin>["layers"], workspace: "content" | "developer", children: React.ReactNode = <p>page</p>) => {
+  const layout = (layers: ReturnType<typeof defineAdmin>["layers"], workspace: "content" | "developer", children: React.ReactNode = <p>page</p>, nav?: ProjectNav, listed: unknown[] = []) => {
     const client = new QueryClient();
     client.setQueryData(["me"], { login: "ada", image: null, role: "admin", admin: true });
-    client.setQueryData(["collections"], []);
+    client.setQueryData(["collections"], listed);
     client.setQueryData(["site"], { brand: "Acme", icons: [] });
     client.setQueryData(viewsManifestQueryOptions().queryKey, []);
     client.setQueryData(operationsQueryOptions().queryKey, []);
     return renderToStaticMarkup(
       <PreferencesProvider initialLanguage="en"><QueryClientProvider client={client}>
         <SurfaceProvider surface="browser" host={null} layers={layers}><TooltipProvider><AdminRouterProvider>
-          <AuthenticatedLayout workspace={workspace}>{children}</AuthenticatedLayout>
+          <ProjectNavProvider nav={nav ?? { groups: {}, items: [] }}><AuthenticatedLayout workspace={workspace}>{children}</AuthenticatedLayout></ProjectNavProvider>
         </AdminRouterProvider></TooltipProvider></SurfaceProvider>
       </QueryClientProvider></PreferencesProvider>,
     );
@@ -106,6 +120,15 @@ describe("the pages mount their slots", () => {
     expect(developer).not.toContain("my-sidebar");
     expect(developer).not.toContain("my-header");
     expect(developer).toContain("Overview");
+  });
+
+  it("gives the sidebar the groups and items the application declared with defineAdmin", () => {
+    const { nav } = defineAdmin(admin, { nav: { groups: { approvals: { title: "Approvals", order: 5 } }, items: [{ group: "approvals", title: "Rejected", to: { collection: "requests", filter: { title: "late" } } }] } });
+    const requests = { name: "requests", title: "requests", description: null, lifecycle: "operational", parent: null, localized: false, hasTranslations: false, exportFields: [], uiSchema: null };
+    const sidebar = defineAdmin(admin, { components: { Sidebar: ({ groups }) => <nav>{JSON.stringify(groups.map(({ title, items }) => [title, items.map(item => ("url" in item ? item.url : item.title))]))}</nav> } }).layers;
+    const html = layout(sidebar, "content", <p>page</p>, nav, [requests]).split("&quot;").join('"');
+    expect(html).toContain('["Approvals",["/admin/c/requests?filter_field=title&amp;filter_value=late"]]');
+    expect(layout(sidebar, "content", <p>page</p>, undefined, [requests]).split("&quot;").join('"')).not.toContain("Approvals");
   });
 
   it("replaces the whole shell, and keeps a record form's action bar in the page", () => {

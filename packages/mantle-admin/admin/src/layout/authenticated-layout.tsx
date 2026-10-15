@@ -47,6 +47,7 @@ import { statusLabel } from "../features/content/status";
 import { t } from "../app/i18n";
 import { FormActionBarHostContext } from "../ui/page";
 import { Slot } from "../app/slots";
+import { useProjectNav, type ProjectNav } from "../app/project-nav";
 import type { ShellProps } from "../app/slot-props";
 import { ShellContext, type ShellContextValue } from "./shell-context";
 import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
@@ -118,6 +119,7 @@ export function AuthenticatedLayout({
   );
 
   const canonical = site.data?.canonicalLocale ?? null;
+  const projectNav = useProjectNav();
   const groups = React.useMemo<ReadonlyArray<NavGroupData>>(
     () => workspace === "developer"
       ? buildDeveloperNavGroups(language)
@@ -132,8 +134,9 @@ export function AuthenticatedLayout({
           site.data?.capabilities,
           site.data?.extensions,
           site.data?.navGroups,
+          projectNav,
         ),
-    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.admin, workspace, site.data?.capabilities, site.data?.extensions, site.data?.navGroups],
+    [projectNav, collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.admin, workspace, site.data?.capabilities, site.data?.extensions, site.data?.navGroups],
   );
   return workspace === "developer"
     ? <ShellFrame workspace="developer" nav={groups} brand={resolvedBrand}>{children}</ShellFrame>
@@ -226,6 +229,8 @@ function preferredAdminIcon(icons: readonly SiteIcon[] | undefined): string | un
     ?? icons?.[0]?.src;
 }
 
+const BUILT_IN_GROUPS: ReadonlySet<string> = new Set(["content", "operations", "reports", "more"]);
+
 export function buildNavGroups(
   collections: ReadonlyArray<Collection>,
   views: ReadonlyArray<ViewManifestInfo>,
@@ -236,6 +241,7 @@ export function buildNavGroups(
   capabilities?: SiteInfo["capabilities"],
   extensions?: SiteInfo["extensions"],
   navGroups?: SiteInfo["navGroups"],
+  project?: ProjectNav,
 ): ReadonlyArray<NavGroupData> {
   // Sidebar placement (`uiSchema.nav` and navGroups): presentation only, so the server's visibility filtering stands.
   // Without any placement this yields Admin's default groups: content, operations, reports, more.
@@ -263,6 +269,12 @@ export function buildNavGroups(
       icon: Puzzle,
     });
   }
+  // the application's own items (`defineAdmin` `nav.items`): only those whose collection or View this caller can see, which
+  // are the ones the server listed; a link shows nothing the target's own route would not
+  for (const item of project?.items ?? []) {
+    const link = projectNavLink(item, collections, views, language, canonical);
+    if (link) place(item.group, item.order, link);
+  }
   // within a group: ordered entries first by order, then the rest in Admin's order (a stable sort)
   const itemsOf = (group: string) => (buckets.get(group) ?? []).sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity)).map((p) => p.item);
   // project groups sort among the built-in ones (more is always last); a stable sort keeps declaration order
@@ -271,7 +283,17 @@ export function buildNavGroups(
     { id: "operations", title: t(language, "nav.operations"), order: 20 },
     { id: "reports", title: t(language, "nav.reports"), order: 30 },
     ...(navGroups ?? []).map((g) => ({ id: g.id, title: resolveLocalizedText(g.title, language, canonical) ?? g.id, order: g.order ?? 50 })),
-  ].sort((a, b) => a.order - b.order);
+  ];
+  // `defineAdmin` groups win over the legacy `navGroups` of the same id
+  for (const [id, g] of Object.entries(project?.groups ?? {})) {
+    if (BUILT_IN_GROUPS.has(id)) continue; // Admin's own groups are not redeclared (`tsc` refuses it; a zero-config entry has none)
+    const next = { id, title: resolveLocalizedText(g.title, language, canonical) ?? id, order: g.order ?? 50 };
+    const at = titled.findIndex((t) => t.id === id);
+    if (at < 0) titled.push(next); else titled[at] = next;
+  }
+  // a group nobody declared (a zero-config entry has no `tsc` to refuse it) still shows its items, titled by its id
+  for (const id of buckets.keys()) if (id !== "more" && !titled.some((t) => t.id === id)) titled.push({ id, title: fieldLabel(id), order: 50 });
+  titled.sort((a, b) => a.order - b.order);
   const homeGroup: NavGroupData = {
     items: [
       {
@@ -327,6 +349,24 @@ export function buildNavGroups(
     ...placedGroups,
     ...(moreGroup.items.length > 0 ? [moreGroup] : []),
   ];
+}
+
+/** The sidebar link of an application item, or null when the caller cannot see its collection or View (the server lists only those it may read). */
+function projectNavLink(item: ProjectNav["items"][number], collections: ReadonlyArray<Collection>, views: ReadonlyArray<ViewManifestInfo>, language: AdminLanguage, canonical: string | null): NavLink | null {
+  const scalars = (values: object | undefined) => Object.entries(values ?? {}).flatMap(([k, v]) => typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? [[k, String(v)] as [string, string]] : []);
+  const title = (name: string) => resolveLocalizedText(item.title, language, canonical) ?? fieldLabel(name);
+  if ("collection" in item.to) {
+    const { collection: name, filter } = item.to;
+    const found = collections.find((c) => c.name === name);
+    if (!found) return null;
+    const [field] = scalars(filter);
+    const query = field ? `?filter_field=${encodeURIComponent(field[0])}&filter_value=${encodeURIComponent(field[1])}` : "";
+    return { title: title(name), icon: item.icon ?? Folder, url: `/admin/c/${encodeURIComponent(name)}${query}` };
+  }
+  const { view: name, input } = item.to;
+  if (!views.some((v) => v.name === name)) return null;
+  const query = new URLSearchParams(scalars(input)).toString();
+  return { title: title(name), icon: item.icon ?? BarChart3, url: `/admin/views/${encodeURIComponent(name)}${query ? `?${query}` : ""}` };
 }
 
 export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<NavGroupData> {
