@@ -41,7 +41,7 @@ export function emitTranslations(plan:RuntimePlan,target:Target):Record<string,s
     declarations.push(`${q(schema.name)}: Pick<Tables[${q(schema.name)}]["row"],${["id",...columns.filter(c=>c!==schema.scope)].map(value=>q(value)).join("|")}>${schema.scope&&columns.includes(schema.scope)?` & {readonly ${q(schema.scope)}?:string|null}`:""};`);
     descriptors.push(`${q(schema.name)}:[${entries.join(",")}]`);
   }
-  return {"translations.ts":`${user.code ? user.code+"\n" : ""}import {ContractError,type Caller${driver==="postgres"?",type Postgres as Database":""}} from "@aotter/mantle/contracts";
+  return {"translations.ts":`${user.code ? user.code+"\n" : ""}import {ContractError,type Caller${driver==="postgres"?",type Unsafe as Database":""}} from "@aotter/mantle/contracts";
 ${driver!=="postgres"?`import type {Handle as Database} from "@aotter/mantle/driver/${driver}";`:""}
 import {read} from "@aotter/mantle/driver/${driver}";
 import {binds,encode} from "@aotter/mantle/binds";

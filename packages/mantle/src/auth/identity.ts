@@ -3,7 +3,7 @@ import { adminOptionsOf, isBanned, type AuthInstance } from "./caller.js";
 import { authNames } from "./adapter.js";
 import { APIError } from "@better-auth/core/error";
 import type { AuthContext } from "@better-auth/core";
-import { ContractError, type Caller, type Postgres } from "../kernel/contracts.js";
+import { ContractError, type Caller, type Postgres, type Unsafe } from "../kernel/contracts.js";
 import { adminLayerOf, rolesFrom } from "../kernel/user-caller.js";
 import * as sqlite from "../kernel/dialect/sqlite.js";
 import * as postgres from "../kernel/dialect/postgres.js";
@@ -147,7 +147,7 @@ function directory(auth: IdentityAuth, _caller: Caller, headers: Headers, d: Dia
 }
 export type IdentityDirectory = ReturnType<typeof directory>;
 export const d1Identity = (db: Reader, auth: IdentityAuth, caller: Caller, headers: Headers): IdentityDirectory => directory(auth, caller, headers, sqlite.dialect, (sql, v) => d1Read(db, sql, v));
-export const postgresIdentity = (db: Postgres, auth: IdentityAuth, caller: Caller, headers: Headers): IdentityDirectory => directory(auth, caller, headers, postgres.dialect, (sql, v) => pgRead(db, sql, v));
+export const postgresIdentity = (db: Unsafe, auth: IdentityAuth, caller: Caller, headers: Headers): IdentityDirectory => directory(auth, caller, headers, postgres.dialect, (sql, v) => pgRead(db, sql, v));
 /**
  * Server-side reads of Better Auth users for code without a session (cron, system callers): no SQL against Better Auth's
  * tables, each instance's own table mapping, banned users excluded. Read-only; writes stay with the caller-bound directory.

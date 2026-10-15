@@ -99,7 +99,7 @@ export function generate(input: GenerateInput): GenerateResult {
     const callerStep = step(c, path, fieldNames), trustedStep = mode === "caller" ? step(trusted!, path, fieldNames) : callerStep;
     declarations.push(`export type View${index}Input = ${queryInputType(view.input ?? { type: "object", additionalProperties: false }, [c, ...(trusted ? [trusted] : [])])};`, `export type View${index}Row = { ${output.join(" ")} };`, `export type View${index}WireRow = { ${keys.map(key => `readonly ${q(key)}: ${boundaryType(plan, name, key) ? wireType(boundaryType(plan, name, key)) : `View${index}Row[${q(key)}]`};`).join(" ")} };`,
       `const ${fn}Caller = ${callerStep} as const;`, ...(trustedStep !== callerStep ? [`const ${fn}Trusted = ${trustedStep} as const;`] : []),
-      `async function ${fn}(db: Database, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), ...(user.used ? ['  USER.modeOf(caller);'] : []),
+      `async function ${fn}(db: ${isSqlite ? "Database" : "Unsafe"}, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), ...(user.used ? ['  USER.modeOf(caller);'] : []),
       `  const m = ${trustedStep !== callerStep ? `${user.used ? 'USER.modeOf(caller) === "trusted"' : 'caller.kind === "system"'} ? ${fn}Trusted : ` : ""}${fn}Caller;`, `  return DRIVER.read(db, ${user.used ? "USER.scoped(m.sql, caller)" : "m.sql"}, binds(D, m.binds, caller, raw));`, "}");
     views.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("view", name)} };`);
@@ -136,7 +136,7 @@ export function generate(input: GenerateInput): GenerateResult {
     `export function store${hasHandlers ? "<const H extends Handlers>" : ""}(db: Database, caller: Caller${hasHandlers ? ", options: { handlers: H & Record<Exclude<keyof H, keyof Handlers>, never> }" : ", _options?: { handlers?: Handlers }"}): ReturnType<typeof makeStore> { return (makeStore ??= initStore())(db, caller${hasHandlers ? ", options" : ""}); }`,
   ] : [])].join("\n");
   const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
-  const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database"] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny", ...(/\bisAdmin\(/.test(code) ? ["isAdmin"] : []), ...(/\bisUser\(/.test(code) ? ["isUser"] : [])] : []), ...(procedures.length ? ["type Output"] : [])];
+  const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database", ...(views.length ? ["type Unsafe"] : [])] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny", ...(/\bisAdmin\(/.test(code) ? ["isAdmin"] : []), ...(/\bisUser\(/.test(code) ? ["isUser"] : [])] : []), ...(procedures.length ? ["type Output"] : [])];
   const dbType = isSqlite ? databaseImport(target) : "";
   return { ok: true, refProcedures: refNames, files: generatedFiles({ ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", user.code, dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
     ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...((names => names.length ? [`import { ${names.join(", ")} } from "${base}store";`] : [])([...(stores ? ["createStore"] : []), ...(hasHandlers && target !== "cloudflare-d1" ? ["handlerTransaction"] : [])])),
