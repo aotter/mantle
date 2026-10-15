@@ -18,7 +18,7 @@ export interface Options<Env, Database> extends GatewayOptions {
   serverInfo?: { name?: string; title?: string; version?: string; icons?: { src: string; mimeType?: string; sizes?: string[]; theme?: "light" | "dark" }[] };
   requiredScopes?: readonly string[];
   resourceMetadata?: string;
-  /** Origins whose browser requests MCP answers besides the request URL's own, compared by hostname: `https://console.example` or the official SDK's bare `console.example`. They are also local Hosts. */
+  /** Browser origins MCP answers besides loopback, compared by hostname: `https://console.example` or the official SDK's bare `console.example`. The site's own origin is not implied. */
   allowedOrigins?: readonly string[];
   onObservation?: (event: McpObservation) => void | Promise<void>;
   onRefusal?: (event: CallerRefusal) => void | Promise<void>;

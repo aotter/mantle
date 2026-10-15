@@ -217,21 +217,18 @@ The scope floor defaults to `["mcp"]` for every credential except cookie session
 from initialize, and every call in a batch is checked before any call runs.
 `resourceMetadata` overrides the challenge URL for reverse proxies.
 
-A request whose `Origin` header names another host gets 403 on both endpoints
-and every credential, before authentication; a request without `Origin` (a
-server-side MCP client) passes. Allowed Origins are the host of `request.url`
-plus `allowedOrigins`, compared by hostname as the official SDK does (not scheme
-or port). Each entry is a full origin (`https://console.example`) or the SDK's
-bare host (`console.example`, `localhost:8787`); anything else, such as a path,
-throws when `mcp(...)` is configured.
-
-`request.url` follows the `Host` header, so only a request from a loopback peer
-(`CF-Connecting-IP`, as `wrangler dev` sets it) is checked for DNS rebinding:
-its `Host` must be `localhost`, `127.0.0.1`, `[::1]` or an `allowedOrigins`
-host, else 403. Add a tunnel's hostname to `allowedOrigins` when one forwards
-to a local server. Gateway-forwarded requests and hosts that set no
-`CF-Connecting-IP` (Bun) get no Host check. Cookie writes keep the full
-same-origin check.
+Both endpoints answer a request without `Origin`, which is what server-side MCP
+clients send. A present `Origin` marks a browser: it must name a loopback host
+(`localhost`, `127.0.0.1`, `[::1]`, any port) or an `allowedOrigins` entry, else
+403 before authentication on every credential; `Origin: null` is refused. The
+site's own origin is not implied, because a DNS-rebinding page sends an `Origin`
+equal to the `Host` it rebound, so a browser client served from your deployed
+site lists that origin: `allowedOrigins: ["https://app.example"]`. Entries are
+compared by hostname as the official SDK does (not scheme or port); each is a
+full origin (`https://console.example`) or the SDK's bare host
+(`console.example`, `localhost:8787`), and anything else, such as a path, throws
+when `mcp(...)` is configured. `Host` is not checked. Cookie writes also need
+the full same-origin check.
 
 `onObservation` receives request refusals and invocation attempt/completion
 metadata, including duration and outcome. Its Caller and scopes are frozen copies.

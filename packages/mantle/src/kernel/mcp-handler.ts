@@ -27,12 +27,11 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
     const requiredScopes = options.requiredScopes ?? ["mcp"], locale = options.locale ?? "en";
     const url = new URL(request.url), path = url.pathname.replace(/\/+$/, ""), surface = path === "/mcp" ? "public" as const : path === "/mcp/admin" ? "admin" as const : undefined;
     if (!surface) return;
-    // MCP transport MUST: a present Origin outside this host and `allowedOrigins` is 403. A loopback peer (local dev, the
-    // DNS-rebinding target) must also name a local or listed Host, since request.url follows the Host header.
-    const loopback = !forwarded(ctx, options.gateway) && /^(127\.|::1$|::ffff:127\.)/.test(request.headers.get("cf-connecting-ip") ?? "");
-    if (request.headers.has("origin") || loopback) {
+    // MCP transport MUST: a present Origin is a browser, answered only for loopback or `allowedOrigins`. The request's own
+    // host is not implied, since a DNS-rebinding page sends Origin == its rebound Host; a missing Origin is a server client.
+    if (request.headers.has("origin")) {
       const sdk = await import("@modelcontextprotocol/server");
-      const foreign = sdk.originValidationResponse(request, [url.hostname, ...allowed]) ?? (loopback ? sdk.hostHeaderValidationResponse(request, [...sdk.localhostAllowedHostnames(), ...allowed]) : undefined);
+      const foreign = sdk.originValidationResponse(request, [...sdk.localhostAllowedOrigins(), ...allowed]);
       if (foreign) {
         access?.finish(new ContractError("AUTH_DENIED", "Origin is not allowed.", "request:origin"));
         observe(options.onObservation, { kind: "request-refused", at: Date.now(), surface, status: 403 });
