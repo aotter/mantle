@@ -6,12 +6,15 @@ source, tests, package READMEs, and accepted ADRs define the current contract.
 
 ## Product and architecture contract
 
-Mantle Core is an embeddable manifest engine. A consumer may use only the parser
-and linker, bind Runtime to application-owned storage, add generated TypeScript
-bindings, or compose optional Web, Admin, UI, and platform adapters. For new
-applications, `mantle generate` assembles a full blank site by default or a
-smaller positively selected composition (ADR-0026). Application source remains
-user-owned; a minimal reference consumer validates the package contract.
+Mantle Core is an embeddable manifest engine. It compiles manifests into native
+SQL and typed TypeScript. Consumers
+generate selected queries and bind their own native handles and verified Caller,
+or compose optional REST, MCP, web, auth and separate Admin/UI modules. The parser
+and linker are private compiler implementation, not public consumer exports.
+`mantle generate <target> <output-directory> <manifest>...` writes generated
+artifacts and selected Workers build settings; applications own their entry,
+routes, auth and resources. It does not scaffold a website or service preset.
+A directly authored reference consumer validates the package contract.
 
 The sealed build-time pipeline is:
 
@@ -76,7 +79,7 @@ kernel <- domain <- usecase <- infrastructure
 
 ## Local setup and checks
 
-Requirements: Node.js 22 or newer and pnpm 9 or newer.
+Requirements: Node.js 22.22 or newer and pnpm 9 or newer.
 
 ```bash
 pnpm install --frozen-lockfile

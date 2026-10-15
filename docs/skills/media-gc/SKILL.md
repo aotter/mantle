@@ -41,11 +41,13 @@ objects approved by the user.
 
 `POST /admin/api/media/uploads` issues presigned PUT URLs that expire after 15
 minutes, for keys under `uploads/<purpose>/<group>/<role>.<ext>`. Commit
-copies each checked object to `<purpose>/<group>/<role>.<ext>` (with
-`committedAt` metadata) and deletes the upload key; a rejected group's upload
-keys are deleted. So an object still under `uploads/` long after its URL
-expired belongs to an upload that was never committed, and nothing can commit
-it any more. Objects outside `uploads/` are committed media: never candidates.
+copies each checked object to `committed/<group>/<attempt>/<role>.<ext>` (with
+`committedAt` metadata); the attempt UUID isolates concurrent commits. Upload
+keys are removed after the database commit succeeds, or when a group is
+rejected. An old upload key may also be leftover cleanup from a successful or
+uncertain commit: it is not evidence that the media row is absent. Once expired,
+it cannot create a new asset. Objects outside `uploads/` are never candidates;
+reconcile attempt copies separately with live database references.
 
 ## Audit
 

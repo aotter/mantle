@@ -177,7 +177,8 @@ metadata route. Auth challenges point to that route. Presented bearer credential
 need the `mcp` scope; cookie sessions use the same-origin mutation checks.
 
 Generation emits `mcp.ts` only for a non-internal View or MCP Trigger. These
-surfaces typecheck without the `@modelcontextprotocol/server` 2.1.0 peer.
+surfaces typecheck without the optional `@modelcontextprotocol/server` peer;
+install the exact version declared in the installed SDK's `peerDependencies`.
 The peer loads by dynamic import on the first matching `/mcp` request; if
 missing, that request fails at runtime. Publishing alone does not select MCP;
 on a selected

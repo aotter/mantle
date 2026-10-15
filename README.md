@@ -18,7 +18,7 @@
   <a href="https://github.com/aotter/mantle/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/aotter/mantle?style=flat-square&color=0b7285&label=stars"></a>
   <a href="https://www.npmjs.com/package/@aotter/mantle"><img alt="npm version" src="https://img.shields.io/npm/v/@aotter/mantle?style=flat-square&label=npm&color=0b7285"></a>
   <a href="https://github.com/aotter/mantle/releases"><img alt="GitHub prerelease" src="https://img.shields.io/github/v/release/aotter/mantle?include_prereleases&sort=semver&style=flat-square&label=release&color=0b7285"></a>
-  <a href="https://nodejs.org/"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/node-%3E%3D22-0b7285?style=flat-square&logo=nodedotjs&logoColor=white"></a>
+  <a href="https://nodejs.org/"><img alt="Node.js 22.22 or newer" src="https://img.shields.io/badge/node-%3E%3D22.22-0b7285?style=flat-square&logo=nodedotjs&logoColor=white"></a>
   <a href="LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-0b7285?style=flat-square"></a>
 </p>
 
@@ -72,7 +72,7 @@ current admin session and retain server-side authorization and concurrency check
 ### Developer UI and application API docs
 
 Explore your application's Schemas, Views, Procedures, Triggers, and their
-relationships in the owner-only Developer UI. Its HTTP, MCP, and WebMCP docs
+relationships in the admin-only Developer UI. Its HTTP, MCP, and WebMCP docs
 show the application's projected routes and tool schemas, with links back to
 the owning definitions.
 
@@ -81,15 +81,15 @@ the owning definitions.
 *Developer UI rendered locally from the intake example. The graph describes
 compiled declarations; it does not certify runtime or deployment health.*
 
-The generated service serves the console at `/admin` from
+The application serves the console at `/admin` from
 `@aotter/mantle-admin/admin/index.html`; this view draws from the admin-only
 `GET /admin/api/developer-console`.
 
 | Interface | Integration guide |
 |---|---|
-| HTTP | [Writes: Procedures, Triggers and hooks](docs/handbook/concepts/procedures-and-triggers.md) |
+| HTTP | [Writes: Procedures and Triggers](docs/handbook/concepts/procedures-and-triggers.md) |
 | Remote MCP | [Endpoints, tools, and authentication](docs/handbook/concepts/mcp-and-agents.md) |
-| Browser WebMCP | [WebMCP in Admin](docs/handbook/concepts/mcp-and-agents.md#webmcp-in-admin) |
+| Browser WebMCP | [WebMCP in Admin](docs/handbook/concepts/mcp-and-agents.md) |
 
 ## A Manifest in practice
 
@@ -123,21 +123,24 @@ Install the Mantle skill to get guided setup for your application and the
 features you need:
 
 ```sh
-npx skills add aotter/mantle
+npx skills add https://github.com/aotter/mantle/tree/v0.2.0-alpha.7 --skill mantle
 ```
 
 Ask your agent to follow the installed skill and describe what you want to build.
-The installer finds the `mantle` skill by name.
+Use the release tag matching your application's SDK; an unqualified repository
+install follows `main`, which can lag an alpha release on `develop`.
 See the [agent setup guide](docs/handbook/guides/agent-setup.md) for supported
 editors, plugins, and project instructions.
 
 ### Build it yourself
 
-Install an exact 0.2.x version of `@aotter/mantle`, write your manifests, and
-run `mantle generate`. The first run names the packages your selection needs;
-install them and run it again. It writes the service preset for the chosen
-host (Cloudflare by default, or Bun) once, and from then on those files are
-yours. Follow the
+Use Node 22.22+ and install an exact 0.2.x version of `@aotter/mantle`, with
+matching Admin/UI packages when selected. Write your manifests, then run
+`mantle generate <target> <output-directory> <manifest>...`, for example
+`mantle generate cloudflare-d1 generated manifests/*.yaml`.
+The generator writes native TypeScript/SQL and Workers split-build settings;
+your application supplies its entry, routes, auth and database handles.
+Follow the
 [quickstart](docs/handbook/start/quickstart-worker.md), then the
 [project and CLI guide](docs/handbook/start/project-and-cli.md). The
 [reference service](docs/examples/reference-service/README.md) is a whole
@@ -149,16 +152,16 @@ Using ChatGPT Sites? Follow [Mantle on ChatGPT Sites](docs/handbook/cloudflare/c
 
 | Start with | Add when you need |
 |---|---|
-| [`@aotter/mantle`](packages/mantle/README.md) | Manifests, Store authored as SQL, the runtime and the `mantle` CLI. |
-| `@aotter/mantle/cloudflare` and the generated preset | A Worker on D1, or on PostgreSQL through Hyperdrive, with REST, MCP and Admin. |
-| `@aotter/mantle/bun` and the generated preset | A Bun server on PostgreSQL or SQLite with the same surfaces. |
+| [`@aotter/mantle`](packages/mantle/README.md) | Native generated queries, typed Store, compiler and the `mantle` CLI. |
+| Target `cloudflare-d1` or `cloudflare-postgres` | App-owned Worker routing and D1 or postgres.js/Hyperdrive handles. |
+| Target `bun-sqlite` or `bun-postgres` | App-owned Bun server using bun:sqlite or Bun.SQL. |
 | `@aotter/mantle/auth` | Sign-in, admin roles, and OAuth for MCP. |
 | [The reference service](docs/examples/reference-service/README.md) | A whole service to read and run. |
 
-SQLite (D1) and PostgreSQL are the built-in dialects, PostgreSQL the
-reference. Each dialect is its own target: a manifest is written in its
-dialect's SQL, and PostgreSQL uses node-postgres on every host. Cloudflare and
-Bun are the preset hosts. Upgrading from 0.1.x:
+PostgreSQL and SQLite are the two built-in dialects. Manifest SQL uses the
+compiler's PostgreSQL syntax and is rendered for the selected target.
+PostgreSQL uses Bun.SQL on Bun and postgres.js on Workers; other native handles
+need an application-owned adapter. Upgrading from 0.1.x:
 [the upgrade guide](docs/upgrade-0.1-to-0.2.md); an existing PostgreSQL
 service also reads [the release notes](docs/handbook/releases/index.md).
 
@@ -167,7 +170,7 @@ service also reads [the release notes](docs/handbook/releases/index.md).
 
 | Package | Purpose |
 |---|---|
-| `@aotter/mantle` | Core, the manifest compiler, the D1 and PostgreSQL dialects, the Cloudflare and Bun hosts, Auth, Admin, MCP and REST surfaces, the compliance suite, and the `mantle` CLI, as subpaths. |
+| `@aotter/mantle` | Native SDK, private compiler, generator and CLI; selected driver, auth, REST, MCP, web and site/media primitives. |
 | `@aotter/mantle-ui` | Pure UI: generic interaction controller, React components, visual kit and design tokens. No SDK dependency. |
 | `@aotter/mantle-admin` | Admin SPA and thin server, extensions, preview and Admin MCP App. Uses UI and public SDK contracts; the SDK remains a peer. |
 

@@ -1,31 +1,35 @@
 # Auth hosting model
 
-0.1.x described free self-hosted auth, a paid hosted-auth platform provisioned
-through Landing, and parent- and customer-domain SSO (ADR-0014). In 0.2.0
-Mantle never owns the user (ADR-0032 decision 8): the service resolves a
-`Caller` once per request, and `identity` in `mantle.config.json` chooses who
-produces it.
+The native SDK leaves authentication and identity selection to application code.
+The application resolves a verified `Caller` for each request and passes it to
+generated queries and selected surfaces. There is no `mantle.config.json.identity`
+switch or generated auth/service preset. See the current
+[service composition](handbook/cloudflare/service-entry.md) and
+[authorization contract](handbook/reference/authorization.md).
 
-| `identity` | Who produces the caller |
+| Application wiring | Who produces the caller |
 |---|---|
-| `mantle` | `@aotter/mantle/auth`: Better Auth on the service's own database, with email OTP, magic link, social and generic OAuth sign-in, admin roles and an OAuth server for MCP. Self-hosted; the owner supplies provider credentials and an email sender |
-| `custom` | the service's own `CallerResolver` over its existing sessions or tokens, which may come from any identity provider |
-| `none` | nobody: every caller is anonymous |
+| Better Auth | App-owned `auth.ts` and optional official plugins; `resolveCaller` from `@aotter/mantle/auth` verifies sessions/tokens and carries the original branded identity. The app owns the database, provider credentials and production email sender. |
+| Existing identity provider | Connect it to Better Auth (its generic OAuth or SSO plugins) so `resolveCaller` produces the Caller; Mantle has no public API that builds a Caller from another provider's session. Never derive authority from unverified request data. |
+| Public-only routes | The app supplies `{ kind: "anonymous" }`; generated SQL still applies public visibility and row rules. |
 
-What carries over from 0.1.x:
+Domain and transport boundaries:
 
 - **Same parent domain.** First-party apps under one registrable domain can
   share a Better Auth session with `crossSubDomainCookies` and a
   `cookiePrefix`; `trustedOrigins` is the auth-flow trust list, not CORS.
 - **Customer domains.** Cookies never cross registrable domains. A customer
   site runs its own OAuth/OIDC flow against the identity provider and keeps
-  its own session; with `identity: custom` its resolver maps that session to a
-  `Caller`.
-- **API and MCP authorization** is the same `requires` and guard everywhere;
-  see [surface contracts](handbook/reference/surface.md).
+  its own session; its app-owned resolver maps that verified session to a Caller.
+- **API and MCP authorization** retains generated `requires` and row policy.
+  Selected REST/MCP/Admin boundaries accept `authorize(target, caller)` for
+  per-target permissions; direct generated calls do not invoke that callback.
+  Dynamic manifest `requires.guard` is refused. See
+  [surface contracts](handbook/reference/surface.md).
 
-The standalone hosted-auth and Landing provisioning flow from 0.1.x is absent
-in 0.2.0. A Mantle Cloud tenant uses Cloud's managed identity/storage contract;
-Cloud project membership does not grant tenant admin access. See
+The hosted-auth/Landing provisioning model from 0.1.x (ADR-0014) is historical.
+An application behind a host gateway uses the explicit
+[Gateway mode](handbook/reference/authorization.md#gateway-mode) contract;
+host project membership alone does not grant application admin authority. See
 [Authentication](handbook/cloudflare/authentication.md) and
 [Authorization](handbook/concepts/authorization.md).

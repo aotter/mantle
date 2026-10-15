@@ -4,6 +4,10 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 
 ## ADRs
 
+Rows summarize decisions in their original context. Later amendments take
+precedence; start with the native SDK reading order below rather than treating
+historical presets, runtime plans or driver choices as current APIs.
+
 | # | Title | Status |
 |---|---|---|
 | [0001](0001-four-atom-manifest-model.md) | Four-atom manifest model (Schema / View / Procedure / Trigger). Folds POC ADR-0005 (grammar discipline) and POC ADR-0006 (multi-doc YAML). | Accepted; fixed-file contract superseded |
@@ -26,7 +30,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0023](0023-port-failure-contract.md) | Storage and service failure contracts: resource, rate, outcome-unknown, partial-failure and precondition diagnostics with safe `failure` facts. | Accepted for alpha.17 (#857); amends 0008 |
 | [0024](0024-manifest-native-schema-tables.md) | Materialize each Schema as a native storage table and deploy reviewed migration artifacts. | Accepted; authored-native-name clauses superseded by 0025; migration workflow superseded by 0033 |
 | [0025](0025-reserved-native-columns-and-published-only-public-views.md) | Reserve the six native column names, let `indexes` reference them, and compile public publishing Views published-only. | Accepted |
-| [0026](0026-progressive-generate.md) | Progressive `mantle generate` with a full default, positive features, saved host selection, and user-owned source. | Accepted; supersedes part of 0021; dependency closure, identity and `--host` amended by 0032 |
+| [0026](0026-progressive-generate.md) | Historical progressive generator with a full default, positive features and saved host selection. | Accepted for 0.1.5; source ownership remains, but presets/flags are replaced by native generation (0045 and the current CLI handbook) |
 | [0027](0027-scheduled-procedure-triggers.md) | Schedule Triggers in the sealed plan with Cloudflare-hosted invocation and system identity. | Accepted for 0.1.5; cron dialect and host requirement amended by 0032 |
 | [0028](0028-schema-ttl-expiry.md) | Logical TTL on Schema reads with preview-first, explicit bounded cleanup. | Accepted for 0.1.5 |
 | [0029](0029-mcp-apps-interaction-contracts.md) | Official MCP SDK for all MCP wire handling; transport-neutral capability catalog with validate-once invocation; `@aotter/mantle-mcp` and `@aotter/mantle-ui`; Manifest-declared interaction contracts and MCP Apps (#1110). | Accepted; amends ADR-lite 909 |
@@ -39,26 +43,30 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0036](0036-host-and-dialect.md) | A project picks a host (`cloudflare`, `none`) and a dialect (`sqlite`, `postgres`, a package) once; `mantle generate` writes the pair's preset; the host never enters the plan. | Accepted for 0.2.0; reserved Bun host amended by 0038 |
 | [0037](0037-postgresql-is-the-reference-dialect.md) | PostgreSQL is the reference dialect: one closed allowlist in Core (base and reference profiles), D1 runs the base subset; a View reads an internal View; `restrict` narrows at runtime; boot-checked PostgreSQL read limits and write SET LOCAL; Cloud's PostgreSQL connection stays with the platform. | Accepted for 0.2.0; decision 5 amended by #1379/#1383, corrected in #1391 |
 | [0038](0038-bun-native-host.md) | Bun is a native host: `@aotter/mantle/bun` owns the native SQLite and PostgreSQL drivers and Admin files; `host: bun` defaults to `dialect: postgres`; the CLI writes a `Bun.serve` entry once. | Accepted for 0.2.0 |
-| [0039](0039-postgresql-is-native.md) | PostgreSQL is native, not a D1 emulation: each dialect is its own target, PostgreSQL ordering and SQL are PostgreSQL's, and node-postgres is the only PostgreSQL driver on every host. | Accepted; supersedes parts of 0035, 0037 and 0038 |
+| [0039](0039-postgresql-is-native.md) | PostgreSQL is native, not a D1 emulation: each dialect is its own target, PostgreSQL ordering and SQL are PostgreSQL's, and node-postgres is the only PostgreSQL driver on every host. | Historical driver choice; native PostgreSQL semantics remain, while the driver selection is superseded by 0045 |
 | [0040](0040-thin-native-toolkit.md) | Mantle is a thin config-as-code toolkit: author-owned application decisions, native resource reuse and semantics, a clean Store boundary, and explicit execution costs. | Accepted direction; amends 0007 |
 | [0041](0041-native-driver-and-application-hook-ownership.md) | Native driver execution; remove request sessions, write pipelines/retries and before-hook policing; separate native SQLite handles. | Accepted for #1426; breaking cleanup |
 | [0042](0042-native-query-work-cleanup.md) | Native product reads, query lowering, owned media ordering, fresh Auth proofs and immutable Admin descriptions. | Accepted for #1428; amended by 0043 |
-| [0043](0043-schema-readers.md) | Per-Schema readers (`store.db` / `ctx.db`: `get`, `first`, `find`) replace `Store.select`: one walk per query shape, a bounded per-Store memo of compiled shapes, typed rows, and refused reader-name collisions. | Accepted for #1432; `select` is deprecated in PR A and removed in PR B |
-| [0044](0044-generate-time-lowering.md) | `mantle generate` lowers every View and inline Procedure for the plan's dialect into `plan.lowered`; the runtime seeds its compile cache from it, and the page size is a bind. | Accepted direction for #1433; amends 0035 and 0032 decision 10 |
-| [0046](0046-roles-and-user-fields.md) | Roles and user fields aligned with Better Auth: two layers (Better Auth `adminRoles` admins, renamed from staff, and members) with permissions as Better Auth statements, no role model in the manifest (the vocabulary is derived from use): `auth.hasRole()` and `auth.user(field)` replace `auth.role()`; a field in Schema scope is enforced on every read and write path (with an author-written role escape), and in SQL is a filter; the same references serve members and staff; versioned host contract with a Better Auth–shaped user and no staff mode, host-forwarded invocations, a `mantle describe` permission report and local test tools (#1492). | Accepted; §4 Paging amended by #1644 (an `IN` user-field term never fixes an index prefix) |
+| [0043](0043-schema-readers.md) | Per-Schema readers (`store.db` / `ctx.db`: `get`, `first`, `find`) replace `Store.select`: one walk per query shape, a bounded per-Store memo of compiled shapes, typed rows, and refused reader-name collisions. | Historical migration; generated generic Store ownership superseded by 0045 |
+| [0044](0044-generate-time-lowering.md) | `mantle generate` lowers every View and inline Procedure for the plan's dialect into `plan.lowered`; the runtime seeds its compile cache from it, and the page size is a bind. | Historical plan-lowering cache; generated shared runtime ownership superseded by 0045 |
+| [0045](0045-next-runtime-core.md) | Current native runtime ownership: one dialect/driver boundary, generated queries and generic Store with compiler-owned row rules; Bun.SQL and postgres.js handles, application-owned routing/auth/migrations. | Accepted; amends 0043 and 0044; current native SDK contract |
+| [0046](0046-roles-and-user-fields.md) | Current enforcement-only amendment: Better Auth classifies admin/member layers; `authorize(target, caller)` owns per-target permissions; user fields drive scope/restrict; branded host forwarding and describe metadata. Role lists and `auth.hasRole()` SQL/role escapes are withdrawn. | Accepted with enforcement-only amendment; the amendment takes precedence over superseded sections; §4 Paging amended by #1644 (an `IN` user-field term never fixes an index prefix) |
 
 ## Reading order
 
 If you're new to the codebase:
 
-1. **0001** — what the 4 atoms are.
-2. **0019** — the sealed source-to-runtime pipeline and optional product boundaries.
-3. **0009** — historical context for consumer-owned manifests.
-4. **0007** — what running the SDK feels like as an AI author (and as the operator agent).
-5. **0011** — the boundary between the runtime and the adapter.
-6. **0010** — how locale flows through the system.
-7. **0026** — current progressive generation boundary; **0021** retains the direct-authoring history and **0013** is historical install-session context.
-8. **0002, 0008** — the two ADRs that touch every diagnostic and every binding.
+1. **0001, 0002, 0008** — the closed four-atom grammar and diagnostic contract.
+2. **0045** — current native SDK ownership: generated queries, dialects/drivers,
+   shared Store and application-owned handles. Read it with the current
+   [CLI](../handbook/start/project-and-cli.md) and
+   [migration contract](../handbook/concepts/runtime-and-adapters.md).
+3. **0046**, starting with **Amendment: enforcement only** — current identity,
+   user-field scope/restrict, authorization and host-forwarding rules.
+4. **0040** — the thin native toolkit direction.
+5. Read earlier ADRs for history or the remaining decisions named by these
+   amendments. ADR-0026's presets, 0032's `createMantle` service, 0033's boot-time
+   convergence and 0039's node-postgres selection are not alpha.7 authoring APIs.
 
 ## What's NOT here (and why)
 
