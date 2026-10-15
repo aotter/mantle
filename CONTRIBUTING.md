@@ -6,7 +6,8 @@ source, tests, package READMEs, and accepted ADRs define the current contract.
 
 ## Product and architecture contract
 
-Mantle Core compiles manifests into native SQL and typed TypeScript. Consumers
+Mantle Core is an embeddable manifest engine. It compiles manifests into native
+SQL and typed TypeScript. Consumers
 generate selected queries and bind their own native handles and verified Caller,
 or compose optional REST, MCP, web, auth and separate Admin/UI modules. The parser
 and linker are private compiler implementation, not public consumer exports.
