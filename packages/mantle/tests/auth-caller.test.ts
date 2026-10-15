@@ -17,7 +17,7 @@ import { admin as adminFunction, customSession, emailOTP, jwt } from "better-aut
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { oauthGrantExtension, oauthConsents, pruneLegacyOAuthClients } from "../src/auth/oauth.js";
+import { oauthGrantExtension, oauthGrantRevocation, oauthConsents, pruneLegacyOAuthClients } from "../src/auth/oauth.js";
 import { authRoutes, loopbackClientsAreNative, normalizeAuthResponseCookies } from "../src/auth/routes.js";
 import { ContractError } from "../src/kernel/contracts.js";
 import { authLoader, resolveCaller, type AuthInstance } from "../src/auth/caller.js";
@@ -34,7 +34,7 @@ type App = Awaited<ReturnType<typeof makeApp>>;
 async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean; additionalFields?: NonNullable<BetterAuthOptions["user"]>["additionalFields"]; derivedRegion?: boolean; localOnly?: boolean } = {}) {
   const sqlite = new Database(":memory:");
   sqlite.run("PRAGMA foreign_keys = ON");
-  const otps: { email: string; otp: string }[] = [];
+  const otps: { email: string; otp: string }[] = [], resets: string[] = [];
   const statements: string[] = [], native = d1Shim(sqlite);
   // Serve the handler first: baseURL (and so the JWKS URL and token issuer) must name the real port.
   let handle: (request: Request) => Promise<Response> = async () => new Response("not ready", { status: 503 });
@@ -53,6 +53,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
     secret: "test-secret-test-secret-test-secret-0123456789",
     database: d1Adapter({ prepare: sql => { statements.push(sql); return native.prepare(sql); } }),
     disabledPaths: ["/token"],
+    emailAndPassword: { enabled: true, sendResetPassword: async ({ token }: { token: string }) => { resets.push(token); } },
     advanced: {
       ...(options.cookiePrefix ? { cookiePrefix: options.cookiePrefix } : {}),
       ...(options.sessionTokenName ? { cookies: { session_token: { name: options.sessionTokenName } } } : {}),
@@ -62,11 +63,12 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
       emailOTP({ sendVerificationOTP: async ({ email, otp }) => { otps.push({ email, otp }); } }),
       options.customAdmin ? adminFunction({ adminRoles: ["admin"], ac, roles: { admin: ac.newRole(defaultStatements) } }) : adminFunction(),
       jwt({ disableSettingJwtHeader: true }),
+      oauthGrantRevocation(),
       oauthProvider({
         loginPage: "/sign-in",
         consentPage: "/oauth/consent",
         extensions: [oauthGrantExtension],
-        scopes: ["mcp", "openid"],
+        scopes: ["mcp", "openid", "offline_access"],
         resources: [AUDIENCE],
         enforcePerClientResources: false,
         allowDynamicClientRegistration: true,
@@ -91,7 +93,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
     return { cookie, userId: body.user.id, setCookies: response.headers.getSetCookie() };
   }
   const request = (headers: Record<string, string> = {}) => new Request(`${origin}/some/route`, { headers });
-  return { sqlite, auth, loader, post, signIn, request, baseURL, loads: () => loads, breakCache: () => { cacheBroken = true; }, cache, statements };
+  return { sqlite, auth, loader, post, signIn, request, baseURL, resets, loads: () => loads, breakCache: () => { cacheBroken = true; }, cache, statements };
 }
 
 describe("resolveCaller: session cookie", () => {
@@ -183,7 +185,7 @@ const REDIRECT = "https://client.example.test/callback";
 
 /** The official authorization-code + PKCE flow against the live instance; returns the access token. */
 async function oauthAccessToken(app: App, cookie: string, scope = "mcp", proof?: (url: string, method: string, token?: string) => Promise<string>, skipConsent = false) {
-  const registered = await app.post("/oauth2/register", { client_name: "test", redirect_uris: [REDIRECT], token_endpoint_auth_method: "none", grant_types: ["authorization_code"], response_types: ["code"], scope });
+  const registered = await app.post("/oauth2/register", { client_name: "test", redirect_uris: [REDIRECT], token_endpoint_auth_method: "none", grant_types: scope.includes("offline_access") ? ["authorization_code", "refresh_token"] : ["authorization_code"], response_types: ["code"], scope });
   expect(registered.status).toBe(201);
   const client = await registered.json() as { client_id: string };
 
@@ -201,9 +203,9 @@ async function oauthAccessToken(app: App, cookie: string, scope = "mcp", proof?:
   const code = new URL(location).searchParams.get("code")!;
   expect(code).toBeTruthy();
   const exchange = await fetch(`${app.baseURL}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...(proof ? { DPoP: await proof(`${app.baseURL}/oauth2/token`, "POST") } : {}) }, body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: REDIRECT, client_id: client.client_id, code_verifier: verifier, resource: AUDIENCE }) });
-  const token = await exchange.json() as { access_token?: string; scope?: string };
+  const token = await exchange.json() as { access_token?: string; refresh_token?: string; scope?: string };
   expect(exchange.status, JSON.stringify(token)).toBe(200);
-  return { accessToken: token.access_token!, clientId: client.client_id, scope: token.scope };
+  return { accessToken: token.access_token!, refreshToken: token.refresh_token, clientId: client.client_id, scope: token.scope };
 }
 
 describe("resolveCaller: OAuth bearer", () => {
@@ -277,6 +279,83 @@ describe("OAuth grant revocation and consent routes", () => {
     await expect(resolveCaller(request, app.loader, { audience: AUDIENCE })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
     app.sqlite.run('DELETE FROM session WHERE userId = ?', [userId]);
     await expect(resolveCaller(request, app.loader, { audience: AUDIENCE })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+  });
+  test("offline_access outlives the browser session until its refresh lineage ends; session-bound refresh fails coherently", async () => {
+    const app = await makeApp(); const { cookie, userId } = await app.signIn();
+    const url = app.request().url;
+    expect((await oauthAccessToken(app, cookie)).refreshToken).toBeUndefined();
+    const { accessToken, refreshToken, clientId } = await oauthAccessToken(app, cookie, "mcp offline_access");
+    const claims = (token: string) => JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString()) as { scope: string; sid?: string };
+    expect(claims(accessToken).scope).toBe("mcp offline_access");
+    const use = (token: string) => resolveCaller(new Request(url, { headers: { authorization: `Bearer ${token}` } }), app.loader, { audience: AUDIENCE });
+    const refresh = async (token: string, scope?: string) => {
+      const response = await fetch(`${app.baseURL}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: token, client_id: clientId, resource: AUDIENCE, ...(scope ? { scope } : {}) }) });
+      return { status: response.status, body: await response.json() as { access_token: string; refresh_token: string; error?: string } };
+    };
+    app.sqlite.run("UPDATE session SET expiresAt = ? WHERE userId = ?", [new Date(0).toISOString(), userId]);
+    expect(await use(accessToken)).toMatchObject({ subject: userId, credential: "oauth" });
+    const expired = await refresh(refreshToken!);
+    expect(expired.status).toBe(200);
+    expect(claims(expired.body.access_token).sid).toBeString();
+    expect(await use(expired.body.access_token)).toMatchObject({ subject: userId });
+    expect(await refresh(expired.body.refresh_token, "mcp")).toMatchObject({ status: 400, body: { error: "invalid_grant" } });
+    app.sqlite.run("DELETE FROM session WHERE userId = ?", [userId]);
+    const deleted = await refresh(expired.body.refresh_token);
+    expect(deleted.status).toBe(200);
+    expect(claims(deleted.body.access_token).sid).toBeNull();
+    expect(await use(deleted.body.access_token)).toMatchObject({ subject: userId });
+    expect(await use(expired.body.access_token)).toMatchObject({ subject: userId });
+    app.sqlite.run("UPDATE user SET banned = 1 WHERE id = ?", [userId]);
+    await expect(use(deleted.body.access_token)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    app.sqlite.run("UPDATE user SET banned = 0 WHERE id = ?", [userId]);
+    expect(await use(deleted.body.access_token)).toMatchObject({ subject: userId });
+    app.sqlite.run("UPDATE oauthRefreshToken SET expiresAt = ? WHERE revoked IS NULL", [new Date(0).toISOString()]);
+    await expect(use(deleted.body.access_token)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    app.sqlite.run("UPDATE oauthRefreshToken SET expiresAt = ? WHERE revoked IS NULL", [new Date(Date.now() + 60_000).toISOString()]);
+    expect(await use(deleted.body.access_token)).toMatchObject({ subject: userId });
+    const consent = (await oauthConsents(app.auth as never).listOAuthConsents(userId)).find(x => x.clientId === clientId);
+    expect(await oauthConsents(app.auth as never).revokeOAuthConsent(userId, consent!.id)).toBe(true);
+    await expect(use(deleted.body.access_token)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    expect((await refresh(deleted.body.refresh_token)).status).toBe(400);
+  });
+  test("password reset, admin ban, admin session revocation and admin password change end a user's offline grants", async () => {
+    const app = await makeApp(), root = await app.signIn("root@example.test");
+    app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [root.userId]);
+    const asAdmin = (path: string, body: object) => app.post(path, body, { cookie: root.cookie });
+    const use = (token: string) => resolveCaller(app.request({ authorization: `Bearer ${token}` }), app.loader, { audience: AUDIENCE });
+    const events: [string, (userId: string, email: string) => Promise<Response>][] = [
+      ["reset", async (_userId, email) => { await app.post("/request-password-reset", { email, redirectTo: "/" }); return app.post("/reset-password", { newPassword: "another-password-123", token: app.resets.at(-1) }); }],
+      ["query", async (_userId, email) => { await app.post("/request-password-reset", { email, redirectTo: "/" }); return app.post(`/reset-password?token=${app.resets.at(-1)}`, { newPassword: "another-password-123" }); }],
+      ["ban", userId => asAdmin("/admin/ban-user", { userId })],
+      ["sessions", userId => asAdmin("/admin/revoke-user-sessions", { userId })],
+      ["password", userId => asAdmin("/admin/set-user-password", { userId, newPassword: "another-password-123" })],
+    ];
+    for (const [name, end] of events) {
+      const email = `${name}@example.test`, { cookie, userId } = await app.signIn(email);
+      const grant = await oauthAccessToken(app, cookie, "mcp offline_access");
+      expect((await end(userId, email)).status).toBe(200);
+      if (name === "ban") expect((await asAdmin("/admin/unban-user", { userId })).status).toBe(200);
+      const refreshed = await fetch(`${app.baseURL}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: grant.refreshToken!, client_id: grant.clientId, resource: AUDIENCE }) });
+      expect(refreshed.status, name).not.toBe(200);
+      // An issued access token stands on its session while that lives (at most its own lifetime), then on the revoked refresh token.
+      app.sqlite.run("DELETE FROM session WHERE userId = ?", [userId]);
+      await expect(use(grant.accessToken), name).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    }
+    // Sign-out and a user's own password change without signing out other devices keep offline grants (Better Auth).
+    const keep = await app.signIn("keep@example.test"), kept = await oauthAccessToken(app, keep.cookie, "mcp offline_access");
+    expect((await app.post("/sign-out", {}, { cookie: keep.cookie })).status).toBe(200);
+    app.sqlite.run("DELETE FROM session WHERE userId = ?", [keep.userId]);
+    expect(await use(kept.accessToken)).toMatchObject({ subject: keep.userId });
+  });
+  test("sign-out follows Better Auth: session-bound grants end, offline_access refresh tokens survive", async () => {
+    const app = await makeApp(); const { cookie, userId } = await app.signIn();
+    const online = await oauthAccessToken(app, cookie), offline = await oauthAccessToken(app, cookie, "mcp offline_access");
+    expect((await app.post("/sign-out", {}, { cookie })).status).toBe(200);
+    const use = (token: string) => resolveCaller(app.request({ authorization: `Bearer ${token}` }), app.loader, { audience: AUDIENCE });
+    await expect(use(online.accessToken)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    const response = await fetch(`${app.baseURL}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: offline.refreshToken!, client_id: offline.clientId, resource: AUDIENCE }) });
+    expect(response.status).toBe(200);
+    expect(await use((await response.json() as { access_token: string }).access_token)).toMatchObject({ subject: userId });
   });
   test("methods never loads auth; session-only connected apps, localized HTML and origin-checked writes", async () => {
     const app = await makeApp(); const routes = authRoutes(app.loader as never, { methods: [{ kind: "email-otp" }] });

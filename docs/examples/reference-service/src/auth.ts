@@ -5,7 +5,7 @@ import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { mcp } from "@better-auth/mcp";
 import { cimd } from "@better-auth/cimd";
-import { oauthGrantExtension } from "@aotter/mantle/auth/oauth";
+import { oauthGrantExtension, oauthGrantRevocation } from "@aotter/mantle/auth/oauth";
 import { d1Adapter } from "@aotter/mantle/auth/adapter";
 import { d1BootstrapAdmin } from "@aotter/mantle/auth/identity";
 import { authHardening, hashEmailOtp } from "@aotter/mantle/auth/hardening";
@@ -24,6 +24,8 @@ export function authOptions(env: Env) {
       console.log(`${email}: one-time code is ${otp}`);
     } }),
     jwt({ disableSettingJwtHeader: true }),
+    // Ends a user's OAuth grants (offline ones too) on password reset, admin ban or session revocation.
+    oauthGrantRevocation(),
     mcp({ loginPage: "/admin/sign-in", consentPage: "/admin/oauth/consent", resource: `${origin}/mcp`, scopes: ["mcp"], extensions: [oauthGrantExtension], allowPublicClientPrelogin: true, clientRegistrationClientSecretExpiration: "90d" }),
     cimd({ fetchClientMetadataResource: (input, init) => fetch(input, { ...init, redirect: "manual" }), metadataProfile: "mcp-2026-07-28" }),
   ];

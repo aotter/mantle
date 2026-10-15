@@ -8,7 +8,7 @@ import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 import { assertActiveUserGrant, oauthConsents, oauthGrantExtension } from "../src/auth/oauth.js";
 
 const url = process.env.MANTLE_NEXT_BUN_PG_URL;
-(url ? test : test.skip)("native PostgreSQL live grant, native JSON/date fields and revocation cascade", async () => {
+(url ? test : test.skip)("native PostgreSQL live grant, offline grant after session end, native JSON/date fields and revocation cascade", async () => {
   const schema = `oauth_${crypto.randomUUID().replaceAll("-", "")}`;
   const admin = new SQL(url!); await admin.unsafe(`CREATE SCHEMA "${schema}"`);
   const sql = new SQL(url!, { max: 1 }); await sql.unsafe(`SET search_path TO "${schema}"`);
@@ -24,11 +24,23 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
     const claims = { sub: user.id, azp: "client", sid: session.id, mantle_consent_id: consent.id, mantle_consent_reference: null, aud: "https://resource.test/mcp", scope: "mcp" };
     await assertActiveUserGrant(auth as never, claims, claims.aud);
     await expect(assertActiveUserGrant(auth as never, { ...claims, scope: "mcp other" }, claims.aud)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    await adapter.update({ model: "oauthConsent", where: [{ field: "id", value: consent.id }], update: { scopes: ["mcp", "offline_access"] } });
+    const refresh = await adapter.create<{ id: string }>({ model: "oauthRefreshToken", data: { token: "native-pg-refresh", clientId: "client", sessionId: session.id, userId: user.id, scopes: ["mcp", "offline_access"], createdAt: now, expiresAt } });
+    const offline = { ...claims, scope: "mcp offline_access" };
+    await adapter.update({ model: "session", where: [{ field: "id", value: session.id }], update: { expiresAt: new Date(0) } });
+    await expect(assertActiveUserGrant(auth as never, claims, claims.aud)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    await assertActiveUserGrant(auth as never, offline, claims.aud);
+    await adapter.delete({ model: "session", where: [{ field: "id", value: session.id }] });
+    await assertActiveUserGrant(auth as never, { ...offline, sid: null }, claims.aud);
+    await adapter.update({ model: "oauthRefreshToken", where: [{ field: "id", value: refresh.id }], update: { revoked: new Date() } });
+    await expect(assertActiveUserGrant(auth as never, offline, claims.aud)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    await adapter.update({ model: "oauthRefreshToken", where: [{ field: "id", value: refresh.id }], update: { revoked: null } });
+    await assertActiveUserGrant(auth as never, offline, claims.aud);
     const consents = oauthConsents(auth as never);
-    expect(await consents.listOAuthConsents(user.id)).toMatchObject([{ clientId: "client", clientName: "PG client", scopes: ["mcp"] }]);
+    expect(await consents.listOAuthConsents(user.id)).toMatchObject([{ clientId: "client", clientName: "PG client", scopes: ["mcp", "offline_access"] }]);
     expect(await consents.revokeOAuthConsent("other", consent.id)).toBe(false);
     expect(await consents.revokeOAuthConsent(user.id, consent.id)).toBe(true);
-    await expect(assertActiveUserGrant(auth as never, claims, claims.aud)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    await expect(assertActiveUserGrant(auth as never, offline, claims.aud)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
     expect(await adapter.findMany({ model: "verification", where: [{ field: "identifier", value: "pending" }] })).toEqual([]);
   } finally { await sql.close(); await admin.unsafe(`DROP SCHEMA "${schema}" CASCADE`); await admin.close(); }
 }, 30_000);
