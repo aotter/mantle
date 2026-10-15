@@ -58,10 +58,87 @@ test("official SDK initializes, lists only surface tools, calls shared validatio
   caller=user;expect((await call("tools/list",{},"/mcp/admin")).data.result.tools.map((t:any)=>t.name)).toEqual(["admin_items"]);
   caller=fixtureCaller({...user,role:null,admin:false}); const roleDenied=await call("tools/list",{},"/mcp/admin");expect(roleDenied.response.status).toBe(403);expect(roleDenied.response.headers.has("www-authenticate")).toBe(false);
   caller=fixtureCaller({...user,scopes:[]}); const scopeDenied=await call("tools/list");expect(scopeDenied.response.status).toBe(403);expect(scopeDenied.response.headers.get("www-authenticate")).toContain('error="insufficient_scope", scope="mcp"');
-  caller=fixtureCaller({...user,credential:"session"});expect((await call("tools/call",{name:"add_item",arguments:{title:"CSRF"}},"/mcp",{origin:"https://evil.test"})).data.result.isError).toBe(true);
+  caller=fixtureCaller({...user,credential:"session"});expect((await call("tools/call",{name:"add_item",arguments:{title:"CSRF"}},"/mcp",{origin:"https://evil.test"})).response.status).toBe(403);
+  expect((await call("tools/call",{name:"add_item",arguments:{title:"CSRF"}},"/mcp",{"sec-fetch-site":"cross-site"})).data.result.isError).toBe(true);
   expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({n:1});
   expect(await handle(new Request("https://app.test/other"),{})).toBeUndefined();
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test("MCP answers a foreign Origin 403 before authentication on both endpoints and eras; no Origin and allowed origins pass",async()=>{
+ const files=await generateOrThrow("bun-sqlite",[{sourceId:"origin.yaml",text:source}]);
+ const dir=await mkdtemp(resolve(import.meta.dir,".mcp-origin-")),db=new Database(":memory:");
+ let caller:any={kind:"anonymous"};const refusals:any[]=[];
+ try {
+  await writeGenerated(dir,files);db.exec(files["schema.sql"]!);const {mcp}=await import(resolve(dir,"mcp.ts"));
+  const open=mcp({db:()=>db,caller:()=>caller,onRefusal:(event:any)=>{refusals.push(event);}}),listed=mcp({db:()=>db,caller:()=>caller,allowedOrigins:["https://app.test","https://console.test:8443"]});
+  const call=(handle:any,url:string,headers:Record<string,string>={},era?:string)=>handle(new Request(url,{method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream",...(era?{"mcp-protocol-version":era,"mcp-method":"tools/list"}:{}),...headers},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/list",params:era?{_meta:{"io.modelcontextprotocol/protocolVersion":era,"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{name:"test",version:"1"}}}:{}})}),{});
+  for(const who of [{kind:"anonymous"},user]) for(const path of ["/mcp","/mcp/admin"]) for(const era of [undefined,"2026-07-28"]) {
+   caller=who;const refused=await call(open,"https://app.test"+path,{origin:"https://evil.test"},era);
+   expect(refused.status).toBe(403);expect((await refused.json()).error.message).toBe("Invalid Origin: evil.test");
+   if(who===user) for(const headers of [{},{origin:"https://app.test"}]) expect((await call(open,"https://app.test"+path,headers,era)).status).toBe(200);
+  }
+  expect(refusals.every(event=>event.reason==="origin"&&event.status===403)).toBe(true);expect(refusals).toHaveLength(8);
+  caller={kind:"anonymous"};
+  expect((await call(listed,"https://app.test/mcp",{origin:"https://console.test"})).status).toBe(200);
+  // DNS rebinding: the attacker's name resolves to this server, so the request URL carries it too.
+  expect((await call(open,"http://evil.example.com/mcp",{origin:"http://evil.example.com"})).status).toBe(200);
+  expect((await call(listed,"http://evil.example.com/mcp",{origin:"http://evil.example.com"})).status).toBe(403);
+  expect((await call(listed,"http://evil.example.com/mcp")).status).toBe(403);
+ } finally {db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test("generated tools carry a title and read/destructive hints; declared hints win",async()=>{
+ const text=source+`---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: posts}
+spec:
+  title: Posts
+  lifecycle: publishing
+  schema: {type: object, properties: {title: {type: string}}, required: [title]}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts}
+spec: {surface: admin, sql: 'SELECT id, title FROM posts ORDER BY id'}
+`+[
+  ["rename-item","sql: 'UPDATE items SET title = input.title WHERE id = input.id'",""],
+  ["upsert-item","sql: 'INSERT INTO items(id, title) VALUES(input.id, input.title) ON CONFLICT(id) DO UPDATE SET title = excluded.title'",""],
+  ["keep-item","sql: 'INSERT INTO items(id, title) VALUES(input.id, input.title) ON CONFLICT(id) DO NOTHING'",""],
+  ["purge-items","sql: 'DELETE FROM items WHERE title = input.title'",""],
+  ["sendMail","ref: sendMail",""],
+  ["lookUp","ref: lookUp","  mcp: {readOnlyHint: true}\n"],
+  ["retitle-item","sql: 'UPDATE items SET title = input.title WHERE id = input.id'","  title: Retitle\n  mcp: {destructiveHint: false, openWorldHint: false}\n"],
+ ].map(([name,handler,extra])=>`---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: ${name}}
+spec:
+${extra}  input: {type: object, properties: {id: {type: string}, title: {type: string}}, required: [id, title], additionalProperties: false}
+  output: {type: object}
+  handler: {${handler}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: ${name}-mcp}
+spec: {source: {kind: mcp, surface: admin}, target: {procedure: ${name}}}
+`).join("");
+ const files=await generateOrThrow("bun-sqlite",[{sourceId:"hints.yaml",text}]);
+ const dir=await mkdtemp(resolve(import.meta.dir,".mcp-hints-"));
+ try {
+  await writeGenerated(dir,files);const {tools}=await import(resolve(dir,"mcp.ts"));
+  const hints=Object.fromEntries(tools.map((t:any)=>[t.name,[t.title,t.annotations]]));
+  expect(hints).toEqual({
+   items:["Items",{readOnlyHint:true,destructiveHint:false}],admin_items:["Admin items",{readOnlyHint:true,destructiveHint:false}],
+   add_item:["Add item",{readOnlyHint:false,destructiveHint:false}],rename_item:["Rename item",{readOnlyHint:false,destructiveHint:true}],
+   upsert_item:["Upsert item",{readOnlyHint:false,destructiveHint:true}],keep_item:["Keep item",{readOnlyHint:false,destructiveHint:false}],
+   purge_items:["Purge items",{readOnlyHint:false,destructiveHint:true}],sendmail:["Send mail",{readOnlyHint:false,destructiveHint:true}],
+   lookup:["Look up",{readOnlyHint:true,destructiveHint:false}],retitle_item:["Retitle",{readOnlyHint:false,destructiveHint:false,openWorldHint:false}],
+   posts:["Posts",{readOnlyHint:true,destructiveHint:false}],publish_posts:["Publish posts",{readOnlyHint:false,destructiveHint:false}],
+   unpublish_posts:["Unpublish posts",{readOnlyHint:false,destructiveHint:false}],archive_posts:["Archive posts",{readOnlyHint:false,destructiveHint:true}],
+  });
+ } finally {await rm(dir,{recursive:true,force:true});}
 });
 
 test("MCP SDK stays outside startup, unused surface is tree shaken and static SDK imports are refused",async()=>{

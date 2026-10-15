@@ -18,6 +18,8 @@ export interface Options<Env, Database> extends GatewayOptions {
   serverInfo?: { name?: string; title?: string; version?: string; icons?: { src: string; mimeType?: string; sizes?: string[]; theme?: "light" | "dark" }[] };
   requiredScopes?: readonly string[];
   resourceMetadata?: string;
+  /** Origins whose browser requests MCP answers, compared by hostname; when set, the request host must be one of them too. Default: the request URL's own. */
+  allowedOrigins?: readonly string[];
   onObservation?: (event: McpObservation) => void | Promise<void>;
   onRefusal?: (event: CallerRefusal) => void | Promise<void>;
 }

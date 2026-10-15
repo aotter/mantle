@@ -1,9 +1,9 @@
 /** Build-time projections only; generated exports are static, independently tree-shakable data. */
-import { DiagnosticError, BUILT_IN_NAV_GROUPS, navGroupProblems, navPlacementProblems, isPrimaryCollection, standaloneParentField, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
+import { DiagnosticError, BUILT_IN_NAV_GROUPS, navGroupProblems, navPlacementProblems, isPrimaryCollection, standaloneParentField, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, toolTitle, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
 import { emitValidation } from "./validation.js";
-import { publishingInput, publishingTransitions } from "./publishing.js";
+import { publishingAnnotations, publishingInput, publishingTransitions } from "./publishing.js";
 
 const adminEnum = (p: JsonSchema): JsonSchema => { if(!p.oneOf) return p; const {oneOf,...rest}=p; return {...rest,enum:oneOf.map(c=>c.const)}; };
 
@@ -69,7 +69,7 @@ export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin
 
     authorizations.procedures[name]={auth:{all:["ctx.admin"]}};
     const description=verb+" an entry in "+schema.name+".";
-    webmcp.tools.push({name:tool,target:{kind:"procedure",name},description,inputSchema:publishingInput,annotations:{readOnlyHint:false,destructiveHint:verb==="archive"}});
+    webmcp.tools.push({name:tool,target:{kind:"procedure",name},title:toolTitle(verb+"_"+schema.name),description,inputSchema:publishingInput,annotations:publishingAnnotations(verb)});
     webmcp.routes[tool]={path:"/admin/c/"+encodeURIComponent(schema.name),entry:true};
     snapshot.interfaces.callable.push({kind:"procedure",name:tool,target:name,surface:"admin",audience:"admin",title:null,description,input:publishingInput,output:null,trigger:null});
   }

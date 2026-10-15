@@ -1,5 +1,5 @@
 /** Compile the seven media inputs once; the generated module binds the existing site. */
-import type { JsonSchema } from "../build/compiler.js";
+import { toolTitle, type JsonSchema } from "../build/compiler.js";
 import { emitValidation } from "./validation.js";
 import { mediaDefinitions } from "../domain/generated-tools.js";
 export { mediaDefinitions };
@@ -14,7 +14,7 @@ import type { MediaStorage } from "@aotter/mantle/site";
 import type { Tool } from "@aotter/mantle/mcp";
 ${definitions.map((tool,i)=>`import { validate as v${i} } from "./validation/media/${tool.name}.js";`).join("\n")}
 export function mediaTools<Handlers = never>(storage: () => MediaStorage): Tool<Parameters<typeof site>[0], Handlers>[] { return [
-${definitions.map(({action,...tool},i)=>`{...${JSON.stringify({...tool,...(tool.annotations.readOnlyHint ? {readOnly:true} : {})})},surface:"admin",closed:true,validate:v${i},run:${invoke[action]}}`).join(",\n")}
+${definitions.map(({action,...tool},i)=>`{...${JSON.stringify({...tool,title:toolTitle(tool.name),...(tool.annotations.readOnlyHint ? {readOnly:true} : {})})},surface:"admin",closed:true,validate:v${i},run:${invoke[action]}}`).join(",\n")}
 ]; }
 `};
 }
