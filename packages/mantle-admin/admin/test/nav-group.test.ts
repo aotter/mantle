@@ -336,6 +336,11 @@ describe("sidebar placement (uiSchema.nav and navGroups)", () => {
       expect(links(build(project({ items: [{ group: "content", title: "Req", to: { collection: "requests" } }] })), "Content")!.map((l) => l.title)).toContain("Req");
     });
 
+    it("ignores a declaration of Admin's own group ids, so More is not listed twice", () => {
+      const groups = build(project({ groups: { more: { title: "Extras" }, reports: { title: "Mine", order: 1 } } }), [], [view("pending")]);
+      expect(shape(groups).slice(1)).toEqual([["Reports", ["pending"]]]);
+    });
+
     it("titles a group nobody declared by its id instead of dropping its items", () => {
       const groups = build(project(), [collection("requests", "operational", { group: "approvals" })], []);
       expect(shape(groups).slice(1)).toEqual([["Approvals", ["requests"]]]);

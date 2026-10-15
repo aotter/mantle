@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SidebarProvider, TooltipProvider } from "@aotter/mantle-ui/kit";
 import { defineAdmin, type AdminMeta } from "../src/app/define-admin";
 import { PreferencesProvider } from "../src/app/preferences";
@@ -47,6 +47,19 @@ describe("Admin's built-in components through their slots", () => {
     const withFooter = shell(sidebar, defineAdmin(admin, { components: { Sidebar: (props: SlotProps<SidebarProps>) => props.renderDefault({ ...props, footer: <p>Need help?</p> }) } }).layers);
     expect(withFooter).toContain("Need help?");
     expect(withFooter).toContain("Requests");
+  });
+
+  it("highlights only the preset item on a preset URL, not the default entry of the same collection", () => {
+    const at = (pathname: string, search: string) => {
+      vi.stubGlobal("window", { location: { pathname, search, href: `http://x${pathname}${search}`, origin: "http://x" }, addEventListener() {}, removeEventListener() {} });
+      try { return shell(<Slot name="Sidebar" Default={AppSidebar} props={{ brand: { title: "Acme" }, groups: [
+        { title: "Records", items: [{ title: "requests", url: "/admin/c/requests" }] },
+        { title: "Reports", items: [{ title: "Rejected", url: "/admin/c/requests?filter_field=status&filter_value=rejected" }] },
+      ] }} />, {}); } finally { vi.unstubAllGlobals(); }
+    };
+    const activeLabels = (html: string) => [...html.matchAll(/data-active="true"[^>]*>.*?<span[^>]*>([^<]*)<\/span>/g)].map((m) => m[1]);
+    expect(activeLabels(at("/admin/c/requests", "?filter_field=status&filter_value=rejected"))).toEqual(["Rejected"]);
+    expect(activeLabels(at("/admin/c/requests", ""))).toEqual(["requests"]);
   });
 
   it("replaces the brand inside the built-in sidebar", () => {

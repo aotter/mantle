@@ -396,12 +396,12 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
 - Built-in groups need no declaration: `content`, `operations`, `reports`, `more`. A project declares every other
   group once, in `src/admin.tsx`: `defineAdmin(admin, { nav: { groups } })`, each with a title (text or
   `{ locale: text }`) and an `order` among the built-in groups' content 10, operations 20 and reports 30 (default 50);
-  More always stays last. `generated/admin-client.ts` exports `ManifestNavGroup`, every group the manifest uses, and types
+  More always stays last. Declaring a built-in id is a type error (and ignored at runtime). `generated/admin-client.ts` exports `ManifestNavGroup`, every group the manifest uses, and types
   `nav.groups` so that `tsc` refuses an entry that leaves one out (`mantle generate` no longer checks it). Without an
   `src/admin.tsx` (the built-in entry) nothing refuses it, so an undeclared group still shows its items, titled by its id.
 - `nav.items` adds entries beside the ones `uiSchema.nav` produces: `{ group, title, icon?, order?, to }`, where `title` is
   text or `{ locale: text }`, `icon` is any React icon component, and `to` is `{ collection, filter? }` (the list, preset
-  to one field's value) or `{ view, input? }` (an admin View with its input). Names, the filter field and value and the
+  to the value of one field) or `{ view, input? }` (an admin View with its input). Names, the filter field and value and the
   View input are typed from the generated manifest, so a misspelling or a wrong preset fails `tsc`. Several items may lead to
   one resource with different presets. An item whose collection or View the caller cannot see is not shown; showing or
   hiding one changes no permission, because the target's own route still decides.

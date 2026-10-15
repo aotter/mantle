@@ -229,6 +229,8 @@ function preferredAdminIcon(icons: readonly SiteIcon[] | undefined): string | un
     ?? icons?.[0]?.src;
 }
 
+const BUILT_IN_GROUPS: ReadonlySet<string> = new Set(["content", "operations", "reports", "more"]);
+
 export function buildNavGroups(
   collections: ReadonlyArray<Collection>,
   views: ReadonlyArray<ViewManifestInfo>,
@@ -284,6 +286,7 @@ export function buildNavGroups(
   ];
   // `defineAdmin` groups win over the legacy `navGroups` of the same id
   for (const [id, g] of Object.entries(project?.groups ?? {})) {
+    if (BUILT_IN_GROUPS.has(id)) continue; // Admin's own groups are not redeclared (`tsc` refuses it; a zero-config entry has none)
     const next = { id, title: resolveLocalizedText(g.title, language, canonical) ?? id, order: g.order ?? 50 };
     const at = titled.findIndex((t) => t.id === id);
     if (at < 0) titled.push(next); else titled[at] = next;

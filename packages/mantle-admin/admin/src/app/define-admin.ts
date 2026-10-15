@@ -115,7 +115,7 @@ type ScalarOf<V> = Extract<NonNullable<V>, Scalar>;
 /** One declared field of a collection and the value to list it by: the list filters on a single field. Any field name for the open shape the built-in entry has. */
 type NavFilter<D> = [keyof D] extends [never]
   ? { readonly [field: string]: Scalar }
-  : { [F in keyof D & string]-?: [ScalarOf<D[F]>] extends [never] ? never : { readonly [P in F]: ScalarOf<D[F]> } }[keyof D & string];
+  : { [F in keyof D & string]-?: [ScalarOf<D[F]>] extends [never] ? never : { readonly [P in F]: ScalarOf<D[F]> } & { readonly [Q in Exclude<keyof D & string, F>]?: never } }[keyof D & string];
 
 /** Where a sidebar item leads: a collection's list, preset to one field's value, or an admin View with its input. */
 export type AdminNavTarget<T extends AdminTypes = AdminTypes> =
@@ -127,7 +127,7 @@ export type AdminNavTarget<T extends AdminTypes = AdminTypes> =
  * presets. An item whose collection or View the caller cannot see is not shown; showing or hiding one grants and denies nothing.
  */
 export interface AdminNavItem<T extends AdminTypes = AdminTypes> {
-  readonly group: BuiltInNavGroup | CustomGroup<T> | RequiredGroup<T>;
+  readonly group: BuiltInNavGroup | CustomGroup<T>;
   readonly title: AdminText;
   /** Any icon component; the default is a folder for a collection and a chart for a View. */
   readonly icon?: React.ElementType;
@@ -136,9 +136,9 @@ export interface AdminNavItem<T extends AdminTypes = AdminTypes> {
   readonly to: AdminNavTarget<T>;
 }
 
-/** Declare a project group for every `uiSchema.nav.group` the manifest uses; `tsc` refuses a missing one. */
+/** Declare a project group for every `uiSchema.nav.group` the manifest uses; `tsc` refuses a missing one, and refuses Admin's own group ids. */
 export type AdminNavGroups<T extends AdminTypes = AdminTypes> =
-  { readonly [K in RequiredGroup<T>]: AdminNavGroup } & { readonly [id: string]: AdminNavGroup };
+  { readonly [K in RequiredGroup<T>]: AdminNavGroup } & { readonly [id: string]: AdminNavGroup } & { readonly [K in BuiltInNavGroup]?: never };
 
 /** `defineAdmin`'s `nav`. `groups` is required when the manifest uses a group Admin does not have. */
 export interface AdminNav<T extends AdminTypes = AdminTypes> {

@@ -8,7 +8,7 @@ import type { WireRow as View0Wire } from "./views/recent-activity.js";
 type Renamed<Row, Names extends { readonly [from: string]: string }> = { [K in keyof Row as K extends keyof Names ? Names[K] : K]: Row[K] };
 type View0Row = Renamed<View0Wire, {}>;
 
-/** Every sidebar group the manifest places items in. */
+/** Every sidebar group the manifest places an item in. */
 export type ManifestNavGroup = never;
 
 /** The input and row of each admin View, the `data` of each collection's entries, and the input and output of each admin operation. */

@@ -39,12 +39,15 @@ import {
 
 interface NavGroupProps {
   group: NavGroupData;
+  /** Every top-level link of the sidebar: a link without a query string yields to a sibling preset of the same path that matches. */
+  links: ReadonlyArray<NavLink>;
   pathname: string;
   search: string;
 }
 
 export function NavGroup({
   group,
+  links,
   pathname,
   search,
 }: NavGroupProps): React.ReactElement {
@@ -56,6 +59,7 @@ export function NavGroup({
           <NavGroupItem
             key={navKey(item)}
             item={item}
+            links={links}
             pathname={pathname}
             search={search}
           />
@@ -71,16 +75,18 @@ function navKey(item: NavItem): string {
 
 function NavGroupItem({
   item,
+  links,
   pathname,
   search,
 }: {
   item: NavItem;
+  links: ReadonlyArray<NavLink>;
   pathname: string;
   search: string;
 }): React.ReactElement {
   const { state, isMobile } = useSidebar();
   if (!isCollapsible(item)) {
-    return <NavLinkItem item={item} pathname={pathname} search={search} />;
+    return <NavLinkItem item={item} links={links} pathname={pathname} search={search} />;
   }
   if (state === "collapsed" && !isMobile) {
     return (
@@ -102,16 +108,18 @@ function NavGroupItem({
 
 function NavLinkItem({
   item,
+  links,
   pathname,
   search,
 }: {
   item: NavLink;
+  links: ReadonlyArray<NavLink>;
   pathname: string;
   search: string;
 }): React.ReactElement {
   const { setOpenMobile } = useSidebar();
   const prefetch = useCollectionPrefetch(item.url);
-  const active = isLinkActive(item, pathname, search, true);
+  const active = isSubLinkActive(item, links, pathname, search);
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={active}>
