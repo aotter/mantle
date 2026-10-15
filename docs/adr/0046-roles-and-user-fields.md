@@ -1,6 +1,6 @@
 # ADR-0046: Roles and user fields in SQL scope
 
-**Status:** Accepted for 0.2.0 (2026-10-14, issue #1492), amended the same day by the section "Amendment: enforcement only", which takes precedence over the sections it names.
+**Status:** Accepted for 0.2.0 (2026-10-14, issue #1492), amended the same day by the section "Amendment: enforcement only", which takes precedence over the sections it names; §4 Paging amended 2026-10-15 (#1644).
 
 **Date:** 2026-10-13
 
@@ -308,6 +308,18 @@ spec:
 - **Paging.** `col IN field` counts as fan-out fixed for the paging proof, so an index
   such as `[region, createdAt]` serves `ORDER BY createdAt`. The cost is bounded by
   elements × limit. Admin and public variants are each proven.
+
+  **Amended (#1644, 2026-10-15):** the text above is withdrawn. A user-field `IN` term
+  (scope or restrict) never fixes an index prefix; only equality does. The statement is
+  prepared for a set of values, so `ORDER BY createdAt` after `[region, createdAt]`
+  reads and sorts all of the caller's rows on every page, for one value, several values
+  and `{ all: true }` alike; no per-value fan-out exists. Generate refuses such a View and
+  names the bounded ways: order by the scoped column first, bind it with an equality
+  input, or index the ordered columns alone for `{ all: true }` readers. The proof runs on
+  the caller variant. The `{ all: true }` variant only drops `IN` terms, which no longer
+  count, so an accepted View is bounded for it too; trusted reads also drop `= auth.uid()`
+  and restrict terms, as the handbook already states. See the
+  handbook's [index prefixes](../handbook/reference/schema.md#index-prefixes-for-paged-views).
 - **Public Views.** Row policy applies in public mode too. A public View over a
   field-scoped Schema returns nothing to anonymous visitors, and generate warns with
   `USER_SCOPE_PUBLIC_ANON_EMPTY`. A member with fields sees their own range. Tests pin

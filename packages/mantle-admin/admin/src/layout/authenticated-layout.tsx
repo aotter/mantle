@@ -239,9 +239,9 @@ export function buildNavGroups(
       url: `/admin/views/${encodeURIComponent(v.name)}`,
     });
   }
-  // extension pages placed in a sidebar group other than more/settings
+  // extension pages that ask for a place; settings pages sit with Admin's own settings in More
   for (const extension of extensions ?? []) for (const page of extension.contributes?.pages ?? []) {
-    if (page.nav && page.nav.group !== "more" && page.nav.group !== "settings") place(page.nav.group, page.nav.order ?? 0, {
+    if (page.nav && page.nav.group !== "settings") place(page.nav.group, page.nav.order, {
       title: resolveLocalizedText(page.title, language, canonical) ?? page.id,
       url: `/admin/x/${encodeURIComponent(extension.id)}/${encodeURIComponent(page.id)}`,
       icon: Puzzle,
@@ -268,11 +268,12 @@ export function buildNavGroups(
         : []),
     ],
   };
-  // content stays even when empty (its empty state is the start of the console); other groups need an item
-  const placedGroups: NavGroupData[] = titled
-    .map((g) => ({ title: g.title, items: itemsOf(g.id), keep: g.id === "content" }))
-    .filter((g) => g.keep || g.items.length > 0)
-    .map(({ keep: _keep, ...g }) => g);
+  // an empty group is not shown, except Content while every group is empty: its empty state is the start of the console
+  const placed = titled.map((g) => ({ id: g.id, title: g.title, items: itemsOf(g.id) }));
+  const empty = placed.every((g) => g.items.length === 0);
+  const placedGroups: NavGroupData[] = placed
+    .filter((g) => g.items.length > 0 || (empty && g.id === "content"))
+    .map(({ id: _id, ...g }) => g);
 
   const moreGroup: NavGroupData = {
     title: t(language, "nav.more"),
@@ -290,21 +291,19 @@ export function buildNavGroups(
             { title: t(language, "nav.admin"), url: "/admin/admin", icon: Users },
           ]
         : []),
-      // extension pages and settings (ADR-lite 1376), already filtered to this admin member's role by the server;
-      // a page appears only when it asks for a place, a settings page always does
+      // extension settings and settings pages (ADR-lite 1376) next to Admin's own settings, already filtered to this
+      // admin member's role by the server; a stable sort keeps declaration order within one order
       ...(extensions ?? []).flatMap((extension) => [
-        ...(extension.contributes?.pages ?? []).filter((p) => p.nav?.group === "more" || p.nav?.group === "settings").map((p) => ({ ...p, order: p.nav!.order ?? 0, group: p.nav!.group })),
-        ...(extension.contributes?.settings ?? []).map((s) => ({ ...s, order: 0, group: "settings" as const })),
+        ...(extension.contributes?.pages ?? []).filter((p) => p.nav?.group === "settings").map((p) => ({ ...p, order: p.nav!.order ?? 0 })),
+        ...(extension.contributes?.settings ?? []).map((s) => ({ ...s, order: 0 })),
       ].map((c) => ({
         order: c.order,
-        group: c.group,
         title: resolveLocalizedText(c.title, language, canonical) ?? c.id,
         url: `/admin/x/${encodeURIComponent(extension.id)}/${encodeURIComponent(c.id)}`,
-        icon: c.group === "settings" ? SettingsIcon : Puzzle,
+        icon: SettingsIcon,
       })))
-        // settings next to Admin's own settings, then the rest; a stable sort keeps declaration order within one order
-        .sort((a, b) => (a.group === b.group ? a.order - b.order : a.group === "settings" ? -1 : 1))
-        .map(({ order: _order, group: _group, ...item }) => item),
+        .sort((a, b) => a.order - b.order)
+        .map(({ order: _order, ...item }) => item),
       ...itemsOf("more"),
     ],
   };

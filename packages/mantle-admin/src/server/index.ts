@@ -105,7 +105,7 @@ export interface Metadata {
     readonly webmcp: unknown;
     readonly developerConsole?: unknown;
     /** Project sidebar groups (`navGroups`); Schemas, admin Views and pages place items in them with `nav.group`. */
-    readonly navGroups?: readonly { readonly id: string; readonly title: string | Readonly<Record<string, string>>; readonly order?: number }[];
+    readonly navGroups?: readonly import("./extension-types.js").AdminNavGroup[];
 }
 export interface View<Database> {
     readonly name: string;

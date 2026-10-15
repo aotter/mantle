@@ -59,7 +59,8 @@ driver-native rows. Internal paging creates no public route/tool.
 Authored SQL `LIMIT` caps each page, up to 500, rather than the whole cursor walk.
 A pageable Schema View has a complete NOT NULL scalar tuple ending in the
 compiler's `id` tiebreak. Its ordered columns must match an index after fixed
-equality prefixes (including caller scope); multiple columns and mixed directions
+equality prefixes; a user-field `IN` scope or restrict is not one (see
+[index prefixes](schema.md#index-prefixes-for-paged-views)); multiple columns and mixed directions
 retain the authored order. CTE projections preserve the proof; joins must have a
 proved singleton side, or equality on the joined Schema's `id` or single-field
 unique key, so the base id cannot fan out. LEFT JOIN accepts nullable or missing

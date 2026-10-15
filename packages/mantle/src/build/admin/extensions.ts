@@ -1,6 +1,6 @@
 /** Build-time contribution metadata and existing manifest binding checks. */
 import { DiagnosticError, makeDiagnostic } from "../spec/kernel/index.js";
-import { UI_EXTENSION_REF, type JsonSchema, type LocalizedText, type RuntimePlan, type AdminRole } from "../spec/domain/index.js";
+import { UI_EXTENSION_REF, isLocalizedText, type JsonSchema, type LocalizedText, type RuntimePlan, type AdminRole } from "../spec/domain/index.js";
 export const ADMIN_EXTENSION_TARGETS = {
   action: ["record/v1", "list.selection/v1", "list.toolbar/v1"],
   panel: ["record.sidebar/v1", "home/v1"],
@@ -79,7 +79,6 @@ const invalid = (code: "UI_EXTENSION_INVALID" | "UI_EXTENSION_UNKNOWN" | "UI_EXT
   new DiagnosticError(makeDiagnostic({ code, phase: "boot", severity: "error", path, message, ...(value === undefined ? {} : { value }) }));
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-const isText = (v: unknown): v is LocalizedText => (typeof v === "string" && v.length > 0) || (isObject(v) && Object.keys(v).length > 0 && Object.values(v).every((x) => typeof x === "string" && x.length > 0));
 const keysWithin = (o: Record<string, unknown>, allowed: readonly string[]) => Object.keys(o).find((k) => !allowed.includes(k));
 
 // ---------- the form subset (settings schemas and field options) ----------
@@ -103,10 +102,10 @@ export function formSchemaProblem(schema: unknown): string | null {
     if (!isObject(p) || typeof p["type"] !== "string" || !FORM_TYPES.includes(p["type"])) return `property '${name}' typed string, number, integer or boolean`;
     const bad = keysWithin(p, FORM_PROPERTY_KEYS);
     if (bad) return `property '${name}' without '${bad}'`;
-    if (p["title"] !== undefined && !isText(p["title"])) return `property '${name}' with a text title`;
-    if (p["description"] !== undefined && !isText(p["description"])) return `property '${name}' with a text description`;
+    if (p["title"] !== undefined && !isLocalizedText(p["title"])) return `property '${name}' with a text title`;
+    if (p["description"] !== undefined && !isLocalizedText(p["description"])) return `property '${name}' with a text description`;
     if (p["enum"] !== undefined && (!Array.isArray(p["enum"]) || p["enum"].length === 0 || p["enum"].some((x) => !matchesType(p["type"] as string, x)))) return `property '${name}' with an enum of its type`;
-    if (p["oneOf"] !== undefined && (!Array.isArray(p["oneOf"]) || p["oneOf"].length === 0 || p["oneOf"].some((o) => !isObject(o) || keysWithin(o, ["const", "title"]) || !matchesType(p["type"] as string, o["const"]) || (o["title"] !== undefined && !isText(o["title"]))))) return `property '${name}' with a oneOf of { const, title }`;
+    if (p["oneOf"] !== undefined && (!Array.isArray(p["oneOf"]) || p["oneOf"].length === 0 || p["oneOf"].some((o) => !isObject(o) || keysWithin(o, ["const", "title"]) || !matchesType(p["type"] as string, o["const"]) || (o["title"] !== undefined && !isLocalizedText(o["title"]))))) return `property '${name}' with a oneOf of { const, title }`;
     for (const k of ["minimum", "maximum", "minLength", "maxLength"]) if (p[k] !== undefined && (typeof p[k] !== "number" || !Number.isFinite(p[k]))) return `property '${name}' with a numeric ${k}`;
     if (p["default"] !== undefined && checkValue(p, p["default"]) !== null) return `property '${name}' with a default it accepts`;
   }
