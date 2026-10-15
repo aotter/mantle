@@ -234,10 +234,17 @@ Store keeps `find({ search })`, `first({ search })` and `count(where?)`. See [St
 A Schema with a required `x-mantle-ref` folds under its parent collection: it
 opens from the parent entry's workbench and stays out of the sidebar, while
 `/admin/c/<schema>` still lists it; translation children remain on language
-tabs. Set `Schema.spec.uiSchema.nav.standalone: true` to put a child with a required `id`
-reference at the top level instead; a child folded only by a unique-field reference stays in its
-parent's workbench. With multiple eligible references, set
-`nav.parentField` to the chosen reference field.
+tabs. The parent is the reference named by `Schema.spec.uiSchema.nav.parentField` (a required
+`x-mantle-ref` field, by `id` or by a unique field), else the only required `id` reference, else
+the first required unique-field reference. A Schema with two or more required `id` references and
+no `parentField` is refused by `mantle generate` with `SCHEMA_UI_INVALID`; the diagnostic lists the
+candidates and the `nav: { parentField: <field> }` line that keeps the first one. `parentField` is
+refused on a translation child and when its parent chain leads back to the Schema. Choosing the
+parent changes Admin navigation only: storage and authorization are unchanged.
+
+Set `nav.standalone: true` to put a child with a required `id` reference at the top level instead;
+a child folded only by a unique-field reference stays in its parent's workbench. With
+`standalone`, `parentField` must name a required `id` reference.
 
 ### Sidebar
 

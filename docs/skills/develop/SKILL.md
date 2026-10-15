@@ -41,8 +41,9 @@ version? }` selects row actions and binds the row id / reviewed OCC version to
 the named inputs. Other admin operations appear under Operations in the sidebar.
 Keep state conditions in the SQL WHERE: simple AND equality/IN literals become
 row-menu hints, while the Procedure remains the authority. Required-ref child
-collections fold under their parent's sidebar group; use Schema
-`uiSchema.nav.standalone: true` for a top-level entry.
+collections fold under their parent's sidebar group; with two or more required
+`id` refs, set Schema `uiSchema.nav.parentField` to the parent's ref (generate
+refuses otherwise); use `uiSchema.nav.standalone: true` for a top-level entry.
 
 ## Database changes
 
