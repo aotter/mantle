@@ -77,14 +77,14 @@ test("MCP answers a foreign Origin, and a foreign Host from a loopback peer, 403
   for(const who of [{kind:"anonymous"},user]) for(const path of ["/mcp","/mcp/admin"]) for(const era of [undefined,"2026-07-28"]) {
    caller=who;const refused=await call(open,"https://app.test"+path,{origin:"https://evil.test"},era);
    expect(refused.status).toBe(403);expect((await refused.json()).error.message).toBe("Invalid Origin: evil.test");
-   if(who===user) for(const headers of [{},{origin:"https://app.test"}]) expect((await call(open,"https://app.test"+path,headers,era)).status).toBe(200);
+   if(who===user) for(const headers of [{},{origin:"https://app.test"}] as Record<string,string>[]) expect((await call(open,"https://app.test"+path,headers,era)).status).toBe(200);
   }
   // Each refusal is reported once to both callbacks.
   expect(refusals).toHaveLength(8);expect(refusals.every(event=>event.reason==="origin"&&event.status===403)).toBe(true);
   expect(observations.filter(event=>event.kind==="request-refused").map(event=>[event.status,event.surface])).toEqual(["public","public","admin","admin","public","public","admin","admin"].map(surface=>[403,surface]));
   caller={kind:"anonymous"};
   // allowedOrigins adds to the request host; it does not pin the Host.
-  for(const origin of [undefined,"https://app.test","https://console.test","http://partner.test:3000"]) expect((await call(listed,"https://app.test/mcp",origin?{origin}:{})).status).toBe(200);
+  for(const headers of [{},...["https://app.test","https://console.test","http://partner.test:3000"].map(origin=>({origin}))]) expect((await call(listed,"https://app.test/mcp",headers)).status).toBe(200);
   expect((await call(listed,"https://app.test/mcp",{origin:"https://evil.test"})).status).toBe(403);
   // DNS rebinding: the attacker's name resolves to a loopback server, so request.url and Origin carry it too; only a loopback peer is local.
   const rebound={host:"evil.example.com",origin:"http://evil.example.com"};
