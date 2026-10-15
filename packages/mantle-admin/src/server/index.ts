@@ -156,14 +156,19 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
         if (!options.authorize) return { ...metadata, views: sees(metadata.views, views, c.caller), operations: sees(metadata.operations, operations, c.caller), webmcp: catalogue };
         return (await import("./authorization.js")).visibleMetadata(metadata, catalogue, views, operations, options.developerViews ?? views, options.authorize, c.caller);
     };
+    const batchNames = (url: URL): string[] => {
+        const names = [...new Set((url.searchParams.get("names") ?? "").split(",").filter(Boolean))];
+        if (!names.length || names.length > 20) throw new ContractError("INPUT_VALIDATION_FAILED", "Name 1 to 20 Views in `names`, separated by commas.", "admin");
+        return names;
+    };
     const runRoute = (route: Route<Env, Database>, c: Context<Env, Database>) => options.authorize && route.target
         ? checkTarget(route.target(c), c.caller).then(() => route.run(c)) : route.run(c);
-    const viewPage = async (c: Context<Env, Database>, preview = false) => {
-        const view = (preview ? options.developerViews ?? views : views).find(v => v.name === c.params.name && (options.authorize || v.allows(c.caller)));
+    const viewPage = async (c: Context<Env, Database>, preview = false, name = c.params.name, search = c.url.searchParams) => {
+        const view = (preview ? options.developerViews ?? views : views).find(v => v.name === name && (options.authorize || v.allows(c.caller)));
         if (view && options.authorize) deny(c.caller, view.allows(c.caller), "views/" + view.name);
         if (!view) { if (preview) return { unavailable: true }; throw missing(); }
         if (options.authorize) await checkTarget({ kind: "view", name: view.name }, c.caller);
-        const { input: raw, ...paging } = view.query(c.url.searchParams), input = { ...raw };
+        const { input: raw, ...paging } = view.query(search), input = { ...raw };
         convert(input, view.convert);
         const page = await view.page(c.db, c.caller, input as never, paging);
         return view.row ? { ...page, rows: page.rows.map(view.row) } : page;
@@ -200,6 +205,21 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 }, columns);
             } },
         { method: "GET", path: "/views/{name}", prepare: async c => { const view = views.find(v => v.name === c.params.name); if (!view) throw missing(); deny(c.caller, view.allows(c.caller), "views/" + view.name); view.check?.(c.caller); if (options.authorize) await checkTarget({kind:"view",name:view.name}, c.caller); const input = {...view.query(c.url.searchParams).input}; convert(input, view.convert); }, run: c => viewPage(c) },
+        // Nav badges: up to 20 Views in one read, each as the caller through the single route's checks. A refused or missing View
+        // is the same `{ unavailable: true }`; a View that cannot answer with no input is `{ error: true }`, and neither fails the batch.
+        { method: "GET", path: "/view-batch", prepare: c => { batchNames(c.url); }, run: async c => {
+            const out: [string, unknown][] = [];
+            for (const name of batchNames(c.url)) {
+                try {
+                    views.find(v => v.name === name)?.check?.(c.caller);
+                    out.push([name, await viewPage(c, false, name, new URLSearchParams({ limit: "1" }))]);
+                } catch (error) {
+                    if (!(error instanceof ContractError)) throw error;
+                    out.push([name, ["AUTH_DENIED", "UNAUTHENTICATED", "NOT_FOUND"].includes(error.code) ? { unavailable: true } : { error: true }]);
+                }
+            }
+            return { views: Object.fromEntries(out) };
+        } },
         ...(metadata.developerConsole === undefined ? [] : [{ method: "GET" as const, path: "/developer/views/{name}", run: (c: Context<Env, Database>) => viewPage(c, true) }]),
         { method: "POST", path: "/operations/{name}", prepare: async c => {
             const operation = operations.find(p => p.name === c.params.name); if (!operation) throw missing();

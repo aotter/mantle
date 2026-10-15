@@ -1,7 +1,7 @@
 import { ApiError, api } from "../lib/api";
 import { diagnosticsOf, outputOf } from "../../../src/app/bridge";
 import { toolName } from "./slots";
-import type { AdminEntry, AdminMe, AdminTransport, McpAppTransportOptions, McpToolResult, Reply } from "./hooks";
+import type { AdminEntry, AdminMe, BadgeAnswer, AdminTransport, McpAppTransportOptions, McpToolResult, Reply } from "./hooks";
 
 type Row = Readonly<Record<string, unknown>>;
 
@@ -50,6 +50,7 @@ export const browserTransport: AdminTransport = {
   // a collection without statistics answers 501 whatever the caller: it has no total to show
   total: collection => read(async () => (await api.get<{ total: number }>(`/collections/${path(collection)}/statistics?range=7d`)).total, [501]),
   me: () => read(() => api.get<AdminMe>("/me")),
+  badges: names => read(async () => (await api.get<{ views: { [name: string]: BadgeAnswer } }>(`/view-batch?names=${encodeURIComponent(names.join(","))}`)).views),
   run: (name, input) => read(async () => (await api.post<{ ok: boolean; output: unknown }>(`/operations/${path(name)}`, input)).output),
 };
 
@@ -103,6 +104,7 @@ export function createMcpAppTransport({ call, host }: McpAppTransportOptions): A
     entry: async () => unavailable,
     total: async () => unavailable,
     me: async () => unavailable,
+    badges: async () => unavailable,
     run: async (name, input) => {
       if (!live) return unavailable;
       const reply = await invoke(live, toolName(name), { ...input }, output => output);

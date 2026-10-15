@@ -2,7 +2,7 @@ import { sdkFixtureCaller as fixtureCaller } from "../../../mantle/tests/apps/fi
 import {test, expect} from "bun:test";
 import { admin as adminFunction, type Route, type Metadata} from "../../src/server/index.js";
 import {entries, type EntrySchema} from "../../src/server/entries.js";
-import type {Caller} from "@aotter/mantle/contracts";
+import {ContractError, type Caller} from "@aotter/mantle/contracts";
 import type {NativeCollection,NativeProcedureAdapter} from "../../src/server/native.js";
 const mode={projection:"id, version, title",from:"FROM fixture",policy:"",binds:[],fields:{title:{column:"title",insert:"@value",update:"title=@value"}},create:{prefix:"create(",between:")(",suffix:")",columns:[],values:[],binds:[],returning:""},patch:{prefix:"patch ",sets:[],where:"",returning:"",binds:[{k:"input" as const,name:"id"},{k:"version" as const}]},remove:{sql:"remove",binds:[{k:"input" as const,name:"id"},{k:"version" as const}],row:true}};
 const compiled:NativeCollection={path:"admin/entries",marker:"@value",id:"id",cursorAliases:[{name:"_cursor0",sql:"_cursor0"},{name:"_cursor1",sql:"_cursor1"}],fields:{id:{expression:"id",value:"@value",wire:"id",kind:"text",nullable:false}},orderFields:["id"],caller:mode,trusted:mode,statistics:{time:"created_at",subtype:"NULL",rowsAlias:{name:"_statistics",sql:"_statistics"}}};
@@ -162,4 +162,26 @@ test("entry editor and translation badges do not query denied related collection
   expect(editor.parentEntryId).toBeNull();expect(editor.related).toEqual([]);expect(reads).toBe(1);
   const list=await(await fetch(new Request("https://app.test/admin/api/entries?collection=posts"),{}))!.json();
   expect(list.items[0].translation_locales).toEqual([]);expect(reads).toBe(2);
+});
+
+test("view-batch runs each View as the caller; a refused, missing or authorize-denied View is the same unavailable and cannot fail the batch",async()=>{
+  const seen:string[]=[];
+  const view=(name:string,allows:(c:Caller)=>boolean,rows:Record<string,unknown>[]=[{count:3}]):any=>({name,allows,query:(p:URLSearchParams)=>({input:{},limit:Number(p.get("limit"))}),page:async(_db:unknown,c:Caller,_i:unknown,paging:{limit?:number})=>{seen.push(`${name}:${"subject" in c?c.subject:""}:${paging.limit}`);return {rows};},row:(r:Record<string,unknown>)=>({...r,count:Number(r.count)})});
+  const needsInput:any={...view("needs-input",()=>true),query:()=>{throw new ContractError("INPUT_VALIDATION_FAILED","Needs input.","views/needs-input");}};
+  const views=[view("pending-count",()=>true,[{count:"3"}]),view("admins-only",()=>false),view("blocked",()=>true),needsInput];
+  const authorize:any=async(target:{name:string})=>target.name!=="blocked";
+  const build=(extra={})=>{let providers=0;const f=adminFunction(metadata,views,[],{db:()=>{providers++;return {};},caller:()=>admin,...extra});return {providers:()=>providers,ask:(names:string)=>f(new Request("https://app.test/admin/api/view-batch"+names,{headers:{origin:"https://app.test"}}),{})};};
+  const f=build(),res=await f.ask("?names=pending-count,admins-only,nope,needs-input,pending-count");
+  expect(res!.status).toBe(200);expect(res!.headers.get("cache-control")).toBe("private, no-store");
+  const body=await res!.json();
+  expect(body).toEqual({views:{"pending-count":{rows:[{count:3}]},"admins-only":{unavailable:true},nope:{unavailable:true},"needs-input":{error:true}}});
+  // one read per named View, one row each, as the caller
+  expect(seen).toEqual(["pending-count:a:1"]);
+  expect(JSON.stringify(body.views["admins-only"])).toBe(JSON.stringify(body.views.nope));
+  const denied=await build({authorize}).ask("?names=blocked,pending-count");
+  expect(await denied!.json()).toEqual({views:{blocked:{unavailable:true},"pending-count":{rows:[{count:3}]}}});
+  const many=build();
+  for(const names of ["","?names=","?names="+Array.from({length:21},(_,i)=>"v"+i).join(",")])expect((await many.ask(names))!.status).toBe(400);
+  expect(many.providers()).toBe(0);
+  expect((await many.ask("?names="+Array.from({length:20},(_,i)=>"v"+i).join(",")))!.status).toBe(200);
 });

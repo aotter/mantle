@@ -499,3 +499,16 @@ spec: {source: {kind: mcp, surface: admin}, target: {procedure: app-test}}
   expect(await operation.run(new Database(":memory:"),caller("A"),{label:"hi"})).toEqual({label:"hi!"});
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+// D9 (#1669): a keyless single-row aggregate admin View is a proved singleton, so the Admin surface accepts it.
+const aggregateView=(name:string,sql:string)=>({sourceId:name+".json",text:JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"View",metadata:{name},spec:{surface:"admin",requires:{auth:{all:["ctx.admin"]}},sql,uiSchema:{nav:{hidden:true}}}})});
+test("Admin accepts a keyless single-row aggregate View and counts only the caller's scoped rows",async()=>{
+ const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-aggregate-")),db=new Database(":memory:");
+ try{
+ const result=await generateFromSources({target:"bun-sqlite",sources:{sources:[source,aggregateView("pending-count","SELECT COUNT(*) AS count FROM records WHERE status = 'draft'")]},admin:true});
+ if(!result.ok)throw Error(JSON.stringify(result.diagnostics));await writeBindings(dir,result.files);db.exec(result.files["schema.sql"]!);
+ db.exec(`INSERT INTO records(id,version,created_at,updated_at,status,ownerid,label,kind) VALUES ('a',1,0,0,'draft','A','x','a'),('b',1,0,0,'draft','A','y','a'),('c',1,0,0,'published','A','z','a'),('d',1,0,0,'draft','B','w','a')`);
+ const view=(await import(join(dir,"admin-bindings.ts"))).adminBindings().views.find((v:any)=>v.name==="pending-count"),{input,...paging}=view.query(new URLSearchParams());
+ const page=await view.page(db,caller("A"),input,paging);expect(page.nextCursor).toBeUndefined();expect(page.rows.map((r:any)=>view.row?view.row(r):r)).toEqual([{count:2}]);
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});

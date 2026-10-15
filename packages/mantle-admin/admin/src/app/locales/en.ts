@@ -260,6 +260,8 @@ export default {
     "nav.admin": "Administrators",
     "nav.members": "Members",
     "nav.reports": "Reports",
+    "nav.badgeLoading": "Loading count",
+    "nav.badgeError": "Count could not be read",
     "nav.localizedContent": "Contains localized content",
     "common.yes": "Yes",
     "common.no": "No",

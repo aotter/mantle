@@ -6,6 +6,7 @@ export const queryClient = new QueryClient({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["collection-statistics"] });
       void queryClient.invalidateQueries({ queryKey: ["entries"] });
+      void queryClient.invalidateQueries({ queryKey: ["badges"] });
     },
   }),
   defaultOptions: {
@@ -31,3 +32,6 @@ for (const key of ["me", "site", "admin-webmcp"]) {
 }
 
 queryClient.setQueryDefaults(["entries"], { staleTime: 300_000 });
+
+// nav badges: fresh for 30 s, read again when the window regains focus, never polled
+queryClient.setQueryDefaults(["badges"], { staleTime: 30_000, refetchOnWindowFocus: true });

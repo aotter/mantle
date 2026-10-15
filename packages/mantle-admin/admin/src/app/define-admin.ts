@@ -120,6 +120,12 @@ export type AdminNavTarget<T extends AdminTypes = AdminTypes> =
   | { [C in Collections<T>]: { readonly collection: C; readonly filter?: NavFilter<T["collections"][C]["data"]> } }[Collections<T>]
   | { [V in Views<T>]: { readonly view: V; readonly input?: T["views"][V]["input"] } }[Views<T>];
 
+/** A count shown on a sidebar item: `field` of the one row an aggregate admin View returns, typically one with `uiSchema.nav.hidden: true`. */
+export type AdminBadge<T extends AdminTypes = AdminTypes> = { [V in Views<T>]: { readonly view: V; readonly field: [keyof T["views"][V]["row"]] extends [never] ? string : keyof T["views"][V]["row"] & string } }[Views<T>];
+
+/** At most this many distinct Views feed badges: `GET /admin/api/view-batch` reads that many in one request. */
+export const MAX_BADGE_VIEWS = 20;
+
 /**
  * A sidebar entry added beside the ones `uiSchema.nav` produces. Several items may lead to one resource with different
  * presets. An item whose collection or View the caller cannot see is not shown; showing or hiding one grants and denies nothing.
@@ -132,6 +138,8 @@ export interface AdminNavItem<T extends AdminTypes = AdminTypes> {
   /** Position within the group; items without one follow those with one. */
   readonly order?: number;
   readonly to: AdminNavTarget<T>;
+  /** A count beside the title, read as the caller through the View's own `requires`; refused or missing shows nothing. Surface: browser. */
+  readonly badge?: AdminBadge<T>;
 }
 
 /**
@@ -210,5 +218,7 @@ export function defineAdmin<T extends AdminTypes>(
     if (problem) console.error(`defineAdmin: page path '${page.path}' ${problem}; the page is skipped.`);
     return !problem;
   });
+  const badged = new Set((config.nav?.items ?? []).flatMap(item => item.badge ? [item.badge.view] : []));
+  if (badged.size > MAX_BADGE_VIEWS) console.error(`defineAdmin: nav badges read ${badged.size} Views; only the first ${MAX_BADGE_VIEWS} are counted.`);
   return { meta: meta as AdminMeta, pages, nav: { groups: config.nav?.groups ?? {}, items: (config.nav?.items ?? []) as unknown as readonly AdminNavItem[] }, layers, ...(config.mcp ? { mcp: config.mcp } : {}) };
 }

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AdminUnavailableError, mcpAppTransport, useAdminSurface, useCollectionTotal, useEntries, useEntry, useHost, useMe, useOperation, useView, type AdminHost, type AdminTransport, type McpToolResult } from "../src/app/hooks";
+import { AdminUnavailableError, mcpAppTransport, useAdminSurface, useBadges, useCollectionTotal, useEntries, useEntry, useHost, useMe, useOperation, useView, type AdminHost, type AdminTransport, type McpToolResult } from "../src/app/hooks";
 import { AdminHooksProvider } from "../src/app/hooks-context";
 import { browserTransport } from "../src/app/transport";
 import type { AdminMeta } from "../src/app/define-admin";
@@ -38,6 +38,13 @@ describe("browser transport", () => {
     expect(await browserTransport.run("restock", { sku: "a" })).toEqual({ status: "ok", data: { results: [] } });
     expect(called().url).toBe("/admin/api/operations/restock");
     expect(called().init).toMatchObject({ method: "POST", body: JSON.stringify({ sku: "a" }) });
+  });
+
+  it("reads the nav badges in one request naming the Views, and a refusal of the whole batch as unavailable", async () => {
+    stubFetch(json({ views: { "pending-count": { rows: [{ count: 3 }] }, hidden: { unavailable: true } } }), json({ error: { code: "AUTH_DENIED", message: "no" } }, 403));
+    expect(await browserTransport.badges(["pending-count", "hidden"])).toEqual({ status: "ok", data: { "pending-count": { rows: [{ count: 3 }] }, hidden: { unavailable: true } } });
+    expect(called().url).toBe("/admin/api/view-batch?names=pending-count%2Chidden");
+    expect(await browserTransport.badges(["pending-count"])).toEqual({ status: "unavailable" });
   });
 
   it("reads a 403 and a 404 as the same unavailable, and any other failure as an error", async () => {
@@ -94,7 +101,7 @@ describe("MCP App transport", () => {
     const call = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const transport = mcpAppTransport({ call, host: host() });
-    for (const reply of [await transport.entries("c", {}), await transport.entry("c", "1"), await transport.total("c"), await transport.me()]) expect(reply).toEqual({ status: "unavailable" });
+    for (const reply of [await transport.entries("c", {}), await transport.entry("c", "1"), await transport.total("c"), await transport.me(), await transport.badges(["v"])]) expect(reply).toEqual({ status: "unavailable" });
     expect(call).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -140,6 +147,7 @@ const transportOf = (overrides: Partial<AdminTransport> = {}): AdminTransport =>
   entry: async () => ({ status: "unavailable" }),
   total: async () => ({ status: "ok", data: 3 }),
   me: async () => ({ status: "unavailable" }),
+  badges: async () => ({ status: "unavailable" }),
   run: async () => ({ status: "ok", data: { results: [] } }),
   ...overrides,
 });
@@ -179,13 +187,13 @@ describe("data hooks", () => {
 
   it("pass the View's row names and no caller to the transport, and refresh what Admin shows when an operation succeeds", async () => {
     const client = new QueryClient();
-    for (const key of [["view", "pending", "x"], ["entries", "requests"], ["entry-editor", "requests", "1"], ["collection-statistics", "requests", "7d"], ["site"]]) client.setQueryData(key, 1);
+    for (const key of [["view", "pending", "x"], ["entries", "requests"], ["entry-editor", "requests", "1"], ["collection-statistics", "requests", "7d"], ["badges", "u", "browser", ["pending"]], ["site"]]) client.setQueryData(key, 1);
     const run = vi.fn(async () => ({ status: "ok", data: { results: [] } }) as const);
     const state = mount(client, transportOf({ run }), () => useOperation("approve")).seen as { run: (input: object) => Promise<unknown>; pending: boolean };
     expect(await state.run({ id: "1" })).toEqual({ results: [] });
     expect(run).toHaveBeenCalledWith("approve", { id: "1" });
     const stale = client.getQueryCache().getAll().filter(query => query.state.isInvalidated).map(query => query.queryKey[0]).sort();
-    expect(stale).toEqual(["collection-statistics", "entries", "entry-editor", "view"]);
+    expect(stale).toEqual(["badges", "collection-statistics", "entries", "entry-editor", "view"]);
     client.clear();
   });
 
@@ -198,6 +206,67 @@ describe("data hooks", () => {
     await expect(failing.run({})).rejects.toThrow("boom");
     expect(client.getQueryCache().find({ queryKey: ["view", "pending", "x"] })!.state.isInvalidated).toBe(false);
     client.clear();
+  });
+
+  describe("useBadges", () => {
+    const user = (id: string) => ({ status: "ok", data: { userId: id } });
+    const seed = (client: QueryClient, names: string[], answers: unknown, userId = "u1") => {
+      client.setQueryData(["me", "hook", "browser"], user(userId));
+      client.setQueryData(["badges", userId, "browser", names], answers === undefined ? undefined : { status: "ok", data: answers });
+    };
+    const read = (client: QueryClient, refs: { view: string; field: string }[], transport = transportOf()) => mount(client, transport, () => useBadges(refs)).seen as { count: number | undefined; status: string }[];
+
+    it("reads loading, a count, zero, unavailable and error apart, in the order asked", () => {
+      const client = new QueryClient();
+      const refs = ["a", "b", "c", "d", "e"].map(view => ({ view, field: "count" }));
+      seed(client, ["a", "b", "c", "d", "e"], { a: { rows: [{ count: 4 }] }, b: { rows: [{ count: "0" }] }, c: { unavailable: true }, d: { error: true }, e: { rows: [{ count: "many" }] } });
+      expect(read(client, refs)).toEqual([{ count: 4, status: "ready" }, { count: 0, status: "ready" }, { count: undefined, status: "unavailable" }, { count: undefined, status: "error" }, { count: undefined, status: "error" }]);
+      const waiting = new QueryClient();
+      waiting.setQueryData(["me", "hook", "browser"], user("u1"));
+      expect(read(waiting, [refs[0]!])).toEqual([{ count: undefined, status: "loading" }]);
+      client.clear(); waiting.clear();
+    });
+
+    it("asks nothing when there is no badge, and one query for every badge even when two share a View", () => {
+      const none = new QueryClient();
+      expect(read(none, [])).toEqual([]);
+      expect(none.getQueryCache().find({ queryKey: ["badges"] })).toBeUndefined();
+      const some = new QueryClient();
+      read(some, [{ view: "a", field: "count" }, { view: "b", field: "count" }, { view: "a", field: "total" }]);
+      expect(some.getQueryCache().findAll({ queryKey: ["badges"] }).map(query => query.queryKey)).toEqual([["badges", undefined, "browser", ["a", "b"]]]);
+      none.clear(); some.clear();
+    });
+
+    it("keys by the signed-in user, so another identity never reads this one's counts", () => {
+      const client = new QueryClient();
+      seed(client, ["a"], { a: { rows: [{ count: 9 }] } }, "u1");
+      client.setQueryData(["me", "hook", "browser"], user("u2"));
+      expect(read(client, [{ view: "a", field: "count" }])).toEqual([{ count: undefined, status: "loading" }]);
+      client.clear();
+    });
+
+    it("counts only the first 20 distinct Views; the rest read as unavailable", () => {
+      const client = new QueryClient(), views = Array.from({ length: 21 }, (_, i) => "v" + i);
+      seed(client, views.slice(0, 20), Object.fromEntries(views.map(v => [v, { rows: [{ count: 1 }] }])));
+      const states = read(client, views.map(view => ({ view, field: "count" })));
+      expect(states.slice(0, 20).every(state => state.status === "ready")).toBe(true);
+      expect(states[20]).toEqual({ count: undefined, status: "unavailable" });
+      client.clear();
+    });
+
+    it("is unavailable where the surface has no signed-in user to key by (an MCP host)", () => {
+      const client = new QueryClient();
+      client.setQueryData(["me", "hook", "mcp-app"], { status: "unavailable" });
+      expect(mount(client, mcpAppTransport({ host: host() }), () => useBadges([{ view: "a", field: "count" }])).seen).toEqual([{ count: undefined, status: "unavailable" }]);
+      client.clear();
+    });
+
+    it("refreshes after 30 s of staleness or a mutation, never by polling", async () => {
+      const { queryClient } = await import("../src/app/query-client");
+      const defaults = queryClient.getQueryDefaults(["badges", "u", "browser", ["a"]]);
+      expect(defaults).toMatchObject({ staleTime: 30_000, refetchOnWindowFocus: true });
+      expect(defaults).not.toHaveProperty("refetchInterval");
+    });
   });
 
   it("give no run where the surface cannot write", () => {

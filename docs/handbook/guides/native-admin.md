@@ -94,6 +94,7 @@ routes. Send JSON with `Content-Type: application/json`.
 | `POST /entries/{id}/unpublish?collection=<schema>` | Body `{ expectedVersion }`; returns the entry to draft. |
 | `POST /operations/{name}` | Body is the Procedure's input; runs an Admin operation (a Procedure with `requires: ctx.admin` or a `target`). |
 | `GET /views/{name}` | Generated admin View query parameters plus `limit`/`cursor`; returns `{ rows, nextCursor? }`. |
+| `GET /view-batch?names=a,b` | One to 20 comma-separated admin View names, deduplicated; reads the first row of each as the caller, with the single route's checks (`requires`, scope, TTL, `authorize`), and returns `{ views: { <name>: { rows } \| { unavailable: true } \| { error: true } } }`. A refused View and a missing one are the same `{ unavailable: true }`; a View that cannot answer with no input is `{ error: true }`. Neither fails the batch. Empty or more than 20 names is a 400, before the database is acquired. |
 | `GET /me` | Returns `{ userId, role, admin, login, image }` for the signed-in caller. |
 
 Entry create/read/patch/transitions return
@@ -136,6 +137,7 @@ refused View or collection from a missing one. Showing or hiding a component gra
 | `useEntry(collection, id)` | `GET /entries/{id}` | browser only |
 | `useCollectionTotal(collection)` | `GET /collections/{name}/statistics`, its `total` | browser only |
 | `useMe()` | `GET /me` | browser only |
+| `useBadges(refs)` -> one `{ count, status }` per `{ view, field }`, in order; [freshness below](#sidebar-badges) | `GET /view-batch` | browser only |
 
 In an MCP host, `useView` and `useOperation` call the View's or operation's admin MCP tool (its name lowercased, kebab to snake) through the host (`tools/call`),
 under the caller's MCP authorization; the browser-only hooks read `unavailable` there, so declare the data an App needs as an
@@ -265,7 +267,9 @@ Pages keep native NULL ordering, id ties, microsecond timestamp keys and an
 opaque cursor bound to caller, input, filters and ordering. Malformed/foreign
 cursors and unknown selectors fail before acquiring the route's DB handle;
 the app's authentication may already have used its own database. Admin manifest
-Views retain their complete proved key tuple, not a two-key approximation.
+Views retain their complete proved key tuple, not a two-key approximation. A View without a key is accepted only as a proved
+singleton, such as an aggregate without `GROUP BY` (`SELECT COUNT(*) AS count FROM requests WHERE status = 'submitted'`): it
+returns its one row on one page and has no cursor.
 
 Generated full/partial input checks validate creates, edits, operations and
 filters. Plain titled string `oneOf` choices use the same enum checks; general
@@ -412,6 +416,14 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
   View input are typed from the generated manifest, so a misspelling or a wrong preset fails `tsc`. Several items may lead to
   one resource with different presets. An item whose collection or View the caller cannot see is not shown; showing or
   hiding one changes no permission, because the target's own route still decides.
+- <a id="sidebar-badges"></a>`badge: { view, field }` on an item shows a count after its title: `field` of the one row an aggregate admin View
+  returns, typically one with `uiSchema.nav.hidden: true` so it stays out of Reports. The View is typed from the generated manifest
+  and runs for the current caller through its own `requires`, scope and TTL, with no system fallback. Admin reads every badge of the
+  sidebar in one `GET /view-batch` (the first 20 distinct Views; `defineAdmin` logs the rest and they show nothing). Zero shows a muted
+  `0`, loading a placeholder and an unreadable count `!`. A refused or missing View shows nothing, so a badge never reveals a queue
+  the caller cannot read, and no state blocks the link. Counts are cached for 30 seconds, read again when the window regains
+  focus, and refreshed after a mutation through Admin's shared query cache (`useOperation` or any Admin write); there is no polling.
+  The cache is keyed by the signed-in user. A replacement `Sidebar` reads the same counts with `useBadges`. Badges are browser only.
 - `pages` adds a page of the application's own inside Admin's shell: `{ path, title, element, icon?, nav? }`. `path` is one
   segment of lowercase letters, digits and hyphens, and the page is at `/admin/p/<path>`. `nav: { group, order? }` places it in
   the sidebar with the other entries of that group (the same group ids as `nav.items`: a built-in group, or one that a manifest

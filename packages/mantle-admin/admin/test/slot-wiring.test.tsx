@@ -6,6 +6,8 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { SidebarProvider, TooltipProvider } from "@aotter/mantle-ui/kit";
 import { defineAdmin, type AdminMeta } from "../src/app/define-admin";
+import { AdminHooksProvider } from "../src/app/hooks-context";
+import { browserTransport } from "../src/app/transport";
 import { PreferencesProvider } from "../src/app/preferences";
 import { AdminRouterProvider } from "../src/app/router";
 import { ProjectNavProvider, type ProjectNav } from "../src/app/project-nav";
@@ -70,6 +72,39 @@ describe("Admin's built-in components through their slots", () => {
     const activeLabels = (html: string) => [...html.matchAll(/data-active="true"[^>]*>.*?<span[^>]*>([^<]*)<\/span>/g)].map((m) => m[1]);
     expect(activeLabels(at("/admin/c/requests", "?filter_field=status&filter_value=rejected"))).toEqual(["Rejected"]);
     expect(activeLabels(at("/admin/c/requests", ""))).toEqual(["requests"]);
+  });
+
+  describe("nav badges", () => {
+    const badged = (answers: unknown, user: string | null = "u1") => {
+      const client = new QueryClient();
+      if (user) client.setQueryData(["me", "hook", "browser"], { status: "ok", data: { userId: user } });
+      if (answers !== undefined) client.setQueryData(["badges", "u1", "browser", ["pending-count"]], { status: "ok", data: answers });
+      const groups = [{ title: "Reports", items: [{ title: "Waiting", url: "/admin/views/pending-count", badge: { view: "pending-count", field: "count" } }, { title: "Other", url: "/admin/c/requests" }] }];
+      return renderToStaticMarkup(
+        <PreferencesProvider initialLanguage="en"><QueryClientProvider client={client}><AdminHooksProvider meta={admin} transport={browserTransport}>
+          <TooltipProvider><AdminRouterProvider>
+            <ShellContext.Provider value={{ brand: { title: "Acme" }, publicUrl: undefined, workspaceLink: undefined, actionsHostRef: () => {}, user: { login: "ada", image: null, role: "admin" } }}>
+              <SidebarProvider><AppSidebar brand={{ title: "Acme" }} groups={groups} /></SidebarProvider>
+            </ShellContext.Provider>
+          </AdminRouterProvider></TooltipProvider>
+        </AdminHooksProvider></QueryClientProvider></PreferencesProvider>,
+      );
+    };
+    const marks = (html: string) => [...html.matchAll(/data-badge="(\w+)"[^>]*>([^<]*)</g)].map((m) => [m[1], m[2]]);
+
+    it("renders a count, zero, loading and error apart, and nothing for an unavailable or absent View", () => {
+      expect(marks(badged({ "pending-count": { rows: [{ count: 7 }] } }))).toEqual([["count", "7"]]);
+      expect(marks(badged({ "pending-count": { rows: [{ count: 120 }] } }))).toEqual([["count", "99+"]]);
+      expect(marks(badged({ "pending-count": { rows: [{ count: 0 }] } }))).toEqual([["zero", "0"]]);
+      expect(marks(badged({ "pending-count": { error: true } }))).toEqual([["error", "!"]]);
+      expect(marks(badged(undefined))).toEqual([["loading", "0"]]);
+      expect(marks(badged({ "pending-count": { unavailable: true } }))).toEqual([]);
+      expect(marks(badged({}))).toEqual([]);
+    });
+
+    it("never blocks navigation: the link renders whatever the badge reads", () => {
+      for (const answers of [undefined, { "pending-count": { error: true } }, { "pending-count": { unavailable: true } }]) expect(badged(answers)).toContain('href="/admin/views/pending-count"');
+    });
   });
 
   it("replaces the brand inside the built-in sidebar", () => {
