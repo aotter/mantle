@@ -118,12 +118,11 @@ export function MantleApp(props: {
         action={open.action}
         labels={labels}
         locale={props.locale}
-        timeZone={props.timeZone}
         onClose={() => setOpen(null)}
         onDone={() => { void refresh(); }}
         // the model reads the change at its next turn; the App never speaks for the user (`ui/message`)
         onSucceeded={() => { void props.host.updateModelContext({
-          content: [{ type: "text", text: `${open.action.capability} succeeded on row ${String(open.row["id"])}; the list was refreshed.` }],
+          content: [{ type: "text", text: `${open.action.capability} succeeded on row ${String(open.row["id"])}.` }],
           structuredContent: { tool: open.action.capability, id: String(open.row["id"]), outcome: "succeeded" },
         }); }}
       />
@@ -188,7 +187,6 @@ function RowAction(props: {
   readonly action: AppRowAction;
   readonly labels: AppLabels;
   readonly locale: string | undefined;
-  readonly timeZone: string | undefined;
   readonly onClose: () => void;
   readonly onDone: () => void;
   readonly onSucceeded: () => void;
@@ -227,7 +225,6 @@ function RowActionPanel(props: {
   readonly automatic: readonly string[];
   readonly labels: AppLabels;
   readonly locale: string | undefined;
-  readonly timeZone: string | undefined;
   readonly onClose: () => void;
   readonly onDone: () => void;
   readonly onSucceeded: () => void;
@@ -261,7 +258,8 @@ function RowActionPanel(props: {
   const properties = (action.inputSchema.properties ?? {}) as Readonly<Record<string, FieldSchema>>;
   // a Procedure's inputs are its own: a field named created_at is not the entry's timestamp
   const fieldLabel = (field: string) => propertyLabel(field, properties[field], language);
-  const fieldValue = (field: string, value: unknown) => appValue(properties[field], value, language, props.timeZone);
+  // the form's own zone: a native date input reads and writes the iframe's local time
+  const fieldValue = (field: string, value: unknown) => renderDataValue(properties[field], value, language);
   const hidden = hiddenInputs(action);
   const visible = Object.keys(properties).some((name) => !hidden.includes(name));
   return (

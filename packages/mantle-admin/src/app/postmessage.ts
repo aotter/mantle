@@ -189,8 +189,16 @@ export function connectHost(handlers: {
       capabilities,
       ...(capabilities.serverTools ? { call } : {}),
       openLink: async url => !!capabilities.openLinks && web(url) && !!await ask("ui/open-link", { url }),
-      sendMessage: async text => !!capabilities.message && !!await ask("ui/message", { role: "user", content: [{ type: "text", text }] }),
-      updateModelContext: async params => !!capabilities.updateModelContext && json(params) && !!await ask("ui/update-model-context", params),
+      sendMessage: async text => !!capabilities.message?.text && !!await ask("ui/message", { role: "user", content: [{ type: "text", text }] }),
+      // only the kinds of content the host says it accepts; nothing when it accepts none of them
+      updateModelContext: async ({ content, structuredContent }) => {
+        const accepts = capabilities.updateModelContext;
+        const sent = {
+          ...(content && accepts?.text && content.every(block => block.type === "text") ? { content } : {}),
+          ...(structuredContent && accepts?.structuredContent ? { structuredContent } : {}),
+        };
+        return Object.keys(sent).length > 0 && json(sent) && !!await ask("ui/update-model-context", sent);
+      },
       requestDisplayMode: async mode => {
         if (!modes.includes(mode)) return null;
         const granted = (await ask("ui/request-display-mode", { mode }))?.mode;

@@ -57,13 +57,15 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     await app.locator('input[type="time"]').fill("12:34");
     // Closing the popover leaves the selected day in the shared form draft.
     await date.press("Escape");
+    // the primary color is the App's own (D13), not the host's inverse background
+    expect(await app.getByRole("button", { name: "執行", exact: true }).evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(250, 250, 250)");
     await app.getByRole("button", { name: "執行", exact: true }).click();
     await page.waitForFunction(() => (window as any).host.calls.length >= 2);
     const state = await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors, sizes: (window as any).host.sizes }));
     expect(state.errors).toEqual([]);
     // the model learns of the change at its next turn; the App never speaks for the user
     await expect.poll(() => page.evaluate(() => (window as any).host.contexts)).toEqual([{
-      content: [{ type: "text", text: "review_requisition succeeded on row r1; the list was refreshed." }],
+      content: [{ type: "text", text: "review_requisition succeeded on row r1." }],
       structuredContent: { tool: "review_requisition", id: "r1", outcome: "succeeded" },
     }]);
     expect(await page.evaluate(() => (window as any).host.messages)).toEqual([]);
@@ -74,6 +76,9 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     expect(state.sizes.length).toBeGreaterThan(0);
     const root = await app.locator("html").evaluate(node => ({ lang: node.lang, theme: node.dataset.theme, color: node.style.getPropertyValue("--color-text-primary") }));
     expect(root).toEqual({ lang: "zh-TW", theme: "dark", color: "rgb(1, 2, 3)" });
+    // a bounded container: the App scrolls and reports a height within the bound
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { maxHeight: 200 } }));
+    await expect.poll(() => page.evaluate(() => (window as any).host.sizes.at(-1).height)).toBeLessThanOrEqual(200);
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "en", theme: "light" }));
     await expect.poll(() => app.locator("html").getAttribute("lang")).toBe("en");
     await expect.poll(() => app.locator("html").getAttribute("data-theme")).toBe("light");

@@ -27,9 +27,9 @@ passed through as the resource's `_meta.ui`. `domain` is the dedicated sandbox
 origin for hosts that serve each App from its own origin; use the form that
 host documents.
 
-An HTML loader receives `{ tools }`, the tool names this caller's `tools/list`
-shows on the endpoint (after `requires`, scopes and `authorize`), so the HTML
-it renders names no tool the caller cannot see. Zero-argument loaders keep
+An HTML loader receives `{ tools }`, the same tool names this caller's
+`tools/list` returns on the endpoint (with `authorize` configured, only those
+it allows), so the HTML it renders names no tool the caller cannot see. Zero-argument loaders keep
 working. `adminMcpApps` uses it: the catalogue it embeds holds only the Views
 and row actions in `tools`. A host that caches the resource across callers
 may hold an older catalogue; a View it does not describe still shows its rows,
@@ -82,10 +82,9 @@ success, warning), `--font-sans`, `--font-mono`, font weights, text sizes and
 radii follow the host; the primary color stays the App's own.
 
 A View result carries its rows twice, as the JSON text block and as
-`structuredContent`. Hosts may truncate long results (one host is reported to
-cut at about 150,000 characters), so keep the page an App renders well under
-that: the reference example's widest admin View is about 34,000 characters
-at the default 50 rows and about 343,000 at the 500-row maximum.
+`structuredContent`, and `limit` goes up to 500. Hosts may truncate long tool
+results, and a truncated text block is no longer JSON, so keep the pages an
+App renders small; the default is 50 rows.
 
 Checks against real hosts need an account and a public HTTPS endpoint, so
 they are manual: add the endpoint as a custom connector in each host, call a

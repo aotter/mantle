@@ -12,7 +12,7 @@ test("official supported versions establish origin; teardown acknowledges and di
   const disconnect=connectHost({ready,input:vi.fn(),result:vi.fn(),cancelled,context:vi.fn(),error:vi.fn()},win);
   const initialize=postMessage.mock.calls[0]![0];
   const send=(data:unknown,origin="https://host.test")=>receive({source:parent,origin,data} as unknown as MessageEvent);
-  send({jsonrpc:"2.0",id:initialize.id,result:{protocolVersion,hostInfo:{name:"test",version:"1"},hostCapabilities:{},hostContext:{}}});
+  send({jsonrpc:"2.0",id:initialize.id,result:{protocolVersion,hostInfo:{name:"test",version:"1"},hostCapabilities:{serverTools:{}},hostContext:{}}});
   await Promise.resolve(); await Promise.resolve();
   expect(ready).toHaveBeenCalledOnce();
   send({jsonrpc:"2.0",id:1,method:"ui/resource-teardown",params:{}},"https://other.test");
@@ -20,7 +20,7 @@ test("official supported versions establish origin; teardown acknowledges and di
   send({jsonrpc:"2.0",id:2,method:"ui/resource-teardown",params:{}});
   expect(postMessage).toHaveBeenLastCalledWith({jsonrpc:"2.0",id:2,result:{}},"https://host.test");
   expect(cancelled).toHaveBeenCalledOnce(); expect(removeEventListener).toHaveBeenCalled();
-  expect(ready.mock.calls[0]![0].call).toBeUndefined();
+  await expect(ready.mock.calls[0]![0].call("write",{})).rejects.toThrow("Invalid tool call");
   disconnect(); vi.unstubAllGlobals();
  }
 });
@@ -71,8 +71,18 @@ test("without serverTools the App gets no tool call, and requests the host did n
  disconnect();
 });
 
+test("model context carries only the content kinds the host accepts",async()=>{
+ const {postMessage,host,answer,disconnect}=await handshake({updateModelContext:{text:{}}});
+ const sent=postMessage.mock.calls.length;
+ expect(await host!.updateModelContext({structuredContent:{tool:"t"}})).toBe(false);
+ expect(postMessage.mock.calls.length).toBe(sent);
+ expect(await answer(host!.updateModelContext({content:[{type:"text",text:"done"}],structuredContent:{tool:"t"}}),{})).toBe(true);
+ expect(postMessage.mock.lastCall![0].params).toEqual({content:[{type:"text",text:"done"}]});
+ disconnect();
+});
+
 test("advertised host requests use the spec's methods; only http(s) links are opened",async()=>{
- const {postMessage,host,answer,send,disconnect}=await handshake({serverTools:{},openLinks:{},message:{text:{}},updateModelContext:{text:{}}},{availableDisplayModes:["inline"]});
+ const {postMessage,host,answer,send,disconnect}=await handshake({serverTools:{},openLinks:{},message:{text:{}},updateModelContext:{text:{},structuredContent:{}}},{availableDisplayModes:["inline"]});
  expect(typeof host!.call).toBe("function");
  const sent=postMessage.mock.calls.length;
  expect(await host!.openLink("javascript:alert(1)")).toBe(false);
