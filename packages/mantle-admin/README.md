@@ -77,6 +77,10 @@ for an app that mounts Admin inside its own providers, and it renders once the
 stored or browser language has loaded. The built-in entry is `defineAdmin({})`:
 with no generated metadata, Admin reads its collections, Views and operations
 from `/admin/api` at runtime. The prebuilt SPA is that entry, built the same way.
+Admin extensions load only in Admin built by `buildAdmin`: its page supplies the
+import map and shared modules that extension modules resolve `react` and the kit
+through. An app that renders `<MantleAdmin>` in its own build has neither, so
+extension client modules fail to load there.
 
 ## Extensions
 
