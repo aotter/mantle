@@ -13,10 +13,11 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
   if (!Object.values(plan.views).some(view=>view.surface!=="internal") && !Object.values(plan.triggers).some(trigger=>trigger.source.kind==="mcp")) return {};
   const reads: { name: string; surface: string }[] = [];
   const imports: string[] = plan.access ? ['import { userBinds } from "@aotter/mantle/user-fields";'] : [], tools: { fields: string[]; schema: string }[] = [];
-  const files:Record<string,string> = media ? emitMcpMedia(refuse) : {};
+  const mediaTools = media ? mediaDefinitions().map(({action,...tool})=>({action,...versioned(tool)})) : [];
+  const files:Record<string,string> = media ? emitMcpMedia(mediaTools, refuse) : {};
   let hasRef=false,hasWire=false;
-  const names = new Set<string>(media ? mediaDefinitions().map(tool=>"admin:"+tool.name) : []);
-  const versions = media ? mediaDefinitions().map(({action:_,...tool})=>"admin:"+tool.name+":"+versioned(tool).version) : [];
+  const names = new Set<string>(mediaTools.map(tool=>"admin:"+tool.name));
+  const versions = mediaTools.map(tool=>"admin:"+tool.name+":"+tool.version);
 
   const guard = (requires: RuntimePlan["views"][string]["requires"], path: string, binds: LoweredStatement["binds"] = [], trustedOnly = false) => {
     const lines = authLines(requires, path, binds, !target.endsWith("postgres"), trustedOnly);
@@ -46,7 +47,8 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
     const output=kind === "procedures" ? ref ? (procedure?.output.type === "object" ? procedure.output : undefined) : {type:"object",properties:{results:{type:"array",items:{type:"array",items:{type:"object"}}}},required:["results"]} : undefined;
     const annotations=kind === "views" ? {readOnlyHint:true} : procedure?.mcp;
     const wire = kind === "views" ? outputConversions(plan, name, target) : [];
-    const listed = versioned({name:tool,title:operation.title,description:operation.description ?? operation.title ?? name,inputSchema,outputSchema:output,annotations});
+    // Hashed as listed: the kernel adds a View tool's paging properties exactly so.
+    const listed = versioned({name:tool,title:operation.title,description:operation.description ?? operation.title ?? name,inputSchema:kind === "views" ? {...inputSchema,properties:{...inputSchema?.properties,limit:{type:"integer",minimum:1,maximum:500},cursor:{type:"string"}}} : inputSchema,outputSchema:output,annotations});
     versions.push(surface+":"+tool+":"+listed.version);
     hasWire ||= wire.length > 0;
     const fields=[...(description.targets.find(t => t._meta.id === `${kind === "views" ? "view" : "procedure"}:${name}`)?._meta.readOnly ? ["readOnly: true"] : []),`target: ${q({kind:kind === "views" ? "view" : "procedure",name})}${guard(operation.requires,`${kind}/${name}`, binds, procedure?.trustedOnly)}`,`name: ${q(tool)}`,`surface: ${q(surface)}`,...(operation.title?[`title: ${q(operation.title)}`]:[]),`description: ${q(listed.description)}`,"inputSchema",...(output?[`outputSchema: ${q(output)}`]:[]),...(annotations?[`annotations: ${q(annotations)}`]:[]),...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: ${kind === "views" ? `validate${index}` : `async (raw) => (await import("./validation/procedures/${file}.js")).validate(raw)`}`,...(convert?[`convert: ${convert}`]:[]),
@@ -81,7 +83,7 @@ ${tools.map(({ fields, schema }) => `  { ${fields.map(field => field === "inputS
 export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env, ctx?: import("@aotter/mantle/contracts").RequestContext) => Promise<Response | undefined> {
   // A hash of the whole generated catalogue, for people and diagnostic tools.
   const serverInfo = { version: ${q(versionOf(versions.sort()))}, ...options.serverInfo };
-  return serve<Env, Database, Handlers>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/admin" ? (await import("./mcp-media.js")).mediaTools<Handlers>(() => options.media!(env)) : [])]` : "tools"}, ${plan.access ? `{...options, serverInfo, fields: ${q(plan.access.userFields)}, accessTargets: () => import("./access-targets.js").then(m => m.targets)}` : '{...options, serverInfo, accessTargets: () => import("./access-targets.js").then(m => m.targets)}'}, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaDefinitions().filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"admin"})))} : [])]` : q(reads)});
+  return serve<Env, Database, Handlers>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/admin" ? (await import("./mcp-media.js")).mediaTools<Handlers>(() => options.media!(env)) : [])]` : "tools"}, ${plan.access ? `{...options, serverInfo, fields: ${q(plan.access.userFields)}, accessTargets: () => import("./access-targets.js").then(m => m.targets)}` : '{...options, serverInfo, accessTargets: () => import("./access-targets.js").then(m => m.targets)}'}, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaTools.filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"admin"})))} : [])]` : q(reads)});
 }
 `};
 }

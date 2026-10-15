@@ -73,7 +73,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       if (!options.gateway && caller.kind === "user" && caller.credential !== "session" && requiredScopes.some(scope => !(caller as Extract<Caller, {kind: "user"}>).scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs the required MCP scopes.", "mcp"), union(caller.scopes, requiredScopes));
     } catch (error) { return challenge(error); }
     if (surface === "admin") selected = await select();
-    const { McpServer, createMcpHandler, fromJsonSchema } = await import("@modelcontextprotocol/server");
+    const { McpServer, ProtocolErrorCode, createMcpHandler, fromJsonSchema } = await import("@modelcontextprotocol/server");
     if (request.method === "POST" && !cookieOnly && !options.gateway) await parse();
     if (tooLarge && access) return challenge(new ContractError("INPUT_VALIDATION_FAILED", "MCP body exceeds its limit.", "mcp"), undefined, true);
     if (tooLarge) return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Request body exceeds 1048576 bytes." } }, { status: 413 });
@@ -129,10 +129,14 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         }
       } catch (error) { return challenge(error); }
     }
+    const serverInfo = { name: "aotter.mantle", version: "0.2.0", ...options.serverInfo };
+    // A host's stale copy names a tool this catalogue lacks: say so, with the catalogue version, instead of the SDK's bare "not found".
+    if (!host && isRecord(parsedBody) && parsedBody.method === "tools/call" && parsedBody.id !== undefined && isRecord(parsedBody.params) && typeof parsedBody.params.name === "string" && !selected.some(tool => tool.name === (parsedBody as {params: {name: string}}).params.name))
+      return Response.json({ jsonrpc: "2.0", id: parsedBody.id, error: { code: ProtocolErrorCode.InvalidParams, message: `No tool named ${JSON.stringify(parsedBody.params.name)} exists in the current catalogue (catalogue version ${serverInfo.version}).` } });
     // Host calls execute in the SDK callback, after transport validation.
     const handler = createMcpHandler(() => {
       const schema = (value: unknown) => fromJsonSchema(value as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } });
-      const server = new McpServer({ name: "aotter.mantle", version: "0.2.0", ...options.serverInfo }, { capabilities: { tools: { listChanged: false } }, ...(options.instructions ? { instructions: options.instructions } : {}) });
+      const server = new McpServer(serverInfo, { capabilities: { tools: { listChanged: false } }, ...(options.instructions ? { instructions: options.instructions } : {}) });
       if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
       const appMeta = links ? registerApps(server, links, parsedBody) : undefined;
       for (const tool of selected) {

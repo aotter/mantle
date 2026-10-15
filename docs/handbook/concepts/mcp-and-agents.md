@@ -19,7 +19,9 @@ See [surface contracts](../reference/surface.md) for tool schemas, challenges an
 
 ## When a host shows old tools
 
-A fresh `tools/list` always returns the deployed tools, but many hosts keep their own copy and do not ask again after a deploy. Mantle sends no list-changed notifications: tools change only at deploy, and the hosts that keep copies do not act on them. Instead each tool description ends with its own version, and every result carries the deployed version (failures also state the current input schema), so a model holding an older definition can see it, correct its call or ask the user to refresh. `serverInfo.version` identifies the whole catalogue for people and diagnostic tools. The exact shapes are in [surface contracts](../reference/surface.md#tool-versions).
+A fresh `tools/list` always returns the deployed tools, but many hosts keep their own copy and do not ask again after a deploy. Mantle sends no list-changed notifications: tools change only at deploy, and the hosts that keep copies do not act on them. Instead each generated tool's description ends with its own version, and the results of a call that reaches the tool carry the deployed version, so a model holding an older definition can see it, correct its call or ask the user to refresh. Failures also state the input schema the tool is listed with now, except authorization refusals. A call naming a tool the catalogue no longer has gets the protocol's unknown-tool error, whose message gives `serverInfo.version`, the version of the whole catalogue. Refusals before a call reaches its tool, such as authentication challenges, carry neither.
+
+WebMCP tools in Admin follow the same rules through Admin's tool route. Admin's two navigation tools, `admin_get_context` and `admin_navigate`, carry no version: the page defines and runs them without a server call, so it cannot list one definition and run another, and a reload after a deploy replaces both. The exact shapes are in [surface contracts](../reference/surface.md#tool-versions).
 
 How each client refreshes its copy (as of 2026-10):
 

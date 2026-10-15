@@ -120,6 +120,18 @@ test("handler-less WebMCP dispatch accepts omitted and undefined handlers", asyn
  }
 });
 
+test("a WebMCP refusal carries the deployed tool version and, unless it is an authorization refusal, the listed input schema", async () => {
+ const {webmcpRoutes}=await import("../../src/server/webmcp.js"),{ContractError}=await import("@aotter/mantle/contracts");
+ const inputSchema={type:"object",properties:{title:{type:"string",minLength:1}},required:["title"]};
+ let refusal=new ContractError("INPUT_VALIDATION_FAILED","title is too short.","title");
+ const tools: import("@aotter/mantle/mcp").Tool<null>[]=[{name:"add",surface:"admin",description:"Add",inputSchema,validate:()=>{throw refusal;},run:async()=>({})}];
+ const ask=createAdmin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>null,caller:()=>admin,routes:webmcpRoutes({tools:[{name:"add",version:"0a1b2c3d",inputSchema}]},tools)});
+ const call=async()=>{const response=(await ask(new Request("https://example.test/admin/api/webmcp/add",{method:"POST",headers:{origin:"https://example.test","content-type":"application/json"},body:"{}"}),{}))!;return [response.status,await response.json()];};
+ expect(await call()).toEqual([400,{error:{code:"INPUT_VALIDATION_FAILED",message:"title is too short.",path:"title",toolVersion:"0a1b2c3d",inputSchema}}]);
+ refusal=new ContractError("AUTH_DENIED","No.","x");
+ expect(await call()).toEqual([403,{error:{code:"AUTH_DENIED",message:"No.",path:"x",toolVersion:"0a1b2c3d"}}]);
+});
+
 test("WebMCP ref tools require handlers with inferred and explicit type arguments", async () => {
  const ts = (await import("typescript")).default;
  const {writeFile} = await import("node:fs/promises");

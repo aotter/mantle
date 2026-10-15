@@ -237,16 +237,28 @@ content. MCP adds no prompts or non-UI resources.
 ### Tool versions
 
 Each generated tool (MCP, media, publishing and WebMCP) carries `version`, a
-short hash of its listed name, title, description, input and output schemas and
-annotations, computed by `mantle generate`; its description ends with
-`(tool version <version>)`, so an unchanged tool keeps a byte-identical
-description across deploys. MCP results add a second text block,
+short hash computed by `mantle generate` of the definition as listed: name,
+title, description without the marker, input schema (a View tool's with its
+`limit` and `cursor` paging properties), output schema and annotations. A
+localized title or description is hashed with all its locales. The description
+ends with `(tool version <version>)`, so an unchanged tool keeps a
+byte-identical description across deploys.
+
+MCP results of a call that reaches the tool add a second text block,
 `tool version <version>`; failures other than authorization refusals append
 `; input schema <JSON>`, the input schema the tool is listed with.
-`structuredContent` is unchanged. WebMCP calls return the version beside the
-output. Generated `mcp()` sets `serverInfo.version` to a hash of the whole
-generated catalogue unless `serverInfo.version` is given. Tools an application
-adds itself carry a version only if it sets one. Why: [MCP and
+`structuredContent` is unchanged. An unbatched `tools/call` naming no tool in
+the caller's catalogue is answered with JSON-RPC error `-32602` and the message
+`No tool named "<name>" exists in the current catalogue (catalogue version <serverInfo.version>).`
+Generated `mcp()` sets `serverInfo.version` to a hash of the whole generated
+catalogue unless `serverInfo.version` is given.
+
+`POST /admin/api/webmcp/{tool}` returns `{ output, version }`. A refusal's
+diagnostic adds `toolVersion`, and `inputSchema` unless it is an authorization
+refusal; internal errors and refusals before the call carry neither. Admin's
+WebMCP results repeat these as the same text block MCP adds. The navigation
+tools `admin_get_context` and `admin_navigate` have no version. Tools an
+application adds itself carry a version only if it sets one. Why: [MCP and
 agents](../concepts/mcp-and-agents.md#when-a-host-shows-old-tools).
 
 ### Declared View scalars on the wire

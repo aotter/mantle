@@ -13,6 +13,8 @@ export interface AdminToolCatalog {
 export interface AdminModelContext {
   registerTool(tool: AdminTool & { execute(input: Record<string, unknown>, context?: { signal?: AbortSignal }): Promise<unknown> }, options: { signal: AbortSignal }): void | Promise<void>;
 }
+/** UI-only tools, defined and run by this page with no server call, so they carry no version: a page cannot list one
+ *  definition and run another, and a reload after a deploy replaces both. */
 export const navigationTools: AdminTool[] = [
   { name: "admin_get_context", description: "Read the current Admin page and available admin tools. Call before navigating or changing data.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
   { name: "admin_navigate", description: "Navigate to a same-origin Admin page. Use /admin/c/{collection}, /admin/c/{collection}/{id}, /admin/views/{view}, /admin/media or a standard Admin page. This only changes the displayed page.", inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false }, annotations: { readOnlyHint: true } },
@@ -33,8 +35,19 @@ export function resultPath(catalog: AdminToolCatalog, name: string, output: unkn
 }
 /** What a tool call answers a WebMCP host: the output as structured content when it is an object, and as JSON text. */
 export interface AdminToolResult {
+  isError?: true;
   content: { type: "text"; text: string }[];
   structuredContent?: Record<string, unknown>;
+}
+
+/** What a failed call answers a WebMCP host: the message, then, as for MCP, the deployed tool version and the input
+ *  schema the tool is listed with now when the refusal names them; the diagnostic stays structured. */
+export function toolFailure(error: unknown): AdminToolResult {
+  const diagnostic = error && typeof error === "object" && "body" in error ? error.body : undefined;
+  const { toolVersion, inputSchema } = (diagnostic && typeof diagnostic === "object" ? diagnostic : {}) as { toolVersion?: unknown; inputSchema?: unknown };
+  const about = [typeof toolVersion === "string" && `tool version ${toolVersion}`, inputSchema !== undefined && `input schema ${JSON.stringify(inputSchema)}`].filter(Boolean).join("; ");
+  return { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : "Admin tool failed." }, ...(about ? [{ type: "text" as const, text: about }] : [])],
+    ...(diagnostic !== undefined ? { structuredContent: { diagnostic } } : {}) };
 }
 
 /** Call an admin tool once on Admin's tool route (`POST /admin/api/webmcp/{tool}`), with the signed-in session. A refusal
