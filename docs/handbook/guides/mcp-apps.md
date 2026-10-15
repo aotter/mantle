@@ -87,9 +87,9 @@ follow the host; the primary color stays the App's own.
 A View result carries its rows twice, as the JSON text block and as
 `structuredContent`. Hosts truncate long tool results (about 150k characters
 is reported for some), and a truncated text block is no longer JSON. So an MCP
-View page holds at most 100 rows: `tools/list` advertises `limit` up to 100,
-and a `limit` from 101 to 500 returns 100 rows with the next cursor. The
-default is 50 rows. REST and native paging keep their 500-row limit.
+View page holds at most 100 rows: `limit` still accepts 1 to 500, and a
+`limit` from 101 to 500 returns 100 rows with the next cursor, as a View's own
+SQL `LIMIT` caps a page. The default is 50 rows. REST and native paging keep their 500-row limit.
 
 Checks against real hosts need an account and a public HTTPS endpoint, so
 they are manual: add the endpoint as a custom connector in each host, call a

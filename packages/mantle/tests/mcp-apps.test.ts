@@ -150,10 +150,9 @@ test("an HTML loader renders for the tools this caller's tools/list shows, and o
   expect(rendered).toEqual([listed]);
 });
 
-test("an MCP page advertises and returns at most 100 rows; 101..500 are clamped with the next cursor, above 500 refused", async () => {
+test("an MCP page returns at most 100 rows; 101..500 are clamped with the next cursor, above 500 refused", async () => {
   const limits: unknown[] = [];
   const api = mcp([{ ...tools[0]!, page: async (_db, _caller, _input, paging) => { limits.push(paging.limit); return { rows: [], nextCursor: "next" }; } }], { db: () => null, caller: () => ({ kind: "anonymous" }) });
-  expect((await call(api, "tools/list")).result.tools[0].inputSchema.properties.limit).toEqual({ type: "integer", minimum: 1, maximum: 100 });
   for (const limit of [20, 100, 101, 500]) expect((await call(api, "tools/call", { name: "public_rows", arguments: { limit } })).result.structuredContent).toEqual({ rows: [], nextCursor: "next" });
   expect(limits).toEqual([20, 100, 100, 100]);
   expect((await call(api, "tools/call", { name: "public_rows", arguments: { limit: 501 } })).result.isError).toBe(true);

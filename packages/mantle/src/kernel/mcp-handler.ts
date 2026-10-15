@@ -14,13 +14,14 @@ const text = (value: LocalizedText | undefined, locale: string): string | undefi
 function observe<T>(listener: ((event: T) => void | Promise<void>) | undefined, event: T): void {
   if (listener) try { void Promise.resolve(listener(event)).catch(() => {}); } catch {}
 }
+const paging = (schema: { properties?: object }) => ({ ...schema, properties: { ...schema.properties, limit: { type: "integer", minimum: 1, maximum: 500 }, cursor: { type: "string" } } });
 /**
  * An MCP page holds at most 100 rows, so a wide View's result (its rows twice: text and
  * `structuredContent`) stays well under the ~150k characters at which hosts are reported to
- * truncate. A limit up to 500 is still accepted and returns 100 rows with the next cursor.
+ * truncate. The listed schema, which the tool version hashes, keeps 1..500: a larger limit
+ * returns 100 rows with the next cursor, as a View's own LIMIT caps a page.
  */
 const MCP_PAGE_SIZE = 100;
-const paging = (schema: { properties?: object }) => ({ ...schema, properties: { ...schema.properties, limit: { type: "integer", minimum: 1, maximum: MCP_PAGE_SIZE }, cursor: { type: "string" } } });
 const pageLimit = (raw: Record<string, unknown>) => { const limit = raw?.limit; return Number.isSafeInteger(limit) && (limit as number) > MCP_PAGE_SIZE && (limit as number) <= MAX_PAGE_SIZE ? { ...raw, limit: MCP_PAGE_SIZE } : raw; };
 /** The scopes a challenge asks for: the credential's, plus what the request needs. */
 const union = (scopes: readonly string[], extra: readonly string[]) => [...new Set([...scopes, ...extra])].join(" ");
