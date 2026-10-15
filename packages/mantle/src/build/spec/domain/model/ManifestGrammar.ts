@@ -368,7 +368,8 @@ export interface ProcedureManifestSpec {
    *  `{ sql }` (write statements, compiled to the plan's IR; ADR-0034). */
   readonly handler: HandlerBinding;
   /** MCP tool annotations the author declares because Core cannot infer
-   *  them for a `ref` handler (#972). Emitted verbatim on the tool;
+   *  them for a `ref` handler (#972). They override the generated defaults
+   *  (`procedureAnnotations`);
    *  An `x-mcp-hint: idempotency-key` input does not infer an
    *  `idempotentHint` annotation in 0.2. A `readOnlyHint: true` on a `sql`
    *  handler, which always writes, is rejected at validation. */

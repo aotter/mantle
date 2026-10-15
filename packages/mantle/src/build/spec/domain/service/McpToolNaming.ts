@@ -1,5 +1,5 @@
 import { INPUT_RULE_KEYWORDS, resolveLocalizedText, type AuthorizationRequirements, type JsonSchema, type LocalizedText, type ProcedureMcpAnnotations } from "../model/ManifestGrammar.js";
-import type { RuntimePlan } from "../model/RuntimePlan.js";
+import type { PlanProcedure, RuntimePlan } from "../model/RuntimePlan.js";
 import { rootRefChain } from "./RootRefChain.js";
 
 /**
@@ -9,6 +9,25 @@ import { rootRefChain } from "./RootRefChain.js";
 export function mcpToolNameSegment(name: string): string {
   return name.toLowerCase().replace(/-/g, "_");
 }
+
+/** A tool title from a name when the manifest declares none: `add-item`, `addItem` and `add_item` read `Add item`. */
+export function toolTitle(name: string): string {
+  const words = name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[-_.\s]+/g, " ").trim().toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export const viewAnnotations = { readOnlyHint: true, destructiveHint: false } as const;
+/**
+ * A Procedure's tool hints: declared ones win; otherwise it writes, and is destructive unless its SQL only inserts. A ref handler
+ * is opaque, so destructive. Hints only: authorization never reads them.
+ */
+export function procedureAnnotations(p: PlanProcedure): ProcedureMcpAnnotations {
+  const readOnlyHint = p.mcp?.readOnlyHint ?? false;
+  return { readOnlyHint, destructiveHint: !readOnlyHint && ("ref" in p.handler || overwrites(p.handler.sql.stmts)), ...p.mcp };
+}
+/** Any DELETE, UPDATE or upsert DO UPDATE, a writable CTE included. */
+const overwrites = (node: unknown): boolean => !!node && typeof node === "object" &&
+  ("DeleteStmt" in node || "UpdateStmt" in node || (node as { onConflictClause?: { action?: string } }).onConflictClause?.action === "ONCONFLICT_UPDATE" || Object.values(node).some(overwrites));
 
 /** One MCP tool and the Procedure or View it comes from. */
 export interface McpTool {
@@ -40,11 +59,11 @@ export function mcpTools(plan: RuntimePlan, surface: "public" | "admin", locale 
     const p = plan.procedures[t.procedure]!;
     const title = text(p.title);
     add({
-      name: mcpToolNameSegment(t.procedure), kind: "procedure", source: t.procedure, ...(title ? { title } : {}),
+      name: mcpToolNameSegment(t.procedure), kind: "procedure", source: t.procedure, title: title ?? toolTitle(t.procedure),
       description: text(p.description) ?? title ?? t.procedure, inputSchema: p.input,
       // structuredContent must be an object
       ...(p.output.type === "object" ? { outputSchema: p.output } : {}),
-      ...(p.mcp ? { annotations: p.mcp } : {}), requires: p.requires,
+      annotations: procedureAnnotations(p), requires: p.requires,
     });
   }
   for (const [name, v] of Object.entries(plan.views)) {
@@ -57,11 +76,11 @@ export function mcpTools(plan: RuntimePlan, surface: "public" | "admin", locale 
     if ("limit" in props || "cursor" in props) throw new TypeError(`View '${name}' declares an input named limit or cursor; the MCP tool reserves both for paging.`);
     const title = text(v.title);
     add({
-      name: mcpToolNameSegment(name), kind: "view", source: name, ...(title ? { title } : {}), description: text(v.description) ?? title ?? name,
+      name: mcpToolNameSegment(name), kind: "view", source: name, title: title ?? toolTitle(name), description: text(v.description) ?? title ?? name,
       inputSchema: { type: "object", properties: { ...props, limit: { type: "integer", minimum: 1, maximum: 500 }, cursor: { type: "string" } }, ...(required.length ? { required } : {}),
         // Input rules stay: describe keeps them, AI tool catalogues turn them into sentences.
         ...Object.fromEntries(chain.flatMap((s) => INPUT_RULE_KEYWORDS.flatMap((k) => s[k] === undefined ? [] : [[k, s[k]]]))) } as JsonSchema,
-      annotations: { readOnlyHint: true }, requires: v.requires,
+      annotations: viewAnnotations, requires: v.requires,
     });
   }
   return [...tools.values()];

@@ -232,14 +232,36 @@ as an explicit option.
 ### MCP catalogue and callbacks
 
 `mcp({ db, caller, handlers?, locale?, instructions?, serverInfo?, requiredScopes?,
-resourceMetadata?, onObservation?, onRefusal? })` keeps the SDK behind its first
+resourceMetadata?, allowedOrigins?, onObservation?, onRefusal? })` keeps the SDK behind its first
 request. Locale defaults to `en`; localized titles/descriptions fall back to
-English, then their first entry. Views advertise `readOnlyHint`; Procedures use
-their declared MCP annotations. `instructions` is returned by initialize.
+English, then their first entry. Tools carry the [tool hints](procedure.md#mcp-tool-hints). `instructions` is returned by initialize.
 The scope floor defaults to `["mcp"]` for every credential except cookie sessions;
 `requiredScopes: []` disables that floor. An anonymous closed surface challenges
 from initialize, and every call in a batch is checked before any call runs.
 `resourceMetadata` overrides the challenge URL for reverse proxies.
+
+Both endpoints answer a request without `Origin`, which is what server-side MCP
+clients send. A present `Origin` marks a browser: it must name a loopback host
+(`localhost`, `127.0.0.1`, `[::1]`, any port) or an `allowedOrigins` entry, else
+403 before authentication on every credential; `Origin: null` is refused. The
+site's own origin is not implied, because a DNS-rebinding page sends an `Origin`
+equal to the `Host` it rebound, so a browser client served from your deployed
+site lists that origin: `allowedOrigins: ["https://app.example"]`. Entries are
+compared by hostname as the official SDK does (not scheme or port); each is a
+full origin (`https://console.example`) or the SDK's bare host
+(`console.example`, `localhost:8787`), and anything else, such as a path, throws
+when `mcp(...)` is configured; so does a wildcard such as `*` or
+`https://*.example.com`, since entries are matched by exact hostname. `Host` is
+not checked. Cookie writes also need the full same-origin check.
+
+`/mcp` sends no CORS headers. `allowedOrigins` therefore serves pages on the
+same origin as the endpoint, or clients behind a proxy that forwards their
+`Origin`; a browser client on another origin also needs the app to answer
+preflight and add CORS headers itself. Under `wrangler dev` with `routes` or
+`dev.host`, Miniflare rewrites an `Origin` equal to the request's own origin to
+the route or `dev.host` origin, and a DNS-rebinding request always has that
+shape. Listing that host would admit rebinding against the local server, so keep
+the route and `dev.host` hosts out of `allowedOrigins` in local development.
 
 `onObservation` receives request refusals and invocation attempt/completion
 metadata, including duration and outcome. Its Caller and scopes are frozen copies.
@@ -256,6 +278,44 @@ revalidate native database rows. Business failures carry diagnostics in text;
 with an output schema they omit `structuredContent` to avoid validating an error
 against a success schema. Without one they also expose diagnostic structured
 content. MCP adds no prompts or non-UI resources.
+
+### Tool versions
+
+Each generated tool (MCP, media, publishing and WebMCP) carries `version`, a
+short hash computed by `mantle generate` of the definition as listed: name,
+title, description without the marker, input schema (a View tool's with its
+`limit` and `cursor` paging properties), output schema and annotations. A
+localized title or description is hashed with all its locales. The description
+ends with `(tool version <version>)`, so an unchanged tool keeps a
+byte-identical description across deploys.
+
+MCP results of a call that reaches the tool add a second text block,
+`tool version <version>`; failures other than authorization refusals append
+`; input schema <JSON>`, the input schema the tool is listed with.
+`structuredContent` is unchanged. A `tools/call` naming a tool the endpoint
+serves but the caller may not use is answered by the authentication or
+authorization challenge (HTTP 401 or 403) before the SDK's transport and
+request checks, even though that caller's `tools/list` omits the tool. A
+`tools/call` naming a tool not in the endpoint's catalogue, in a batch or not
+and from a host caller too, is answered with JSON-RPC error `-32602` and the
+message
+`No tool named "<name>" exists in the current catalogue (catalogue version <serverInfo.version>).`
+For such a name the SDK's transport and request checks (headers, protocol
+version, JSON-RPC shape) answer first, so a malformed request gets the same
+refusal as one naming a served tool the caller may use.
+Unless `serverInfo.version` is given, the kernel's `mcp()` sets it to
+a hash of the `surface:name:version` of every tool the endpoint serves, before
+per-caller filtering, so `/mcp` and `/mcp/admin` each report their own catalogue
+version, and it changes when a generated tool's definition changes or a tool is
+added or removed, however the tools are wired.
+
+`POST /admin/api/webmcp/{tool}` returns `{ output, version }`. A refusal's
+diagnostic adds `toolVersion`, and `inputSchema` unless it is an authorization
+refusal; internal errors and refusals before the call carry neither. Admin's
+WebMCP results repeat these as the same text block MCP adds. The navigation
+tools `admin_get_context` and `admin_navigate` have no version. Tools an
+application adds itself carry a version only if it sets one. Why: [MCP and
+agents](../concepts/mcp-and-agents.md#when-a-host-shows-old-tools).
 
 ### Declared View scalars on the wire
 
