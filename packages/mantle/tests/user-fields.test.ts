@@ -258,11 +258,17 @@ test('#1644: an IN-scoped or IN-restricted prefix does not serve ORDER BY; the r
   }
   // The suggested order keeps the authored direction, and every set-bound prefix column needs its own equality.
   const desc=await generateOrThrow(target,[{sourceId:'d.yaml',text:[inScoped(true),inView('listed','ORDER BY orderNo DESC')].join('\n---\n')}]).then(()=>'',(e:Error)=>e.message);
-  expect(desc).toContain('ORDER BY region DESC, orderNo DESC (served by the same index)');
+  expect(desc).toContain('ORDER BY region DESC, orderNo DESC (served by the same index, read backwards; on PostgreSQL confirm with EXPLAIN that no Sort remains)');
   const two=JSON.parse(inScoped(true));two.spec.scope+=" AND store IN auth.user('store')";two.spec.indexes=[['region','store','orderNo','id']];two.spec.schema.required.push('store');two.spec.schema.properties.store={type:'string'};
   const both=await generateOrThrow(target,[{sourceId:'e.yaml',text:[JSON.stringify(two),inView('listed','ORDER BY orderNo')].join('\n---\n')}]).then(()=>'',(e:Error)=>e.message);
   expect(both).toContain("only after 'region', 'store', which");
   expect(both).toContain('ORDER BY region, store, orderNo (served by the same index); a View input bound with equality, e.g. WHERE region = input.region AND store = input.store, which fixes the prefix');
+  // An equality-fixed column between the set-bound one and the order stays in the suggestion, and following it generates.
+  const mid=JSON.parse(inScoped(true));mid.spec.indexes=[['region','tier','orderNo','id']];
+  const tiered=(sql:string)=>[JSON.stringify(mid),inView('listed',sql,'public',{input:{type:'object',required:['tier'],properties:{tier:{type:'string'}}}})].join('\n---\n');
+  const midError=await generateOrThrow(target,[{sourceId:'m.yaml',text:tiered('WHERE tier = input.tier ORDER BY orderNo')}]).then(()=>'',(e:Error)=>e.message);
+  expect(midError).toContain('ORDER BY region, tier, orderNo (served by the same index)');
+  await generateOrThrow(target,[{sourceId:'n.yaml',text:tiered('WHERE tier = input.tier ORDER BY region, tier, orderNo')}]);
   // An order no index serves keeps the plain message.
   await expect(generateOrThrow(target,[{sourceId:'b.yaml',text:[inScoped(true),inView('listed','ORDER BY tier')].join('\n---\n')}])).rejects.toThrow(/Missing index for ORDER BY \(tier\): declare a Schema index/);
  }

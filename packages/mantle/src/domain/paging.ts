@@ -143,10 +143,13 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
           if (!serving(base.fixed)) {
             const index = serving(new Set([...base.fixed, ...base.sets])), named = (c: string) => schema.names?.[c] ?? c, columns = order.map(f => named(f.name)).join(", ");
             if (!index) return fail(`Missing index for ORDER BY (${order.map(f => f.name).join(", ")}): declare a Schema index with these ordered columns after any fixed equality prefix.`);
-            const set = index.slice(0, index.indexOf(order[0]!.name)).filter(c => !base!.fixed.has(c)).map(named);
+            const prefix = index.slice(0, index.indexOf(order[0]!.name)), set = prefix.filter(c => !base!.fixed.has(c)).map(named);
+            // The suggested order is the index from its first set-bound column: an equality-fixed column between stays in it.
+            const lead = prefix.slice(prefix.findIndex(c => !base!.fixed.has(c))).map(named);
             const dir = (f: Field) => sorts[keys.indexOf(f)]!.SortBy.sortby_dir === "SORTBY_DESC" ? " DESC" : "";
-            const sorted = [...set.map(c => c + dir(order[0]!)), ...order.map(f => named(f.name) + dir(f))].join(", ");
-            return fail(`ORDER BY (${columns}) is served by index [${index.map(named).join(", ")}] only after ${set.map(c => `'${c}'`).join(", ")}, which a user-field scope or restrict fixes to a set of values, not one value: every page would read and sort all of the caller's rows. Bounded ways: ORDER BY ${sorted} (served by the same index); a View input bound with equality, e.g. WHERE ${set.map(c => `${c} = input.${c}`).join(" AND ")}, which fixes the prefix (the scope or restrict still applies); or, for Views read by { all: true } callers, an index on the ORDER BY columns alone, e.g. [${columns}] (not bounded for scoped callers).`);
+            const sorted = [...lead.map(c => c + dir(order[0]!)), ...order.map(f => named(f.name) + dir(f))].join(", ");
+            const desc = order.some(f => dir(f)) ? ", read backwards; on PostgreSQL confirm with EXPLAIN that no Sort remains" : "";
+            return fail(`ORDER BY (${columns}) is served by index [${index.map(named).join(", ")}] only after ${set.map(c => `'${c}'`).join(", ")}, which a user-field scope or restrict fixes to a set of values, not one value: every page would read and sort all of the caller's rows. Bounded ways: ORDER BY ${sorted} (served by the same index${desc}); a View input bound with equality, e.g. WHERE ${set.map(c => `${c} = input.${c}`).join(" AND ")}, which fixes the prefix (the scope or restrict still applies); or, for Views read by { all: true } callers, an index on the ORDER BY columns alone, e.g. [${columns}] (not bounded for scoped callers).`);
           }
         }
       }
