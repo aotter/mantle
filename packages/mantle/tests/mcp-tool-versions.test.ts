@@ -89,8 +89,10 @@ const connect=async(handle:(request:Request,env:unknown)=>Promise<Response|undef
  return client;
 };
 /** What tools/list returns, without the marker, hashes to the version the marker advertises. */
-const expectListedHashes=(tools:readonly {name:string;title?:string;description?:string;inputSchema:unknown;outputSchema?:unknown;annotations?:unknown}[])=>{
+const expectListedHashes=(tools:readonly {name:string;title?:string;description?:string;inputSchema:unknown;outputSchema?:unknown;annotations?:{destructiveHint?:boolean}}[])=>{
  expect(tools.length).toBeGreaterThan(0);
+ // Default titles and hints are part of the listed definition, so they are part of what the version hashes.
+ expect(tools.every(t=>!!t.title&&typeof t.annotations?.destructiveHint==="boolean")).toBe(true);
  for(const {name,title,description,inputSchema,outputSchema,annotations} of tools){
   const [,text,version]=/^(.*) \(tool version ([0-9a-f]{8})\)$/s.exec(description!)!;
   expect([name,versionOf({name,title,description:text,inputSchema,outputSchema,annotations})]).toEqual([name,version!]);
@@ -134,7 +136,7 @@ test("/mcp/admin over the official client: publishing and media tools carry mark
  const admin=fixtureCaller({kind:"user",subject:"u",role:"admin",admin:true,scopes:["mcp"],credential:"session",credentialId:null,clientId:null});
  const storage={async createUpload(){throw Error("unused");},async commitUpload(){throw Error("unused");},async deleteObject(){}};
  await withApp(generated.files,async(mcp,db)=>{
-  const handle=mcp({db:()=>db,caller:()=>admin,media:()=>storage});
+  const handle=mcp({db:()=>db,allowedOrigins:["https://app.test"],caller:()=>admin,media:()=>storage});
   for(const mode of eras){
    const client=await connect(handle,mode,"/mcp/admin",{cookie:"fixture=1",origin:"https://app.test"});
    const {tools}=await client.listTools(),version=(name:string)=>/\(tool version ([0-9a-f]{8})\)$/.exec(tools.find(t=>t.name===name)!.description!)![1];

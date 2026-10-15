@@ -232,14 +232,36 @@ as an explicit option.
 ### MCP catalogue and callbacks
 
 `mcp({ db, caller, handlers?, locale?, instructions?, serverInfo?, requiredScopes?,
-resourceMetadata?, onObservation?, onRefusal? })` keeps the SDK behind its first
+resourceMetadata?, allowedOrigins?, onObservation?, onRefusal? })` keeps the SDK behind its first
 request. Locale defaults to `en`; localized titles/descriptions fall back to
-English, then their first entry. Views advertise `readOnlyHint`; Procedures use
-their declared MCP annotations. `instructions` is returned by initialize.
+English, then their first entry. Tools carry the [tool hints](procedure.md#mcp-tool-hints). `instructions` is returned by initialize.
 The scope floor defaults to `["mcp"]` for every credential except cookie sessions;
 `requiredScopes: []` disables that floor. An anonymous closed surface challenges
 from initialize, and every call in a batch is checked before any call runs.
 `resourceMetadata` overrides the challenge URL for reverse proxies.
+
+Both endpoints answer a request without `Origin`, which is what server-side MCP
+clients send. A present `Origin` marks a browser: it must name a loopback host
+(`localhost`, `127.0.0.1`, `[::1]`, any port) or an `allowedOrigins` entry, else
+403 before authentication on every credential; `Origin: null` is refused. The
+site's own origin is not implied, because a DNS-rebinding page sends an `Origin`
+equal to the `Host` it rebound, so a browser client served from your deployed
+site lists that origin: `allowedOrigins: ["https://app.example"]`. Entries are
+compared by hostname as the official SDK does (not scheme or port); each is a
+full origin (`https://console.example`) or the SDK's bare host
+(`console.example`, `localhost:8787`), and anything else, such as a path, throws
+when `mcp(...)` is configured; so does a wildcard such as `*` or
+`https://*.example.com`, since entries are matched by exact hostname. `Host` is
+not checked. Cookie writes also need the full same-origin check.
+
+`/mcp` sends no CORS headers. `allowedOrigins` therefore serves pages on the
+same origin as the endpoint, or clients behind a proxy that forwards their
+`Origin`; a browser client on another origin also needs the app to answer
+preflight and add CORS headers itself. Under `wrangler dev` with `routes` or
+`dev.host`, Miniflare rewrites an `Origin` equal to the request's own origin to
+the route or `dev.host` origin, and a DNS-rebinding request always has that
+shape. Listing that host would admit rebinding against the local server, so keep
+the route and `dev.host` hosts out of `allowedOrigins` in local development.
 
 `onObservation` receives request refusals and invocation attempt/completion
 metadata, including duration and outcome. Its Caller and scopes are frozen copies.

@@ -2,9 +2,11 @@ import { api, ApiError, refusalOf } from "./api";
 
 export interface AdminTool {
   name: string;
+  title?: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  annotations?: { readOnlyHint?: boolean };
+  outputSchema?: Record<string, unknown>;
+  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean; openWorldHint?: boolean; idempotentHint?: boolean };
 }
 export interface AdminToolCatalog {
   tools: AdminTool[];
@@ -16,8 +18,8 @@ export interface AdminModelContext {
 /** UI-only tools, defined and run by this page with no server call, so they carry no version: a page cannot list one
  *  definition and run another, and a reload after a deploy replaces both. */
 export const navigationTools: AdminTool[] = [
-  { name: "admin_get_context", description: "Read the current Admin page and available admin tools. Call before navigating or changing data.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
-  { name: "admin_navigate", description: "Navigate to a same-origin Admin page. Use /admin/c/{collection}, /admin/c/{collection}/{id}, /admin/views/{view}, /admin/media or a standard Admin page. This only changes the displayed page.", inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false }, annotations: { readOnlyHint: true } },
+  { name: "admin_get_context", title: "Admin get context", description: "Read the current Admin page and available admin tools. Call before navigating or changing data.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false } },
+  { name: "admin_navigate", title: "Admin navigate", description: "Navigate to a same-origin Admin page. Use /admin/c/{collection}, /admin/c/{collection}/{id}, /admin/views/{view}, /admin/media or a standard Admin page. This only changes the displayed page.", inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false } },
 ];
 export function adminPath(path: unknown): string {
   if (typeof path !== "string" || !/^\/admin(?:\/|\?|$)/u.test(path) || /[\\#\r\n]/u.test(path)) throw new TypeError("Expected an Admin page path.");
