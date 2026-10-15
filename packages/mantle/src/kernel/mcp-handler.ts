@@ -73,7 +73,9 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       if (!options.gateway && caller.kind === "user" && caller.credential !== "session" && requiredScopes.some(scope => !(caller as Extract<Caller, {kind: "user"}>).scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs the required MCP scopes.", "mcp"), union(caller.scopes, requiredScopes));
     } catch (error) { return challenge(error); }
     if (surface === "admin") selected = await select();
-    const { McpServer, ProtocolErrorCode, createMcpHandler, fromJsonSchema } = await import("@modelcontextprotocol/server");
+    // Before per-caller filtering, so every caller of a deploy sees one catalogue version.
+    const version = catalogueVersion(selected);
+    const { McpServer, ProtocolError, ProtocolErrorCode, createMcpHandler, fromJsonSchema } = await import("@modelcontextprotocol/server");
     if (request.method === "POST" && !cookieOnly && !options.gateway) await parse();
     if (tooLarge && access) return challenge(new ContractError("INPUT_VALIDATION_FAILED", "MCP body exceeds its limit.", "mcp"), undefined, true);
     if (tooLarge) return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Request body exceeds 1048576 bytes." } }, { status: 413 });
@@ -129,19 +131,26 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         }
       } catch (error) { return challenge(error); }
     }
-    const serverInfo = { name: "aotter.mantle", version: "0.2.0", ...options.serverInfo };
-    // A host's stale copy names a tool this catalogue lacks: say so, with the catalogue version, instead of the SDK's bare "not found".
-    if (!host && isRecord(parsedBody) && parsedBody.method === "tools/call" && parsedBody.id !== undefined && isRecord(parsedBody.params) && typeof parsedBody.params.name === "string" && !selected.some(tool => tool.name === (parsedBody as {params: {name: string}}).params.name))
-      return Response.json({ jsonrpc: "2.0", id: parsedBody.id, error: { code: ProtocolErrorCode.InvalidParams, message: `No tool named ${JSON.stringify(parsedBody.params.name)} exists in the current catalogue (catalogue version ${serverInfo.version}).` } });
+    const serverInfo = { name: "aotter.mantle", ...options.serverInfo, version: options.serverInfo?.version ?? version };
     // Host calls execute in the SDK callback, after transport validation.
     const handler = createMcpHandler(() => {
       const schema = (value: unknown) => fromJsonSchema(value as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } });
-      const server = new McpServer(serverInfo, { capabilities: { tools: { listChanged: false } }, ...(options.instructions ? { instructions: options.instructions } : {}) });
+      // Tools capability after construction: given to the constructor, the SDK installs its tools/call handler before the wrap below.
+      const server = new McpServer(serverInfo, options.instructions ? { instructions: options.instructions } : {});
+      server.server.registerCapabilities({ tools: { listChanged: false } });
       if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
       const appMeta = links ? registerApps(server, links, parsedBody) : undefined;
+      // A host's stale copy names a tool this catalogue lacks: say so, with the catalogue version, instead of the SDK's bare "not found".
+      // Wrapped where the SDK stores it, so transport and request validation still answer first.
+      const registered = new Set<string>(), set = server.server.setRequestHandler.bind(server.server) as (method: string, handler: unknown) => void;
+      server.server.setRequestHandler = ((method: string, handler: unknown) => set(method, method === "tools/call" && typeof handler === "function" ? (request: { params: { name: string } }, context: unknown) => {
+        if (!registered.has(request.params.name)) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `No tool named ${JSON.stringify(request.params.name)} exists in the current catalogue (catalogue version ${serverInfo.version}).`);
+        return handler(request, context);
+      } : handler)) as typeof server.server.setRequestHandler;
       for (const tool of selected) {
         const meta = appMeta?.(tool.name);
         if (meta === false) continue;
+        registered.add(tool.name);
         // Not part of structured output: the version, and on failure the current input contract.
         const about = (contract: boolean) => { const text = [tool.version && `tool version ${tool.version}`, contract && `input schema ${JSON.stringify(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema)}`].filter(Boolean).join("; "); return text ? [{ type: "text" as const, text }] : []; };
         server.registerTool(tool.name, { ...(meta ? { _meta: meta } : {}), ...(tool.title ? { title: text(tool.title, locale) } : {}), description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name, inputSchema: schema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) }, async (raw: unknown) => {
@@ -167,6 +176,8 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         }
       });
       }
+      // An empty catalogue still answers tools/list and refuses calls the same way.
+      if (registered.size === 0) { server.server.setRequestHandler("tools/list", () => ({ tools: [] })); server.server.setRequestHandler("tools/call", () => ({ content: [] })); }
       return server;
     }, { legacy: "stateless", maxRequestBodySize: 1024 * 1024, onerror: error => console.error("[mantle mcp] request failed", error) });
     const response = await handler.fetch(request, { parsedBody });
@@ -179,6 +190,12 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       return (await import("./host-caller.js")).hostFailure(error, resolved, "mcp");
     }
   };
+}
+
+/** A hash of the tools an endpoint serves (`surface:name:version`, sorted), as 32-bit FNV-1a hex: it changes with any tool's definition. */
+function catalogueVersion(tools: readonly { readonly surface: string; readonly name: string; readonly version?: string }[]): string {
+  const text = JSON.stringify(tools.map(tool => `${tool.surface}:${tool.name}:${tool.version ?? ""}`).sort());
+  return [...text].reduce((h, c) => Math.imul(h ^ c.codePointAt(0)!, 16777619) >>> 0, 2166136261).toString(16).padStart(8, "0");
 }
 
 const CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities";

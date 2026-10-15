@@ -247,11 +247,17 @@ byte-identical description across deploys.
 MCP results of a call that reaches the tool add a second text block,
 `tool version <version>`; failures other than authorization refusals append
 `; input schema <JSON>`, the input schema the tool is listed with.
-`structuredContent` is unchanged. An unbatched `tools/call` naming no tool in
-the caller's catalogue is answered with JSON-RPC error `-32602` and the message
+`structuredContent` is unchanged. A `tools/call` naming no tool the caller's
+`tools/list` would show, in a batch or not and from a host caller too, is
+answered with JSON-RPC error `-32602` and the message
 `No tool named "<name>" exists in the current catalogue (catalogue version <serverInfo.version>).`
-Generated `mcp()` sets `serverInfo.version` to a hash of the whole generated
-catalogue unless `serverInfo.version` is given.
+The SDK's transport and request checks (headers, protocol version, JSON-RPC
+shape) answer first, so a malformed request gets the same refusal whatever tool
+it names. Unless `serverInfo.version` is given, the kernel's `mcp()` sets it to
+a hash of the `surface:name:version` of every tool the endpoint serves, before
+per-caller filtering, so `/mcp` and `/mcp/admin` each report their own catalogue
+version and it changes whenever a tool's definition does, however the tools are
+wired.
 
 `POST /admin/api/webmcp/{tool}` returns `{ output, version }`. A refusal's
 diagnostic adds `toolVersion`, and `inputSchema` unless it is an authorization
