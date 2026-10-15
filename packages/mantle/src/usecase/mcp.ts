@@ -3,7 +3,7 @@ import type { AppDescription } from "../domain/describe/index.js";
 import { mcpToolNameSegment, type RuntimePlan, type PlanLowered, type LoweredStatement } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
 import { emitMcpMedia, mediaDefinitions } from "./mcp-media.js";
-import { emitValidation } from "./validation.js";
+import { advertised, emitValidation } from "./validation.js";
 import { databaseImport, q } from "../domain/entry.js";
 import { authLines, conversions } from "../domain/input.js";
 import { publishingInput } from "./publishing.js";
@@ -35,7 +35,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
       imports.push(`const run${index}: typeof import(${q(module)}).default = async (...args) => (await import(${q(module)})).default(...args);`);
     }
     // The kernel adds a View tool's `limit` and `cursor` paging properties.
-    const schema = q(kind === "views" ? operation.input ?? {type:"object",additionalProperties:false} : operation.input);
+    const { inputSchema, description: about } = advertised(kind === "views" ? operation.input ?? {type:"object",additionalProperties:false} : operation.input, operation.description ?? operation.title ?? name), schema = q(inputSchema);
     if (kind === "views" && ("limit" in (operation.input?.properties ?? {}) || "cursor" in (operation.input?.properties ?? {}))) refuse(`views/${name}`, "MCP View input reserves limit and cursor for paging.");
     if(names.has(surface+":"+tool)) refuse(`${kind}/${name}`,`MCP tool name ${tool} collides on ${surface}.`);
     names.add(surface+":"+tool);
@@ -45,7 +45,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
     const annotations=kind === "views" ? {readOnlyHint:true} : procedure?.mcp;
     const wire = kind === "views" ? outputConversions(plan, name, target) : [];
     hasWire ||= wire.length > 0;
-    const fields=[...(description.targets.find(t => t._meta.id === `${kind === "views" ? "view" : "procedure"}:${name}`)?._meta.readOnly ? ["readOnly: true"] : []),`target: ${q({kind:kind === "views" ? "view" : "procedure",name})}${guard(operation.requires,`${kind}/${name}`, binds, procedure?.trustedOnly)}`,`name: ${q(tool)}`,`surface: ${q(surface)}`,...(operation.title?[`title: ${q(operation.title)}`]:[]),`description: ${q(operation.description ?? operation.title ?? name)}`,"inputSchema",...(output?[`outputSchema: ${q(output)}`]:[]),...(annotations?[`annotations: ${q(annotations)}`]:[]),...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: ${kind === "views" ? `validate${index}` : `async (raw) => (await import("./validation/procedures/${file}.js")).validate(raw)`}`,...(convert?[`convert: ${convert}`]:[]),
+    const fields=[...(description.targets.find(t => t._meta.id === `${kind === "views" ? "view" : "procedure"}:${name}`)?._meta.readOnly ? ["readOnly: true"] : []),`target: ${q({kind:kind === "views" ? "view" : "procedure",name})}${guard(operation.requires,`${kind}/${name}`, binds, procedure?.trustedOnly)}`,`name: ${q(tool)}`,`surface: ${q(surface)}`,...(operation.title?[`title: ${q(operation.title)}`]:[]),`description: ${q(about)}`,"inputSchema",...(output?[`outputSchema: ${q(output)}`]:[]),...(annotations?[`annotations: ${q(annotations)}`]:[]),...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: ${kind === "views" ? `validate${index}` : `async (raw) => (await import("./validation/procedures/${file}.js")).validate(raw)`}`,...(convert?[`convert: ${convert}`]:[]),
       ...(kind === "views" ? [`path: ${q(`views/${name}`)}`,`page: ${boundaryPage(`run${index}`, wire)}`] : [`run: ${ref ? `(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)` : `async (db, caller, input) => (await import("./procedures/${file}.js")).default(db, caller, input)`}`])];
     tools.push({ fields, schema });
   };

@@ -256,12 +256,8 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
 }
 
 const UNSUPPORTED_JSON_SCHEMA_KEYWORDS = new Set([
-  "anyOf",
   "allOf",
   "not",
-  "if",
-  "then",
-  "else",
   "$anchor",
   "$dynamicAnchor",
   "$dynamicRef",
@@ -273,6 +269,8 @@ const UNSUPPORTED_JSON_SCHEMA_KEYWORDS = new Set([
   "propertyNames",
   "unevaluatedProperties",
 ]);
+
+const INPUT_RULE_KEYWORDS = ["dependentRequired", "anyOf", "if", "then", "else"];
 
 export function validateJsonSchema(
   root: unknown,
@@ -305,6 +303,17 @@ export function validateJsonSchema(
       if (keyword in value) {
         throw new ManifestParseError(
           `${kind} '${name}' uses unsupported JSON Schema keyword '${keyword}'`,
+          idx,
+          `${pointer}/${escapeJsonPointerSegment(keyword)}`,
+          "JSON_SCHEMA_UNSUPPORTED",
+        );
+      }
+    }
+    // Generated input validation checks these rules (their shapes are checked at generate); nothing checks them elsewhere.
+    if (basePointer !== "/spec/input") for (const keyword of INPUT_RULE_KEYWORDS) {
+      if (keyword in value) {
+        throw new ManifestParseError(
+          `${kind} '${name}' uses JSON Schema keyword '${keyword}', which is supported only in View and Procedure input`,
           idx,
           `${pointer}/${escapeJsonPointerSegment(keyword)}`,
           "JSON_SCHEMA_UNSUPPORTED",

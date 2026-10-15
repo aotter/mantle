@@ -96,3 +96,12 @@ test("row preconditions derive AND equality/IN literals only from the declared t
   const plan=await planOf(),{loaded:m}=await metadata(plan);
   expect(m.operations[0].preconditions).toEqual([{field:"state",values:["todo"]}]);
 });
+
+test("WebMCP advertises Procedure input rules as description sentences; Admin operations keep them",async()=>{
+  const input={type:"object",properties:{entryId:{type:"string"},expectedVersion:{type:"integer"},note:{type:"string"}},required:["entryId","expectedVersion"],dependentRequired:{note:["expectedVersion"]}};
+  const {loaded:m}=await metadata(await planOf(sources.map(s=>s.sourceId==="mark-done.json"?manifest("Procedure","mark-done",{...JSON.parse(s.text).spec,input}):s)));
+  const tool=m.webmcp.tools.find((t:any)=>t.name==="mark_done");
+  expect(tool.description).toBe("Complete a task. 'expectedVersion' is required when 'note' is present.");
+  expect(tool.inputSchema).not.toHaveProperty("dependentRequired");
+  expect(m.operations[0].input).toEqual(input);
+});
