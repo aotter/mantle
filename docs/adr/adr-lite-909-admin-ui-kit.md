@@ -1,6 +1,6 @@
 # ADR-lite 909: Mantle Admin UI kit export
 
-**Status:** Accepted; amended by [ADR-0029](0029-mcp-apps-interaction-contracts.md) (the kit moves to `@aotter/mantle-ui`, with a one-minor re-export from `@aotter/mantle-admin-ui/kit`); amended by [ADR-lite 1376 revision 4](adr-lite-1376-admin-extensions.md) (the Admin application, layout, data hooks and default components become public library surface; the prebuilt SPA goes away)
+**Status:** Accepted; amended by [ADR-0029](0029-mcp-apps-interaction-contracts.md) (the kit moves to `@aotter/mantle-ui`, with a one-minor re-export from `@aotter/mantle-admin-ui/kit`); amended by [ADR-lite 1376 revision 4](adr-lite-1376-admin-extensions.md)
 
 ## Context
 
@@ -19,8 +19,11 @@ Mantle design variables.
 
 The kit does not export the Admin application, authenticated layout, router,
 queries, API client, or feature views. Those modules assume Admin routes and
-transport contracts and remain private. Consumers needing the complete product
-use the canonical Admin assets or the explicit same-origin sandbox preview.
+transport contracts and remain private (until ADR-lite 1376 revision 4).
+Consumers needing the complete product use the canonical Admin assets or the
+explicit same-origin sandbox preview; under ADR-lite 1376 revision 4 the
+application builds both into `<assets>/admin`, and the preview host bridge
+stays a package export.
 
 Copy-owned shadcn recipes may compose the public kit into working defaults.
 They are installed as source in the consuming application rather than exposed
@@ -31,7 +34,8 @@ optional legal links.
 
 - Applications can share Mantle controls and visual tokens without depending
   on Builder internals or duplicating Admin CSS.
-- The static Admin SPA remains unchanged and optional.
+- The static Admin SPA remains unchanged and optional (superseded by ADR-lite
+  1376 revision 4: the application builds Admin).
 - New public kit components require package-level contract and rendering tests.
 - Authentication and legal-consent policy remain application concerns, not UI
   primitive behavior.
