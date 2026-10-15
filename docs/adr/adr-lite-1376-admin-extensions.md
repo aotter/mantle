@@ -1,12 +1,12 @@
 # ADR-lite 1376: Admin customization
 
-**Status:** Accepted, revision 4. Supersedes revision 3 §1–§6 entirely.
+**Status:** Accepted, revision 4. Supersedes revision 3 entirely.
 Revision 3 shipped only in the 0.2.0 alpha prereleases (alpha.6 and alpha.7),
 never in a stable release. Amends [ADR-lite 909](adr-lite-909-admin-ui-kit.md).
 
-**Implementation:** in progress. Until the removals below land, the code
-implements [revision 3](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/adr-lite-1376-admin-extensions.md), which stays the record for the keys and APIs it
-defines.
+**Implementation:** in progress. Until the removals below land,
+[revision 3](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/adr-lite-1376-admin-extensions.md)
+describes the code.
 
 ## Context
 
@@ -26,37 +26,44 @@ authorizes.
 ## Decision
 
 1. **The application builds Admin.** `mantle bundle` builds it with Vite
-   whenever the Worker selects Admin, from `src/admin.tsx` or a built-in
-   default entry, into `<assets>/admin` (`mantle bundle <entry> <outdir>
-   --assets <dir>`, default `<outdir>/client`). Worker output moves to
-   `<outdir>/worker`.
+   from `src/admin.tsx` or a built-in default entry into `<assets>/admin`
+   (`mantle bundle <entry> <outdir> --assets <dir>`, default
+   `<outdir>/client`). On Workers it does so when the Worker bundle imports
+   `@aotter/mantle-admin/server`, and Worker output moves to
+   `<outdir>/worker`; the assets directory must not overlap the Worker
+   directory. On Bun, which runs the server as TypeScript, the generate
+   target recorded in `.mantle-inputs.json` makes `mantle bundle` build only
+   Admin.
    - The build works under `npm ci --ignore-scripts`: native tools come from
      platform `optionalDependencies`.
-   - Nothing at runtime reads `node_modules`.
+   - Admin assets are never read from `node_modules` at runtime.
    - Pipelines that already run `mantle bundle` or `wrangler deploy` need no
      extra step.
-   - The same build emits the same-origin preview document into
-     `<assets>/admin`, and the host bridge stays a package export, so
-     ADR-lite 909's sandbox preview contract holds.
+   - The same build emits the same-origin preview document and
+     `host-bridge.js` into `<assets>/admin`, so ADR-lite 909's sandbox
+     preview contract holds.
    - There is no prebuilt-SPA path.
 2. **Composition.** `defineAdmin(generatedAdmin, { nav, pages, components,
-   plugins })`. Resources are derived from generated metadata; pages are React
-   routes.
+   plugins })`; pages are React routes. The Admin bundle is public static
+   content: generated code contributes types and only the names the
+   application's own code references, never Procedure statements, guards,
+   audiences, authorization predicates or full lists of Views and
+   Procedures. Resources, and what each caller sees, come at runtime from
+   caller-filtered `/admin/api` metadata.
 3. **Overrides.** Every named region accepts a component that receives the
    default props plus `renderDefault(props)`. The regions are Shell, Sidebar,
-   Header, Brand, Home, CollectionList, RecordView, record asides and actions,
-   and per-field cells and inputs. Plugins are `defineAdmin` fragments applied
+   Header, Brand, Home, CollectionList, RecordView, record asides, record
+   and list (bulk) actions, per-field and per-View-column cells, and
+   per-field inputs. Plugins are `defineAdmin` fragments applied
    in order as a `renderDefault` chain. Slot names and props are versioned
    with the package.
 4. **Data.** Hooks (`useView`, `useEntries`, `useEntry`, `useOperation`,
    `useCollectionTotal`, `useMe`) call only caller-authorized `/admin/api`
    routes, each of which checks the caller, and share Admin's query cache.
    Generated types bind names, inputs and rows. Refusals read as unavailable.
-5. **The manifest keeps data semantics,** for example
-   `uiSchema.nav.{group,order,hidden,standalone,parentField}`, list columns,
-   filters, search and primary fields, Procedure `collectionAction`, and
-   built-in widgets. Only component references (`<extension>/<contribution>`
-   widgets, `list.cells`, `panels`) are removed.
+5. **The manifest keeps data semantics;** only component references
+   (`<extension>/<contribution>` widgets, `list.cells`, `panels`) are
+   removed.
 6. **Theme** is the shadcn CSS variables, overridden by application CSS.
    **Eject** is a shadcn registry of the default components, built only on the
    public props and hooks.
@@ -79,7 +86,7 @@ application route.
 the default components become public library surface of
 `@aotter/mantle-admin`. The prebuilt Admin SPA goes away; the complete product
 is the application-built `<assets>/admin`, which includes the sandbox preview
-document. The kit's contract is otherwise unchanged.
+document and its host bridge. The kit's contract is otherwise unchanged.
 
 ## Non-goals
 
@@ -102,6 +109,7 @@ document. The kit's contract is otherwise unchanged.
     `list.cells` or `panels`, which `mantle generate` then refuses;
   - the output layout: Worker output moves to `<outdir>/worker`, so wrangler
     configs (`main`, `base_dir`, `assets.directory`) must be regenerated with
-    `mantle generate`.
+    `mantle generate`, or edited by hand for `wrangler.toml`, where it only
+    prints the keys.
 
   A migration note ships with the removal.

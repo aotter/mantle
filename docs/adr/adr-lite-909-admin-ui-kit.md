@@ -19,11 +19,8 @@ Mantle design variables.
 
 The kit does not export the Admin application, authenticated layout, router,
 queries, API client, or feature views. Those modules assume Admin routes and
-transport contracts and remain private (until ADR-lite 1376 revision 4).
-Consumers needing the complete product use the canonical Admin assets or the
-explicit same-origin sandbox preview; under ADR-lite 1376 revision 4 the
-application builds both into `<assets>/admin`, and the preview host bridge
-stays a package export.
+transport contracts and remain private. Consumers needing the complete product
+use the canonical Admin assets or the explicit same-origin sandbox preview.
 
 Copy-owned shadcn recipes may compose the public kit into working defaults.
 They are installed as source in the consuming application rather than exposed
@@ -34,8 +31,7 @@ optional legal links.
 
 - Applications can share Mantle controls and visual tokens without depending
   on Builder internals or duplicating Admin CSS.
-- The static Admin SPA remains unchanged and optional (superseded by ADR-lite
-  1376 revision 4: the application builds Admin).
+- The static Admin SPA remains unchanged and optional.
 - New public kit components require package-level contract and rendering tests.
 - Authentication and legal-consent policy remain application concerns, not UI
   primitive behavior.
