@@ -19,6 +19,7 @@ const union = (scopes: readonly string[], extra: readonly string[]) => [...new S
 
 /** The handler for `/mcp` (public tools) and `/mcp/admin` (tools for `admin` roles); other paths are undefined. */
 export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, apps: Partial<Record<string, ReturnType<typeof linkSurface>>> = {}, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
+  const allowed = options.allowedOrigins ?? [];
   return async (request, env, ctx) => {
     const access = options.gateway ? (await import("./host-access.js")).accessRequest(ctx, options) : undefined;
     let resolved: Caller | undefined;
@@ -26,11 +27,19 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
     const requiredScopes = options.requiredScopes ?? ["mcp"], locale = options.locale ?? "en";
     const url = new URL(request.url), path = url.pathname.replace(/\/+$/, ""), surface = path === "/mcp" ? "public" as const : path === "/mcp/admin" ? "admin" as const : undefined;
     if (!surface) return;
-    // MCP transport MUST: a present Origin that is not allowed is 403; a configured list also pins the host (DNS rebinding).
-    const hosts = options.allowedOrigins?.map(origin => new URL(origin).hostname);
-    const foreign = hosts && !hosts.includes(url.hostname) ? Response.json({ jsonrpc: "2.0", error: { code: -32000, message: `Invalid Host: ${url.hostname}` }, id: null }, { status: 403 })
-      : request.headers.has("origin") ? (await import("@modelcontextprotocol/server")).originValidationResponse(request, hosts ?? [url.hostname]) : undefined;
-    if (foreign) { access?.finish(new ContractError("AUTH_DENIED", "Origin is not allowed.", "request:origin")); observe(options.onRefusal, { at: Date.now(), status: 403, reason: "origin" }); return foreign; }
+    // MCP transport MUST: a present Origin outside this host and `allowedOrigins` is 403. A loopback peer (local dev, the
+    // DNS-rebinding target) must also name a local or listed Host, since request.url follows the Host header.
+    const loopback = !forwarded(ctx, options.gateway) && /^(127\.|::1$|::ffff:127\.)/.test(request.headers.get("cf-connecting-ip") ?? "");
+    if (request.headers.has("origin") || loopback) {
+      const sdk = await import("@modelcontextprotocol/server");
+      const foreign = sdk.originValidationResponse(request, [url.hostname, ...allowed]) ?? (loopback ? sdk.hostHeaderValidationResponse(request, [...sdk.localhostAllowedHostnames(), ...allowed]) : undefined);
+      if (foreign) {
+        access?.finish(new ContractError("AUTH_DENIED", "Origin is not allowed.", "request:origin"));
+        observe(options.onObservation, { kind: "request-refused", at: Date.now(), surface, status: 403 });
+        observe(options.onRefusal, { at: Date.now(), status: 403, reason: "origin" });
+        return foreign;
+      }
+    }
     const select = async () => (typeof tools === "function" ? await tools(request, env) : tools).filter(tool => tool.surface === surface);
     // Dynamic admin tables stay behind the admin gate; cache classification uses generated metadata only.
     let selected = surface === "public" ? await select() : [];

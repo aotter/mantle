@@ -1,11 +1,17 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { adminPath, callAdminTool, resultPath } from "../src/lib/admin-tools";
+import { adminPath, callAdminTool, navigationTools, resultPath } from "../src/lib/admin-tools";
 
 afterEach(() => vi.unstubAllGlobals());
 describe("Admin tool transport and routing", () => {
   it("rejects external, API, and normalized escape paths", () => {
     for (const path of ["https://evil.test", "//evil.test/admin", "/admin/../api/delete", "/admin/api/mcp", "/administrator", "/admin/\\evil", "/admin/auth/x"]) expect(() => adminPath(path)).toThrow();
     expect(adminPath("/admin/c/posts?status=draft")).toBe("/admin/c/posts?status=draft");
+  });
+  it("gives the navigation tools a title and read-only, non-destructive hints", () => {
+    expect(navigationTools.map(({ name, title, annotations }) => [name, title, annotations])).toEqual([
+      ["admin_get_context", "Admin get context", { readOnlyHint: true, destructiveHint: false }],
+      ["admin_navigate", "Admin navigate", { readOnlyHint: true, destructiveHint: false }],
+    ]);
   });
   it("navigates only to known result targets and encodes entry IDs", () => {
     const catalog = { tools: [], routes: { create: { path: "/admin/c/posts", entry: true } } };

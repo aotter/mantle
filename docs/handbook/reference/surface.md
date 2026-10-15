@@ -219,12 +219,19 @@ from initialize, and every call in a batch is checked before any call runs.
 
 A request whose `Origin` header names another host gets 403 on both endpoints
 and every credential, before authentication; a request without `Origin` (a
-server-side MCP client) passes. The allowed host is that of `request.url`, or
-the hostnames of `allowedOrigins` when set (the official SDK compares hostnames,
-not scheme or port). Because `request.url` follows the `Host` header, only
-`allowedOrigins` protects against DNS rebinding: when set, a request whose host
-is not in it is also 403, so list the public origin too, and set it for a
-server bound to localhost. Cookie writes keep the full same-origin check.
+server-side MCP client) passes. Allowed Origins are the host of `request.url`
+plus `allowedOrigins`, compared by hostname as the official SDK does (not scheme
+or port). Each entry is a full origin (`https://console.example`) or the SDK's
+bare host (`console.example`, `localhost:8787`); anything else, such as a path,
+throws when `mcp(...)` is configured.
+
+`request.url` follows the `Host` header, so only a request from a loopback peer
+(`CF-Connecting-IP`, as `wrangler dev` sets it) is checked for DNS rebinding:
+its `Host` must be `localhost`, `127.0.0.1`, `[::1]` or an `allowedOrigins`
+host, else 403. Add a tunnel's hostname to `allowedOrigins` when one forwards
+to a local server. Gateway-forwarded requests and hosts that set no
+`CF-Connecting-IP` (Bun) get no Host check. Cookie writes keep the full
+same-origin check.
 
 `onObservation` receives request refusals and invocation attempt/completion
 metadata, including duration and outcome. Its Caller and scopes are frozen copies.

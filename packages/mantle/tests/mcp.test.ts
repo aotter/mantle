@@ -65,26 +65,40 @@ test("official SDK initializes, lists only surface tools, calls shared validatio
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });
 
-test("MCP answers a foreign Origin 403 before authentication on both endpoints and eras; no Origin and allowed origins pass",async()=>{
+test("MCP answers a foreign Origin, and a foreign Host from a loopback peer, 403 before authentication; allowedOrigins adds and parses once",async()=>{
  const files=await generateOrThrow("bun-sqlite",[{sourceId:"origin.yaml",text:source}]);
  const dir=await mkdtemp(resolve(import.meta.dir,".mcp-origin-")),db=new Database(":memory:");
- let caller:any={kind:"anonymous"};const refusals:any[]=[];
+ let caller:any={kind:"anonymous"};const refusals:any[]=[],observations:any[]=[];
  try {
   await writeGenerated(dir,files);db.exec(files["schema.sql"]!);const {mcp}=await import(resolve(dir,"mcp.ts"));
-  const open=mcp({db:()=>db,caller:()=>caller,onRefusal:(event:any)=>{refusals.push(event);}}),listed=mcp({db:()=>db,caller:()=>caller,allowedOrigins:["https://app.test","https://console.test:8443"]});
+  const open=mcp({db:()=>db,caller:()=>caller,onRefusal:(event:any)=>{refusals.push(event);},onObservation:(event:any)=>{observations.push(event);}});
+  const listed=mcp({db:()=>db,caller:()=>caller,allowedOrigins:["https://console.test:8443","partner.test"]});
   const call=(handle:any,url:string,headers:Record<string,string>={},era?:string)=>handle(new Request(url,{method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream",...(era?{"mcp-protocol-version":era,"mcp-method":"tools/list"}:{}),...headers},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/list",params:era?{_meta:{"io.modelcontextprotocol/protocolVersion":era,"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{name:"test",version:"1"}}}:{}})}),{});
   for(const who of [{kind:"anonymous"},user]) for(const path of ["/mcp","/mcp/admin"]) for(const era of [undefined,"2026-07-28"]) {
    caller=who;const refused=await call(open,"https://app.test"+path,{origin:"https://evil.test"},era);
    expect(refused.status).toBe(403);expect((await refused.json()).error.message).toBe("Invalid Origin: evil.test");
    if(who===user) for(const headers of [{},{origin:"https://app.test"}]) expect((await call(open,"https://app.test"+path,headers,era)).status).toBe(200);
   }
-  expect(refusals.every(event=>event.reason==="origin"&&event.status===403)).toBe(true);expect(refusals).toHaveLength(8);
+  // Each refusal is reported once to both callbacks.
+  expect(refusals).toHaveLength(8);expect(refusals.every(event=>event.reason==="origin"&&event.status===403)).toBe(true);
+  expect(observations.filter(event=>event.kind==="request-refused").map(event=>[event.status,event.surface])).toEqual(["public","public","admin","admin","public","public","admin","admin"].map(surface=>[403,surface]));
   caller={kind:"anonymous"};
-  expect((await call(listed,"https://app.test/mcp",{origin:"https://console.test"})).status).toBe(200);
-  // DNS rebinding: the attacker's name resolves to this server, so the request URL carries it too.
-  expect((await call(open,"http://evil.example.com/mcp",{origin:"http://evil.example.com"})).status).toBe(200);
-  expect((await call(listed,"http://evil.example.com/mcp",{origin:"http://evil.example.com"})).status).toBe(403);
-  expect((await call(listed,"http://evil.example.com/mcp")).status).toBe(403);
+  // allowedOrigins adds to the request host; it does not pin the Host.
+  for(const origin of [undefined,"https://app.test","https://console.test","http://partner.test:3000"]) expect((await call(listed,"https://app.test/mcp",origin?{origin}:{})).status).toBe(200);
+  expect((await call(listed,"https://app.test/mcp",{origin:"https://evil.test"})).status).toBe(403);
+  // DNS rebinding: the attacker's name resolves to a loopback server, so request.url and Origin carry it too; only a loopback peer is local.
+  const rebound={host:"evil.example.com",origin:"http://evil.example.com"};
+  expect((await call(open,"http://evil.example.com/mcp",rebound)).status).toBe(200);
+  for(const ip of ["127.0.0.1","::1","::ffff:127.0.0.1"]) {
+   const refused=await call(open,"http://evil.example.com/mcp",{...rebound,"cf-connecting-ip":ip});
+   expect(refused.status).toBe(403);expect((await refused.json()).error.message).toBe("Invalid Host: evil.example.com");
+  }
+  expect(refusals).toHaveLength(11);
+  for(const host of ["localhost:8787","127.0.0.1:8787","[::1]:8787"]) expect((await call(open,`http://${host}/mcp`,{host,origin:`http://${host}`,"cf-connecting-ip":"127.0.0.1"})).status).toBe(200);
+  expect((await call(listed,"http://partner.test/mcp",{host:"partner.test","cf-connecting-ip":"127.0.0.1"})).status).toBe(200);
+  // allowedOrigins is parsed once: full origins and bare hosts pass, anything else fails at configuration.
+  expect(()=>mcp({db:()=>db,allowedOrigins:["https://a.test","a.test","localhost:8787","[::1]","http://[::1]:8787"]})).not.toThrow();
+  for(const bad of ["https://a.test/mcp","a.test/path","https://","","https://a.test?x=1","https://user@a.test"]) expect(()=>mcp({db:()=>db,allowedOrigins:[bad]})).toThrow(`mcp allowedOrigins: "${bad}"`);
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });
 
