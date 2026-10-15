@@ -98,7 +98,8 @@ The consent, client, scope, resource and ban checks still apply. An access token
 issued before sign-out stays valid until it expires (one hour by default).
 `oauthGrantRevocation()` ends every OAuth grant of the user once one of these
 succeeds: revokes their refresh and access tokens, deletes their consents for
-every client (the next authorization asks again) and their unredeemed
+every client (the next authorization asks again, except for a first-party
+`skip_consent` client, which never asks) and their unredeemed
 authorization codes. The events and the sessions each one ends:
 
 | Event | Sessions ended |

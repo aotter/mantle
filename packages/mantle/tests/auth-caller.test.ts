@@ -366,12 +366,16 @@ describe("OAuth grant revocation and consent routes", () => {
       // Consent exists, so this code is issued silently; it stays unredeemed across the event.
       const pending = await authorize(app, cookie, grant.clientId, "mcp offline_access");
       expect(pending.location, name).toStartWith(REDIRECT);
+      // Redeeming would fail anyway once the code's session is gone, so check the row itself.
+      const codes = () => app.sqlite.query("SELECT count(*) AS n FROM verification WHERE value LIKE ? AND value LIKE '%authorization_code%'").get(`%${userId}%`);
+      expect(codes(), name).toEqual({ n: 1 });
       const ended = await end({ userId, email, cookie });
       expect(ended.status, name).toBe(200);
       // Better Auth replaces the current session of a password change with a new one; every other session ends.
       const current = name === "change" ? cookieOf(ended) : null;
       if (name.endsWith("ban")) expect((await asAdmin("/admin/unban-user", { userId })).status).toBe(200);
       expect((await refresh(grant)).status, name).not.toBe(200);
+      expect(codes(), name).toEqual({ n: 0 });
       expect((await exchange(app, grant.clientId, new URL(pending.location).searchParams.get("code")!, pending.verifier)).status, name).not.toBe(200);
       await expect(use(grant.accessToken), name).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
       expect([await session(cookie), await session(other), !!current && await session(current)], name).toEqual([false, false, name === "change"]);
