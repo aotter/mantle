@@ -16,6 +16,7 @@ import { resolveLocalizedText } from "../../lib/localized-text";
 import type { JsonSchema, AdminOperation } from "../../lib/types";
 import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue } from "../../lib/render-data-value";
+import { invalidateAfterWrite } from "../../lib/after-write";
 
 const LABEL_KEYS: Record<keyof InteractionLabels, I18nKey> = {
   submit: "interaction.submit",
@@ -102,9 +103,7 @@ export function InteractionDialog({ create, operation, hidden, automatic, langua
   const refreshed = () => {
     // An operation can write any collection: every list, count and open
     // entry refetches, as after any other Admin mutation.
-    for (const queryKey of [["entry-editor"], ["entries"], ["collection-statistics"]]) {
-      void queryClient.invalidateQueries({ queryKey });
-    }
+    invalidateAfterWrite(queryClient);
     onDone();
   };
   const title = resolveLocalizedText(operation.title, language, canonical) || operation.name;

@@ -197,6 +197,17 @@ describe("data hooks", () => {
     client.clear();
   });
 
+  it("refresh badges after any Admin mutation and after the shared write helper", async () => {
+    const { queryClient } = await import("../src/app/query-client");
+    const { invalidateAfterWrite } = await import("../src/lib/after-write");
+    for (const write of [() => queryClient.getMutationCache().build(queryClient, { mutationFn: async () => 1 }).execute(undefined), () => invalidateAfterWrite(queryClient)]) {
+      queryClient.setQueryData(["badges", "u", "browser", ["a"]], 1);
+      await write();
+      expect(queryClient.getQueryState(["badges", "u", "browser", ["a"]])?.isInvalidated).toBe(true);
+      queryClient.clear();
+    }
+  });
+
   it("do not refresh anything when an operation fails, and read a refusal as unavailable", async () => {
     const client = new QueryClient();
     client.setQueryData(["view", "pending", "x"], 1);

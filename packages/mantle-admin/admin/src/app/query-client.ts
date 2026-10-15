@@ -1,13 +1,10 @@
 import { MutationCache, QueryClient } from "@tanstack/react-query";
 import { ApiError } from "../lib/api";
+import { invalidateAfterWrite } from "../lib/after-write";
 
 export const queryClient = new QueryClient({
   mutationCache: new MutationCache({
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["collection-statistics"] });
-      void queryClient.invalidateQueries({ queryKey: ["entries"] });
-      void queryClient.invalidateQueries({ queryKey: ["badges"] });
-    },
+    onSuccess: () => invalidateAfterWrite(queryClient),
   }),
   defaultOptions: {
     queries: {

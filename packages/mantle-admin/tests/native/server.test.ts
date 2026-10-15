@@ -168,7 +168,9 @@ test("view-batch runs each View as the caller; a refused, missing or authorize-d
   const seen:string[]=[];
   const view=(name:string,allows:(c:Caller)=>boolean,rows:Record<string,unknown>[]=[{count:3}]):any=>({name,allows,query:(p:URLSearchParams)=>({input:{},limit:Number(p.get("limit"))}),page:async(_db:unknown,c:Caller,_i:unknown,paging:{limit?:number})=>{seen.push(`${name}:${"subject" in c?c.subject:""}:${paging.limit}`);return {rows};},row:(r:Record<string,unknown>)=>({...r,count:Number(r.count)})});
   const needsInput:any={...view("needs-input",()=>true),query:()=>{throw new ContractError("INPUT_VALIDATION_FAILED","Needs input.","views/needs-input");}};
-  const views=[view("pending-count",()=>true,[{count:"3"}]),view("admins-only",()=>false),view("blocked",()=>true),needsInput];
+  // a refused View whose user binding would throw must still read as unavailable, never as an error
+  const refusedBound:any={...view("refused-bound",()=>false),check:()=>{throw new ContractError("HOST_CONTRACT","The target needs user field 'dept'.","",{status:412});}};
+  const views=[view("pending-count",()=>true,[{count:"3"}]),view("admins-only",()=>false),refusedBound,view("blocked",()=>true),needsInput];
   const authorize:any=async(target:{name:string})=>target.name!=="blocked";
   const build=(extra={})=>{let providers=0;const f=adminFunction(metadata,views,[],{db:()=>{providers++;return {};},caller:()=>admin,...extra});return {providers:()=>providers,ask:(names:string)=>f(new Request("https://app.test/admin/api/view-batch"+names,{headers:{origin:"https://app.test"}}),{})};};
   const f=build(),res=await f.ask("?names=pending-count,admins-only,nope,needs-input,pending-count");
@@ -178,6 +180,7 @@ test("view-batch runs each View as the caller; a refused, missing or authorize-d
   // one read per named View, one row each, as the caller
   expect(seen).toEqual(["pending-count:a:1"]);
   expect(JSON.stringify(body.views["admins-only"])).toBe(JSON.stringify(body.views.nope));
+  expect((await (await build().ask("?names=refused-bound,nope"))!.json()).views).toEqual({"refused-bound":{unavailable:true},nope:{unavailable:true}});
   const denied=await build({authorize}).ask("?names=blocked,pending-count");
   expect(await denied!.json()).toEqual({views:{blocked:{unavailable:true},"pending-count":{rows:[{count:3}]}}});
   const many=build();

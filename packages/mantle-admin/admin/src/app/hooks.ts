@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AdminBadge, AdminTypes } from "./define-admin";
 import { useAdminContext } from "./hooks-context";
 import { MAX_BADGE_VIEWS, createMcpAppTransport } from "./transport";
+import { invalidateAfterWrite } from "../lib/after-write";
 
 export { useOpenLink } from "./slots";
 
@@ -168,8 +169,6 @@ export interface AdminHooks<T extends AdminTypes> {
   useBadges(refs: readonly AdminBadge<T>[]): readonly BadgeState[];
 }
 
-const AFFECTED = ["view", "entries", "entry-editor", "collection-statistics", "badges"] as const;
-
 const statusOf = (query: { isPending: boolean; isError: boolean }, reply: Reply<unknown> | undefined): ReadStatus =>
   query.isError ? "error" : query.isPending ? "loading" : reply?.status === "unavailable" ? "unavailable" : "ready";
 
@@ -202,7 +201,7 @@ const implementation = {
         return reply.data;
       },
       // the shared cache: what Admin shows and what the application's own components read both refetch
-      onSuccess: () => { for (const key of AFFECTED) void client.invalidateQueries({ queryKey: [key] }); },
+      onSuccess: () => invalidateAfterWrite(client),
     });
     return { run: transport.writable ? mutation.mutateAsync : undefined, pending: mutation.isPending };
   },
@@ -224,7 +223,7 @@ const implementation = {
     const userId = me.data?.status === "ok" ? me.data.data.userId : undefined;
     const query = useQuery({ queryKey: ["badges", userId, transport.surface, names], queryFn: () => transport.badges(names), enabled: names.length > 0 && userId !== undefined });
     return refs.map((ref): BadgeState => {
-      if (names.length === 0 || !names.includes(ref.view)) return { count: undefined, status: "unavailable" };
+      if (!names.includes(ref.view)) return { count: undefined, status: "unavailable" };
       if (me.isError || query.isError) return { count: undefined, status: "error" };
       if (me.isPending || query.isPending || userId === undefined) return { count: undefined, status: me.data?.status === "unavailable" ? "unavailable" : "loading" };
       const answer = query.data?.status === "ok" ? query.data.data[ref.view] : undefined;

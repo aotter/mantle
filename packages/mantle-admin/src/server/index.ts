@@ -158,7 +158,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     };
     const batchNames = (url: URL): string[] => {
         const names = [...new Set((url.searchParams.get("names") ?? "").split(",").filter(Boolean))];
-        if (!names.length || names.length > 20) throw new ContractError("INPUT_VALIDATION_FAILED", "Name 1 to 20 Views in `names`, separated by commas.", "admin");
+        if (!names.length || names.length > 20)  /* same cap as MAX_BADGE_VIEWS in admin/src/app/transport.ts */ throw new ContractError("INPUT_VALIDATION_FAILED", "Name 1 to 20 Views in `names`, separated by commas.", "admin");
         return names;
     };
     const runRoute = (route: Route<Env, Database>, c: Context<Env, Database>) => options.authorize && route.target
@@ -211,7 +211,6 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             const out: [string, unknown][] = [];
             for (const name of batchNames(c.url)) {
                 try {
-                    views.find(v => v.name === name)?.check?.(c.caller);
                     out.push([name, await viewPage(c, false, name, new URLSearchParams({ limit: "1" }))]);
                 } catch (error) {
                     if (!(error instanceof ContractError)) throw error;
