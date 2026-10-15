@@ -13,9 +13,10 @@ try {
   const allowed = /^package\/(?:package\.json|README\.md|LICENSE|(?:docs|skills)\/[A-Za-z0-9_./@-]+|dist\/[A-Za-z0-9_/-]+\.(?:js|d\.ts))$/;
   assert.ok(names.every(name => allowed.test(name)), `unexpected package files: ${names.filter(name => !allowed.test(name))}`);
   execFileSync("tar", ["-xzf", archive, "-C", directory]);
-  // docs/release-process.md: packaged links to repository-only files name a release tag, never a moving branch.
+  // docs/release-process.md: packaged links to repository-only files name a release tag, never a moving branch (the
+  // changelog on main is the one moving link meant to be read latest).
   for (const name of names.filter(name => /^package\/(?:docs|skills)\/.+\.md$/.test(name)))
-    assert.ok(!/github\.com\/aotter\/mantle\/(?:blob|tree)\/develop\//.test(await readFile(resolve(directory, name), "utf8")), `unversioned repository link in ${name}`);
+    assert.ok(!/github\.com\/aotter\/mantle\/(?:blob|tree)\/(?:develop|HEAD|main(?!\/CHANGELOG\.md))(?:\/|\b)/.test(await readFile(resolve(directory, name), "utf8")), `unversioned repository link in ${name}`);
   for (const name of names.filter(name => name.startsWith("package/dist/") && name.endsWith(".d.ts"))) {
     const text = (await readFile(resolve(directory, name), "utf8")).replace(/\/\*[\s\S]*?\*\//g, "");
     for (const [, path] of text.matchAll(/["'](\.[^"']+)["']/g)) {
