@@ -292,6 +292,7 @@ describe("sidebar placement (uiSchema.nav and navGroups)", () => {
     const groups = buildNavGroups([collection("posts", "publishing", { group: "editorial" })], [], "en", null, false, false, undefined, undefined, [{ id: "editorial", title: "Editorial" }]);
     expect(shape(groups).slice(1)).toEqual([["Editorial", ["posts"]]]);
     expect(shape(buildNavGroups([], [], "en", null, false)).slice(1)).toEqual([["Content", []]]);
+    expect(shape(buildNavGroups([collection("archive", "operational", { group: "more" })], [], "en", null, false)).slice(1)).toEqual([["More", ["archive"]]]);
   });
 
   it("orders pages and collections together in More", () => {

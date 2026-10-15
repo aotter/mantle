@@ -43,3 +43,9 @@ export function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
     nav: navField && navParent ? { standalone: true, parentField: navField, parentCollection: navParent.schema } : null,
   };
 }
+
+/** @internal Whether a Schema has its own sidebar entry: not a translation, and top-level or an opt-in standalone child (Admin's `isPrimaryNavCollection` agrees). */
+export function isPrimaryCollection(s: PlanSchema, schemas: readonly PlanSchema[]): boolean {
+  const c = collectionOf(s, schemas);
+  return !s.translates && (!c.parent || c.nav !== null);
+}

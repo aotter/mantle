@@ -1,5 +1,5 @@
 /** Build-time projections only; generated exports are static, independently tree-shakable data. */
-import { DiagnosticError, BUILT_IN_NAV_GROUPS, navGroupProblems, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
+import { DiagnosticError, BUILT_IN_NAV_GROUPS, navGroupProblems, navPlacementProblems, isPrimaryCollection, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
 import { emitValidation } from "./validation.js";
@@ -10,10 +10,20 @@ const adminEnum = (p: JsonSchema): JsonSchema => { if(!p.oneOf) return p; const 
 export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin=false}:Pick<GenerateInput,"plan"|"adminExtensions"|"navGroups"|"admin">,diagnostics:GenerateDiagnostic[]):Record<string,string> {
   // Sidebar placement: every nav.group names a built-in group or a declared navGroups id (presentation only).
   for(const [path,message] of navGroupProblems(navGroups))diagnostics.push({code:"SCHEMA_UI_INVALID",path,message});
-  const groupIds=new Set<string>([...BUILT_IN_NAV_GROUPS,...(Array.isArray(navGroups)?navGroups.map(g=>g.id):[])]);
-  const placed=[...Object.values(plan.schemas).map(s=>["schemas/"+s.name,s.uiSchema] as const),...Object.entries(plan.views).map(([name,v])=>["views/"+name,v.uiSchema] as const)];
-  for(const [path,ui] of placed){const group=(ui?.["nav"] as {group?:unknown}|undefined)?.group;if(typeof group==="string"&&!groupIds.has(group))diagnostics.push({code:"SCHEMA_UI_INVALID",path:path+"/uiSchema/nav/group",message:`Unknown nav group '${group}': use content, operations, reports or more, or declare it in navGroups of the --admin-extensions module.`});}
-  for(const e of adminExtensions)for(const p of e.contributes.pages??[]){const group=p.nav?.group;if(group!==undefined&&group!=="settings"&&!groupIds.has(group))diagnostics.push({code:"UI_EXTENSION_INVALID",path:`admin/extensions/${e.id}/pages/${p.id}/nav/group`,message:`Unknown nav group '${group}'.`});}
+  const groupIds=new Set<string>([...BUILT_IN_NAV_GROUPS,...(Array.isArray(navGroups)?navGroups.map(g=>g?.id):[])]);
+  const schemaList=Object.values(plan.schemas);
+  const placed=[...schemaList.map(s=>["schemas/"+s.name,s.uiSchema,s] as const),...Object.entries(plan.views).map(([name,v])=>["views/"+name,v.uiSchema,null] as const)];
+  for(const [path,ui,s] of placed){
+    const nav=(ui?.["nav"]??{}) as Record<string,unknown>,group=nav["group"];
+    if(typeof group==="string"&&!groupIds.has(group))diagnostics.push({code:"SCHEMA_UI_INVALID",path:path+"/uiSchema/nav/group",message:`Unknown nav group '${group}': use content, operations, reports or more, or declare it in navGroups of the --admin-extensions module.`});
+    // a child folded under its parent, or a translation on its parent's language tabs, has no sidebar entry to place
+    if(s&&!isPrimaryCollection(s,schemaList))for(const key of ["group","order","hidden"])if(nav[key]!==undefined)diagnostics.push({code:"SCHEMA_UI_INVALID",path:`${path}/uiSchema/nav/${key}`,message:s.translates?`Schema '${s.name}' has no sidebar entry to place: it is a translation, shown on its parent's language tabs.`:`Schema '${s.name}' has no sidebar entry to place: it is folded under its parent; nav.standalone: true lists it in the sidebar.`});
+  }
+  for(const e of adminExtensions)for(const p of e.contributes.pages??[]){
+    const path=`admin/extensions/${e.id}/pages/${p.id}/nav`,group=p.nav?.group,bad=p.nav?.order===undefined?null:navPlacementProblems({order:p.nav.order});
+    if(group!==undefined&&group!=="settings"&&!groupIds.has(group))diagnostics.push({code:"UI_EXTENSION_INVALID",path:path+"/group",message:`Unknown nav group '${group}'.`});
+    if(bad)diagnostics.push({code:"UI_EXTENSION_INVALID",path:path+"/order",message:`nav.order must be ${bad[1]}.`});
+  }
   try {checkPlanUiExtensions(plan,adminExtensions);} catch(error) {
     if(!(error instanceof DiagnosticError))throw error;
     const {code,path,message}=error.diagnostic;diagnostics.push({code,path,message});return {};

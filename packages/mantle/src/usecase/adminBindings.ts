@@ -1,6 +1,6 @@
 import { userReferences } from "../domain/userReferences.js";
 /** Selected application bindings: compiled checks/native SQL; only the app depends on Admin adapters. */
-import {collectionOf} from "../build/compiler.js";
+import {isPrimaryCollection} from "../build/compiler.js";
 import { enumOptions, type JsonSchema } from "../build/compiler.js";
 import type { GenerateInput } from "../domain/model.js";
 import { databaseImport, isSqlite, literal as q } from "../domain/entry.js";
@@ -73,8 +73,7 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
     const entrySpec=`entrySpecs[${q(s.name)}]`;
     if(!input.adminEntries?.[s.name]){refuse(schemaPath,"Missing compiler-authorized entry queries and Procedures.");continue;}
     const defaults=Object.fromEntries(Object.entries(checks(s,true).properties??{}).flatMap(([key,p])=>p.default!==undefined?[[key,p.default]]:[]));
-    const descriptor=collectionOf(s,Object.values(plan.schemas));
-    const primary=!s.translates&&(!descriptor.parent||descriptor.nav?.standalone===true);
+    const primary=isPrimaryCollection(s,Object.values(plan.schemas));
     const schemaCode=`{
       name:${q(s.name)},primary:${primary},descriptor:allCollections[${q(s.name)}],publishing:${!!s.publishing},readOnly:${s.schema.readOnly===true||declared.some(f=>s.fields[f]==="geo")},fields:names${n},defaults:${q(defaults)},
       binding:${entrySpec},

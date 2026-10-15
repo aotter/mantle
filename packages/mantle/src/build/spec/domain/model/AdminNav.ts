@@ -4,14 +4,22 @@ import { isLocalizedText, type LocalizedText } from "./ManifestGrammar.js";
 /** Admin's own groups. Project groups sort among content 10, operations 20 and reports 30 by `order`; More always stays last. */
 export const BUILT_IN_NAV_GROUPS: ReadonlySet<string> = new Set(["content", "operations", "reports", "more"]);
 export interface AdminNavGroup { readonly id: string; readonly title: LocalizedText; readonly order?: number }
-export const NAV_PLACEMENT_KEYS = ["group", "order", "hidden"] as const;
 const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const PLACEMENT: Readonly<Record<string, readonly [(value: unknown) => boolean, string]>> = {
+  group: [(v) => typeof v === "string" && ID.test(v), "a kebab-case group id"],
+  order: [Number.isInteger, "an integer"],
+  hidden: [(v) => typeof v === "boolean", "a boolean"],
+};
 
-/** The problem with one placement key's value, or null. Group ids are checked against `navGroups` at generate. */
-export function navPlacementProblem(key: string, value: unknown): string | null {
-  if (key === "group") return typeof value === "string" && ID.test(value) ? null : "a kebab-case group id";
-  if (key === "order") return Number.isInteger(value) ? null : "an integer";
-  if (key === "hidden") return typeof value === "boolean" ? null : "a boolean";
+/** The first bad `nav` key as [key, expected], or null; `own` keys are the owner's to check. Group ids are checked against `navGroups` at generate. */
+export function navPlacementProblems(nav: Readonly<Record<string, unknown>>, own: readonly string[] = []): [string, string] | null {
+  const keys = [...own, ...Object.keys(PLACEMENT)];
+  for (const [key, value] of Object.entries(nav)) {
+    if (own.includes(key)) continue;
+    const rule = Object.hasOwn(PLACEMENT, key) ? PLACEMENT[key]! : null;
+    if (!rule) return [key, `${keys.slice(0, -1).join(", ")} or ${keys.at(-1)}`];
+    if (!rule[0](value)) return [key, rule[1]];
+  }
   return null;
 }
 

@@ -240,13 +240,15 @@ at the top level instead. With multiple eligible references, set
 
 ### Sidebar
 
-By default the sidebar lists publishing Schemas under Content, operational Schemas under Records (`operations`),
-admin Views under Reports and Admin's own pages under More, each in name order. A project arranges it for how its
+By default the sidebar lists publishing Schemas under Content, operational Schemas under Records (`operations`) and
+admin Views under Reports, in manifest declaration order (source files in the order given to `mantle generate`, then
+document order), with Admin's own pages under More. A project arranges it for how its
 staff work, in the same manifest change that adds a Schema or View. Placement is presentation only: permissions,
 REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, and an empty group is not shown.
 
 - `Schema.spec.uiSchema.nav` and admin `View.spec.uiSchema.nav` take `group` (a group id), `order` (an integer;
-  ascending, entries without one follow in name order) and `hidden: true` (out of the sidebar, still at its URL).
+  ascending; entries without one follow in that default order, collections before Views before extension pages) and
+  `hidden: true` (out of the sidebar, still at its URL).
 - Built-in groups need no declaration: `content`, `operations`, `reports`, `more`. Project groups are declared once
   as `navGroups` in the `--admin-extensions` module, with a title (text or `{ locale: text }`) and an `order` among
   the built-in groups' content 10, operations 20 and reports 30 (default 50); More always stays last.
@@ -264,7 +266,9 @@ export const adminExtensions: AdminExtension[] = [];
 uiSchema: { nav: { group: approvals, order: 1 } }
 ```
 
-`mantle generate` refuses an undeclared group, a duplicate or built-in `navGroups` id and a non-integer `order`.
+`mantle generate` refuses an undeclared group, a duplicate or built-in `navGroups` id, a non-integer `order`, and
+placement on a Schema without a sidebar entry of its own: a translation, or a folded child that is not
+[`standalone`](#collection-navigation-and-operation-placement).
 The purchasing example puts its approval queue and requests in an Approvals group.
 
 Operational collections have no generic create or draft: officers add records through a Procedure placed with `collectionAction` (the list header shows its button and input form), so every write is a declared, validated program. For a user-field scoped Schema, SQL INSERT is system-only, so that Procedure is a ref handler that inserts through `ctx.store` ([procedure.md](../reference/procedure.md)).

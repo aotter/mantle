@@ -1,4 +1,4 @@
-import { NAV_PLACEMENT_KEYS, navPlacementProblem } from "../model/AdminNav.js";
+import { navPlacementProblems } from "../model/AdminNav.js";
 import type { JsonSchema, SchemaManifest } from "../model/ManifestGrammar.js";
 import { RESERVED_ENTRY_COLUMNS, enumOptions, isUiExtensionRef, resolveMantleRef } from "../model/ManifestGrammar.js";
 import { checkSchemaIndexes } from "./SchemaIndexChecker.js";
@@ -33,7 +33,6 @@ export interface SchemaAdminUiProblem {
 const EMPTY_LIST: SchemaListPresentation = { primaryField: null, columns: [] };
 const SCHEMA_UI_ROOTS = new Set(["fields", "list", "nav", "panels"]);
 const SCHEMA_LIST_KEYS = new Set(["filterField", "primaryField", "columns", "cells"]);
-const SCHEMA_NAV_KEYS = new Set(["standalone", "parentField", ...NAV_PLACEMENT_KEYS]);
 const SCALAR_TYPES = new Set(["string", "number", "integer", "boolean"]);
 
 export function checkSchemaAdminUi(schema: SchemaManifest): {
@@ -356,23 +355,8 @@ function checkNav(
     };
   }
   const config = nav as Record<string, unknown>;
-  const unknown = Object.keys(config).find((key) => !SCHEMA_NAV_KEYS.has(key));
-  if (unknown) {
-    return {
-      nav: null,
-      problem: problem(
-        `/spec/uiSchema/nav/${unknown}`,
-        config[unknown],
-        "standalone, parentField, group, order or hidden",
-        `Schema.spec.uiSchema.nav.${unknown} is not supported.`,
-      ),
-    };
-  }
-
-  for (const key of NAV_PLACEMENT_KEYS) {
-    const expected = config[key] === undefined ? null : navPlacementProblem(key, config[key]);
-    if (expected) return { nav: null, problem: problem(`/spec/uiSchema/nav/${key}`, config[key], expected, `Schema.spec.uiSchema.nav.${key} must be ${expected}.`) };
-  }
+  const bad = navPlacementProblems(config, ["standalone", "parentField"]);
+  if (bad) return { nav: null, problem: problem(`/spec/uiSchema/nav/${bad[0]}`, config[bad[0]], bad[1], `Schema.spec.uiSchema.nav.${bad[0]} must be ${bad[1]}.`) };
 
   const standalone = config["standalone"];
   if (standalone !== undefined && typeof standalone !== "boolean") {

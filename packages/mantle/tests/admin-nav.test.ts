@@ -26,3 +26,22 @@ test("generate refuses unknown groups, bad placement values and bad navGroups", 
   expect(codes(await run([schema("quotes")], [], page("sales")))).toEqual(["UI_EXTENSION_INVALID admin/extensions/tools/pages/browser/nav/group"]);
   for (const group of ["more", "settings", "reports"]) expect((await run([schema("quotes")], [], page(group))).ok).toBe(true);
 });
+
+const doc = (name: string, spec: object) => JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind: "Schema", metadata: { name }, spec });
+const child = (nav: object) => doc("lines", { title: "Lines", lifecycle: "operational", uiSchema: { nav }, schema: { type: "object", required: ["quoteId"], properties: { quoteId: { type: "string", "x-mantle-ref": "quotes" } } } });
+const posts = doc("posts", { title: "Posts", lifecycle: "publishing", indexes: [["slug"]], schema: { type: "object", required: ["slug", "title"], properties: { slug: { type: "string" }, title: { type: "string" } } } });
+const locales = (nav: object) => doc("postlocales", { title: "Post locales", lifecycle: "publishing", localized: true, translates: { parent: "posts", on: "slug" }, indexes: [["slug"]], uiSchema: { nav }, schema: { type: "object", required: ["slug", "locale", "title"], properties: { slug: { type: "string" }, locale: { type: "string" }, title: { type: "string" } } } });
+
+test("generate refuses placement on a Schema with no sidebar entry of its own", async () => {
+  expect(codes(await run([schema("quotes"), child({ group: "operations", hidden: true })]))).toEqual(["SCHEMA_UI_INVALID schemas/lines/uiSchema/nav/group", "SCHEMA_UI_INVALID schemas/lines/uiSchema/nav/hidden"]);
+  const folded = await run([schema("quotes"), child({ order: 1 })]);
+  expect(folded.ok ? "" : folded.diagnostics[0]!.message).toContain("nav.standalone: true");
+  expect((await run([schema("quotes"), child({ standalone: true, group: "operations", order: 1 })])).ok).toBe(true);
+  expect(codes(await run([posts, locales({ order: 1 })]))).toEqual(["SCHEMA_UI_INVALID schemas/postlocales/uiSchema/nav/order"]);
+});
+
+test("generate reports bad navGroups entries and extension page orders instead of throwing", async () => {
+  expect(codes(await run([schema("quotes")], [null, 1]))).toEqual(["SCHEMA_UI_INVALID admin/navGroups/0", "SCHEMA_UI_INVALID admin/navGroups/1"]);
+  for (const group of ["more", "settings"]) expect(codes(await run([schema("quotes")], [], [{ id: "tools", contributes: { pages: [{ id: "browser", title: "Browser", role: "admin", nav: { group, order: 1.5 } }] } }])))
+    .toEqual(["UI_EXTENSION_INVALID admin/extensions/tools/pages/browser/nav/order"]);
+});
