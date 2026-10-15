@@ -77,7 +77,7 @@ export async function fetchService(request: Request, env: Env, context: Executio
       }
       return respond(response);
     }
-    const shell = await adminShell(request, path => env.ASSETS.fetch(new Request(new URL("/" + path, url), request)));
+    const shell = await adminShell(request, path => env.ASSETS.fetch(new Request(new URL("/admin/" + path, url), request)));
     if (shell) return shell;
     return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
   } catch (error) { return surfaceFailure(error); }

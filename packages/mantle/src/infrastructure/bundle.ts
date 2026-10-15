@@ -1,5 +1,7 @@
-import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
-import { relative, resolve, sep } from "node:path";
+import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import { build, type Metafile } from "esbuild";
 import { INPUTS_FILE, authTableSql, extraRoles, staleInputs } from "./inputs.js";
 
@@ -36,13 +38,71 @@ export function guardStartup(metafile: Metafile, entry: string): void {
   }
 }
 
+/** Whether `inner` is `outer` or inside it. */
+const within = (outer: string, inner: string) => {
+  const path = relative(resolve(outer), resolve(inner));
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
+};
+
+/** A directory a build empties must not be the working directory or hold the source entry. */
+function assertCleanable(label: string, dir: string, entry: string): void {
+  if (resolve(dir) === process.cwd()) throw new Error(`${label} must not be the working directory: it is cleaned before building.`);
+  if (within(dir, entry)) throw new Error(`${label} must not contain the source entry: it is cleaned before building.`);
+}
+
+/**
+ * `mantle bundle <entry> <outdir> [--assets <dir>]`: the Worker into `<outdir>/worker`, and Admin into `<assets>/admin`
+ * (default `<outdir>/client`) when the Worker serves it (`@aotter/mantle-admin/server`; `/mcp` and the other subpaths alone do not).
+ */
+export async function bundleApp(entry: string, outdir: string, assets = join(outdir, "client")): Promise<void> {
+  const worker = join(outdir, "worker");
+  // Wrangler uploads every module under the Worker directory and every file under the assets directory.
+  if (within(worker, assets) || within(assets, worker)) throw new Error(`The assets directory ${assets} must not overlap the Worker directory ${worker}.`);
+  const metafile = await bundle(entry, worker);
+  if (Object.keys(metafile.inputs).some(input => /(?:^|\/)mantle-admin\/(?:dist|src)\/server\/index\.[jt]s$/.test(input.replaceAll("\\", "/")))) {
+    await bundleAdmin(realpathSync(entry), outdir, join(assets, "admin"));
+  }
+}
+
+/**
+ * Admin from `<dirname(entry)>/admin.tsx`, or the built-in entry, with `@aotter/mantle-admin/build` as the app installed
+ * it. The built-in entry is skipped when the installed Admin and its direct dependencies are unchanged since the last
+ * build; an application entry always builds, because what it imports is only known by building it.
+ */
+async function bundleAdmin(entry: string, outdir: string, out: string): Promise<void> {
+  const source = join(dirname(entry), "admin.tsx"), custom = existsSync(source);
+  assertCleanable("The Admin output directory", out, entry);
+  const require = createRequire(entry);
+  let builder: string;
+  try { builder = require.resolve("@aotter/mantle-admin/build"); }
+  catch { throw new Error(`The Worker serves Admin, but @aotter/mantle-admin/build does not resolve from ${relative(process.cwd(), entry)}. Install @aotter/mantle-admin at the version of @aotter/mantle-admin/server.`); }
+  const stamp = join(outdir, ".admin-inputs");
+  const key = custom ? undefined : JSON.stringify({ out: resolve(out), packages: installed(require.resolve("@aotter/mantle-admin/package.json")) });
+  if (key && existsSync(join(out, "index.html")) && existsSync(stamp) && readFileSync(stamp, "utf8") === key) {
+    console.log(`Admin inputs unchanged; kept ${relative(process.cwd(), out)}.`);
+    return;
+  }
+  rmSync(stamp, { force: true });
+  const { buildAdmin } = await import(pathToFileURL(builder).href) as { buildAdmin(options: { entry?: string; outDir: string }): Promise<void> };
+  await buildAdmin({ entry: custom ? source : undefined, outDir: out });
+  if (key) writeFileSync(stamp, key);
+}
+
+/** The package's version and the installed version of each of its dependencies (whose `exports` may hide package.json). */
+function installed(manifest: string): Record<string, string | null> {
+  const { name, version, dependencies = {} } = JSON.parse(readFileSync(manifest, "utf8")) as { name: string; version: string; dependencies?: Record<string, string> };
+  const require = createRequire(manifest);
+  const versions: Record<string, string | null> = { [name]: version };
+  for (const dependency of Object.keys(dependencies).sort()) {
+    const found = require.resolve.paths(dependency)?.map(dir => join(dir, dependency, "package.json")).find(file => existsSync(file));
+    versions[dependency] = found ? (JSON.parse(readFileSync(found, "utf8")) as { version: string }).version : null;
+  }
+  return versions;
+}
+
 export async function bundle(entry: string, outdir: string): Promise<Metafile> {
   entry = realpathSync(entry);
-  if (resolve(outdir) === process.cwd()) throw new Error("Bundle outdir must not be the working directory: it is cleaned before building.");
-  const fromOutput = relative(resolve(outdir), resolve(entry));
-  if (fromOutput === "" || (!fromOutput.startsWith(`..${sep}`) && fromOutput !== "..")) {
-    throw new Error("Bundle outdir must not contain the source entry: it is cleaned before building.");
-  }
+  assertCleanable("Bundle outdir", outdir, entry);
   rmSync(outdir, { recursive: true, force: true });
   const result = await build({
     entryPoints: [entry], outdir, bundle: true, splitting: true, format: "esm", platform: "neutral",

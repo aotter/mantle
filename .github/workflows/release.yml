@@ -172,6 +172,10 @@ jobs:
         if: steps.ver.outputs.tag_exists != 'true'
         run: node scripts/check-examples.mjs --fresh
 
+      - name: Admin build under npm ci --ignore-scripts, served without node_modules
+        if: steps.ver.outputs.tag_exists != 'true'
+        run: node scripts/check-admin-build.mjs
+
       - name: Check native hosts
         if: steps.ver.outputs.tag_exists != 'true'
         run: pnpm --filter @aotter/mantle test:native

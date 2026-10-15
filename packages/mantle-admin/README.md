@@ -23,8 +23,20 @@ at `@aotter/mantle-ui/controller`.
 
 ## Static assets
 
-Resolve `@aotter/mantle-admin/admin/index.html` and serve its directory through
-an app-owned asset binding or reader at `/admin/`. Missing assets stay missing;
+`mantle bundle` builds Admin for the application into `<assets>/admin` (default
+`dist/client/admin`) whenever the Worker imports `@aotter/mantle-admin/server`,
+through `buildAdmin({ entry, outDir })` from `@aotter/mantle-admin/build` (not a
+CLI). The entry is `admin.tsx` beside the Worker entry, default-exporting
+`defineAdmin(...)`, or the built-in entry. Vite, Tailwind, React and Admin's UI
+packages are dependencies of this package, so the application adds none; the
+build needs no install scripts (`npm ci --ignore-scripts` works). A `package-lock.json` made on one OS can lack the native build binaries (rolldown, `@tailwindcss/oxide`, lightningcss) that npm installs per platform from `optionalDependencies`, so a lockfile made on macOS can fail the build on a Linux host; create the lockfile on the build platform or use pnpm.
+The build writes the shell, the preview
+document, `host-bridge.js`, the extension shims and hashed assets.
+
+Serve that directory through an app-owned asset binding or reader at `/admin/`;
+`adminShell`'s `assets(path)` receives paths relative to it. Bun hosts serve the
+prebuilt directory of `@aotter/mantle-admin/admin/index.html` the same way until
+they build Admin too. Missing assets stay missing;
 the API does not read the filesystem or own a platform asset preset. Static SPA
 files stay outside the Worker query bundle. Route an authenticated API request
 to the Admin server with the app's already-resolved caller and generated Store,
@@ -62,16 +74,9 @@ Rich-text editors and the complete developer workspace load on demand.
 `@aotter/mantle-admin/app` exports `defineAdmin(meta)` and `<MantleAdmin admin>`.
 An Admin entry default-exports `defineAdmin(...)`; `<MantleAdmin>` is the root
 for an app that mounts Admin inside its own providers, and it renders once the
-stored or browser language has loaded. The prebuilt SPA is the built-in entry,
-`defineAdmin({})`: with no generated metadata, Admin reads its collections,
-Views and operations from `/admin/api` at runtime.
-
-**Not usable outside this repository yet.** The library keeps Admin's UI
-packages (React DOM, TanStack Query, Tiptap, React Flow and others) as imports,
-but they are not yet dependencies of this package, and it ships no CSS. An
-application build cannot resolve or style it until those dependencies and the
-Admin stylesheet ship with the package. Until then, serve the prebuilt SPA
-above.
+stored or browser language has loaded. The built-in entry is `defineAdmin({})`:
+with no generated metadata, Admin reads its collections, Views and operations
+from `/admin/api` at runtime. The prebuilt SPA is that entry, built the same way.
 
 ## Extensions
 

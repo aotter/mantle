@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mantle-reference",
-  "main": "dist/index.js",
+  "main": "dist/worker/index.js",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": [
     "nodejs_compat"
@@ -31,7 +31,7 @@
     }
   ],
   "assets": {
-    "directory": "node_modules/@aotter/mantle-admin/dist/admin",
+    "directory": "dist/client",
     "binding": "ASSETS",
     "run_worker_first": true,
     "html_handling": "none"
@@ -43,7 +43,7 @@
   },
   "no_bundle": true,
   "find_additional_modules": true,
-  "base_dir": "dist",
+  "base_dir": "dist/worker",
   "build": {
     "command": "mantle bundle src/index.ts dist",
     "watch_dir": [

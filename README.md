@@ -81,8 +81,8 @@ the owning definitions.
 *Developer UI rendered locally from the intake example. The graph describes
 compiled declarations; it does not certify runtime or deployment health.*
 
-The application serves the console at `/admin` from
-`@aotter/mantle-admin/admin/index.html`; this view draws from the admin-only
+The application serves the console at `/admin` from the Admin that `mantle bundle`
+builds into `dist/client/admin`; this view draws from the admin-only
 `GET /admin/api/developer-console`.
 
 | Interface | Integration guide |

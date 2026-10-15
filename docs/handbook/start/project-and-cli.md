@@ -10,13 +10,13 @@ description: Generation targets, CLI options and ownership of native application
 | `generated/` | Generator: TypeScript, native SQL and selected bindings |
 | `migrations/` | App's agent and native migration tool |
 | `wrangler.jsonc` | App configuration; generator maintains selected split-build keys |
-| `dist/` | Disposable bundle output; do not commit |
+| `dist/` | Disposable bundle output (`dist/worker`, `dist/client`); do not commit |
 
 ## Commands
 
 ```sh
 mantle generate <target> <output-directory> <manifest>... [options]
-mantle bundle <entry> <outdir>
+mantle bundle <entry> <outdir> [--assets <dir>]
 ```
 
 | Target | Dialect | Handle |
@@ -37,7 +37,8 @@ Other handles may adapt to the same [structural driver contracts](../guides/adap
 | `--admin-extensions <module>` | Read the named/default `adminExtensions` array and the optional `navGroups` (sidebar groups; see native-admin.md "Sidebar"). The app shell passes `src/admin.ts`. |
 | `--wrangler <path>` | Existing JSONC/JSON/TOML config; default finds one or creates `wrangler.jsonc`. TOML receives manual-edit instructions. |
 | `--entry <path>` | Worker source entry; default `src/worker.ts`. |
-| `--outdir <path>` | Split bundle output; default `dist`. Keep separate from source/generated files. |
+| `--outdir <path>` | Bundle output; default `dist`. The Worker goes to `<outdir>/worker`. Keep separate from source/generated files. |
+| `--assets <path>` | With `--admin`: the static assets directory `mantle bundle` builds Admin into (`<assets>/admin`); default `<outdir>/client`. Written to Wrangler's `assets.directory`, and to the build command when not the default. |
 
 ## Outputs
 
@@ -54,4 +55,4 @@ Apply `schema.sql` only to an empty database. Later changes require [explicit mi
 
 Never edit generated output by hand. Merge manifests/options, regenerate with the same command, then review TypeScript and SQL diffs. Use that exact command with `--check` in CI. Unmarked app files are preserved. Imported option modules must be pure; generation does not make their side effects safe.
 
-On Workers, generation configures `mantle bundle` as Wrangler's build command. It emits minified split ESM with a startup guard for eager Better Auth imports. On Bun, the app owns `Bun.serve`, its Database/SQL pool and scheduler. See [service composition](../cloudflare/service-entry.md).
+On Workers, generation configures `mantle bundle` as Wrangler's build command. It emits minified split ESM into `<outdir>/worker` with a startup guard for eager Better Auth imports. When the Worker imports `@aotter/mantle-admin/server`, it also builds Admin with Vite into `<assets>/admin` (`--assets`, default `<outdir>/client`), from `admin.tsx` beside the Worker entry or Admin's built-in entry; `src/admin.ts` is not an entry. The assets directory must not overlap the Worker directory. The built-in entry is not rebuilt while the installed `@aotter/mantle-admin` and its direct dependencies keep their versions; an `admin.tsx` entry builds every time. The build needs no install scripts (`npm ci --ignore-scripts` works). A `package-lock.json` made on one OS can lack the native build binaries (rolldown, `@tailwindcss/oxide`, lightningcss) that npm installs per platform from `optionalDependencies`, so a lockfile made on macOS can fail the build on a Linux host; create the lockfile on the build platform or use pnpm. Nothing at runtime reads `node_modules`. On Bun, the app owns `Bun.serve`, its Database/SQL pool and scheduler. See [service composition](../cloudflare/service-entry.md).
