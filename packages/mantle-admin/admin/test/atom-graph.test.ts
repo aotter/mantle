@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { loadLanguage } from "../src/app/i18n";
-import { atomKindLabel, focusSlice, traceAtomIds, layoutComponents, layoutGraph } from "../src/features/logic/atom-graph";
+import { atomKindLabel, focusSlice, traceAtomIds, layoutComponents } from "../src/features/logic/atom-graph";
 import { wideSystemGraph } from "./wide-system-graph";
 import { developerDetailHref, developerSelectionHref } from "../src/features/logic/developer-route";
 import { buildSchemaDiagram } from "../src/features/logic/schema-diagram";
@@ -171,17 +171,6 @@ describe("layoutComponents", () => {
       expect(x, id).toBeGreaterThanOrEqual(left);
       expect(x + 220, id).toBeLessThanOrEqual(right);
     }
-  });
-
-  it("lets Fit View reach the whole graph on a narrow canvas", () => {
-    const { nodes, minZoom } = layoutGraph(wideSystemGraph(), "en");
-    const width = (node: (typeof nodes)[number]): number => Number(node.style?.width ?? 220);
-    const height = (node: (typeof nodes)[number]): number => Number(node.style?.height ?? 88);
-    const graphWidth = Math.max(...nodes.map((node) => node.position.x + width(node))) - Math.min(...nodes.map(({ position }) => position.x));
-    const graphHeight = Math.max(...nodes.map((node) => node.position.y + height(node))) - Math.min(...nodes.map(({ position }) => position.y));
-    expect(minZoom).toBeLessThan(0.25);
-    expect(minZoom).toBeLessThanOrEqual(Math.min(320 / (graphWidth * 1.16), 320 / (graphHeight * 1.16)));
-    expect(layoutGraph(graph, "en").minZoom).toBe(0.25);
   });
 
   it("traces a schema through its command upstream", () => {

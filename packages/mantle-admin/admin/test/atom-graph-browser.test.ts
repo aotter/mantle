@@ -3,14 +3,15 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { expect, it } from "vitest";
-import { wideSystemGraph } from "./wide-system-graph";
+import { tallSystemGraph, wideSystemGraph } from "./wide-system-graph";
 
-// #1666: on a phone-width canvas the built Admin shows every node of a wide system wiring graph,
-// initially, after Fit View and after automatic layout, and can still zoom in to a readable scale.
-it("fits the whole wide system wiring graph on a narrow canvas", async () => {
+// #1666: the built Admin shows every node of a large system wiring graph, initially, after Fit View
+// and after automatic layout, and can still zoom in to a readable scale. A wide graph on a phone in
+// portrait and a tall graph on a short landscape canvas.
+it("fits the whole system wiring graph on narrow and short canvases", async () => {
   const dist = resolve(import.meta.dirname, "../../dist/admin");
-  const snapshot = { dataModel: { schemas: [], views: [] }, logic: { triggers: [], procedures: [] }, interfaces: { http: [], callable: [] }, graph: wideSystemGraph() };
-  const bridge = `<script>
+  let snapshot = {};
+  const bridge = () => `<script>
     localStorage.setItem('cms.preference.language', 'en');
     const snapshot = ${JSON.stringify(snapshot).replace(/</g, "\\u003c")};
     window.fetch = async (input, init) => {
@@ -35,7 +36,7 @@ it("fits the whole wide system wiring graph on a narrow canvas", async () => {
         return;
       }
       res.setHeader("content-type", "text/html");
-      res.end((await readFile(resolve(dist, "index.html"), "utf8")).replace("</head>", `${bridge}</head>`));
+      res.end((await readFile(resolve(dist, "index.html"), "utf8")).replace("</head>", `${bridge()}</head>`));
     } catch (error) { res.statusCode = 500; res.end(String(error)); }
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -53,18 +54,26 @@ it("fits the whole wide system wiring graph on a narrow canvas", async () => {
     return last;
   };
   try {
-    const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
-    page.setDefaultTimeout(15_000);
-    await page.goto(`${origin}/admin/dev`);
-    await page.locator(".react-flow__node").first().waitFor();
-    const nodes = snapshot.graph.atoms.length + 5; // atoms plus one group node per audience
-    expect(await settled(page)).toMatchObject({ nodes, outside: 0 });
-    await page.locator(".react-flow__controls-fitview").click();
-    expect(await settled(page)).toMatchObject({ nodes, outside: 0 });
-    await page.locator(".react-flow__controls-button").last().click(); // automatic layout
-    expect(await settled(page)).toMatchObject({ nodes, outside: 0 });
-    for (let i = 0; i < 8; i += 1) await page.locator(".react-flow__controls-zoomin").click();
-    expect((await settled(page)).zoom).toBeGreaterThanOrEqual(0.25);
+    const cases = [
+      { graph: wideSystemGraph(), audiences: 5, viewport: { width: 375, height: 812 } },
+      { graph: tallSystemGraph(), audiences: 1, viewport: { width: 740, height: 360 } },
+    ];
+    for (const { graph, audiences, viewport } of cases) {
+      snapshot = { dataModel: { schemas: [], views: [] }, logic: { triggers: [], procedures: [] }, interfaces: { http: [], callable: [] }, graph };
+      const page = await browser.newPage({ viewport });
+      page.setDefaultTimeout(15_000);
+      await page.goto(`${origin}/admin/dev`);
+      await page.locator(".react-flow__node").first().waitFor();
+      const nodes = graph.atoms.length + audiences; // atoms plus one group node per audience
+      expect(await settled(page), `initial ${viewport.width}x${viewport.height}`).toMatchObject({ nodes, outside: 0 });
+      await page.locator(".react-flow__controls-fitview").click();
+      expect(await settled(page), `Fit View ${viewport.width}x${viewport.height}`).toMatchObject({ nodes, outside: 0 });
+      await page.locator(".react-flow__controls-button").last().click(); // automatic layout
+      expect(await settled(page), `layout ${viewport.width}x${viewport.height}`).toMatchObject({ nodes, outside: 0 });
+      for (let i = 0; i < 12; i += 1) await page.locator(".react-flow__controls-zoomin").click();
+      expect((await settled(page)).zoom).toBeGreaterThanOrEqual(0.25);
+      await page.close();
+    }
   } finally {
     await browser.close();
     await new Promise<void>(resolve => server.close(() => resolve()));

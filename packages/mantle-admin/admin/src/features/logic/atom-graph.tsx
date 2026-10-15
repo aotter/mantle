@@ -164,7 +164,10 @@ export function AtomGraph({
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const hudRef = React.useRef<HTMLDivElement>(null);
 
-  const layout = React.useMemo(() => business ? { ...businessOverview(graph, schemas, language), minZoom: 0.25 } : layoutGraph(graph, language), [graph, language, schemas, business]);
+  const layout = React.useMemo(() => business ? businessOverview(graph, schemas, language) : layoutGraph(graph, language), [graph, language, schemas, business]);
+  // System wiring can be far larger than the canvas; a low floor lets Fit View (xyflow fits the node
+  // bounds to the real canvas) show all of it on any canvas shape (#1666).
+  const minZoom = business ? 0.25 : 0.02;
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
   const [flow, setFlow] = React.useState<ReactFlowInstance<Node, Edge> | null>(null);
@@ -195,7 +198,7 @@ export function AtomGraph({
     setEdges(layout.edges);
     setSelectedId(null);
     setTrace(null);
-    window.requestAnimationFrame(() => void flow?.fitView({ padding: 0.08, minZoom: business ? 0.4 : layout.minZoom, duration: 240 }));
+    window.requestAnimationFrame(() => void flow?.fitView({ padding: 0.08, minZoom: business ? 0.4 : minZoom, duration: 240 }));
   }, [layout, setEdges, setNodes]);
 
   const highlight = (nodeIds: ReadonlySet<string>, relationIds: ReadonlySet<string>): void => {
@@ -311,8 +314,8 @@ export function AtomGraph({
       nodeTypes={nodeTypes}
       colorMode={theme}
       fitView
-      fitViewOptions={{ padding: 0.08, minZoom: business ? 0.65 : layout.minZoom }}
-      minZoom={layout.minZoom}
+      fitViewOptions={{ padding: 0.08, minZoom: business ? 0.65 : minZoom }}
+      minZoom={minZoom}
       maxZoom={1.8}
       deleteKeyCode={null}
       nodesConnectable={false}
@@ -339,18 +342,13 @@ export function AtomGraph({
   );
 }
 
-// The narrowest canvas the graph is shown on; Fit View must be able to zoom out far enough to show
-// the whole graph there (with its 0.08 padding on each side), so the minimum zoom comes from the bounds.
-const narrowestCanvas = 320;
-
-export function layoutGraph(
+function layoutGraph(
   graph: DeveloperConsoleSnapshot["graph"],
   language: AdminLanguage,
-): { nodes: Node[]; edges: Edge[]; minZoom: number } {
-  const { positions, groups, size } = layoutTopDown(graph);
+): { nodes: Node[]; edges: Edge[] } {
+  const { positions, groups } = layoutTopDown(graph);
 
   return {
-    minZoom: Math.min(0.25, narrowestCanvas / (1.16 * Math.max(size.width, size.height))),
     nodes: [
       ...groups.map((group) => ({
         id: `Audience:${group.audience}`,
@@ -435,7 +433,7 @@ type AudienceGroup = { audience: DeveloperAudience; x: number; y: number; width:
 // One coordinate space for every atom: audience surfaces are laid out as grids, then Procedures and
 // Schemas are packed in rows under the median of their already placed sources. Atoms without a placed
 // source go after the anchored ones, and every row stays inside the surface span (#1666).
-function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: Map<string, { x: number; y: number }>; groups: AudienceGroup[]; size: { width: number; height: number } } {
+function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: Map<string, { x: number; y: number }>; groups: AudienceGroup[] } {
   const nodeWidth = 220;
   const nodeHeight = 88;
   const gap = 24;
@@ -487,9 +485,7 @@ function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: M
   const procedureY = surfaceBottom + 64;
   const procedureHeight = pack(graph.atoms.filter(({ kind }) => kind === "Procedure"), procedureY, ["trigger-target"]);
   pack(graph.atoms.filter(({ kind }) => kind === "Schema"), procedureY + procedureHeight + 48, ["procedure-schema", "view-source"]);
-  const boxes = [...groups, ...[...positions.values()].map((position) => ({ ...position, width: nodeWidth, height: nodeHeight }))];
-  const span = (from: number[], to: number[]): number => boxes.length ? Math.max(...to) - Math.min(...from) : 0;
-  return { positions, groups, size: { width: span(boxes.map(({ x }) => x), boxes.map(({ x, width }) => x + width)), height: span(boxes.map(({ y }) => y), boxes.map(({ y, height }) => y + height)) } };
+  return { positions, groups };
 }
 
 export function focusSlice(graph: DeveloperConsoleSnapshot["graph"], selectedId: string): FocusSlice {
