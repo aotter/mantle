@@ -246,31 +246,30 @@ test('an undefined scope value is not given: one partition autofills, several st
 const inScoped=(scope:boolean)=>{const o=JSON.parse(schema);if(scope)o.spec.scope="region IN auth.user('region')";o.spec.indexes=[['region','orderNo','id']];
  o.spec.schema.required.push('orderNo');o.spec.schema.properties.orderNo={type:'integer'};return JSON.stringify(o);};
 const inView=(name:string,sql:string,surface='public',more:object={})=>JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'View',metadata:{name},spec:{surface,sql:`SELECT id,orderNo AS "orderNo",region FROM orders ${sql}`,...more}});
-test('#1644: an IN-scoped or IN-restricted prefix does not serve ORDER BY; the refusal names the bounded ways',async()=>{
- const cases=[[inScoped(true),inView('listed','ORDER BY orderNo')],[inScoped(false),inView('listed','ORDER BY orderNo','public',{restrict:{orders:"region IN auth.user('region')"}})]];
+test('#1644: an IN-scoped or IN-restricted prefix does not serve ORDER BY; the refusal names the bounded order',async()=>{
+ const fails=(target:'bun-sqlite'|'bun-postgres',...docs:string[])=>generateOrThrow(target,[{sourceId:'a.yaml',text:docs.join('\n---\n')}]).then(()=>'',(e:Error)=>e.message);
+ const restricted=inView('listed','ORDER BY orderNo','public',{restrict:{orders:"region IN auth.user('region')"}});
  for(const target of ['bun-sqlite','bun-postgres'] as const){
-  for(const [s,v] of cases){
-   const error=await generateOrThrow(target,[{sourceId:'a.yaml',text:[s,v].join('\n---\n')}]).then(()=>undefined,(e:Error)=>e.message);
-   expect(error).toContain("ORDER BY (orderNo) is served by index [region, orderNo, id] only after 'region', which a user-field scope or restrict fixes to a set of values, not one value: every page would read and sort all of the caller's rows.");
-   expect(error).toContain('ORDER BY region, orderNo (served by the same index)');
-   expect(error).toContain('WHERE region = input.region, which fixes the prefix (the scope or restrict still applies)');
-   expect(error).toContain('for Views read by { all: true } callers, an index on the ORDER BY columns alone, e.g. [orderNo] (not bounded for scoped callers)');
-  }
-  // The suggested order keeps the authored direction, and every set-bound prefix column needs its own equality.
-  const desc=await generateOrThrow(target,[{sourceId:'d.yaml',text:[inScoped(true),inView('listed','ORDER BY orderNo DESC')].join('\n---\n')}]).then(()=>'',(e:Error)=>e.message);
-  expect(desc).toContain('ORDER BY region DESC, orderNo DESC (served by the same index, read backwards; on PostgreSQL confirm with EXPLAIN that no Sort remains)');
+  const head="ORDER BY (orderNo) needs index [region, orderNo, id] past 'region', which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows.";
+  const scoped=await fails(target,inScoped(true),inView('listed','ORDER BY orderNo'));
+  expect(scoped).toContain(`${head} Bounded: ORDER BY region, orderNo (same index); for { all: true } callers only, index [orderNo, id] (handbook: reference/schema.md#index-prefixes-for-paged-views).`);
+  // { all: true } never lifts a restrict, so the ORDER BY-only index is not offered.
+  const byRestrict=await fails(target,inScoped(false),restricted);
+  expect(byRestrict).toContain(`${head} Bounded: ORDER BY region, orderNo (same index) (handbook:`);
+  // A nullable restrict column cannot become an ORDER BY key: the refusal says to make it required first.
+  const optional=JSON.parse(inScoped(false));optional.spec.schema.required=optional.spec.schema.required.filter((c:string)=>c!=='region');
+  expect(await fails(target,JSON.stringify(optional),restricted)).toContain("Bounded: make 'region' required, then ORDER BY region, orderNo (same index) (handbook:");
+  // The suggested order keeps the authored direction, and every set-bound prefix column is named.
+  expect(await fails(target,inScoped(true),inView('listed','ORDER BY orderNo DESC'))).toContain('ORDER BY region DESC, orderNo DESC (same index, read backwards; on PostgreSQL confirm with EXPLAIN that no Sort remains)');
   const two=JSON.parse(inScoped(true));two.spec.scope+=" AND store IN auth.user('store')";two.spec.indexes=[['region','store','orderNo','id']];two.spec.schema.required.push('store');two.spec.schema.properties.store={type:'string'};
-  const both=await generateOrThrow(target,[{sourceId:'e.yaml',text:[JSON.stringify(two),inView('listed','ORDER BY orderNo')].join('\n---\n')}]).then(()=>'',(e:Error)=>e.message);
-  expect(both).toContain("only after 'region', 'store', which");
-  expect(both).toContain('ORDER BY region, store, orderNo (served by the same index); a View input bound with equality, e.g. WHERE region = input.region AND store = input.store, which fixes the prefix');
+  expect(await fails(target,JSON.stringify(two),inView('listed','ORDER BY orderNo'))).toContain("past 'region', 'store', which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows. Bounded: ORDER BY region, store, orderNo (same index);");
   // An equality-fixed column between the set-bound one and the order stays in the suggestion, and following it generates.
   const mid=JSON.parse(inScoped(true));mid.spec.indexes=[['region','tier','orderNo','id']];
   const tiered=(sql:string)=>[JSON.stringify(mid),inView('listed',sql,'public',{input:{type:'object',required:['tier'],properties:{tier:{type:'string'}}}})].join('\n---\n');
-  const midError=await generateOrThrow(target,[{sourceId:'m.yaml',text:tiered('WHERE tier = input.tier ORDER BY orderNo')}]).then(()=>'',(e:Error)=>e.message);
-  expect(midError).toContain('ORDER BY region, tier, orderNo (served by the same index)');
+  expect(await fails(target,tiered('WHERE tier = input.tier ORDER BY orderNo'))).toContain('ORDER BY region, tier, orderNo (same index)');
   await generateOrThrow(target,[{sourceId:'n.yaml',text:tiered('WHERE tier = input.tier ORDER BY region, tier, orderNo')}]);
-  // An order no index serves keeps the plain message.
-  await expect(generateOrThrow(target,[{sourceId:'b.yaml',text:[inScoped(true),inView('listed','ORDER BY tier')].join('\n---\n')}])).rejects.toThrow(/Missing index for ORDER BY \(tier\): declare a Schema index/);
+  // An order no index serves keeps the plain message, in authored names.
+  expect(await fails(target,inScoped(true),inView('listed','ORDER BY orderNo, tier'))).toContain('Missing index for ORDER BY (orderNo, tier): declare a Schema index');
  }
 });
 const sorts=(plan:any):boolean=>!!plan&&typeof plan==='object'&&(plan['Node Type']==='Sort'||Object.values(plan).some(sorts));
