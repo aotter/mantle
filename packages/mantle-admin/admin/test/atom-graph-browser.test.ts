@@ -57,8 +57,10 @@ it("fits the whole system wiring graph on narrow and short canvases", async () =
     const cases = [
       { graph: wideSystemGraph(), audiences: 5, viewport: { width: 375, height: 812 } },
       { graph: tallSystemGraph(), audiences: 1, viewport: { width: 740, height: 360 } },
+      // needs a zoom far below any fixed floor (#1666 review: 431 of 1002 nodes outside at 0.02)
+      { graph: tallSystemGraph(500), audiences: 1, viewport: { width: 740, height: 360 }, zoomIn: false },
     ];
-    for (const { graph, audiences, viewport } of cases) {
+    for (const { graph, audiences, viewport, zoomIn = true } of cases) {
       snapshot = { dataModel: { schemas: [], views: [] }, logic: { triggers: [], procedures: [] }, interfaces: { http: [], callable: [] }, graph };
       const page = await browser.newPage({ viewport });
       page.setDefaultTimeout(15_000);
@@ -70,12 +72,14 @@ it("fits the whole system wiring graph on narrow and short canvases", async () =
       expect(await settled(page), `Fit View ${viewport.width}x${viewport.height}`).toMatchObject({ nodes, outside: 0 });
       await page.locator(".react-flow__controls-button").last().click(); // automatic layout
       expect(await settled(page), `layout ${viewport.width}x${viewport.height}`).toMatchObject({ nodes, outside: 0 });
-      for (let i = 0; i < 12; i += 1) await page.locator(".react-flow__controls-zoomin").click();
-      expect((await settled(page)).zoom).toBeGreaterThanOrEqual(0.25);
+      if (zoomIn) {
+        for (let i = 0; i < 12; i += 1) await page.locator(".react-flow__controls-zoomin").click();
+        expect((await settled(page)).zoom).toBeGreaterThanOrEqual(0.25);
+      }
       await page.close();
     }
   } finally {
     await browser.close();
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
-}, 60_000);
+}, 120_000);

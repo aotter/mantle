@@ -165,9 +165,19 @@ export function AtomGraph({
   const hudRef = React.useRef<HTMLDivElement>(null);
 
   const layout = React.useMemo(() => business ? businessOverview(graph, schemas, language) : layoutGraph(graph, language), [graph, language, schemas, business]);
-  // System wiring can be far larger than the canvas; a low floor lets Fit View (xyflow fits the node
-  // bounds to the real canvas) show all of it on any canvas shape (#1666).
-  const minZoom = business ? 0.25 : 0.02;
+  const [canvas, setCanvas] = React.useState<{ width: number; height: number } | null>(null);
+  React.useLayoutEffect(() => {
+    const element = canvasRef.current;
+    if (!element) return;
+    const measure = (): void => setCanvas((current) => current?.width === element.clientWidth && current.height === element.clientHeight ? current : { width: element.clientWidth, height: element.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  // System wiring can be far larger than the canvas: the floor drops below 0.25 only as far as Fit View
+  // needs to show the whole layout on the measured canvas (#1666).
+  const minZoom = business ? 0.25 : fitZoomFloor(layout.nodes, canvas);
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
   const [flow, setFlow] = React.useState<ReactFlowInstance<Node, Edge> | null>(null);
@@ -198,7 +208,7 @@ export function AtomGraph({
     setEdges(layout.edges);
     setSelectedId(null);
     setTrace(null);
-    window.requestAnimationFrame(() => void flow?.fitView({ padding: 0.08, minZoom: business ? 0.4 : minZoom, duration: 240 }));
+    window.requestAnimationFrame(() => void flow?.fitView({ padding: 0.08, ...(business && { minZoom: 0.4 }), duration: 240 }));
   }, [layout, setEdges, setNodes]);
 
   const highlight = (nodeIds: ReadonlySet<string>, relationIds: ReadonlySet<string>): void => {
@@ -314,7 +324,7 @@ export function AtomGraph({
       nodeTypes={nodeTypes}
       colorMode={theme}
       fitView
-      fitViewOptions={{ padding: 0.08, minZoom: business ? 0.65 : minZoom }}
+      fitViewOptions={{ padding: 0.08, ...(business && { minZoom: 0.65 }) }}
       minZoom={minZoom}
       maxZoom={1.8}
       deleteKeyCode={null}
@@ -422,6 +432,17 @@ export function ManifestEdge({ id, data, sourceX, sourceY, sourcePosition, targe
       </EdgeLabelRenderer>
     </>
   );
+}
+
+// The usual 0.25 floor, or lower when the layout bounds (atoms are 220x88, audience groups carry their
+// size) only fit the canvas below it, with headroom for Fit View's padding.
+function fitZoomFloor(nodes: readonly Node[], canvas: { width: number; height: number } | null): number {
+  if (!canvas?.width || !canvas.height || !nodes.length) return 0.25;
+  const right = Math.max(...nodes.map(({ position, style }) => position.x + Number(style?.width ?? 220)));
+  const bottom = Math.max(...nodes.map(({ position, style }) => position.y + Number(style?.height ?? 88)));
+  const left = Math.min(...nodes.map(({ position }) => position.x));
+  const top = Math.min(...nodes.map(({ position }) => position.y));
+  return Math.min(0.25, 0.8 * Math.min(canvas.width / (right - left), canvas.height / (bottom - top)));
 }
 
 export function layoutComponents(graph: DeveloperConsoleSnapshot["graph"]): Map<string, { x: number; y: number }> {
