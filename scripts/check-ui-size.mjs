@@ -30,6 +30,8 @@ try {
         unpacked += size;
         const path = header.toString("utf8", 0, 100).replace(/\0.*$/s, "");
         if (path.endsWith(".map")) failures.push(`${name} publishes source map ${path}`);
+        // Admin is built by the application (`mantle bundle`); a prebuilt SPA must not come back
+        if (name === "mantle-admin" && /^package\/dist\/admin\//.test(path)) failures.push(`Admin publishes a prebuilt SPA file ${path}`);
         if (name === "mantle-ui" && /\/dist\/(?:admin|mcp-app|extension|admin-preview|app)\//.test(path)) failures.push(`pure UI publishes ${path}`);
       }
       offset += 512 + Math.ceil(size / 512) * 512;

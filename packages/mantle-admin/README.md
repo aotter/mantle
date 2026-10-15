@@ -1,7 +1,7 @@
 # @aotter/mantle-admin
 
-The complete Mantle Admin product: the SPA, extension client API, same-origin
-iframe preview and Admin MCP App. It uses the public `@aotter/mantle-ui` kit
+The complete Mantle Admin product: the Admin app library and its build, extension
+client API, same-origin iframe preview and Admin MCP App. It uses the public `@aotter/mantle-ui` kit
 and declares `@aotter/mantle` as a peer. The SDK never imports this package.
 
 ## Package migration
@@ -10,12 +10,15 @@ These exports moved from `@aotter/mantle-ui` without compatibility aliases:
 
 | Former UI subpath | New Admin subpath |
 | --- | --- |
-| `/admin/index.html` | `@aotter/mantle-admin/admin/index.html` |
-| `/admin/preview.html` | `@aotter/mantle-admin/admin/preview.html` |
-| `/admin/host-bridge.js` | `@aotter/mantle-admin/admin/host-bridge.js` |
 | `/extension` | `@aotter/mantle-admin/extension` |
 | `/admin-preview` | `@aotter/mantle-admin/admin-preview` |
 | `/mcp-app` | `@aotter/mantle-admin/mcp-app` |
+
+The package ships no prebuilt SPA: `admin/index.html`, `admin/preview.html` and
+`admin/host-bridge.js` are not exports. The application builds them (see Static
+assets); the same-origin preview document and its bridge are written beside
+`index.html`. An app that copied them from `node_modules` serves `<assets>/admin`
+instead (breaking).
 
 Admin-specific catalogue and tool-result adapters moved from the UI root to
 `@aotter/mantle-admin/controller`. The generic interaction controller remains
@@ -78,7 +81,7 @@ An Admin entry default-exports `defineAdmin(...)`; `<MantleAdmin>` is the root
 for an app that mounts Admin inside its own providers, and it renders once the
 stored or browser language has loaded. The built-in entry is `defineAdmin({})`:
 with no generated metadata, Admin reads its collections, Views and operations
-from `/admin/api` at runtime. The prebuilt SPA is that entry, built the same way.
+from `/admin/api` at runtime. The application builds that entry when it has no `admin.tsx`.
 Admin extensions load only in Admin built by `buildAdmin`: its page supplies the
 import map and shared modules that extension modules resolve `react` and the kit
 through. An app that renders `<MantleAdmin>` in its own build has neither, so
@@ -100,7 +103,8 @@ calculate integrity.
 ## Preview
 
 Use `adminPreviewDocument` and `readAdminPreviewRequest` from `/admin-preview`
-with the exported preview document and host bridge. The immediate parent must
+with the preview document and host bridge `buildAdmin` writes into the assets
+directory. The immediate parent must
 be same-origin. Validate the protocol-1 request envelope, bind the bridge to
 one source revision, and authorize every runtime request. Unknown paths never
 fall through to authentication or another origin. The canonical Admin document
