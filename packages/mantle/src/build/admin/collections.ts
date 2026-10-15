@@ -20,11 +20,10 @@ export function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
   const nav = ui["nav"];
   const filterField = list["filterField"] as string | undefined;
   // a required reference is composition: the child sits under its parent, the declared nav.parentField first, then an `id` reference, else one by a unique field
-  const byId = standaloneParentField(s, schemas);
   const declared = nav?.["parentField"] as string | undefined;
   const parentField = foldParentField(s.schema, declared, (name) => names.has(name));
   // a standalone list's parent picker scopes by the parent's entry id, so only an `id` reference composes there (the checker agrees)
-  const navField = nav?.["standalone"] === true ? declared ?? byId : undefined;
+  const navField = nav?.["standalone"] === true ? declared ?? (s.translates ? undefined : requiredMantleRefFields(s.schema).find((r) => names.has(r.collection))?.field) : undefined;
   const navParent = navField ? resolveMantleRef(props[navField]) : null;
   const children = schemas.filter((c) => c.translates?.parent === s.name);
   return {
@@ -41,13 +40,6 @@ export function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
     list: { primaryField: (list["primaryField"] as string | undefined) ?? null, columns: (list["columns"] as string[] | undefined) ?? [] },
     nav: navField && navParent ? { standalone: true, parentField: navField, parentCollection: navParent.schema } : null,
   };
-}
-
-/** @internal The default parent field of a standalone list: the first required `id` reference to a non-translation Schema, as the checker's `nav.standalone` rule requires; undefined when standalone is refused. */
-export function standaloneParentField(s: PlanSchema, schemas: readonly PlanSchema[]): string | undefined {
-  if (s.translates) return undefined;
-  const names = new Set(schemas.filter((x) => !x.translates).map((x) => x.name));
-  return requiredMantleRefFields(s.schema).find((r) => names.has(r.collection))?.field;
 }
 
 /** @internal Whether a Schema has its own sidebar entry: not a translation, and top-level or an opt-in standalone child (Admin's `isPrimaryNavCollection` agrees). */
