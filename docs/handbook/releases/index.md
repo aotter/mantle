@@ -10,14 +10,42 @@ open; installing one means choosing an exact version, not a channel.
 [GitHub Releases](https://github.com/aotter/mantle/releases) is the canonical
 change history; this page is the narrative one.
 
-From 0.2.0, Mantle is two packages, `@aotter/mantle` and `@aotter/mantle-ui`,
-published together at one version: the 0.1.x `-spec`, `-runtime`,
-`-cloudflare`, `-auth`, `-admin`, `-mcp`, `-web` and other packages fold into
-subpaths of `@aotter/mantle`, and `@aotter/mantle-admin-ui` into
-`@aotter/mantle-ui/admin`. Pin every one you use to the
-same exact version and upgrade them together.
+From 0.2.0-alpha.7, Mantle publishes three packages together at one version:
+`@aotter/mantle` (native SDK, compiler and CLI), `@aotter/mantle-ui` (pure UI),
+and `@aotter/mantle-admin` (optional Admin server, SPA and MCP App).
+Pin every package you use to the same exact version and upgrade them together.
 
 ## 0.2.0 — in preparation
+
+### Native SDK migration (alpha.7)
+
+Alpha.7 replaces the previous Core runtime and generated service contract.
+Existing alpha.6 applications require a source migration:
+
+- Replace `createMantle`, `Store.select` and the old host presets with
+  [native generated queries and Store](../guides/typed-queries.md).
+  Generate with an explicit target and output directory, for example
+  `mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --admin`.
+  See [CLI and generated ownership](../start/project-and-cli.md).
+- The application owns routing, native database handles, verified Caller,
+  Auth configuration and migrations. Runtime no longer converges storage or
+  runs DDL at boot. Apply generated `schema.sql` only to an empty database;
+  migrate existing data explicitly. PostgreSQL uses Bun.SQL on Bun and
+  postgres.js on Workers. See [native execution](../guides/native-execution.md).
+- Install the separate `@aotter/mantle-admin` package when selecting Admin.
+  Compose its [native bindings](../guides/native-admin.md) in the application.
+  Bare queries retain driver-native values; selected REST/MCP/Admin boundaries
+  own validation and declared-column wire conversion.
+- Move lifecycle/schedule handlers and dynamic authorization guards into
+  application code. Review [authorization and Caller wiring](../concepts/runtime-and-adapters.md)
+  and regenerate all owned artifacts before running `generate --check`.
+
+The [reference Worker](https://github.com/aotter/mantle/tree/v0.2.0-alpha.7/docs/examples/reference-service) and
+[app shell](../../examples/app-shell/) demonstrate the current composition.
+The following earlier-alpha notes are historical; the current handbook and
+the native migration above supersede their runtime and CLI instructions.
+
+### Earlier alpha design
 
 0.2.0 replaces 0.1.x's grammar and composition; no stable 0.1.5 was released
 (`0.1.5-alpha.1` was a prerelease). It breaks every consumer, and
