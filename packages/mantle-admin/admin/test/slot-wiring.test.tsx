@@ -1,6 +1,8 @@
 import * as React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SidebarProvider, TooltipProvider } from "@aotter/mantle-ui/kit";
 import { defineAdmin, type AdminMeta } from "../src/app/define-admin";
@@ -10,6 +12,9 @@ import { Slot, SurfaceProvider, type SlotProps } from "../src/app/slots";
 import type { SidebarProps } from "../src/app/slot-props";
 import { AppSidebar } from "../src/layout/app-sidebar";
 import { ShellContext } from "../src/layout/shell-context";
+import { AuthenticatedLayout } from "../src/layout/authenticated-layout";
+import { FormActionBar } from "../src/ui/page";
+import { operationsQueryOptions, viewsManifestQueryOptions } from "../src/lib/queries";
 import { DataCell } from "../src/ui/data-cell";
 import { SchemaFields } from "../src/features/content/entry-edit-view";
 
@@ -69,5 +74,64 @@ describe("Admin's built-in components through their slots", () => {
     expect(html).toContain('value="n"');
     expect(shell(form(), layers)).not.toContain("data-input");
     expect(shell(form({ schema: "requests", readOnly: false }), {})).toContain('value="Laptops"');
+  });
+});
+
+describe("the pages mount their slots", () => {
+  const layout = (layers: ReturnType<typeof defineAdmin>["layers"], workspace: "content" | "developer", children: React.ReactNode = <p>page</p>) => {
+    const client = new QueryClient();
+    client.setQueryData(["me"], { login: "ada", image: null, role: "admin", admin: true });
+    client.setQueryData(["collections"], []);
+    client.setQueryData(["site"], { brand: "Acme", icons: [] });
+    client.setQueryData(viewsManifestQueryOptions().queryKey, []);
+    client.setQueryData(operationsQueryOptions().queryKey, []);
+    return renderToStaticMarkup(
+      <PreferencesProvider initialLanguage="en"><QueryClientProvider client={client}>
+        <SurfaceProvider surface="browser" host={null} layers={layers}><TooltipProvider><AdminRouterProvider>
+          <AuthenticatedLayout workspace={workspace}>{children}</AuthenticatedLayout>
+        </AdminRouterProvider></TooltipProvider></SurfaceProvider>
+      </QueryClientProvider></PreferencesProvider>,
+    );
+  };
+  const mine = defineAdmin(admin, { components: {
+    Sidebar: () => <nav>my-sidebar</nav>,
+    Header: () => <header>my-header</header>,
+  } }).layers;
+
+  it("wraps the content workspace's sidebar and header, and leaves the developer workspace as built", () => {
+    const content = layout(mine, "content");
+    expect(content).toContain("my-sidebar");
+    expect(content).toContain("my-header");
+    const developer = layout(mine, "developer");
+    expect(developer).not.toContain("my-sidebar");
+    expect(developer).not.toContain("my-header");
+    expect(developer).toContain("Overview");
+  });
+
+  it("replaces the whole shell, and keeps a record form's action bar in the page", () => {
+    const layers = defineAdmin(admin, { components: { Shell: ({ children }) => <main data-shell="mine">{children}</main> } }).layers;
+    const html = layout(layers, "content", <FormActionBar><button>Save</button></FormActionBar>);
+    expect(html).toContain('data-shell="mine"');
+    expect(html).toContain("<button>Save</button>");
+  });
+
+  it("mounts every page slot where its page renders", () => {
+    const src = (file: string) => readFileSync(resolve(import.meta.dirname, "../src", file), "utf8");
+    const app = src("app/admin-app.tsx");
+    for (const name of ["CollectionList", "RecordView", "Home"]) expect(app, name).toMatch(new RegExp(`<Slot name="${name}"`));
+    const edit = src("features/content/entry-edit-view.tsx");
+    for (const name of ["record\\.aside", "record\\.actions", "input"]) expect(edit, name).toMatch(new RegExp(`<Slot name=\\{`+"`"+`${name}:`));
+    expect(src("features/content/collection-view.tsx")).toMatch(/<Slot name=\{`list\.actions:/);
+    // a list column goes through its Schema field's slot; a View column through its Schema field's, then its own
+    expect(src("features/content/collection-view.tsx")).toContain("`cell:${collection?.name ?? \"\"}.${name}`");
+    const view = src("features/ops/view-page.tsx");
+    expect(view).toContain("`cell:${view.columns[col].schema}.${view.columns[col].field}`");
+    expect(view).toContain("`cell:view:${name}.${col}`");
+  });
+
+  it("passes on what a layer leaves out, so a component that forwards only the typed props still renders Admin's own", () => {
+    const html = shell(<Slot name="x" Default={(p: { a: string; hidden?: string }) => <i>{p.a}{p.hidden}</i>} props={{ a: "A", hidden: "H" }} />,
+      { x: [({ a, renderDefault }: SlotProps<{ a: string }>) => renderDefault({ a })] as never });
+    expect(html).toContain("<i>AH</i>");
   });
 });

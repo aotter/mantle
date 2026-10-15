@@ -182,12 +182,12 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 | `Header` | browser | `title?`, `actions?` (before the built-in controls) |
 | `Brand` | browser | `title`, `image?`, `href?` |
 | `Home` | browser | `collections`, `site` (what the page shows; the built-in page loads its own data) |
-| `CollectionList` | browser | `collection`, `query` (the search string) |
+| `CollectionList` | browser | `collection` (filters come from the page's location) |
 | `RecordView` | both | `collection`, `entryId`, `surface` |
 | `record.aside:<schema>` | both | `collection`, `entry`, `surface` |
 | `record.actions:<schema>` | both | `collection`, `entry`, `surface` |
 | `list.actions:<schema>` | browser | `collection`, `selection` (empty in the toolbar, the selected ids in the bulk bar) |
-| `cell:<schema>.<field>` | both | `value`, `row`, `property`, `surface` |
+| `cell:<schema>.<field>` | both | `value`, `row` (the list's columns only, `null` when empty), `property`, `surface` |
 | `cell:view:<view>.<column>` | both | `value`, `row`, `property`, `surface` |
 | `input:<schema>.<field>` | both | `value`, `onChange`, `readOnly`, `property`, `surface` |
 
@@ -195,7 +195,7 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 record form's top-level fields go through `input:`; a View's parameters and a Procedure's inputs do not. A read-only field
 (a bound or `readOnly` property) has no `input:` component, and `readOnly` tells yours that the caller cannot edit the
 record. A View column that reads a Schema field also goes through that field's `cell:` component, with the column's own
-`cell:view:` component outside it. The developer workspace (`/admin/dev`) is Admin's own tool and is not a slot.
+`cell:view:` component outside it. The developer workspace (`/admin/dev`) is Admin's own tool and does not go through any slot. A record with folded child collections opens on a workbench at `/admin/c/<schema>/<id>`, which is not `RecordView`; the record form (and so `RecordView`, `record.aside:`, `record.actions:` and `input:`) is its `/edit` page. A `Shell` that does not call `renderDefault` has no status bar: the record form's Save and Publish bar then stays in the page.
 
 `plugins` are fragments of `components`, applied in order: each one's `renderDefault` is the plugin before it, the first
 plugin's is the built-in component, and the application's own `components` are outermost. A plugin is
@@ -234,7 +234,9 @@ export default defineConfig({ plugins: [adminVitePlugin({ entry: "src/admin.tsx"
 ```
 
 Run `vite` beside `wrangler dev` and open `http://localhost:5173/admin/`. The plugin proxies `/admin/api` and `/api/auth` to
-`http://localhost:8787` (`target` changes it), so the service must accept the dev server's origin for sign-in.
+`http://localhost:8787` (`target` changes it; `authBasePath` names the auth path when the service's is not `/api/auth`). The proxy keeps
+the dev server's `Host`, so the browser's `Origin` and the service's own origin agree and session writes pass the same-origin check.
+The service may still need to trust `http://localhost:5173` as an auth origin for sign-in.
 
 ## Generated reads and writes
 

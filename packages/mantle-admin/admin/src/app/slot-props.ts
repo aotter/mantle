@@ -80,10 +80,9 @@ export interface HomeProps {
   readonly site: AdminSiteSummary | undefined;
 }
 
-/** `CollectionList`: a collection's list page. `query` is the location's search string. Surface: browser. */
+/** `CollectionList`: a collection's list page, which reads its filters from the location. Surface: browser. */
 export interface CollectionListProps {
   readonly collection: string;
-  readonly query: string;
 }
 
 /** `RecordView`: one entry's page, which loads the entry itself. Surface: both. */

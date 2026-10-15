@@ -35,7 +35,7 @@ export function AppSidebar({ brand, groups, footer }: SidebarProps): React.React
     >
       <SidebarHeader className="h-14 justify-center border-b border-sidebar-border px-2 py-0">
         <div className="flex min-w-0 items-center gap-1">
-          <Slot name="Brand" Default={AppTitle} props={brand} />
+          {brand.href === "/admin/dev" ? <AppTitle {...brand} /> : <Slot name="Brand" Default={AppTitle} props={brand} />}
           <SidebarTrigger
             className="shrink-0 group-data-[collapsible=icon]:mx-auto"
             aria-label={t(language, "common.toggleSidebar")}

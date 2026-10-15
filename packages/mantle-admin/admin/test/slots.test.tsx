@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { defineAdmin, type AdminMeta } from "../src/app/define-admin";
 import type { AdminHost } from "../src/app/hooks";
 import { AdminLink, Slot, SurfaceProvider, useOpenLink, useViewCellNames, type SlotProps } from "../src/app/slots";
-import type { CellProps, SidebarProps } from "../src/app/slot-props";
+import type { SidebarProps } from "../src/app/slot-props";
 
 /** The generated types of a small application: what `generated/admin-client.ts` describes. */
 interface Types {
@@ -65,7 +65,9 @@ describe("slots", () => {
   it("types components from the generated metadata", () => {
     defineAdmin(admin, {
       components: {
-        "cell:requests.title": ({ value, row }: CellProps<string, { title: string; status: "open" | "closed" }>) => `${value}${row.status}`,
+        "cell:requests.title": ({ value, row }) => `${value}${row.status ?? ""}`,
+        // @ts-expect-error a list row holds only the columns shown, so a field may be missing
+        "cell:requests.status": ({ row }) => row.title.length,
         "cell:view:pending-requests.amount": ({ value, row }) => value + row.amount,
         "input:requests.status": ({ value, onChange }) => { onChange(value === "open" ? "closed" : "open"); return null; },
         "record.actions:requests": ({ entry }) => entry.data.title,
@@ -110,7 +112,7 @@ describe("links", () => {
     expect(await openLink!("javascript:alert(1)")).toBe(false);
     expect(await openLink!("/admin")).toBe(false);
     expect(open).toHaveBeenCalledTimes(1);
-    const tab = vi.fn(() => ({}));
+    const tab = vi.fn(() => null); // what a real `noopener` open returns
     vi.stubGlobal("window", { open: tab });
     renderToStaticMarkup(<Probe />);
     expect(await openLink!("https://example.com")).toBe(true);

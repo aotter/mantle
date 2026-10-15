@@ -46,7 +46,7 @@ export function Slot<P extends object>({ name, Default, props }: { name: string 
   if (!context || layers.length === 0) return <Default {...props} />;
   const extra = isBothSlot(names[0]!) ? { surface: context.surface } : {};
   const at = (index: number) => (next: P): React.ReactNode => {
-    if (index < 0) return <Default {...next} />;
+    if (index < 0) return <Default {...props} {...next} />;
     const Layer = layers[index] as unknown as React.ComponentType<P & { renderDefault: (props: P) => React.ReactNode }>;
     return <Layer {...next} {...extra} renderDefault={at(index - 1)} />;
   };
@@ -83,7 +83,7 @@ const isWeb = (url: string): boolean => /^https?:\/\//i.test(url);
 /**
  * Open an http(s) URL outside Admin: a new tab in the browser, `ui/open-link` in an MCP host (which blocks navigation
  * from its sandbox, so never `window.open` or `target="_blank"` in a component that renders there). Resolves false when
- * the URL is not http(s), or the host cannot or refuses to open it.
+ * the URL is not http(s), or an MCP host cannot or refuses to open it (the browser cannot tell, so it resolves true).
  *
  * Surface: both.
  */
@@ -92,7 +92,9 @@ export function useOpenLink(): (url: string) => Promise<boolean> {
   return React.useCallback(async (url: string) => {
     if (!isWeb(url)) return false;
     if (host) return host.openLink(url);
-    return window.open(url, "_blank", "noopener,noreferrer") !== null;
+    // `noopener` makes window.open return null even when the tab opens, so success cannot be read back
+    window.open(url, "_blank", "noopener,noreferrer");
+    return true;
   }, [host]);
 }
 

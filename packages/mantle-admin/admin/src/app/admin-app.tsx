@@ -131,7 +131,7 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   if (collectionMatch) {
     return (
       <AuthenticatedLayout>
-        <Slot name="CollectionList" Default={CollectionPage} props={{ collection: decodeURIComponent(collectionMatch[1]!), query: search }} />
+        <Slot name="CollectionList" Default={CollectionPage} props={{ collection: decodeURIComponent(collectionMatch[1]!) }} />
       </AuthenticatedLayout>
     );
   }

@@ -181,9 +181,9 @@ function ShellFrame({ children, nav, brand, workspace = "content" }: ShellProps 
     <PageHeaderActionsHostContext.Provider value={pageHeaderActionsHost}>
       <SidebarProvider className="h-svh min-h-0 overflow-hidden">
         <SkipToMain />
-        <Slot name="Sidebar" Default={AppSidebar} props={{ brand, groups: nav }} />
+        {workspace === "developer" ? <AppSidebar brand={brand} groups={nav} /> : <Slot name="Sidebar" Default={AppSidebar} props={{ brand, groups: nav }} />}
         <SidebarInset className="min-h-0 overflow-hidden">
-          <Slot name="Header" Default={Header} props={{ title: pageTitle }} />
+          {workspace === "developer" ? <Header title={pageTitle} /> : <Slot name="Header" Default={Header} props={{ title: pageTitle }} />}
           <Main className={fullBleed
             ? "min-h-0 max-w-none overflow-hidden px-0 py-0 pt-14 pb-10 sm:px-0"
             : `min-h-0 overflow-y-auto overscroll-contain pt-20 ${workspace === "developer" ? "pb-14" : "pb-20"}`}>

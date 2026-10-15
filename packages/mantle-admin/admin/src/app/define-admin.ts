@@ -41,6 +41,8 @@ type FieldOf<T extends AdminTypes, K extends string> = K extends `${infer C}.${i
 type Member<O, F extends string> = [keyof O] extends [never] ? unknown : F extends keyof O ? O[F] : never;
 type RowOf<T extends AdminTypes, V extends string> = V extends keyof T["views"] ? T["views"][V]["row"] : never;
 type ColumnOf<T extends AdminTypes, K extends string> = K extends `${infer V}.${infer F}` ? Member<RowOf<T, V>, F> : never;
+/** What a collection list passes as `row`: the columns it shows, `null` where empty. */
+type ListRow<D> = unknown extends D ? Readonly<Record<string, unknown>> : { readonly [P in keyof D]?: D[P] | null };
 type Of<K extends string, Prefix extends string> = K extends `${Prefix}${infer Rest}` ? Rest : never;
 
 /**
@@ -68,7 +70,7 @@ export type AdminComponents<T extends AdminTypes = AdminTypes> = {
 } & {
   readonly [K in `list.actions:${Collections<T>}`]?: Browser<ListActionsProps>;
 } & {
-  readonly [K in `cell:${FieldKey<T>}`]?: Both<CellProps<FieldOf<T, Of<K, "cell:">>, DataOf<T, Of<K, "cell:"> extends `${infer C}.${string}` ? C : never>>>;
+  readonly [K in `cell:${FieldKey<T>}`]?: Both<CellProps<FieldOf<T, Of<K, "cell:">>, ListRow<DataOf<T, Of<K, "cell:"> extends `${infer C}.${string}` ? C : never>>>>;
 } & {
   readonly [K in `cell:view:${ColumnKey<T>}`]?: Both<CellProps<ColumnOf<T, Of<K, "cell:view:">>, RowOf<T, Of<K, "cell:view:"> extends `${infer V}.${string}` ? V : never>>>;
 } & {

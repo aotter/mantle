@@ -62,6 +62,8 @@ export interface AdminViteOptions {
   readonly entry?: string;
   /** The running service, to which `/admin/api` and `/api/auth` are proxied. `http://localhost:8787`, `wrangler dev`'s address, by default. */
   readonly target?: string;
+  /** The service's auth base path when it is not `/api/auth`, as the service's `authBasePath`. */
+  readonly authBasePath?: string;
 }
 
 /**
@@ -74,13 +76,16 @@ export interface AdminViteOptions {
  * export default defineConfig({ plugins: [adminVitePlugin({ entry: "src/admin.tsx" })] });
  * ```
  */
-export async function adminVitePlugin({ entry, target = "http://localhost:8787" }: AdminViteOptions = {}): Promise<PluginOption[]> {
+export async function adminVitePlugin({ entry, target = "http://localhost:8787", authBasePath = "/api/auth" }: AdminViteOptions = {}): Promise<PluginOption[]> {
   const { plugins, config, allow } = await adminCore(entry);
   const { configFile: _configFile, ...inherited } = config;
   return [{
     name: "mantle-admin-dev",
     // the page is served at /admin/ as it is in production; the service answers its API and sign-in
-    config: () => ({ ...inherited, base: "/admin/", server: { fs: { allow }, proxy: { "/admin/api": target, "/api/auth": target } } }),
+    // changeOrigin stays off: the service compares a write's Origin with its own Host, and both are the dev server's
+    config: () => ({ ...inherited, base: "/admin/", server: { fs: { allow }, proxy: { "/admin/api": { target }, [authBasePath]: { target } } } }),
+    // the service injects this into the shell it serves (`adminShell`)
+    transformIndexHtml: (html: string) => authBasePath === "/api/auth" ? html : html.replace("</head>", `<meta name="mantle-auth-base" content="${authBasePath}"></head>`),
   }, ...plugins];
 }
 
