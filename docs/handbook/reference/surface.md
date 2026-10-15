@@ -228,7 +228,9 @@ compared by hostname as the official SDK does (not scheme or port); each is a
 full origin (`https://console.example`) or the SDK's bare host
 (`console.example`, `localhost:8787`), and anything else, such as a path, throws
 when `mcp(...)` is configured. `Host` is not checked. Cookie writes also need
-the full same-origin check.
+the full same-origin check. Under `wrangler dev` with `routes`, a page served by
+the same dev server arrives with its `Origin` rewritten to the route host, so
+list that host too if such a page calls MCP.
 
 `onObservation` receives request refusals and invocation attempt/completion
 metadata, including duration and outcome. Its Caller and scopes are frozen copies.
