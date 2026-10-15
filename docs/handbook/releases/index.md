@@ -40,7 +40,7 @@ Existing alpha.6 applications require a source migration:
   application code. Review [authorization and Caller wiring](../concepts/runtime-and-adapters.md)
   and regenerate all owned artifacts before running `generate --check`.
 
-The [reference Worker](../../examples/reference-service/) and
+The [reference Worker](https://github.com/aotter/mantle/tree/v0.2.0-alpha.7/docs/examples/reference-service) and
 [app shell](../../examples/app-shell/) demonstrate the current composition.
 The following earlier-alpha notes are historical; the current handbook and
 the native migration above supersede their runtime and CLI instructions.

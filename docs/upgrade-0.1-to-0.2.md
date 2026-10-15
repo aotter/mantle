@@ -3,7 +3,7 @@
 For **0.2.0-alpha.7 and later**, use the
 [native SDK migration](handbook/releases/index.md#native-sdk-migration-alpha7),
 [current CLI](handbook/start/project-and-cli.md) and
-[reference Worker](examples/reference-service/). The application owns routing,
+[app shell](examples/app-shell/). The application owns routing,
 Auth, native handles and database migrations; the former `createMantle` runtime,
 host presets, boot-time convergence and CLI flags below have been replaced.
 Install the same exact version of `@aotter/mantle`, `@aotter/mantle-ui` and,
