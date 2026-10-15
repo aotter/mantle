@@ -135,7 +135,8 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
           tool.check?.(caller);
           await authorizeTarget(options.authorize, tool.target ?? { kind: tool.page ? "view" : "procedure", name: tool.name }, caller);
         }
-        if ((Array.isArray(parsedBody) ? parsedBody : [parsedBody]).some(message => message?.method === "tools/list")) {
+        // an App's HTML is rendered for the same tools the caller's tools/list shows
+        if ((Array.isArray(parsedBody) ? parsedBody : [parsedBody]).some(message => message?.method === "tools/list" || message?.method === "resources/read")) {
           const visible = [];
           for (const tool of selected) {
             if (caller.kind === "anonymous" && tool.closed || !options.gateway && caller.kind === "user" && caller.credential === "oauth" && tool.scopes?.some(scope => !caller.scopes.includes(scope))) continue;
@@ -154,7 +155,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       const server = new McpServer(serverInfo, options.instructions ? { instructions: options.instructions } : {});
       server.server.registerCapabilities({ tools: { listChanged: false } });
       if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
-      const appMeta = links ? registerApps(server, links, parsedBody) : undefined;
+      const appMeta = links ? registerApps(server, links, parsedBody, new Set(selected.map(tool => tool.name))) : undefined;
       // A host's stale copy names a tool this catalogue lacks: say so, with the catalogue version, instead of the SDK's bare "not found".
       // Wrapped where the SDK stores it, so transport and request validation still answer first.
       const registered = new Set<string>(), set = server.server.setRequestHandler.bind(server.server) as (method: string, handler: unknown) => void;
@@ -230,17 +231,17 @@ function clientUiSupport(message: unknown): "supported" | "unsupported" | "unkno
 }
 
 function appMeta(r: McpAppResource): { ui: Record<string, unknown> } | undefined {
-  const ui = { ...(r.csp ? { csp: r.csp } : {}), ...(r.permissions ? { permissions: r.permissions } : {}), ...(r.prefersBorder !== undefined ? { prefersBorder: r.prefersBorder } : {}) };
+  const ui = { ...(r.csp ? { csp: r.csp } : {}), ...(r.permissions ? { permissions: r.permissions } : {}), ...(r.domain !== undefined ? { domain: r.domain } : {}), ...(r.prefersBorder !== undefined ? { prefersBorder: r.prefersBorder } : {}) };
   return Object.keys(ui).length > 0 ? { ui } : undefined;
 }
 
 /** Registration uses the official SDK; HTML loaders run only on resources/read. */
-function registerApps(server: import("@modelcontextprotocol/server").McpServer, links: ReturnType<typeof linkSurface>["links"], message: unknown) {
+function registerApps(server: import("@modelcontextprotocol/server").McpServer, links: ReturnType<typeof linkSurface>["links"], message: unknown, tools: ReadonlySet<string>) {
   const enabled = clientUiSupport(message) !== "unsupported";
   if (enabled) for (const resource of links.resources) {
     const meta = appMeta(resource);
     server.registerResource(resource.name, resource.uri, { mimeType: RESOURCE_MIME_TYPE, title: resource.title, description: resource.description, ...(meta ? { _meta: meta } : {}) }, async () => {
-      try { return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: typeof resource.html === "string" ? resource.html : await resource.html(), ...(meta ? { _meta: meta } : {}) }] }; }
+      try { return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: typeof resource.html === "string" ? resource.html : await resource.html({ tools }), ...(meta ? { _meta: meta } : {}) }] }; }
       catch { console.error("[mantle mcp] resource rendering failed"); throw new Error("Internal error."); }
     });
   }

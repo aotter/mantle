@@ -3,7 +3,7 @@ import { createInteractionController, type InteractionController } from "@aotter
 import { OperationPanel } from "@aotter/mantle-ui";
 import { SchemaFields, applyFieldEdits } from "@aotter/mantle-ui/kit";
 import { useInteraction } from "@aotter/mantle-ui";
-import { nativeTimestamp, propertyLabel, renderDataValue, resolveLocalizedText, withNativeSchema, type FieldSchema } from "@aotter/mantle-ui";
+import { nativeTimestamp, propertyLabel, renderDataValue, resolveLocalizedText, timestampHint, withNativeSchema, type FieldSchema } from "@aotter/mantle-ui";
 import {
   actionsFor,
   diagnosticsOf,
@@ -19,6 +19,7 @@ import {
   type CallTool,
   type ToolResult,
 } from "../app/bridge.js";
+import { web, type HostApi } from "../app/postmessage.js";
 import { appLabels, type AppLabels } from "./locale.js";
 
 type Row = Readonly<Record<string, unknown>>;
@@ -30,6 +31,26 @@ function columnLabel(name: string, schema: FieldSchema | undefined, language: st
 }
 
 /**
+ * A value as the App shows it: a date-time in the host's language and time zone, an http(s) link opened through the host
+ * (`ui/open-link`, as the sandbox blocks navigation), anything else as Admin shows it.
+ */
+export function appValue(schema: FieldSchema | undefined, value: unknown, language: string, timeZone?: string, openLink?: HostApi["openLink"]): ReactNode {
+  const time = timestampHint(schema) && typeof value === "number" ? value : schema?.format === "date-time" && typeof value === "string" ? Date.parse(value) : NaN;
+  if (Number.isFinite(time)) {
+    try {
+      const text = new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short", ...(timeZone ? { timeZone } : {}) }).format(time);
+      return typeof value === "string" ? <time dateTime={value}>{text}</time> : text;
+    } catch {
+      // an unknown language tag: Admin's own formatting
+    }
+  }
+  if (openLink && schema?.format === "uri" && typeof value === "string" && web(value)) {
+    return <a href={value} className="underline" onClick={(event) => { event.preventDefault(); void openLink(value); }}>{value}</a>;
+  }
+  return renderDataValue(schema, value, language);
+}
+
+/**
  * The Mantle MCP App: a View tool's rows as Admin shows them, and one row action at a time through the shared controller.
  * What a View's columns are and which tools act on a row come from the catalog the server embedded; every read and write is a
  * server tool call through the host (`callServerTool`), under the caller's own MCP authorization. The App holds no
@@ -37,7 +58,8 @@ function columnLabel(name: string, schema: FieldSchema | undefined, language: st
  */
 export function MantleApp(props: {
   readonly catalog: AppCatalog;
-  readonly call: CallTool;
+  /** The host: without its server tools the App only shows rows, it opens and refreshes nothing. */
+  readonly host: HostApi;
   /** The View tool's result, as the host delivered it. */
   readonly result: ToolResult | null;
   /** The View tool's arguments, reused to refresh the rows and to re-read one. */
@@ -48,7 +70,11 @@ export function MantleApp(props: {
   readonly cancelled?: boolean;
   /** The host's BCP 47 locale. */
   readonly locale?: string;
+  /** The host's IANA time zone, for date-times. */
+  readonly timeZone?: string;
 }): ReactNode {
+  const { call, capabilities } = props.host;
+  const openLink = capabilities.openLinks ? props.host.openLink : undefined;
   const labels = appLabels(props.locale);
   const language = props.locale ?? "en";
   const tool = props.result ? toolOf(props.result, props.hostTool) : null;
@@ -63,9 +89,9 @@ export function MantleApp(props: {
   }, [props.result]);
 
   const refresh = async () => {
-    if (!tool) return;
+    if (!tool || !call) return;
     try {
-      const fresh = rowsOf(await props.call(tool, { ...props.input }));
+      const fresh = rowsOf(await call(tool, { ...props.input }));
       if (fresh) setRows(fresh);
       setStale(!fresh);
     } catch {
@@ -83,17 +109,23 @@ export function MantleApp(props: {
       </div>
     );
   }
-  if (open && tool) {
+  if (open && tool && call) {
     return (
       <RowAction
         key={`${open.action.capability}:${String(open.row["id"])}`}
-        call={props.call}
+        call={call}
         row={open.row}
         action={open.action}
         labels={labels}
         locale={props.locale}
+        timeZone={props.timeZone}
         onClose={() => setOpen(null)}
         onDone={() => { void refresh(); }}
+        // the model reads the change at its next turn; the App never speaks for the user (`ui/message`)
+        onSucceeded={() => { void props.host.updateModelContext({
+          content: [{ type: "text", text: `${open.action.capability} succeeded on row ${String(open.row["id"])}; the list was refreshed.` }],
+          structuredContent: { tool: open.action.capability, id: String(open.row["id"]), outcome: "succeeded" },
+        }); }}
       />
     );
   }
@@ -106,14 +138,14 @@ export function MantleApp(props: {
       <ul data-slot="app-rows" className="grid gap-2 p-3">
         {rows.map((row, index) => {
           const id = typeof row["id"] === "string" ? row["id"] : undefined;
-          const actions = actionsFor(props.catalog, view, row);
+          const actions = call ? actionsFor(props.catalog, view, row) : [];
           return (
             <li key={id ?? index} className="grid gap-2 rounded-md border p-3 text-sm">
               <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-3 gap-y-1">
                 {columns.map((field) => (
                   <div key={field} className="contents">
                     <dt className="text-muted-foreground">{columnLabel(field, view.columns[field], language, labels)}</dt>
-                    <dd className="break-words">{renderDataValue(withNativeSchema(field, view.columns[field]), row[field], language)}</dd>
+                    <dd className="break-words">{appValue(withNativeSchema(field, view.columns[field]), row[field], language, props.timeZone, openLink)}</dd>
                   </div>
                 ))}
               </dl>
@@ -156,8 +188,10 @@ function RowAction(props: {
   readonly action: AppRowAction;
   readonly labels: AppLabels;
   readonly locale: string | undefined;
+  readonly timeZone: string | undefined;
   readonly onClose: () => void;
   readonly onDone: () => void;
+  readonly onSucceeded: () => void;
 }): ReactNode {
   const automatic = idempotencyInputs(props.action);
   // Created once when the action is opened, from the row as it was then: a
@@ -193,8 +227,10 @@ function RowActionPanel(props: {
   readonly automatic: readonly string[];
   readonly labels: AppLabels;
   readonly locale: string | undefined;
+  readonly timeZone: string | undefined;
   readonly onClose: () => void;
   readonly onDone: () => void;
+  readonly onSucceeded: () => void;
 }): ReactNode {
   const { action, controller } = props;
   const state = useInteraction(controller);
@@ -206,6 +242,7 @@ function RowActionPanel(props: {
     if (state.phase === "succeeded" && !refreshed.current) {
       refreshed.current = true;
       props.onDone();
+      props.onSucceeded();
     }
     // A refused or conflicting payload is a new operation next time.
     if (state.phase === "failed" || state.phase === "conflict") {
@@ -224,7 +261,7 @@ function RowActionPanel(props: {
   const properties = (action.inputSchema.properties ?? {}) as Readonly<Record<string, FieldSchema>>;
   // a Procedure's inputs are its own: a field named created_at is not the entry's timestamp
   const fieldLabel = (field: string) => propertyLabel(field, properties[field], language);
-  const fieldValue = (field: string, value: unknown) => renderDataValue(properties[field], value, language);
+  const fieldValue = (field: string, value: unknown) => appValue(properties[field], value, language, props.timeZone);
   const hidden = hiddenInputs(action);
   const visible = Object.keys(properties).some((name) => !hidden.includes(name));
   return (

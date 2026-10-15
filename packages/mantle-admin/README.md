@@ -109,7 +109,10 @@ workspace remains part of the product.
 The `/mcp-app` entry exports `mantleAppHtml`. The Admin contributor registers
 it through the SDK's generic MCP Apps hook. Tools retain the same caller
 permissions as ordinary MCP calls; the document holds no credentials. Reserve
-`ui://mantle-admin/` resources for this contributor.
+`ui://mantle-admin/` resources for this contributor. The catalogue it embeds is
+cut to the reading caller's tools, and `domain` passes through to
+`_meta.ui.domain`. What the App asks of a host is in the
+[MCP Apps guide](../../docs/handbook/guides/mcp-apps.md#the-admin-app-in-a-host).
 
 Unsafe native integer versions remain exact in transport; generic UI
 interactions require safe numeric versions. Entries outside that range are

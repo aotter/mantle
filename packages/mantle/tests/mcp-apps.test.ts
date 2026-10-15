@@ -130,3 +130,22 @@ test("the admin tool table loads only for an admin caller", async () => {
   expect((await list())!.status).toBe(200);
   expect(loads).toBe(1);
 });
+
+test("a resource's domain is passed through as _meta.ui.domain on list and read", async () => {
+  const api = handle({ admin: { resources: [{ ...resource("ui://mantle-admin/rows", ["admin_rows"]), domain: "rows.apps.example" }] } });
+  expect((await call(api, "resources/list", {}, "admin")).result.resources[0]._meta.ui).toEqual({ domain: "rows.apps.example" });
+  expect((await call(api, "resources/read", { uri: "ui://mantle-admin/rows" }, "admin")).result.contents[0]._meta.ui).toEqual({ domain: "rows.apps.example" });
+});
+
+test("an HTML loader renders for the tools this caller's tools/list shows, and only those", async () => {
+  const rendered: string[][] = [];
+  const api = mcp(tools, {
+    db: () => null, caller: () => fixtureCaller({ kind: "user", subject: "u", role: "admin", admin: true, scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null }),
+    authorize: target => target.name !== "admin_details",
+    apps: { admin: { resources: [{ ...resource("ui://mantle-admin/rows", ["admin_rows"]), html: ({ tools }) => { rendered.push([...tools]); return "<h1>Admin</h1>"; } }] } },
+  });
+  const listed = (await call(api, "tools/list", {}, "admin")).result.tools.map((tool: any) => tool.name);
+  expect(listed).toEqual(["admin_rows"]);
+  expect((await call(api, "resources/read", { uri: "ui://mantle-admin/rows" }, "admin")).result.contents[0].text).toBe("<h1>Admin</h1>");
+  expect(rendered).toEqual([listed]);
+});
