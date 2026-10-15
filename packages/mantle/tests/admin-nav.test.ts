@@ -80,6 +80,8 @@ test("generate refuses a Schema with two required id references and no nav.paren
   expect(message).toContain("Schema 'lines'");
   expect(message).toContain("quoteId, customerId");
   expect(message).toContain("nav: { parentField: quoteId }");
+  // standalone no longer defaults to the first id reference either
+  expect(codes(await run([schema("quotes"), schema("customers"), twoRefs({ standalone: true })]))).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
 });
 
 test("nav.parentField without standalone chooses the fold parent; the Schema stays folded", async () => {
