@@ -9,14 +9,13 @@ import { versioned } from "./tool-version.js";
 const adminEnum = (p: JsonSchema): JsonSchema => { if(!p.oneOf) return p; const {oneOf,...rest}=p; return {...rest,enum:oneOf.map(c=>c.const)}; };
 
 export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin=false}:Pick<GenerateInput,"plan"|"adminExtensions"|"navGroups"|"admin">,diagnostics:GenerateDiagnostic[]):Record<string,string> {
-  // Sidebar placement: every nav.group names a built-in group or a declared navGroups id (presentation only).
+  // Sidebar placement: a nav.group is a built-in group or one `defineAdmin` declares (admin-client.ts types it, so tsc checks it); navGroups is the legacy declaration (presentation only).
   for(const [path,message] of navGroupProblems(navGroups))diagnostics.push({code:"SCHEMA_UI_INVALID",path,message});
   const groupIds=new Set<string>([...BUILT_IN_NAV_GROUPS,...(Array.isArray(navGroups)?navGroups.map(g=>g?.id):[])]);
   const schemaList=Object.values(plan.schemas);
   const placed=[...schemaList.map(s=>["schemas/"+s.name,s.uiSchema,s] as const),...Object.entries(plan.views).map(([name,v])=>["views/"+name,v.uiSchema,null] as const)];
   for(const [path,ui,s] of placed){
     const nav=(ui?.["nav"]??{}) as Record<string,unknown>,group=nav["group"];
-    if(typeof group==="string"&&!groupIds.has(group))diagnostics.push({code:"SCHEMA_UI_INVALID",path:path+"/uiSchema/nav/group",message:`Unknown nav group '${group}': use content, operations, reports or more, or declare it in navGroups of the --admin-extensions module.`});
     // a child folded under its parent, or a translation on its parent's language tabs, has no sidebar entry to place
     if(s&&!isPrimaryCollection(s,schemaList))for(const key of ["group","order","hidden"])if(nav[key]!==undefined)diagnostics.push({code:"SCHEMA_UI_INVALID",path:`${path}/uiSchema/nav/${key}`,message:s.translates?`Schema '${s.name}' has no sidebar entry to place: it is a translation, shown on its parent's language tabs.`:`Schema '${s.name}' has no sidebar entry to place: it is folded under its parent${collectionOf(s,schemaList).parent?.parentField==="id"?"; nav.standalone: true lists it in the sidebar.":" and opens from its parent's workbench (standalone needs a required id reference)."}`});
   }

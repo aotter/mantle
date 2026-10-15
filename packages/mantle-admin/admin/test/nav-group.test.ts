@@ -2,6 +2,7 @@ import type { AdminExtensionInfo, ViewManifestInfo, Collection } from "../src/li
 import { describe, expect, it } from "vitest";
 import { isGroupActive, isLinkActive, isSubLinkActive } from "../src/layout/nav-group";
 import { buildDeveloperNavGroups, buildNavGroups } from "../src/layout/authenticated-layout";
+import type { ProjectNav } from "../src/app/project-nav";
 import type { NavCollapsible, NavLink } from "../src/layout/types";
 import { initialsFor } from "../src/lib/initials";
 import { foldedChildCollections, hasFoldedChildCollections, isFoldedFieldChild, entryEditPath, entryLandingPath } from "../src/lib/collection-nav";
@@ -302,5 +303,42 @@ describe("sidebar placement (uiSchema.nav and navGroups)", () => {
       pages({ id: "tools", title: "Tools", role: "admin", nav: { group: "more", order: 100 } }),
     );
     expect(shape(groups).slice(-1)).toEqual([["More", ["archive", "Tools"]]]);
+  });
+
+  describe("defineAdmin nav", () => {
+    const project = (nav: Partial<ProjectNav> = {}): ProjectNav => ({ groups: {}, items: [], ...nav });
+    const build = (nav: ProjectNav, collections = [collection("requests", "operational"), collection("posts", "publishing")], views = [view("pending")], legacy?: { id: string; title: string; order?: number }[]) =>
+      buildNavGroups(collections, views, "en", null, false, false, undefined, undefined, legacy, nav);
+    const links = (groups: ReturnType<typeof buildNavGroups>, title: string) => groups.find((g) => g.title === title)?.items as NavLink[] | undefined;
+
+    it("declares groups, localised and ordered among the built-in ones, and wins over a legacy group of the same id", () => {
+      const nav = project({ groups: { approvals: { title: { en: "Approvals", "zh-TW": "簽核" }, order: 5 }, desk: { title: "New desk" } }, items: [{ group: "approvals", title: "Waiting", to: { view: "pending" } }, { group: "desk", title: "Requests", to: { collection: "requests" } }] });
+      expect(shape(build(nav)).slice(1)).toEqual([["Approvals", ["Waiting"]], ["Content", ["posts"]], ["Records", ["requests"]], ["Reports", ["pending"]], ["New desk", ["Requests"]]]);
+      expect(shape(build(project({ groups: { approvals: { title: "Mine", order: 1 } }, items: [{ group: "approvals", title: "Waiting", to: { view: "pending" } }] }), [], [view("pending")], [{ id: "approvals", title: "Legacy", order: 99 }])).slice(1))
+        .toEqual([["Mine", ["Waiting"]], ["Reports", ["pending"]]]);
+    });
+
+    it("leads items to a collection preset to one field's value, or to a View with its input", () => {
+      const nav = project({ items: [
+        { group: "content", title: "Rejected", to: { collection: "requests", filter: { status: "rejected" } } },
+        { group: "content", title: "All requests", to: { collection: "requests" } },
+        { group: "reports", title: "Mine", order: 1, to: { view: "pending", input: { owner: "me", limit: 5, flag: true, skip: undefined, nested: { a: 1 } } } },
+      ] });
+      const groups = build(nav);
+      expect(links(groups, "Content")!.filter((l) => l.title !== "posts").map((l) => [l.title, l.url])).toEqual([["Rejected", "/admin/c/requests?filter_field=status&filter_value=rejected"], ["All requests", "/admin/c/requests"]]);
+      expect(links(groups, "Reports")!.map((l) => [l.title, l.url])).toEqual([["Mine", "/admin/views/pending?owner=me&limit=5&flag=true"], ["pending", "/admin/views/pending"]]);
+    });
+
+    it("shows no item whose collection or View the caller cannot see, and adds no permission", () => {
+      const nav = project({ items: [{ group: "content", title: "Secret", to: { collection: "secrets" } }, { group: "reports", title: "Hidden view", to: { view: "private" } }] });
+      expect(JSON.stringify(build(nav))).not.toMatch(/Secret|Hidden view|secrets|private/);
+      // visible only because the server listed it: an item for a visible resource appears with the same url as the default entry
+      expect(links(build(project({ items: [{ group: "content", title: "Req", to: { collection: "requests" } }] })), "Content")!.map((l) => l.title)).toContain("Req");
+    });
+
+    it("titles a group nobody declared by its id instead of dropping its items", () => {
+      const groups = build(project(), [collection("requests", "operational", { group: "approvals" })], []);
+      expect(shape(groups).slice(1)).toEqual([["Approvals", ["requests"]]]);
+    });
   });
 });

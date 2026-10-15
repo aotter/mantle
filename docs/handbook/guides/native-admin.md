@@ -393,16 +393,38 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
 - `Schema.spec.uiSchema.nav` and admin `View.spec.uiSchema.nav` take `group` (a group id), `order` (an integer;
   ascending; entries without one follow in that default order, collections before Views before extension pages) and
   `hidden: true` (out of the sidebar, still at its URL).
-- Built-in groups need no declaration: `content`, `operations`, `reports`, `more`. Project groups are declared once
-  as `navGroups` in the `--admin-extensions` module, with a title (text or `{ locale: text }`) and an `order` among
-  the built-in groups' content 10, operations 20 and reports 30 (default 50); More always stays last.
+- Built-in groups need no declaration: `content`, `operations`, `reports`, `more`. A project declares every other
+  group once, in `src/admin.tsx`: `defineAdmin(admin, { nav: { groups } })`, each with a title (text or
+  `{ locale: text }`) and an `order` among the built-in groups' content 10, operations 20 and reports 30 (default 50);
+  More always stays last. `generated/admin-client.ts` exports `ManifestNavGroup`, every group the manifest uses, and types
+  `nav.groups` so that `tsc` refuses an entry that leaves one out (`mantle generate` no longer checks it). Without an
+  `src/admin.tsx` (the built-in entry) nothing refuses it, so an undeclared group still shows its items, titled by its id.
+- `nav.items` adds entries beside the ones `uiSchema.nav` produces: `{ group, title, icon?, order?, to }`, where `title` is
+  text or `{ locale: text }`, `icon` is any React icon component, and `to` is `{ collection, filter? }` (the list, preset
+  to one field's value) or `{ view, input? }` (an admin View with its input). Names, the filter field and value and the
+  View input are typed from the generated manifest, so a misspelling or a wrong preset fails `tsc`. Several items may lead to
+  one resource with different presets. An item whose collection or View the caller cannot see is not shown; showing or
+  hiding one changes no permission, because the target's own route still decides.
+- Until the legacy mechanism is removed, `navGroups` in the `--admin-extensions` module still declares groups; a group
+  `defineAdmin` declares wins over a legacy one of the same id, and a group the legacy module declares need not be
+  declared again.
 - Extension pages use the same ids: `pages[].nav: { group, order? }` (`more` and `settings` keep their places); a page without `nav` keeps its route and stays out of the sidebar.
 
-```ts
-// src/admin.ts, passed as --admin-extensions src/admin.ts (the app shell already does)
-import type { AdminExtension, AdminNavGroup } from "@aotter/mantle-admin/server/extensions";
-export const navGroups: AdminNavGroup[] = [{ id: "approvals", title: { en: "Approvals", "zh-TW": "簽核" }, order: 5 }];
-export const adminExtensions: AdminExtension[] = [];
+```tsx
+// src/admin.tsx
+import { Inbox } from "lucide-react";
+import { defineAdmin } from "@aotter/mantle-admin/app";
+import { admin } from "../generated/admin-client.js";
+
+export default defineAdmin(admin, {
+  nav: {
+    groups: { approvals: { title: { en: "Approvals", "zh-TW": "簽核" }, order: 5 } },
+    items: [
+      { group: "approvals", title: "Waiting for me", icon: Inbox, to: { view: "pending-requests" } },
+      { group: "approvals", title: "Rejected", to: { collection: "requests", filter: { status: "rejected" } } },
+    ],
+  },
+});
 ```
 
 ```yaml
@@ -410,7 +432,7 @@ export const adminExtensions: AdminExtension[] = [];
 uiSchema: { nav: { group: approvals, order: 1 } }
 ```
 
-`mantle generate` refuses an undeclared group, a duplicate or built-in `navGroups` id, a non-integer `order`, and
+`mantle generate` refuses a duplicate or built-in `navGroups` id, a non-integer `order`, and
 placement on a Schema without a sidebar entry of its own: a translation, or a folded child that is not
 [`standalone`](#collection-navigation-and-operation-placement).
 The purchasing example puts its approval queue and requests in an Approvals group.

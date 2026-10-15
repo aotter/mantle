@@ -15,9 +15,25 @@ test("uiSchema.nav places Schemas and admin Views in built-in or declared groups
   expect(metadata).toMatch(/export const bootstrap = \{[^}]*navGroups/);
 });
 
-test("generate refuses unknown groups, bad placement values and bad navGroups", async () => {
-  expect(codes(await run([schema("quotes", { group: "sales" })]))).toEqual(["SCHEMA_UI_INVALID schemas/quotes/uiSchema/nav/group"]);
-  expect(codes(await run([schema("quotes"), view("pipeline", { group: "sales" })]))).toEqual(["SCHEMA_UI_INVALID views/pipeline/uiSchema/nav/group"]);
+test("a group no navGroups declares is checked by tsc, not by generate: admin-client.ts types the groups defineAdmin must declare", async () => {
+  const client = async (docs: string[], navGroups?: unknown) => {
+    const r = await run(docs, navGroups);
+    if (!r.ok) throw Error(JSON.stringify(r.diagnostics));
+    return r.files["admin-client.ts"]!;
+  };
+  const undeclared = await client([schema("quotes", { group: "sales" }), view("pipeline", { group: "approvals" }), schema("audit", { group: "operations" })]);
+  expect(undeclared).toContain('export type ManifestNavGroup = "approvals" | "operations" | "sales";');
+  expect(undeclared).toContain('readonly navGroups: "approvals" | "sales";');
+  expect(undeclared).toContain('readonly requiredNavGroups: "approvals" | "sales";');
+  // the legacy navGroups module still declares its ids, which defineAdmin then need not
+  expect(await client([schema("quotes", { group: "sales" }), view("pipeline", { group: "approvals" })], [{ id: "sales", title: "Sales" }])).toContain('readonly requiredNavGroups: "approvals";');
+  const none = await client([schema("quotes", { group: "reports" })]);
+  expect(none).toContain('export type ManifestNavGroup = "reports";');
+  expect(none).toContain("readonly navGroups: never;");
+  expect(none).toContain("readonly requiredNavGroups: never;");
+});
+
+test("generate refuses bad placement values and bad navGroups", async () => {
   for (const nav of [{ order: 1.5 }, { hidden: "yes" }, { group: "Sales" }, { colour: "red" }]) expect((await run([schema("quotes", nav)])).ok).toBe(false);
   expect((await run([schema("quotes"), view("pipeline", { order: "1" })])).ok).toBe(false);
   expect(codes(await run([schema("quotes")], [{ id: "sales", title: "Sales" }, { id: "sales", title: "Again" }, { id: "content", title: "Mine" }, { id: "x", title: "" }]))).toEqual([

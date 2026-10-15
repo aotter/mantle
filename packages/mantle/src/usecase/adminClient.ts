@@ -1,5 +1,5 @@
 /** `admin-client.ts`: the types Admin's data hooks bind to, for the application's browser-side `admin.tsx`. */
-import { mcpTools, type JsonSchema, type RuntimePlan } from "../build/compiler.js";
+import { BUILT_IN_NAV_GROUPS, mcpTools, type JsonSchema, type RuntimePlan } from "../build/compiler.js";
 import { q } from "../domain/entry.js";
 
 type TypeOf = (schema: JsonSchema | undefined) => string;
@@ -14,7 +14,7 @@ const closed = (typeOf: TypeOf, schema: JsonSchema | undefined): string =>
  * `tools/call` returns the SQL names; the hooks rename them with `rowNames`). The file imports `generated/*` as types only, so nothing of the
  * Worker enters the browser bundle, and it is refused in the Worker's startup graph (`mantle bundle`).
  */
-export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<string, string> {
+export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf, declared: readonly string[] = []): Record<string, string> {
   const tools = mcpTools(plan, "admin"), hasTool = (kind: string, source: string) => tools.some(t => t.kind === kind && t.source === source);
   const views = Object.entries(plan.views).filter(([, v]) => v.surface === "admin").sort(([a], [b]) => a < b ? -1 : 1);
   const operations = Object.entries(plan.procedures).filter(([name]) => hasTool("procedure", name)).sort(([a], [b]) => a < b ? -1 : 1);
@@ -32,6 +32,12 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
     const named = key === c.field ? plan.schemas[c.schema]!.names[c.field] ?? key : key;
     return named !== key ? [[key, named]] : [];
   })));
+  // every sidebar group an admin Schema or View places an item in; `defineAdmin` must declare the ones Admin does not have
+  // (the generate-time check of `uiSchema.nav.group` is this type), except those the legacy `navGroups` module declares
+  const placed = (ui: Readonly<Record<string, unknown>> | undefined): string[] => { const group = (ui?.["nav"] as { group?: unknown } | undefined)?.group; return typeof group === "string" ? [group] : []; };
+  const used = [...new Set([...schemas.flatMap(s => placed(s.uiSchema)), ...views.flatMap(([, v]) => placed(v.uiSchema))])].sort();
+  const custom = used.filter(group => !BUILT_IN_NAV_GROUPS.has(group));
+  const union = (names: readonly string[]) => names.length ? names.map(name => q(name)).join(" | ") : "never";
   const rows = views.map(([name], n) => `import type { WireRow as View${n}Wire } from "./views/${encodeURIComponent(name)}.js";`);
   const sql = operations.some(([, p]) => "sql" in p.handler);
   return { "admin-client.ts": [
@@ -44,11 +50,16 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
     "type Renamed<Row, Names extends { readonly [from: string]: string }> = { [K in keyof Row as K extends keyof Names ? Names[K] : K]: Row[K] };",
     ...views.map((_, n) => `type View${n}Row = Renamed<View${n}Wire, ${q(renames[n])}>;`),
     "",
+    "/** Every sidebar group the manifest places an item in. */",
+    `export type ManifestNavGroup = ${union(used)};`,
+    "",
     "/** The input and row of each admin View, the `data` of each collection's entries, and the input and output of each admin operation. */",
     "export interface AppAdminTypes {",
     `  readonly views: { ${views.map(([name, v], n) => `readonly ${q(name)}: { readonly input: ${closed(typeOf, v.input)}; readonly row: View${n}Row }`).join("; ")} };`,
     `  readonly collections: { ${schemas.map(s => `readonly ${q(s.name)}: { readonly data: ${dataOf(s)} }`).join("; ")} };`,
     `  readonly operations: { ${operations.map(([name, p]) => `readonly ${q(name)}: { readonly input: ${closed(typeOf, p.input)}; readonly output: ${"sql" in p.handler ? "Output" : "unknown"} }`).join("; ")} };`,
+    `  readonly navGroups: ${union(custom)};`,
+    `  readonly requiredNavGroups: ${union(custom.filter(group => !declared.includes(group)))};`,
     "}",
     "",
     "/** Pass to `defineAdmin(admin)`: the column names a View's rows carry in the browser, for an MCP App to match. */",

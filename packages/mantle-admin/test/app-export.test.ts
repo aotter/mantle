@@ -11,7 +11,7 @@ describe("@aotter/mantle-admin/app", () => {
     expect(target).toEqual({ types: "./dist/admin-app/index.d.ts", import: "./dist/admin-app/index.js" });
     const app = await import(resolve(pkg, target.import));
     expect(Object.keys(app).sort()).toEqual(["AdminLink", "MantleAdmin", "defineAdmin"]);
-    expect(app.defineAdmin({})).toEqual({ meta: {}, layers: {} });
+    expect(app.defineAdmin({})).toEqual({ meta: {}, nav: { groups: {}, items: [] }, layers: {} });
   });
 
   it("publishes the data hooks from a chunk shared with the app library, so both see one Admin context", async () => {
@@ -83,6 +83,43 @@ describe("@aotter/mantle-admin/app", () => {
       'defineAdmin(typed, { components: { "cell:requests.titel": () => null } });',
       '// @ts-expect-error a browser slot has no `surface`',
       'defineAdmin(typed, { components: { Sidebar: ({ surface }) => String(surface) } });',
+      "interface NavTypes extends Types {",
+      '  readonly navGroups: "approvals" | "billing";',
+      '  readonly requiredNavGroups: "approvals";',
+      "}",
+      "const navMeta: AdminMeta<NavTypes> = {};",
+      "const Icon = (): null => null;",
+      "export const navigation: AdminDefinition = defineAdmin(navMeta, { nav: {",
+      '  groups: { approvals: { title: { en: "Approvals", "zh-TW": "簽核" }, order: 5 } },',
+      "  items: [",
+      '    { group: "approvals", title: "Waiting for me", to: { view: "pending-requests", input: { q: "x" } } },',
+      '    { group: "reports", title: "Closed", icon: Icon, order: 1, to: { collection: "requests", filter: { status: "closed" } } },',
+      '    { group: "billing", title: "All", to: { collection: "requests" } },',
+      "  ],",
+      "} });",
+      "// a manifest that uses only Admin's groups needs no declaration; the config stays optional",
+      "export const plain: AdminDefinition = defineAdmin(typed);",
+      '// @ts-expect-error a group the manifest places items in is not declared',
+      "defineAdmin(navMeta, { nav: { groups: {} } });",
+      '// @ts-expect-error nav.groups is required while the manifest uses a group Admin does not have',
+      "defineAdmin(navMeta, { nav: { items: [] } });",
+      '// @ts-expect-error so is the config',
+      "defineAdmin(navMeta);",
+      '// @ts-expect-error a group title is text or a locale map',
+      "defineAdmin(navMeta, { nav: { groups: { approvals: { title: 5 } } } });",
+      "const declared = { nav: { groups: { approvals: { title: \"A\" } } } } as const;",
+      '// @ts-expect-error a collection that is not in the manifest',
+      'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { collection: "request" } }] } });',
+      '// @ts-expect-error a View that is not in the manifest',
+      'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { view: "pending" } }] } });',
+      '// @ts-expect-error an input the View does not declare',
+      'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { view: "pending-requests", input: { q: 1 } } }] } });',
+      '// @ts-expect-error a field the collection does not have',
+      'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { collection: "requests", filter: { nope: "x" } } }] } });',
+      '// @ts-expect-error a value the field cannot hold',
+      'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { collection: "requests", filter: { status: "archived" } } }] } });',
+      '// @ts-expect-error a group that neither Admin nor the manifest has',
+      'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "approval", title: "x", to: { collection: "requests" } }] } });',
       "const props: MantleAdminProps = { admin };",
       "// @ts-expect-error preview mode is internal to the canonical preview document",
       "export const preview: MantleAdminProps = { admin, preview: true };",

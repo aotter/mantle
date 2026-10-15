@@ -76,7 +76,7 @@ Rich-text editors and the complete developer workspace load on demand.
 
 ## App library
 
-`@aotter/mantle-admin/app` exports `defineAdmin(meta, { components, plugins, mcp })`, `<AdminLink>` and `<MantleAdmin admin>`.
+`@aotter/mantle-admin/app` exports `defineAdmin(meta, { nav, components, plugins, mcp })`, `<AdminLink>` and `<MantleAdmin admin>`.
 An Admin entry default-exports `defineAdmin(...)`; `<MantleAdmin>` is the root
 for an app that mounts Admin inside its own providers, and it renders once the
 stored or browser language has loaded. The built-in entry is `defineAdmin({})`:
@@ -84,6 +84,7 @@ with no generated metadata, Admin reads its collections, Views and operations
 from `/admin/api` at runtime. The application builds that entry when it has no `admin.tsx`.
 `components` replace or wrap named regions of Admin (`Shell`, `Sidebar`, `Home`, `cell:<schema>.<field>`, `input:<schema>.<field>`, ...)
 through `renderDefault`, and `plugins` compose such fragments; see the Native Admin guide, "Customising Admin".
+`nav` declares the sidebar groups the manifest uses (`ManifestNavGroup` in `generated/admin-client.ts`, checked by `tsc`) and adds `items` that lead to a collection, preset to a field's value, or to a View; see "Sidebar" in the same guide.
 `@aotter/mantle-admin/build` also exports the optional `adminVitePlugin()` for hot reload in a Vite dev server.
 Admin extensions load only in Admin built by `buildAdmin`: its page supplies the
 import map and shared modules that extension modules resolve `react` and the kit

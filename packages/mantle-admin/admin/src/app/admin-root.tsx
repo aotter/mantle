@@ -4,6 +4,7 @@ import { Toaster, TooltipProvider } from "@aotter/mantle-ui/kit";
 import { ConfirmProvider } from "../ui/confirm-dialog";
 import { AdminApp } from "./admin-app";
 import { AdminHooksProvider } from "./hooks-context";
+import { ProjectNavProvider } from "./project-nav";
 import { loadLanguage, STRINGS } from "./i18n";
 import { PreferencesProvider, readInitialLanguage, usePreferences, type AdminLanguage } from "./preferences";
 import { queryClient } from "./query-client";
@@ -27,8 +28,10 @@ export function AdminRoot(props: { admin: AdminDefinition; preview?: boolean }):
               <AdminHooksProvider meta={props.admin.meta} transport={browserTransport} layers={props.admin.layers}>
                 <TooltipProvider>
                   <ConfirmProvider>
-                    <AdminApp preview={props.preview ?? false} />
-                    <AdminToaster />
+                    <ProjectNavProvider nav={props.admin.nav}>
+                      <AdminApp preview={props.preview ?? false} />
+                      <AdminToaster />
+                    </ProjectNavProvider>
                   </ConfirmProvider>
                 </TooltipProvider>
               </AdminHooksProvider>
