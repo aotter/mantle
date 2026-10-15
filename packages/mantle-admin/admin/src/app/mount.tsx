@@ -2,7 +2,6 @@ import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import { AdminRoot } from "./admin-root";
 import type { AdminDefinition } from "./define-admin";
-import { installExtensionShared } from "./extension-shared";
 import { canRenderAdmin, installPreviewPolicy, isAdminPreview } from "./frame-policy";
 
 /**
@@ -12,7 +11,6 @@ import { canRenderAdmin, installPreviewPolicy, isAdminPreview } from "./frame-po
 export function mountAdmin(admin: AdminDefinition): void {
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("Missing #root element.");
-  installExtensionShared();
   const preview = isAdminPreview();
   if (preview && canRenderAdmin(window, true)) installPreviewPolicy(window);
   if (canRenderAdmin(window, preview)) {

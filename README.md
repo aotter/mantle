@@ -172,7 +172,7 @@ service also reads [the release notes](docs/handbook/releases/index.md).
 |---|---|
 | `@aotter/mantle` | Native SDK, private compiler, generator and CLI; selected driver, auth, REST, MCP, web and site/media primitives. |
 | `@aotter/mantle-ui` | Pure UI: generic interaction controller, React components, visual kit and design tokens. No SDK dependency. |
-| `@aotter/mantle-admin` | Admin SPA and thin server, extensions, preview and Admin MCP App. Uses UI and public SDK contracts; the SDK remains a peer. |
+| `@aotter/mantle-admin` | Admin app library and thin server, preview and Admin MCP App. Uses UI and public SDK contracts; the SDK remains a peer. |
 
 </details>
 

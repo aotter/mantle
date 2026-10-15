@@ -22,13 +22,12 @@ Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty va
 | `packages/mantle-admin/admin/test/developer-operations.test.tsx` | Schedule/run availability and latest-run projections. |
 | `packages/mantle-admin/admin/test/entry-edit.test.ts` | Merged into `collection-summary.test.ts`: Explicit edit unlock/admin access, primary title, required values, hidden join fields and declared widgets. |
 | `packages/mantle-admin/admin/test/enum-options.test.tsx` | Merged into `admin-ux.test.tsx`: Rendered localized enum titles/empty values, native timestamp labels and server error messages. |
-| `packages/mantle-admin/admin/test/extensions.test.ts` | Declared field placement/target precedence and lazy shared kit identity; import timeout 30 s. |
 | `packages/mantle-admin/admin/test/field-label.test.ts` | Deleted: shared label/description/localization reexports are covered by mantle-ui/test/fields.test.tsx; native labels remain in admin-ux.test.tsx. |
 | `packages/mantle-admin/admin/test/field-render.test.ts` | Merged into `id-value.test.ts`: Only Admin-owned ID tail remains; shared date/money rendering is covered by mantle-ui/test/fields.test.tsx. |
 | `packages/mantle-admin/admin/test/i18n-coverage.test.ts` | Every declared language has required messages and identical placeholders; one inventory contract. |
 | `packages/mantle-admin/admin/test/id-value.test.ts` | Declared/conventional ID recognition and distinguishable shortening. |
 | `packages/mantle-admin/admin/test/media-upload.test.ts` | Explicit missing-storage state, policy/encoder/size choice, bounded encoding and no commit after upload failure. |
-| `packages/mantle-admin/admin/test/nav-group.test.ts` | Filter/detail selection, admin/capability navigation, standalone children, operation placement and extension ordering. |
+| `packages/mantle-admin/admin/test/nav-group.test.ts` | Filter/detail selection, admin/capability navigation, standalone children, operation placement and project groups/items. |
 | `packages/mantle-admin/admin/test/nav-user.test.ts` | Merged into `nav-group.test.ts`: Initials fallback for user names. |
 | `packages/mantle-admin/admin/test/preview-boundary.test.ts` | Real browser preview frame sandbox and host bridge confinement (explicit browser suite). |
 | `packages/mantle-admin/admin/test/row-operations.test.ts` | Declared bindings/version review, unsupported version refusal, diagnostic outcomes and operation placement. |
@@ -42,11 +41,11 @@ Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty va
 | `packages/mantle-admin/tests/native/authorize-bypass.test.ts` | WebMCP authorizes its operation; a write grant alone cannot read the resulting entry. |
 | `packages/mantle-admin/tests/native/d1.test.ts` | Shared Admin native scope/OCC/transition/paging oracle executes on actual local storage. |
 | `packages/mantle-admin/tests/native/entries-lifecycle.test.ts` | Native entry create/edit/publish/translation lifecycle retains scope, validation and OCC. |
-| `packages/mantle-admin/tests/native/followups.test.ts` | Streaming CSV, scoped statistics, relationship projections, session authority, extension drift and exact temporal subtype behavior. |
+| `packages/mantle-admin/tests/native/followups.test.ts` | Streaming CSV, scoped statistics, relationship projections, session authority and exact temporal subtype behavior. |
 | `packages/mantle-admin/tests/native/gateway.test.ts` | Admin gateway admission, scope, freshness/OCC, member refusal and redacted contract errors. |
 | `packages/mantle-admin/tests/native/helpers.test.ts` | Tuple cursors/bind positions/caps, NUL JSON keys, bucket overflow and scoped batch filter intersection. |
 | `packages/mantle-admin/tests/native/server-native.test.ts` | Shared Admin native oracle on PostgreSQL adapters, including committed writes with lost replies. |
-| `packages/mantle-admin/tests/native/server.test.ts` | Admin session/origin/body limits before DB, lazy raw extensions, scoped operations/preview/metadata and authorize on every route. |
+| `packages/mantle-admin/tests/native/server.test.ts` | Admin session/origin/body limits before DB, absent `/x/*` extension routes, scoped operations/preview/metadata and authorize on every route. |
 | `packages/mantle-admin/tests/native/shell.test.ts` | Shell anti-framing/cache/nosniff headers and path/traversal/missing-file confinement. |
 | `packages/mantle-ui/test/components.test.tsx` | Rendered interaction state/actions, diagnostics, diffs, host labels and uncertainty acknowledgement. |
 | `packages/mantle-ui/test/controller.test.ts` | Pinned row/version review, conflict/uncertain outcomes, no retries, cancellation, immutable state and input rebasing. |
@@ -73,7 +72,7 @@ Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty va
 | `packages/mantle/compiler-tests/spec/view-ctes.test.ts` | Lexical CTE provenance, closed CTE grammar, reserved aliases, scope/TTL/publishing/DML binds and forged tag refusal. |
 | `packages/mantle/compiler-tests/spec/view-references.test.ts` | Internal View expansion/provenance and refusal of public/input-bearing/cyclic/writing references. |
 | `packages/mantle/tests/admin-bindings.test.ts` | Generated Admin factories, scoped entry/View/write policies, filters/statistics, prototype keys, exact cursors and public preview visibility. |
-| `packages/mantle/tests/admin-descriptors.test.ts` | Admin collection/translation metadata, operation placement/preconditions, extension validation and metadata-only imports. |
+| `packages/mantle/tests/admin-descriptors.test.ts` | Admin collection/translation metadata, operation placement/preconditions, refusal of removed extension references and metadata-only imports. |
 | `packages/mantle/tests/admin-layer.test.ts` | Configured admin roles, credential scope checks and admission before loading tools or storage. |
 | `packages/mantle/tests/artifacts.test.ts` | Output symlinks are refused before writes; application files survive regeneration. |
 | `packages/mantle/tests/auth-adapter.test.ts` | Native CRUD/joins, predicate semantics, transactions, auth flows, case folding, ID formats and atomic OTP/attempt counting; one shared conformance run per adapter. |
@@ -86,7 +85,7 @@ Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty va
 | `packages/mantle/tests/authorize.test.ts` | REST and MCP authorize manifest targets before SQL/handlers; requires precedes authorization and lists hide denied targets. |
 | `packages/mantle/tests/boundaries.test.ts` | Request and build imports respect package/layer boundaries. |
 | `packages/mantle/tests/bun-assets.test.ts` | Asset reader refuses traversal, malformed paths and escaping symlinks. |
-| `packages/mantle/tests/cli.test.ts` | CLI handler guidance, config preservation/idempotence, executable consumer build and extension declarations; process timeout 30 s. |
+| `packages/mantle/tests/cli.test.ts` | CLI handler guidance, config preservation/idempotence, executable consumer build and the removed `--admin-extensions` option; process timeout 30 s. |
 | `packages/mantle/tests/compiler-boundary.test.ts` | Generator loads and compiles without optional auth/MCP dependencies; process timeout 30 s. |
 | `packages/mantle/tests/consumer.test.ts` | Four generated consumers typecheck native handles and TTL entries; bundles exclude unrelated code; CLI cleanup/check preserve application files; process timeout 30 s. |
 | `packages/mantle/tests/describe-diff.test.ts` | Restriction replacement widens access; target hashes are independent of process locale. |
@@ -144,7 +143,7 @@ Node 22.22.3, Bun 1.3.14. Packages were built before testing. Both measurements 
 | UI Vitest | 46 → 45 | 10.64 → 6.46 | 45 pass |
 | Total / sum of suite wall times | 1,366 → 865 | 80.69 → 45.80 | Cases −36.7%; summed time −43.2% |
 
-The 50% case target was not reached: the remaining cases cover distinct rules or execution boundaries. No product code changed. Whole-process CLI/consumer cases and the extension-kit import have explicit 30 s timeouts.
+The 50% case target was not reached: the remaining cases cover distinct rules or execution boundaries. No product code changed. Whole-process CLI/consumer cases have explicit 30 s timeouts.
 
 Commands: `bun test tests/*.test.ts`; `pnpm exec vitest run --config vitest.compiler.config.ts`; `MANTLE_NATIVE_TESTS=1 bun test tests/native/*.test.ts`; Admin/UI `pnpm exec vitest run`; `pnpm typecheck`; compiler `tsc --noEmit -p tsconfig.compiler.json`; `git diff --check`.
 

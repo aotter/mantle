@@ -14,7 +14,6 @@ import {
   ContactRound,
   Users,
   Workflow,
-  Puzzle,
 } from "lucide-react";
 
 import { SidebarInset, SidebarProvider } from "@aotter/mantle-ui/kit";
@@ -132,11 +131,9 @@ export function AuthenticatedLayout({
           (operationsQuery.data ?? []).some((operation) =>
             (operation.interactions ?? []).length === 0 && !operation.uiSchema?.["collectionAction"]),
           site.data?.capabilities,
-          site.data?.extensions,
-          site.data?.navGroups,
           projectNav,
         ),
-    [projectNav, collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.admin, workspace, site.data?.capabilities, site.data?.extensions, site.data?.navGroups],
+    [projectNav, collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.admin, workspace, site.data?.capabilities],
   );
   return workspace === "developer"
     ? <ShellFrame workspace="developer" nav={groups} brand={resolvedBrand}>{children}</ShellFrame>
@@ -239,11 +236,9 @@ export function buildNavGroups(
   admin: boolean,
   hasGlobalOperations = false,
   capabilities?: SiteInfo["capabilities"],
-  extensions?: SiteInfo["extensions"],
-  navGroups?: SiteInfo["navGroups"],
   project?: ProjectNav,
 ): ReadonlyArray<NavGroupData> {
-  // Sidebar placement (`uiSchema.nav` and navGroups): presentation only, so the server's visibility filtering stands.
+  // Sidebar placement (`uiSchema.nav` and `defineAdmin`'s `nav`): presentation only, so the server's visibility filtering stands.
   // Without any placement this yields Admin's default groups: content, operations, reports, more.
   type Placed = { order: number | undefined; item: NavItem };
   const buckets = new Map<string, Placed[]>();
@@ -261,14 +256,6 @@ export function buildNavGroups(
       url: `/admin/views/${encodeURIComponent(v.name)}`,
     });
   }
-  // extension pages that ask for a place; settings pages sit with Admin's own settings in More
-  for (const extension of extensions ?? []) for (const page of extension.contributes?.pages ?? []) {
-    if (page.nav && page.nav.group !== "settings") place(page.nav.group, page.nav.order, {
-      title: resolveLocalizedText(page.title, language, canonical) ?? page.id,
-      url: `/admin/x/${encodeURIComponent(extension.id)}/${encodeURIComponent(page.id)}`,
-      icon: Puzzle,
-    });
-  }
   // the application's own items (`defineAdmin` `nav.items`): only those whose collection or View this caller can see, which
   // are the ones the server listed; a link shows nothing the target's own route would not
   for (const item of project?.items ?? []) {
@@ -282,14 +269,12 @@ export function buildNavGroups(
     { id: "content", title: t(language, "nav.content"), order: 10 },
     { id: "operations", title: t(language, "nav.operations"), order: 20 },
     { id: "reports", title: t(language, "nav.reports"), order: 30 },
-    ...(navGroups ?? []).map((g) => ({ id: g.id, title: resolveLocalizedText(g.title, language, canonical) ?? g.id, order: g.order ?? 50 })),
   ];
-  // `defineAdmin` groups win over the legacy `navGroups` of the same id
+  // the project's groups (`defineAdmin` `nav.groups`)
   for (const [id, g] of Object.entries(project?.groups ?? {})) {
     if (BUILT_IN_GROUPS.has(id)) continue; // Admin's own groups are not redeclared (`tsc` refuses it; a zero-config entry has none)
     const next = { id, title: resolveLocalizedText(g.title, language, canonical) ?? id, order: g.order ?? 50 };
-    const at = titled.findIndex((t) => t.id === id);
-    if (at < 0) titled.push(next); else titled[at] = next;
+    titled.push(next);
   }
   // a group nobody declared (a zero-config entry has no `tsc` to refuse it) still shows its items, titled by its id
   for (const id of buckets.keys()) if (id !== "more" && !titled.some((t) => t.id === id)) titled.push({ id, title: fieldLabel(id), order: 50 });
@@ -327,19 +312,6 @@ export function buildNavGroups(
             { title: t(language, "nav.admin"), url: "/admin/admin", icon: Users },
           ]
         : []),
-      // extension settings and settings pages (ADR-lite 1376) next to Admin's own settings, already filtered to this
-      // admin member's role by the server; a stable sort keeps declaration order within one order
-      ...(extensions ?? []).flatMap((extension) => [
-        ...(extension.contributes?.pages ?? []).filter((p) => p.nav?.group === "settings").map((p) => ({ ...p, order: p.nav!.order ?? 0 })),
-        ...(extension.contributes?.settings ?? []).map((s) => ({ ...s, order: 0 })),
-      ].map((c) => ({
-        order: c.order,
-        title: resolveLocalizedText(c.title, language, canonical) ?? c.id,
-        url: `/admin/x/${encodeURIComponent(extension.id)}/${encodeURIComponent(c.id)}`,
-        icon: SettingsIcon,
-      })))
-        .sort((a, b) => a.order - b.order)
-        .map(({ order: _order, ...item }) => item),
       ...itemsOf("more"),
     ],
   };

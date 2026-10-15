@@ -88,7 +88,7 @@ export default {
 Remove imports and array entries for omitted surfaces. `mcp.ts` exists only when
 the manifest has an MCP surface, and requires the documented optional MCP peer.
 Pass the same handlers to each selected surface that exposes ref Procedures.
-Bind site/media/identity and extension capabilities through the selected Admin/MCP
+Bind site/media/identity capabilities through the selected Admin/MCP
 options; do not expose native auth administrative routes without `authRoutes` or
 `guardAuthAdminRequest`. `withAuthTasks` retains background callbacks on the
 current request's context; `authHardening` configures the background handler.
@@ -96,8 +96,7 @@ Select `--admin` to emit `admin-bindings.ts`. Admin's API is a separate
 `@aotter/mantle-admin` package; the SDK never imports it. The API handles only
 `/admin/api`. The app-owned asset route serves the built shell for `/admin` and
 client routes, including `/admin/sign-in`, and preserves missing asset 404s.
-Allow its built import map through the exact CSP hash documented by the installed
-Admin package. Collection statistics use the generated shared `statisticsView`:
+Collection statistics use the generated shared `statisticsView`:
 its collection parameter selects only a generated table and visibility policy.
 
 ## Workers assets and secrets
@@ -220,7 +219,6 @@ pnpm exec mantle bundle src/worker.ts dist   # dist/worker, and dist/client/admi
 `--check` regenerates in memory, lists missing/changed/obsolete SDK-owned files
 and stale Wrangler build settings, exits nonzero, and writes nothing. Unmarked
 application files are preserved. TOML generation prints manual edits, so an
-exact Wrangler `--check` requires JSON/JSONC. Use all the same `--site`, `--auth`,
-`--admin` and `--admin-extensions` options as normal generation. The check needs no database,
+exact Wrangler `--check` requires JSON/JSONC. Use all the same `--site`, `--auth` and `--admin` options as normal generation. The check needs no database,
 network access, credentials or deployment. Imported configuration modules must
 remain pure: exporting `authOptions(env)` avoids constructing Better Auth at build time.

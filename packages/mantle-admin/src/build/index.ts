@@ -1,12 +1,12 @@
 /// <reference types="node" />
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import type { InlineConfig, Plugin, PluginOption } from "vite";
 import { PREVIEW_CSP } from "./preview-csp.js";
 
 const dist = resolve(import.meta.dirname, "..");
-/** The page template: index.html, main.js, styles.css and the public files (theme, icons, preview bridge, extension helper). */
+/** The page template: index.html, main.js, styles.css and the public files (theme, icons, preview bridge). */
 const page = resolve(dist, "admin-build");
 const ENTRY = "virtual:mantle-admin/entry";
 
@@ -54,7 +54,7 @@ export async function buildAdmin({ entry, outDir }: BuildAdminOptions): Promise<
   const { build } = await import("vite");
   const { plugins, config } = await adminCore(entry);
   outDir = resolve(outDir);
-  await build({ ...config, base: "./", logLevel: "warn", plugins: [...plugins, extensionShared(outDir), previewDocument(outDir)], build: { outDir, emptyOutDir: true } });
+  await build({ ...config, base: "./", logLevel: "warn", plugins: [...plugins, previewDocument(outDir)], build: { outDir, emptyOutDir: true } });
 }
 
 export interface AdminViteOptions {
@@ -87,48 +87,6 @@ export async function adminVitePlugin({ entry, target = "http://localhost:8787",
     // the service injects this into the shell it serves (`adminShell`)
     transformIndexHtml: (html: string) => authBasePath === "/api/auth" ? html : html.replace("</head>", `<meta name="mantle-auth-base" content="${authBasePath}"></head>`),
   }, ...plugins];
-}
-
-/**
- * Admin extensions share Admin's React (ADR-lite 1376): an import map before any module, and `shared/*.js` modules that
- * re-export what Admin installs. The extension helper (`shared/extension.js`) is a public file.
- */
-const SHARED_MODULES = {
-  react: "react",
-  "react/jsx-runtime": "react-jsx-runtime",
-  "react-dom": "react-dom",
-  "react-dom/client": "react-dom-client",
-  "@aotter/mantle-ui/kit": "kit",
-  "@aotter/mantle-admin/extension": "extension",
-} as const;
-const SHIMMED = ["react", "react/jsx-runtime", "react-dom", "react-dom/client", "@aotter/mantle-ui/kit"] as const;
-
-function extensionShared(outDir: string): Plugin {
-  const imports = Object.fromEntries(Object.entries(SHARED_MODULES).map(([specifier, file]) => [specifier, `./shared/${file}.js`]));
-  return {
-    name: "admin-extension-shared",
-    transformIndexHtml: {
-      order: "pre",
-      // after <base>, so the relative addresses resolve beside the shell in canonical and preview mounts
-      handler: html => html.replace(/(<base [^>]*>)/, `$1\n    <script type="importmap">${JSON.stringify({ imports })}</script>`),
-    },
-    async writeBundle() {
-      const require = createRequire(import.meta.url);
-      const dir = resolve(outDir, "shared");
-      mkdirSync(dir, { recursive: true });
-      for (const specifier of SHIMMED) {
-        const module = specifier === "@aotter/mantle-ui/kit" ? await import(specifier) : require(specifier) as object;
-        const names = Object.keys(module).filter(name => /^[A-Za-z_$][\w$]*$/.test(name) && name !== "default");
-        writeFileSync(resolve(dir, `${SHARED_MODULES[specifier]}.js`), [
-          `const m = globalThis.__MANTLE_ADMIN_SHARED__?.[${JSON.stringify(specifier)}];`,
-          `if (!m) throw new Error("Admin has not shared ${specifier}: load this module from Admin.");`,
-          "export default m.default ?? m;",
-          `export const { ${names.join(", ")} } = m;`,
-          "",
-        ].join("\n"));
-      }
-    },
-  };
 }
 
 /** A separate opt-in document for the same-origin preview; the canonical index.html keeps its frame refusal. */

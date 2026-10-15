@@ -25,7 +25,7 @@ export default{async fetch(request,env){if(new URL(request.url).pathname==='/hea
   let ready=false;
   for(let n=0;n<45;n++){if(worker.exitCode!==null)throw Error(await readFile(join(privateDir,"worker.log"),"utf8"));try{ready=(await fetch(`http://127.0.0.1:${port}/health`,{signal:AbortSignal.timeout(1000)})).ok;}catch{}if(ready)break;await new Promise(r=>setTimeout(r,1000));}
   if(!ready)throw Error(await readFile(join(privateDir,"worker.log"),"utf8"));
-  const response=await fetch(`http://127.0.0.1:${port}/verify`,{signal:AbortSignal.timeout(30000)});expect(await response.json()).toEqual({ok:true,checks:14,extensionLocks:true});expect(response.status).toBe(200);
+  const response=await fetch(`http://127.0.0.1:${port}/verify`,{signal:AbortSignal.timeout(30000)});expect(await response.json()).toEqual({ok:true,checks:14});expect(response.status).toBe(200);
  }finally{
   if(worker&&worker.exitCode===null){const ended=once(worker,"exit");try{process.kill(-worker.pid!,"SIGTERM");}catch{}await ended;}
   await log?.close();await rm(dir,{recursive:true,force:true});await rm(privateDir,{recursive:true,force:true});

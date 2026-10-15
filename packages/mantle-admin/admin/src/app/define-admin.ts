@@ -11,14 +11,12 @@ export interface AdminTypes {
   readonly views: { readonly [name: string]: { readonly input: object; readonly row: object } };
   readonly collections: { readonly [name: string]: { readonly data: object } };
   readonly operations: { readonly [name: string]: { readonly input: object; readonly output: unknown } };
-  /** The sidebar groups beyond Admin's own that the manifest places items in (`uiSchema.nav.group`); any name when absent. */
+  /** The sidebar groups beyond Admin's own that the manifest places items in (`uiSchema.nav.group`), which `defineAdmin` must declare in `nav.groups`; any name when absent. */
   readonly navGroups?: string;
-  /** Those `defineAdmin` must declare in `nav.groups`: `navGroups` minus any the legacy `--admin-extensions` module declares; none when absent. */
-  readonly requiredNavGroups?: string;
 }
 
 type CustomGroup<T extends AdminTypes> = T extends { readonly navGroups: infer G extends string } ? G : string;
-type RequiredGroup<T extends AdminTypes> = T extends { readonly requiredNavGroups: infer G extends string } ? G : never;
+type RequiredGroup<T extends AdminTypes> = T extends { readonly navGroups: infer G extends string } ? G : never;
 
 /**
  * Generated Admin metadata for `defineAdmin`: the column names each View's rows carry in the browser where they differ from

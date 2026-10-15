@@ -45,44 +45,9 @@ stars, CTEs and subqueries). Translation
 metadata and selected execution share the generated translation policy. Child
 fields win; private scope fields cannot be overlaid by inherited parent fields.
 
-Pass declarations with `mantle generate --admin-extensions ./admin-extensions.mjs`.
-The module exports a named `adminExtensions` array or a default array; it should
-contain plain declarations, without constructing runtime services:
-
-```js
-export const adminExtensions = [{ id: 'audit', contributes: {
-  fields: [{ id: 'color', target: 'field.input/v1',
-    optionsSchema: { type: 'object', properties: { palette: { type: 'string' } } }
-  }]
-}}];
-```
-
-The programmatic generation options accept the same declarations:
-
-```ts
-await generateFromSources({ target, sources,
-  adminExtensions: [{ id: 'audit', contributes: {
-    fields: [{ id: 'color', target: 'field.input/v1',
-      optionsSchema: { type: 'object', properties: { palette: { type: 'string' } } }
-    }]
-  }}]
-});
-```
-
-Only `id` and `contributes` are needed at generation. `extensionBindings` records
-Schema/Procedure field widgets, Schema/admin View cells and sidebar panels.
-Unknown contributions, wrong targets and invalid options fail generation with
-`UI_EXTENSION_UNKNOWN`, `UI_EXTENSION_TARGET` or `UI_EXTENSION_OPTIONS`, retaining
-0.2 paths. Serving extension modules and handling extension actions is separate.
-
 `adminBindings()` provides the selected adapter and checked entry/View/operation
 bindings. The server shares native read templates across collections; descriptors
 carry compiler-verified policy/field fragments and generated validators, not a
 copy of full SQL for every order/direction. Metadata endpoints perform no storage
 read of their own; caller resolution and optional site/user enrichment may query.
 Statistics capability is advertised only when its native route is mounted.
-
-Full extension declarations also emit `extensionMetadata` and, with Admin selected,
-`admin-extensions.ts` with a runtime `extensionBindings` function and compiled
-settings checks. Native modules are host-served; install integrity in the host
-shell import map. `source` modules are refused.

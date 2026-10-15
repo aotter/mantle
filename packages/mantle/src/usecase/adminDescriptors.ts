@@ -1,35 +1,18 @@
 /** Build-time projections only; generated exports are static, independently tree-shakable data. */
-import { DiagnosticError, BUILT_IN_NAV_GROUPS, navGroupProblems, navPlacementProblems, isPrimaryCollection, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, toolTitle, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
+import { isPrimaryCollection, mcpTools, mcpToolNameSegment, toolTitle, collectionOf, developerConsole, rowPreconditions, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
-import { advertised, emitValidation } from "./validation.js";
+import { advertised } from "./validation.js";
 import { publishingAnnotations, publishingInput, publishingTransitions } from "./publishing.js";
 import { versioned } from "./tool-version.js";
 
-const adminEnum = (p: JsonSchema): JsonSchema => { if(!p.oneOf) return p; const {oneOf,...rest}=p; return {...rest,enum:oneOf.map(c=>c.const)}; };
-
-export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin=false}:Pick<GenerateInput,"plan"|"adminExtensions"|"navGroups"|"admin">,diagnostics:GenerateDiagnostic[]):Record<string,string> {
-  // Sidebar placement: a nav.group is a built-in group or one `defineAdmin` declares (admin-client.ts types it, so tsc checks it); navGroups is the legacy declaration (presentation only).
-  for(const [path,message] of navGroupProblems(navGroups))diagnostics.push({code:"SCHEMA_UI_INVALID",path,message});
-  const groupIds=new Set<string>([...BUILT_IN_NAV_GROUPS,...(Array.isArray(navGroups)?navGroups.map(g=>g?.id):[])]);
+export function emitAdminDescriptors({plan,admin=false}:Pick<GenerateInput,"plan"|"admin">,diagnostics:GenerateDiagnostic[]):Record<string,string> {
   const schemaList=Object.values(plan.schemas);
   const placed=[...schemaList.map(s=>["schemas/"+s.name,s.uiSchema,s] as const),...Object.entries(plan.views).map(([name,v])=>["views/"+name,v.uiSchema,null] as const)];
   for(const [path,ui,s] of placed){
     const nav=(ui?.["nav"]??{}) as Record<string,unknown>,group=nav["group"];
     // a child folded under its parent, or a translation on its parent's language tabs, has no sidebar entry to place
     if(s&&!isPrimaryCollection(s,schemaList))for(const key of ["group","order","hidden"])if(nav[key]!==undefined)diagnostics.push({code:"SCHEMA_UI_INVALID",path:`${path}/uiSchema/nav/${key}`,message:s.translates?`Schema '${s.name}' has no sidebar entry to place: it is a translation, shown on its parent's language tabs.`:`Schema '${s.name}' has no sidebar entry to place: it is folded under its parent${collectionOf(s,schemaList).parent?.parentField==="id"?"; nav.standalone: true lists it in the sidebar.":" and opens from its parent's workbench (standalone needs a required id reference)."}`});
-  }
-  for(const e of adminExtensions)for(const p of e.contributes.pages??[]){
-    if(p.nav===undefined)continue; // without nav a page keeps its own route and stays out of the sidebar
-    const path=`admin/extensions/${e.id}/pages/${p.id}/nav`,nav=p.nav as unknown;
-    if(!nav||typeof nav!=="object"||Array.isArray(nav)||typeof p.nav.group!=="string"){diagnostics.push({code:"UI_EXTENSION_INVALID",path,message:"A page nav is an object { group, order? }."});continue;}
-    const group=p.nav.group,bad=p.nav.order===undefined?null:navPlacementProblems({order:p.nav.order});
-    if(group!=="settings"&&!groupIds.has(group))diagnostics.push({code:"UI_EXTENSION_INVALID",path:path+"/group",message:`Unknown nav group '${group}'.`});
-    if(bad)diagnostics.push({code:"UI_EXTENSION_INVALID",path:path+"/order",message:`nav.order must be ${bad[1]}.`});
-  }
-  try {checkPlanUiExtensions(plan,adminExtensions);} catch(error) {
-    if(!(error instanceof DiagnosticError))throw error;
-    const {code,path,message}=error.diagnostic;diagnostics.push({code,path,message});return {};
   }
   if(diagnostics.length)return {};
   const schemas=Object.values(plan.schemas);
@@ -41,8 +24,8 @@ export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin
       const output=key===column.field?field:key;(viewNames[name]??=Object.create(null))[key]=output;
       return [output,{schema:schema.name,field}];
     }));
-    const list=(v.uiSchema?.list??{}) as {columns?:string[];searchFields?:string[];filterFields?:string[];cells?:Record<string,string>};
-    return {name,title:v.title??null,description:v.description??null,input:v.input??null,list:{columns:list.columns??[],searchFields:list.searchFields??[],filterFields:list.filterFields??[],cells:list.cells??{}},columns,...(v.uiSchema?.nav?{nav:v.uiSchema.nav}:{})};
+    const list=(v.uiSchema?.list??{}) as {columns?:string[];searchFields?:string[];filterFields?:string[]};
+    return {name,title:v.title??null,description:v.description??null,input:v.input??null,list:{columns:list.columns??[],searchFields:list.searchFields??[],filterFields:list.filterFields??[]},columns,...(v.uiSchema?.nav?{nav:v.uiSchema.nav}:{})};
   });
   const adminTools=mcpTools(plan,"admin"),toolNames=new Set(adminTools.map(t=>t.name));
   const operations=adminTools.filter(t=>t.kind==="procedure").map(t=>{
@@ -73,30 +56,8 @@ export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin
     webmcp.routes[tool]={path:"/admin/c/"+encodeURIComponent(schema.name),entry:true};
     snapshot.interfaces.callable.push({kind:"procedure",name:tool,target:name,surface:"admin",audience:"admin",title:null,description,input:publishingInput,output:null,trigger:null});
   }
-  const extensionIds = new Set<string>();
-  const extensionMetadata = adminExtensions.map(extension => {
-    if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(extension.id) || extensionIds.has(extension.id) || extension.apiVersion !== undefined && extension.apiVersion !== 1) diagnostics.push({code:"UI_EXTENSION_INVALID",path:"admin/extensions/"+extension.id,message:"Extensions need unique kebab-case ids and apiVersion 1."});
-    extensionIds.add(extension.id);
-    const {source, handlers: _handlers, bodyLimit: _bodyLimit, ...declaration} = extension as typeof extension & {handlers?: unknown; bodyLimit?: number};
-    if (source !== undefined) diagnostics.push({code:"GENERATE_UNSUPPORTED",path:"admin/extensions/"+extension.id,message:"Native Admin uses host-served module paths; source modules are not served. Set module and install its integrity in the host shell import map."});
-    if (extension.module && (!extension.module.startsWith("/") || extension.module.startsWith("//") || /[\\?#]/.test(extension.module))) diagnostics.push({code:"UI_EXTENSION_INVALID",path:"admin/extensions/"+extension.id,message:"module must be a same-origin absolute path."});
-    return {id:extension.id,declaration:JSON.stringify(declaration),public:declaration,...(extension.module?{module:extension.module}:{}),...(extension.integrity?{integrity:extension.integrity}:{}),source:false,settings:(extension.contributes.settings??[]).map(s=>s.id),actions:(extension.contributes.actions??[]).map(a=>({id:a.id,target:a.target,...(a.when?.schema?{schema:a.when.schema}:{})}))};
-  });
-  const checks: string[] = [], validationFiles: Record<string,string> = {};
-  for (const extension of adminExtensions) for (const settings of extension.contributes.settings ?? []) {
-    const key=extension.id+"/"+settings.id, problem=formSchemaProblem(settings.schema);
-    if(problem){diagnostics.push({code:"UI_EXTENSION_INVALID",path:"admin/extensions/"+key,message:problem});continue;}
-    const input={...settings.schema,additionalProperties:false,properties:Object.fromEntries(Object.entries(settings.schema.properties??{}).map(([name,p])=>[name,adminEnum(p)]))};
-    const file=extension.id+"__"+settings.id; // ponytail: no "/" so Node ESM can import the emitted module
-    const generated=emitValidation({views:{},procedures:{[file]:{input}}},(path,message)=>diagnostics.push({code:"GENERATE_UNSUPPORTED",path,message}));
-    Object.assign(validationFiles,generated);
-    const alias="check"+checks.length;
-    checks.push(`import {validate as ${alias}} from "./validation/procedures/${encodeURIComponent(file)}.js";`);
-  }
-  const settingsKeys=adminExtensions.flatMap(e=>(e.contributes.settings??[]).map(s=>e.id+"/"+s.id));
-  const bindings = "import {extensionOptions} from '@aotter/mantle-admin/server/extensions';\nimport type {AdminExtension} from '@aotter/mantle-admin/server/extensions';\nimport {extensionMetadata} from './admin-descriptors.js';\nimport {ContractError} from '@aotter/mantle/contracts';\n"+checks.join("\n")+"\nconst checks={"+settingsKeys.map((key,n)=>`${q(key)}:(value:unknown)=>{try{check${n}(value);return {};}catch(error){if(!(error instanceof ContractError))throw error;return {[(error.path.split('/input/')[1]??'').replace(/~1/g,'/').replace(/~0/g,'~')]:error.message};}}`).join(",")+"};\nexport const extensionBindings=<Env,DB>(definitions:readonly AdminExtension<Env,DB>[])=>extensionOptions<Env,DB>(extensionMetadata,checks,definitions);\n";
-  const data={allCollections,views,operations,navGroups,fieldNames:Object.fromEntries(schemas.map(s=>[s.name,s.names])),viewNames,authorizations,developerConsole:snapshot,mcpAppCatalogues:catalogues,webmcp,extensionBindings:planUiExtensionRefs(plan),extensionMetadata};
-  return {...validationFiles,...(adminExtensions.length && admin ? {"admin-extensions.ts":bindings} : {}),"admin-descriptors.ts":"// Generated static Admin metadata. Import only the exports the application uses.\n"+literals(data)+"\nexport const collections = ["+schemas.filter(s=>!s.translates).map(s=>"allCollections["+q(s.name)+"]").join(",")+"] as const;\nexport const bootstrap = {collections, allCollections, operations, views, navGroups, webmcp, developerConsole} as const;\n"};
+  const data={allCollections,views,operations,fieldNames:Object.fromEntries(schemas.map(s=>[s.name,s.names])),viewNames,authorizations,developerConsole:snapshot,mcpAppCatalogues:catalogues,webmcp};
+  return {"admin-descriptors.ts":"// Generated static Admin metadata. Import only the exports the application uses.\n"+literals(data)+"\nexport const collections = ["+schemas.filter(s=>!s.translates).map(s=>"allCollections["+q(s.name)+"]").join(",")+"] as const;\nexport const bootstrap = {collections, allCollections, operations, views, webmcp, developerConsole} as const;\n"};
 }
 
 /**

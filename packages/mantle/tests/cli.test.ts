@@ -147,18 +147,16 @@ test.skipIf(!process.env.MANTLE_NATIVE_TESTS)("workspace consumer bin: plain Wra
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
 
-test("generate loads declared Admin extensions without runtime construction",async()=>{
+test("generate no longer takes --admin-extensions, and a widget naming an extension contribution is refused",async()=>{
   const dir=await mkdtemp(join(tmpdir(),"next-cli-extensions-"));
   try{
     const source=join(dir,"schema.json"),module=join(dir,"extensions.mjs");
-    await writeFile(source,JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"posts"},spec:{title:"Posts",lifecycle:"operational",schema:{type:"object",properties:{title:{type:"string"}},required:["title"]},uiSchema:{fields:{title:{widget:"audit/color",options:{palette:"brand"}}}}}}));
-    const declarations=[{id:"audit",contributes:{fields:[{id:"color",target:"field.input/v1",optionsSchema:{type:"object",properties:{palette:{type:"string",enum:["brand"]}},required:["palette"]}}]}}];
+    await writeFile(source,JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"posts"},spec:{title:"Posts",lifecycle:"operational",schema:{type:"object",properties:{title:{type:"string"}},required:["title"]}}}));
+    await writeFile(module,"export const adminExtensions=[];");
     const args=[cli,"generate","bun-sqlite","generated",source];
-    const missing=spawnSync("node",args,{cwd:dir,encoding:"utf8"});expect(missing.status).toBe(1);expect(missing.stderr).toContain("UI_EXTENSION_UNKNOWN");
-    await writeFile(module,"export const adminExtensions="+JSON.stringify(declarations)+";");
-    expect(spawnSync("node",[...args,"--admin-extensions",module],{cwd:dir,encoding:"utf8"}).status).toBe(0);
-    expect(await readFile(join(dir,"generated/admin-descriptors.ts"),"utf8")).toContain('"ref":"audit/color"');
-    await writeFile(module,"export default "+JSON.stringify(declarations)+";");expect(spawnSync("node",[...args,"--admin-extensions",module],{cwd:dir}).status).toBe(0);
-    await writeFile(module,"export const adminExtensions=()=>{throw Error('constructed runtime');};");const invalid=spawnSync("node",[...args,"--admin-extensions",module],{cwd:dir,encoding:"utf8"});expect(invalid.status).toBe(1);expect(invalid.stderr).toContain("must export an adminExtensions array");expect(invalid.stderr).not.toContain("constructed runtime");
+    expect(spawnSync("node",args,{cwd:dir,encoding:"utf8"}).status).toBe(0);
+    const flag=spawnSync("node",[...args,"--admin-extensions",module],{cwd:dir,encoding:"utf8"});expect(flag.status).toBe(1);expect(flag.stderr).toContain("--admin-extensions");
+    await writeFile(source,JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind:"Schema",metadata:{name:"posts"},spec:{title:"Posts",lifecycle:"operational",schema:{type:"object",properties:{title:{type:"string"}},required:["title"]},uiSchema:{fields:{title:{widget:"audit/color"}}}}}));
+    const named=spawnSync("node",args,{cwd:dir,encoding:"utf8"});expect(named.status).toBe(1);expect(named.stderr).toContain("widget must be 'textarea'");
   }finally{await rm(dir,{recursive:true,force:true});}
 },30_000);

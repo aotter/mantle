@@ -32,7 +32,6 @@ const ParentEntryWorkbench = React.lazy(() => import("../features/content/parent
 const MediaLibraryView = React.lazy(() => import("../features/media/media-library-view").then(module => ({ default: module.MediaLibraryView })));
 const OperationsView = React.lazy(() => import("../features/ops/operations-view").then(module => ({ default: module.OperationsView })));
 const ViewPage = React.lazy(() => import("../features/ops/view-page").then(module => ({ default: module.ViewPage })));
-const ExtensionPage = React.lazy(() => import("../features/system/extension-page").then(module => ({ default: module.ExtensionPage })));
 const PreferencesView = React.lazy(() => import("../features/system/preferences-view").then(module => ({ default: module.PreferencesView })));
 const SettingsView = React.lazy(() => import("../features/system/settings-view").then(module => ({ default: module.SettingsView })));
 const AdminView = React.lazy(() => import("../features/system/admin-view").then(module => ({ default: module.AdminView })));
@@ -216,15 +215,6 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
 
   if (path.startsWith("/admin/dev")) {
     return <React.Suspense fallback={<GateLoading />}><DeveloperWorkspace path={path} /></React.Suspense>;
-  }
-
-  const extensionMatch = path.match(/^\/admin\/x\/([^/]+)\/([^/]+)\/?$/);
-  if (extensionMatch) {
-    return (
-      <AuthenticatedLayout>
-        <ExtensionPage extension={decodeURIComponent(extensionMatch[1]!)} contribution={decodeURIComponent(extensionMatch[2]!)} />
-      </AuthenticatedLayout>
-    );
   }
 
   const viewMatch = path.match(/^\/admin\/views\/([^/]+)\/?$/);

@@ -9,7 +9,7 @@ There are three packages, pinned to matching versions:
 | Package | Owns |
 | --- | --- |
 | `@aotter/mantle` | One native Core SDK: compiler, generator, query kernel and optional auth/surface primitives. |
-| `@aotter/mantle-admin` | Optional Admin server, SPA, extensions, design preview and Admin MCP App. |
+| `@aotter/mantle-admin` | Optional Admin server, app-built SPA library, design preview and Admin MCP App. |
 | `@aotter/mantle-ui` | Shared UI kit and generic interaction controller. |
 
 The SDK does not import Admin or its assets. Selecting Admin emits application
@@ -26,7 +26,7 @@ pnpm exec tsc --noEmit
 
 Targets are `bun-sqlite`, `bun-postgres`, `cloudflare-d1` and
 `cloudflare-postgres`. Programmatic generation accepts `admin: true` with the
-same target/source options. Optional `--auth`, `--site` and `--admin-extensions`
+same target/source options. Optional `--auth` and `--site`
 modules follow their [generation contracts](../cloudflare/service-entry.md).
 Generate, typecheck, implement every printed `Handlers` key, then typecheck
 again. Commit generated TypeScript, SQL and Wrangler edits. Never edit the
@@ -191,7 +191,7 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 | `cell:view:<view>.<column>` | both | `value`, `row`, `property`, `surface` |
 | `input:<schema>.<field>` | both | `value`, `onChange`, `readOnly`, `property`, `surface` |
 
-`record.aside:` and `record.actions:` render beside the built-in extension panels and actions, which they do not replace. A
+`record.aside:` and `record.actions:` render beside Admin's own side cards and actions, which they do not replace. A
 record form's top-level fields go through `input:`; a View's parameters and a Procedure's inputs do not. A read-only field
 (a bound or `readOnly` property) has no `input:` component, and `readOnly` tells yours that the caller cannot edit the
 record. A View column that reads a Schema field also goes through that field's `cell:` component, with the column's own
@@ -295,7 +295,7 @@ from `@aotter/mantle/media`; other custom ContractErrors must carry an explicit
 status, otherwise the boundary returns a redacted 500. Do not leak native
 error messages, tokens or credentials to clients.
 
-## Statistics and extensions
+## Statistics
 
 `GET /admin/api/collections/{name}/statistics?range=7d` supports primary or
 standalone collections; folded children/translations are not primary routes.
@@ -308,13 +308,11 @@ most 20 days and 480 buckets, with safe microsecond arithmetic. Temporal enum
 subtypes return original metadata keys; equivalent offset spellings count once
 under the first key, and separate microseconds remain distinct.
 
-Site/media/identity, extensions, WebMCP, design preview and MCP Apps are selected
-through the public Admin modules, not added to the SDK kernel. Extension
-contribution declarations go to `--admin-extensions`; executable handlers and
-sources stay in app-owned server configuration. Raw extension handlers receive
-the original Request without pre-reading, cloning or rebuilding it. Custom
-`bodyLimit` checks Content-Length before DB access; the app must bound reads of
-unknown-length raw streams. Built-in JSON routes use the shared bounded reader
+Site/media/identity, WebMCP, design preview and MCP Apps are selected
+through the public Admin modules, not added to the SDK kernel. A route with
+`rawBody` receives the original Request without pre-reading, cloning or
+rebuilding it; its custom `bodyLimit` checks Content-Length before DB access,
+and the app must bound reads of unknown-length raw streams. Built-in JSON routes use the shared bounded reader
 (default 1,000,000 bytes) after caller/origin checks and before DB acquisition.
 The API advertises capabilities for actually mounted routes, including statistics.
 
@@ -324,7 +322,7 @@ Use a disposable database for native tests, then exercise actual OTP sign-in,
 the Admin console and member frontend. Check invalid input, another tenant's
 rows, expired rows, publishing transitions, related/translated entries, paging,
 statistics, CSV, operations/ref effects, stale OCC and persisted state after a
-restart. Recheck extensions, previews, all supported UI languages and the
+restart. Recheck custom components, previews, all supported UI languages and the
 complete developer workspace. A generated file, typecheck or HTTP 200 alone
 does not verify these flows.
 
@@ -334,21 +332,6 @@ SDK package bytes and query/write/cold timing are separate checks. Extra selecte
 Admin indexes add write/storage maintenance; an indexed SELECT plan does not
 prove unchanged write latency. Report remaining gates honestly; this guide does not promise measured performance.
 
-## Extension declarations
-
-Pass full declarations to `--admin-extensions`. Generation emits
-`extensionMetadata` in `admin-descriptors.ts` and compiled settings checks plus
-`extensionBindings` in `admin-extensions.ts`. Bind the same runtime definitions
-(including handlers) with `extensionBindings(adminExtensions)`, and merge the
-returned `extensions` and `routes` into `admin()` options. Declaration drift is
-refused before any handler runs. The older descriptor `extensionBindings` export
-contains manifest UI references only; it is not the runtime binding function.
-
-Native Admin does not serve `source` modules or modify shell import maps. Serve
-an extension's `module` at a same-origin absolute path and install its `integrity`
-in the host shell import map. Selecting `source` fails generation with that
-instruction. This differs from historical 0.2's automatic source-module route.
-
 Entry lists and editor reads/writes return translation badges and related
 sections in one authorized HTTP response. `/bootstrap?collection=...` can include
 the first requested list page. CSV exports use `/entries/export` and
@@ -356,6 +339,28 @@ the first requested list page. CSV exports use `/entries/export` and
 A failure after headers aborts the stream, so a download can fail after partial
 bytes have arrived. Existing databases need an app-owned migration for the
 Admin-selected `created_at` statistics indexes emitted in initial `schema.sql`.
+
+## Migrating from Admin extensions
+
+The extension mechanism is gone: Admin is an application-built React library, and the application's own code replaces
+what an extension contributed. Alpha applications that used it change as follows.
+
+| Removed | Use instead |
+| --- | --- |
+| `--admin-extensions <module>`, `adminExtensions`, `src/admin.ts`, generated `admin-extensions.ts` | Drop the flag from `generate` and `check` scripts and delete the module. `generate` now rejects the option. |
+| `navGroups` in that module | `defineAdmin(admin, { nav: { groups } })` in `src/admin.tsx`, an object keyed by group id instead of an array: `{ id: "approvals", title, order }` becomes `approvals: { title, order }`. `tsc` refuses a group the manifest uses and `groups` omits. See [Sidebar](#sidebar). |
+| `defineAdminExtension`, `@aotter/mantle-admin/extension` | A React component in `defineAdmin({ components })`; see [Customising Admin](#customising-admin). |
+| Field widget `widget: <extension>/<contribution>` and `options` | `"input:<schema>.<field>"` in `components`. `widget: textarea` stays. |
+| `list.cells` on a Schema or View | `"cell:<schema>.<field>"` or `"cell:view:<view>.<column>"` in `components`. |
+| `uiSchema.panels`, `record.sidebar/v1` and `home/v1` panels | `"record.aside:<schema>"` and the `Home` component. |
+| `record/v1`, `list.selection/v1` and `list.toolbar/v1` actions | `"record.actions:<schema>"` and `"list.actions:<schema>"`; call a Procedure with `useOperation`. |
+| Handlers `api`, `settings` and `actions.run`, and the `/admin/api/x/<extension>/*` routes | Server work is a Procedure (writes), a View (reads) or an application route. Authorization stays on the server: a Procedure or View carries its own `requires`. |
+| `extensionBindings`, `extensionOptions`, `@aotter/mantle-admin/server/extensions`, the `extensions` and `navGroups` options of `admin()` and the `extensions` field of `/admin/api/site` | Delete them. |
+| The import map and `shared/*.js` shims in the built Admin | None: the application's bundle holds the one React there is. Drop any CSP hash for the import map. |
+| Extension pages (`/admin/x/<extension>/<page>`) and settings pages | An application route; `uiSchema.nav.group` places Schemas and Views, `nav.items` adds links to a collection or View. |
+
+A manifest that still names a removed key fails `mantle generate` with `SCHEMA_UI_INVALID` or `VIEW_UI_INVALID` at the
+key's path. The `UI_EXTENSION_*` diagnostics no longer exist.
 
 ## Collection list template today
 
@@ -391,7 +396,7 @@ staff work, in the same manifest change that adds a Schema or View. Placement is
 REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, and an empty group is not shown.
 
 - `Schema.spec.uiSchema.nav` and admin `View.spec.uiSchema.nav` take `group` (a group id), `order` (an integer;
-  ascending; entries without one follow in that default order, collections before Views before extension pages) and
+  ascending; entries without one follow in that default order, collections before Views) and
   `hidden: true` (out of the sidebar, still at its URL).
 - Built-in groups need no declaration: `content`, `operations`, `reports`, `more`. A project declares every other
   group once, in `src/admin.tsx`: `defineAdmin(admin, { nav: { groups } })`, each with a title (text or
@@ -405,10 +410,6 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
   View input are typed from the generated manifest, so a misspelling or a wrong preset fails `tsc`. Several items may lead to
   one resource with different presets. An item whose collection or View the caller cannot see is not shown; showing or
   hiding one changes no permission, because the target's own route still decides.
-- Until the legacy mechanism is removed, `navGroups` in the `--admin-extensions` module still declares groups; a group
-  `defineAdmin` declares wins over a legacy one of the same id, and a group the legacy module declares need not be
-  declared again.
-- Extension pages use the same ids: `pages[].nav: { group, order? }` (`more` and `settings` keep their places); a page without `nav` keeps its route and stays out of the sidebar.
 
 ```tsx
 // src/admin.tsx
@@ -432,7 +433,7 @@ export default defineAdmin(admin, {
 uiSchema: { nav: { group: approvals, order: 1 } }
 ```
 
-`mantle generate` refuses a duplicate or built-in `navGroups` id, a non-integer `order`, and
+`mantle generate` refuses a non-integer `order` and
 placement on a Schema without a sidebar entry of its own: a translation, or a folded child that is not
 [`standalone`](#collection-navigation-and-operation-placement).
 The purchasing example puts its approval queue and requests in an Approvals group.

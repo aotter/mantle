@@ -55,8 +55,8 @@ test("mantle bundle: the Worker into <outdir>/worker, Admin into <assets>/admin;
     await bundleApp(entry, dist);
     expect(await builds()).toHaveLength(3);
 
-    // src/admin.tsx is the entry; src/admin.ts (an Admin presentation module) is not. What it imports can be anywhere, so it always builds.
-    await writeFile(join(dir, "src/admin.ts"), "export const navGroups = [];\n");
+    // src/admin.tsx is the entry; src/admin.ts is not. What it imports can be anywhere, so it always builds.
+    await writeFile(join(dir, "src/admin.ts"), "export const notTheEntry = 1;\n");
     await writeFile(join(dir, "src/admin.tsx"), "export default {};\n");
     await bundleApp(entry, dist);
     expect(await readFile(join(dist, "client/admin/index.html"), "utf8")).toEndWith("/src/admin.tsx");

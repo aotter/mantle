@@ -1,5 +1,4 @@
 import * as React from "react";
-import { ExtensionPanels } from "../extensions/extension-contributions";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bot,
@@ -231,8 +230,6 @@ export function HomeView(_props: HomeProps): React.ReactElement {
           </div> : null}
         </SectionCard>
       ) : null}
-
-      <ExtensionPanels target="home/v1" />
 
       <section aria-labelledby="collections-heading">
         <h2 id="collections-heading" className="mb-4 text-xl font-semibold">{t(language, "console.collections.title")}</h2>
