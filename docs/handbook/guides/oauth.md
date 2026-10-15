@@ -74,6 +74,20 @@ its access/refresh tokens. Tokens issued without an active consent fail closed.
 First-party `skip_consent` tokens instead require a live, enabled client with
 `skipConsent` and allowed scopes, plus a live user session. Already-issued
 JWTs fail on the next call, and reconsenting cannot revive the old JWT lineage.
+
+Grant lifetime follows Better Auth. Better Auth issues a refresh token only when
+the grant includes `offline_access` and the client allows `refresh_token`.
+Without `offline_access` the grant is bound to the browser session: its tokens
+stop working when that session expires or the user signs out. A refresh that
+narrows the scope to drop `offline_access` after the session ends returns
+`invalid_grant`, so it never yields an unusable token. An `offline_access` grant
+outlives the browser session. Expiry, deletion and sign-out of the session leave
+it usable until its refresh token expires (`refreshTokenExpiresIn`, 30 days by
+default) or is revoked. That includes disconnect, refresh-token revocation and
+Better Auth's reuse detection. Without a live session, its access tokens need an
+unrevoked, unexpired `offline_access` refresh token for the same user and client.
+The consent, client, scope, resource and ban checks still apply. An access token
+issued before sign-out stays valid until it expires (one hour by default).
 Database failures remain server errors, rather than silently authenticating.
 
 For app-owned API keys/personal tokens, supply `resolveCredential(request)` in

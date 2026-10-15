@@ -10,32 +10,44 @@ const array = (value: unknown): string[] | null => {
   try { const parsed = typeof value === "string" ? JSON.parse(value) : value; return Array.isArray(parsed) && parsed.every(x => typeof x === "string") ? parsed : null; } catch { return null; }
 };
 
-/** Fail closed for unbound tokens; reconsent cannot resurrect an issued JWT. */
+/**
+ * Fail closed for unbound tokens; reconsent cannot resurrect an issued JWT. As in Better Auth, an `offline_access` grant outlives
+ * the browser session: without a live session it stands on an unrevoked, unexpired offline refresh token for the same user and client.
+ */
 export async function assertActiveUserGrant(auth: AuthInstance, claims: Record<string, unknown>, audience: string | readonly string[]) {
   const { sub, azp, sid, mantle_consent_id: id, mantle_consent_reference: reference, mantle_skip_consent: skip } = claims;
-  if (![sub, azp, sid].every(x => typeof x === "string" && x.length) || !(skip === true && id === null || typeof id === "string" && id.length)) throw new ContractError("UNAUTHENTICATED", "OAuth token is not bound to a user session.");
+  const tokenScopes = typeof claims.scope === "string" ? claims.scope.split(/\s+/).filter(Boolean) : array(claims.scope);
+  const offline = !!tokenScopes?.includes("offline_access");
+  if (![sub, azp].every(x => typeof x === "string" && x.length) || !(offline && sid == null || typeof sid === "string" && sid.length) || !(skip === true && id === null || typeof id === "string" && id.length)) throw new ContractError("UNAUTHENTICATED", "OAuth token is not bound to a user session.");
   const { exec, param, now, table, column } = nativeAuthRead(auth.options);
-  const c = (field: string) => `c.${column("oauthConsent", field)}`, s = (field: string) => `s.${column("session", field)}`, client = (field: string) => `client.${column("oauthClient", field)}`;
-  const { rows } = await exec(`SELECT ${s("userId")} AS id, ${c("id")} AS "consentId", ${c("referenceId")} AS reference, ${c("resources")} AS resources, ${c("scopes")} AS scopes,
+  const at = now(Date.now());
+  const c = (field: string) => `c.${column("oauthConsent", field)}`, s = (field: string) => `s.${column("session", field)}`, client = (field: string) => `client.${column("oauthClient", field)}`, r = (field: string) => column("oauthRefreshToken", field);
+  const { rows } = await exec(`SELECT ${s("id")} AS session, ${c("id")} AS "consentId", ${c("referenceId")} AS reference, ${c("resources")} AS resources, ${c("scopes")} AS scopes,
       ${client("skipConsent")} AS "skipConsent", ${client("disabled")} AS disabled, ${client("scopes")} AS "clientScopes"
-    FROM ${table("oauthClient")} client JOIN ${table("session")} s ON ${s("id")} = ${param(1)} AND ${s("userId")} = ${param(2)} AND ${s("expiresAt")} > ${param(3)}
-    LEFT JOIN ${table("oauthConsent")} c ON ${c("id")} = ${param(4)} AND ${c("userId")} = ${s("userId")} AND ${c("clientId")} = ${client("clientId")}
-    WHERE ${client("clientId")} = ${param(5)}`, [sid, sub, now(Date.now()), id, azp]);
+    FROM ${table("oauthClient")} client LEFT JOIN ${table("session")} s ON ${s("id")} = ${param(1)} AND ${s("userId")} = ${param(2)} AND ${s("expiresAt")} > ${param(3)}
+    LEFT JOIN ${table("oauthConsent")} c ON ${c("id")} = ${param(4)} AND ${c("userId")} = ${param(2)} AND ${c("clientId")} = ${client("clientId")}
+    WHERE ${client("clientId")} = ${param(5)}`, [sid ?? null, sub, at, id, azp]);
   const grant = rows[0];
+  const live = !!grant?.session || offline && !!grant && (await exec(`SELECT ${r("scopes")} AS scopes FROM ${table("oauthRefreshToken")}
+    WHERE ${r("userId")} = ${param(1)} AND ${r("clientId")} = ${param(2)} AND ${r("revoked")} IS NULL AND ${r("expiresAt")} > ${param(3)}`, [sub, azp, at])).rows.some(row => array(row.scopes)?.includes("offline_access"));
   const provider = auth.options.plugins?.find(plugin => plugin.id === "oauth-provider") as { options?: { scopes?: string[] } } | undefined;
   const firstParty = skip === true && id === null && !!grant?.skipConsent;
   const resources = firstParty ? (typeof claims.aud === "string" ? [claims.aud] : array(claims.aud)) : array(grant?.resources);
   const scopes = firstParty ? array(grant?.clientScopes) ?? provider?.options?.scopes : array(grant?.scopes);
   const requested = typeof audience === "string" ? [audience] : audience;
   const tokenAudiences = typeof claims.aud === "string" ? [claims.aud] : array(claims.aud) ?? [];
-  const tokenScopes = typeof claims.scope === "string" ? claims.scope.split(/\s+/).filter(Boolean) : array(claims.scope);
-  if (!grant || grant.disabled || !firstParty && (!grant.consentId || (grant.reference ?? null) !== reference) || !resources || !scopes || !tokenScopes || !requested.some(x => resources.includes(x) && tokenAudiences.includes(x)) || !tokenScopes.every(x => scopes.includes(x))) throw new ContractError("UNAUTHENTICATED", "OAuth authorization grant is no longer active.");
-  return { id: grant.id as string };
+  if (!grant || !live || grant.disabled || !firstParty && (!grant.consentId || (grant.reference ?? null) !== reference) || !resources || !scopes || !tokenScopes || !requested.some(x => resources.includes(x) && tokenAudiences.includes(x)) || !tokenScopes.every(x => scopes.includes(x))) throw new ContractError("UNAUTHENTICATED", "OAuth authorization grant is no longer active.");
+  return { id: sub as string };
 }
 
 /** Add first to oauthProvider/mcp extensions; Better Auth retains ownership of referenceId. */
 export const oauthGrantExtension: NonNullable<Parameters<typeof oauthProvider>[0]["extensions"]>[number] = {
-  claims: { accessToken: async ({ ctx, user, client, referenceId }) => {
+  claims: { accessToken: async ({ ctx, user, client, referenceId, grantType, scopes, sessionId }) => {
+    // Narrowing away offline_access on refresh would mint a session-bound token for a session that has already ended.
+    if (grantType === "refresh_token" && !scopes.includes("offline_access")) {
+      const session = sessionId ? await ctx.context.adapter.findOne<{ expiresAt: Date | string }>({ model: "session", where: [pair("id", sessionId)] }) : null;
+      if (!session || new Date(session.expiresAt).getTime() <= Date.now()) throw ctx.error("BAD_REQUEST", { error: "invalid_grant", error_description: "The browser session for this grant has ended; keep offline_access or sign in again." });
+    }
     if (client.skipConsent) return { mantle_consent_id: null, mantle_skip_consent: true };
     const consent = user && await ctx.context.adapter.findOne<{ id: string }>({ model: "oauthConsent", where: [pair("userId", user.id), pair("clientId", client.clientId), { field: "referenceId", value: referenceId ?? null }] });
     return { mantle_consent_id: consent?.id ?? null, mantle_consent_reference: referenceId ?? null };
