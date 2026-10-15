@@ -23,9 +23,9 @@ import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Badge } from "@aotter/mantle-ui/kit";
 import { SchemaFields } from "../content/entry-edit-view";
-import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
+import { withNativeSchema } from "../../lib/render-data-value";
+import { DataCell } from "../../ui/data-cell";
 import { enumOptions, optionLabel } from "../../lib/enum-options";
-import { IdValue, isIdField } from "../../ui/id-value";
 import { cn } from "../../lib/utils";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 import {
@@ -243,9 +243,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
                       <ExtensionCell schema={view?.columns?.[col]?.schema ?? ""} field={view?.columns?.[col]?.field ?? col} value={value}
                         property={schema as Record<string, unknown> | undefined}
                         cells={view?.list.cells?.[col] === undefined ? undefined : { [view?.columns?.[col]?.field ?? col]: view.list.cells[col] }}>
-                        {isIdField(col, schema) && typeof value === "string"
-                          ? <IdValue value={value} language={language} />
-                          : renderDataValue(schema, value, language, canonical)}
+                        <DataCell names={[...(view?.columns?.[col] ? [`cell:${view.columns[col].schema}.${view.columns[col].field}`] : []), `cell:view:${name}.${col}`]} field={col} value={value} row={row} property={schema} />
                       </ExtensionCell>
                     </TableCell>
                   );

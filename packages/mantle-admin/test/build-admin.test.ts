@@ -1,12 +1,14 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createServer as createHttpServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterAll, describe, expect, it } from "vitest";
 
 const pkg = resolve(import.meta.dirname, "..");
 const temp = mkdtempSync(join(tmpdir(), "mantle-build-admin-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
-const { buildAdmin } = await import(resolve(pkg, "dist/build/index.js")) as typeof import("../src/build/index.js");
+const { adminVitePlugin, buildAdmin } = await import(resolve(pkg, "dist/build/index.js")) as typeof import("../src/build/index.js");
 const assets = (dir: string, ext: string) => readdirSync(join(dir, "assets")).filter(file => file.endsWith(ext)).map(file => readFileSync(join(dir, "assets", file), "utf8")).join("\n");
 
 describe("@aotter/mantle-admin/build", () => {
@@ -39,6 +41,47 @@ describe("@aotter/mantle-admin/build", () => {
     await buildAdmin({ entry: join(src, "admin.tsx"), outDir: out });
     expect(assets(out, ".js")).toContain("custom-admin-entry");
     expect(assets(out, ".css")).toContain("#123456");
+  }, 120_000);
+
+  it("serves Admin with HMR from a Vite dev server, proxying the service's API", async () => {
+    const src = join(temp, "dev/src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "admin.tsx"), [
+      `import { defineAdmin } from ${JSON.stringify(resolve(pkg, "dist/admin-app/index.js"))};`,
+      "export default defineAdmin({});",
+    ].join("\n"));
+    // the "service" echoes what it received; both servers take a free port
+    const service = createHttpServer((request, response) => { response.setHeader("content-type", "application/json"); response.end(JSON.stringify({ via: "service", url: request.url, host: request.headers.host, origin: request.headers.origin })); });
+    await new Promise<void>(done => service.listen(0, "127.0.0.1", done));
+    const target = `http://127.0.0.1:${(service.address() as AddressInfo).port}`;
+    const { createServer } = await import("vite");
+    const vite = await createServer({ configFile: false, logLevel: "silent", plugins: await adminVitePlugin({ entry: join(src, "admin.tsx"), target, authBasePath: "/auth" }), server: { port: 0, host: "127.0.0.1" } });
+    try {
+      await vite.listen();
+      const origin = new URL(vite.resolvedUrls!.local[0]!).origin;
+      const get = (path: string) => fetch(`${origin}${path}`);
+      for (const path of ["/admin/", "/admin/c/requests"]) {
+        const html = await (await get(path)).text();
+        expect(html, path).toContain("/@vite/client");
+        expect(html, path).toContain('<div id="root">');
+      }
+      // the page's module graph loads the application's entry through Admin's library
+      const main = await get("/admin/main.js");
+      expect(main.status).toBe(200);
+      const code = await main.text();
+      // the entry is the application's file, and every module it imports is served
+      expect(code).toMatch(/import admin from "\/admin\/@fs\/[^"]+\/dev\/src\/admin\.tsx"/);
+      for (const [, url] of code.matchAll(/from "(\/admin\/[^"]+)"/g)) expect((await get(url!)).status, url).toBe(200);
+      expect(await (await get("/admin/api/me")).json()).toMatchObject({ via: "service", url: "/admin/api/me" });
+      expect(await (await get("/auth/get-session")).json()).toMatchObject({ via: "service", url: "/auth/get-session" });
+      expect(await (await get("/admin/")).text()).toContain('<meta name="mantle-auth-base" content="/auth">');
+      // a write keeps the browser's Origin and Host together, as the service's same-origin check needs
+      const write = await (await fetch(`${origin}/admin/api/operations/x`, { method: "POST", headers: { origin } })).json() as { host: string; origin: string };
+      expect(`http://${write.host}`).toBe(write.origin);
+    } finally {
+      await vite.close();
+      await new Promise(done => service.close(done));
+    }
   }, 120_000);
 
   it("declares every package its shipped build and library import as a dependency", () => {

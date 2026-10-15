@@ -73,6 +73,8 @@ import {
   RowOperationsMenu,
 } from "./row-operations";
 import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
+import { DataCell } from "../../ui/data-cell";
+import { Empty, Slot } from "../../app/slots";
 import { optionLabel } from "../../lib/enum-options";
 import { renderTitleText } from "../../lib/entry-title";
 import { LocaleBadge, LocaleStatusBadges } from "./locale-badge";
@@ -330,6 +332,7 @@ function CollectionList({
         onSuccess={refreshEntries}
       />
       <ExtensionActions target="list.toolbar/v1" schema={collectionName} onDone={refreshEntries} />
+      <Slot name={`list.actions:${collectionName}`} Default={Empty} props={{ collection: collectionName, selection: [] }} />
     </div>
   );
   const header = layout === "page" ? (
@@ -606,6 +609,7 @@ function BulkActionBar({
       <div className="ml-auto flex items-center gap-2">
         <ExtensionActions target="list.selection/v1" size="sm" schema={collection?.name ?? ""}
           selection={{ schema: collection?.name ?? "", ids: selectedIds }} onDone={() => { onClear(); onDone(); }} />
+        <Slot name={`list.actions:${collection?.name ?? ""}`} Default={Empty} props={{ collection: collection?.name ?? "", selection: selectedIds }} />
         {canPublish ? (
           <>
             <Button
@@ -1136,9 +1140,7 @@ function EntryRowDisplay({
             <TableCell key={name} className="text-muted-foreground">
               <ExtensionCell schema={collection?.name ?? ""} field={name} value={value} property={schema as Record<string, unknown> | undefined}
                 cells={(collection?.uiSchema?.["list"] as { cells?: unknown } | undefined)?.cells}>
-                {isIdField(name, schema) && typeof value === "string"
-                  ? <IdValue value={value} language={language} />
-                  : renderDataValue(schema, value, language, canonical)}
+                <DataCell names={[`cell:${collection?.name ?? ""}.${name}`]} field={name} value={value} row={row.data_preview ?? {}} property={schema} />
               </ExtensionCell>
             </TableCell>
           );

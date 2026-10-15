@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { MantleApp, appValue } from "../src/mcp-app/app.js";
 import type { HostApi } from "../src/app/postmessage.js";
 import { adminMcpApps } from "../src/server/mcp.js";
+import { defineAdmin } from "../admin/src/app/define-admin.js";
+import { SurfaceProvider } from "../admin/src/app/slots.js";
 import { actionsFor, APP_TOOL_META_KEY, hiddenInputs, invokeTool, outputOf, readCatalog, rowsOf, toolOf, type AppCatalog, type ToolResult } from "../src/app/bridge.js";
 
 const action = {
@@ -81,6 +83,15 @@ describe("MantleApp", () => {
     // Each row's button names its row for assistive technology; the row without a version cannot lock one.
     expect(html).toContain('aria-label="Review requisition: r1"');
     expect(html).not.toContain('aria-label="Review requisition: r2"');
+  });
+
+  it("shows a column through the application's cell:view component, which sees the App's surface and can wrap the built-in cell", () => {
+    const { layers } = defineAdmin({}, { components: { "cell:view:pending.item": ({ value, surface, row, renderDefault, ...props }) => <mark data-surface={surface} data-row={String(row["id"])}>{renderDefault({ ...props, row, value: `${value}!` })}</mark> } });
+    const html = renderToStaticMarkup(<SurfaceProvider surface="mcp-app" host={null} layers={layers}><MantleApp catalog={catalog} host={host()} result={viewResult} input={{}} /></SurfaceProvider>);
+    expect(html).toContain('<mark data-surface="mcp-app" data-row="r1">Laptops!</mark>');
+    // only the column it names
+    expect(html).toContain("1,234.56");
+    expect(html).not.toContain("<mark data-surface=\"mcp-app\" data-row=\"r1\">1,234");
   });
 
   it("speaks the host's locale, in its own strings and in the plan's titles", () => {

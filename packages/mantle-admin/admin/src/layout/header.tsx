@@ -1,6 +1,6 @@
 import * as React from "react";
 import { WebMcpControl } from "./webmcp-control";
-import { ExternalLink, type LucideIcon } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import { useAdminLocation } from "@/app/router";
 import { usePreferences } from "@/app/preferences";
@@ -16,42 +16,24 @@ import {
 } from "@aotter/mantle-ui/kit";
 import { SidebarTrigger } from "@aotter/mantle-ui/kit";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
-import { cn } from "@/lib/utils";
 import { fieldLabel } from "@/lib/field-label";
-import type { AdminBrand } from "./types";
+import type { HeaderProps } from "../app/slot-props";
+import { useShell } from "./shell-context";
 import {
   LanguagePreferenceDropdown,
   ThemePreferenceDropdown,
 } from "./preference-controls";
 
-interface HeaderProps {
-  className?: string;
-  site?: AdminBrand;
-  publicUrl?: string;
-  pageTitle?: string;
-  workspaceLink?: { href: string; label: string; icon: LucideIcon };
-  actionsHostRef?: React.Ref<HTMLDivElement>;
-}
-
-export function Header({
-  className,
-  site,
-  publicUrl,
-  pageTitle,
-  workspaceLink,
-  actionsHostRef,
-}: HeaderProps): React.ReactElement {
+export function Header({ title, actions }: HeaderProps): React.ReactElement {
   const { pathname } = useAdminLocation();
   const { language } = usePreferences();
-  const current = pageTitle ?? currentPage(pathname, language);
+  const { publicUrl, workspaceLink, actionsHostRef, brand: site } = useShell();
+  const current = title ?? currentPage(pathname, language);
 
   return (
     <header
       data-slot="app-header"
-      className={cn(
-        "group/header flex h-14 shrink-0 items-center gap-1 border-b px-2 sm:gap-2 sm:px-4",
-        className,
-      )}
+      className="group/header absolute inset-x-0 top-0 z-30 flex h-14 shrink-0 items-center gap-1 border-b px-2 sm:gap-2 sm:px-4"
     >
       <SidebarTrigger className="-ms-1 md:hidden" aria-label={t(language, "common.toggleSidebar")} />
       <Breadcrumb className="min-w-0 max-sm:group-has-[[data-slot=page-header-actions]:not(:empty)]/header:hidden" aria-label={t(language, "common.breadcrumb")}>
@@ -71,6 +53,7 @@ export function Header({
       </Breadcrumb>
       <div ref={actionsHostRef} data-slot="page-header-actions" className="flex min-w-0 shrink items-center" />
       <div className="ms-auto flex shrink-0 items-center gap-1">
+        {actions}
         {workspaceLink ? (
           <Tooltip>
             <TooltipTrigger asChild>

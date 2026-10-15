@@ -22,6 +22,8 @@ import {
 } from "../features/auth/auth-views";
 import { HomeView } from "../features/console/home-view";
 import { CollectionView } from "../features/content/collection-view";
+import { Slot } from "./slots";
+import type { CollectionListProps, RecordViewProps } from "./slot-props";
 import { hasFoldedChildCollections } from "../lib/collection-nav";
 import { NotFoundView } from "../features/system/not-found-view";
 
@@ -129,7 +131,7 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   if (collectionMatch) {
     return (
       <AuthenticatedLayout>
-        <CollectionView collectionName={decodeURIComponent(collectionMatch[1]!)} />
+        <Slot name="CollectionList" Default={CollectionPage} props={{ collection: decodeURIComponent(collectionMatch[1]!) }} />
       </AuthenticatedLayout>
     );
   }
@@ -138,10 +140,7 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   if (entryEditMatch) {
     return (
       <AuthenticatedLayout>
-        <EntryEditView
-          collectionName={decodeURIComponent(entryEditMatch[1]!)}
-          entryId={decodeURIComponent(entryEditMatch[2]!)}
-        />
+        <Slot name="RecordView" Default={RecordPage} props={{ collection: decodeURIComponent(entryEditMatch[1]!), entryId: decodeURIComponent(entryEditMatch[2]!) }} />
       </AuthenticatedLayout>
     );
   }
@@ -160,7 +159,7 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   if (path === "/admin" || path === "/admin/") {
     return (
       <AuthenticatedLayout>
-        <HomeView />
+        <HomePage />
       </AuthenticatedLayout>
     );
   }
@@ -262,5 +261,22 @@ function EntryLanding({
   if (hasFoldedChildCollections(collectionsQuery.data ?? [], collectionName)) {
     return <ParentEntryWorkbench collectionName={collectionName} entryId={entryId} />;
   }
-  return <EntryEditView collectionName={collectionName} entryId={entryId} />;
+  return <Slot name="RecordView" Default={RecordPage} props={{ collection: collectionName, entryId }} />;
+}
+
+function CollectionPage({ collection }: CollectionListProps): React.ReactElement {
+  return <CollectionView collectionName={collection} />;
+}
+
+function RecordPage({ collection, entryId }: RecordViewProps): React.ReactElement {
+  return <EntryEditView collectionName={collection} entryId={entryId} />;
+}
+
+function HomePage(): React.ReactElement {
+  const collections = useQuery<Collection[]>({
+    queryKey: ["collections"],
+    queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
+  });
+  const site = useQuery<SiteInfo>({ queryKey: ["site"], queryFn: () => api.get<SiteInfo>("/site") });
+  return <Slot name="Home" Default={HomeView} props={{ collections: collections.data ?? [], site: site.data }} />;
 }

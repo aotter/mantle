@@ -25,6 +25,7 @@ import { Skeleton } from "@aotter/mantle-ui/kit";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@aotter/mantle-ui/kit";
 import { CopyField, EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { usePreferences } from "../../app/preferences";
+import type { HomeProps } from "../../app/slot-props";
 import { t } from "../../app/i18n";
 import { CollectionStatisticsCard } from "./collection-statistics-card";
 import { isPrimaryNavCollection } from "../../lib/collection-nav";
@@ -35,7 +36,8 @@ const CLAUDE_NEW_CHAT_URL = "https://claude.ai/new";
 const CHATGPT_URL = "https://chatgpt.com/";
 const GROK_CONNECTORS_URL = "https://grok.com/connectors";
 
-export function HomeView(): React.ReactElement {
+/** The built-in home page. It loads its own data; `props` tell a replacement what it shows. */
+export function HomeView(_props: HomeProps): React.ReactElement {
   const { language } = usePreferences();
   const site = useQuery<SiteInfo>({
     queryKey: ["site"],

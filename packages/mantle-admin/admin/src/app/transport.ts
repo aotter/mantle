@@ -1,5 +1,6 @@
 import { ApiError, api } from "../lib/api";
 import { diagnosticsOf, outputOf } from "../../../src/app/bridge";
+import { toolName } from "./slots";
 import type { AdminEntry, AdminMe, AdminTransport, McpAppTransportOptions, McpToolResult, Reply } from "./hooks";
 
 type Row = Readonly<Record<string, unknown>>;
@@ -55,8 +56,6 @@ export const browserTransport: AdminTransport = {
 /** Tool failures the browser would have read as 403 or 404. */
 const REFUSED = ["AUTH_DENIED", "NOT_FOUND"];
 
-/** The admin MCP tool of a View or Procedure: its name lowercased, kebab to snake (`mcpToolNameSegment` in @aotter/mantle's compiler). */
-export const toolName = (name: string): string => name.toLowerCase().replace(/-/g, "_");
 
 /** A host rejects a call it cannot make: a tool the caller's catalogue lacks (JSON-RPC InvalidParams) or a refused one (HTTP 403 or 404). */
 const refusedCall = (error: unknown): boolean => isRecord(error) && (error["code"] === -32602 || error["status"] === 403 || error["status"] === 404);

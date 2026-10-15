@@ -15,6 +15,8 @@ import { resolveLocalizedText } from "../../lib/localized-text";
 import { composeEntry, entryApiPath, entryEditorQueryOptions, operationsQueryOptions, siteQueryOptions } from "../../lib/queries";
 import { fieldContribution } from "../../lib/extensions";
 import { ExtensionMount } from "../extensions/extension-mount";
+import { Empty, Slot } from "../../app/slots";
+import type { InputProps } from "../../app/slot-props";
 import { ExtensionActions, ExtensionPanels } from "../extensions/extension-contributions";
 import type {
   AdminUser,
@@ -217,6 +219,7 @@ export function EntryEditView({
             <ExtensionActions target="record/v1" schema={payload.collection.name}
               record={{ schema: payload.collection.name, id: payload.entry.id, version: payload.entry.version }}
               onDone={() => void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })} />
+            <Slot name={`record.actions:${payload.collection.name}`} Default={Empty} props={{ collection: payload.collection.name, entry: payload.entry }} />
             <RowOperationsMenu
               row={payload.entry}
               collection={payload.collection}
@@ -309,6 +312,7 @@ export function EntryEditView({
                 collectionName={payload.collection.name}
                 mediaPurposes={mediaPurposes}
                 hiddenRootFields={hiddenFields}
+                inputSlots={{ schema: payload.collection.name, readOnly: !canEdit }}
               />
             </fieldset>
           </SectionCard>
@@ -340,6 +344,7 @@ export function EntryEditView({
           </SectionCard>
           <ExtensionPanels target="record.sidebar/v1" schema={payload.collection.name} uiSchema={payload.collection.uiSchema}
             record={{ schema: payload.collection.name, id: payload.entry.id, version: payload.entry.version }} />
+          <Slot name={`record.aside:${payload.collection.name}`} Default={Empty} props={{ collection: payload.collection.name, entry: payload.entry }} />
         </div>
       </div>
 
@@ -495,6 +500,7 @@ export function SchemaFields({
   collectionName,
   mediaPurposes,
   hiddenRootFields = [],
+  inputSlots,
 }: {
   schema: JsonSchema;
   uiSchema?: Record<string, unknown> | null;
@@ -506,6 +512,8 @@ export function SchemaFields({
   collectionName: string;
   mediaPurposes: readonly MediaPurposePolicy[];
   hiddenRootFields?: readonly string[];
+  /** A record form: its top-level fields go through the application's `input:<schema>.<field>` slots. */
+  inputSlots?: { schema: string; readOnly: boolean };
 }): React.ReactElement {
   const labels: FieldLabels = {
     emptyOption: t(language, "entryEdit.emptyOption"),
@@ -518,7 +526,7 @@ export function SchemaFields({
     addItem: t(language, "entryEdit.addItem"),
   };
   const site = useQuery(siteQueryOptions());
-  const renderField = (field: FieldSlot): React.ReactNode | undefined => {
+  const builtIn = (field: FieldSlot): React.ReactNode | undefined => {
     const fieldSchema = field.schema as JsonSchema;
     // an Admin extension's widget (ADR-lite 1376), for a top-level field of any type: named in uiSchema, or by its `when`
     if (field.path.length === path.length + 1) {
@@ -541,10 +549,26 @@ export function SchemaFields({
     if (field.widget === "html") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><HtmlEditor value={text} onChange={field.setValue} /></React.Suspense>;
     return undefined;
   };
+  const build = (field: FieldSlot): React.ReactNode => builtIn(field) ?? field.renderDefault({ value: field.value, setValue: field.setValue });
+  // a record form's top-level fields: the application's `input:` components wrap whatever control the field has
+  const renderField = (field: FieldSlot): React.ReactNode | undefined => !inputSlots || field.path.length !== path.length + 1 ? builtIn(field) : (
+    <Slot name={`input:${inputSlots.schema}.${field.name}`} Default={BuiltInInput}
+      props={{ value: field.value, onChange: field.setValue, readOnly: inputSlots.readOnly, property: field.schema as Record<string, unknown>, field, build }} />
+  );
   return (
     <SharedSchemaFields schema={schema} uiSchema={uiSchema} value={value} path={path} onChange={onChange} language={language}
       canonical={canonical} hiddenRootFields={hiddenRootFields} labels={labels} renderField={renderField} propertyLabel={(name, fieldSchema, _language, fieldCanonical) => propertyLabel(name, fieldSchema as JsonSchema, language, fieldCanonical)} />
   );
+}
+
+interface BuiltInInputProps extends InputProps {
+  readonly field: FieldSlot;
+  readonly build: (field: FieldSlot) => React.ReactNode;
+}
+
+/** The control a field has without an `input:` slot, for the `value` and `onChange` the slot's component passes on. */
+function BuiltInInput({ value, onChange, field, build }: BuiltInInputProps): React.ReactElement {
+  return <>{build({ ...field, value, setValue: onChange })}</>;
 }
 
 export function editorHiddenFields(

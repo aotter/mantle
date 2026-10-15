@@ -1,8 +1,10 @@
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import type { AdminHost } from "../../admin/src/app/hooks.js";
 import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps";
 import { applyHostContext, connectHost, type HostApi } from "../app/postmessage.js";
 import { MantleApp } from "./app.js";
+import { SurfaceProvider, type AdminLayers } from "../../admin/src/app/slots.js";
 import { appLabels } from "./locale.js";
 import { readCatalog, type ToolResult } from "../app/bridge.js";
 import "./styles.css";
@@ -11,6 +13,8 @@ declare const __MANTLE_VERSION__: string;
 
 // the server embeds it once, when it builds the surface
 const catalog = readCatalog();
+// the prebuilt App renders Admin's own components; an application's overrides arrive when the App is built from its entry
+const NO_LAYERS: AdminLayers = {};
 
 function Root() {
   const [result, setResult] = useState<ToolResult | null>(null);
@@ -28,9 +32,14 @@ function Root() {
     error: setError,
   }, window, __MANTLE_VERSION__), []);
   useEffect(() => { if (context) applyHostContext(context); }, [context]);
+  const adminHost = useMemo<AdminHost | null>(() => host && {
+    context: { ...context }, capabilities: { ...host.capabilities },
+    openLink: host.openLink, sendMessage: host.sendMessage, requestDisplayMode: host.requestDisplayMode,
+    updateModelContext: params => host.updateModelContext({ ...(params.content ? { content: [...params.content] } : {}), ...(params.structuredContent ? { structuredContent: { ...params.structuredContent } } : {}) }),
+  }, [host, context]);
   const locale = context?.locale;
   if (error) return <p role="alert" className="p-4 text-sm text-destructive">{error.message}</p>;
-  if (!host) return null;
+  if (!host || !adminHost) return null;
   const hostTool = context?.toolInfo?.tool.name;
   const labels = appLabels(locale);
   // a long form or many columns: the person may ask the host for the whole screen, when it offers one
@@ -42,7 +51,7 @@ function Root() {
       </button>
     </div>
   ) : null;
-  return <>{toggle}<MantleApp catalog={catalog} host={host} result={result} input={input} cancelled={cancelled} {...(hostTool ? { hostTool } : {})} {...(locale ? { locale } : {})} {...(context?.timeZone ? { timeZone: context.timeZone } : {})} /></>;
+  return <SurfaceProvider surface="mcp-app" host={adminHost} layers={NO_LAYERS}>{toggle}<MantleApp catalog={catalog} host={host} result={result} input={input} cancelled={cancelled} {...(hostTool ? { hostTool } : {})} {...(locale ? { locale } : {})} {...(context?.timeZone ? { timeZone: context.timeZone } : {})} /></SurfaceProvider>;
 }
 
 createRoot(document.getElementById("root")!).render(<StrictMode><Root /></StrictMode>);

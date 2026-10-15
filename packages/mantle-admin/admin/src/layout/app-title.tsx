@@ -9,11 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@aotter/mantle-ui/kit";
 import { initialsFor } from "@/lib/initials";
 import type { AdminBrand } from "./types";
 
-interface AppTitleProps {
-  brand: AdminBrand;
-}
-
-export function AppTitle({ brand }: AppTitleProps): React.ReactElement {
+export function AppTitle(brand: AdminBrand): React.ReactElement {
   const { setOpenMobile } = useSidebar();
   const href = brand.href ?? "/admin";
   return (

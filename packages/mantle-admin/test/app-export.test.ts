@@ -10,15 +10,15 @@ describe("@aotter/mantle-admin/app", () => {
     const target = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")).exports["./app"];
     expect(target).toEqual({ types: "./dist/admin-app/index.d.ts", import: "./dist/admin-app/index.js" });
     const app = await import(resolve(pkg, target.import));
-    expect(Object.keys(app).sort()).toEqual(["MantleAdmin", "defineAdmin"]);
-    expect(app.defineAdmin({})).toEqual({ meta: {} });
+    expect(Object.keys(app).sort()).toEqual(["AdminLink", "MantleAdmin", "defineAdmin"]);
+    expect(app.defineAdmin({})).toEqual({ meta: {}, layers: {} });
   });
 
   it("publishes the data hooks from a chunk shared with the app library, so both see one Admin context", async () => {
     const target = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")).exports["./hooks"];
     expect(target).toEqual({ types: "./dist/admin-app/hooks.d.ts", import: "./dist/admin-app/hooks.js" });
     const hooks = await import(resolve(pkg, target.import));
-    expect(Object.keys(hooks).sort()).toEqual(["AdminUnavailableError", "createAdminHooks", "mcpAppTransport", "useAdminSurface", "useCollectionTotal", "useEntries", "useEntry", "useHost", "useMe", "useOperation", "useView"]);
+    expect(Object.keys(hooks).sort()).toEqual(["AdminUnavailableError", "createAdminHooks", "mcpAppTransport", "useAdminSurface", "useCollectionTotal", "useEntries", "useEntry", "useHost", "useMe", "useOpenLink", "useOperation", "useView"]);
     const context = (file: string) => /from"?\s*"\.\/(transport-[\w-]+\.js)"/.exec(readFileSync(resolve(pkg, "dist/admin-app", file), "utf8"))?.[1];
     const root = readFileSync(resolve(pkg, "dist/admin-app/index.js"), "utf8").match(/from\s*"\.\/(admin-root-[\w-]+\.js)"/)![1]!;
     expect(context("hooks.js")).toBeDefined();
@@ -62,8 +62,27 @@ describe("@aotter/mantle-admin/app", () => {
       "}",
       "export const host: AdminHost | null = null;",
       "export const transport = mcpAppTransport;",
-      'import { defineAdmin, MantleAdmin, type AdminDefinition, type MantleAdminProps } from "@aotter/mantle-admin/app";',
+      'import { AdminLink, defineAdmin, MantleAdmin, type AdminDefinition, type AdminMeta, type MantleAdminProps, type SidebarProps } from "@aotter/mantle-admin/app";',
       "const admin: AdminDefinition = defineAdmin({});",
+      "const typed: AdminMeta<Types> = {};",
+      "export const composed: AdminDefinition = defineAdmin(typed, {",
+      "  components: {",
+      "    Sidebar: (props) => props.renderDefault({ ...props, footer: AdminLink({ href: \"https://example.com\", children: \"Help\" }) }),",
+      '    "cell:requests.title": ({ value, surface }) => `${surface}:${value.length}`,',
+      '    "cell:view:pending-requests.amount": ({ value, row }) => `${value + row.amount}`,',
+      '    "input:requests.status": ({ value, onChange }) => { onChange(value === "open" ? "closed" : "open"); return null; },',
+      '    "record.aside:requests": ({ entry }) => entry.data.title,',
+      "  },",
+      "  plugins: [{ components: { Home: (props) => props.renderDefault(props) } }],",
+      "  mcp: { csp: { connectDomains: [\"https://api.example.com\"] } },",
+      "});",
+      "export const sidebar: SidebarProps | undefined = undefined;",
+      '// @ts-expect-error a misspelt collection is not a slot',
+      'defineAdmin(typed, { components: { "record.aside:request": () => null } });',
+      '// @ts-expect-error a misspelt field is not a slot',
+      'defineAdmin(typed, { components: { "cell:requests.titel": () => null } });',
+      '// @ts-expect-error a browser slot has no `surface`',
+      'defineAdmin(typed, { components: { Sidebar: ({ surface }) => String(surface) } });',
       "const props: MantleAdminProps = { admin };",
       "// @ts-expect-error preview mode is internal to the canonical preview document",
       "export const preview: MantleAdminProps = { admin, preview: true };",

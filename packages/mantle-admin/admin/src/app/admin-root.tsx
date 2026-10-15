@@ -24,7 +24,7 @@ export function AdminRoot(props: { admin: AdminDefinition; preview?: boolean }):
         <QueryClientProvider client={queryClient}>
           <PreferencesProvider initialLanguage={initialLanguage}>
             <AdminRouterProvider>
-              <AdminHooksProvider meta={props.admin.meta} transport={browserTransport}>
+              <AdminHooksProvider meta={props.admin.meta} transport={browserTransport} layers={props.admin.layers}>
                 <TooltipProvider>
                   <ConfirmProvider>
                     <AdminApp preview={props.preview ?? false} />
