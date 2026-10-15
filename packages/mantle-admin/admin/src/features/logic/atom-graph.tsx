@@ -1,5 +1,4 @@
 import * as React from "react";
-import dagre from "@dagrejs/dagre";
 import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Database, Info, LayoutGrid, Workflow, X } from "lucide-react";
 import {
   BaseEdge,
@@ -166,6 +165,9 @@ export function AtomGraph({
   const hudRef = React.useRef<HTMLDivElement>(null);
 
   const layout = React.useMemo(() => business ? businessOverview(graph, schemas, language) : layoutGraph(graph, language), [graph, language, schemas, business]);
+  // System wiring can be far larger than the canvas; a low floor lets Fit View (xyflow fits the node
+  // bounds to the real canvas) show all of it on any canvas shape (#1666).
+  const minZoom = business ? 0.25 : 0.02;
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
   const [flow, setFlow] = React.useState<ReactFlowInstance<Node, Edge> | null>(null);
@@ -196,7 +198,7 @@ export function AtomGraph({
     setEdges(layout.edges);
     setSelectedId(null);
     setTrace(null);
-    window.requestAnimationFrame(() => void flow?.fitView({ padding: 0.08, minZoom: business ? 0.4 : 0.25, duration: 240 }));
+    window.requestAnimationFrame(() => void flow?.fitView({ padding: 0.08, minZoom: business ? 0.4 : minZoom, duration: 240 }));
   }, [layout, setEdges, setNodes]);
 
   const highlight = (nodeIds: ReadonlySet<string>, relationIds: ReadonlySet<string>): void => {
@@ -312,8 +314,8 @@ export function AtomGraph({
       nodeTypes={nodeTypes}
       colorMode={theme}
       fitView
-      fitViewOptions={{ padding: 0.08, minZoom: business ? 0.65 : 0.25 }}
-      minZoom={0.25}
+      fitViewOptions={{ padding: 0.08, minZoom: business ? 0.65 : minZoom }}
+      minZoom={minZoom}
       maxZoom={1.8}
       deleteKeyCode={null}
       nodesConnectable={false}
@@ -426,23 +428,24 @@ export function layoutComponents(graph: DeveloperConsoleSnapshot["graph"]): Map<
   return layoutTopDown(graph).positions;
 }
 
-function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: Map<string, { x: number; y: number }>; groups: Array<{ audience: DeveloperAudience; x: number; y: number; width: number; height: number; count: number }> } {
+type AudienceGroup = { audience: DeveloperAudience; x: number; y: number; width: number; height: number; count: number };
+
+// One coordinate space for every atom: audience surfaces are laid out as grids, then Procedures and
+// Schemas are packed in rows under the median of their already placed sources. Atoms without a placed
+// source go after the anchored ones, and every row stays inside the surface span (#1666).
+function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: Map<string, { x: number; y: number }>; groups: AudienceGroup[] } {
   const nodeWidth = 220;
   const nodeHeight = 88;
   const gap = 24;
   const groupPadding = 16;
   const groupHeader = 48;
   const groupColumns = 4;
-  const layout = new dagre.graphlib.Graph({ multigraph: true }).setDefaultEdgeLabel(() => ({}));
-  layout.setGraph({ rankdir: "TB", nodesep: gap, ranksep: 80, edgesep: 20 });
-  graph.atoms.forEach(({ id }) => layout.setNode(id, { width: nodeWidth, height: nodeHeight }));
-  graph.relations.filter(({ kind }) => ["trigger-target", "procedure-schema", "view-source"].includes(kind)).forEach(({ id, sourceId, targetId }) => layout.setEdge(sourceId, targetId, {}, id));
-  dagre.layout(layout);
+  const left = 72;
 
   const positions = new Map<string, { x: number; y: number }>();
-  const groups: Array<{ audience: DeveloperAudience; x: number; y: number; width: number; height: number; count: number }> = [];
+  const groups: AudienceGroup[] = [];
   const relationTarget = new Map(graph.relations.filter(({ kind }) => kind === "trigger-target" || kind === "view-source").map(({ sourceId, targetId }) => [sourceId, targetId]));
-  let groupX = 72;
+  let groupX = left;
   audiences.forEach((audience) => {
     const atoms = graph.atoms.filter((atom) => (atom.kind === "Trigger" || atom.kind === "View") && (atom.audience ?? "public") === audience).sort((a, b) => `${relationTarget.get(a.id) ?? ""}:${a.id}`.localeCompare(`${relationTarget.get(b.id) ?? ""}:${b.id}`));
     if (!atoms.length) return;
@@ -456,25 +459,26 @@ function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: M
   });
 
   const surfaceBottom = Math.max(...groups.map(({ y, height }) => y + height), 200);
-  const preferredX = (atom: DeveloperAtom, kinds: readonly DeveloperRelationKind[]): number => {
+  const preferredX = (atom: DeveloperAtom, kinds: readonly DeveloperRelationKind[]): number | null => {
     const related = graph.relations.filter(({ targetId, kind }) => targetId === atom.id && kinds.includes(kind)).map(({ sourceId }) => positions.get(sourceId)).filter((position): position is { x: number; y: number } => Boolean(position)).map(({ x }) => x + nodeWidth / 2).sort((a, b) => a - b);
-    if (!related.length) return layout.node(atom.id).x;
+    if (!related.length) return null;
     const middle = Math.floor(related.length / 2);
     return related.length % 2 ? related[middle]! : (related[middle - 1]! + related[middle]!) / 2;
   };
   const bandColumns = 7;
+  const slot = nodeWidth + gap;
+  const right = Math.max(groupX - 32, left + bandColumns * slot - gap);
   const pack = (atoms: DeveloperAtom[], y: number, kinds: readonly DeveloperRelationKind[]): number => {
-    const ordered = atoms.map((atom) => ({ atom, preferred: preferredX(atom, kinds) })).sort((a, b) => a.preferred - b.preferred);
+    const ordered = atoms.map((atom) => ({ atom, preferred: preferredX(atom, kinds) })).sort((a, b) => (a.preferred ?? Infinity) - (b.preferred ?? Infinity) || a.atom.id.localeCompare(b.atom.id));
     const rows = Math.ceil(ordered.length / bandColumns);
     for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
       const row = ordered.slice(rowIndex * bandColumns, (rowIndex + 1) * bandColumns);
-      const desired = row.map(({ preferred }) => preferred - nodeWidth / 2);
-      const placed: number[] = [];
-      desired.forEach((x, index) => placed.push(index === 0 ? x : Math.max(x, placed[index - 1]! + nodeWidth + gap)));
-      const average = (values: number[]): number => values.reduce((sum, value) => sum + value, 0) / values.length;
-      let shift = average(desired) - average(placed);
-      if (placed[0]! + shift < 72) shift += 72 - (placed[0]! + shift);
-      row.forEach(({ atom }, index) => positions.set(atom.id, { x: placed[index]! + shift, y: y + rowIndex * (nodeHeight + gap) }));
+      let x = left - slot;
+      row.forEach(({ atom, preferred }, index) => {
+        // as close to the preferred x as the left neighbour allows, but leaving room for the rest of the row
+        x = Math.min(Math.max((preferred ?? left) - nodeWidth / 2, x + slot), right - nodeWidth - (row.length - 1 - index) * slot);
+        positions.set(atom.id, { x, y: y + rowIndex * (nodeHeight + gap) });
+      });
     }
     return rows * (nodeHeight + gap);
   };
