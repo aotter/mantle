@@ -256,13 +256,20 @@ test('#1644: an IN-scoped or IN-restricted prefix does not serve ORDER BY; the r
    expect(error).toContain('WHERE region = input.region, which fixes the prefix (the scope or restrict still applies)');
    expect(error).toContain('for Views read by { all: true } callers, an index on the ORDER BY columns alone, e.g. [orderNo] (not bounded for scoped callers)');
   }
+  // The suggested order keeps the authored direction, and every set-bound prefix column needs its own equality.
+  const desc=await generateOrThrow(target,[{sourceId:'d.yaml',text:[inScoped(true),inView('listed','ORDER BY orderNo DESC')].join('\n---\n')}]).then(()=>'',(e:Error)=>e.message);
+  expect(desc).toContain('ORDER BY region DESC, orderNo DESC (served by the same index)');
+  const two=JSON.parse(inScoped(true));two.spec.scope+=" AND store IN auth.user('store')";two.spec.indexes=[['region','store','orderNo','id']];two.spec.schema.required.push('store');two.spec.schema.properties.store={type:'string'};
+  const both=await generateOrThrow(target,[{sourceId:'e.yaml',text:[JSON.stringify(two),inView('listed','ORDER BY orderNo')].join('\n---\n')}]).then(()=>'',(e:Error)=>e.message);
+  expect(both).toContain("only after 'region', 'store', which");
+  expect(both).toContain('ORDER BY region, store, orderNo (served by the same index); a View input bound with equality, e.g. WHERE region = input.region AND store = input.store, which fixes the prefix');
   // An order no index serves keeps the plain message.
   await expect(generateOrThrow(target,[{sourceId:'b.yaml',text:[inScoped(true),inView('listed','ORDER BY tier')].join('\n---\n')}])).rejects.toThrow(/Missing index for ORDER BY \(tier\): declare a Schema index/);
  }
 });
 const sorts=(plan:any):boolean=>!!plan&&typeof plan==='object'&&(plan['Node Type']==='Sort'||Object.values(plan).some(sorts));
 for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`#1644: accepted IN-scoped Views page without sorting the caller's rows on ${pg?'PostgreSQL':'SQLite'}`,async()=>{
- const text=[inScoped(true),inView('listed','ORDER BY region, orderNo','internal'),inView('one','WHERE region = input.region ORDER BY orderNo','internal',{input:{type:'object',required:['region'],properties:{region:{type:'string'}}}})].join('\n---\n');
+ const text=[inScoped(true),inView('listed','ORDER BY region, orderNo','internal'),inView('backward','ORDER BY region DESC, orderNo DESC','internal'),inView('one','WHERE region = input.region ORDER BY orderNo','internal',{input:{type:'object',required:['region'],properties:{region:{type:'string'}}}})].join('\n---\n');
  const files=await generateOrThrow(pg?'bun-postgres':'bun-sqlite',[{sourceId:'c.yaml',text}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/in-prefix-')),namespace='in_prefix_'+crypto.randomUUID().replaceAll('-','');
  const raw:any=pg?new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}):new Database(':memory:'),ran:[string,unknown[]][]=[];
  const run=(sql:string,values:unknown[]=[])=>pg?raw.unsafe(sql,values):Promise.resolve(raw.query(sql).all(...values));
@@ -272,20 +279,22 @@ for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:
   const app=await import(resolve(dir,'generated.ts')),sys={kind:'system',reason:'fixture'} as const;
   for(const [region,tier,orderNo] of [['TW','a',3],['JP','b',1],['US','c',2],['TW','d',4],['JP','e',5]] as const)await app.store(raw,sys).collection('orders').insert({region,tier,orderno:orderNo});
   // Rows come back in index order across the caller's regions.
-  const {default:listed}=await import(resolve(dir,'paged/views/listed.ts')),{default:one}=await import(resolve(dir,'paged/views/one.ts'));
+  const {default:listed}=await import(resolve(dir,'paged/views/listed.ts')),{default:backward}=await import(resolve(dir,'paged/views/backward.ts')),{default:one}=await import(resolve(dir,'paged/views/one.ts'));
   const walk=async(page:any,caller:any,input:object)=>{const seen:number[]=[];let cursor:string|undefined;do{const p=await page(db,caller,input,{limit:2,...(cursor?{cursor}:{})});seen.push(...p.rows.map((r:any)=>Number(r.orderNo)));cursor=p.nextCursor??undefined;}while(cursor);return seen;};
   expect(await walk(listed,userCaller({id:'u',region:['TW','JP']},{fields}),{})).toEqual([1,5,3,4]);
+  expect(await walk(backward,userCaller({id:'u',region:['TW','JP']},{fields}),{})).toEqual([4,3,5,1]);
   expect(await walk(one,userCaller({id:'u',region:['TW','JP']},{fields}),{region:'TW'})).toEqual([3,4]);
-  // Enough rows that a planner prefers the index to a scan and sort.
+  // Enough rows that a planner prefers the index to a scan and sort. PostgreSQL's DESC next page for one value can
+  // still cost a Sort over a misestimated `= ANY(CAST(...))` range, so only SQLite pins the backward plan.
   if(pg)await run(`INSERT INTO orders(id,version,created_at,updated_at,region,tier,orderno) SELECT 'g'||i,1,now(),now(),'R'||(i%20),'t',i FROM generate_series(1,20000) i`);
   else raw.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<20000) INSERT INTO orders(id,version,created_at,updated_at,region,tier,orderno) SELECT 'g'||i,1,0,0,'R'||(i%20),'t',i FROM n`);
   await run('ANALYZE');
   const callers=[userCaller({id:'u',region:['R1']},{fields}),userCaller({id:'u',region:['R1','R2','R3']},{fields}),userCaller({id:'u',region:{all:true}},{fields}),sys];
-  for(const caller of callers)for(const [page,input] of [[listed,{}],[one,{region:'R2'}]] as const){
-   ran.length=0;const first=await page(db,caller,input,{limit:10});await page(db,caller,input,{limit:10,cursor:first.nextCursor});
+  for(const caller of callers)for(const [page,input] of [[listed,{}],[one,{region:'R1'}],...(pg?[]:[[backward,{}]] as const)] as const){
+   ran.length=0;const first=await page(db,caller,input,{limit:10});expect(first.nextCursor).toBeDefined();await page(db,caller,input,{limit:10,cursor:first.nextCursor});
    expect(ran.length).toBe(2);
    for(const [sql,values] of ran){
-    if(pg){const [row]=await raw.unsafe(`EXPLAIN (FORMAT JSON) ${sql}`,values);expect({sql,sort:sorts(row['QUERY PLAN'])}).toEqual({sql,sort:false});}
+    if(pg){const [row]=await raw.unsafe(`EXPLAIN (FORMAT JSON) ${sql}`,values);expect({sql,sort:sorts(row["QUERY PLAN"])}).toEqual({sql,sort:false});}
     else{const plan=raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...values).map((r:any)=>r.detail).join(' | ');expect(plan).not.toContain('USE TEMP B-TREE FOR ORDER BY');}
    }
   }

@@ -60,8 +60,8 @@ Indexes are ordered composite scalar/native columns. A paged View's `ORDER BY` m
 
 Only equality fixes an index prefix: `col = input.x`, `col = 'literal'` and an `= auth.uid()` scope or restrict. A user-field term (`region IN auth.user('region')`, as a `scope` or `restrict`) binds a set of values, so it never fixes a prefix, even when the caller holds one value or `{ all: true }`: the statement is prepared for a set, and an `ORDER BY` after that column would read and sort all of the caller's rows on every page. With `scope: "region IN auth.user('region')"`, `indexes: [[region, orderNo, id]]` and `ORDER BY orderNo`, generation refuses the View and names the bounded ways:
 
-- `ORDER BY region, orderNo`, served by the same index: rows come back grouped by region.
-- A View input bound with equality, `WHERE region = input.region ORDER BY orderNo`: the input fixes the prefix, and the scope still applies.
+- `ORDER BY region, orderNo` (or `region DESC, orderNo DESC`), served by the same index: rows come back grouped by region.
+- A View input bound with equality, `WHERE region = input.region ORDER BY orderNo`: the input fixes the prefix, and the scope still applies. Every set-bound column before the ordered ones needs its own equality.
 - An index on the ordered columns alone, `[orderNo, id]`, for Views read by `{ all: true }` callers. It is not bounded for scoped callers, who scan the index and filter.
 
 Declaring both indexes does not make one View bounded for every caller. System (trusted) reads drop scope terms, so a scope-first index such as `[owner, at]` is not a proved range scan for them.
