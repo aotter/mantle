@@ -126,7 +126,8 @@ export type PostgresResult = any[] & { readonly count: number | null };
  */
 export interface Postgres {
   unsafe(text: string, values: any[]): PromiseLike<PostgresResult>;
-  begin<T>(options: string, fn: (tx: Postgres) => Promise<T>): PromiseLike<T>;
+  /** The transaction handle only needs `unsafe`: postgres.js 3.4.9 types it without `begin`. */
+  begin<T>(options: string, fn: (tx: Unsafe) => Promise<T>): PromiseLike<T>;
 }
 /** What a read or a single statement needs: a transaction handle suits it too. */
 export type Unsafe = Pick<Postgres, "unsafe">;
