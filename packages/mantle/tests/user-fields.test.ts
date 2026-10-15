@@ -240,3 +240,21 @@ test('an undefined scope value is not given: one partition autofills, several st
   expect(() => scopeInsert(scopes, two, { region: undefined })).toThrow(/several 'region' values/);
   expect(() => scopeInsert(scopes, { kind: 'system', reason: 'test' }, { region: undefined })).toThrow(/explicit 'region' value/);
 });
+test('ADR-0046 §Paging: a caller IN scope is a fixed prefix, so [region, orderNo] serves ORDER BY orderNo across regions',async()=>{
+ const scoped=JSON.parse(schema);scoped.spec.scope="region IN auth.user('region')";scoped.spec.indexes=[['region','orderNo']];
+ scoped.spec.schema.required.push('orderNo');scoped.spec.schema.properties.orderNo={type:'integer'};
+ const text=(order:string,surface='public')=>[JSON.stringify(scoped),JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'View',metadata:{name:'listed'},spec:{surface,sql:`SELECT id,orderNo AS "orderNo",region FROM orders ORDER BY ${order}`}})].join('\n---\n');
+ for(const target of ['bun-sqlite','bun-postgres'] as const){
+  await generateOrThrow(target,[{sourceId:'a.yaml',text:text('orderNo')}]);
+  // The prefix only helps the column after it: an order the index does not serve is still refused.
+  await expect(generateOrThrow(target,[{sourceId:'b.yaml',text:text('tier')}])).rejects.toThrow(/Missing index for ORDER BY/);
+ }
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'c.yaml',text:text('orderNo','internal')}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/in-prefix-')),db=new Database(':memory:');
+ try{await writeGenerated(dir,files);const app=await import(resolve(dir,'generated.ts')),{default:page}=await import(resolve(dir,'paged/views/listed.ts'));db.exec(files['schema.sql']!);const sys={kind:'system',reason:'fixture'} as const;
+  for(const [region,tier,orderNo] of [['TW','a',3],['JP','b',1],['US','c',2],['TW','d',4],['JP','e',5]] as const)await app.store(db,sys).collection('orders').insert({region,tier,orderno:orderNo});
+  const caller=userCaller({id:'u',region:['TW','JP']},{fields});
+  const seen:number[]=[];let cursor:string|undefined;
+  do{const p=await page(db,caller,{},{limit:2,...(cursor?{cursor}:{})});seen.push(...p.rows.map((r:any)=>r.orderNo));cursor=p.nextCursor??undefined;}while(cursor);
+  expect(seen).toEqual([1,3,4,5]);
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
