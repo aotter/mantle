@@ -86,6 +86,16 @@ test("generate refuses a Schema with two required id references and no nav.paren
   expect(standalone.ok ? "" : standalone.diagnostics[0]!.message).toContain("nav: { parentField: quoteId }");
 });
 
+test("the ambiguity diagnostic only suggests a line that passes the cycle check", async () => {
+  const folders = (nav?: object) => doc("folders", { title: "Folders", lifecycle: "operational", ...(nav ? { uiSchema: { nav } } : {}), schema: { type: "object", required: ["parentId", "driveId"], properties: { parentId: { type: "string", "x-mantle-ref": "folders" }, driveId: { type: "string", "x-mantle-ref": "drives" } } } });
+  const r = await run([schema("drives"), folders()]);
+  const message = r.ok ? "" : r.diagnostics[0]!.message;
+  expect(codes(r)).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+  expect(message).toContain("nav: { parentField: driveId }");
+  expect(message).not.toContain("parentField: parentId }");
+  expect((await run([schema("drives"), folders({ parentField: "driveId" })])).ok).toBe(true);
+});
+
 test("nav.parentField without standalone chooses the fold parent; the Schema stays folded", async () => {
   expect(parentOf(await run([schema("quotes"), schema("customers"), twoRefs({ parentField: "customerId" })]))).toBe('{"collection":"customers","parentField":"id","childField":"customerId"}');
   expect(parentOf(await run([schema("quotes"), schema("customers"), twoRefs({ parentField: "quoteId" })]))).toBe('{"collection":"quotes","parentField":"id","childField":"quoteId"}');

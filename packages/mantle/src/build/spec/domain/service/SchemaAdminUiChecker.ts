@@ -509,26 +509,33 @@ export function checkSchemaNavTargets(
     const eligible = eligibleIdRefs(schema, schemasByName);
     if (eligible.length < 2) return null;
     const names = eligible.join(", ");
+    // the line that keeps the current choice only exists when that choice would not close a parent cycle
+    const keep = eligible.find((field) => !closesParentCycle(schema, field, schemasByName));
     return problem(
       "/spec/uiSchema/nav/parentField",
       undefined,
       `one of ${names}`,
-      `Schema '${schema.metadata.name}' has more than one required id x-mantle-ref (${names}); set uiSchema.nav.parentField to choose its parent. To keep the current choice, add nav: { parentField: ${eligible[0]} }.`,
+      `Schema '${schema.metadata.name}' has more than one required id x-mantle-ref (${names}); set uiSchema.nav.parentField to choose its parent.${keep === undefined ? "" : ` To keep the current choice, add nav: { parentField: ${keep} }.`}`,
     );
   }
+  return closesParentCycle(schema, declared, schemasByName)
+    ? problem(
+      "/spec/uiSchema/nav/parentField",
+      declared,
+      "a reference whose parent chain does not lead back to this Schema",
+      `Schema '${schema.metadata.name}' nav.parentField '${declared}' creates a parent cycle.`,
+    )
+    : null;
+}
+
+/** Whether folding `schema` under `field`'s Schema leads back to `schema` through the parents the Admin descriptor resolves. */
+function closesParentCycle(schema: SchemaManifest, field: string, schemasByName: ReadonlyMap<string, SchemaManifest>): boolean {
   const seen = new Set<string>();
-  for (let at: string | undefined = target; at !== undefined && !seen.has(at); at = foldParentOf(schemasByName.get(at), schemasByName)) {
-    if (at === schema.metadata.name) {
-      return problem(
-        "/spec/uiSchema/nav/parentField",
-        declared,
-        "a reference whose parent chain does not lead back to this Schema",
-        `Schema '${schema.metadata.name}' nav.parentField '${declared}' creates a parent cycle.`,
-      );
-    }
+  for (let at = resolveMantleRef(schema.spec.schema.properties?.[field])?.schema; at !== undefined && !seen.has(at); at = foldParentOf(schemasByName.get(at), schemasByName)) {
+    if (at === schema.metadata.name) return true;
     seen.add(at);
   }
-  return null;
+  return false;
 }
 
 function declaredParentField(schema: SchemaManifest): string | undefined {
