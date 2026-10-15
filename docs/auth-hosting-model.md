@@ -10,7 +10,7 @@ switch or generated auth/service preset. See the current
 | Application wiring | Who produces the caller |
 |---|---|
 | Better Auth | App-owned `auth.ts` and optional official plugins; `resolveCaller` from `@aotter/mantle/auth` verifies sessions/tokens and carries the original branded identity. The app owns the database, provider credentials and production email sender. |
-| Existing identity provider | An app-owned resolver verifies its sessions/tokens, then constructs the original Caller with `userCaller` from `@aotter/mantle/user-fields`. Never derive authority from unverified request data. |
+| Existing identity provider | Connect it to Better Auth (its generic OAuth or SSO plugins) so `resolveCaller` produces the Caller; Mantle has no public API that builds a Caller from another provider's session. Never derive authority from unverified request data. |
 | Public-only routes | The app supplies `{ kind: "anonymous" }`; generated SQL still applies public visibility and row rules. |
 
 Domain and transport boundaries:

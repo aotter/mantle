@@ -10,11 +10,8 @@
 ## For AI agents
 
 **Consumers** (authoring or embedding a Mantle application): start with the
-install skill, then the CLI and handbook.
-
-```sh
-npx skills add aotter/mantle
-```
+install skill, then the CLI and handbook. Install the skill pinned to the release you use, as
+[agent setup](docs/handbook/guides/agent-setup.md) shows: an unpinned install follows `main`.
 
 Follow [`skills/mantle/SKILL.md`](skills/mantle/SKILL.md). After
 `@aotter/mantle` is installed, its task skills and the handbook live under
