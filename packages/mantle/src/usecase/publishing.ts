@@ -7,8 +7,8 @@ import { publishedParent } from "./translations.js";
 import { entry, exportName, q } from "../domain/entry.js";
 
 
-import { publishingInput, publishingTransitions } from "../domain/generated-tools.js";
-export { publishingInput, publishingTransitions };
+import { publishingAnnotations, publishingInput, publishingTransitions } from "../domain/generated-tools.js";
+export { publishingAnnotations, publishingInput, publishingTransitions };
 export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declarations: string[], procedures: string[], entries: Record<string, string>, values: Set<string>, refuse: (path: string, message: string) => void): void {
   const d = isSqlite ? sqlite : postgres;
   const translations = Object.values(plan.schemas).some(s=>s.translates);

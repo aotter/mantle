@@ -44,7 +44,7 @@ test("Admin projections match 0.2 collections, operations, SQL graph and MCP cat
   expect(m.developerConsole.graph.relations).toEqual(expect.arrayContaining([expect.objectContaining({kind:"schema-reference",pointer:"/spec/schema/properties/projectId/x-mantle-ref"}),expect.objectContaining({kind:"trigger-target",targetId:"Procedure:mark-done"})]));
   expect(m.developerConsole.operations).toMatchObject({schedules:[],ttlPolicies:[{schema:"tasks",field:"expiresAt",expireAfterSeconds:3600,sweepObservation:"unavailable"}],observationAvailability:"unavailable",runs:[],latestRuns:[]});
   expect(m.mcpAppCatalogues).toEqual({public:appCatalog(plan,"public"),admin:appCatalog(plan,"admin")});expect(m.mcpAppCatalogues.admin.views.tasks_board.actions).toEqual(["mark_done"]);expect(m.mcpAppCatalogues.admin.views.joined_board.actions).toEqual([]);expect(m.mcpAppCatalogues.admin.views.alias_board.actions).toEqual([]);
-  expect(m.webmcp.routes.mark_done).toEqual({path:"/admin/c/tasks",entry:true});expect(m.bootstrap).toEqual({collections:m.collections,allCollections:m.allCollections,operations:m.operations,views:m.views,navGroups:[],webmcp:m.webmcp,developerConsole:m.developerConsole});
+  expect(m.webmcp.routes.mark_done).toEqual({path:"/admin/c/tasks",entry:true});for(const tool of m.webmcp.tools)expect(tool.description).toEndWith(` (tool version ${tool.version})`);expect(m.bootstrap).toEqual({collections:m.collections,allCollections:m.allCollections,operations:m.operations,views:m.views,navGroups:[],webmcp:m.webmcp,developerConsole:m.developerConsole});
   expect(m.extensionBindings).toEqual(expect.arrayContaining([expect.objectContaining({ref:"audit/color",target:"field.input/v1"}),expect.objectContaining({ref:"audit/history",target:"record.sidebar/v1"}),expect.objectContaining({path:"procedure:notify-task/uiSchema/fields/message/widget",ref:"audit/color"})]));
   expect(files["admin-descriptors.ts"]).not.toMatch(/^import\b/m);expect(files["admin-descriptors.ts"]).not.toContain('"stmts":');expect(files["admin-descriptors.ts"]).not.toContain('"ColumnRef":');
 });
@@ -59,7 +59,7 @@ test("translation projection folds children, inherits media and retains composit
 
 test("publishing descriptors use generated Procedure and canonical admin MCP names",async()=>{
   const plan=await planOf([manifest("Schema","articles",schema({title:{type:"string"}},["title"],{lifecycle:"publishing"})),manifest("View","articles-list",{surface:"admin",sql:"SELECT id,title FROM articles ORDER BY id"}),manifest("View","articles-second",{surface:"admin",sql:"SELECT id,title FROM articles ORDER BY id"})]),{loaded:m}=await metadata(plan);
-  expect(m.operations).toEqual([]);expect(m.webmcp.tools.map((t:any)=>t.name)).toEqual(["articles_list","articles_second","publish_articles","unpublish_articles","archive_articles"]);expect(m.webmcp.routes.publish_articles).toEqual({path:"/admin/c/articles",entry:true});
+  expect(m.operations).toEqual([]);expect(m.webmcp.tools.map((t:any)=>t.name)).toEqual(["articles_list","articles_second","publish_articles","unpublish_articles","archive_articles"]);expect(m.webmcp.routes.publish_articles).toEqual({path:"/admin/c/articles",entry:true});expect(m.webmcp.tools.map((t:any)=>[t.title,t.annotations])).toEqual([["Articles list",{readOnlyHint:true,destructiveHint:false}],["Articles second",{readOnlyHint:true,destructiveHint:false}],["Publish articles",{readOnlyHint:false,destructiveHint:false}],["Unpublish articles",{readOnlyHint:false,destructiveHint:false}],["Archive articles",{readOnlyHint:false,destructiveHint:true}]]);
   expect(m.mcpAppCatalogues.admin.views.articles_list.actions).toEqual(["publish_articles","unpublish_articles","archive_articles"]);expect(m.mcpAppCatalogues.admin.views.articles_second.actions).toEqual(["publish_articles","unpublish_articles","archive_articles"]);expect(m.mcpAppCatalogues.public.actions).toEqual({});expect(m.authorizations.procedures["articles.publish"].auth.all).toEqual(["ctx.admin"]);
   expect(m.developerConsole.interfaces.callable.find((t:any)=>t.name==="publish_articles")).toMatchObject({target:"articles.publish",surface:"admin",audience:"admin"});
 });
@@ -105,14 +105,14 @@ test("WebMCP advertises View and Procedure input rules as description sentences;
     manifest("View","referred",{surface:"admin",description:"Find by reference.",input:{type:"object",properties:{a:{type:"string"},b:{type:"string"}},$ref:"#/$defs/t",$defs:{t:{type:"object",properties:{a:{},b:{}},anyOf:[{required:["a"]},{required:["b"]}]}}},sql:"SELECT id,title FROM tasks ORDER BY id"})]);
   const {loaded:m}=await metadata(plan);
   const tool=m.webmcp.tools.find((t:any)=>t.name==="mark_done");
-  expect(tool.description).toBe("Complete a task. 'expectedVersion' is required when 'note' is present.");
+  expect(tool.description).toBe(`Complete a task. 'expectedVersion' is required when 'note' is present. (tool version ${tool.version})`);
   expect(tool.inputSchema).not.toHaveProperty("dependentRequired");
   expect(m.operations[0].input).toEqual(input);
   const view=m.webmcp.tools.find((t:any)=>t.name==="titled");
-  expect(view.description).toBe("Find tasks. At least one of 'a', 'b' is required.");
+  expect(view.description).toBe(`Find tasks. At least one of 'a', 'b' is required. (tool version ${view.version})`);
   expect(view.inputSchema).not.toHaveProperty("anyOf");
   const referred=m.webmcp.tools.find((t:any)=>t.name==="referred");
-  expect(referred.description).toBe("Find by reference. At least one of 'a', 'b' is required.");
+  expect(referred.description).toBe(`Find by reference. At least one of 'a', 'b' is required. (tool version ${referred.version})`);
   expect(referred.inputSchema).toMatchObject({properties:{a:{type:"string"},b:{type:"string"}}});
   expect(referred.inputSchema).not.toHaveProperty("anyOf");
   const described=(await describeApp(plan)).targets.find(t=>t._meta.id==="view:titled")!;
