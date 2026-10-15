@@ -112,12 +112,24 @@ test("WebMCP localizes declarations and View export validates before streaming",
 test("handler-less WebMCP dispatch accepts omitted and undefined handlers", async () => {
  const {webmcpRoutes}=await import("../../src/server/webmcp.js");
  const tools: import("@aotter/mantle/mcp").Tool<null>[]=[{name:"plain",surface:"admin",description:"Plain SQL",inputSchema:{},validate:raw=>raw as Record<string,unknown>,run:async()=>({results:[[{reqStatus:"submitted"}]]})}];
- for(const routes of [webmcpRoutes({tools:[{name:"plain"}]},tools),webmcpRoutes({tools:[{name:"plain"}]},tools,undefined)]) {
+ for(const routes of [webmcpRoutes({tools:[{name:"plain",version:"0a1b2c3d"}]},tools),webmcpRoutes({tools:[{name:"plain",version:"0a1b2c3d"}]},tools,undefined)]) {
   const ask=createAdmin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>null,caller:()=>admin,routes});
   const response=await ask(new Request("https://example.test/admin/api/webmcp/plain",{method:"POST",headers:{origin:"https://example.test","content-type":"application/json"},body:"{}"}),{});
   expect(response?.status).toBe(200);
-  expect(await response!.json()).toEqual({output:{results:[[{reqStatus:"submitted"}]]}});
+  expect(await response!.json()).toEqual({output:{results:[[{reqStatus:"submitted"}]]},version:"0a1b2c3d"});
  }
+});
+
+test("a WebMCP refusal carries the deployed tool version and, unless it is an authorization refusal, the listed input schema", async () => {
+ const {webmcpRoutes}=await import("../../src/server/webmcp.js"),{ContractError}=await import("@aotter/mantle/contracts");
+ const inputSchema={type:"object",properties:{title:{type:"string",minLength:1}},required:["title"]};
+ let refusal=new ContractError("INPUT_VALIDATION_FAILED","title is too short.","title");
+ const tools: import("@aotter/mantle/mcp").Tool<null>[]=[{name:"add",surface:"admin",description:"Add",inputSchema,validate:()=>{throw refusal;},run:async()=>({})}];
+ const ask=createAdmin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>null,caller:()=>admin,routes:webmcpRoutes({tools:[{name:"add",version:"0a1b2c3d",inputSchema}]},tools)});
+ const call=async()=>{const response=(await ask(new Request("https://example.test/admin/api/webmcp/add",{method:"POST",headers:{origin:"https://example.test","content-type":"application/json"},body:"{}"}),{}))!;return [response.status,await response.json()];};
+ expect(await call()).toEqual([400,{error:{code:"INPUT_VALIDATION_FAILED",message:"title is too short.",path:"title",toolVersion:"0a1b2c3d",inputSchema}}]);
+ refusal=new ContractError("AUTH_DENIED","No.","x");
+ expect(await call()).toEqual([403,{error:{code:"AUTH_DENIED",message:"No.",path:"x",toolVersion:"0a1b2c3d"}}]);
 });
 
 test("WebMCP ref tools require handlers with inferred and explicit type arguments", async () => {

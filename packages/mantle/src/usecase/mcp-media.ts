@@ -4,8 +4,8 @@ import { emitValidation } from "./validation.js";
 import { mediaDefinitions } from "../domain/generated-tools.js";
 export { mediaDefinitions };
 
-export function emitMcpMedia(refuse: (path:string,message:string)=>void): Record<string,string> {
-  const definitions = mediaDefinitions();
+/** `definitions` are the versioned media tools, computed once by the MCP emitter. */
+export function emitMcpMedia(definitions: readonly (ReturnType<typeof mediaDefinitions>[number] & { title: string; version: string })[], refuse: (path:string,message:string)=>void): Record<string,string> {
   const inputs = Object.fromEntries(definitions.map(tool => [tool.name,{input:tool.inputSchema as JsonSchema}]));
   const checks = Object.fromEntries(Object.entries(emitValidation({views:{},procedures:inputs},refuse)).map(([path,code])=>[path.replace("validation/procedures/","validation/media/"),code]));
   const invoke = {policy:'async (db,caller) => ({purposes:(await site(db,caller).read()).media.purposes})',create:'(db,caller,input:Record<string,unknown>) => site(db,caller).media(storage()).createUpload(input)',commit:'(db,caller,input:Record<string,unknown>) => site(db,caller).media(storage()).commitUpload(input.uploadGroupId as string,input)',list:'(db,caller,input:Record<string,unknown>) => site(db,caller).media(storage()).list(input)',get:'(db,caller,input:Record<string,unknown>) => site(db,caller).media(storage()).get(input.id as string)',update:'(db,caller,input:Record<string,unknown>) => site(db,caller).media(storage()).update(input.id as string,input)',delete:'(db,caller,input:Record<string,unknown>) => site(db,caller).media(storage()).delete(input.id as string)'};

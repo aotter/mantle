@@ -58,10 +58,109 @@ test("official SDK initializes, lists only surface tools, calls shared validatio
   caller=user;expect((await call("tools/list",{},"/mcp/admin")).data.result.tools.map((t:any)=>t.name)).toEqual(["admin_items"]);
   caller=fixtureCaller({...user,role:null,admin:false}); const roleDenied=await call("tools/list",{},"/mcp/admin");expect(roleDenied.response.status).toBe(403);expect(roleDenied.response.headers.has("www-authenticate")).toBe(false);
   caller=fixtureCaller({...user,scopes:[]}); const scopeDenied=await call("tools/list");expect(scopeDenied.response.status).toBe(403);expect(scopeDenied.response.headers.get("www-authenticate")).toContain('error="insufficient_scope", scope="mcp"');
-  caller=fixtureCaller({...user,credential:"session"});expect((await call("tools/call",{name:"add_item",arguments:{title:"CSRF"}},"/mcp",{origin:"https://evil.test"})).data.result.isError).toBe(true);
+  caller=fixtureCaller({...user,credential:"session"});expect((await call("tools/call",{name:"add_item",arguments:{title:"CSRF"}},"/mcp",{origin:"https://evil.test"})).response.status).toBe(403);
+  expect((await call("tools/call",{name:"add_item",arguments:{title:"CSRF"}},"/mcp",{"sec-fetch-site":"cross-site"})).data.result.isError).toBe(true);
   expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({n:1});
   expect(await handle(new Request("https://app.test/other"),{})).toBeUndefined();
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 before authentication; no Origin passes; allowedOrigins parses once",async()=>{
+ const files=await generateOrThrow("bun-sqlite",[{sourceId:"origin.yaml",text:source}]);
+ const dir=await mkdtemp(resolve(import.meta.dir,".mcp-origin-")),db=new Database(":memory:");
+ let caller:any={kind:"anonymous"};const refusals:any[]=[],observations:any[]=[];
+ try {
+  await writeGenerated(dir,files);db.exec(files["schema.sql"]!);const {mcp}=await import(resolve(dir,"mcp.ts"));
+  const open=mcp({db:()=>db,caller:()=>caller,onRefusal:(event:any)=>{refusals.push(event);},onObservation:(event:any)=>{observations.push(event);}});
+  const listed=mcp({db:()=>db,caller:()=>caller,allowedOrigins:["https://console.test:8443","partner.test","app.test"]});
+  const call=(handle:any,url:string,headers:Record<string,string>={},era?:string)=>handle(new Request(url,{method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream",...(era?{"mcp-protocol-version":era,"mcp-method":"tools/list"}:{}),...headers},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/list",params:era?{_meta:{"io.modelcontextprotocol/protocolVersion":era,"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{name:"test",version:"1"}}}:{}})}),{});
+  for(const who of [{kind:"anonymous"},user]) for(const path of ["/mcp","/mcp/admin"]) for(const era of [undefined,"2026-07-28"]) {
+   caller=who;const refused=await call(open,"https://app.test"+path,{origin:"https://evil.test"},era);
+   expect(refused.status).toBe(403);expect((await refused.json()).error.message).toBe("Invalid Origin: evil.test");
+   if(who===user) for(const headers of [{},{origin:"http://localhost:5173"}] as Record<string,string>[]) expect((await call(open,"https://app.test"+path,headers,era)).status).toBe(200);
+  }
+  // Each refusal is reported once to both callbacks.
+  expect(refusals).toHaveLength(8);expect(refusals.every(event=>event.reason==="origin"&&event.status===403)).toBe(true);
+  expect(observations.filter(event=>event.kind==="request-refused").map(event=>[event.status,event.surface])).toEqual(["public","public","admin","admin","public","public","admin","admin"].map(surface=>[403,surface]));
+  caller={kind:"anonymous"};
+  // The site's own origin is not implied: DNS rebinding sends Origin == the rebound Host, whatever CF-Connecting-IP claims.
+  for(const url of ["https://app.test/mcp","http://evil.example.com:8787/mcp"]) for(const ip of [{},{"cf-connecting-ip":"127.0.0.1"}] as Record<string,string>[]) {
+   const refused=await call(open,url,{host:new URL(url).host,origin:new URL(url).origin,...ip});
+   expect(refused.status).toBe(403);expect((await refused.json()).error.message).toBe(`Invalid Origin: ${new URL(url).hostname}`);
+  }
+  // A forged loopback peer does not admit a foreign Origin; the opaque `null` Origin is refused.
+  expect((await call(open,"http://127.0.0.1:8787/mcp",{origin:"https://evil.test","cf-connecting-ip":"127.0.0.1"})).status).toBe(403);
+  expect((await call(open,"http://127.0.0.1:8787/mcp",{origin:"null"})).status).toBe(403);
+  expect(refusals).toHaveLength(14);
+  // The refused POST body is read (bounded) before the 403, so the connection stays usable under wrangler dev.
+  const unread=new Request("https://app.test/mcp",{method:"POST",headers:{"content-type":"application/json",origin:"https://evil.test"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/list"})});
+  expect((await open(unread,{},{})).status).toBe(403);expect(unread.bodyUsed).toBe(true);
+  // No Origin is a server-side client: any Host passes, as behind wrangler routes or dev.host (Host rewritten, peer still loopback).
+  for(const host of ["app.example.com","evil.example.com"]) expect((await call(open,`http://${host}/mcp`,{host,"cf-connecting-ip":"127.0.0.1"})).status).toBe(200);
+  // Loopback Origins pass on any port.
+  for(const host of ["localhost:8787","127.0.0.1:3000","[::1]:8787"]) expect((await call(open,"https://app.test/mcp",{origin:`http://${host}`})).status).toBe(200);
+  // allowedOrigins lists browser origins by hostname, including the site's own.
+  for(const origin of ["https://app.test","https://console.test","http://partner.test:3000","http://localhost:8787"]) expect((await call(listed,"https://app.test/mcp",{origin})).status).toBe(200);
+  expect((await call(listed,"https://app.test/mcp",{origin:"https://evil.test"})).status).toBe(403);
+  // allowedOrigins is parsed once: full origins and bare hosts pass, anything else fails at configuration.
+  expect(()=>mcp({db:()=>db,allowedOrigins:["https://a.test","a.test","localhost:8787","[::1]","http://[::1]:8787"]})).not.toThrow();
+  for(const bad of ["https://a.test/mcp","a.test/path","https://","","https://a.test?x=1","https://user@a.test"]) expect(()=>mcp({db:()=>db,allowedOrigins:[bad]})).toThrow(`mcp allowedOrigins: "${bad}"`);
+  // Wildcards never match an exact hostname, so they fail at configuration.
+  for(const wild of ["*","https://*.example.com","*.example.com"]) expect(()=>mcp({db:()=>db,allowedOrigins:[wild]})).toThrow(`mcp allowedOrigins: "${wild}" is not an origin (https://host[:port]) or a host[:port]; wildcards never match.`);
+ } finally {db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test("generated tools carry a title and read/destructive hints; declared hints win",async()=>{
+ const text=source+`---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: posts}
+spec:
+  title: Posts
+  lifecycle: publishing
+  schema: {type: object, properties: {title: {type: string}}, required: [title]}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts}
+spec: {surface: admin, sql: 'SELECT id, title FROM posts ORDER BY id'}
+`+[
+  ["rename-item","sql: 'UPDATE items SET title = input.title WHERE id = input.id'",""],
+  ["upsert-item","sql: 'INSERT INTO items(id, title) VALUES(input.id, input.title) ON CONFLICT(id) DO UPDATE SET title = excluded.title'",""],
+  ["keep-item","sql: 'INSERT INTO items(id, title) VALUES(input.id, input.title) ON CONFLICT(id) DO NOTHING'",""],
+  ["purge-items","sql: 'DELETE FROM items WHERE title = input.title'",""],
+  ["sendMail","ref: sendMail",""],
+  ["lookUp","ref: lookUp","  mcp: {readOnlyHint: true}\n"],
+  ["retitle-item","sql: 'UPDATE items SET title = input.title WHERE id = input.id'","  title: Retitle\n  mcp: {destructiveHint: false, openWorldHint: false}\n"],
+ ].map(([name,handler,extra])=>`---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: ${name}}
+spec:
+${extra}  input: {type: object, properties: {id: {type: string}, title: {type: string}}, required: [id, title], additionalProperties: false}
+  output: {type: object}
+  handler: {${handler}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: ${name}-mcp}
+spec: {source: {kind: mcp, surface: admin}, target: {procedure: ${name}}}
+`).join("");
+ const files=await generateOrThrow("bun-sqlite",[{sourceId:"hints.yaml",text}]);
+ const dir=await mkdtemp(resolve(import.meta.dir,".mcp-hints-"));
+ try {
+  await writeGenerated(dir,files);const {tools}=await import(resolve(dir,"mcp.ts"));
+  const hints=Object.fromEntries(tools.map((t:any)=>[t.name,[t.title,t.annotations]]));
+  expect(hints).toEqual({
+   items:["Items",{readOnlyHint:true,destructiveHint:false}],admin_items:["Admin items",{readOnlyHint:true,destructiveHint:false}],
+   add_item:["Add item",{readOnlyHint:false,destructiveHint:false}],rename_item:["Rename item",{readOnlyHint:false,destructiveHint:true}],
+   upsert_item:["Upsert item",{readOnlyHint:false,destructiveHint:true}],keep_item:["Keep item",{readOnlyHint:false,destructiveHint:false}],
+   purge_items:["Purge items",{readOnlyHint:false,destructiveHint:true}],sendmail:["Send mail",{readOnlyHint:false,destructiveHint:true}],
+   lookup:["Look up",{readOnlyHint:true,destructiveHint:false}],retitle_item:["Retitle",{readOnlyHint:false,destructiveHint:false,openWorldHint:false}],
+   posts:["Posts",{readOnlyHint:true,destructiveHint:false}],publish_posts:["Publish posts",{readOnlyHint:false,destructiveHint:false}],
+   unpublish_posts:["Unpublish posts",{readOnlyHint:false,destructiveHint:false}],archive_posts:["Archive posts",{readOnlyHint:false,destructiveHint:true}],
+  });
+ } finally {await rm(dir,{recursive:true,force:true});}
 });
 
 test("MCP SDK stays outside startup, unused surface is tree shaken and static SDK imports are refused",async()=>{
@@ -179,10 +278,10 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
   await writeGenerated(dir,files);db.exec(files['schema.sql']!);const {mcp}=await import(resolve(dir,'mcp.ts'));
   const handle=mcp({db:()=>db,caller:()=>caller,locale:'zh',instructions:'Use these tools.',serverInfo:{name:'example',title:'Example',version:'7'},requiredScopes:['custom'],resourceMetadata:'https://proxy.test/resource',onObservation:(event:any)=>{observations.push(event);if(event.kind==='invocation'){expect(Object.isFrozen(event.caller)).toBe(true);expect(Object.isFrozen(event.caller.scopes)).toBe(true);}return Promise.reject(new Error('ignored listener'));},onRefusal:(event:any)=>{refusals.push(event);throw Error('ignored listener');}});
   const call=async(method:string,params:any={},path='/mcp',headers:any={})=>{const response=await handle(new Request('https://app.test'+path,{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream',...headers},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});const body=await response.text();return {response,data:JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body)};};
-  const init=await call('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}});expect(init.data.result.instructions).toBe('Use these tools.');expect(init.data.result.serverInfo.name).toBe('example');
+  const init=await call('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}});expect(init.data.result.instructions).toBe('Use these tools.');expect(init.data.result.serverInfo).toMatchObject({name:'example',version:'7'});
   const listed=(await call('tools/list')).data.result.tools;
-  expect(listed[0]).toMatchObject({title:'項目',description:'項目',annotations:{readOnlyHint:true}});
-  expect(listed[1]).toMatchObject({title:'新增項目',description:'新增資料',annotations:{destructiveHint:true},outputSchema:{required:['results']}});
+  expect(listed[0]).toMatchObject({title:'項目',description:expect.stringMatching(/^項目 \(tool version [0-9a-f]{8}\)$/),annotations:{readOnlyHint:true}});
+  expect(listed[1]).toMatchObject({title:'新增項目',description:expect.stringMatching(/^新增資料 \(tool version [0-9a-f]{8}\)$/),annotations:{destructiveHint:true},outputSchema:{required:['results']}});
   const ok=await call('tools/call',{name:'add_item',arguments:{title:'Works'}});expect(ok.data.result.structuredContent.results[0][0].id).toBeString();
   const bad=await call('tools/call',{name:'add_item',arguments:{title:''}});expect(bad.data.result.isError).toBe(true);expect(bad.data.result.structuredContent).toBeUndefined();
   expect(observations.filter(event=>event.phase==='completion').map(event=>event.outcome)).toEqual(['succeeded','failed']);
@@ -192,7 +291,7 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
   expect(refusals.map(event=>event.reason)).toEqual(['credential','credential','origin']);expect(db.query('SELECT COUNT(*) n FROM items').get()).toEqual({n:1});
   for(const locale of [undefined,'constructor','toString','fr']) {
    const response=await mcp({db:()=>db,caller:()=>caller,locale})(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})}),{});
-   const body=await response.text(),data=JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);expect(data.result.tools[0].title).toBe('Items');expect(data.result.tools[1].description).toBe('Add a row');
+   const body=await response.text(),data=JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);expect(data.result.tools[0].title).toBe('Items');expect(data.result.tools[1].description).toStartWith('Add a row (tool version ');
   }
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });
@@ -228,7 +327,7 @@ spec: {source: {kind: mcp, surface: public}, target: {procedure: log-item}}
   const handle=mcp({db:()=>db,caller:()=>({kind:'anonymous'})});
   const call=async(method:string,params:any={})=>{const response=await handle(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});const body=await response.text();return JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);};
   const tool=(await call('tools/list')).result.tools.find((t:any)=>t.name==='log_item');
-  expect(tool.description).toBe("Log an item. 'unit' is required when 'weight' is present. At least one of 'title', 'weight' is required.");
+  expect(tool.description).toMatch(/^Log an item\. 'unit' is required when 'weight' is present\. At least one of 'title', 'weight' is required\. \(tool version [0-9a-f]{8}\)$/);
   expect(Object.keys(tool.inputSchema).sort()).toEqual(['additionalProperties','properties','type']);
   const bad=await call('tools/call',{name:'log_item',arguments:{title:'A',weight:1}});
   expect(JSON.parse(bad.result.content[0].text).diagnostics[0]).toMatchObject({code:'INPUT_VALIDATION_FAILED',path:'procedures/log-item/input/unit',message:"'unit' is required when 'weight' is present."});

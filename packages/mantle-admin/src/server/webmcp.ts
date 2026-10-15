@@ -5,6 +5,8 @@ import { json, type Route } from "./index.js";
 export function webmcpRoutes<Env, Database, Handlers>(catalogue: {
     readonly tools: readonly {
         readonly name: string;
+        readonly version?: string;
+        readonly inputSchema?: unknown;
     }[];
 }, tools: readonly Tool<Database, Handlers>[], ...args: [Handlers] extends [never] ? [handlers?: undefined] : [handlers: NoInfer<Handlers>]): readonly Route<Env, Database>[] {
     const selected = tools.filter(tool => tool.surface === "admin" && catalogue.tools.some(item => item.name === tool.name));
@@ -16,7 +18,17 @@ export function webmcpRoutes<Env, Database, Handlers>(catalogue: {
     };
     // The same target as the MCP call, so `authorize` sees one name whichever way the tool is reached.
     return [{ method: "POST", path: "/webmcp/{tool}", target: c => { const tool = toolOf(c.params.tool); tool.check?.(c.caller); return tool.target ?? { kind: tool.page ? "view" : "procedure", name: tool.name }; }, run: async (c) => {
-                const tool = toolOf(c.params.tool);
-                return { output: await callTool(tool, await json(c), () => c.db, c.caller, args[0] as Handlers) };
+                const tool = toolOf(c.params.tool), listed = catalogue.tools.find(item => item.name === tool.name), version = listed?.version;
+                // The deployed definition's version, so a page registered before a deploy can tell; a refusal other than
+                // authorization also names the input schema the tool is listed with now.
+                try {
+                    return { output: await callTool(tool, await json(c), () => c.db, c.caller, args[0] as Handlers), ...(version ? { version } : {}) };
+                }
+                catch (error) {
+                    if (!(error instanceof ContractError)) throw error;
+                    const contract = !["AUTH_DENIED", "UNAUTHENTICATED"].includes(error.code) && listed?.inputSchema !== undefined;
+                    if (!version && !contract) throw error;
+                    throw new ContractError(error.code, error.message, error.path, { cause: error, ...(error.status ? { status: error.status } : {}), fields: { ...error.fields, ...(version ? { toolVersion: version } : {}), ...(contract ? { inputSchema: listed!.inputSchema } : {}) } });
+                }
             } }];
 }

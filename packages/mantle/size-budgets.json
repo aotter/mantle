@@ -4,6 +4,6 @@
   "startup:rest": 11264,
   "startup:mcp": 12288,
   "startup:web": 11520,
-  "startup:all": 19968,
+  "startup:all": 20480,
   "runtime": 140286
 }

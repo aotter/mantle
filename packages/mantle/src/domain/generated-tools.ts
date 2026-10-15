@@ -2,6 +2,8 @@
 import type { JsonSchema } from "../build/compiler.js";
 
 export const publishingTransitions = [["publish", ["draft"], "published"], ["unpublish", ["published", "archived"], "draft"], ["archive", ["draft", "published"], "archived"]] as const;
+/** Only archive withdraws an entry from both drafts and the public. */
+export const publishingAnnotations = (verb: string) => ({ readOnlyHint: false, destructiveHint: verb === "archive" });
 export const publishingInput: JsonSchema = {type:"object",properties:{id:{type:"string",minLength:1},expectedVersion:{type:"integer",minimum:1}},required:["id","expectedVersion"],additionalProperties:false};
 
 export function mediaDefinitions() {

@@ -108,6 +108,6 @@ These retain their issue-based filenames and original decision status.
 | [#842 MCP authoring](adr-lite-842-mcp-authoring.md) | Accepted |
 | [#845 Frontend client](adr-lite-845-frontend-client.md) | Accepted |
 | [#861 Admin WebMCP](adr-lite-861-admin-webmcp.md) | Accepted |
-| [909 Admin UI kit](adr-lite-909-admin-ui-kit.md) | Accepted; amended by 0029 |
-| [#1376 Admin extensions](adr-lite-1376-admin-extensions.md) | Accepted |
+| [909 Admin UI kit](adr-lite-909-admin-ui-kit.md) | Accepted; amended by 0029 and #1376 revision 4 |
+| [#1376 Admin customization](adr-lite-1376-admin-extensions.md) | Accepted (revision 4); implementation in progress; amends 909 |
 | [#1395 Durable Object SQLite driver](adr-lite-1395-durable-object-driver.md) | Accepted; experimental |
