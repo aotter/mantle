@@ -13,3 +13,9 @@ test("every --auth instance gets its tables; a table two instances define differ
   expect(same.ok).toBe(true);
   await expect(generateFromSources({ target: "bun-postgres", sources, auth: [{ plugins: [admin()] }, {}] })).rejects.toThrow('table "user" differently');
 });
+
+test("an OAuth provider without oauthGrantRevocation() is refused at generate", async () => {
+  const provider = { id: "oauth-provider" } as never, revocation = { id: "mantle-oauth-grant-revocation" } as never;
+  await expect(generateFromSources({ target: "bun-sqlite", sources, auth: { plugins: [provider] } })).rejects.toThrow("without oauthGrantRevocation()");
+  expect((await generateFromSources({ target: "bun-sqlite", sources, auth: { plugins: [revocation, provider] } })).ok).toBe(true);
+});

@@ -17,7 +17,7 @@ import { admin as adminFunction, customSession, emailOTP, jwt } from "better-aut
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { oauthGrantExtension, oauthConsents, pruneLegacyOAuthClients } from "../src/auth/oauth.js";
+import { oauthGrantExtension, oauthGrantRevocation, oauthConsents, pruneLegacyOAuthClients } from "../src/auth/oauth.js";
 import { authRoutes, loopbackClientsAreNative, normalizeAuthResponseCookies } from "../src/auth/routes.js";
 import { ContractError } from "../src/kernel/contracts.js";
 import { authLoader, resolveCaller, type AuthInstance } from "../src/auth/caller.js";
@@ -34,7 +34,7 @@ type App = Awaited<ReturnType<typeof makeApp>>;
 async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean; additionalFields?: NonNullable<BetterAuthOptions["user"]>["additionalFields"]; derivedRegion?: boolean; localOnly?: boolean } = {}) {
   const sqlite = new Database(":memory:");
   sqlite.run("PRAGMA foreign_keys = ON");
-  const otps: { email: string; otp: string }[] = [];
+  const otps: { email: string; otp: string }[] = [], resets: string[] = [];
   const statements: string[] = [], native = d1Shim(sqlite);
   // Serve the handler first: baseURL (and so the JWKS URL and token issuer) must name the real port.
   let handle: (request: Request) => Promise<Response> = async () => new Response("not ready", { status: 503 });
@@ -53,6 +53,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
     secret: "test-secret-test-secret-test-secret-0123456789",
     database: d1Adapter({ prepare: sql => { statements.push(sql); return native.prepare(sql); } }),
     disabledPaths: ["/token"],
+    emailAndPassword: { enabled: true, sendResetPassword: async ({ token }: { token: string }) => { resets.push(token); } },
     advanced: {
       ...(options.cookiePrefix ? { cookiePrefix: options.cookiePrefix } : {}),
       ...(options.sessionTokenName ? { cookies: { session_token: { name: options.sessionTokenName } } } : {}),
@@ -62,6 +63,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
       emailOTP({ sendVerificationOTP: async ({ email, otp }) => { otps.push({ email, otp }); } }),
       options.customAdmin ? adminFunction({ adminRoles: ["admin"], ac, roles: { admin: ac.newRole(defaultStatements) } }) : adminFunction(),
       jwt({ disableSettingJwtHeader: true }),
+      oauthGrantRevocation(),
       oauthProvider({
         loginPage: "/sign-in",
         consentPage: "/oauth/consent",
@@ -91,7 +93,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
     return { cookie, userId: body.user.id, setCookies: response.headers.getSetCookie() };
   }
   const request = (headers: Record<string, string> = {}) => new Request(`${origin}/some/route`, { headers });
-  return { sqlite, auth, loader, post, signIn, request, baseURL, loads: () => loads, breakCache: () => { cacheBroken = true; }, cache, statements };
+  return { sqlite, auth, loader, post, signIn, request, baseURL, resets, loads: () => loads, breakCache: () => { cacheBroken = true; }, cache, statements };
 }
 
 describe("resolveCaller: session cookie", () => {
@@ -315,6 +317,34 @@ describe("OAuth grant revocation and consent routes", () => {
     expect(await oauthConsents(app.auth as never).revokeOAuthConsent(userId, consent!.id)).toBe(true);
     await expect(use(deleted.body.access_token)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
     expect((await refresh(deleted.body.refresh_token)).status).toBe(400);
+  });
+  test("password reset, admin ban, admin session revocation and admin password change end a user's offline grants", async () => {
+    const app = await makeApp(), root = await app.signIn("root@example.test");
+    app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [root.userId]);
+    const asAdmin = (path: string, body: object) => app.post(path, body, { cookie: root.cookie });
+    const use = (token: string) => resolveCaller(app.request({ authorization: `Bearer ${token}` }), app.loader, { audience: AUDIENCE });
+    const events: [string, (userId: string, email: string) => Promise<Response>][] = [
+      ["reset", async (_userId, email) => { await app.post("/request-password-reset", { email, redirectTo: "/" }); return app.post("/reset-password", { newPassword: "another-password-123", token: app.resets.at(-1) }); }],
+      ["ban", userId => asAdmin("/admin/ban-user", { userId })],
+      ["sessions", userId => asAdmin("/admin/revoke-user-sessions", { userId })],
+      ["password", userId => asAdmin("/admin/set-user-password", { userId, newPassword: "another-password-123" })],
+    ];
+    for (const [name, end] of events) {
+      const email = `${name}@example.test`, { cookie, userId } = await app.signIn(email);
+      const grant = await oauthAccessToken(app, cookie, "mcp offline_access");
+      expect((await end(userId, email)).status).toBe(200);
+      if (name === "ban") expect((await asAdmin("/admin/unban-user", { userId })).status).toBe(200);
+      const refreshed = await fetch(`${app.baseURL}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: grant.refreshToken!, client_id: grant.clientId, resource: AUDIENCE }) });
+      expect(refreshed.status, name).not.toBe(200);
+      // An issued access token stands on its session while that lives (at most its own lifetime), then on the revoked refresh token.
+      app.sqlite.run("DELETE FROM session WHERE userId = ?", [userId]);
+      await expect(use(grant.accessToken), name).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    }
+    // Sign-out and a user's own password change without signing out other devices keep offline grants (Better Auth).
+    const keep = await app.signIn("keep@example.test"), kept = await oauthAccessToken(app, keep.cookie, "mcp offline_access");
+    expect((await app.post("/sign-out", {}, { cookie: keep.cookie })).status).toBe(200);
+    app.sqlite.run("DELETE FROM session WHERE userId = ?", [keep.userId]);
+    expect(await use(kept.accessToken)).toMatchObject({ subject: keep.userId });
   });
   test("sign-out follows Better Auth: session-bound grants end, offline_access refresh tokens survive", async () => {
     const app = await makeApp(); const { cookie, userId } = await app.signIn();

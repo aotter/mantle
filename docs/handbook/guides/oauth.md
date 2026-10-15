@@ -5,7 +5,10 @@ create your `betterAuth()` instance with `jwt({ disableSettingJwtHeader: true })
 and `oauthProvider` (or the provider's MCP preset). Append `oauthGrantExtension`
 **first** in its `extensions`. The helper comes from
 `@aotter/mantle/auth/oauth` and binds issued access tokens to the current consent
-ID and Better Auth’s consent reference without changing `referenceId`.
+ID and Better Auth’s consent reference without changing `referenceId`. Add
+`oauthGrantRevocation()` from the same module to the plugins: it ends a user's
+grants on a password reset or admin action (below), and `mantle generate --auth`
+refuses an OAuth provider without it.
 Configure
 `consentPage: "/oauth/consent"`, loginPage,
 resources, allowed/default client registration scopes, and public/native DCR
@@ -66,17 +69,21 @@ private/no-store. Connected-app redirects must be same-origin paths.
 issuer, audience and request-bound DPoP through Better Auth, including a durable
 single-use proof reservation. It then checks the live consent and session and
 loads the current database user.
-All of sub, azp, sid, mantle_consent_id and the consent reference must match;
-the consent must cover the resource and every token scope, and the session must
-still be alive. `scopes` adds a resource-specific scope floor (403 when missing).
+All of sub, azp, mantle_consent_id and the consent reference must match, and so
+must sid while the token stands on its session (an `offline_access` token may
+outlive it; see below). The consent must cover the resource and every token
+scope. `scopes` adds a resource-specific scope floor (403 when missing).
 Unbound legacy tokens fail closed. Disconnect deletes the grant first, revokes
 its access/refresh tokens. Tokens issued without an active consent fail closed.
 First-party `skip_consent` tokens instead require a live, enabled client with
-`skipConsent` and allowed scopes, plus a live user session. Already-issued
+`skipConsent` and allowed scopes, plus the same session or `offline_access`
+rule as consented tokens. Already-issued
 JWTs fail on the next call, and reconsenting cannot revive the old JWT lineage.
 
 Grant lifetime follows Better Auth. Better Auth issues a refresh token only when
-the grant includes `offline_access` and the client allows `refresh_token`.
+the grant includes `offline_access`; a client registered for `authorization_code`
+may use `refresh_token` too, so registering only `authorization_code` does not
+prevent long-lived grants.
 Without `offline_access` the grant is bound to the browser session: its tokens
 stop working when that session expires or the user signs out. A refresh that
 narrows the scope to drop `offline_access` after the session ends returns
@@ -89,6 +96,13 @@ default), so an offline grant that keeps refreshing does not expire. Without a l
 unrevoked, unexpired `offline_access` refresh token for the same user and client.
 The consent, client, scope, resource and ban checks still apply. An access token
 issued before sign-out stays valid until it expires (one hour by default).
+`oauthGrantRevocation()` revokes every OAuth refresh and access token of the user
+on a password reset, a password change that signs out other devices, and the admin
+ban, session revocation and password change actions; unbanning does not restore
+them. An access token already issued stands on its session while that lives (at
+most its own lifetime). Better Auth's `/oauth2/introspect` reports a refreshed
+token inactive once its original session has expired, while Mantle's resource
+check accepts it; Mantle does not use introspection.
 Database failures remain server errors, rather than silently authenticating.
 
 For app-owned API keys/personal tokens, supply `resolveCredential(request)` in

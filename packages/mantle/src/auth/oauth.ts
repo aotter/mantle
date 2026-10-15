@@ -1,5 +1,6 @@
 /** Optional provider integration. Better Auth owns signatures, PKCE, redirects and token rotation. */
-import type { AuthContext, BetterAuthOptions } from "@better-auth/core";
+import type { AuthContext, BetterAuthOptions, BetterAuthPlugin } from "@better-auth/core";
+import { createAuthMiddleware } from "@better-auth/core/api";
 import type { oauthProvider } from "@better-auth/oauth-provider";
 import type { AuthInstance } from "./caller.js";
 import { nativeAuthRead } from "./adapter.js";
@@ -53,6 +54,40 @@ export const oauthGrantExtension: NonNullable<Parameters<typeof oauthProvider>[0
     return { mantle_consent_id: consent?.id ?? null, mantle_consent_reference: referenceId ?? null };
   } },
 };
+
+export const OAUTH_GRANT_REVOCATION = "mantle-oauth-grant-revocation";
+/** Admin and credential events that end a user's OAuth grants; `/change-password` only with `revokeOtherSessions`. */
+const REVOKING = ["/change-password", "/admin/ban-user", "/admin/revoke-user-sessions", "/admin/set-user-password"];
+
+/**
+ * Add to the Better Auth plugins with the OAuth provider. An `offline_access` grant outlives sign-out and session expiry
+ * (as in Better Auth), but a password reset or change that signs out other devices, an admin ban, an admin session
+ * revocation or an admin password change revokes every OAuth grant of that user: a compromised account's grants end.
+ */
+export function oauthGrantRevocation() {
+  const revoke = async (context: AuthContext, userId: unknown) => {
+    if (typeof userId !== "string" || !userId) return;
+    for (const model of ["oauthRefreshToken", "oauthAccessToken"]) await context.adapter.updateMany({ model, where: [pair("userId", userId), { field: "revoked", value: null }], update: { revoked: new Date() } });
+  };
+  return {
+    id: OAUTH_GRANT_REVOCATION,
+    hooks: {
+      // The reset token names its user only until Better Auth consumes it, so this runs before; a valid token proves the email.
+      before: [{ matcher: ctx => ctx.path === "/reset-password", handler: createAuthMiddleware(async ctx => {
+        const token = (ctx.body as { token?: unknown } | undefined)?.token;
+        const value = typeof token === "string" && token ? await ctx.context.internalAdapter.findVerificationValue(`reset-password:${token}`) : null;
+        if (value && new Date(value.expiresAt).getTime() > Date.now()) await revoke(ctx.context, value.value);
+      }) }],
+      // After the endpoint: its own permission checks have passed and it succeeded.
+      after: [{ matcher: ctx => REVOKING.includes(ctx.path ?? ""), handler: createAuthMiddleware(async ctx => {
+        const returned = ctx.context.returned, body = ctx.body as { userId?: unknown; revokeOtherSessions?: unknown } | undefined;
+        if (returned instanceof Error || returned instanceof Response && !returned.ok) return;
+        if (ctx.path !== "/change-password") return revoke(ctx.context, body?.userId);
+        if (body?.revokeOtherSessions === true) await revoke(ctx.context, ctx.context.session?.user.id ?? (returned as { user?: { id?: unknown } } | null)?.user?.id);
+      }) }],
+    },
+  } satisfies BetterAuthPlugin;
+}
 
 /** A verification value that is an authorization code, with its user and client; else undefined. */
 function authCode(text: string): { userId: string; query: { client_id: string } } | undefined {
