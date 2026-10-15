@@ -55,6 +55,18 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
+metadata: {name: posts-matching}
+spec:
+  surface: public
+  input:
+    type: object
+    additionalProperties: false
+    properties: {slug: {type: string}, title: {type: string}}
+    anyOf: [{required: [slug]}, {required: [title]}]
+  sql: SELECT id, slug, title FROM posts WHERE slug = input.slug OR title = input.title ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
 metadata: {name: private-posts}
 spec:
   surface: internal
@@ -69,6 +81,7 @@ test("dynamic web output walks pages, trusts SQL visibility, escapes output and 
     for(let i=0;i<7;i++) db.query("INSERT INTO posts(id,version,created_at,updated_at,slug,title,body,visible) VALUES (?,1,0,0,?,?,?,?)").run(String(i),i===1?"a&b)":"post"+i,"Title ["+i+"]","# body "+i,i===0?0:1);
     const {web}=await import(join(dir,"web.ts"));
     const site=web({db,caller:{kind:"anonymous"},origin:"https://site.test",title:"Blog",description:"Summary",locales:["en"],pages:{"/posts/{slug}":{view:"post-by-slug",list:"posts",markdown:"body"}}});
+    expect(()=>web({db,caller:{kind:"anonymous"},origin:"https://site.test",title:"Blog",description:"Summary",pages:{"/posts/{slug}":{view:"post-by-slug",list:"posts-matching"}}})).toThrow("Page /posts/{slug} lists View 'posts-matching', whose input rejects an empty query; a list View must accept no input.");
     const request=(path:string,init?:RequestInit)=>new Request("https://untrusted.test"+path,init);
     const llms=await site.fetch(request("/llms.txt")),text=await llms.text();
     expect(text).toContain("# Blog\n\n> Summary");expect(text.match(/^- /gm)).toHaveLength(6);expect(text).not.toContain("post0");expect(text).toContain("Title \\[1\\]");expect(text).toContain("(https://site.test/posts/a%26b%29)");
@@ -112,6 +125,8 @@ web({...base,pages:{'/posts':{view:'post-by-slug'}}});
 web({...base,pages:{'/posts/{slug}/{id}':{view:'post-by-slug'}}});
 // @ts-expect-error list needs inputs
 web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'post-by-slug'}}});
+// @ts-expect-error a list View's input rules reject an empty query
+web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'posts-matching'}}});
 // @ts-expect-error unknown markdown column
 web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',markdown:'unknown'}}});
 `);

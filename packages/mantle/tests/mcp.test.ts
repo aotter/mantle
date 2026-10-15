@@ -205,3 +205,33 @@ test("MCP preflights all batch calls before any work and reports expired caller 
  const response=await handle(request(['open','closed'].map((name,id)=>({jsonrpc:'2.0',id,method:'tools/call',params:{name,arguments:{}}}))),{});expect(response!.status).toBe(401);expect(runs).toBe(0);expect(response!.headers.get('www-authenticate')).toContain('scope="mcp write"');
  const expired=await mcp(tools,{db:()=>({}),caller:()=>{throw new ContractError('UNAUTHENTICATED','Expired.','request:authorization');},resourceMetadata:'https://proxy.test/metadata'})(request({jsonrpc:'2.0',id:1,method:'tools/list'}),{});expect(expired!.status).toBe(401);expect(expired!.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/metadata"');
 });
+
+test("MCP tools advertise input rules as description sentences and enforce them",async()=>{
+ const text=source+`---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: log-item}
+spec:
+  description: Log an item.
+  input: {type: object, properties: {title: {type: string}, weight: {type: number}, unit: {type: string}}, dependentRequired: {weight: [unit]}, anyOf: [{required: [title]}, {required: [weight]}], additionalProperties: false}
+  output: {type: object}
+  handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: log-item-mcp}
+spec: {source: {kind: mcp, surface: public}, target: {procedure: log-item}}
+`;
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'rules.yaml',text}]);const dir=await mkdtemp(resolve(import.meta.dir,'.mcp-rules-')),db=new Database(':memory:');
+ try {
+  await writeGenerated(dir,files);db.exec(files['schema.sql']!);const {mcp}=await import(resolve(dir,'mcp.ts'));
+  const handle=mcp({db:()=>db,caller:()=>({kind:'anonymous'})});
+  const call=async(method:string,params:any={})=>{const response=await handle(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});const body=await response.text();return JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);};
+  const tool=(await call('tools/list')).result.tools.find((t:any)=>t.name==='log_item');
+  expect(tool.description).toMatch(/^Log an item\. 'unit' is required when 'weight' is present\. At least one of 'title', 'weight' is required\. \(tool version [0-9a-f]{8}\)$/);
+  expect(Object.keys(tool.inputSchema).sort()).toEqual(['additionalProperties','properties','type']);
+  const bad=await call('tools/call',{name:'log_item',arguments:{title:'A',weight:1}});
+  expect(JSON.parse(bad.result.content[0].text).diagnostics[0]).toMatchObject({code:'INPUT_VALIDATION_FAILED',path:'procedures/log-item/input/unit',message:"'unit' is required when 'weight' is present."});
+  expect((await call('tools/call',{name:'log_item',arguments:{title:'A'}})).result.isError).toBeUndefined();
+ } finally {db.close();await rm(dir,{recursive:true,force:true});}
+});

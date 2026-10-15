@@ -845,7 +845,7 @@ spec:
   it.each([
     ["remote refs", `{ $ref: 'https://example.com/schema.json' }`, "JSON_SCHEMA_REF_INVALID"],
     ["unresolved refs", `{ $ref: '#/$defs/missing' }`, "JSON_SCHEMA_REF_INVALID"],
-    ["unsupported composition", `{ anyOf: [{ type: string }, { type: number }] }`, "JSON_SCHEMA_UNSUPPORTED"],
+    ["unsupported composition", `{ allOf: [{ type: string }, { type: number }] }`, "JSON_SCHEMA_UNSUPPORTED"],
     // a $ref that reaches itself without reading a level of the value: every validation would overflow the stack
     ["a $ref to itself", `{ type: object, $defs: { a: { $ref: '#/$defs/a' } }, properties: { x: { $ref: '#/$defs/a' } } }`, "JSON_SCHEMA_REF_INVALID"],
     ["a $ref cycle through oneOf", `{ type: object, $defs: { a: { oneOf: [{ $ref: '#/$defs/b' }, { type: string }] }, b: { $ref: '#/$defs/a' } }, properties: { x: { $ref: '#/$defs/a' } } }`, "JSON_SCHEMA_REF_INVALID"],
@@ -864,6 +864,34 @@ spec:
   ])("rejects %s with a stable diagnostic", (_label, input, code) => {
     const result = parseManifests(procedure(input));
     expect(result.diagnostics[0]?.code).toBe(code);
+  });
+});
+
+describe("input rules (dependentRequired, anyOf, if/then/else)", () => {
+  const rule = { dependentRequired: "{ a: [b] }", anyOf: "[{ required: [a] }]", if: "{ properties: { a: { const: x } }, required: [a] }", then: "{ required: [b] }" };
+  const object = (rules: string) => `{ type: object, properties: { a: { type: string }, b: { type: string } }, ${rules} }`;
+  const procedure = (input: string, output = "{ type: object }") => `apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: rules }
+spec:
+  input: ${input}
+  output: ${output}
+  handler: { ref: rules }
+`;
+  it("parse in Procedure input; generation checks their shapes", () => {
+    expect(parseManifests(procedure(object(Object.entries(rule).map(([k, v]) => `${k}: ${v}`).join(", ")))).diagnostics).toEqual([]);
+  });
+  it.each(Object.entries(rule))("refuses %s in a Procedure output and a Schema", (keyword, value) => {
+    const schema = `apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  schema: ${object(`${keyword}: ${value}`)}
+`;
+    for (const text of [procedure("{ type: object }", object(`${keyword}: ${value}`)), schema]) {
+      expect(parseManifests(text).diagnostics[0]).toMatchObject({ code: "JSON_SCHEMA_UNSUPPORTED", message: expect.stringContaining(`'${keyword}', which is supported only in View and Procedure input`) });
+    }
   });
 });
 
