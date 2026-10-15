@@ -111,7 +111,11 @@ test("a 4xx refusal says nothing changed and names the field; a 5xx keeps the ge
   const { OperationErrorBox } = await import("../src/ui/page");
   const { ApiError } = await import("../src/lib/api");
   const render = (error: unknown) => renderToStaticMarkup(<PreferencesProvider initialLanguage="en"><OperationErrorBox error={error} /></PreferencesProvider>);
-  const refused = render(new ApiError("400", 400, { error: { code: "INPUT_VALIDATION_FAILED", message: "Value violates minimum.", path: "schemas/products/admin/input/stock" } }));
+  const refused = render(new ApiError("Value violates minimum.", 400, { error: { code: "INPUT_VALIDATION_FAILED", message: "Value violates minimum.", path: "schemas/products/admin/input/stock" } }));
   expect(refused).toContain("nothing was changed"); expect(refused).toContain("stock: Value violates minimum."); expect(refused).not.toContain("ran but failed");
   expect(render(new ApiError("500", 500, { error: { message: "boom" } }))).toContain("ran but failed");
+  // request() appends the current version and what to do to a write conflict; the box keeps it.
+  const conflict = new ApiError("The entry changed; reload it before writing.", 409, { error: { code: "CONFLICT", message: "The entry changed; reload it before writing." } });
+  conflict.message += " The current version is v7. Reload and review your changes before trying again.";
+  expect(render(conflict)).toContain("The current version is v7.");
 });

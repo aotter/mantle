@@ -40,7 +40,8 @@ here instead of repeating it.
 
 ## Site files
 
-- `/sitemap.xml` with every public URL in every language, walking the complete cursor chain of the list View.
+- `/sitemap.xml` with every public URL in every language, walking the complete cursor chain of the list View (the
+  recipes example reads one page of 100 per language and marks the paging as `AGENT:` work).
 - `/robots.txt` with `Disallow: /admin/` and the sitemap URL.
 - `/llms.txt` ([llmstxt.org](https://llmstxt.org)): a title, a one-line summary and a link to each item's Markdown
   alternate.

@@ -10,7 +10,7 @@ import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { d1Identity, d1BootstrapAdmin, postgresBootstrapAdmin, postgresIdentity } from "../src/auth/identity.js";
 import { authHardening, hashEmailOtp, guardGithubLogin, withAuthTasks, retainAuthTask, authSetupIncomplete } from "../src/auth/hardening.js";
-import { d1Adapter, bunSqlAdapter } from "../src/auth/adapter.js";
+import { d1Adapter, postgresAdapter } from "../src/auth/adapter.js";
 import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 import type { Caller, Postgres } from "../src/kernel/contracts.js";
 import { authLoader, resolveCaller } from "../src/auth/caller.js";
@@ -35,7 +35,7 @@ async function app(pg?: SQL, store?: {
     if (!config.db) resources.push(sqlite);
     sqlite.run("PRAGMA foreign_keys=ON");
     let sent = "";
-    const d1 = d1Shim(sqlite), options = { secret, baseURL: "http://localhost/api/auth", session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true }, database: pg ? bunSqlAdapter(pg) : d1Adapter(d1),
+    const d1 = d1Shim(sqlite), options = { secret, baseURL: "http://localhost/api/auth", session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true }, database: pg ? postgresAdapter(pg) : d1Adapter(d1),
         ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], baseURL: "http://localhost" }),
         user: { ...(config.prefix ? { modelName: `${config.prefix}_people`, fields: { createdAt: "joined_at", emailVerified: "verified" } } : {}), additionalFields: (config.prefix ? {} : { githubLogin: { type: "string" as const, required: false } }) as NonNullable<BetterAuthOptions["user"]>["additionalFields"] },
         ...(config.prefix ? { session: { storeSessionInDatabase: true, modelName: `${config.prefix}_sessions` }, account: { modelName: `${config.prefix}_accounts` }, verification: { storeInDatabase: true, modelName: `${config.prefix}_proofs` } } : {}),
@@ -116,7 +116,7 @@ test.skipIf(!pgUrl)("PostgreSQL UUID member search casts only the search express
         const ids = ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"];
         for (const id of ids) await db.unsafe(`INSERT INTO "user" VALUES ($1,$2,'Member',NULL,NULL,true,'2026-02-01T00:00:00.000001Z')`, [id, `${id}@example.test`]);
         const handle = { unsafe: (text: string, values: unknown[]) => { statements.push(text); return db.unsafe(text, values); } };
-        const directory = postgresIdentity(handle as unknown as Postgres, { options: { database: bunSqlAdapter(db), plugins: [adminFunction()], user: { additionalFields: { githubLogin: { type: "string", required: false } } } }, api: { userHasPermission: async () => ({ success: true }) } } as never, admin, new Headers());
+        const directory = postgresIdentity(handle as unknown as Postgres, { options: { database: postgresAdapter(db), plugins: [adminFunction()], user: { additionalFields: { githubLogin: { type: "string", required: false } } } }, api: { userHasPermission: async () => ({ success: true }) } } as never, admin, new Headers());
         expect((await directory.listMembers({ search: "000001" })).items.map(row => row.id)).toEqual([ids[0]!]);
         expect((await directory.listMembers({ search: "MEMBER" })).items.map(row => row.id)).toEqual(ids);
         statements.length = 0;

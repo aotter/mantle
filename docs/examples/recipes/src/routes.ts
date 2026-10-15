@@ -3,7 +3,7 @@ import { store } from "../generated/generated.js";
 import { translationLocales } from "../generated/translations.js";
 import recipePage from "../generated/paged/views/published_recipes.js";
 import translationPage from "../generated/paged/views/published_translations.js";
-import { DEFAULT_LOCALE, LOCALES, type Locale, type Recipe, listHtml, llmsTxt, recipeHtml, recipeMarkdown } from "./pages.js";
+import { DEFAULT_LOCALE, LOCALES, type Locale, type Recipe, listHtml, llmsTxt, recipeHtml, recipeMarkdown, robotsTxt, sitemapXml } from "./pages.js";
 
 // Visitor pages always read as anonymous, even for a signed-in admin, so drafts never reach public HTML.
 const visitor: Caller = { kind: "anonymous" };
@@ -16,18 +16,22 @@ const page = /^\/(zh-TW|en)\/(?:recipes\/([a-z0-9-]+?)(\.md)?)?$/;
  *   /{locale}/recipes/{slug}   detail (HTML: SEO meta, hreflang, JSON-LD Recipe, short answer)
  *   /{locale}/recipes/{slug}.md  Markdown alternate
  *   /llms.txt                  published recipes for AI agents
+ *   /sitemap.xml, /robots.txt  every published URL in every locale; robots keeps crawlers out of /admin/
  */
 export async function appRoutes(request: Request, env: Env, _context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
   const url = new URL(request.url), match = page.exec(url.pathname);
-  if (url.pathname !== "/" && url.pathname !== "/llms.txt" && !match) return undefined;
+  if (!["/", "/llms.txt", "/sitemap.xml", "/robots.txt"].includes(url.pathname) && !match) return undefined;
   if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET, HEAD" } });
   // Absolute links use the configured origin, not the request Host.
   const origin = env.PUBLIC_ORIGIN;
   if (url.pathname === "/") return Response.redirect(`${origin}/${DEFAULT_LOCALE}/`, 302);
 
-  if (url.pathname === "/llms.txt") {
+  if (url.pathname === "/robots.txt") return send(request, robotsTxt(origin), "text/plain; charset=utf-8");
+  if (url.pathname === "/llms.txt" || url.pathname === "/sitemap.xml") {
     const lists = await Promise.all(LOCALES.map(async locale => [locale, await list(env, locale)] as const));
-    return send(request, llmsTxt(origin, lists), "text/plain; charset=utf-8");
+    return url.pathname === "/llms.txt"
+      ? send(request, llmsTxt(origin, lists), "text/plain; charset=utf-8")
+      : send(request, sitemapXml(origin, lists), "application/xml; charset=utf-8");
   }
 
   const locale = match![1] as Locale, slug = match![2], markdown = !!match![3];

@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SQL } from "bun";
-import { d1Adapter, bunSqlAdapter } from "../src/auth/adapter.js";
+import { d1Adapter, postgresAdapter } from "../src/auth/adapter.js";
 import { d1Shim } from "./apps/d1-shim.js";
 import { verifyCookieCaller } from "./auth-cookie-scenarios.js";
 
@@ -21,7 +21,7 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
   const sql = new SQL(url!, { connection: { search_path: schema }, max: 1 });
   try {
     const handle = { unsafe: (text: string, values: unknown[]) => { statements.push(text); return sql.unsafe(text, values); }, begin: sql.begin.bind(sql) };
-    const counts = await verifyCookieCaller(bunSqlAdapter(handle as never), "postgres", async (text, values = []) => [...await sql.unsafe(text, values)], statements);
+    const counts = await verifyCookieCaller(postgresAdapter(handle as never), "postgres", async (text, values = []) => [...await sql.unsafe(text, values)], statements);
     expect(counts["native:fresh"]).toBe(2); expect(counts["renamed:refresh"]).toBe(2);
   } finally { await sql.close(); await admin.unsafe(`DROP SCHEMA "${schema}" CASCADE`); await admin.close(); }
 }, 30000);

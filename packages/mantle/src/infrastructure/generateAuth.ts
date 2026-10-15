@@ -11,11 +11,9 @@ function authSql(instances: readonly BetterAuthOptions[], dialect: "postgres" | 
   const statements = [...new Set(instances.flatMap(options => authSchemaSql(options, dialect)))];
   // CREATE TABLE IF NOT EXISTS would silently keep the first of two different definitions.
   // Identical statements are already merged, so a repeated table name means two different definitions.
-  const tables = new Set<string>();
-  for (const table of statements.map(statement => /^CREATE TABLE IF NOT EXISTS ("(?:[^"]|"")+")/.exec(statement)?.[1]).filter(Boolean)) {
-    if (tables.has(table!)) throw new Error(`Better Auth instances define table ${table} differently; give each instance its own table names (user.modelName, session.modelName, ...).`);
-    tables.add(table!);
-  }
+  const tables = statements.map(statement => /^CREATE TABLE IF NOT EXISTS ("(?:[^"]|"")+")/.exec(statement)?.[1]).filter(Boolean);
+  const twice = tables.find((table, i) => tables.indexOf(table) !== i);
+  if (twice) throw new Error(`Better Auth instances define table ${twice} differently; give each instance its own table names (user.modelName, session.modelName, ...).`);
   return statements;
 }
 export type { GenerateRequest } from "./generate.js";

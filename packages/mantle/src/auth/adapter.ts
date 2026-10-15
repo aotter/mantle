@@ -286,5 +286,3 @@ export function postgresAdapter(sql: Postgres) {
   nativeReaders.set(factory, { exec: executor(sql), param: postgres.param, now: postgres.now });
   return factory;
 }
-/** @deprecated The same adapter under its earlier name; use `postgresAdapter`. */
-export const bunSqlAdapter = postgresAdapter;
