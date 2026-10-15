@@ -1,4 +1,5 @@
 import type * as React from "react";
+import { MAX_BADGE_VIEWS } from "./transport";
 import type { AdminLayers, SlotComponent } from "./slots";
 import type { BrandProps, CellProps, CollectionListProps, HeaderProps, HomeProps, InputProps, ListActionsProps, RecordActionsProps, RecordAsideProps, RecordViewProps, ShellProps, SidebarProps, SurfaceProp } from "./slot-props";
 
@@ -122,9 +123,6 @@ export type AdminNavTarget<T extends AdminTypes = AdminTypes> =
 
 /** A count shown on a sidebar item: `field` of the one row an aggregate admin View returns, typically one with `uiSchema.nav.hidden: true`. */
 export type AdminBadge<T extends AdminTypes = AdminTypes> = { [V in Views<T>]: { readonly view: V; readonly field: [keyof T["views"][V]["row"]] extends [never] ? string : keyof T["views"][V]["row"] & string } }[Views<T>];
-
-/** At most this many distinct Views feed badges: `GET /admin/api/view-batch` reads that many in one request. */
-export const MAX_BADGE_VIEWS = 20;
 
 /**
  * A sidebar entry added beside the ones `uiSchema.nav` produces. Several items may lead to one resource with different

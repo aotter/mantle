@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MAX_BADGE_VIEWS, type AdminBadge, type AdminTypes } from "./define-admin";
+import type { AdminBadge, AdminTypes } from "./define-admin";
 import { useAdminContext } from "./hooks-context";
-import { createMcpAppTransport } from "./transport";
+import { MAX_BADGE_VIEWS, createMcpAppTransport } from "./transport";
 
 export { useOpenLink } from "./slots";
 

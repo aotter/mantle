@@ -5,6 +5,9 @@ import type { AdminEntry, AdminMe, BadgeAnswer, AdminTransport, McpAppTransportO
 
 type Row = Readonly<Record<string, unknown>>;
 
+/** At most this many distinct Views feed badges: `GET /admin/api/view-batch` reads that many in one request. */
+export const MAX_BADGE_VIEWS = 20;
+
 const unavailable = { status: "unavailable" } as const;
 const ok = <T>(data: T): Reply<T> => ({ status: "ok", data });
 
