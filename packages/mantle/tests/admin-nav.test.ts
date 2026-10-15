@@ -40,8 +40,11 @@ test("generate refuses placement on a Schema with no sidebar entry of its own", 
   expect(codes(await run([posts, locales({ order: 1 })]))).toEqual(["SCHEMA_UI_INVALID schemas/postlocales/uiSchema/nav/order"]);
 });
 
-test("generate reports bad navGroups entries and extension page orders instead of throwing", async () => {
+test("generate reports a non-object navGroups entry instead of throwing", async () => {
   expect(codes(await run([schema("quotes")], [null, 1]))).toEqual(["SCHEMA_UI_INVALID admin/navGroups/0", "SCHEMA_UI_INVALID admin/navGroups/1"]);
+});
+
+test("generate refuses a non-integer extension page order", async () => {
   for (const group of ["more", "settings"]) expect(codes(await run([schema("quotes")], [], [{ id: "tools", contributes: { pages: [{ id: "browser", title: "Browser", role: "admin", nav: { group, order: 1.5 } }] } }])))
     .toEqual(["UI_EXTENSION_INVALID admin/extensions/tools/pages/browser/nav/order"]);
 });
