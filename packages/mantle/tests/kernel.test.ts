@@ -26,3 +26,11 @@ test("SQLite rollback failure retains both errors and signals an unknown outcome
   }
   expect(calls).toEqual(["BEGIN IMMEDIATE", "ROLLBACK"]);
 });
+
+test("a PostgreSQL handle without begin runs single statements and refuses a multi-statement Procedure clearly", async () => {
+  const { procedure } = await import("../src/kernel/driver/postgres.js");
+  const rows = Object.assign([{ id: 1 }], { count: 1 });
+  const tx = { unsafe: async () => rows } as never;
+  expect(await procedure(tx, [{ sql: "SELECT 1", binds: [] }], "p")).toEqual([rows]);
+  await expect(procedure(tx, [{ sql: "SELECT 1", binds: [] }, { sql: "SELECT 2", binds: [] }], "p")).rejects.toThrow(/cannot begin another/);
+});

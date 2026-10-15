@@ -57,6 +57,8 @@ export async function procedure(db: Postgres, steps: readonly Bound[], path: str
 export async function transaction<T>(db: Postgres, fn: (tx: Postgres) => Promise<T>, options: TransactionOptions = {}, path = "store/transaction"): Promise<T> {
   guard(db);
   if (transactions.has(db)) throw new Error("Nested transactions are not supported.");
+  // a transaction handle the app opened (postgres.js types it without `begin`) only suits reads and single statements
+  if (typeof db.begin !== "function") throw new Error("This PostgreSQL handle is a transaction the app opened and cannot begin another: open the transaction with store(pool, caller).transaction and call Procedures through its tx.");
   let committing = false;
   const state: { outer?: object; handle?: object } = { outer: db };
   try {
