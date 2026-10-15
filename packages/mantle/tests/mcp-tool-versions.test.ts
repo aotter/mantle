@@ -158,7 +158,7 @@ test("the kernel wired as the templates wire it reports the served catalogue's v
   const options={db:()=>db,caller:()=>({kind:"anonymous" as const})},kernel=serveMcp(tools,options),generated=mcp(options);
   for(const mode of eras){
    const client=await connect(kernel,mode),version=client.getServerVersion()!.version;
-   expect(version).toBe(catalogue(tools));expect(version).not.toBe("0.2.0");
+   expect(version).toBe(catalogue(tools));expect(version).not.toBe("0.2.0");expect(client.getServerCapabilities()?.tools).toEqual({listChanged:false});
    expect(await client.callTool({name:"gone",arguments:{}}).then(()=>"",(error:Error)=>error.message)).toContain(`(catalogue version ${version}).`);
    await client.close();
    const viaGenerated=await connect(generated,mode);expect(viaGenerated.getServerVersion()!.version).toBe(version);await viaGenerated.close();

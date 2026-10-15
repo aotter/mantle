@@ -256,8 +256,8 @@ shape) answer first, so a malformed request gets the same refusal whatever tool
 it names. Unless `serverInfo.version` is given, the kernel's `mcp()` sets it to
 a hash of the `surface:name:version` of every tool the endpoint serves, before
 per-caller filtering, so `/mcp` and `/mcp/admin` each report their own catalogue
-version and it changes whenever a tool's definition does, however the tools are
-wired.
+version, and it changes when a generated tool's definition changes or a tool is
+added or removed, however the tools are wired.
 
 `POST /admin/api/webmcp/{tool}` returns `{ output, version }`. A refusal's
 diagnostic adds `toolVersion`, and `inputSchema` unless it is an authorization
