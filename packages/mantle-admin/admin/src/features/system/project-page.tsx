@@ -17,7 +17,7 @@ export function ProjectPage({ path }: { path: string }): React.ReactElement {
   return (
     <section aria-label={title}>
       <PageHeader title={title} />
-      {page.element}
+      <React.Fragment key={page.path}>{page.element}</React.Fragment>
     </section>
   );
 }

@@ -31,8 +31,8 @@ const EntryEditView = React.lazy(() => import("../features/content/entry-edit-vi
 const ParentEntryWorkbench = React.lazy(() => import("../features/content/parent-entry-workbench").then(module => ({ default: module.ParentEntryWorkbench })));
 const MediaLibraryView = React.lazy(() => import("../features/media/media-library-view").then(module => ({ default: module.MediaLibraryView })));
 const OperationsView = React.lazy(() => import("../features/ops/operations-view").then(module => ({ default: module.OperationsView })));
-const ProjectPage = React.lazy(() => import("../features/system/project-page").then(module => ({ default: module.ProjectPage })));
 const ViewPage = React.lazy(() => import("../features/ops/view-page").then(module => ({ default: module.ViewPage })));
+import { ProjectPage } from "../features/system/project-page";
 const PreferencesView = React.lazy(() => import("../features/system/preferences-view").then(module => ({ default: module.PreferencesView })));
 const SettingsView = React.lazy(() => import("../features/system/settings-view").then(module => ({ default: module.SettingsView })));
 const AdminView = React.lazy(() => import("../features/system/admin-view").then(module => ({ default: module.AdminView })));
@@ -218,11 +218,11 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
     return <React.Suspense fallback={<GateLoading />}><DeveloperWorkspace path={path} /></React.Suspense>;
   }
 
-  const pageMatch = path.match(/^\/admin\/p\/([^/]+)\/?$/);
+  const pageMatch = path.match(/^\/admin\/p\/([a-z0-9-]+)\/?$/);
   if (pageMatch) {
     return (
       <AuthenticatedLayout>
-        <React.Suspense fallback={<GateLoading />}><ProjectPage path={decodeURIComponent(pageMatch[1]!)} /></React.Suspense>
+        <ProjectPage path={pageMatch[1]!} />
       </AuthenticatedLayout>
     );
   }

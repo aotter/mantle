@@ -20,9 +20,16 @@ describe("@aotter/mantle-admin/app", () => {
     expect(Object.keys(app).sort()).toEqual(["AdminLink", "MantleAdmin", "defineAdmin"]);
     expect(app.defineAdmin({})).toEqual({ meta: {}, pages: [], nav: { groups: {}, items: [] }, layers: {} });
     const page = (path: string) => ({ path, title: "T", element: null });
-    expect(() => app.defineAdmin({}, { pages: [page("Budget")] })).toThrow("lowercase letters, digits and hyphens");
-    expect(() => app.defineAdmin({}, { pages: [page("a/b")] })).toThrow("lowercase letters, digits and hyphens");
-    expect(() => app.defineAdmin({}, { pages: [page("budget"), page("budget")] })).toThrow("two pages have the path 'budget'");
+    const errors: string[] = [], log = console.error;
+    console.error = (message: string) => { errors.push(message); };
+    try {
+      expect(app.defineAdmin({}, { pages: [page("Budget"), page("a/b"), page("ok"), page("ok")] }).pages.map((p: { path: string }) => p.path)).toEqual(["ok"]);
+    } finally { console.error = log; }
+    expect(errors).toEqual([
+      "defineAdmin: page path 'Budget' must be lowercase letters, digits and hyphens; the page is skipped.",
+      "defineAdmin: page path 'a/b' must be lowercase letters, digits and hyphens; the page is skipped.",
+      "defineAdmin: page path 'ok' is already used by an earlier page; the page is skipped.",
+    ]);
     expect(app.defineAdmin({}, { pages: [page("budget-2026")] }).pages).toHaveLength(1);
   });
 

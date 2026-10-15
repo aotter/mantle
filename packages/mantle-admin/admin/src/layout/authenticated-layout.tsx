@@ -261,7 +261,7 @@ export function buildNavGroups(
   for (const page of project?.pages ?? []) {
     if (page.nav) place(page.nav.group, page.nav.order, {
       title: resolveLocalizedText(page.title, language, canonical) ?? page.path,
-      url: `/admin/p/${encodeURIComponent(page.path)}`,
+      url: `/admin/p/${page.path}`,
       icon: page.icon ?? FileText,
     });
   }

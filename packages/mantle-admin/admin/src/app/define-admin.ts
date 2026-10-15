@@ -140,7 +140,7 @@ export interface AdminNavItem<T extends AdminTypes = AdminTypes> {
  * authorized on the server, by the View or Procedure it calls.
  */
 export interface AdminPage<T extends AdminTypes = AdminTypes> {
-  /** One segment of lowercase letters, digits and hyphens. */
+  /** One segment of lowercase letters, digits and hyphens, unique among the pages; a page that breaks this is skipped with a console error. */
   readonly path: string;
   readonly title: AdminText;
   readonly element: React.ReactNode;
@@ -204,10 +204,11 @@ export function defineAdmin<T extends AdminTypes>(
   for (const components of [...(config.plugins ?? []).map(plugin => plugin.components), config.components]) {
     for (const [name, component] of Object.entries(components ?? {})) if (component) (layers[name] ??= []).push(component as SlotComponent<never>);
   }
-  const pages = (config.pages ?? []) as readonly AdminPage[];
-  for (const [i, page] of pages.entries()) {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(page.path)) throw new Error(`defineAdmin: page path '${page.path}' must be lowercase letters, digits and hyphens.`);
-    if (pages.findIndex(other => other.path === page.path) !== i) throw new Error(`defineAdmin: two pages have the path '${page.path}'.`);
-  }
+  // A bad page is skipped, not thrown: this runs at module load in the browser, where a throw would blank all of Admin.
+  const pages = ((config.pages ?? []) as readonly AdminPage[]).filter((page, i, all) => {
+    const problem = !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(page.path) ? "must be lowercase letters, digits and hyphens" : all.findIndex(other => other.path === page.path) !== i ? "is already used by an earlier page" : "";
+    if (problem) console.error(`defineAdmin: page path '${page.path}' ${problem}; the page is skipped.`);
+    return !problem;
+  });
   return { meta: meta as AdminMeta, pages, nav: { groups: config.nav?.groups ?? {}, items: (config.nav?.items ?? []) as unknown as readonly AdminNavItem[] }, layers, ...(config.mcp ? { mcp: config.mcp } : {}) };
 }

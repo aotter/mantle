@@ -9,4 +9,5 @@ import { admin } from "../generated/admin-client.js";
  */
 export default defineAdmin(admin, {
   nav: { groups: { approvals: { title: { en: "Approvals", "zh-TW": "簽核" }, order: 5 } } },
+  pages: [{ path: "guide", title: "Approver guide", element: <p>Approve a request when the amount fits the budget; reject it with a reason otherwise.</p>, nav: { group: "approvals", order: 9 } }],
 });

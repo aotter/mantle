@@ -358,7 +358,7 @@ what an extension contributed. Alpha applications that used it change as follows
 | Handlers `api`, `settings` and `actions.run`, and the `/admin/api/x/<extension>/*` routes | Server work is a Procedure (writes), a View (reads) or an application route. Authorization stays on the server: a Procedure or View carries its own `requires`. |
 | `extensionBindings`, `extensionOptions`, `@aotter/mantle-admin/server/extensions`, the `extensions` and `navGroups` options of `admin()` and the `extensions` field of `/admin/api/site` | Delete them. |
 | The import map and `shared/*.js` shims in the built Admin | None: the application's bundle holds the one React there is. Drop any CSP hash for the import map. |
-| Extension pages (`/admin/x/<extension>/<page>`) | `defineAdmin({ pages: [{ path, title, element, nav }] })` at `/admin/p/<path>`; `nav: { group, order? }` replaces the page's `nav`. |
+| Extension pages (`/admin/x/<extension>/<page>`) | `defineAdmin({ pages: [{ path, title, element, nav }] })` at `/admin/p/<path>`; `nav: { group, order? }` replaces the page's `nav`, in a built-in group or one the manifest uses (an extension's own `navGroups` entry that no Schema or View uses cannot hold a page). A page has no `role`: every member sees it, so gate inside the element with `useMe()`; the `requires` of the View or Procedure it calls still decides what works. |
 | Extension settings pages (declared form, `settings` handlers) | A page in `pages` whose element reads and saves through a View and a Procedure that hold the settings, or an application route. |
 
 A manifest that still names a removed key fails `mantle generate` with `SCHEMA_UI_INVALID` or `VIEW_UI_INVALID` at the
@@ -414,9 +414,12 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
   hiding one changes no permission, because the target's own route still decides.
 - `pages` adds a page of the application's own inside Admin's shell: `{ path, title, element, icon?, nav? }`. `path` is one
   segment of lowercase letters, digits and hyphens, and the page is at `/admin/p/<path>`. `nav: { group, order? }` places it in
-  the sidebar with the other entries of that group (the same group ids as `nav.items`); without `nav` it keeps its route and
-  stays out of the sidebar. A page's `element` reads through the [data hooks](#typed-data-hooks) and writes through
+  the sidebar with the other entries of that group (the same group ids as `nav.items`: a built-in group, or one that a manifest
+  `uiSchema.nav.group` uses; `tsc` refuses any other); without `nav` it keeps its route and stays out of the sidebar. A page has
+  no `role`: every Admin member sees it, so hide a part of it with `useMe()` and rely on the `requires` of what it calls. A page's `element` reads through the [data hooks](#typed-data-hooks) and writes through
   Procedures; showing a page grants nothing, because each View or Procedure it calls authorizes on the server.
+
+`src/admin.tsx` is JSX: the app-shell template sets `jsx: react-jsx` and depends on `react` and `@types/react`; add `lucide-react` (or another icon package) yourself if you use icons.
 
 ```tsx
 // src/admin.tsx
