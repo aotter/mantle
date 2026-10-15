@@ -4,7 +4,7 @@ import { invalidateAfterWrite } from "../lib/after-write";
 
 export const queryClient = new QueryClient({
   mutationCache: new MutationCache({
-    onSuccess: () => invalidateAfterWrite(queryClient),
+    onSuccess: (): void => invalidateAfterWrite(queryClient),
   }),
   defaultOptions: {
     queries: {
