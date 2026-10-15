@@ -18,6 +18,7 @@ import type { AdminDefinition } from "./define-admin";
  */
 export function AdminRoot(props: { admin: AdminDefinition; preview?: boolean }): React.ReactElement {
   const [initialLanguage] = React.useState(readInitialLanguage);
+  const projectNav = React.useMemo(() => ({ ...props.admin.nav, pages: props.admin.pages }), [props.admin]);
   // Nothing paints until the stored or browser language has loaded; a failed load falls back to English.
   return (
     <React.Suspense fallback={null}>
@@ -28,7 +29,7 @@ export function AdminRoot(props: { admin: AdminDefinition; preview?: boolean }):
               <AdminHooksProvider meta={props.admin.meta} transport={browserTransport} layers={props.admin.layers}>
                 <TooltipProvider>
                   <ConfirmProvider>
-                    <ProjectNavProvider nav={props.admin.nav}>
+                    <ProjectNavProvider nav={projectNav}>
                       <AdminApp preview={props.preview ?? false} />
                       <AdminToaster />
                     </ProjectNavProvider>

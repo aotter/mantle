@@ -65,7 +65,7 @@ site/media/identity routes with `/server/site`; Admin's resolver accepts only a
 fresh admin cookie session. The API router handles `/admin/api` and returns
 `undefined` for other paths, so the application must serve the SPA shell for
 `/admin` and client routes, including `/admin/sign-in`, after mounting auth.
-Keep missing `/admin/assets/*` as 404 responses. The built shell has no inline
+Keep missing `/admin/assets/*` and `/admin/shared/*` as 404 responses. The built shell has no inline
 script to authorize. The API cannot serve or rewrite assets.
 
 All 22 languages are retained. English is the fallback in the entry; the saved

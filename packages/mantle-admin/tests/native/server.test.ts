@@ -38,6 +38,8 @@ test("there are no extension routes: /x/* is not an Admin API route",async()=>{
   const f=fixture();
   for(const [path,method] of [["/x/audit/api/deep","GET"],["/x/audit/actions/run","POST"],["/x/audit/settings/policy","GET"]])expect([path,(await f.ask(path,method))?.status]).toEqual([path,404]);
   expect(f.providers()).toBe(0);
+  const site=await(await f.ask("/site"))?.json();
+  expect(site).toMatchObject({capabilities:expect.any(Object)});for(const removed of ["extensions","navGroups"])expect(site).not.toHaveProperty(removed);
 });
 test("generated Procedure callbacks retain native OCC locks, reject system fields and reuse RETURNING row",async()=>{
   const row={id:"a",version:"9007199254740993",created_at:"2026-01-01T00:00:00Z",updated_at:"2026-01-01T00:00:00Z",title:"old"};let reads=0,writes=0,lock:unknown;

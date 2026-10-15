@@ -134,6 +134,22 @@ export interface AdminNavItem<T extends AdminTypes = AdminTypes> {
   readonly to: AdminNavTarget<T>;
 }
 
+/**
+ * A page of the application's own, inside Admin's shell at `/admin/p/<path>`. `nav` places it in the sidebar beside the items
+ * `uiSchema.nav` produces, in the same groups as `nav.items`. Showing a page grants nothing: what it reads or writes is
+ * authorized on the server, by the View or Procedure it calls.
+ */
+export interface AdminPage<T extends AdminTypes = AdminTypes> {
+  /** One segment of lowercase letters, digits and hyphens. */
+  readonly path: string;
+  readonly title: AdminText;
+  readonly element: React.ReactNode;
+  /** Any icon component; the default is a page. */
+  readonly icon?: React.ElementType;
+  /** Without `nav` the page keeps its route and stays out of the sidebar. */
+  readonly nav?: { readonly group: BuiltInNavGroup | CustomGroup<T>; readonly order?: number };
+}
+
 /** Declare a project group for every `uiSchema.nav.group` the manifest uses; `tsc` refuses a missing one, and refuses Admin's own group ids. */
 export type AdminNavGroups<T extends AdminTypes = AdminTypes> =
   { readonly [K in RequiredGroup<T>]: AdminNavGroup } & { readonly [id: string]: AdminNavGroup } & { readonly [K in BuiltInNavGroup]?: never };
@@ -154,6 +170,8 @@ export type AdminConfig<T extends AdminTypes = AdminTypes> = AdminOptions<T> & (
 export interface AdminOptions<T extends AdminTypes = AdminTypes> {
   /** The sidebar: groups the manifest places items in, and items of the application's own. `uiSchema.nav` stays the default. */
   readonly nav?: AdminNav<T>;
+  /** Pages of the application's own, in Admin's shell. */
+  readonly pages?: readonly AdminPage<T>[];
   /** Replace or wrap regions of Admin; applied after `plugins`, so these are outermost. */
   readonly components?: AdminComponents<T>;
   /** Fragments applied in order: each one's `renderDefault` is the plugin before it, or the built-in component. */
@@ -167,6 +185,8 @@ export interface AdminDefinition {
   readonly meta: AdminMeta;
   /** The sidebar groups and items, as `defineAdmin` was given them. */
   readonly nav: { readonly groups: { readonly [id: string]: AdminNavGroup }; readonly items: readonly AdminNavItem[] };
+  /** The application's own pages, as `defineAdmin` was given them. */
+  readonly pages: readonly AdminPage[];
   /** The components of each slot, nearest the built-in first. */
   readonly layers: AdminLayers;
   readonly mcp?: { readonly csp?: AdminMcpCsp };
@@ -184,5 +204,10 @@ export function defineAdmin<T extends AdminTypes>(
   for (const components of [...(config.plugins ?? []).map(plugin => plugin.components), config.components]) {
     for (const [name, component] of Object.entries(components ?? {})) if (component) (layers[name] ??= []).push(component as SlotComponent<never>);
   }
-  return { meta: meta as AdminMeta, nav: { groups: config.nav?.groups ?? {}, items: (config.nav?.items ?? []) as unknown as readonly AdminNavItem[] }, layers, ...(config.mcp ? { mcp: config.mcp } : {}) };
+  const pages = (config.pages ?? []) as readonly AdminPage[];
+  for (const [i, page] of pages.entries()) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(page.path)) throw new Error(`defineAdmin: page path '${page.path}' must be lowercase letters, digits and hyphens.`);
+    if (pages.findIndex(other => other.path === page.path) !== i) throw new Error(`defineAdmin: two pages have the path '${page.path}'.`);
+  }
+  return { meta: meta as AdminMeta, pages, nav: { groups: config.nav?.groups ?? {}, items: (config.nav?.items ?? []) as unknown as readonly AdminNavItem[] }, layers, ...(config.mcp ? { mcp: config.mcp } : {}) };
 }

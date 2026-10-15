@@ -264,6 +264,14 @@ describe("sidebar placement (uiSchema.nav and defineAdmin nav)", () => {
       expect(shape(build(nav)).slice(1)).toEqual([["Approvals", ["Waiting"]], ["Content", ["posts"]], ["Records", ["requests"]], ["Reports", ["pending"]], ["New desk", ["Requests"]]]);
     });
 
+    it("places an application page in its group by order, beside the items; a page without nav stays out of the sidebar", () => {
+      const nav = project({ groups: { approvals: { title: "Approvals" } }, items: [{ group: "approvals", title: "Waiting", order: 1, to: { view: "pending" } }],
+        pages: [{ path: "budget", title: { en: "Budget" }, element: null, nav: { group: "approvals", order: 2 } }, { path: "hidden", title: "Hidden", element: null }] });
+      const groups = build(nav);
+      expect(links(groups, "Approvals")!.map((l) => [l.title, l.url])).toEqual([["Waiting", "/admin/views/pending"], ["Budget", "/admin/p/budget"]]);
+      expect(JSON.stringify(groups)).not.toContain("/admin/p/hidden");
+    });
+
     it("leads items to a collection preset to one field's value, or to a View with its input", () => {
       const nav = project({ items: [
         { group: "content", title: "Rejected", to: { collection: "requests", filter: { status: "rejected" } } },

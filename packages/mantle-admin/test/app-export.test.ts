@@ -6,12 +6,24 @@ import { describe, expect, it } from "vitest";
 const pkg = resolve(import.meta.dirname, "..");
 
 describe("@aotter/mantle-admin/app", () => {
+  it("no longer exports the extension mechanism", () => {
+    const exports = Object.keys(JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")).exports);
+    expect(exports).not.toContain("./extension");
+    expect(exports).not.toContain("./server/extensions");
+    expect(exports).toContain("./app");
+  });
+
   it("publishes defineAdmin and MantleAdmin from the built library", async () => {
     const target = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")).exports["./app"];
     expect(target).toEqual({ types: "./dist/admin-app/index.d.ts", import: "./dist/admin-app/index.js" });
     const app = await import(resolve(pkg, target.import));
     expect(Object.keys(app).sort()).toEqual(["AdminLink", "MantleAdmin", "defineAdmin"]);
-    expect(app.defineAdmin({})).toEqual({ meta: {}, nav: { groups: {}, items: [] }, layers: {} });
+    expect(app.defineAdmin({})).toEqual({ meta: {}, pages: [], nav: { groups: {}, items: [] }, layers: {} });
+    const page = (path: string) => ({ path, title: "T", element: null });
+    expect(() => app.defineAdmin({}, { pages: [page("Budget")] })).toThrow("lowercase letters, digits and hyphens");
+    expect(() => app.defineAdmin({}, { pages: [page("a/b")] })).toThrow("lowercase letters, digits and hyphens");
+    expect(() => app.defineAdmin({}, { pages: [page("budget"), page("budget")] })).toThrow("two pages have the path 'budget'");
+    expect(app.defineAdmin({}, { pages: [page("budget-2026")] }).pages).toHaveLength(1);
   });
 
   it("publishes the data hooks from a chunk shared with the app library, so both see one Admin context", async () => {
@@ -96,6 +108,9 @@ describe("@aotter/mantle-admin/app", () => {
       '    { group: "billing", title: "All", to: { collection: "requests" } },',
       "  ],",
       "} });",
+      "export const withPage: AdminDefinition = defineAdmin(navMeta, { nav: { groups: { approvals: { title: \"A\" }, billing: { title: \"B\" } } }, pages: [{ path: \"budget\", title: \"Budget\", element: null, nav: { group: \"billing\", order: 1 } }, { path: \"plain\", title: \"Plain\", element: null }] });",
+      '// @ts-expect-error a page is placed in a group the manifest or Admin has',
+      'defineAdmin(navMeta, { nav: { groups: { approvals: { title: "A" }, billing: { title: "B" } } }, pages: [{ path: "x", title: "X", element: null, nav: { group: "billng" } }] });',
       "// a manifest that uses only Admin's groups needs no declaration; the config stays optional",
       "export const plain: AdminDefinition = defineAdmin(typed);",
       '// @ts-expect-error a group the manifest places items in is not declared',

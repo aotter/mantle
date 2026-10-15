@@ -5,6 +5,7 @@ import {
   BookOpenText,
   Database,
   Folder,
+  FileText,
   Globe,
   Home,
   Images,
@@ -254,6 +255,14 @@ export function buildNavGroups(
       title: resolveLocalizedText(v.title, language, canonical) ?? fieldLabel(v.name),
       icon: BarChart3,
       url: `/admin/views/${encodeURIComponent(v.name)}`,
+    });
+  }
+  // the application's own pages (`defineAdmin` `pages`) that ask for a place; the others keep their route
+  for (const page of project?.pages ?? []) {
+    if (page.nav) place(page.nav.group, page.nav.order, {
+      title: resolveLocalizedText(page.title, language, canonical) ?? page.path,
+      url: `/admin/p/${encodeURIComponent(page.path)}`,
+      icon: page.icon ?? FileText,
     });
   }
   // the application's own items (`defineAdmin` `nav.items`): only those whose collection or View this caller can see, which
