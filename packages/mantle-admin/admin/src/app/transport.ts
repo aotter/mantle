@@ -95,7 +95,7 @@ export function createMcpAppTransport({ call, host }: McpAppTransportOptions): A
       const args = { ...input, ...(page.limit !== undefined ? { limit: page.limit } : {}), ...(page.cursor ? { cursor: page.cursor } : {}) };
       return invoke(live, toolName(name), args, output => {
         // the tool returns the SQL output names; the browser's route renames some, and the types are the browser's
-        const rename = (row: Row): Row => rowNames ? Object.fromEntries(Object.entries(row).map(([key, value]) => [Object.hasOwn(rowNames, key) ? rowNames[key]! : key, value])) : row;
+        const rename = (row: Row): Row => rowNames ? Object.fromEntries(Object.entries(row).map(([key, value]) => [Object.prototype.hasOwnProperty.call(rowNames, key) ? rowNames[key]! : key, value])) : row;
         const rows = isRecord(output) && Array.isArray(output["rows"]) ? output["rows"].filter(isRecord).map(rename) : [];
         return { rows, ...(isRecord(output) && typeof output["nextCursor"] === "string" ? { nextCursor: output["nextCursor"] } : {}) };
       });
