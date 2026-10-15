@@ -146,6 +146,96 @@ says which. `@aotter/mantle-admin/hooks` also exports the same hooks untyped, fo
 `@aotter/mantle-admin/app` and `/hooks`, and so `generated/admin-client.ts`, which imports them, run in the browser only:
 `mantle bundle` refuses them in the Worker's startup graph.
 
+## Customising Admin
+
+An application replaces or wraps regions of Admin from `src/admin.tsx`. The entry passes the generated metadata and, beside it,
+what to change; the built-in entry needs none of this.
+
+```tsx
+import { defineAdmin } from "@aotter/mantle-admin/app";
+import { admin } from "../generated/admin-client.js";
+
+export default defineAdmin(admin, {
+  components: {
+    // wrap: the built-in page below your own section
+    Home: (props) => <><MyQueue />{props.renderDefault(props)}</>,
+    // change a prop: the sidebar with a footer
+    Sidebar: (props) => props.renderDefault({ ...props, footer: <HelpLink /> }),
+    // replace: one value in the requests list, and the control of one field in its record form
+    "cell:requests.amount": ({ value }) => <Money cents={value} />,
+    "input:products.color": ({ value, onChange }) => <ColorPicker value={value} onChange={onChange} />,
+    "record.aside:requests": ({ entry }) => <RequestTimeline id={entry.id} />,
+  },
+  plugins: [auditTrail()],
+});
+```
+
+Every component receives the props of the built-in one and `renderDefault(props)`, which renders what it replaces: pass the
+props you were given (spread them to change some), or ignore it to replace the region. A slot is named by a key that `tsc`
+derives from the generated metadata, so a misspelt collection, field or View column is a type error. In a key `<schema>` is a
+collection's name, `<field>` one of its fields and `<column>` a column of an admin View (names contain no `.`).
+
+| Slot | Surface | Props (besides `renderDefault`) |
+| --- | --- | --- |
+| `Shell` | browser | `children`, `nav` (sidebar groups), `brand` |
+| `Sidebar` | browser | `groups`, `brand`, `footer?` (above the signed-in user) |
+| `Header` | browser | `title?`, `actions?` (before the built-in controls) |
+| `Brand` | browser | `title`, `image?`, `href?` |
+| `Home` | browser | `collections`, `site` (what the page shows; the built-in page loads its own data) |
+| `CollectionList` | browser | `collection`, `query` (the search string) |
+| `RecordView` | both | `collection`, `entryId`, `surface` |
+| `record.aside:<schema>` | both | `collection`, `entry`, `surface` |
+| `record.actions:<schema>` | both | `collection`, `entry`, `surface` |
+| `list.actions:<schema>` | browser | `collection`, `selection` (empty in the toolbar, the selected ids in the bulk bar) |
+| `cell:<schema>.<field>` | both | `value`, `row`, `property`, `surface` |
+| `cell:view:<view>.<column>` | both | `value`, `row`, `property`, `surface` |
+| `input:<schema>.<field>` | both | `value`, `onChange`, `readOnly`, `property`, `surface` |
+
+`record.aside:` and `record.actions:` render beside the built-in extension panels and actions, which they do not replace. A
+record form's top-level fields go through `input:`; a View's parameters and a Procedure's inputs do not. A read-only field
+(a bound or `readOnly` property) has no `input:` component, and `readOnly` tells yours that the caller cannot edit the
+record. A View column that reads a Schema field also goes through that field's `cell:` component, with the column's own
+`cell:view:` component outside it. The developer workspace (`/admin/dev`) is Admin's own tool and is not a slot.
+
+`plugins` are fragments of `components`, applied in order: each one's `renderDefault` is the plugin before it, the first
+plugin's is the built-in component, and the application's own `components` are outermost. A plugin is
+`{ components: { ... } }`, so one can be written once and shared.
+
+`mcp: { csp: { connectDomains, resourceDomains, frameDomains, baseUriDomains } }` is accepted and typed, and nothing reads it
+yet: it will name what Admin's MCP App may load once that App is built from your entry.
+
+Authorization is unchanged by any of this. A component that shows or hides something grants or denies nothing; the server
+checks every route, View and Procedure.
+
+### Components that also render in an MCP host
+
+A slot marked both renders in Admin's browser page and in an MCP host (`surface` is `"browser"` or `"mcp-app"`). A component
+for one of these slots must:
+
+1. read and write data only through the hooks, not `fetch`, and keep no login state in `document.cookie` or `localStorage`;
+2. link with `<AdminLink href>` or open URLs with `useOpenLink()` (from `@aotter/mantle-admin/app` and `/hooks`),
+   never `window.open` or `target="_blank"`, which a host's sandbox blocks. In a host `<AdminLink>` opens an http(s) URL
+   through `ui/open-link` and shows any other href, such as an `/admin/...` path, as plain text, as it has no origin there;
+3. assume no width: a host sets it;
+4. render something on both surfaces when it branches on `surface` or `useAdminSurface()`.
+
+`useOpenLink()` resolves `false` for anything but an http(s) URL, and when a host cannot or refuses to open it.
+
+### Hot reload while you work on `src/admin.tsx`
+
+By default `wrangler dev` rebuilds Admin with `mantle bundle` when its sources change; reload the page. For hot module
+replacement, add a Vite config yourself; nothing in a template enables it:
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import { adminVitePlugin } from "@aotter/mantle-admin/build";
+export default defineConfig({ plugins: [adminVitePlugin({ entry: "src/admin.tsx" })] });
+```
+
+Run `vite` beside `wrangler dev` and open `http://localhost:5173/admin/`. The plugin proxies `/admin/api` and `/api/auth` to
+`http://localhost:8787` (`target` changes it), so the service must accept the dev server's origin for sign-in.
+
 ## Generated reads and writes
 
 `adminBindings()` returns static metadata, schemas, views, operations and the

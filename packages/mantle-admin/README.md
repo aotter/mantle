@@ -76,19 +76,22 @@ Rich-text editors and the complete developer workspace load on demand.
 
 ## App library
 
-`@aotter/mantle-admin/app` exports `defineAdmin(meta)` and `<MantleAdmin admin>`.
+`@aotter/mantle-admin/app` exports `defineAdmin(meta, { components, plugins, mcp })`, `<AdminLink>` and `<MantleAdmin admin>`.
 An Admin entry default-exports `defineAdmin(...)`; `<MantleAdmin>` is the root
 for an app that mounts Admin inside its own providers, and it renders once the
 stored or browser language has loaded. The built-in entry is `defineAdmin({})`:
 with no generated metadata, Admin reads its collections, Views and operations
 from `/admin/api` at runtime. The application builds that entry when it has no `admin.tsx`.
+`components` replace or wrap named regions of Admin (`Shell`, `Sidebar`, `Home`, `cell:<schema>.<field>`, `input:<schema>.<field>`, ...)
+through `renderDefault`, and `plugins` compose such fragments; see the Native Admin guide, "Customising Admin".
+`@aotter/mantle-admin/build` also exports the optional `adminVitePlugin()` for hot reload in a Vite dev server.
 Admin extensions load only in Admin built by `buildAdmin`: its page supplies the
 import map and shared modules that extension modules resolve `react` and the kit
 through. An app that renders `<MantleAdmin>` in its own build has neither, so
 extension client modules fail to load there.
 
 `@aotter/mantle-admin/hooks` exports the data hooks (`useView`, `useOperation`, `useEntries`, `useEntry`,
-`useCollectionTotal`, `useMe`, `useHost`, `useAdminSurface`) and `createAdminHooks<Types>()`, which `mantle generate --admin` calls
+`useCollectionTotal`, `useMe`, `useHost`, `useAdminSurface`, `useOpenLink`) and `createAdminHooks<Types>()`, which `mantle generate --admin` calls
 in `generated/admin-client.ts` to bind them to the application's View, collection and operation types. They call only the
 caller-authorized `/admin/api` routes (or, in an MCP host, the admin MCP tools through `mcpAppTransport`), read a 403 and a 404
 as `unavailable`, and share Admin's query cache. Browser only: the Worker's startup graph refuses them.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createInteractionController, type InteractionController } from "@aotter/mantle-ui/controller";
 import { OperationPanel } from "@aotter/mantle-ui";
 import { SchemaFields, applyFieldEdits } from "@aotter/mantle-ui/kit";
@@ -20,6 +20,8 @@ import {
   type ToolResult,
 } from "../app/bridge.js";
 import { web, type HostApi } from "../app/postmessage.js";
+import { Slot, useViewCellNames } from "../../admin/src/app/slots.js";
+import type { CellProps } from "../../admin/src/app/slot-props.js";
 import { appLabels, type AppLabels } from "./locale.js";
 
 type Row = Readonly<Record<string, unknown>>;
@@ -48,6 +50,21 @@ export function appValue(schema: FieldSchema | undefined, value: unknown, langua
     return <a href={value} className="underline" onClick={(event) => { event.preventDefault(); void openLink(value); }}>{value}</a>;
   }
   return renderDataValue(schema, value, language);
+}
+
+/** What a cell needs of the App around it, so the `cell:view:` slots' props stay the public ones. */
+const CellEnv = createContext<{ readonly language: string; readonly timeZone: string | undefined; readonly openLink: HostApi["openLink"] | undefined }>({ language: "en", timeZone: undefined, openLink: undefined });
+
+/** The built-in cell: the value as the App shows it. */
+function AppCell({ value, property }: CellProps): ReactNode {
+  const { language, timeZone, openLink } = useContext(CellEnv);
+  return appValue(property as FieldSchema | undefined, value, language, timeZone, openLink);
+}
+
+/** One column's value, through the application's `cell:view:` components for the View. */
+function ViewCell({ tool, column, row, property }: { tool: string | null; column: string; row: Row; property: FieldSchema | undefined }): ReactNode {
+  const names = useViewCellNames(tool ?? "", column);
+  return <Slot name={names} Default={AppCell} props={{ value: row[column], row, property }} />;
 }
 
 /**
@@ -132,7 +149,7 @@ export function MantleApp(props: {
   if (rows.length === 0) return <>{notice}<p className="text-muted-foreground p-4 text-sm">{labels.nothing}</p></>;
   const columns = columnsOf(view, rows);
   return (
-    <>
+    <CellEnv.Provider value={{ language, timeZone: props.timeZone, openLink }}>
       {notice}
       <ul data-slot="app-rows" className="grid gap-2 p-3">
         {rows.map((row, index) => {
@@ -144,7 +161,7 @@ export function MantleApp(props: {
                 {columns.map((field) => (
                   <div key={field} className="contents">
                     <dt className="text-muted-foreground">{columnLabel(field, view.columns[field], language, labels)}</dt>
-                    <dd className="break-words">{appValue(withNativeSchema(field, view.columns[field]), row[field], language, props.timeZone, openLink)}</dd>
+                    <dd className="break-words"><ViewCell tool={tool} column={field} row={row} property={withNativeSchema(field, view.columns[field])} /></dd>
                   </div>
                 ))}
               </dl>
@@ -171,7 +188,7 @@ export function MantleApp(props: {
           );
         })}
       </ul>
-    </>
+    </CellEnv.Provider>
   );
 }
 

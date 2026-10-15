@@ -46,6 +46,9 @@ import { SkipToMain } from "./skip-to-main";
 import { statusLabel } from "../features/content/status";
 import { t } from "../app/i18n";
 import { FormActionBarHostContext } from "../ui/page";
+import { Slot } from "../app/slots";
+import type { ShellProps } from "../app/slot-props";
+import { ShellContext, type ShellContextValue } from "./shell-context";
 import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
 
 interface AuthenticatedLayoutProps {
@@ -53,14 +56,14 @@ interface AuthenticatedLayoutProps {
   workspace?: "content" | "developer";
 }
 
+/**
+ * The frame of every page. The content workspace goes through the `Shell` slot; the developer workspace (`/admin/dev`)
+ * is Admin's own tool and stays fixed.
+ */
 export function AuthenticatedLayout({
   children,
   workspace = "content",
 }: AuthenticatedLayoutProps): React.ReactElement {
-  const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
-  const [pageHeaderActionsHost, setPageHeaderActionsHost] = React.useState<HTMLDivElement | null>(null);
-  const { pathname, search } = useAdminLocation();
-  const fullBleed = workspace === "developer" && pathname.startsWith("/admin/dev");
   const { language } = usePreferences();
 
   const me = useQuery<AdminUser>({
@@ -132,6 +135,27 @@ export function AuthenticatedLayout({
         ),
     [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.admin, workspace, site.data?.capabilities, site.data?.extensions, site.data?.navGroups],
   );
+  return workspace === "developer"
+    ? <ShellFrame workspace="developer" nav={groups} brand={resolvedBrand}>{children}</ShellFrame>
+    : <Slot name="Shell" Default={ShellFrame} props={{ children, nav: groups, brand: resolvedBrand }} />;
+}
+
+/** Admin's own shell: sidebar, header, the routed `children` and the status bar. */
+function ShellFrame({ children, nav, brand, workspace = "content" }: ShellProps & { workspace?: "content" | "developer" }): React.ReactElement {
+  const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
+  const [pageHeaderActionsHost, setPageHeaderActionsHost] = React.useState<HTMLDivElement | null>(null);
+  const { pathname } = useAdminLocation();
+  const fullBleed = workspace === "developer" && pathname.startsWith("/admin/dev");
+  const { language } = usePreferences();
+  const me = useQuery<AdminUser>({ queryKey: ["me"], queryFn: () => api.get<AdminUser>("/me"), retry: false });
+  const site = useQuery<SiteInfo>({ queryKey: ["site"], queryFn: () => api.get<SiteInfo>("/site") });
+  const collectionsQuery = useQuery<Collection[]>({
+    queryKey: ["collections"],
+    queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
+    enabled: workspace === "content",
+  });
+  const viewsQuery = useQuery<ViewManifestInfo[]>({ ...viewsManifestQueryOptions(), enabled: workspace === "content" });
+  const canonical = site.data?.canonicalLocale ?? null;
   const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
   const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
   const resource = collectionName
@@ -140,35 +164,26 @@ export function AuthenticatedLayout({
   const pageTitle = resource
     ? resolveLocalizedText(resource.title, language, canonical) ?? fieldLabel(resource.name)
     : undefined;
+  const shell = React.useMemo<ShellContextValue>(() => ({
+    brand,
+    publicUrl: site.data?.publicUrl,
+    actionsHostRef: setPageHeaderActionsHost,
+    user: { login: me.data?.login ?? null, image: me.data?.image ?? null, role: me.data?.role ?? null },
+    workspaceLink: workspace === "developer"
+      ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: LayoutDashboard }
+      : me.data?.admin === true
+      ? { href: "/admin/dev", label: t(language, "developer.workspaceTitle"), icon: Wrench }
+      : undefined,
+  }), [brand, site.data?.publicUrl, me.data?.login, me.data?.image, me.data?.role, me.data?.admin, workspace, language]);
   return (
+    <ShellContext.Provider value={shell}>
     <FormActionBarHostContext.Provider value={formActionBarHost}>
     <PageHeaderActionsHostContext.Provider value={pageHeaderActionsHost}>
       <SidebarProvider className="h-svh min-h-0 overflow-hidden">
         <SkipToMain />
-        <AppSidebar
-          brand={resolvedBrand}
-          groups={groups}
-          pathname={pathname === "/admin/dev" ? "/admin/dev/overview/flow" : pathname /* the workspace entry is the overview flow */}
-          search={search}
-          user={{
-            login: me.data?.login ?? null,
-            image: me.data?.image ?? null,
-            role: me.data?.role ?? null,
-          }}
-        />
+        <Slot name="Sidebar" Default={AppSidebar} props={{ brand, groups: nav }} />
         <SidebarInset className="min-h-0 overflow-hidden">
-          <Header
-            actionsHostRef={setPageHeaderActionsHost}
-            className="absolute inset-x-0 top-0 z-30"
-            site={resolvedBrand}
-            publicUrl={site.data?.publicUrl}
-            pageTitle={pageTitle}
-            workspaceLink={workspace === "developer"
-              ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: LayoutDashboard }
-              : me.data?.admin === true
-              ? { href: "/admin/dev", label: t(language, "developer.workspaceTitle"), icon: Wrench }
-              : undefined}
-          />
+          <Slot name="Header" Default={Header} props={{ title: pageTitle }} />
           <Main className={fullBleed
             ? "min-h-0 max-w-none overflow-hidden px-0 py-0 pt-14 pb-10 sm:px-0"
             : `min-h-0 overflow-y-auto overscroll-contain pt-20 ${workspace === "developer" ? "pb-14" : "pb-20"}`}>
@@ -201,6 +216,7 @@ export function AuthenticatedLayout({
       </SidebarProvider>
     </PageHeaderActionsHostContext.Provider>
     </FormActionBarHostContext.Provider>
+    </ShellContext.Provider>
   );
 }
 

@@ -37,6 +37,14 @@ describe("SchemaFields", () => {
     expect(html).not.toContain("<textarea");
   });
 
+  it("lets a host wrap a field's own control, with its own value", () => {
+    const html = render({ renderField: (f) => (f.name === "total" ? <div data-wrapped>{f.renderDefault({ value: 7, setValue: f.setValue })}</div> : undefined) });
+    // the number input shows the host's value, not the form's
+    expect(html).toMatch(/data-wrapped[^]*value="7"/);
+    expect(html).not.toContain('value="12345"');
+    expect(render()).not.toContain("data-wrapped");
+  });
+
   it("hides root fields a host binds", () => {
     expect(render({ hiddenRootFields: ["decision"] })).not.toContain("決定");
   });

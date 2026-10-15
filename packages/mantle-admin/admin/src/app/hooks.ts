@@ -3,6 +3,8 @@ import type { AdminTypes } from "./define-admin";
 import { useAdminContext } from "./hooks-context";
 import { createMcpAppTransport } from "./transport";
 
+export { useOpenLink } from "./slots";
+
 /** Where Admin renders: its own page, or inside an MCP host (`ui://`). Slots and hooks that work in both say so. */
 export type AdminSurface = "browser" | "mcp-app";
 
