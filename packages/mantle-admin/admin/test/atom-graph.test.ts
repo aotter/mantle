@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { loadLanguage } from "../src/app/i18n";
-import { atomKindLabel, focusSlice, traceAtomIds, layoutComponents } from "../src/features/logic/atom-graph";
+import { atomKindLabel, focusSlice, traceAtomIds, layoutComponents, layoutGraph } from "../src/features/logic/atom-graph";
+import { wideSystemGraph } from "./wide-system-graph";
 import { developerDetailHref, developerSelectionHref } from "../src/features/logic/developer-route";
 import { buildSchemaDiagram } from "../src/features/logic/schema-diagram";
 import type { DeveloperConsoleSnapshot, DeveloperSchemaModel } from "../src/lib/types";
@@ -153,6 +154,34 @@ describe("layoutComponents", () => {
     expect(positions.get("Schema:first")!.x).toBe(positions.get("Procedure:first")!.x);
     expect(positions.get("Procedure:second")!.x).toBe(positions.get("Trigger:second")!.x);
     expect(positions.get("Schema:second")!.x).toBe(positions.get("Procedure:second")!.x);
+  });
+
+  it("packs a wide graph, internal Procedures included, inside the audience surface span (#1666)", () => {
+    const graph = wideSystemGraph();
+    const positions = layoutComponents(graph);
+    const rects = graph.atoms.map(({ id, kind }) => ({ id, kind, ...positions.get(id)! }));
+    expect(rects.every(({ x, y }) => Number.isFinite(x) && Number.isFinite(y))).toBe(true);
+    for (const a of rects) for (const b of rects) {
+      if (a.id < b.id) expect(Math.abs(a.x - b.x) < 220 && Math.abs(a.y - b.y) < 88, `${a.id} overlaps ${b.id}`).toBe(false);
+    }
+    const surface = rects.filter(({ kind }) => kind === "Trigger" || kind === "View");
+    const left = Math.min(...surface.map(({ x }) => x)) - 16;
+    const right = Math.max(Math.max(...surface.map(({ x }) => x + 220)) + 16, left + 7 * 244 - 24);
+    for (const { id, x } of rects.filter(({ kind }) => kind === "Procedure" || kind === "Schema")) {
+      expect(x, id).toBeGreaterThanOrEqual(left);
+      expect(x + 220, id).toBeLessThanOrEqual(right);
+    }
+  });
+
+  it("lets Fit View reach the whole graph on a narrow canvas", () => {
+    const { nodes, minZoom } = layoutGraph(wideSystemGraph(), "en");
+    const width = (node: (typeof nodes)[number]): number => Number(node.style?.width ?? 220);
+    const height = (node: (typeof nodes)[number]): number => Number(node.style?.height ?? 88);
+    const graphWidth = Math.max(...nodes.map((node) => node.position.x + width(node))) - Math.min(...nodes.map(({ position }) => position.x));
+    const graphHeight = Math.max(...nodes.map((node) => node.position.y + height(node))) - Math.min(...nodes.map(({ position }) => position.y));
+    expect(minZoom).toBeLessThan(0.25);
+    expect(minZoom).toBeLessThanOrEqual(Math.min(320 / (graphWidth * 1.16), 320 / (graphHeight * 1.16)));
+    expect(layoutGraph(graph, "en").minZoom).toBe(0.25);
   });
 
   it("traces a schema through its command upstream", () => {
