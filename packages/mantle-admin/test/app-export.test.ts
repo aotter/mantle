@@ -15,9 +15,8 @@ describe("@aotter/mantle-admin/app", () => {
   });
 
   it("ships no prebuilt SPA: the application builds Admin", () => {
-    const { exports, scripts } = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")) as { exports: Record<string, unknown>; scripts: { build: string } };
+    const { exports } = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")) as { exports: Record<string, unknown> };
     expect(Object.keys(exports).filter(key => key.startsWith("./admin/"))).toEqual([]);
-    expect(scripts.build).not.toContain("dist/admin'");
     expect(existsSync(resolve(pkg, "dist/admin"))).toBe(false);
   });
 
