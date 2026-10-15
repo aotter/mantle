@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const packages = JSON.parse(execFileSync(
@@ -23,6 +23,12 @@ const packages = JSON.parse(execFileSync(
 )).filter((pkg) => !pkg.private).map((pkg) => [pkg.name, pkg.path]);
 const separator = process.argv.indexOf("--");
 const args = separator < 0 ? process.argv.slice(2) : process.argv.slice(2, separator);
+// --pm npm | pnpm@<exact>: install the consumer (no lockfile either way) and run the command with that package
+// manager instead of the pnpm on PATH, as a user copying an example would.
+const pmAt = args.indexOf("--pm");
+const pm = pmAt < 0 ? null : args.splice(pmAt, 2)[1];
+if (pm !== null && pm !== "npm" && !/^pnpm@\d+\.\d+\.\d+$/.test(pm ?? "")) throw new Error("--pm takes npm or pnpm@<exact version>");
+const npm = pm === "npm";
 const command = separator < 0 ? [] : process.argv.slice(separator + 1);
 const help = args.some((arg) => arg === "-h" || arg === "--help");
 
@@ -57,7 +63,7 @@ if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
   process.exit(0);
 }
 if (help) {
-  console.log("Usage: node scripts/check-packed-consumer.mjs --project <path> [--output <path>] -- <command> [args...]");
+  console.log("Usage: node scripts/check-packed-consumer.mjs [--pm npm|pnpm@<version>] --project <path> [--output <path>] -- <command> [args...]");
   process.exit(0);
 }
 const output = args.length === 4 && args[2] === "--output" && args[3]
@@ -69,7 +75,7 @@ if (
   || !args[1]
   || command.length === 0
 ) {
-  throw new Error("Usage: node scripts/check-packed-consumer.mjs --project <path> [--output <path>] -- <command> [args...]");
+  throw new Error("Usage: node scripts/check-packed-consumer.mjs [--pm npm|pnpm@<version>] --project <path> [--output <path>] -- <command> [args...]");
 }
 const project = resolve(root, args[1]);
 if (!statSync(project, { throwIfNoEntry: false })?.isDirectory()) {
@@ -101,10 +107,37 @@ try {
   const { prefix, bytes } = archiveProject(project);
   mkdirSync(consumer);
   execFileSync("tar", ["-x", "-C", consumer], { input: bytes });
-  addOverrides(join(consumer, "package.json"), tarballs);
-  run("pnpm", ["install", "--no-frozen-lockfile"], consumer);
-  const lockfile = readFileSync(join(consumer, "pnpm-lock.yaml"), "utf8");
-  assertExactTarballResolutions(lockfile, tarballs);
+  let env;
+  if (pm) {
+    // Public registry only: a user ~/.npmrc may scope @aotter to a private registry.
+    const npmrc = join(temp, "npmrc");
+    writeFileSync(npmrc, "registry=https://registry.npmjs.org/\n");
+    env = { npm_config_userconfig: npmrc, npm_config_registry: "https://registry.npmjs.org/" };
+  }
+  if (pm?.startsWith("pnpm@")) {
+    // That exact pnpm, first on PATH for both the install and the command.
+    const tool = join(temp, "tool");
+    mkdirSync(tool);
+    writeFileSync(join(tool, "package.json"), "{\"private\":true}\n");
+    run("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", pm], tool, true, env);
+    env.PATH = `${join(tool, "node_modules", ".bin")}${delimiter}${process.env.PATH}`;
+  }
+  if (npm) {
+    addNpmOverrides(join(consumer, "package.json"), tarballs);
+    run("npm", ["install", "--no-audit", "--no-fund", "--prefer-online"], consumer, false, env);
+    const lock = JSON.parse(readFileSync(join(consumer, "package-lock.json"), "utf8"));
+    for (const [name, tarball] of tarballs) {
+      const resolved = lock.packages?.[`node_modules/${name}`]?.resolved;
+      if (!resolved?.startsWith("file:") || realpathSync(resolve(consumer, resolved.slice(5))) !== realpathSync(tarball)) {
+        throw new Error(`consumer lock did not resolve ${name} from its exact tarball (got ${resolved})`);
+      }
+    }
+  } else {
+    addOverrides(join(consumer, "package.json"), tarballs);
+    run("pnpm", ["install", "--no-frozen-lockfile"], consumer, false, env);
+    const lockfile = readFileSync(join(consumer, "pnpm-lock.yaml"), "utf8");
+    assertExactTarballResolutions(lockfile, tarballs);
+  }
 
   const installed = findInstalled(consumer, packages.map(([name]) => name));
   let installedCount = 0;
@@ -125,13 +158,14 @@ try {
   }
   if (installedCount === 0) throw new Error("consumer did not install any Mantle package");
 
-  run(command[0], command.slice(1), consumer);
+  run(command[0], command.slice(1), consumer, false, env);
   complete = true;
   console.log(JSON.stringify({
     core_sha: coreSha,
     consumer_sha: consumerSha,
     consumer: basename(project),
     consumer_path: prefix || ".",
+    package_manager: pm ?? "pnpm",
     package_version: version,
     run_artifact_sha256: Object.fromEntries(
       [...tarballs].map(([name, path]) => [name, sha256(path)]),
@@ -166,6 +200,20 @@ function addOverrides(path, tarballs) {
   const yaml = readFileSync(workspace, "utf8");
   if (/^(overrides|peerDependencyRules):/m.test(yaml)) throw new Error(`${workspace} already has overrides; merge them by hand`);
   writeFileSync(workspace, `${yaml.trimEnd()}\noverrides: ${JSON.stringify(manifest.pnpm.overrides)}\npeerDependencyRules: ${JSON.stringify(manifest.pnpm.peerDependencyRules)}\n`);
+}
+
+// npm: a direct dependency and its override must carry the same spec, so both point at the tarball.
+// The override also catches @aotter/mantle-ui under @aotter/mantle-admin, which would otherwise hit a registry.
+function addNpmOverrides(path, tarballs) {
+  const manifest = JSON.parse(readFileSync(path, "utf8"));
+  for (const [name, tarball] of tarballs) {
+    if (manifest.dependencies?.[name]) manifest.dependencies[name] = `file:${tarball}`;
+  }
+  manifest.overrides = {
+    ...(manifest.overrides ?? {}),
+    ...Object.fromEntries([...tarballs].map(([name, tarball]) => [name, `file:${tarball}`])),
+  };
+  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 function assertExactTarballResolutions(lockfile, tarballs) {
@@ -210,10 +258,10 @@ function addIfDirectory(found, name, path) {
   found.set(name, paths);
 }
 
-function run(command, args, cwd, quiet = false) {
+function run(command, args, cwd, quiet = false, extraEnv = {}) {
   execFileSync(command, args, {
     cwd,
-    env: { ...process.env, CI: "1" },
+    env: { ...process.env, CI: "1", ...extraEnv },
     stdio: quiet ? ["ignore", "pipe", "pipe"] : "inherit",
   });
 }
