@@ -17,6 +17,8 @@ async function read<T>(fetch: () => Promise<T>, also: readonly number[] = []): P
   }
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
 const path = (name: string): string => encodeURIComponent(name);
 
 /** The browser: the caller-authorized `/admin/api` routes, with the Admin session cookie. No route is added for the hooks. */
@@ -24,7 +26,7 @@ export const browserTransport: AdminTransport = {
   surface: "browser",
   host: null,
   writable: true,
-  view: (name, _tool, input, page) => read(() => {
+  view: (name, input, page) => read(() => {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries({ ...input, limit: page.limit, cursor: page.cursor })) if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
     const suffix = query.toString();
@@ -39,15 +41,36 @@ export const browserTransport: AdminTransport = {
     const page = await api.get<{ items: AdminEntry<Row>[]; next_cursor: string | null }>(`/entries?${query}`);
     return { items: page.items, ...(page.next_cursor ? { nextCursor: page.next_cursor } : {}) };
   }),
-  entry: (collection, id) => read(async () => (await api.get<{ entry: AdminEntry<Row> }>(`/entries/${path(id)}?collection=${path(collection)}`)).entry),
+  // a caller the policy refuses to read the Schema gets a stub with no `data`: that is a refusal, not an entry
+  entry: async (collection, id) => {
+    const reply = await read(async () => (await api.get<{ entry: AdminEntry<Row> }>(`/entries/${path(id)}?collection=${path(collection)}`)).entry);
+    return reply.status === "ok" && !isRecord(reply.data.data) ? unavailable : reply;
+  },
   // a collection without statistics answers 501 whatever the caller: it has no total to show
   total: collection => read(async () => (await api.get<{ total: number }>(`/collections/${path(collection)}/statistics?range=7d`)).total, [501]),
   me: () => read(() => api.get<AdminMe>("/me")),
-  run: (name, _tool, input) => read(async () => (await api.post<{ ok: boolean; output: unknown }>(`/operations/${path(name)}`, input)).output),
+  run: (name, input) => read(async () => (await api.post<{ ok: boolean; output: unknown }>(`/operations/${path(name)}`, input)).output),
 };
 
 /** Tool failures the browser would have read as 403 or 404. */
 const REFUSED = ["AUTH_DENIED", "NOT_FOUND"];
+
+/** The admin MCP tool of a View or Procedure: its name lowercased, kebab to snake (`mcpToolNameSegment` in @aotter/mantle's compiler). */
+export const toolName = (name: string): string => name.toLowerCase().replace(/-/g, "_");
+
+/** A host rejects a call it cannot make: a tool the caller's catalogue lacks (JSON-RPC InvalidParams) or a refused one (HTTP 403 or 404). */
+const refusedCall = (error: unknown): boolean => isRecord(error) && (error["code"] === -32602 || error["status"] === 403 || error["status"] === 404);
+
+async function invoke<T>(call: (tool: string, args: Record<string, unknown>) => Promise<McpToolResult>, tool: string, args: Record<string, unknown>, pick: (output: unknown) => T): Promise<Reply<T>> {
+  let result: McpToolResult;
+  try {
+    result = await call(tool, args);
+  } catch (error) {
+    if (refusedCall(error)) return unavailable;
+    throw error;
+  }
+  return answer(result, pick);
+}
 
 function answer<T>(result: McpToolResult, pick: (output: unknown) => T): Reply<T> {
   if (!result.isError) return ok(pick(outputOf(result)));
@@ -56,12 +79,10 @@ function answer<T>(result: McpToolResult, pick: (output: unknown) => T): Reply<T
   throw new Error(diagnostics[0]?.message ?? "The tool failed without a diagnostic.");
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
-
 /**
  * An MCP App: each View and operation is its admin MCP tool, called through the host (`tools/call`) under the caller's own
- * MCP authorization. A name without a tool, or a host without `serverTools`, is unavailable; entries, totals and the
- * signed-in user have no tool, so they are unavailable too: an App declares the data it needs as an admin View.
+ * MCP authorization. A host without `serverTools` is unavailable; entries, totals and the signed-in user have no tool, so
+ * they are unavailable too: an App declares the data it needs as an admin View.
  */
 export function createMcpAppTransport({ call, host }: McpAppTransportOptions): AdminTransport {
   const live = call && host.capabilities["serverTools"] !== undefined ? call : undefined;
@@ -69,11 +90,13 @@ export function createMcpAppTransport({ call, host }: McpAppTransportOptions): A
     surface: "mcp-app",
     host,
     writable: live !== undefined,
-    view: async (_name, tool, input, page) => {
-      if (!tool || !live) return unavailable;
+    view: async (name, input, page, rowNames) => {
+      if (!live) return unavailable;
       const args = { ...input, ...(page.limit !== undefined ? { limit: page.limit } : {}), ...(page.cursor ? { cursor: page.cursor } : {}) };
-      return answer(await live(tool, args), output => {
-        const rows = isRecord(output) && Array.isArray(output["rows"]) ? output["rows"].filter(isRecord) : [];
+      return invoke(live, toolName(name), args, output => {
+        // the tool returns the SQL output names; the browser's route renames some, and the types are the browser's
+        const rename = (row: Row): Row => rowNames ? Object.fromEntries(Object.entries(row).map(([key, value]) => [Object.hasOwn(rowNames, key) ? rowNames[key]! : key, value])) : row;
+        const rows = isRecord(output) && Array.isArray(output["rows"]) ? output["rows"].filter(isRecord).map(rename) : [];
         return { rows, ...(isRecord(output) && typeof output["nextCursor"] === "string" ? { nextCursor: output["nextCursor"] } : {}) };
       });
     },
@@ -81,9 +104,9 @@ export function createMcpAppTransport({ call, host }: McpAppTransportOptions): A
     entry: async () => unavailable,
     total: async () => unavailable,
     me: async () => unavailable,
-    run: async (name, tool, input) => {
-      if (!tool || !live) return unavailable;
-      const reply = answer(await live(tool, { ...input }), output => output);
+    run: async (name, input) => {
+      if (!live) return unavailable;
+      const reply = await invoke(live, toolName(name), { ...input }, output => output);
       // the model learns that it ran, not what it returned; a host that refuses the note does not undo the write
       if (reply.status === "ok") await host.updateModelContext({ content: [{ type: "text", text: `Ran ${name}.` }] }).catch(() => false);
       return reply;

@@ -106,9 +106,11 @@ columns inside `data`. See [publishing](../concepts/lifecycle-and-locales.md).
 ## Typed data hooks
 
 `--admin` emits `generated/admin-client.ts`: the type of each admin View's input and row, of each collection's entry
-`data` (declared field names, no scope field), and of each admin operation's input and output, the admin MCP tool behind
-each View and operation (`admin`), and the hooks bound to those types. An entry such as `src/admin.tsx` passes the metadata
-to `defineAdmin(admin)` and its components read data through the hooks:
+`data` (declared field names, no scope field; every field optional for a `publishing` collection, as a draft is only partly
+validated), and of each admin operation's input and output, and the hooks bound to those types. A View's row has the column
+names the browser route gives it (declared case, where the SQL output name is lowercased). An entry such as `src/admin.tsx`
+passes `admin`, which lists those renames, to `defineAdmin(admin)` so that an MCP App's rows match, and its components read
+data through the hooks:
 
 ```tsx
 import { useOperation, useView } from "../generated/admin-client.js";
@@ -117,7 +119,7 @@ function Queue() {
   const { rows, status } = useView("pending-requests", {});   // names, input and rows are checked by tsc
   const approve = useOperation("approve");
   if (status === "unavailable") return null;
-  return rows.map(row => <button key={row.id} onClick={() => approve.run?.({ id: row.id })}>{row.title}</button>);
+  return rows.map(row => <button key={String(row.id)} onClick={() => approve.run?.({ id: String(row.id) })}>{row.title}</button>);
 }
 ```
 
@@ -135,14 +137,14 @@ refused View or collection from a missing one. Showing or hiding a component gra
 | `useCollectionTotal(collection)` | `GET /collections/{name}/statistics`, its `total` | browser only |
 | `useMe()` | `GET /me` | browser only |
 
-In an MCP host, `useView` and `useOperation` call the View's or operation's admin MCP tool through the host (`tools/call`),
+In an MCP host, `useView` and `useOperation` call the View's or operation's admin MCP tool (its name lowercased, kebab to snake) through the host (`tools/call`),
 under the caller's MCP authorization; the browser-only hooks read `unavailable` there, so declare the data an App needs as an
 admin View. Without the host's `serverTools`, `run` is `undefined`. `useHost()` is `null` in the browser and the host's API
 (context, capabilities, `openLink`, `sendMessage`, `updateModelContext`, `requestDisplayMode`) in a host; `useAdminSurface()`
 says which. `@aotter/mantle-admin/hooks` also exports the same hooks untyped, for code without generated types.
 
-`admin-client.ts` and `@aotter/mantle-admin/app` and `/hooks` run in the browser only: `mantle bundle` refuses them, and React,
-in the Worker's startup graph.
+`@aotter/mantle-admin/app` and `/hooks`, and so `generated/admin-client.ts`, which imports them, run in the browser only:
+`mantle bundle` refuses them in the Worker's startup graph.
 
 ## Generated reads and writes
 

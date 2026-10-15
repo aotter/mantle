@@ -15,17 +15,17 @@ const called = (n = 0) => ({ url: fetchMock.mock.calls[n]![0], init: fetchMock.m
 describe("browser transport", () => {
   it("reads a View over the admin route, leaving out empty input", async () => {
     stubFetch(json({ rows: [{ id: "a" }], nextCursor: "c2" }));
-    const reply = await browserTransport.view("pending requests", "pending_requests", { q: "x y", empty: "", none: null }, { limit: 5, cursor: undefined });
+    const reply = await browserTransport.view("pending requests", { q: "x y", empty: "", none: null }, { limit: 5, cursor: undefined });
     expect(reply).toEqual({ status: "ok", data: { rows: [{ id: "a" }], nextCursor: "c2" } });
     expect(called().url).toBe("/admin/api/views/pending%20requests?q=x+y&limit=5");
     expect(called().init).toMatchObject({ credentials: "same-origin" });
   });
 
   it("reads entries with one filter, an entry, a total and the caller", async () => {
-    stubFetch(json({ items: [{ id: "1" }], next_cursor: "n" }), json({ entry: { id: "1" }, related: [] }), json({ total: 7, buckets: [] }), json({ userId: "u", role: "admin", admin: true, login: null, image: null }));
+    stubFetch(json({ items: [{ id: "1" }], next_cursor: "n" }), json({ entry: { id: "1", data: { title: "t" } }, related: [] }), json({ total: 7, buckets: [] }), json({ userId: "u", role: "admin", admin: true, login: null, image: null }));
     expect(await browserTransport.entries("requests", { filter: { field: "status", value: "open" }, search: "pay", limit: 20, cursor: "c" })).toEqual({ status: "ok", data: { items: [{ id: "1" }], nextCursor: "n" } });
     expect(called(0).url).toBe("/admin/api/entries?collection=requests&limit=20&search=pay&cursor=c&filter_field=status&filter_value=open");
-    expect(await browserTransport.entry("requests", "a/b")).toEqual({ status: "ok", data: { id: "1" } });
+    expect(await browserTransport.entry("requests", "a/b")).toEqual({ status: "ok", data: { id: "1", data: { title: "t" } } });
     expect(called(1).url).toBe("/admin/api/entries/a%2Fb?collection=requests");
     expect(await browserTransport.total("requests")).toEqual({ status: "ok", data: 7 });
     expect(called(2).url).toBe("/admin/api/collections/requests/statistics?range=7d");
@@ -35,7 +35,7 @@ describe("browser transport", () => {
 
   it("runs an operation and returns its output", async () => {
     stubFetch(json({ ok: true, output: { results: [] } }));
-    expect(await browserTransport.run("restock", "restock", { sku: "a" })).toEqual({ status: "ok", data: { results: [] } });
+    expect(await browserTransport.run("restock", { sku: "a" })).toEqual({ status: "ok", data: { results: [] } });
     expect(called().url).toBe("/admin/api/operations/restock");
     expect(called().init).toMatchObject({ method: "POST", body: JSON.stringify({ sku: "a" }) });
   });
@@ -43,10 +43,13 @@ describe("browser transport", () => {
   it("reads a 403 and a 404 as the same unavailable, and any other failure as an error", async () => {
     for (const status of [403, 404]) {
       stubFetch(json({ error: { code: status === 403 ? "AUTH_DENIED" : "NOT_FOUND", message: "no" } }, status));
-      expect(await browserTransport.view("v", null, {}, {})).toEqual({ status: "unavailable" });
+      expect(await browserTransport.view("v", {}, {})).toEqual({ status: "unavailable" });
     }
     stubFetch(json({ error: { code: "AUTH_DENIED", message: "no" } }, 403), json({ error: { code: "NOT_FOUND", message: "no" } }, 404));
-    expect(await browserTransport.run("op", null, {})).toEqual({ status: "unavailable" });
+    expect(await browserTransport.run("op", {})).toEqual({ status: "unavailable" });
+    expect(await browserTransport.entry("c", "1")).toEqual({ status: "unavailable" });
+    // a policy that refuses the caller the Schema answers 200 with a stub that has no data: a refusal too
+    stubFetch(json({ entry: { id: "1", version: 2 }, related: [] }));
     expect(await browserTransport.entry("c", "1")).toEqual({ status: "unavailable" });
     // a collection without statistics answers 501: nothing to total
     stubFetch(json({ error: { code: "STATISTICS_UNAVAILABLE", message: "no" } }, 501), json({ error: { message: "boom" } }, 500));
@@ -65,16 +68,26 @@ describe("MCP App transport", () => {
     const call = vi.fn(async () => result({ rows: [{ id: "a" }, "junk"], nextCursor: "c2" }));
     const transport = mcpAppTransport({ call, host: host() });
     expect(transport).toMatchObject({ surface: "mcp-app", writable: true });
-    expect(await transport.view("pending-requests", "pending_requests", { q: 1 }, { limit: 10, cursor: "c" })).toEqual({ status: "ok", data: { rows: [{ id: "a" }], nextCursor: "c2" } });
+    expect(await transport.view("pending-requests", { q: 1 }, { limit: 10, cursor: "c" })).toEqual({ status: "ok", data: { rows: [{ id: "a" }], nextCursor: "c2" } });
     expect(call).toHaveBeenCalledWith("pending_requests", { q: 1, limit: 10, cursor: "c" });
   });
 
-  it("calls nothing for a View or operation without a tool", async () => {
-    const call = vi.fn();
+  it("derives the tool from the name, and gives rows the names the browser route gives them", async () => {
+    const call = vi.fn(async () => result({ rows: [{ id: "a", prioritylevel: 2, title: "t" }] }));
     const transport = mcpAppTransport({ call, host: host() });
-    expect(await transport.view("v", null, {}, {})).toEqual({ status: "unavailable" });
-    expect(await transport.run("op", null, {})).toEqual({ status: "unavailable" });
-    expect(call).not.toHaveBeenCalled();
+    expect(await transport.view("Task-Board", {}, {}, { prioritylevel: "priorityLevel" })).toEqual({ status: "ok", data: { rows: [{ id: "a", priorityLevel: 2, title: "t" }] } });
+    expect(call).toHaveBeenCalledWith("task_board", {});
+    await transport.run("mark-Done", { id: "1" });
+    expect(call).toHaveBeenLastCalledWith("mark_done", { id: "1" });
+  });
+
+  it("reads a call the host rejects as refused (an unknown tool, a 403) as unavailable, any other rejection as an error", async () => {
+    const reject = (error: unknown) => mcpAppTransport({ call: async () => { throw error; }, host: host() });
+    for (const error of [Object.assign(new Error("Unknown tool"), { code: -32602 }), Object.assign(new Error("Forbidden"), { status: 403 })]) {
+      expect(await reject(error).view("v", {}, {})).toEqual({ status: "unavailable" });
+      expect(await reject(error).run("op", {})).toEqual({ status: "unavailable" });
+    }
+    await expect(reject(new Error("offline")).view("v", {}, {})).rejects.toThrow("offline");
   });
 
   it("has no route behind entries, totals or the caller: unavailable, with no tool call and no fetch", async () => {
@@ -90,8 +103,8 @@ describe("MCP App transport", () => {
     const call = vi.fn();
     const transport = mcpAppTransport({ call, host: host({}) });
     expect(transport.writable).toBe(false);
-    expect(await transport.view("v", "v", {}, {})).toEqual({ status: "unavailable" });
-    expect(await transport.run("op", "op", {})).toEqual({ status: "unavailable" });
+    expect(await transport.view("v", {}, {})).toEqual({ status: "unavailable" });
+    expect(await transport.run("op", {})).toEqual({ status: "unavailable" });
     expect(call).not.toHaveBeenCalled();
     expect(mcpAppTransport({ host: host() }).writable).toBe(false);
   });
@@ -99,27 +112,27 @@ describe("MCP App transport", () => {
   it("reads AUTH_DENIED and NOT_FOUND as unavailable, any other failure as an error", async () => {
     const failure = (code: string) => result({ diagnostics: [{ code, message: `${code} happened` }] }, true);
     const transport = (answer: McpToolResult) => mcpAppTransport({ call: async () => answer, host: host() });
-    expect(await transport(failure("AUTH_DENIED")).view("v", "v", {}, {})).toEqual({ status: "unavailable" });
-    expect(await transport(failure("NOT_FOUND")).run("op", "op", {})).toEqual({ status: "unavailable" });
-    await expect(transport(failure("INPUT_VALIDATION_FAILED")).view("v", "v", {}, {})).rejects.toThrow("INPUT_VALIDATION_FAILED happened");
+    expect(await transport(failure("AUTH_DENIED")).view("v", {}, {})).toEqual({ status: "unavailable" });
+    expect(await transport(failure("NOT_FOUND")).run("op", {})).toEqual({ status: "unavailable" });
+    await expect(transport(failure("INPUT_VALIDATION_FAILED")).view("v", {}, {})).rejects.toThrow("INPUT_VALIDATION_FAILED happened");
   });
 
   it("tells the model an operation ran, not what it returned, and only when it succeeded", async () => {
     const h = host();
     const ok = mcpAppTransport({ call: async () => result({ results: [[{ secret: 1 }]] }), host: h });
-    expect(await ok.run("restock", "restock", { sku: "a" })).toEqual({ status: "ok", data: { results: [[{ secret: 1 }]] } });
+    expect(await ok.run("restock", { sku: "a" })).toEqual({ status: "ok", data: { results: [[{ secret: 1 }]] } });
     expect(h.updateModelContext).toHaveBeenCalledWith({ content: [{ type: "text", text: "Ran restock." }] });
     const refused = host();
-    await mcpAppTransport({ call: async () => result({ diagnostics: [{ code: "AUTH_DENIED", message: "no" }] }, true), host: refused }).run("restock", "restock", {});
+    await mcpAppTransport({ call: async () => result({ diagnostics: [{ code: "AUTH_DENIED", message: "no" }] }, true), host: refused }).run("restock", {});
     expect(refused.updateModelContext).not.toHaveBeenCalled();
     // a host that refuses the note does not undo the write
     const failing = host();
     failing.updateModelContext.mockRejectedValue(new Error("no"));
-    expect(await mcpAppTransport({ call: async () => result({}), host: failing }).run("restock", "restock", {})).toMatchObject({ status: "ok" });
+    expect(await mcpAppTransport({ call: async () => result({}), host: failing }).run("restock", {})).toMatchObject({ status: "ok" });
   });
 });
 
-const meta: AdminMeta = { views: { pending: { tool: "pending_tool" } }, operations: { approve: { tool: "approve_tool" } } };
+const meta: AdminMeta = { rowNames: { pending: { prioritylevel: "priorityLevel" } } };
 const transportOf = (overrides: Partial<AdminTransport> = {}): AdminTransport => ({
   surface: "browser", host: null, writable: true,
   view: async () => ({ status: "ok", data: { rows: [{ id: "r1" }], nextCursor: "next" } }),
@@ -164,13 +177,13 @@ describe("data hooks", () => {
     client.clear();
   });
 
-  it("pass the generated tool and no caller to the transport, and refresh what Admin shows when an operation succeeds", async () => {
+  it("pass the View's row names and no caller to the transport, and refresh what Admin shows when an operation succeeds", async () => {
     const client = new QueryClient();
     for (const key of [["view", "pending", "x"], ["entries", "requests"], ["entry-editor", "requests", "1"], ["collection-statistics", "requests", "7d"], ["site"]]) client.setQueryData(key, 1);
     const run = vi.fn(async () => ({ status: "ok", data: { results: [] } }) as const);
     const state = mount(client, transportOf({ run }), () => useOperation("approve")).seen as { run: (input: object) => Promise<unknown>; pending: boolean };
     expect(await state.run({ id: "1" })).toEqual({ results: [] });
-    expect(run).toHaveBeenCalledWith("approve", "approve_tool", { id: "1" });
+    expect(run).toHaveBeenCalledWith("approve", { id: "1" });
     const stale = client.getQueryCache().getAll().filter(query => query.state.isInvalidated).map(query => query.queryKey[0]).sort();
     expect(stale).toEqual(["collection-statistics", "entries", "entry-editor", "view"]);
     client.clear();

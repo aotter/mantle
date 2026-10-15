@@ -27,11 +27,7 @@ const refused: ReadonlyArray<readonly [RegExp, string]> = [
   [/(?:^|\/)node_modules\/(?:@aotter\/mantle\/dist\/(?:build|infrastructure)\/|yaml\/|pgsql-deparser\/|libpg-query\/)|(?:^|\/)mantle\/(?:dist|src)\/(?:build|infrastructure)\//, "Generator code must not run in a Worker; import runtime entry points such as @aotter/mantle/rest."],
   // Admin's UI is built into <assets>/admin by the app's admin.tsx; the Worker serves it, never runs it.
   [/(?:^|\/)node_modules\/@aotter\/mantle-admin\/dist\/admin-app\/|(?:^|\/)mantle-admin\/(?:dist\/admin-app|admin\/src)\//, "Admin's UI (@aotter/mantle-admin/app, /hooks) runs in the browser: import it only from src/admin.tsx, which `mantle bundle` builds into the assets directory."],
-  [/(?:^|\/)node_modules\/(?:react|react-dom)\//, "React runs in the browser: keep it in src/admin.tsx (built into the assets directory), out of the Worker."],
 ];
-
-/** The generated Admin client holds browser-side types and hooks; it sits in the generated directory that has `.mantle-inputs.json`. */
-const adminClient = (input: string) => /(?:^|[\\/])admin-client\.[cm]?[jt]s$/.test(input) && existsSync(resolve(input, "..", INPUTS_FILE));
 
 export function guardStartup(metafile: Metafile, entry: string): void {
   for (const name of startupGraph(metafile, entry)) {
@@ -40,7 +36,6 @@ export function guardStartup(metafile: Metafile, entry: string): void {
       // shortcut: vendored auth outside node_modules is not recognized; use package metadata if vendoring is supported.
       const hit = refused.find(([pattern]) => pattern.test(input.replaceAll("\\", "/")));
       if (hit) throw new Error(`Startup module ${name} contains ${input}. ${hit[1]}`);
-      if (adminClient(input)) throw new Error(`Startup module ${name} contains ${input}. generated/admin-client.ts is for the browser: import it only from src/admin.tsx.`);
     }
   }
 }

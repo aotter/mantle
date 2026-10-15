@@ -64,12 +64,12 @@ export interface AdminTransport {
   readonly host: AdminHost | null;
   /** Whether this surface can write: an MCP host without server tools is read-only. */
   readonly writable: boolean;
-  view(name: string, tool: string | null, input: Row, page: { readonly limit?: number | undefined; readonly cursor?: string | undefined }): Promise<Reply<{ readonly rows: readonly Row[]; readonly nextCursor?: string }>>;
+  view(name: string, input: Row, page: { readonly limit?: number | undefined; readonly cursor?: string | undefined }, rowNames?: { readonly [column: string]: string }): Promise<Reply<{ readonly rows: readonly Row[]; readonly nextCursor?: string }>>;
   entries(collection: string, options: { readonly filter?: { readonly field: string; readonly value: string } | undefined; readonly search?: string | undefined; readonly limit?: number | undefined; readonly cursor?: string | undefined }): Promise<Reply<{ readonly items: readonly AdminEntry<Row>[]; readonly nextCursor?: string }>>;
   entry(collection: string, id: string): Promise<Reply<AdminEntry<Row>>>;
   total(collection: string): Promise<Reply<number>>;
   me(): Promise<Reply<AdminMe>>;
-  run(name: string, tool: string | null, input: Row): Promise<Reply<unknown>>;
+  run(name: string, input: Row): Promise<Reply<unknown>>;
 }
 
 /** An MCP App's transport: Views and operations through `call` (the host's `tools/call`); everything else is `unavailable`. */
@@ -154,14 +154,11 @@ const AFFECTED = ["view", "entries", "entry-editor", "collection-statistics"] as
 const statusOf = (query: { isPending: boolean; isError: boolean }, reply: Reply<unknown> | undefined): ReadStatus =>
   query.isError ? "error" : query.isPending ? "loading" : reply?.status === "unavailable" ? "unavailable" : "ready";
 
-const toolOf = (declared: { readonly [name: string]: { readonly tool: string | null } } | undefined, name: string): string | null =>
-  declared && Object.prototype.hasOwnProperty.call(declared, name) ? declared[name]!.tool : null;
-
 const implementation = {
   useView(name: string, input: object, options: ViewOptions = {}): ViewState<object> {
     const { meta, transport } = useAdminContext();
-    const tool = toolOf(meta.views, name), page = { limit: options.limit, cursor: options.cursor };
-    const query = useQuery({ queryKey: ["view", name, "hook", transport.surface, input, page], queryFn: () => transport.view(name, tool, input as Row, page) });
+    const page = { limit: options.limit, cursor: options.cursor }, rowNames = meta.rowNames?.[name];
+    const query = useQuery({ queryKey: ["view", name, "hook", transport.surface, input, page], queryFn: () => transport.view(name, input as Row, page, rowNames) });
     const ok = query.data?.status === "ok" ? query.data.data : undefined;
     return { rows: ok?.rows ?? [], nextCursor: ok?.nextCursor, status: statusOf(query, query.data) };
   },
@@ -177,11 +174,11 @@ const implementation = {
     return { entry: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
   },
   useOperation(name: string): OperationState<object, unknown> {
-    const { meta, transport } = useAdminContext();
-    const client = useQueryClient(), tool = toolOf(meta.operations, name);
+    const { transport } = useAdminContext();
+    const client = useQueryClient();
     const mutation = useMutation({
       mutationFn: async (input: object): Promise<unknown> => {
-        const reply = await transport.run(name, tool, input as Row);
+        const reply = await transport.run(name, input as Row);
         if (reply.status === "unavailable") throw new AdminUnavailableError();
         return reply.data;
       },

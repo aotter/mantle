@@ -10,13 +10,12 @@ export interface AdminTypes {
 }
 
 /**
- * Generated Admin metadata for `defineAdmin`: the admin MCP tool that serves each View and operation, or `null` when
- * none does; the built-in entry has none. The browser reads `/admin/api` and ignores it; inside an MCP host the hooks call the tool. It names Views
- * and operations only, so nothing here grants or denies anything.
+ * Generated Admin metadata for `defineAdmin`: the column names each View's rows carry in the browser where they differ from
+ * the SQL output names an MCP tool returns, so an MCP App's rows match the browser's. It names columns only; it grants and
+ * denies nothing. The built-in entry has none.
  */
 export interface AdminMeta<T extends AdminTypes = AdminTypes> {
-  readonly views?: { readonly [N in keyof T["views"]]: { readonly tool: string | null } };
-  readonly operations?: { readonly [N in keyof T["operations"]]: { readonly tool: string | null } };
+  readonly rowNames?: { readonly [N in keyof T["views"]]?: { readonly [column: string]: string } };
 }
 
 /** What an Admin entry default-exports and `<MantleAdmin>` renders. */

@@ -3,7 +3,10 @@
 import type { AdminMeta } from "@aotter/mantle-admin/app";
 import { createAdminHooks } from "@aotter/mantle-admin/hooks";
 import type { Output } from "@aotter/mantle/contracts";
-import type { WireRow as View0Row } from "./views/recent-activity.js";
+import type { WireRow as View0Wire } from "./views/recent-activity.js";
+
+type Renamed<Row, Names extends { readonly [from: string]: string }> = { [K in keyof Row as K extends keyof Names ? Names[K] : K]: Row[K] };
+type View0Row = Renamed<View0Wire, {}>;
 
 /** The input and row of each admin View, the `data` of each collection's entries, and the input and output of each admin operation. */
 export interface AppAdminTypes {
@@ -12,13 +15,7 @@ export interface AppAdminTypes {
   readonly operations: { readonly "restock": { readonly input: { readonly "sku": string; readonly "name": string; readonly "qty": number;  }; readonly output: Output } };
 }
 
-/** Pass to `defineAdmin(admin)`: names the admin MCP tool behind each View and operation. */
-export const admin: AdminMeta<AppAdminTypes> = { views: { "recent-activity": { tool: "recent_activity" } }, operations: { "restock": { tool: "restock" } } };
+/** Pass to `defineAdmin(admin)`: the column names a View's rows carry in the browser, for an MCP App to match. */
+export const admin: AdminMeta<AppAdminTypes> = { rowNames: {} };
 
-const hooks = createAdminHooks<AppAdminTypes>();
-export const useView = hooks.useView;
-export const useEntries = hooks.useEntries;
-export const useEntry = hooks.useEntry;
-export const useOperation = hooks.useOperation;
-export const useCollectionTotal = hooks.useCollectionTotal;
-export const useMe = hooks.useMe;
+export const { useView, useEntries, useEntry, useOperation, useCollectionTotal, useMe } = createAdminHooks<AppAdminTypes>();

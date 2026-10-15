@@ -155,7 +155,7 @@ test("mantle bundle for a bun-* target builds only Admin: Bun runs the server as
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
 
-test("mantle bundle keeps Admin's UI, React and the generated Admin client out of the Worker's startup graph", async () => {
+test("mantle bundle keeps Admin's UI and hooks, which the generated Admin client imports, out of the Worker's startup graph", async () => {
   const { dir, entry } = await app();
   try {
     const pkg = join(dir, "node_modules/@aotter/mantle-admin");
@@ -163,29 +163,24 @@ test("mantle bundle keeps Admin's UI, React and the generated Admin client out o
     manifest.exports["./hooks"] = "./dist/admin-app/hooks.js";
     await writeFile(manifestFile, JSON.stringify(manifest));
     await mkdir(join(pkg, "dist/admin-app"), { recursive: true });
-    await writeFile(join(pkg, "dist/admin-app/hooks.js"), "export const useView = () => 1;\n");
+    await writeFile(join(pkg, "dist/admin-app/hooks.js"), "export const createAdminHooks = () => ({ useView: () => 1 });\n");
     await mkdir(join(dir, "node_modules/react"), { recursive: true });
     await writeFile(join(dir, "node_modules/react/package.json"), JSON.stringify({ name: "react", version: "19.0.0", main: "index.js" }));
     await writeFile(join(dir, "node_modules/react/index.js"), "module.exports = { createElement: () => 1 };\n");
-    const generated = join(dir, "generated"), source = join(dir, "app.yaml");
-    await mkdir(generated);
-    await writeFile(source, "kind: Schema\n");
-    await writeFile(join(generated, "generated.ts"), "export const store = 1;\n");
-    await writeFile(join(generated, "admin-client.ts"), "export const admin = {};\n");
+    // the generated client calls createAdminHooks at the top level, so it cannot be dropped from the graph
+    await writeFile(join(dir, "admin-client.ts"), 'import { createAdminHooks } from "@aotter/mantle-admin/hooks";\nexport const { useView } = createAdminHooks();\n');
     const worker = (imports: string) => writeFile(entry, `import { shell } from "@aotter/mantle-admin/server";\n${imports}\nexport default { fetch: () => new Response(shell) };\n`);
     const dist = join(dir, "dist");
 
-    await worker('import { useView } from "@aotter/mantle-admin/hooks";\nexport const x = useView;');
+    await worker('import { createAdminHooks } from "@aotter/mantle-admin/hooks";\nexport const x = createAdminHooks;');
     await expect(bundleApp(entry, dist)).rejects.toThrow("Admin's UI");
+    await worker('import { useView } from "../admin-client.js";\nexport const x = useView;');
+    await expect(bundleApp(entry, dist)).rejects.toThrow("Admin's UI");
+    // React alone is not Admin's: an app may render its own pages with it
     await worker('import React from "react";\nexport const x = React;');
-    await expect(bundleApp(entry, dist)).rejects.toThrow("React runs in the browser");
-    // a generated directory is the one with the inputs record; any other admin-client.ts is the app's own file
-    await worker('import { admin } from "../generated/admin-client.js";\nexport const x = admin;');
     await bundleApp(entry, dist);
-    await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [source], "cloudflare-d1"));
-    await expect(bundleApp(entry, dist)).rejects.toThrow("admin-client.ts is for the browser");
     // only the startup graph counts: a request-time import is its own module
-    await worker('export const x = () => import("react");');
+    await worker('export const x = () => import("../admin-client.js");');
     await bundleApp(entry, dist);
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
