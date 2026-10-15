@@ -34,10 +34,12 @@ Lifecycle and schedule sources are rejected at generation with `GENERATE_UNSUPPO
 
 ## Input rules
 
-The MCP tool below lists `reason` and `closed` without the rules, and its
-description ends "'reason' is required when 'closed' is false."; REST and MCP
-calls fail that rule with `INPUT_VALIDATION_FAILED` at `/reason`. See
-[surface contracts](surface.md) for the supported rules.
+The admin MCP tool below lists `reason` and `closed` without the rules, and its
+description ends "'reason' is required when 'closed' is false."; a call with
+`closed: false` and no `reason` fails with `INPUT_VALIDATION_FAILED` at
+`procedures/set-ticket/input/reason` (the error path is
+`procedures/<name>/input/<field>`). See [surface contracts](surface.md) for the
+supported rules.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2

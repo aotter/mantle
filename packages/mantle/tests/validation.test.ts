@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { JsonSchema, RuntimePlan } from "../src/build/compiler.js";
-import { advertised, emitValidation } from "../src/usecase/validation.js";
+import { acceptsEmpty, advertised, emitValidation } from "../src/usecase/validation.js";
 import { loadGenerated } from "./apps/link.js";
 
 const plan = (input: JsonSchema) => ({ views: { search: { input } }, procedures: { save: { input } } }) as unknown as RuntimePlan;
@@ -111,6 +111,19 @@ test("const compares JSON values", async () => {
   const { validate } = await checked({ type: "object", properties: { kind: { const: "a" }, shape: { const: { a: [1] } }, none: { const: null } } });
   expect(validate({ kind: "a", shape: { a: [1] }, none: null })).toBeTruthy();
   for (const field of [{ kind: "b" }, { shape: { a: [2] } }, { none: 0 }]) error(() => validate(field), `procedures/save/input/${Object.keys(field)[0]}`, "Value violates const.");
+});
+
+test("const numbers must be finite", () => {
+  for (const input of [{ type: "object", properties: { a: { const: Infinity } } }, { type: "object", properties: { a: { const: { b: [NaN] } } } }]) expect(() => emitValidation(plan(input as JsonSchema))).toThrow("Input const numbers must be finite");
+  const refused: string[] = [];
+  emitValidation(plan({ type: "object", properties: { a: {}, b: {} }, if: { properties: { a: { const: -Infinity } }, required: ["a"] }, then: { required: ["b"] } } as JsonSchema), (path, text) => refused.push(`${path}: ${text}`));
+  expect(refused).toEqual([expect.stringContaining("if is supported only"), expect.stringContaining("if is supported only")]);
+});
+
+test("an input accepts no fields only without required, anyOf or an else rule", () => {
+  const properties = { a: { type: "string" }, b: { type: "string" } }, when = { properties: { a: { const: "x" } }, required: ["a"] };
+  for (const input of [undefined, { type: "object", properties }, { type: "object", properties, dependentRequired: { a: ["b"] } }, { type: "object", properties, if: when, then: { required: ["b"] } }]) expect(acceptsEmpty(input as JsonSchema | undefined)).toBe(true);
+  for (const input of [{ type: "object", properties, required: ["a"] }, { type: "object", properties, anyOf: [{ required: ["a"] }, { required: ["b"] }] }, { type: "object", properties, if: when, else: { required: ["b"] } }]) expect(acceptsEmpty(input as JsonSchema)).toBe(false);
 });
 
 test("format uri is an absolute http or https URL", async () => {

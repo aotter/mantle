@@ -153,7 +153,8 @@ const tags = await site.head(request, env); // HTML string, empty for unknown/mi
 ```
 
 Page parameter names must exactly match the View's declared input properties.
-Page and list Views must return the page parameters; list Views must accept empty input. Markdown
+Page and list Views must return the page parameters; list Views must accept empty input: no
+`required`, no root `anyOf` and no `else` rule. `web()` throws a `TypeError` for any other list View. Markdown
 must name a textual output column. HTML remains application-owned.
 
 `/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head

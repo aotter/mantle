@@ -1,12 +1,12 @@
 /** Compile boundary checks into each operation; no schema enters the request bundle. */
-import type { JsonSchema } from "../build/compiler.js";
+import { INPUT_RULE_KEYWORDS, type JsonSchema } from "../build/compiler.js";
 import { q } from "../domain/entry.js";
 import { publishingInput } from "./publishing.js";
 const pointer = (key: string) => key.replace(/~/g, "~0").replace(/\//g, "~1");
-/** Validation-only rules between an object's fields: AI tool catalogues advertise them as sentences instead. */
-const ruleKeywords = ["dependentRequired", "anyOf", "if", "then", "else"];
-const supported = new Set([..."$defs $ref $schema $id type nullable properties required additionalProperties items enum const format pattern minLength maxLength minimum maximum exclusiveMinimum exclusiveMaximum multipleOf minItems maxItems title description default readOnly writeOnly examples deprecated x-mantle-ref x-mcp-hint".split(" "), ...ruleKeywords]);
+const supported = new Set([..."$defs $ref $schema $id type nullable properties required additionalProperties items enum const format pattern minLength maxLength minimum maximum exclusiveMinimum exclusiveMaximum multipleOf minItems maxItems title description default readOnly writeOnly examples deprecated x-mantle-ref x-mcp-hint".split(" "), ...INPUT_RULE_KEYWORDS]);
 const shapes = "see docs/handbook/reference/surface.md";
+// YAML .inf and .nan parse to numbers that JSON writes as null.
+const finite = (value: unknown): boolean => typeof value === "number" ? Number.isFinite(value) : !!value && typeof value === "object" ? Object.values(value).every(finite) : true;
 type Rule = { readonly when: string; readonly key?: string; readonly message: string };
 const has = (key: string) => `Object.hasOwn(object,${q(key)})`;
 const exactly = (value: unknown, keys: string) => !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join(" ") === keys;
@@ -31,14 +31,19 @@ function rules(schema: JsonSchema): Rule[] | string {
     const [key] = exactly(condition, "properties required") ? Object.keys((condition as JsonSchema).properties!) : [];
     const value = key === undefined ? undefined : (condition as JsonSchema).properties![key];
     // Without required: [key], an absent key satisfies `if`.
-    if (key === undefined || !exactly((condition as JsonSchema).properties, key) || !exactly(value, "const") || !["string", "number", "boolean"].includes(typeof value!.const) && value!.const !== null || q((condition as JsonSchema).required) !== q([key]) || !declared([key]))
-      return `if is supported only as exactly { properties: { <field>: { const: <scalar> } }, required: [<field>] }, so an absent field does not satisfy it; ${shapes}.`;
+    if (key === undefined || !exactly((condition as JsonSchema).properties, key) || !exactly(value, "const") || !(["string", "boolean"].includes(typeof value!.const) || Number.isFinite(value!.const) || value!.const === null) || q((condition as JsonSchema).required) !== q([key]) || !declared([key]))
+      return `if is supported only as exactly { properties: { <field>: { const: <string, finite number, boolean or null> } }, required: [<field>] }, so an absent field does not satisfy it; ${shapes}.`;
     if (then === undefined && otherwise === undefined || [then, otherwise].some(branch => branch !== undefined && !(exactly(branch, "required") && declared((branch as JsonSchema).required)))) return `then and else are supported only as exactly { required: [declared properties] } after an if; ${shapes}.`;
     const met = `${has(key)} && object[${q(key)}] === ${q(value!.const)}`;
     for (const name of (then as JsonSchema | undefined)?.required ?? []) found.push({ when: `${met} && !${has(name)}`, key: name, message: `'${name}' is required when '${key}' is ${q(value!.const)}.` });
     for (const name of (otherwise as JsonSchema | undefined)?.required ?? []) found.push({ when: `!(${met}) && !${has(name)}`, key: name, message: `'${name}' is required unless '${key}' is ${q(value!.const)}.` });
   }
   return found;
+}
+/** Whether an input schema accepts `{}`: a list View is read with no input, so web indexes need this. */
+export function acceptsEmpty(input: JsonSchema | undefined): boolean {
+  // dependentRequired needs a present key; an if needs its field, so `{}` meets only an else.
+  return !input?.required?.length && input?.anyOf === undefined && !(input?.else as JsonSchema | undefined)?.required?.length;
 }
 type Text = string | Readonly<Record<string, string>>;
 /**
@@ -52,7 +57,7 @@ export function advertised(input: JsonSchema | undefined, description: Text): { 
     if (!node || typeof node !== "object") return;
     const schema = node as Record<string, unknown>, found = rules(schema);
     if (typeof found !== "string") for (const rule of found) sentences.push(at ? `In '${at}': ${rule.message}` : rule.message);
-    for (const keyword of ruleKeywords) delete schema[keyword];
+    for (const keyword of INPUT_RULE_KEYWORDS) delete schema[keyword];
     for (const [key, child] of Object.entries((schema.properties ?? {}) as object)) strip(child, `${at}/${key}`);
     for (const [key, child] of Object.entries((schema.$defs ?? {}) as object)) strip(child, `#/$defs/${key}`);
     strip(schema.items, `${at}/*`);
@@ -111,7 +116,7 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
       const only = types.length === 1 ? types[0] : undefined;
       const guard = (type:string, test = `(${condition(type)})`) => only === type || type === "number" && only === "integer" ? "" : test + " && ";
       if (schema.enum) { equality = true; check(`!${q(schema.enum)}.some(option=>equal(value,option))`,"Value is not in enum."); }
-      if (schema.const !== undefined) { equality = true; check(`!equal(value,${q(schema.const)})`,"Value violates const."); }
+      if (schema.const !== undefined) { if (!finite(schema.const)) refuse(base, "Input const numbers must be finite; JSON has no Infinity or NaN."); equality = true; check(`!equal(value,${q(schema.const)})`,"Value violates const."); }
       for (const [type,measure,keywords] of bounds) for (const [key,operator] of Object.entries(keywords)) if (schema[key] !== undefined) check(`${guard(type)}${measure} ${operator} ${schema[key]}`, `Value violates ${key}.`);
       if (schema.multipleOf !== undefined) check(`${guard("number",'typeof value === "number"')}!(Math.abs(value / ${schema.multipleOf} - Math.round(value / ${schema.multipleOf})) < 1e-9)`,"Number violates multipleOf.");
       if (schema.pattern !== undefined) {

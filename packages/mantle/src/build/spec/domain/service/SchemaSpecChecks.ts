@@ -1,5 +1,5 @@
 /** Schema.spec: its JSON Schema subset, local refs, indexes, search and Admin UI. */
-import { MANTLE_BIND_KEYWORD, RESERVED_ENTRY_COLUMNS, RESERVED_PROCEDURE_INPUT_NAMES, type SchemaManifest } from "../model/ManifestGrammar.js";
+import { INPUT_RULE_KEYWORDS, MANTLE_BIND_KEYWORD, RESERVED_ENTRY_COLUMNS, RESERVED_PROCEDURE_INPUT_NAMES, type SchemaManifest } from "../model/ManifestGrammar.js";
 import { ManifestParseError, V01_LIFECYCLE_MODES, escapeJsonPointerSegment, rejectUnknownKeys, validateLocalizedText } from "./ManifestFieldChecks.js";
 import { checkSchemaAdminUi } from "./SchemaAdminUiChecker.js";
 import { checkSchemaIndexes, schemaIndexDiagnosticCode } from "./SchemaIndexChecker.js";
@@ -269,8 +269,6 @@ const UNSUPPORTED_JSON_SCHEMA_KEYWORDS = new Set([
   "propertyNames",
   "unevaluatedProperties",
 ]);
-
-const INPUT_RULE_KEYWORDS = ["dependentRequired", "anyOf", "if", "then", "else"];
 
 export function validateJsonSchema(
   root: unknown,
