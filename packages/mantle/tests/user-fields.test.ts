@@ -260,10 +260,10 @@ test('#1644: an IN-scoped or IN-restricted prefix does not serve ORDER BY; the r
   const store=JSON.parse(inScoped(true));store.spec.schema.required.push('store');store.spec.schema.properties.store={type:'string'};
   const elsewhere=await fails(target,JSON.stringify(store),inView('listed','ORDER BY orderNo','public',{restrict:{orders:"store IN auth.user('store')"}}));
   expect(elsewhere).toContain(`${head} Bounded: ORDER BY region, orderNo (same index) (handbook:`);
-  // A nullable restrict column cannot become an ORDER BY key: not required, or required but allowing null.
+  // A nullable restrict column cannot become an ORDER BY key (not required, or required but allowing null): the scope-first order is not offered.
   const optional=JSON.parse(inScoped(false));optional.spec.schema.required=optional.spec.schema.required.filter((c:string)=>c!=='region');
   const nullable=JSON.parse(inScoped(false));nullable.spec.schema.properties.region={type:['string','null']};
-  for(const o of [optional,nullable])expect(await fails(target,JSON.stringify(o),restricted)).toContain("Bounded: make 'region' required and non-null, then ORDER BY region, orderNo (same index) (handbook:");
+  for(const o of [optional,nullable])expect(await fails(target,JSON.stringify(o),restricted)).toContain(`${head} Scope-first ORDER BY unavailable: 'region' can be null (handbook:`);
   // The suggested order keeps the authored direction, and every set-bound prefix column is named.
   expect(await fails(target,inScoped(true),inView('listed','ORDER BY orderNo DESC'))).toContain('ORDER BY region DESC, orderNo DESC (same index, read backwards; on PostgreSQL confirm with EXPLAIN that no Sort remains)');
   const two=JSON.parse(inScoped(true));two.spec.scope+=" AND store IN auth.user('store')";two.spec.indexes=[['region','store','orderNo','id']];two.spec.schema.required.push('store');two.spec.schema.properties.store={type:'string'};
@@ -278,6 +278,19 @@ test('#1644: an IN-scoped or IN-restricted prefix does not serve ORDER BY; the r
   await generateOrThrow(target,[{sourceId:'t.yaml',text:tiered('WHERE tier = input.tier ORDER BY orderNo')}]);
   // An order no index serves keeps the plain message, in authored names.
   expect(await fails(target,inScoped(true),inView('listed','ORDER BY orderNo, tier'))).toContain('Missing index for ORDER BY (orderNo, tier): declare a Schema index');
+  // A publishing Schema's fields can be null (drafts), so an added 'tier' makes the scope-first order unavailable; the scope column itself is non-null.
+  // A public View fixes status = 'published' too, so the { all: true } index lists it.
+  const draft=JSON.parse(inScoped(true));draft.spec.lifecycle='publishing';draft.spec.indexes=[['region','tier','createdAt','id']];
+  const drafted=(sql:string)=>[JSON.stringify(draft),inView('listed',sql,'public',{input:{type:'object',required:['tier'],properties:{tier:{type:'string'}}}})].join('\n---\n');
+  expect(await fails(target,drafted('WHERE tier = input.tier ORDER BY created_at'))).toContain(`past 'region', which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows. Scope-first ORDER BY unavailable: 'tier' can be null. Bounded: for { all: true } callers only, index [status, tier, created_at, id] (handbook:`);
+  draft.spec.indexes=[['region','createdAt','id']];
+  expect(await fails(target,drafted('WHERE tier = input.tier ORDER BY created_at'))).toContain('Bounded: ORDER BY region, created_at (same index); for { all: true } callers only, index [status, tier, created_at, id] (handbook:');
+  await generateOrThrow(target,[{sourceId:'p.yaml',text:drafted('WHERE tier = input.tier ORDER BY region, created_at')}]);
+  // The owner scope column is NOT NULL in storage, but a View cannot name it, so the scope-first order is not offered past it.
+  const owned=JSON.parse(inScoped(true));owned.spec.scope+=' AND ownerId = auth.uid()';owned.spec.indexes=[['ownerId','region','id'],['region','ownerId','orderNo','id']];owned.spec.schema.properties.ownerId={type:'string'};owned.spec.schema.required.push('ownerId');
+  expect(await fails(target,JSON.stringify(owned),inView('listed','ORDER BY orderNo'))).toContain("past 'region', which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows. Scope-first ORDER BY unavailable: 'ownerId' is the owner column, which SQL cannot name. Bounded: for { all: true } callers only, index [ownerId, orderNo, id] (handbook:");
+  owned.spec.indexes.push(['ownerId','orderNo','id']);
+  await generateOrThrow(target,[{sourceId:'o.yaml',text:[JSON.stringify(owned),inView('listed','ORDER BY orderNo')].join('\n---\n')}]);
  }
 });
 const sorts=(plan:any):boolean=>!!plan&&typeof plan==='object'&&(plan['Node Type']==='Sort'||Object.values(plan).some(sorts));
