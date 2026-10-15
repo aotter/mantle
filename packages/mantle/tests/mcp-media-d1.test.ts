@@ -69,8 +69,8 @@ export default{async fetch(request,env){const url=new URL(request.url),key=url.p
   expect((await call("commit_media_upload",{uploadGroupId:upload.uploadGroupId})).structuredContent.id).toBe(committed.id);
   expect((await call("list_media_assets",{search:committed.id})).structuredContent.rows).toHaveLength(1);
   expect((await call("update_media_asset",{id:committed.id,alt:"native R2"})).structuredContent.alt).toBe("native R2");
-  const before=(await counts()).reads,refused=(await rpc("tools/call",{name:"delete_media_asset",arguments:{id:committed.id}},"/mcp/admin",{origin:"https://evil.test"})).data.result;
-  expect(JSON.parse(refused.content[0].text).diagnostics[0]).toMatchObject({code:"AUTH_DENIED",path:"request:origin"});expect((await counts()).reads).toBe(before);
+  const before=(await counts()).reads,refused=await rpc("tools/call",{name:"delete_media_asset",arguments:{id:committed.id}},"/mcp/admin",{origin:"https://evil.test"});
+  expect(refused.response.status).toBe(403);expect(refused.data.error.message).toBe("Invalid Origin: evil.test");expect((await counts()).reads).toBe(before);
   expect((await call("get_media_asset",{id:committed.id})).structuredContent.alt).toBe("native R2");
   const missing=await fetch(origin+"/native-error-status");expect(missing.status).toBe(404);expect((await missing.json() as {error:{code:string;path:string}}).error).toMatchObject({code:"MEDIA_ASSET_NOT_FOUND",path:"media"});
   const partial=await fetch(origin+"/native-error-status?partial=1&id="+committed.id);expect(partial.status).toBe(503);expect((await partial.json() as {error:{code:string;path:string;failure:unknown}}).error).toMatchObject({code:"PARTIAL_FAILURE",path:"media",failure:{outcome:"partial",retry:"safe",resource:"media"}});

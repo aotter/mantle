@@ -18,6 +18,8 @@ export interface Options<Env, Database> extends GatewayOptions {
   serverInfo?: { name?: string; title?: string; version?: string; icons?: { src: string; mimeType?: string; sizes?: string[]; theme?: "light" | "dark" }[] };
   requiredScopes?: readonly string[];
   resourceMetadata?: string;
+  /** Browser origins MCP answers besides loopback, compared by hostname: `https://console.example` or the official SDK's bare `console.example`. The site's own origin is not implied. */
+  allowedOrigins?: readonly string[];
   onObservation?: (event: McpObservation) => void | Promise<void>;
   onRefusal?: (event: CallerRefusal) => void | Promise<void>;
 }
@@ -43,6 +45,8 @@ export interface Tool<Database, Handlers = never> {
   readonly outputSchema?: unknown;
   readonly annotations?: { readonly readOnlyHint?: boolean; readonly destructiveHint?: boolean; readonly openWorldHint?: boolean; readonly idempotentHint?: boolean };
   readonly inputSchema: unknown;
+  /** The listed definition's version; results carry it so a model holding an older definition can tell. */
+  readonly version?: string;
   /** Declares an auth requirement: anonymous callers are challenged. */
   readonly closed?: boolean;
   /** OAuth scopes the requirement names. */
@@ -72,11 +76,21 @@ export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database,
       typeof tools === "function" ? linkApps(app) : linked[surface] = linkSurface(app, tools.filter(tool => tool.surface === surface));
     }
   }
-  options = { ...options, apps };
+  options = { ...options, apps, allowedOrigins: originHostnames(options.allowedOrigins) };
   return async (request, env, ctx) => {
     if (!/^\/mcp(?:\/admin)?\/*$/.test(new URL(request.url).pathname)) return;
     const { handler } = await import("./mcp-handler.js");
     serve ??= handler(tools, options, linked, reads);
     return serve(request, env, ctx);
   };
+}
+
+/** `allowedOrigins` as the hostnames the official SDK compares; a bad entry fails here, not on each request. */
+function originHostnames(origins: readonly string[] = []): readonly string[] {
+  return Object.freeze(origins.map(origin => {
+    let url: URL | undefined;
+    try { url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(origin) ? origin : `http://${origin}`); } catch {}
+    if (origin.includes("*") || !url?.hostname || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new TypeError(`mcp allowedOrigins: "${origin}" is not an origin (https://host[:port]) or a host[:port]; wildcards never match.`);
+    return url.hostname;
+  }));
 }
