@@ -65,7 +65,7 @@ try {
     if (!result.ok) throw new Error(JSON.stringify(result.diagnostics, null, 2));
     for (const warning of result.warnings ?? []) console.warn(`warning: ${warning}`);
     const read = [...paths, ...(values.auth ?? []), ...[values.site, values["admin-extensions"]].filter((path): path is string => !!path)];
-    const changed = await writeArtifacts(destination, { ...result.files, [INPUTS_FILE]: inputsFingerprint(destination, read) }, values.check);
+    const changed = await writeArtifacts(destination, { ...result.files, [INPUTS_FILE]: inputsFingerprint(destination, read, target) }, values.check);
     if (target.startsWith("cloudflare-")) {
       const wrangler = values.wrangler ?? ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].find(existsSync) ?? "wrangler.jsonc";
       const assets = values.admin ? values.assets ?? join(values.outdir!, "client") : undefined;

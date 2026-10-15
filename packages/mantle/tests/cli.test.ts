@@ -18,6 +18,7 @@ test("generate lists every ref Procedure's Handlers key, then prompts typecheck"
     const source = join(dir, "refs.yaml");
     await writeFile(source, names.map(name => JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind: "Procedure", metadata: { name }, spec: { input: { type: "object" }, output: { type: "object" }, handler: { ref: "app.handler" } } })).join("\n---\n"));
     const output = execFileSync("node", [cli, "generate", "bun-sqlite", "generated", source], { cwd: dir, encoding: "utf8" });
+    expect(JSON.parse(await readFile(join(dir, "generated/.mantle-inputs.json"), "utf8")).target).toBe("bun-sqlite"); // mantle bundle builds only Admin for it
     for (const name of names) expect(output).toContain(`Ref Procedure ${JSON.stringify(name)}: implement Handlers[${JSON.stringify(name)}].`);
     expect(output.trim().endsWith("Next: run tsc --noEmit; pass the handlers at store(db, caller, { handlers }).")).toBe(true);
     const sqlOnly = generate(dir);

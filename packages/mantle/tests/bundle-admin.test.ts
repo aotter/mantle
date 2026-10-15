@@ -1,9 +1,10 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bundleApp } from "../src/infrastructure/bundle.js";
+import { INPUTS_FILE, inputsFingerprint } from "../src/infrastructure/inputs.js";
 
 /** An app whose Worker may mount Admin, with a stand-in `@aotter/mantle-admin` whose buildAdmin records each call. */
 async function app() {
@@ -118,6 +119,38 @@ test("mantle bundle rebuilds the built-in entry when the installed Admin moves a
     await rm(pkg);
     await symlink(store("patched"), pkg, "dir");
     await bundleApp(entry, dist);
+    expect(await builds()).toHaveLength(2);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
+test("mantle bundle for a bun-* target builds only Admin: Bun runs the server as TypeScript", async () => {
+  const { dir, builds } = await app();
+  try {
+    const entry = join(dir, "src/server.ts"), generated = join(dir, "generated"), manifest = join(dir, "app.yaml");
+    await mkdir(generated);
+    await writeFile(manifest, "kind: Schema\n");
+    await writeFile(join(generated, "generated.ts"), "export const store = 1;\n");
+    await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "bun-sqlite"));
+    await writeFile(entry, 'import { Database } from "bun:sqlite";\nimport { shell } from "@aotter/mantle-admin/server";\nimport { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(shell + store + new Database()) });\n');
+    await bundleApp(entry, join(dir, "dist"));
+    expect(existsSync(join(dir, "dist/worker"))).toBe(false);
+    expect(await readFile(join(dir, "dist/client/admin/index.html"), "utf8")).toBe("undefined");
+    // stale generated output is refused as on Workers
+    await writeFile(manifest, "kind: View\n");
+    await expect(bundleApp(entry, join(dir, "dist"))).rejects.toThrow("is stale");
+    await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "bun-postgres"));
+    // a Bun server without the Admin server builds nothing
+    await rm(join(dir, "dist"), { recursive: true });
+    await writeFile(entry, 'import { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(String(store)) });\n');
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    let warned = "";
+    try { await bundleApp(entry, join(dir, "dist")); warned = warn.mock.calls.flat().join("\n"); } finally { warn.mockRestore(); }
+    expect(warned).toContain("no Admin built");
+    expect(existsSync(join(dir, "dist"))).toBe(false);
+    expect(await builds()).toHaveLength(1);
+    // a subpath of the Admin server counts as importing it
+    await writeFile(entry, 'import { x } from "@aotter/mantle-admin/server/extra";\nimport { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(String(x + store)) });\n');
+    await bundleApp(entry, join(dir, "dist"));
     expect(await builds()).toHaveLength(2);
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);

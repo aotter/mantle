@@ -24,7 +24,8 @@ at `@aotter/mantle-ui/controller`.
 ## Static assets
 
 `mantle bundle` builds Admin for the application into `<assets>/admin` (default
-`dist/client/admin`) whenever the Worker imports `@aotter/mantle-admin/server`,
+`dist/client/admin`) whenever the Worker or Bun server imports `@aotter/mantle-admin/server`
+(for a `bun-*` generate target it builds only Admin, since Bun runs the server as TypeScript),
 through `buildAdmin({ entry, outDir })` from `@aotter/mantle-admin/build` (not a
 CLI). The entry is `admin.tsx` beside the Worker entry, default-exporting
 `defineAdmin(...)`, or the built-in entry. Vite, Tailwind, React and Admin's UI
@@ -34,9 +35,10 @@ The build writes the shell, the preview
 document, `host-bridge.js`, the extension shims and hashed assets.
 
 Serve that directory through an app-owned asset binding or reader at `/admin/`;
-`adminShell`'s `assets(path)` receives paths relative to it. Bun hosts serve the
-prebuilt directory of `@aotter/mantle-admin/admin/index.html` the same way until
-they build Admin too. Missing assets stay missing;
+`adminShell`'s `assets(path)` receives paths relative to it. Bun hosts read it
+with `bunAdminAssets("dist/client/admin")` from `@aotter/mantle/bun/assets`; it takes a path with a leading slash and
+returns `null` when missing, so give `adminShell` the adapter
+`async path => (await assets("/" + path)) ?? new Response(null, { status: 404 })`. Missing assets stay missing;
 the API does not read the filesystem or own a platform asset preset. Static SPA
 files stay outside the Worker query bundle. Route an authenticated API request
 to the Admin server with the app's already-resolved caller and generated Store,
