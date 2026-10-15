@@ -10,8 +10,8 @@ export function generateFromSources(request: GenerateRequest & { readonly auth?:
 function authSql(instances: readonly BetterAuthOptions[], dialect: "postgres" | "sqlite"): string[] {
   for (const options of instances) {
     const ids = (options.plugins ?? []).map(plugin => plugin.id);
-    // Offline OAuth grants outlive sessions; without the revocation plugin a password reset or ban would not end them.
-    if (ids.some(id => id === "oauth-provider" || id === "mcp") && !ids.includes("mantle-oauth-grant-revocation") /* oauthGrantRevocation().id */) throw new Error("Better Auth has an OAuth provider (oauthProvider or mcp) without oauthGrantRevocation(): add it from @aotter/mantle/auth/oauth to the plugins, so a password reset, an admin ban or session revocation ends that user's OAuth grants.");
+    // Offline OAuth grants outlive sessions; without the revocation plugin a password reset or ban would not end them. mcp() spreads oauthProvider, id included.
+    if (ids.includes("oauth-provider") && !ids.includes("mantle-oauth-grant-revocation") /* oauthGrantRevocation().id */) throw new Error("Better Auth has an OAuth provider (oauthProvider or mcp) without oauthGrantRevocation(): add it from @aotter/mantle/auth/oauth to the plugins, so a password reset, an admin ban or session revocation ends that user's OAuth grants.");
   }
   const statements = [...new Set(instances.flatMap(options => authSchemaSql(options, dialect)))];
   // CREATE TABLE IF NOT EXISTS would silently keep the first of two different definitions.

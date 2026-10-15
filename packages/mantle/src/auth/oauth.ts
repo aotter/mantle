@@ -56,38 +56,64 @@ export const oauthGrantExtension: NonNullable<Parameters<typeof oauthProvider>[0
 };
 
 export const OAUTH_GRANT_REVOCATION = "mantle-oauth-grant-revocation";
-/** Admin and credential events that end a user's OAuth grants; `/change-password` only with `revokeOtherSessions`. */
-const REVOKING = ["/change-password", "/admin/ban-user", "/admin/revoke-user-sessions", "/admin/set-user-password"];
+/** Password resets (all channels) and an admin password change: the old credential may be compromised, so every session ends too. */
+const RESETS = ["/reset-password", "/email-otp/reset-password", "/phone-number/reset-password", "/admin/set-user-password"];
+const ENDING = [...RESETS, "/change-password", "/admin/ban-user", "/admin/update-user", "/admin/revoke-user-sessions"];
+const RESET_USER = "mantleResetPasswordUser";
 
 /**
  * Add to the Better Auth plugins with the OAuth provider. An `offline_access` grant outlives sign-out and session expiry
- * (as in Better Auth), but a password reset or change that signs out other devices, an admin ban, an admin session
- * revocation or an admin password change revokes every OAuth grant of that user: a compromised account's grants end.
+ * (as in Better Auth), but a successful password reset, a password change that signs out other devices, an admin ban
+ * (`/admin/ban-user`, or `/admin/update-user` setting `banned: true`), an admin session revocation or an admin password
+ * change ends every OAuth grant of that user: tokens, consents and unredeemed codes.
  */
 export function oauthGrantRevocation() {
-  const revoke = async (context: AuthContext, userId: unknown) => {
-    if (typeof userId !== "string" || !userId) return;
-    for (const model of ["oauthRefreshToken", "oauthAccessToken"]) await context.adapter.updateMany({ model, where: [pair("userId", userId), { field: "revoked", value: null }], update: { revoked: new Date() } });
-  };
   return {
     id: OAUTH_GRANT_REVOCATION,
     hooks: {
-      // The reset token names its user only until Better Auth consumes it, so this runs before; a valid token proves the email.
+      // Better Auth consumes the reset token, so its user rides this request's own context to the after hook.
       before: [{ matcher: ctx => ctx.path === "/reset-password", handler: createAuthMiddleware(async ctx => {
         // Better Auth reads the token from the body or the query, in that order.
         const token = (ctx.body as { token?: unknown } | undefined)?.token || (ctx.query as { token?: unknown } | undefined)?.token;
         const value = typeof token === "string" && token ? await ctx.context.internalAdapter.findVerificationValue(`reset-password:${token}`) : null;
-        if (value && new Date(value.expiresAt).getTime() > Date.now()) await revoke(ctx.context, value.value);
+        if (value) return { context: { [RESET_USER]: value.value } };
       }) }],
-      // After the endpoint: its own permission checks have passed and it succeeded.
-      after: [{ matcher: ctx => REVOKING.includes(ctx.path ?? ""), handler: createAuthMiddleware(async ctx => {
-        const returned = ctx.context.returned, body = ctx.body as { userId?: unknown; revokeOtherSessions?: unknown } | undefined;
+      // After the endpoint: its own validation and permission checks have passed and it succeeded.
+      after: [{ matcher: ctx => ENDING.includes(ctx.path ?? ""), handler: createAuthMiddleware(async ctx => {
+        const returned = ctx.context.returned, path = ctx.path ?? "";
         if (returned instanceof Error || returned instanceof Response && !returned.ok) return;
-        if (ctx.path !== "/change-password") return revoke(ctx.context, body?.userId);
-        if (body?.revokeOtherSessions === true) await revoke(ctx.context, ctx.context.session?.user.id ?? (returned as { user?: { id?: unknown } } | null)?.user?.id);
+        const body = ctx.body as { userId?: unknown; revokeOtherSessions?: unknown; data?: { banned?: unknown }; email?: unknown; phoneNumber?: unknown } | undefined;
+        const userId = path === "/reset-password" ? (ctx as { [RESET_USER]?: unknown })[RESET_USER]
+          : path === "/email-otp/reset-password" ? typeof body?.email === "string" && (await ctx.context.internalAdapter.findUserByEmail(body.email.toLowerCase()))?.user.id
+          : path === "/phone-number/reset-password" ? typeof body?.phoneNumber === "string" && (await ctx.context.adapter.findOne<{ id: string }>({ model: "user", where: [pair("phoneNumber", body.phoneNumber)] }))?.id
+          // Better Auth itself ends the other sessions and keeps the current one.
+          : path === "/change-password" ? body?.revokeOtherSessions === true && (ctx.context.session?.user.id ?? (returned as { user?: { id?: unknown } } | null)?.user?.id)
+          : path === "/admin/update-user" ? body?.data?.banned === true && body.userId
+          : body?.userId;
+        if (typeof userId !== "string" || !userId) return;
+        await endGrants(ctx.context.adapter, userId);
+        if (RESETS.includes(path)) await ctx.context.internalAdapter.deleteUserSessions(userId);
       }) }],
     },
   } satisfies BetterAuthPlugin;
+}
+
+/** Ends a user's grants (for one client, or all): consents, tokens and unredeemed authorization codes. */
+async function endGrants(db: AuthContext["adapter"], userId: string, clientId?: string) {
+  const where = [pair("userId", userId), ...clientId ? [pair("clientId", clientId)] : []];
+  // Delete first: even if cleanup fails, every issued JWT fails the live-grant check immediately.
+  await db.deleteMany({ model: "oauthConsent", where });
+  for (const model of ["oauthRefreshToken", "oauthAccessToken"]) await db.updateMany({ model, where: [...where, { field: "revoked", value: null }], update: { revoked: new Date() } });
+  // An unredeemed code would mint a new token lineage after reconsent.
+  const code = (v: string) => { const x = authCode(v); return x?.userId === userId && (!clientId || x.query.client_id === clientId); };
+  const codes = [userId, clientId].filter(x => x !== undefined).map(x => ({ field: "value", operator: "contains" as const, value: JSON.stringify(x) }));
+  for (let offset = 0; ;) {
+    const page = await db.findMany<{ id: string; value: string }>({ model: "verification", where: codes, limit: 100, offset, sortBy: { field: "id", direction: "asc" } });
+    const ids = page.filter(v => code(v.value)).map(v => v.id);
+    if (ids.length) await db.deleteMany({ model: "verification", where: [{ field: "id", operator: "in", value: ids }] });
+    if (page.length < 100) break;
+    offset += page.length - ids.length;
+  }
 }
 
 /** A verification value that is an authorization code, with its user and client; else undefined. */
@@ -133,20 +159,7 @@ export function oauthConsents(auth: AuthInstance & { handler(request: Request): 
       const db = await adapter();
       const consent = await db.findOne<{ clientId: string }>({ model: "oauthConsent", where: [pair("id", consentId), pair("userId", userId)] });
       if (!consent) return false;
-      const where = [pair("userId", userId), pair("clientId", consent.clientId)];
-      // Delete first: even if cleanup fails, every issued JWT fails the live-grant check immediately.
-      await db.deleteMany({ model: "oauthConsent", where });
-      for (const model of ["oauthRefreshToken", "oauthAccessToken"]) await db.updateMany({ model, where: [...where, { field: "revoked", value: null }], update: { revoked: new Date() } });
-      // An unredeemed code would mint a new token lineage after reconsent.
-      const code = (v: string) => { const x = authCode(v); return x?.userId === userId && x.query.client_id === consent.clientId; };
-      const codes = [{ field: "value", operator: "contains" as const, value: JSON.stringify(userId) }, { field: "value", operator: "contains" as const, value: JSON.stringify(consent.clientId) }];
-      for (let offset = 0; ;) {
-        const page = await db.findMany<{ id: string; value: string }>({ model: "verification", where: codes, limit: 100, offset, sortBy: { field: "id", direction: "asc" } });
-        const ids = page.filter(v => code(v.value)).map(v => v.id);
-        if (ids.length) await db.deleteMany({ model: "verification", where: [{ field: "id", operator: "in", value: ids }] });
-        if (page.length < 100) break;
-        offset += page.length - ids.length;
-      }
+      await endGrants(db, userId, consent.clientId);
       return true;
     },
   };

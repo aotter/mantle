@@ -96,11 +96,22 @@ default), so an offline grant that keeps refreshing does not expire. Without a l
 unrevoked, unexpired `offline_access` refresh token for the same user and client.
 The consent, client, scope, resource and ban checks still apply. An access token
 issued before sign-out stays valid until it expires (one hour by default).
-`oauthGrantRevocation()` revokes every OAuth refresh and access token of the user
-on a password reset, a password change that signs out other devices, and the admin
-ban, session revocation and password change actions; unbanning does not restore
-them. An access token already issued stands on its session while that lives (at
-most its own lifetime). Better Auth's `/oauth2/introspect` reports a refreshed
+`oauthGrantRevocation()` ends every OAuth grant of the user once one of these
+succeeds: revokes their refresh and access tokens, deletes their consents for
+every client (the next authorization asks again) and their unredeemed
+authorization codes. The events and the sessions each one ends:
+
+| Event | Sessions ended |
+| --- | --- |
+| Password reset (`/reset-password`, `/email-otp/reset-password`, `/phone-number/reset-password`) | all |
+| Admin password change (`/admin/set-user-password`) | all |
+| Password change with `revokeOtherSessions` | all; Better Auth gives the current device a new session |
+| Admin ban (`/admin/ban-user`, or `/admin/update-user` setting `banned: true`) | all (Better Auth) |
+| Admin session revocation (`/admin/revoke-user-sessions`) | all (Better Auth) |
+
+A failed attempt, sign-out, session expiry and a password change without
+`revokeOtherSessions` end nothing; unbanning does not restore grants. An access
+token already issued is rejected at once. Better Auth's `/oauth2/introspect` reports a refreshed
 token inactive once its original session has expired, while Mantle's resource
 check accepts it; Mantle does not use introspection.
 Database failures remain server errors, rather than silently authenticating.

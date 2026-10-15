@@ -13,7 +13,7 @@ import type { BetterAuthOptions } from "better-auth/types";
 import { afterAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { betterAuth } from "better-auth/minimal";
-import { admin as adminFunction, customSession, emailOTP, jwt } from "better-auth/plugins";
+import { admin as adminFunction, customSession, emailOTP, jwt, phoneNumber } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -34,7 +34,7 @@ type App = Awaited<ReturnType<typeof makeApp>>;
 async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean; additionalFields?: NonNullable<BetterAuthOptions["user"]>["additionalFields"]; derivedRegion?: boolean; localOnly?: boolean } = {}) {
   const sqlite = new Database(":memory:");
   sqlite.run("PRAGMA foreign_keys = ON");
-  const otps: { email: string; otp: string }[] = [], resets: string[] = [];
+  const otps: { email: string; otp: string }[] = [], resets: string[] = [], phoneOtps: string[] = [];
   const statements: string[] = [], native = d1Shim(sqlite);
   // Serve the handler first: baseURL (and so the JWKS URL and token issuer) must name the real port.
   let handle: (request: Request) => Promise<Response> = async () => new Response("not ready", { status: 503 });
@@ -61,6 +61,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
     plugins: [
       ...(options.derivedRegion ? [customSession(async ({ user, session }) => ({ user: { ...user, region: ['TW'] }, session }))] : []),
       emailOTP({ sendVerificationOTP: async ({ email, otp }) => { otps.push({ email, otp }); } }),
+      phoneNumber({ sendOTP: () => {}, sendPasswordResetOTP: async ({ code }) => { phoneOtps.push(code); } }),
       options.customAdmin ? adminFunction({ adminRoles: ["admin"], ac, roles: { admin: ac.newRole(defaultStatements) } }) : adminFunction(),
       jwt({ disableSettingJwtHeader: true }),
       oauthGrantRevocation(),
@@ -93,7 +94,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
     return { cookie, userId: body.user.id, setCookies: response.headers.getSetCookie() };
   }
   const request = (headers: Record<string, string> = {}) => new Request(`${origin}/some/route`, { headers });
-  return { sqlite, auth, loader, post, signIn, request, baseURL, resets, loads: () => loads, breakCache: () => { cacheBroken = true; }, cache, statements };
+  return { sqlite, auth, loader, post, signIn, request, baseURL, resets, otps, phoneOtps, loads: () => loads, breakCache: () => { cacheBroken = true; }, cache, statements };
 }
 
 describe("resolveCaller: session cookie", () => {
@@ -182,6 +183,16 @@ describe("resolveCaller: session cookie", () => {
 
 const b64url = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
 const REDIRECT = "https://client.example.test/callback";
+
+/** An authorization request with PKCE; the location is the consent page, or the client callback with a code when consent exists. */
+async function authorize(app: App, cookie: string, clientId: string, scope: string) {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+  const query = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: REDIRECT, scope, state: "s1", code_challenge: challenge, code_challenge_method: "S256", resource: AUDIENCE });
+  const response = await fetch(`${app.baseURL}/oauth2/authorize?${query}`, { headers: { cookie }, redirect: "manual" });
+  return { location: response.headers.get("location") ?? "", verifier };
+}
+const exchange = (app: App, clientId: string, code: string, verifier: string) => fetch(`${app.baseURL}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: verifier, resource: AUDIENCE }) });
 
 /** The official authorization-code + PKCE flow against the live instance; returns the access token. */
 async function oauthAccessToken(app: App, cookie: string, scope = "mcp", proof?: (url: string, method: string, token?: string) => Promise<string>, skipConsent = false) {
@@ -318,34 +329,73 @@ describe("OAuth grant revocation and consent routes", () => {
     await expect(use(deleted.body.access_token)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
     expect((await refresh(deleted.body.refresh_token)).status).toBe(400);
   });
-  test("password reset, admin ban, admin session revocation and admin password change end a user's offline grants", async () => {
+  test("password resets, admin bans, session revocation and password changes end a user's grants for good", async () => {
     const app = await makeApp(), root = await app.signIn("root@example.test");
     app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [root.userId]);
     const asAdmin = (path: string, body: object) => app.post(path, body, { cookie: root.cookie });
     const use = (token: string) => resolveCaller(app.request({ authorization: `Bearer ${token}` }), app.loader, { audience: AUDIENCE });
-    const events: [string, (userId: string, email: string) => Promise<Response>][] = [
-      ["reset", async (_userId, email) => { await app.post("/request-password-reset", { email, redirectTo: "/" }); return app.post("/reset-password", { newPassword: "another-password-123", token: app.resets.at(-1) }); }],
-      ["query", async (_userId, email) => { await app.post("/request-password-reset", { email, redirectTo: "/" }); return app.post(`/reset-password?token=${app.resets.at(-1)}`, { newPassword: "another-password-123" }); }],
-      ["ban", userId => asAdmin("/admin/ban-user", { userId })],
-      ["sessions", userId => asAdmin("/admin/revoke-user-sessions", { userId })],
-      ["password", userId => asAdmin("/admin/set-user-password", { userId, newPassword: "another-password-123" })],
+    const refresh = (grant: { refreshToken?: string; clientId: string }) => fetch(`${app.baseURL}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: grant.refreshToken!, client_id: grant.clientId, resource: AUDIENCE }) });
+    const session = async (cookie: string) => !!await app.auth.api.getSession({ headers: new Headers({ cookie }) });
+    const resetLink = async (email: string) => { await app.post("/request-password-reset", { email, redirectTo: "/" }); return app.resets.at(-1)!; };
+    const resetOtp = async (email: string) => { await app.post("/email-otp/request-password-reset", { email }); return app.otps.findLast(x => x.email === email)!.otp; };
+    const password = "another-password-123", cookieOf = (response: Response) => response.headers.getSetCookie().map(line => line.split(";")[0]).join("; ");
+    const signUp = async (email: string) => { const response = await app.post("/sign-up/email", { email, password: "first-password-123", name: email }); return { cookie: cookieOf(response), userId: (await response.json() as { user: { id: string } }).user.id }; };
+    type End = (user: { userId: string; email: string; cookie: string }) => Promise<Response>;
+    const events: [string, End][] = [
+      ["reset", async ({ email }) => app.post("/reset-password", { newPassword: password, token: await resetLink(email) })],
+      ["query", async ({ email }) => app.post(`/reset-password?token=${await resetLink(email)}`, { newPassword: password })],
+      ["email-otp", async ({ email }) => app.post("/email-otp/reset-password", { email, otp: await resetOtp(email), password })],
+      ["phone", async ({ userId }) => {
+        const phone = `+1555${userId.slice(0, 7)}`;
+        app.sqlite.run("UPDATE user SET phoneNumber = ? WHERE id = ?", [phone, userId]);
+        await app.post("/phone-number/request-password-reset", { phoneNumber: phone });
+        return app.post("/phone-number/reset-password", { phoneNumber: phone, otp: app.phoneOtps.at(-1), newPassword: password });
+      }],
+      ["password", ({ userId }) => asAdmin("/admin/set-user-password", { userId, newPassword: password })],
+      ["ban", ({ userId }) => asAdmin("/admin/ban-user", { userId })],
+      ["update-ban", ({ userId }) => asAdmin("/admin/update-user", { userId, data: { banned: true } })],
+      ["sessions", ({ userId }) => asAdmin("/admin/revoke-user-sessions", { userId })],
+      ["change", ({ cookie }) => app.post("/change-password", { currentPassword: "first-password-123", newPassword: password, revokeOtherSessions: true }, { cookie })],
     ];
     for (const [name, end] of events) {
-      const email = `${name}@example.test`, { cookie, userId } = await app.signIn(email);
+      const email = `${name}@example.test`;
+      const { cookie, userId } = name === "change" ? await signUp(email) : await app.signIn(email);
+      // An email OTP sign-in verifies the signed-up email, which ends that user's earlier sessions.
+      const other = name === "change" ? cookieOf(await app.post("/sign-in/email", { email, password: "first-password-123" })) : (await app.signIn(email)).cookie;
       const grant = await oauthAccessToken(app, cookie, "mcp offline_access");
-      expect((await end(userId, email)).status).toBe(200);
-      if (name === "ban") expect((await asAdmin("/admin/unban-user", { userId })).status).toBe(200);
-      const refreshed = await fetch(`${app.baseURL}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: grant.refreshToken!, client_id: grant.clientId, resource: AUDIENCE }) });
-      expect(refreshed.status, name).not.toBe(200);
-      // An issued access token stands on its session while that lives (at most its own lifetime), then on the revoked refresh token.
-      app.sqlite.run("DELETE FROM session WHERE userId = ?", [userId]);
+      // Consent exists, so this code is issued silently; it stays unredeemed across the event.
+      const pending = await authorize(app, cookie, grant.clientId, "mcp offline_access");
+      expect(pending.location, name).toStartWith(REDIRECT);
+      const ended = await end({ userId, email, cookie });
+      expect(ended.status, name).toBe(200);
+      // Better Auth replaces the current session of a password change with a new one; every other session ends.
+      const current = name === "change" ? cookieOf(ended) : null;
+      if (name.endsWith("ban")) expect((await asAdmin("/admin/unban-user", { userId })).status).toBe(200);
+      expect((await refresh(grant)).status, name).not.toBe(200);
+      expect((await exchange(app, grant.clientId, new URL(pending.location).searchParams.get("code")!, pending.verifier)).status, name).not.toBe(200);
       await expect(use(grant.accessToken), name).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+      expect([await session(cookie), await session(other), !!current && await session(current)], name).toEqual([false, false, name === "change"]);
+      // No silent re-grant: the next authorization for that client asks again.
+      const again = current ?? (await app.signIn(email)).cookie;
+      expect((await authorize(app, again, grant.clientId, "mcp offline_access")).location, name).toContain("/oauth/consent?");
     }
-    // Sign-out and a user's own password change without signing out other devices keep offline grants (Better Auth).
-    const keep = await app.signIn("keep@example.test"), kept = await oauthAccessToken(app, keep.cookie, "mcp offline_access");
-    expect((await app.post("/sign-out", {}, { cookie: keep.cookie })).status).toBe(200);
-    app.sqlite.run("DELETE FROM session WHERE userId = ?", [keep.userId]);
-    expect(await use(kept.accessToken)).toMatchObject({ subject: keep.userId });
+    // Failed resets, a non-ban update, sign-out and a password change that keeps other devices end nothing.
+    const keeps: [string, End][] = [
+      ["short-reset", async ({ email }) => app.post("/reset-password", { newPassword: "short", token: await resetLink(email) })],
+      ["short-otp", async ({ email }) => app.post("/email-otp/reset-password", { email, otp: await resetOtp(email), password: "short" })],
+      ["rename", ({ userId }) => asAdmin("/admin/update-user", { userId, data: { name: "renamed" } })],
+      ["sign-out", ({ cookie }) => app.post("/sign-out", {}, { cookie })],
+      ["keep-change", ({ cookie }) => app.post("/change-password", { currentPassword: "first-password-123", newPassword: password }, { cookie })],
+    ];
+    for (const [name, end] of keeps) {
+      const email = `${name}@example.test`, { cookie, userId } = name === "keep-change" ? await signUp(email) : await app.signIn(email);
+      const grant = await oauthAccessToken(app, cookie, "mcp offline_access");
+      expect((await end({ userId, email, cookie })).status, name).toBe(name.startsWith("short") ? 400 : 200);
+      expect((await refresh(grant)).status, name).toBe(200);
+      app.sqlite.run("DELETE FROM session WHERE userId = ?", [userId]);
+      expect(await use(grant.accessToken), name).toMatchObject({ subject: userId });
+      expect((await authorize(app, (await app.signIn(email)).cookie, grant.clientId, "mcp offline_access")).location, name).toStartWith(REDIRECT);
+    }
   });
   test("sign-out follows Better Auth: session-bound grants end, offline_access refresh tokens survive", async () => {
     const app = await makeApp(); const { cookie, userId } = await app.signIn();
