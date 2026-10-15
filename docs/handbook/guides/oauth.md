@@ -96,11 +96,38 @@ default), so an offline grant that keeps refreshing does not expire. Without a l
 unrevoked, unexpired `offline_access` refresh token for the same user and client.
 The consent, client, scope, resource and ban checks still apply. An access token
 issued before sign-out stays valid until it expires (one hour by default).
-`oauthGrantRevocation()` revokes every OAuth refresh and access token of the user
-on a password reset, a password change that signs out other devices, and the admin
-ban, session revocation and password change actions; unbanning does not restore
-them. An access token already issued stands on its session while that lives (at
-most its own lifetime). Better Auth's `/oauth2/introspect` reports a refreshed
+`oauthGrantRevocation()` ends every OAuth grant of the user once one of these
+succeeds: revokes their refresh and access tokens, deletes their consents for
+every client (the next authorization asks again, except for a first-party
+`skip_consent` client, which never asks) and their unredeemed
+authorization codes. The events and the sessions each one ends:
+
+| Event | Sessions ended |
+| --- | --- |
+| Password reset (`/reset-password`, `/email-otp/reset-password`, `/phone-number/reset-password`) | all |
+| Admin password change (`/admin/set-user-password`) | all |
+| Password change with `revokeOtherSessions` | all; Better Auth gives the current device a new session |
+| Admin ban (`/admin/ban-user`, or `/admin/update-user` setting `banned: true`) | all (Better Auth) |
+| Admin session revocation (`/admin/revoke-user-sessions`) | all (Better Auth) |
+| Email OTP or magic-link sign-in (`/sign-in/email-otp`, `/magic-link/verify`) that proves the address of an unverified user | all, and its password and linked accounts (Better Auth) |
+
+The last row covers account pre-hijacking: someone who signed up with another
+person's address before it was verified loses their OAuth grants as well as the
+password, linked accounts and sessions that Better Auth strips when the owner
+proves the address. Mantle ends these grants before Better Auth checks the code or
+link, while the user is still unverified, so a failed OTP or magic-link attempt on an
+unverified user also ends that user's OAuth grants.
+
+Otherwise a failed attempt, session expiry, a password change without `revokeOtherSessions`,
+and the user's own sign-out, `/revoke-sessions` and `/revoke-other-sessions`
+("sign out everywhere") end no OAuth grant, as in Better Auth; the user ends a
+connected app's grant by disconnecting it on the connected-apps page
+(`/oauth/consents`). Unbanning does not restore grants. An access token issued
+before the event is rejected on its next use, with one exception: an
+`offline_access` access token of a first-party `skip_consent` client passes again,
+until it expires (one hour by default), once the user grants that client offline
+access anew, because it is checked against any live `offline_access` refresh token
+of the same user and client. Better Auth's `/oauth2/introspect` reports a refreshed
 token inactive once its original session has expired, while Mantle's resource
 check accepts it; Mantle does not use introspection.
 Database failures remain server errors, rather than silently authenticating.
