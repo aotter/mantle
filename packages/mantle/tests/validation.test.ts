@@ -113,6 +113,14 @@ test("const compares JSON values", async () => {
   for (const field of [{ kind: "b" }, { shape: { a: [2] } }, { none: 0 }]) error(() => validate(field), `procedures/save/input/${Object.keys(field)[0]}`, "Value violates const.");
 });
 
+test("const and enum keep a \"__proto__\" key as an own key", async () => {
+  // JSON.parse, as a request body is read, makes "__proto__" an own key; an object literal would set the prototype instead.
+  const own = JSON.parse('{"__proto__":1}'), nested = JSON.parse('{"a":{"__proto__":[1]}}');
+  const { validate } = await checked({ type: "object", properties: { c: { const: own }, e: { enum: ["x", own] }, n: { const: nested } } });
+  expect(validate(JSON.parse('{"c":{"__proto__":1},"e":{"__proto__":1},"n":{"a":{"__proto__":[1]}}}'))).toBeTruthy();
+  for (const field of ["c", "e", "n"]) error(() => validate(JSON.parse(`{"${field}":${field === "n" ? '{"a":{}}' : "{}"}}`)), `procedures/save/input/${field}`);
+});
+
 test("const numbers must be finite", () => {
   for (const input of [{ type: "object", properties: { a: { const: Infinity } } }, { type: "object", properties: { a: { const: { b: [NaN] } } } }]) expect(() => emitValidation(plan(input as JsonSchema))).toThrow("Input const numbers must be finite");
   const refused: string[] = [];
@@ -135,13 +143,13 @@ test("a root $ref's rules decide whether an input accepts no fields", () => {
   for (const input of [{ $ref: "#/$defs/missing" }, { $ref: "#" }, { $ref: "#/$defs/s", $defs: { s: { $ref: "#/$defs/s" } } }]) expect(acceptsEmpty(input as JsonSchema)).toBe(false);
 });
 
-test("a root enum, const or non-object type, also through a root $ref, does not accept no fields", () => {
+test("a root enum or const without {}, or a non-object type, also through a root $ref, does not accept no fields", () => {
   const via = (target: object) => ({ $ref: "#/$defs/t", $defs: { t: target } }) as JsonSchema;
-  for (const target of [{ enum: [{}] }, { const: {} }, { type: "array" }, { type: ["string", "null"] }]) {
+  for (const target of [{ enum: ["x", { a: 1 }] }, { const: { a: 1 } }, { type: "object", const: {}, required: ["a"] }, { type: "array" }, { type: ["string", "null"] }]) {
     expect(acceptsEmpty(target as JsonSchema)).toBe(false);
     expect(acceptsEmpty(via(target))).toBe(false);
   }
-  for (const target of [{ type: ["object", "null"] }, { type: "object" }]) {
+  for (const target of [{ type: ["object", "null"] }, { type: "object" }, { type: "object", const: {} }, { type: "object", enum: ["x", {}] }, { enum: [{}] }]) {
     expect(acceptsEmpty(target as JsonSchema)).toBe(true);
     expect(acceptsEmpty(via(target))).toBe(true);
   }

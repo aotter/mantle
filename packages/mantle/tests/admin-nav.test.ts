@@ -65,3 +65,55 @@ test("generate refuses an extension page nav that is not an object with a string
   for (const nav of [{}, { order: 1 }, "more", null, [], { group: 1 }]) expect(codes(await run([schema("quotes")], [], page(nav)))).toEqual(["UI_EXTENSION_INVALID admin/extensions/tools/pages/browser/nav"]);
   expect((await run([schema("quotes")], [], page(undefined))).ok).toBe(true);
 });
+
+// #1667: two required id references are ambiguous; nav.parentField chooses the fold parent on its own
+const twoRefs = (nav?: object, extra: object = {}) => doc("lines", { title: "Lines", lifecycle: "operational", ...(nav ? { uiSchema: { nav } } : {}), schema: { type: "object", required: ["quoteId", "customerId", ...Object.keys(extra)], properties: { quoteId: { type: "string", "x-mantle-ref": "quotes" }, customerId: { type: "string", "x-mantle-ref": "customers" }, ...extra } } });
+const parentOf = (r: Awaited<ReturnType<typeof run>>) => {
+  if (!r.ok) throw Error(JSON.stringify(r.diagnostics));
+  return /"name":"lines".*?"parent":(\{[^}]*\})/.exec(r.files["admin-descriptors.ts"]!)?.[1];
+};
+
+test("generate refuses a Schema with two required id references and no nav.parentField, naming the line that keeps today's parent", async () => {
+  const r = await run([schema("quotes"), schema("customers"), twoRefs()]);
+  expect(codes(r)).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+  const message = r.ok ? "" : r.diagnostics[0]!.message;
+  expect(message).toContain("Schema 'lines'");
+  expect(message).toContain("quoteId, customerId");
+  expect(message).toContain("nav: { parentField: quoteId }");
+  // standalone without parentField gets the same diagnostic, with the line to add
+  const standalone = await run([schema("quotes"), schema("customers"), twoRefs({ standalone: true })]);
+  expect(codes(standalone)).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+  expect(standalone.ok ? "" : standalone.diagnostics[0]!.message).toContain("nav: { parentField: quoteId }");
+});
+
+test("nav.parentField without standalone chooses the fold parent; the Schema stays folded", async () => {
+  expect(parentOf(await run([schema("quotes"), schema("customers"), twoRefs({ parentField: "customerId" })]))).toBe('{"collection":"customers","parentField":"id","childField":"customerId"}');
+  expect(parentOf(await run([schema("quotes"), schema("customers"), twoRefs({ parentField: "quoteId" })]))).toBe('{"collection":"quotes","parentField":"id","childField":"quoteId"}');
+  // still folded: no sidebar entry of its own to place
+  expect(codes(await run([schema("quotes"), schema("customers"), twoRefs({ parentField: "customerId", order: 1 })]))).toEqual(["SCHEMA_UI_INVALID schemas/lines/uiSchema/nav/order"]);
+  expect((await run([schema("quotes"), schema("customers"), twoRefs({ standalone: true, parentField: "customerId", group: "operations" })])).ok).toBe(true);
+});
+
+test("one id reference plus a unique-field reference is not ambiguous, and parentField may pick the unique-field one", async () => {
+  const quotes = doc("quotes", { title: "Quotes", lifecycle: "operational", uniqueIndexes: [["code"]], schema: { type: "object", required: ["code"], properties: { code: { type: "string" } } } });
+  const lines = (nav?: object) => doc("lines", { title: "Lines", lifecycle: "operational", ...(nav ? { uiSchema: { nav } } : {}), schema: { type: "object", required: ["quoteCode", "customerId"], properties: { quoteCode: { type: "string", "x-mantle-ref": { schema: "quotes", field: "code" } }, customerId: { type: "string", "x-mantle-ref": "customers" } } } });
+  expect(parentOf(await run([quotes, schema("customers"), lines()]))).toBe('{"collection":"customers","parentField":"id","childField":"customerId"}');
+  expect(parentOf(await run([quotes, schema("customers"), lines({ parentField: "quoteCode" })]))).toBe('{"collection":"quotes","parentField":"code","childField":"quoteCode"}');
+  // only references to existing Schemas count: one quotes id reference plus one to a missing Schema is not ambiguous, standalone included
+  const ghost = doc("lines", { title: "Lines", lifecycle: "operational", uiSchema: { nav: { standalone: true } }, schema: { type: "object", required: ["quoteId", "ghostId"], properties: { quoteId: { type: "string", "x-mantle-ref": "quotes" }, ghostId: { type: "string", "x-mantle-ref": "ghosts" } } } });
+  expect(parentOf(await run([schema("quotes"), ghost]))).toBe('{"collection":"quotes","parentField":"id","childField":"quoteId"}');
+  // folded by the unique-field reference: no standalone hint, since standalone would need an id reference
+  const placed = await run([quotes, schema("customers"), lines({ parentField: "quoteCode", order: 1 })]);
+  expect(codes(placed)).toEqual(["SCHEMA_UI_INVALID schemas/lines/uiSchema/nav/order"]);
+  expect(placed.ok ? "" : placed.diagnostics[0]!.message).not.toContain("nav.standalone: true");
+});
+
+test("generate refuses a parentField that is not a required reference, sits on a translation, or closes a parent cycle", async () => {
+  for (const parentField of ["label", "missing"]) expect(codes(await run([schema("quotes"), schema("customers"), twoRefs({ parentField }, { label: { type: "string" } })]))).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+  expect(codes(await run([posts, locales({ parentField: "slug" })]))).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+  const ref = (name: string, to: string) => doc(name, { title: name, lifecycle: "operational", uiSchema: { nav: { parentField: "up" } }, schema: { type: "object", required: ["up"], properties: { up: { type: "string", "x-mantle-ref": to } } } });
+  expect(codes(await run([ref("a", "b"), ref("b", "a")]))).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField", "SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+  expect(codes(await run([ref("a", "a")]))).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+  expect((await run([schema("b"), ref("a", "b")])).ok).toBe(true);
+  expect(codes(await run([posts, locales({}), ref("a", "postlocales")]))).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+});

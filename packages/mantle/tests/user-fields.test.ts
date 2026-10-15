@@ -282,10 +282,16 @@ test('#1644: an IN-scoped or IN-restricted prefix does not serve ORDER BY; the r
   // A public View fixes status = 'published' too, so the { all: true } index lists it.
   const draft=JSON.parse(inScoped(true));draft.spec.lifecycle='publishing';draft.spec.indexes=[['region','tier','createdAt','id']];
   const drafted=(sql:string)=>[JSON.stringify(draft),inView('listed',sql,'public',{input:{type:'object',required:['tier'],properties:{tier:{type:'string'}}}})].join('\n---\n');
-  expect(await fails(target,drafted('WHERE tier = input.tier ORDER BY created_at'))).toContain(`past 'region', which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows. Scope-first ORDER BY unavailable: 'tier' can be null. Bounded: for { all: true } callers only, index [status, tier, created_at, id] (handbook:`);
+  expect(await fails(target,drafted('WHERE tier = input.tier ORDER BY created_at'))).toContain(`past 'region', which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows. Scope-first ORDER BY unavailable: 'tier' can be null. Bounded: for { all: true } callers only, index [status, tier, createdAt, id] (handbook:`);
   draft.spec.indexes=[['region','createdAt','id']];
-  expect(await fails(target,drafted('WHERE tier = input.tier ORDER BY created_at'))).toContain('Bounded: ORDER BY region, created_at (same index); for { all: true } callers only, index [status, tier, created_at, id] (handbook:');
+  // ORDER BY names the SQL column, an index the manifest field: following either suggestion generates.
+  expect(await fails(target,drafted('WHERE tier = input.tier ORDER BY created_at'))).toContain("ORDER BY (created_at) needs index [region, createdAt, id] past 'region'");
+  expect(await fails(target,drafted('WHERE tier = input.tier ORDER BY created_at'))).toContain('Bounded: ORDER BY region, created_at (same index); for { all: true } callers only, index [status, tier, createdAt, id] (handbook:');
   await generateOrThrow(target,[{sourceId:'p.yaml',text:drafted('WHERE tier = input.tier ORDER BY region, created_at')}]);
+  draft.spec.indexes.push(['status','tier','createdAt','id']);
+  await generateOrThrow(target,[{sourceId:'p.yaml',text:drafted('WHERE tier = input.tier ORDER BY created_at')}]);
+  draft.spec.indexes=[['region','id']];
+  expect(await fails(target,drafted('WHERE tier = input.tier ORDER BY created_at'))).toContain('Missing index for ORDER BY (created_at): declare a Schema index with [createdAt] in this order');
   // The owner scope column is NOT NULL in storage, but a View cannot name it, so the scope-first order is not offered past it.
   const owned=JSON.parse(inScoped(true));owned.spec.scope+=' AND ownerId = auth.uid()';owned.spec.indexes=[['ownerId','region','id'],['region','ownerId','orderNo','id']];owned.spec.schema.properties.ownerId={type:'string'};owned.spec.schema.required.push('ownerId');
   expect(await fails(target,JSON.stringify(owned),inView('listed','ORDER BY orderNo'))).toContain("past 'region', which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows. Scope-first ORDER BY unavailable: 'ownerId' is the owner column, which SQL cannot name. Bounded: for { all: true } callers only, index [ownerId, orderNo, id] (handbook:");

@@ -9,7 +9,7 @@ import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type Pla
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
 import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
-import { viewCacheProblem, checkShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
+import { NATIVE_COLUMNS, viewCacheProblem, checkShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 import * as d1 from "../../../d1/compile/index.js";
@@ -24,7 +24,6 @@ export type CompilePlanResult =
   | { readonly ok: false; readonly diagnostics: readonly Diagnostic[] };
 
 /** The physical columns of the native entry fields an index may name (SchemaIndexChecker); a declared field is its lower-cased name. */
-const NATIVE_COLUMNS: Readonly<Record<string, string>> = { id: "id", status: "status", version: "version", createdAt: "created_at", updatedAt: "updated_at", authorId: "author_id" };
 const indexColumn = (field: string) => (Object.hasOwn(NATIVE_COLUMNS, field) ? NATIVE_COLUMNS[field]! : field.toLowerCase());
 
 function toDiagnostic(d: SqlDiagnostic, source: SourceLocation, pointer: string): Diagnostic {

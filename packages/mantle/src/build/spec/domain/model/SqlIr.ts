@@ -119,6 +119,8 @@ export function storageColumns(s: { readonly fields?: Readonly<Record<string, st
 
 /** The native columns storage declares NOT NULL (`status` only on a publishing Schema, the only one that has it); `author_id` is nullable. */
 export const NATIVE_NOT_NULL: ReadonlySet<string> = new Set(["id", "version", "created_at", "updated_at", "status"]);
+/** Each native field a manifest names (in an index, say) -> its storage column, which SQL names. */
+export const NATIVE_COLUMNS: Readonly<Record<string, string>> = { id: "id", status: "status", version: "version", createdAt: "created_at", updatedAt: "updated_at", authorId: "author_id" };
 
 /**
  * The columns an `operational` Schema's database refuses NULL in beyond the native ones: each field its JSON Schema requires and
