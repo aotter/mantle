@@ -57,6 +57,22 @@ All 22 languages are retained. English is the fallback in the entry; the saved
 language loads before rendering, and switching waits for its language chunk.
 Rich-text editors and the complete developer workspace load on demand.
 
+## App library
+
+`@aotter/mantle-admin/app` exports `defineAdmin(meta)` and `<MantleAdmin admin>`.
+An Admin entry default-exports `defineAdmin(...)`; `<MantleAdmin>` is the root
+for an app that mounts Admin inside its own providers, and it renders once the
+stored or browser language has loaded. The prebuilt SPA is the built-in entry,
+`defineAdmin({})`: with no generated metadata, Admin reads its collections,
+Views and operations from `/admin/api` at runtime.
+
+**Not usable outside this repository yet.** The library keeps Admin's UI
+packages (React DOM, TanStack Query, Tiptap, React Flow and others) as imports,
+but they are not yet dependencies of this package, and it ships no CSS. An
+application build cannot resolve or style it until those dependencies and the
+Admin stylesheet ship with the package. Until then, serve the prebuilt SPA
+above.
+
 ## Extensions
 
 ```ts
