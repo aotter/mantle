@@ -18,7 +18,7 @@ Follow the installed [native generation and service workflow](../../handbook/clo
 with its [native contract](../../handbook/guides/native-execution.md) and [supported declarations](../../handbook/reference/features.md). Commit
 all generated output, run the same generation command with `--check`, and keep
 bundle `dist/` untracked. The app owns its verified Caller, handlers and native
-resources; Better Auth’s admin plugin `adminRoles` defines the admin layer (default `["admin"]`); `ctx.admin` accepts open role names.
+resources; Better Auth’s admin plugin `adminRoles` defines the admin layer (default `["admin"]`); `ctx.admin` takes no role list ([authorization](../../handbook/cloudflare/authentication.md)).
 
 Use the native Store/query/surface entries and app-owned fetch from the service composition guide.
 Keep optional modules out of unused entry imports and auth dynamically loaded.

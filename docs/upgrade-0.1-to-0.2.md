@@ -13,12 +13,12 @@ The remainder describes the earlier alpha contract for historical reference.
 
 No codemod, and no in-place upgrade of a 0.1.x database. A coding agent moves
 one project by hand with this guide. When it and
-[ADR-0032](https://github.com/aotter/mantle/blob/develop/docs/adr/0032-store-centric-core-and-service-contract.md),
-[ADR-0033](https://github.com/aotter/mantle/blob/develop/docs/adr/0033-storage-converges-to-the-plan.md),
-[ADR-0034](https://github.com/aotter/mantle/blob/develop/docs/adr/0034-store-is-authored-as-sql.md),
-[ADR-0035](https://github.com/aotter/mantle/blob/develop/docs/adr/0035-sql-dialects.md),
-[ADR-0036](https://github.com/aotter/mantle/blob/develop/docs/adr/0036-host-and-dialect.md) or
-[ADR-0038](https://github.com/aotter/mantle/blob/develop/docs/adr/0038-bun-native-host.md) disagree, the ADR wins.
+[ADR-0032](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0032-store-centric-core-and-service-contract.md),
+[ADR-0033](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0033-storage-converges-to-the-plan.md),
+[ADR-0034](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0034-store-is-authored-as-sql.md),
+[ADR-0035](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0035-sql-dialects.md),
+[ADR-0036](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0036-host-and-dialect.md) or
+[ADR-0038](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0038-bun-native-host.md) disagree, the ADR wins.
 
 ## Rules
 
