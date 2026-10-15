@@ -158,6 +158,11 @@ mantle-spec ◄── mantle-runtime ◄── mantle-mcp ◄── adapters, ma
 > `@aotter/mantle-ui/mcp-app`) reviews a row as listed; a moved version is the
 > server's `CONFLICT`. The preset serves it on `/mcp/staff`; a member-facing
 > App is the application's own.
+>
+> **Amendment ([ADR-lite 1376](adr-lite-1376-admin-extensions.md) revision
+> 4, decision 8):** the Admin App is built by the application from its Admin
+> entry and served from the assets directory; the prebuilt `mantleAppHtml`
+> goes away.
 - `@aotter/mantle-admin-ui/kit` re-exports from `@aotter/mantle-ui` for one
   minor release, then is removed.
 - No exported UI module depends on Admin's router, global API client, query

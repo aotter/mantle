@@ -59,8 +59,9 @@ authorizes.
    with the package.
 4. **Data.** Hooks (`useView`, `useEntries`, `useEntry`, `useOperation`,
    `useCollectionTotal`, `useMe`) call only caller-authorized `/admin/api`
-   routes, each of which checks the caller, and share Admin's query cache.
-   Generated types bind names, inputs and rows. Refusals read as unavailable.
+   routes in the browser (decision 8 covers MCP hosts), each of which checks
+   the caller, and share Admin's query cache. Generated types bind names,
+   inputs and rows. Refusals read as unavailable.
 5. **The manifest keeps data semantics;** only component references
    (`<extension>/<contribution>` widgets, `list.cells`, `panels`) are
    removed.
@@ -76,6 +77,26 @@ authorizes.
      separately;
    - routes reachable from a project's Admin origin act only on that project;
      anything wider lives on another origin.
+8. **MCP Apps.** The Admin MCP App stays one View's rows plus row actions; the
+   full Admin (shell, sidebar, router) does not run inside an MCP host.
+   - `mantle bundle` builds it from the same entry as a single-file
+     `<assets>/admin/mcp-app.html`, served as `ui://mantle-admin/admin`.
+     The file holds no catalog; the server embeds it when the resource is
+     read, limited to the tools that caller can list.
+   - Each slot is typed `browser` or `both`. Cells, inputs, record actions and
+     the record view are `both`; Shell, Sidebar, Header, Brand, Home,
+     CollectionList, pages and navigation are `browser`.
+   - In a host, `both` slots read and write through MCP tool calls to the
+     View and Procedure tools rather than `/admin/api`, open links through
+     the host, and take the host's neutral colours and fonts while the
+     application keeps its brand colours. Hooks without a matching tool read
+     as unavailable; no tools are added for the App.
+   - Authorization is unchanged: the server checks the MCP caller with the
+     same `requires`, scope and TTL as the browser caller.
+   - The build fails any App output that calls `/admin/api`, reads
+     `document.cookie` or loads an undeclared origin, and `mantle generate`
+     emits a compatibility test that loads the App in the official
+     `AppBridge` for every overridden `both` slot.
 
 **Removed:** `adminExtensions`, `--admin-extensions`, `defineAdminExtension`,
 the import map and shared shims, extension server handlers and
@@ -95,6 +116,7 @@ document and its host bridge. The kit's contract is otherwise unchanged.
 - A second prebuilt distribution.
 - A dashboard or query engine.
 - Arbitrary SQL from hooks.
+- The full Admin inside an MCP host, or MCP tools added only for the App.
 
 ## Consequences
 
@@ -103,6 +125,8 @@ document and its host bridge. The kit's contract is otherwise unchanged.
 - Each application installs Admin's UI and build dependencies and spends a few
   seconds of build time.
 - Bun hosts add `mantle bundle` to their build.
+- Overrides reach the MCP App as well as the browser, and a generated test
+  fails a `both` override that only works in the browser.
 - Breaking for alpha users of:
   - `navGroups` and `adminExtensions`;
   - manifests that use `fields.<name>.widget: <extension>/<contribution>`,
@@ -110,6 +134,8 @@ document and its host bridge. The kit's contract is otherwise unchanged.
   - the output layout: Worker output moves to `<outdir>/worker`, so wrangler
     configs (`main`, `base_dir`, `assets.directory`) must be regenerated with
     `mantle generate`, or edited by hand for `wrangler.toml`, where it only
-    prints the keys.
+    prints the keys;
+  - the prebuilt App (`mantleAppHtml` from `@aotter/mantle-admin/mcp-app`),
+    which the application-built `mcp-app.html` replaces.
 
   A migration note ships with the removal.
