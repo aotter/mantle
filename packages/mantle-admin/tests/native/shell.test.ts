@@ -24,7 +24,9 @@ test("traversal, encoded separators and NUL are refused; missing built files sta
   for(const path of ["/admin/assets/gone.js","/admin/shared/gone.js"])expect([path,(await get(path))?.status]).toEqual([path,404]);
   // the documented callback resolves the path against /admin/: a double-encoded dot segment must not climb out of it
   const documented=(path:string)=>new URL("/admin/"+path,"https://app.test").pathname==="/private/report.pdf"?new Response("secret"):new Response("missing",{status:404});
-  for(const path of ["/admin/%252e%252e/private/report.pdf","/admin/.%252e/private/report.pdf","/admin/%252E%252e/private/report.pdf","/admin/x/%252e%252e/%252e%252e/private/report.pdf"])
+  for(const path of ["/admin/%252e%252e/private/report.pdf","/admin/.%252e/private/report.pdf","/admin/%252E%252e/private/report.pdf","/admin/x/%252e%252e/%252e%252e/private/report.pdf",
+    // the URL parser drops tabs and newlines, so `\t..` becomes `..`
+    "/admin/%09../private/report.pdf","/admin/%0a../private/report.pdf","/admin/%0d../private/report.pdf","/admin/.%09./private/report.pdf","/admin/..%09/private/report.pdf","/admin/%09..%09/private/report.pdf"])
     expect([path,(await adminShell(new Request("https://app.test"+path),documented))?.status]).toEqual([path,404]);
   expect(await get("/administrator")).toBeUndefined();
   expect(await get("/elsewhere")).toBeUndefined();

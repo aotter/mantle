@@ -55,12 +55,15 @@ function assertCleanable(label: string, dir: string, entry: string): void {
  * (default `<outdir>/client`) when the Worker serves it (`@aotter/mantle-admin/server`; `/mcp` and the other subpaths alone do not).
  */
 export async function bundleApp(entry: string, outdir: string, assets = join(outdir, "client")): Promise<void> {
-  const worker = join(outdir, "worker");
+  const worker = join(outdir, "worker"), source = realpathSync(entry);
+  // what is cleaned lies under these two, so neither may be the working directory or hold the source
+  assertCleanable("Bundle outdir", outdir, source);
+  assertCleanable("The assets directory", assets, source);
   // Wrangler uploads every module under the Worker directory and every file under the assets directory.
   if (within(worker, assets) || within(assets, worker)) throw new Error(`The assets directory ${assets} must not overlap the Worker directory ${worker}.`);
   const metafile = await bundle(entry, worker);
   if (Object.keys(metafile.inputs).some(input => /(?:^|\/)mantle-admin\/(?:dist|src)\/server\/index\.[jt]s$/.test(input.replaceAll("\\", "/")))) {
-    await bundleAdmin(realpathSync(entry), outdir, join(assets, "admin"));
+    await bundleAdmin(source, outdir, join(assets, "admin"));
   }
 }
 
@@ -77,7 +80,9 @@ async function bundleAdmin(entry: string, outdir: string, out: string): Promise<
   try { builder = require.resolve("@aotter/mantle-admin/build"); }
   catch { throw new Error(`The Worker serves Admin, but @aotter/mantle-admin/build does not resolve from ${relative(process.cwd(), entry)}. Install @aotter/mantle-admin at the version of @aotter/mantle-admin/server.`); }
   const stamp = join(outdir, ".admin-inputs");
-  const key = custom ? undefined : JSON.stringify({ out: resolve(out), packages: installed(require.resolve("@aotter/mantle-admin/package.json")) });
+  // the installed path too: a patched or linked Admin keeps its version but not its path
+  const manifest = realpathSync(lookup(require, "@aotter/mantle-admin") ?? require.resolve("@aotter/mantle-admin/package.json"));
+  const key = custom ? undefined : JSON.stringify({ out: resolve(out), path: dirname(manifest), packages: installed(manifest) });
   if (key && existsSync(join(out, "index.html")) && existsSync(stamp) && readFileSync(stamp, "utf8") === key) {
     console.log(`Admin inputs unchanged; kept ${relative(process.cwd(), out)}.`);
     return;
@@ -88,13 +93,16 @@ async function bundleAdmin(entry: string, outdir: string, out: string): Promise<
   if (key) writeFileSync(stamp, key);
 }
 
-/** The package's version and the installed version of each of its dependencies (whose `exports` may hide package.json). */
+/** The package.json a bare import of `name` finds, read from disk (`exports` may hide it, and require caches realpaths). */
+const lookup = (require: NodeRequire, name: string) => require.resolve.paths(name)?.map(dir => join(dir, name, "package.json")).find(file => existsSync(file));
+
+/** The package's version and the installed version of each of its dependencies. */
 function installed(manifest: string): Record<string, string | null> {
   const { name, version, dependencies = {} } = JSON.parse(readFileSync(manifest, "utf8")) as { name: string; version: string; dependencies?: Record<string, string> };
   const require = createRequire(manifest);
   const versions: Record<string, string | null> = { [name]: version };
   for (const dependency of Object.keys(dependencies).sort()) {
-    const found = require.resolve.paths(dependency)?.map(dir => join(dir, dependency, "package.json")).find(file => existsSync(file));
+    const found = lookup(require, dependency);
     versions[dependency] = found ? (JSON.parse(readFileSync(found, "utf8")) as { version: string }).version : null;
   }
   return versions;

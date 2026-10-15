@@ -9,13 +9,14 @@ export async function adminShell(request: Request, assets: (path: string) => Res
     const url = new URL(request.url);
     if (request.method !== "GET" || (url.pathname !== "/admin" && !url.pathname.startsWith("/admin/")))
         return undefined;
-    // the encoded separators and NUL never name a file; a traversal segment is refused after decoding too, and so is a
-    // still-encoded one (`%252e%252e` decodes to `%2e%2e`, which a callback's `new URL("/admin/" + path, url)` turns into `..`)
+    // the encoded separators and control characters never name a file; a traversal segment is refused after decoding too, and
+    // so is a still-encoded one (`%252e%252e` decodes to `%2e%2e`, which a callback's `new URL("/admin/" + path, url)` turns
+    // into `..`, as it turns `\t..` into `..` by dropping the tab)
     const raw = url.pathname.slice("/admin/".length);
     let rel: string;
     try { rel = decodeURIComponent(raw); }
     catch { return notFound(); }
-    if (/%2f|%5c|%00|\\/i.test(raw) || rel.split("/").some(segment => /^(?:\.|%2e){1,2}$/i.test(segment)))
+    if (/%2f|%5c|\\/i.test(raw) || /[\x00-\x1f\x7f]/.test(rel) || rel.split("/").some(segment => /^(?:\.|%2e){1,2}$/i.test(segment)))
         return notFound();
     const fetchAsset = async (path: string) => { const response = await assets(path); return response.status === 404 ? null : response; };
     const file = rel.split("/").pop()!.includes(".") ? await fetchAsset(rel) : null;
