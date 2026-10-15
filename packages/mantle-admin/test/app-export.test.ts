@@ -19,7 +19,9 @@ describe("@aotter/mantle-admin/app", () => {
     const source = [
       'import { defineAdmin, MantleAdmin, type AdminDefinition, type MantleAdminProps } from "@aotter/mantle-admin/app";',
       "const admin: AdminDefinition = defineAdmin({});",
-      "const props: MantleAdminProps = { admin, preview: true };",
+      "const props: MantleAdminProps = { admin };",
+      "// @ts-expect-error preview mode is internal to the canonical preview document",
+      "export const preview: MantleAdminProps = { admin, preview: true };",
       "export const root = MantleAdmin(props);",
       "// @ts-expect-error metadata is required",
       "defineAdmin();",

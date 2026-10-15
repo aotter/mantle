@@ -11,5 +11,5 @@ export interface AdminDefinition {
 
 /** Compose Admin from generated metadata. The result is plain data; it grants and denies nothing. */
 export function defineAdmin(meta: AdminMeta): AdminDefinition {
-  return Object.freeze({ meta });
+  return { meta };
 }
