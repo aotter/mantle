@@ -2,7 +2,8 @@
 // A host pipeline that installs with `npm ci --ignore-scripts`, runs `npm run build`, deletes node_modules and uploads
 // only the Worker and assets directories. The reference service, from packed packages, builds its Worker and Admin that
 // way; then, with node_modules gone, a Wrangler outside the project serves dist/worker and dist/client.
-// Run it on Linux before a release: a lockfile made on another platform can lack Linux's native build binaries.
+// It runs on Linux in Full checks and release, so Linux's native build binaries install without scripts. The lockfile is
+// made on the same machine, so this does not cover a lockfile made on another platform (see the README).
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,7 +14,7 @@ const project = join(root, "docs/examples/reference-service");
 const wrangler = `wrangler@${JSON.parse(readFileSync(join(project, "package.json"), "utf8")).devDependencies.wrangler}`;
 
 if (process.argv[2] !== "--serve") {
-  const steps = ["rm -rf node_modules", "npm ci --ignore-scripts --no-audit --no-fund", "npm run generate", "npm run build", "rm -rf node_modules", `node '${import.meta.filename}' --serve`];
+  const steps = ["npm ci --ignore-scripts --no-audit --no-fund", "npm run generate", "npm run build", "rm -rf node_modules", `node '${import.meta.filename}' --serve`];
   execFileSync(process.execPath, [join(root, "scripts/check-packed-consumer.mjs"), "--pm", "npm", "--project", project, "--", "sh", "-c", steps.join(" && ")],
     { cwd: root, stdio: "inherit", timeout: 900_000 });
   process.exit(0);

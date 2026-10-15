@@ -22,6 +22,10 @@ test("every shell page is anti-framed, never cached and nosniff; files only nosn
 test("traversal, encoded separators and NUL are refused; missing built files stay 404; other requests pass through",async()=>{
   for(const path of ["/admin/..%2f..%2fsecret.txt","/admin/x%5cy.txt","/admin/a%2Fb","/admin/x%00.js","/admin/%E0%A4","/admin/%2e%2e%2fsecret"])expect([path,(await get(path))?.status]).toEqual([path,404]);
   for(const path of ["/admin/assets/gone.js","/admin/shared/gone.js"])expect([path,(await get(path))?.status]).toEqual([path,404]);
+  // the documented callback resolves the path against /admin/: a double-encoded dot segment must not climb out of it
+  const documented=(path:string)=>new URL("/admin/"+path,"https://app.test").pathname==="/private/report.pdf"?new Response("secret"):new Response("missing",{status:404});
+  for(const path of ["/admin/%252e%252e/private/report.pdf","/admin/.%252e/private/report.pdf","/admin/%252E%252e/private/report.pdf","/admin/x/%252e%252e/%252e%252e/private/report.pdf"])
+    expect([path,(await adminShell(new Request("https://app.test"+path),documented))?.status]).toEqual([path,404]);
   expect(await get("/administrator")).toBeUndefined();
   expect(await get("/elsewhere")).toBeUndefined();
   expect(await adminShell(new Request("https://app.test/admin",{method:"POST"}),assets)).toBeUndefined();

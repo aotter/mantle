@@ -12,7 +12,11 @@ const assets = (dir: string, ext: string) => readdirSync(join(dir, "assets")).fi
 describe("@aotter/mantle-admin/build", () => {
   it("builds the built-in entry: shell, preview document, bridge, public files and extension shims", async () => {
     const out = join(temp, "default");
-    await buildAdmin({ outDir: out });
+    // an installed package sits under the application: an upward search would reach the application's PostCSS config
+    const planted = resolve(pkg, "dist/postcss.config.mjs");
+    writeFileSync(planted, 'export default { plugins: [{ postcssPlugin: "app", Once() { throw new Error("app postcss plugin ran on Admin CSS"); } }] };\n');
+    try { await buildAdmin({ outDir: out }); }
+    finally { rmSync(planted, { force: true }); }
     for (const file of ["index.html", "preview.html", "host-bridge.js", "theme.js", "favicon.svg", "shared/kit.js", "shared/react.js", "shared/extension.js"]) expect(existsSync(join(out, file)), file).toBe(true);
     const html = readFileSync(join(out, "index.html"), "utf8");
     expect(html).toContain('<script type="importmap">{"imports":{"react":"./shared/react.js",');
@@ -22,9 +26,11 @@ describe("@aotter/mantle-admin/build", () => {
     expect(assets(out, ".css")).toMatch(/\.bg-sidebar\{/);
   }, 120_000);
 
-  it("builds an application entry from its own directory, with its own Tailwind classes", async () => {
+  it("builds an application entry from its own directory, with its own Tailwind classes and React's JSX", async () => {
     const src = join(temp, "app/src");
     mkdirSync(src, { recursive: true });
+    // the Worker's tsconfig may set another JSX runtime; Admin's entry is React regardless
+    writeFileSync(join(temp, "app/tsconfig.json"), JSON.stringify({ compilerOptions: { jsx: "react-jsx", jsxImportSource: "hono/jsx" } }));
     writeFileSync(join(src, "admin.tsx"), [
       `import { defineAdmin } from ${JSON.stringify(resolve(pkg, "dist/admin-app/index.js"))};`,
       'export default defineAdmin({ note: <p className="bg-[#123456]">custom-admin-entry</p> });',

@@ -45,8 +45,11 @@ try {
   const entry = /<script[^>]+type="module"[^>]+src="([^"]+)"/.exec(html)?.[1];
   if (!entry) throw new Error("Admin entry module is missing");
   const visited = new Set();
-  // Vite's default eight-character hash: `id-value-<hash>` is a UI component, not the `id` locale.
-  const deferredLanguage = /\/(?:ar|cs|de|es|fa|fr|he|id|it|ja|ko|nl|pl|pt-BR|ru|th|tr|uk|vi|zh-CN|zh-TW)-[\w-]{8}\.js$/;
+  // Vite's default eight-character hash, twice when a locale is built from a hashed library chunk (`ar-<hash>-<hash>.js`):
+  // `id-value-<hash>` is a UI component, not the `id` locale.
+  const deferredLanguage = /\/(?:ar|cs|de|es|fa|fr|he|id|it|ja|ko|nl|pl|pt-BR|ru|th|tr|uk|vi|zh-CN|zh-TW)-[\w-]{8}(?:-[\w-]{8})?\.js$/;
+  // the guard must see the locales, or it would pass whatever reaches startup
+  if (!readdirSync(join(admin, "assets")).some(file => deferredLanguage.test(`/${file}`))) failures.push("no lazy locale chunk matches the startup guard's pattern");
   function startup(path) {
     path = resolve(path);
     if (visited.has(path)) return 0;

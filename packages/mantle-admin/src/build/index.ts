@@ -22,7 +22,7 @@ export interface BuildAdminOptions {
  * its `host-bridge.js`, and hashed assets. `mantle bundle` calls this; it is not a CLI.
  */
 export async function buildAdmin({ entry, outDir }: BuildAdminOptions): Promise<void> {
-  const [{ build }, { default: react }, { default: tailwindcss }] = await Promise.all([import("vite"), import("@vitejs/plugin-react"), import("@tailwindcss/vite")]);
+  const [{ build, normalizePath }, { default: react }, { default: tailwindcss }] = await Promise.all([import("vite"), import("@vitejs/plugin-react"), import("@tailwindcss/vite")]);
   const app = resolve(entry ?? resolve(dist, "admin-app/default-entry.js"));
   outDir = resolve(outDir);
   const kit = resolve(dirname(createRequire(import.meta.url).resolve("@aotter/mantle-ui/package.json")), "dist");
@@ -31,10 +31,14 @@ export async function buildAdmin({ entry, outDir }: BuildAdminOptions): Promise<
   await build({
     root: page, base: "./", configFile: false, logLevel: "warn", publicDir: resolve(page, "public"),
     resolve: { dedupe: ["react", "react-dom"] },
+    // Admin's own settings, not the application's: no postcss.config.* found above the installed package, and React's JSX
+    // whatever `jsxImportSource` the application's tsconfig sets for its Worker
+    css: { postcss: {} }, oxc: { jsx: { runtime: "automatic", importSource: "react" } },
     plugins: [{
       name: "mantle-admin-entry", enforce: "pre",
       resolveId: id => id === ENTRY ? app : undefined,
-      transform: (code, id) => id.split("?")[0] === resolve(page, "styles.css") ? `${code}\n${sources}\n` : undefined,
+      // Vite ids use forward slashes on every platform
+      transform: (code, id) => normalizePath(id.split("?")[0]!) === normalizePath(resolve(page, "styles.css")) ? `${code}\n${sources}\n` : undefined,
     }, react(), tailwindcss(), extensionShared(outDir), previewDocument(outDir)],
     build: { outDir, emptyOutDir: true },
   });

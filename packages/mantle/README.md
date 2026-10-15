@@ -108,7 +108,8 @@ The metafile guard rejects `better-auth` / `@better-auth/*` in the static startu
 use `authLoader(() => import(...))` ([Auth](./docs/handbook/cloudflare/authentication.md#worker-entry)).
 The Worker directory is cleaned first; keep source and generated code elsewhere. A Worker that imports
 `@aotter/mantle-admin/server` also gets Admin, built with Vite into `<assets>/admin` (default `<outdir>/client/admin`)
-from `admin.tsx` beside the entry or the built-in entry, and skipped when its inputs are unchanged.
+from `admin.tsx` beside the entry or the built-in entry. The built-in entry is skipped while the installed
+Admin and its direct dependencies are unchanged; an `admin.tsx` entry builds every time.
 
 ## D1 Sessions
 
