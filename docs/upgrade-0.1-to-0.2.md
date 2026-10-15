@@ -1,5 +1,16 @@
 # Upgrading from 0.1.x to 0.2.0 (for AI agents)
 
+For **0.2.0-alpha.7 and later**, use the
+[native SDK migration](handbook/releases/index.md#native-sdk-migration-alpha7),
+[current CLI](handbook/start/project-and-cli.md) and
+[reference Worker](examples/reference-service/). The application owns routing,
+Auth, native handles and database migrations; the former `createMantle` runtime,
+host presets, boot-time convergence and CLI flags below have been replaced.
+Install the same exact version of `@aotter/mantle`, `@aotter/mantle-ui` and,
+when selecting Admin, `@aotter/mantle-admin`. Start with a new database for a
+0.1.x migration and preserve every authorization, scope and OCC requirement.
+The remainder describes the earlier alpha contract for historical reference.
+
 No codemod, and no in-place upgrade of a 0.1.x database. A coding agent moves
 one project by hand with this guide. When it and
 [ADR-0032](https://github.com/aotter/mantle/blob/develop/docs/adr/0032-store-centric-core-and-service-contract.md),
