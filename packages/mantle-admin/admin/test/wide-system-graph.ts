@@ -36,10 +36,10 @@ export function wideSystemGraph(): DeveloperConsoleSnapshot["graph"] {
 }
 
 // Taller than wide (#1666 review): one audience whose Triggers each start their own Procedure.
-export function tallSystemGraph(): DeveloperConsoleSnapshot["graph"] {
+export function tallSystemGraph(pairs = 120): DeveloperConsoleSnapshot["graph"] {
   const atoms: DeveloperAtom[] = [];
   const relations: DeveloperAtomRelation[] = [];
-  for (let i = 0; i < 120; i += 1) {
+  for (let i = 0; i < pairs; i += 1) {
     atoms.push({ id: `Trigger:t${i}`, kind: "Trigger", name: `t${i}`, title: null, audience: "public", transport: "http" });
     atoms.push({ id: `Procedure:p${i}`, kind: "Procedure", name: `p${i}`, title: null });
     relations.push({ id: `t${i}->p${i}`, kind: "trigger-target", sourceId: `Trigger:t${i}`, targetId: `Procedure:p${i}`, pointer: "/spec", value: `p${i}` });
