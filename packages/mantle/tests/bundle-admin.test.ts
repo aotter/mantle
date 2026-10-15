@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -142,8 +142,15 @@ test("mantle bundle for a bun-* target builds only Admin: Bun runs the server as
     // a Bun server without the Admin server builds nothing
     await rm(join(dir, "dist"), { recursive: true });
     await writeFile(entry, 'import { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(String(store)) });\n');
-    await bundleApp(entry, join(dir, "dist"));
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    let warned = "";
+    try { await bundleApp(entry, join(dir, "dist")); warned = warn.mock.calls.flat().join("\n"); } finally { warn.mockRestore(); }
+    expect(warned).toContain("no Admin built");
     expect(existsSync(join(dir, "dist"))).toBe(false);
     expect(await builds()).toHaveLength(1);
+    // a subpath of the Admin server counts as importing it
+    await writeFile(entry, 'import { x } from "@aotter/mantle-admin/server/extra";\nimport { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(String(x + store)) });\n');
+    await bundleApp(entry, join(dir, "dist"));
+    expect(await builds()).toHaveLength(2);
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);

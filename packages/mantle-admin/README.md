@@ -36,7 +36,9 @@ document, `host-bridge.js`, the extension shims and hashed assets.
 
 Serve that directory through an app-owned asset binding or reader at `/admin/`;
 `adminShell`'s `assets(path)` receives paths relative to it. Bun hosts read it
-with `bunAdminAssets("dist/client/admin")` from `@aotter/mantle/bun/assets`. Missing assets stay missing;
+with `bunAdminAssets("dist/client/admin")` from `@aotter/mantle/bun/assets`; it takes a path with a leading slash and
+returns `null` when missing, so give `adminShell` the adapter
+`async path => (await assets("/" + path)) ?? new Response(null, { status: 404 })`. Missing assets stay missing;
 the API does not read the filesystem or own a platform asset preset. Static SPA
 files stay outside the Worker query bundle. Route an authenticated API request
 to the Admin server with the app's already-resolved caller and generated Store,

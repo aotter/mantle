@@ -174,7 +174,9 @@ const bindings = adminBindings({ handlers });
 const serveAdmin = admin(bindings.metadata, bindings.views, bindings.operations, {
   db: () => db, caller, handlers, routes: entries(bindings.schemas, bindings.adapter),
 });
-// Call assets(path) from your separate shell/static route.
+// Call assets(path) from your separate shell/static route. adminShell(request, reader) wants
+// paths without a leading slash and a Response (404 when missing), so adapt the reader:
+const reader = async (path: string) => (await assets('/' + path)) ?? new Response(null, { status: 404 });
 ```
 
 The reader returns a native `Response` or `null`, rejects traversal/control

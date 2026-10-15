@@ -63,7 +63,9 @@ export async function bundleApp(entry: string, outdir: string, assets = join(out
   // The app's own modules only: enough to find its generated output and whether it imports the Admin server.
   const { metafile: own } = await build({ entryPoints: [entry], bundle: true, write: false, metafile: true, packages: "external", format: "esm", platform: "neutral", logLevel: "silent" });
   if (generatedDirs(own).some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"))) {
-    if (Object.values(own.inputs).some(input => input.imports.some(imported => imported.path === "@aotter/mantle-admin/server"))) await bundleAdmin(source, outdir, join(assets, "admin"));
+    // Packages are external here, so only the app's own imports of the Admin server are seen; one reached through another package is not.
+    if (Object.values(own.inputs).some(input => input.imports.some(imported => /^@aotter\/mantle-admin\/server(?:\/|$)/.test(imported.path)))) await bundleAdmin(source, outdir, join(assets, "admin"));
+    else console.warn("note: no Admin built: the entry's own modules do not import @aotter/mantle-admin/server (an import through another package is not seen).");
     return;
   }
   const worker = join(outdir, "worker");
