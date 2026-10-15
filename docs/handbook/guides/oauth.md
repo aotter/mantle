@@ -114,9 +114,11 @@ authorization codes. The events and the sessions each one ends:
 The last row covers account pre-hijacking: someone who signed up with another
 person's address before it was verified loses their OAuth grants as well as the
 password, linked accounts and sessions that Better Auth strips when the owner
-proves the address.
+proves the address. Mantle ends these grants before Better Auth checks the code or
+link, while the user is still unverified, so a failed OTP or magic-link attempt on an
+unverified user also ends that user's OAuth grants.
 
-A failed attempt, session expiry, a password change without `revokeOtherSessions`,
+Otherwise a failed attempt, session expiry, a password change without `revokeOtherSessions`,
 and the user's own sign-out, `/revoke-sessions` and `/revoke-other-sessions`
 ("sign out everywhere") end no OAuth grant, as in Better Auth; the user ends a
 connected app's grant by disconnecting it on the connected-apps page

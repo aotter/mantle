@@ -446,6 +446,27 @@ describe("OAuth grant revocation and consent routes", () => {
       }
     }
   });
+  test("a proof whose grant ending fails leaves the user unverified, so the retry still ends the pre-registrant's grants", async () => {
+    const app = await makeApp();
+    const cookieOf = (response: Response) => response.headers.getSetCookie().map(line => line.split(";")[0]).join("; ");
+    const refresh = (grant: { refreshToken?: string; clientId: string }) => fetch(`${app.baseURL}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: grant.refreshToken!, client_id: grant.clientId, resource: AUDIENCE }) });
+    const proofs: [string, (email: string) => Promise<Response>][] = [
+      ["otp", async email => { await app.post("/email-otp/send-verification-otp", { email, type: "sign-in" }); return app.post("/sign-in/email-otp", { email, otp: app.otps.findLast(x => x.email === email)!.otp }); }],
+      ["link", async email => { await app.post("/sign-in/magic-link", { email }); return app.auth.handler(new Request(`${app.baseURL}/magic-link/verify?token=${app.links.at(-1)}`, { headers: { origin: app.origin } })); }],
+    ];
+    for (const [kind, prove] of proofs) {
+      const email = `retry-${kind}@example.test`, signedUp = await app.post("/sign-up/email", { email, password: "attacker-password-1", name: "attacker" });
+      const userId = (await signedUp.json() as { user: { id: string } }).user.id, grant = await oauthAccessToken(app, cookieOf(signedUp), "mcp offline_access");
+      app.sqlite.run("CREATE TRIGGER fail_consent BEFORE DELETE ON oauthConsent BEGIN SELECT RAISE(ABORT, 'consent delete failed'); END");
+      expect((await prove(email)).status, kind).toBeGreaterThanOrEqual(500);
+      app.sqlite.run("DROP TRIGGER fail_consent");
+      expect(app.sqlite.query("SELECT emailVerified AS v FROM user WHERE id = ?").get(userId), kind).toEqual({ v: 0 });
+      expect((await prove(email)).status, kind).toBe(200);
+      expect(app.sqlite.query("SELECT emailVerified AS v FROM user WHERE id = ?").get(userId), kind).toEqual({ v: 1 });
+      expect(app.sqlite.query("SELECT count(*) AS n FROM oauthConsent WHERE userId = ?").get(userId), kind).toEqual({ n: 0 });
+      expect((await refresh(grant)).status, kind).not.toBe(200);
+    }
+  });
   test("a reset ends sessions before grants, so a failure in between cannot leave the old sessions alive", async () => {
     const app = await makeApp(), { cookie, userId } = await app.signIn("order@example.test");
     await oauthAccessToken(app, cookie, "mcp offline_access");

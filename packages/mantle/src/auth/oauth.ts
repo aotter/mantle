@@ -62,15 +62,14 @@ const ENDING = [...RESETS, "/change-password", "/admin/ban-user", "/admin/update
 const RESET_USER = "mantleResetPasswordUser";
 /** Better Auth's email-proof sign-ins: on an unverified user they delete its accounts and sessions (revokeUnprovenAccountAccess). */
 const PROVING = ["/sign-in/email-otp", "/magic-link/verify"];
-const UNPROVEN_USER = "mantleUnprovenUser";
 
 /**
  * Add to the Better Auth plugins with the OAuth provider. An `offline_access` grant outlives sign-out and session expiry
  * (as in Better Auth), but a successful password reset, a password change that signs out other devices, an admin ban
  * (`/admin/ban-user`, or `/admin/update-user` setting `banned: true`), an admin session revocation or an admin password
  * change ends every OAuth grant of that user: tokens, consents and unredeemed codes. So does an email OTP or magic-link
- * sign-in that proves the email of an unverified user: Better Auth strips what was set up before that proof, possibly
- * by someone else who registered the address first, and Mantle ends that party's grants too.
+ * sign-in attempt on an unverified user: Better Auth strips what was set up before that proof, possibly by someone else
+ * who registered the address first, and Mantle ends that party's grants before the attempt is checked.
  */
 export function oauthGrantRevocation() {
   return {
@@ -83,20 +82,17 @@ export function oauthGrantRevocation() {
         const value = typeof token === "string" && token ? await ctx.context.internalAdapter.findVerificationValue(`reset-password:${token}`) : null;
         if (value) return { context: { [RESET_USER]: value.value } };
       }) }, { matcher: ctx => PROVING.includes(ctx.path ?? ""), handler: createAuthMiddleware(async ctx => {
-        // Before the endpoint, while the user is still unverified and the magic-link token is unconsumed.
+        // Before the endpoint, while the user is still unverified and the magic-link token is unconsumed: once Better Auth
+        // marks the address verified, no later request would tell the pre-registrant's grants apart. A failure here fails
+        // the request before verification, so a retry ends them. A failed attempt ends them too: an unverified user's grants
+        // are exactly the pre-hijack risk.
         const email = ctx.path === "/sign-in/email-otp" ? (ctx.body as { email?: unknown } | undefined)?.email : await magicLinkEmail(ctx.context, (ctx.query as { token?: unknown } | undefined)?.token);
         const found = typeof email === "string" && email ? await ctx.context.internalAdapter.findUserByEmail(email.toLowerCase()) : null;
-        if (found && !found.user.emailVerified) return { context: { [UNPROVEN_USER]: found.user.id } };
+        if (found && !found.user.emailVerified) await endGrants(ctx.context.adapter, found.user.id);
       }) }],
       // After the endpoint: its own validation and permission checks have passed and it succeeded.
-      after: [{ matcher: ctx => [...ENDING, ...PROVING].includes(ctx.path ?? ""), handler: createAuthMiddleware(async ctx => {
+      after: [{ matcher: ctx => ENDING.includes(ctx.path ?? ""), handler: createAuthMiddleware(async ctx => {
         const returned = ctx.context.returned, path = ctx.path ?? "";
-        // A magic link succeeds with a redirect, so success here is the promotion itself: the user is now verified.
-        if (PROVING.includes(path)) {
-          const id = (ctx as { [UNPROVEN_USER]?: unknown })[UNPROVEN_USER];
-          if (typeof id === "string" && (await ctx.context.internalAdapter.findUserById(id))?.emailVerified) await endGrants(ctx.context.adapter, id);
-          return;
-        }
         if (returned instanceof Error || returned instanceof Response && !returned.ok) return;
         const body = ctx.body as { userId?: unknown; revokeOtherSessions?: unknown; data?: { banned?: unknown }; email?: unknown; phoneNumber?: unknown } | undefined;
         const userId = path === "/reset-password" ? (ctx as { [RESET_USER]?: unknown })[RESET_USER]
