@@ -67,9 +67,8 @@ also retain their own generated `requires` checks. Share one request-local
 resolver with auth, consent, MCP and REST; preserve its response cookie headers.
 
 The API handles `/admin/api/*`. The app separately serves the Admin that
-`mantle bundle` builds into `<assets>/admin` (default `dist/client/admin`; on Bun,
-which does not run `mantle bundle` yet, the directory of
-`@aotter/mantle-admin/admin/index.html`) at `/admin`, including
+`mantle bundle` builds into `<assets>/admin` (default `dist/client/admin`, on Workers
+and on Bun, where it builds only Admin) at `/admin`, including
 client routes such as `/admin/sign-in`; missing assets stay 404. Do not serve
 that directory bare: `adminShell(request, assets)` from
 `@aotter/mantle-admin/server` returns the shell for every `/admin` page with

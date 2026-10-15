@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { INPUTS_FILE, authTableSql, extraRoles, inputsFingerprint, staleInputs } from "../src/infrastructure/inputs.js";
+import { INPUTS_FILE, authTableSql, extraRoles, generatedTarget, inputsFingerprint, staleInputs } from "../src/infrastructure/inputs.js";
 
 test("generated output is stale once a recorded input changes or disappears", () => {
   const root = mkdtempSync(join(tmpdir(), "mantle-inputs-")), generated = join(root, "generated");
@@ -10,9 +10,10 @@ test("generated output is stale once a recorded input changes or disappears", ()
     mkdirSync(generated);
     const manifest = join(root, "app.yaml"), auth = join(root, "auth.ts");
     writeFileSync(manifest, "kind: Schema\n"); writeFileSync(auth, "export {}\n");
-    writeFileSync(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest, auth]));
+    writeFileSync(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest, auth], "bun-sqlite"));
     const module = join(generated, "generated.ts");
     expect(staleInputs(module)).toEqual([]);
+    expect(generatedTarget(module)).toBe("bun-sqlite");
     appendFileSync(manifest, "# edit\n");
     expect(staleInputs(module)).toHaveLength(1);
     rmSync(auth);

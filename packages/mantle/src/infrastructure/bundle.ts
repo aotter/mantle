@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build, type Metafile } from "esbuild";
-import { INPUTS_FILE, authTableSql, extraRoles, staleInputs } from "./inputs.js";
+import { INPUTS_FILE, authTableSql, extraRoles, generatedTarget, staleInputs } from "./inputs.js";
 
 /** Only static imports run at startup; dynamic imports remain separate uploaded modules. */
 export function startupGraph(metafile: Metafile, entry: string): string[] {
@@ -53,12 +53,20 @@ function assertCleanable(label: string, dir: string, entry: string): void {
 /**
  * `mantle bundle <entry> <outdir> [--assets <dir>]`: the Worker into `<outdir>/worker`, and Admin into `<assets>/admin`
  * (default `<outdir>/client`) when the Worker serves it (`@aotter/mantle-admin/server`; `/mcp` and the other subpaths alone do not).
+ * A server whose generated output records a `bun-*` target runs as TypeScript, so only its Admin is built.
  */
 export async function bundleApp(entry: string, outdir: string, assets = join(outdir, "client")): Promise<void> {
-  const worker = join(outdir, "worker"), source = realpathSync(entry);
+  const source = realpathSync(entry);
   // what is cleaned lies under these two, so neither may be the working directory or hold the source
   assertCleanable("Bundle outdir", outdir, source);
   assertCleanable("The assets directory", assets, source);
+  // The app's own modules only: enough to find its generated output and whether it imports the Admin server.
+  const { metafile: own } = await build({ entryPoints: [entry], bundle: true, write: false, metafile: true, packages: "external", format: "esm", platform: "neutral", logLevel: "silent" });
+  if (generatedDirs(own).some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"))) {
+    if (Object.values(own.inputs).some(input => input.imports.some(imported => imported.path === "@aotter/mantle-admin/server"))) await bundleAdmin(source, outdir, join(assets, "admin"));
+    return;
+  }
+  const worker = join(outdir, "worker");
   // Wrangler uploads every module under the Worker directory and every file under the assets directory.
   if (within(worker, assets) || within(assets, worker)) throw new Error(`The assets directory ${assets} must not overlap the Worker directory ${worker}.`);
   const metafile = await bundle(entry, worker);
@@ -108,6 +116,16 @@ function installed(manifest: string): Record<string, string | null> {
   return versions;
 }
 
+/** The generated directories among a build's inputs, refusing stale ones. */
+function generatedDirs(metafile: Metafile): string[] {
+  const dirs = [...new Set(Object.keys(metafile.inputs).map(input => resolve(input, "..")).filter(dir => existsSync(resolve(dir, INPUTS_FILE))))];
+  for (const dir of dirs) {
+    const input = resolve(dir, "generated.ts"), stale = staleInputs(input);
+    if (stale.length) throw new Error(`Generated output in ${relative(process.cwd(), resolve(input, ".."))} is stale (${stale.join("; ")}). Run your generate script (mantle generate ...) and rebuild.`);
+  }
+  return dirs;
+}
+
 export async function bundle(entry: string, outdir: string): Promise<Metafile> {
   entry = realpathSync(entry);
   assertCleanable("Bundle outdir", outdir, entry);
@@ -129,11 +147,7 @@ export async function bundle(entry: string, outdir: string): Promise<Metafile> {
     throw new Error("@aotter/mantle/testing is only for tests and cannot be bundled for production.");
   // A build is what `wrangler dev` and deploys run: generated code must match the manifests it came from.
   // Any bundled module from a generated directory finds its fingerprint (type-only imports leave generated.ts out).
-  const generatedDirs = new Set(Object.keys(result.metafile.inputs).map(input => resolve(input, "..")).filter(dir => existsSync(resolve(dir, INPUTS_FILE))));
-  for (const dir of generatedDirs) {
-    const input = resolve(dir, "generated.ts"), stale = staleInputs(input);
-    if (stale.length) throw new Error(`Generated output in ${relative(process.cwd(), resolve(input, ".."))} is stale (${stale.join("; ")}). Run your generate script (mantle generate ...) and rebuild.`);
-  }
+  generatedDirs(result.metafile);
   const appSources = Object.keys(result.metafile.inputs).filter(input => !/node_modules|(?:^|\/)generated\/|^\.\.\//.test(input) && /\.[cm]?[jt]s$/.test(input)).map(input => [input, readFileSync(input, "utf8")] as const);
   for (const [input, source] of appSources) {
     const tables = authTableSql(source);
