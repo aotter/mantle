@@ -257,6 +257,44 @@ with an output schema they omit `structuredContent` to avoid validating an error
 against a success schema. Without one they also expose diagnostic structured
 content. MCP adds no prompts or non-UI resources.
 
+### Tool versions
+
+Each generated tool (MCP, media, publishing and WebMCP) carries `version`, a
+short hash computed by `mantle generate` of the definition as listed: name,
+title, description without the marker, input schema (a View tool's with its
+`limit` and `cursor` paging properties), output schema and annotations. A
+localized title or description is hashed with all its locales. The description
+ends with `(tool version <version>)`, so an unchanged tool keeps a
+byte-identical description across deploys.
+
+MCP results of a call that reaches the tool add a second text block,
+`tool version <version>`; failures other than authorization refusals append
+`; input schema <JSON>`, the input schema the tool is listed with.
+`structuredContent` is unchanged. A `tools/call` naming a tool the endpoint
+serves but the caller may not use is answered by the authentication or
+authorization challenge (HTTP 401 or 403) before the SDK's transport and
+request checks, even though that caller's `tools/list` omits the tool. A
+`tools/call` naming a tool not in the endpoint's catalogue, in a batch or not
+and from a host caller too, is answered with JSON-RPC error `-32602` and the
+message
+`No tool named "<name>" exists in the current catalogue (catalogue version <serverInfo.version>).`
+For such a name the SDK's transport and request checks (headers, protocol
+version, JSON-RPC shape) answer first, so a malformed request gets the same
+refusal as one naming a served tool the caller may use.
+Unless `serverInfo.version` is given, the kernel's `mcp()` sets it to
+a hash of the `surface:name:version` of every tool the endpoint serves, before
+per-caller filtering, so `/mcp` and `/mcp/admin` each report their own catalogue
+version, and it changes when a generated tool's definition changes or a tool is
+added or removed, however the tools are wired.
+
+`POST /admin/api/webmcp/{tool}` returns `{ output, version }`. A refusal's
+diagnostic adds `toolVersion`, and `inputSchema` unless it is an authorization
+refusal; internal errors and refusals before the call carry neither. Admin's
+WebMCP results repeat these as the same text block MCP adds. The navigation
+tools `admin_get_context` and `admin_navigate` have no version. Tools an
+application adds itself carry a version only if it sets one. Why: [MCP and
+agents](../concepts/mcp-and-agents.md#when-a-host-shows-old-tools).
+
 ### Declared View scalars on the wire
 
 REST and MCP View pages expose declared JSON columns as JSON values and declared
