@@ -3,12 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate": "mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --entry src/index.ts --admin",
+    "generate": "mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --entry src/index.ts --admin --admin-extensions src/admin.ts",
     "types": "wrangler types --include-runtime=false",
     "db:init": "wrangler d1 execute mantle-app --local --file generated/schema.sql",
     "db:seed": "wrangler d1 execute mantle-app --local --file seed.sql",
     "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
-    "check": "mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --entry src/index.ts --admin --check && wrangler types --include-runtime=false --check && tsc --noEmit",
+    "check": "mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --entry src/index.ts --admin --admin-extensions src/admin.ts --check && wrangler types --include-runtime=false --check && tsc --noEmit",
     "smoke": "node smoke.mjs"
   },
   "dependencies": {

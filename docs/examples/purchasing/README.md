@@ -37,6 +37,8 @@ that have been waiting too long.
   `wrangler.jsonc`. The cron retries failed orders (internal View `approved-requests`) and sends the reminder
   (internal View `stale-requests`) to admins who are not banned.
 - Employees see only their own requests through `my-requests` (`restrict: { requests: "author_id = auth.uid()" }`).
+- **Sidebar for the approver's day**: `src/admin.ts` declares an Approvals group (`navGroups`) above Admin's built-in
+  groups; `pending-requests` and `requests` move into it with `uiSchema.nav: { group, order }`.
 - **A page only signed-in employees reach**: `src/requests-page.ts` serves `GET /requests`. An anonymous visitor gets a
   303 to the shell's `/sign-in?return=/requests` (`src/sign-in.ts`, email code, then back). Signed in, the table reads
   `my-requests` as the visitor's own caller. The form keeps `action="/api/requests" method="post"`; a small script sends

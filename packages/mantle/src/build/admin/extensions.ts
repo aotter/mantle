@@ -21,7 +21,8 @@ export interface AdminExtensionPage {
   readonly id: string;
   readonly title: LocalizedText;
   readonly role: AdminRole;
-  readonly nav?: { readonly group: "more" | "settings"; readonly order?: number };
+  /** "more", "settings", a built-in group (content, operations, reports) or a navGroups id. */
+  readonly nav?: { readonly group: string; readonly order?: number };
 }
 /** A settings page Admin renders from `schema` (the form subset) with no client code. */
 export interface AdminExtensionSettings {

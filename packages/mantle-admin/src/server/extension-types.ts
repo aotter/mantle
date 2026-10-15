@@ -25,7 +25,8 @@ export interface AdminExtensionPage {
     readonly title: LocalizedText;
     readonly role: "admin";
     readonly nav?: {
-        readonly group: "more" | "settings";
+        /** "more", "settings", a built-in group (content, operations, reports) or a navGroups id. */
+        readonly group: string;
         readonly order?: number;
     };
 }
@@ -110,4 +111,12 @@ export interface AdminExtensionHandlers<Env = unknown, Database = unknown> {
             readonly schema?: string;
         }, context: Context<Env, Database>): unknown;
     }>>;
+}
+/** A project sidebar group (`navGroups` of the `--admin-extensions` module); `uiSchema.nav.group` and pages name it by id. */
+export interface AdminNavGroup {
+    /** Kebab-case; not a built-in group (content, operations, reports, more, settings). */
+    readonly id: string;
+    readonly title: LocalizedText;
+    /** Among the built-in groups' content 10, operations 20 and reports 30; default 50. More always stays last. */
+    readonly order?: number;
 }

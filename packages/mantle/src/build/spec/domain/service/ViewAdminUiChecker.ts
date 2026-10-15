@@ -1,6 +1,7 @@
 /** View.spec.uiSchema: the Admin list a View presents. */
 import type { ViewManifest } from "../model/ManifestGrammar.js";
 import { checkCells, type SchemaAdminUiProblem } from "./SchemaAdminUiChecker.js";
+import { NAV_PLACEMENT_KEYS, navPlacementProblem } from "../model/AdminNav.js";
 
 const problem = (pointer: string, value: unknown, expected: string, message: string): SchemaAdminUiProblem => ({ pointer, value, expected, message });
 
@@ -39,14 +40,22 @@ export function checkViewAdminUi(view: ViewManifest): {
       "View.spec.uiSchema must be an object.",
     )] };
   }
-  const unknownRoot = Object.keys(uiSchema).find((key) => key !== "list");
+  const unknownRoot = Object.keys(uiSchema).find((key) => key !== "list" && key !== "nav");
   if (unknownRoot) {
     return { list: EMPTY_VIEW_LIST, problems: [problem(
       `/spec/uiSchema/${unknownRoot}`,
       uiSchema[unknownRoot],
-      "list",
+      "list or nav",
       `View.spec.uiSchema.${unknownRoot} is not supported.`,
     )] };
+  }
+  const nav = uiSchema["nav"];
+  if (nav !== undefined) {
+    if (!nav || typeof nav !== "object" || Array.isArray(nav)) return { list: EMPTY_VIEW_LIST, problems: [problem("/spec/uiSchema/nav", nav, "an object", "View.spec.uiSchema.nav must be an object.")] };
+    for (const [key, value] of Object.entries(nav)) {
+      const expected = (NAV_PLACEMENT_KEYS as readonly string[]).includes(key) ? navPlacementProblem(key, value) : "group, order or hidden";
+      if (expected) return { list: EMPTY_VIEW_LIST, problems: [problem(`/spec/uiSchema/nav/${key}`, value, expected, `View.spec.uiSchema.nav.${key} must be ${expected}.`)] };
+    }
   }
   const list = uiSchema["list"];
   if (list === undefined) return { list: EMPTY_VIEW_LIST, problems: [] };

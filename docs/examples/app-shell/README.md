@@ -27,6 +27,7 @@ pnpm smoke                     # when the copied example has smoke.mjs
 | `manifests/*.yaml` | Your Schemas, Views, Procedures and Triggers. `pnpm generate` compiles every file here. |
 | `src/handlers.ts` | Code for each `handler: { ref }` Procedure. The Store it receives is bound to the same caller. |
 | `src/routes.ts` | App-owned routes: visitor pages, SEO files, webhooks and callbacks. |
+| `src/admin.ts` | Admin presentation for `--admin-extensions`: `navGroups` (sidebar groups) and `adminExtensions`. Empty by default. |
 | `src/sign-in.ts` | Member sign-in page at `/sign-in` (email code, then back to `?return=`) and `signInRedirect(request)` for pages that need a signed-in visitor. Unstyled; delete it if the app has no member pages. |
 | `src/schedule.ts` | Cron work. Add the cron to `wrangler.jsonc` `triggers.crons`. |
 | `src/signup.ts` | `allowSignUp(env, email)`: who may create an account (allow-all by default). `auth.ts` calls it before Better Auth creates a user; `ADMIN_EMAIL` is always allowed. |

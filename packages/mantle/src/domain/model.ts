@@ -12,6 +12,8 @@ export interface GenerateInput {
   readonly adminPages?: Readonly<Record<string,{caller:AdminPage;trusted:AdminPage}>>;
   /** Build-time declarations used to check manifest UI bindings. */
   readonly adminExtensions?: readonly AdminExtension[];
+  /** Project sidebar groups; Schemas, admin Views and extension pages place items in them with `nav.group`. */
+  readonly navGroups?: readonly import("../build/compiler.js").AdminNavGroup[];
   readonly site?: import("../build/compiler.js").SiteDefaults;
   readonly plan: RuntimePlan;
   readonly description: import("./describe/index.js").AppDescription;

@@ -25,7 +25,8 @@ spec:
   title: Purchase requests
   lifecycle: operational
   indexes: [[authorId, createdAt, id], [requestStatus, createdAt, id]]
-  uiSchema: { list: { primaryField: title, columns: [department, amount, requestStatus], filterField: requestStatus } }
+  # Sidebar: in the Approvals group (src/admin.ts), after the queue of requests waiting for a decision.
+  uiSchema: { list: { primaryField: title, columns: [department, amount, requestStatus], filterField: requestStatus }, nav: { group: approvals, order: 2 } }
   schema:
     type: object
     # Admin reads requests but cannot edit them generically: a generic edit could move requestStatus back to
@@ -78,6 +79,7 @@ spec:
   title: Pending purchase requests
   surface: admin
   requires: { auth: { all: [ctx.admin] } }
+  uiSchema: { nav: { group: approvals, order: 1 } }
   sql: |
     SELECT id, title, amount, department, version
     FROM requests WHERE requestStatus = 'submitted' ORDER BY created_at, id
