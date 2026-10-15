@@ -84,8 +84,8 @@ test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 bef
   expect(observations.filter(event=>event.kind==="request-refused").map(event=>[event.status,event.surface])).toEqual(["public","public","admin","admin","public","public","admin","admin"].map(surface=>[403,surface]));
   caller={kind:"anonymous"};
   // The site's own origin is not implied: DNS rebinding sends Origin == the rebound Host, whatever CF-Connecting-IP claims.
-  for(const [url,origin] of [["https://app.test/mcp","https://app.test"],["http://evil.example.com:8787/mcp","http://evil.example.com:8787"]]) for(const ip of [{},{"cf-connecting-ip":"127.0.0.1"}]) {
-   const refused=await call(open,url,{host:new URL(url).host,origin,...ip});
+  for(const url of ["https://app.test/mcp","http://evil.example.com:8787/mcp"]) for(const ip of [{},{"cf-connecting-ip":"127.0.0.1"}] as Record<string,string>[]) {
+   const refused=await call(open,url,{host:new URL(url).host,origin:new URL(url).origin,...ip});
    expect(refused.status).toBe(403);expect((await refused.json()).error.message).toBe(`Invalid Origin: ${new URL(url).hostname}`);
   }
   // A forged loopback peer does not admit a foreign Origin; the opaque `null` Origin is refused.
