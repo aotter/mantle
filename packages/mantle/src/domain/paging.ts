@@ -95,6 +95,16 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
     };
     const fixed = (n: SqlNode): void => {
       if (n?.BoolExpr?.boolop === "AND_EXPR") n.BoolExpr.args.forEach(fixed);
+      // `col IN auth.user(field)` (a scope or restrict) is fixed like an equality, fanning out over the caller's values:
+      // ADR-0046 §Paging, cost elements × limit. A scope prints `/*s:field*/ kept /*|*/ kept OR 1 = 1 /*;*/`; `kept` is
+      // the dialect's anyOf lowering, `(col) IN (SELECT value FROM json_each((?)))` or `(col) = ANY(CAST(...(?)...))`.
+      const raw = n?.Raw?.parts;
+      if (raw && typeof raw[0] === "string" && raw[0].startsWith("/*s:")) return fixed(raw[1]);
+      if (raw?.length === 8 && raw[1]?.ColumnRef && raw[5]?.ParamRef && /^ (IN \(SELECT value FROM json_each\(|= ANY\()/.test(raw[3])) {
+        const col = resolve(raw[1], false);
+        if (col && col.source === base!.fields.get("id")?.source) base!.fixed.add(col.name);
+        return;
+      }
       const e = n?.A_Expr;
       if (e?.kind !== "AEXPR_OP" || e.name?.[0]?.String?.sval !== "=") return;
       const col = scalar(e.rexpr) ? resolve(e.lexpr, false) : scalar(e.lexpr) ? resolve(e.rexpr, false) : undefined;
