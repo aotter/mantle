@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import type { JsonSchema, RuntimePlan } from "../src/build/compiler.js";
-import { emitValidation } from "../src/usecase/validation.js";
+import { acceptsEmpty, advertised, emitValidation } from "../src/usecase/validation.js";
 import { loadGenerated } from "./apps/link.js";
 
 const plan = (input: JsonSchema) => ({ views: { search: { input } }, procedures: { save: { input } } }) as unknown as RuntimePlan;
 const checked = async (input: JsonSchema, kind = "procedures") => loadGenerated(emitValidation(plan(input))[`validation/${kind}/${kind === "views" ? "search" : "save"}.ts`]!);
-const error = (run: () => unknown, path: string) => {
+const error = (run: () => unknown, path: string, message?: string) => {
   try { run(); throw Error("Expected validation failure"); } catch (e) {
-    expect(e).toMatchObject({ code: "INPUT_VALIDATION_FAILED", path });
+    expect(e).toMatchObject({ code: "INPUT_VALIDATION_FAILED", path, ...(message ? { message } : {}) });
   }
 };
 
@@ -43,7 +43,7 @@ test("local references retain nullable fields and structural enums", async () =>
 });
 
 test("unsupported validation declarations fail generation explicitly", () => {
-  for (const input of [{ type: "string", format: "uri" }, { type: "array", contains: { type: "string" } }, {const:1}, {oneOf:[]}, {uniqueItems:true}, {minProperties:1}]) {
+  for (const input of [{ type: "string", format: "hostname" }, { type: "array", contains: { type: "string" } }, {oneOf:[]}, {uniqueItems:true}, {minProperties:1}]) {
     expect(() => emitValidation(plan(input))).toThrow("Generated input validation does not support");
     const refused: string[] = [];
     emitValidation(plan(input), (path, message) => refused.push(`${path}: ${message}`));
@@ -86,4 +86,111 @@ test("recursive local references stop at 100 nesting levels", async () => {
     for (const email of ["a@b", "+tag@localhost", "名字@網域", "x@y.z", null]) expect(validate({ email })).toEqual({ email });
     for (const email of ["", "a", "@b", "a@", "a@@b", "a@b@c", " a@b", "a@b\n", "a\tb@c", "a@b c"]) error(() => validate({ email }), `${kind}/${kind === "views" ? "search" : "save"}/input/email`);
   }
+});
+
+const body = { type: "object", additionalProperties: false, properties: { weight: { type: "number" }, unit: { enum: ["kg", "lb"] }, heightCm: { type: "number" }, bodyFatPct: { type: "number" }, undo: { type: "boolean" }, item: { type: "string" } },
+  dependentRequired: { weight: ["unit"] },
+  anyOf: [{ required: ["weight"] }, { required: ["heightCm"] }, { required: ["bodyFatPct"] }],
+  if: { properties: { undo: { const: true } }, required: ["undo"] }, else: { required: ["item"] } } as JsonSchema;
+
+test("cross-field rules fail at the missing field, or the object, with a sentence naming the rule", async () => {
+  const { validate } = await checked(body);
+  for (const valid of [{ weight: 70, unit: "kg", item: "a" }, { heightCm: 180, undo: true }, { bodyFatPct: 20, undo: false, item: "a" }]) expect(validate(valid)).toBe(valid);
+  error(() => validate({ weight: 70, item: "a" }), "procedures/save/input/unit", "'unit' is required when 'weight' is present.");
+  error(() => validate({ unit: "kg", item: "a" }), "procedures/save/input", "At least one of 'weight', 'heightCm', 'bodyFatPct' is required.");
+  for (const input of [{ heightCm: 180, undo: false }, { heightCm: 180 }]) error(() => validate(input), "procedures/save/input/item", "'item' is required unless 'undo' is true.");
+  error(() => validate({ heightCm: 180, undo: "true" }), "procedures/save/input/undo", "Expected boolean.");
+  const nested = await checked({ type: "object", properties: { order: { type: "object", properties: { status: { type: "string" }, "a/reason": { type: "string" }, x: {}, y: {} }, anyOf: [{ required: ["x", "y"] }, { required: ["status"] }],
+    if: { properties: { status: { const: "rejected" } }, required: ["status"] }, then: { required: ["a/reason"] } } } });
+  expect(nested.validate({ order: { status: "open" } })).toBeTruthy();
+  error(() => nested.validate({ order: { status: "rejected" } }), "procedures/save/input/order/a~1reason", "'a/reason' is required when 'status' is \"rejected\".");
+  error(() => nested.validate({ order: { x: 1 } }), "procedures/save/input/order", "At least one of ('x' and 'y'), 'status' is required.");
+});
+
+test("const compares JSON values", async () => {
+  const { validate } = await checked({ type: "object", properties: { kind: { const: "a" }, shape: { const: { a: [1] } }, none: { const: null } } });
+  expect(validate({ kind: "a", shape: { a: [1] }, none: null })).toBeTruthy();
+  for (const field of [{ kind: "b" }, { shape: { a: [2] } }, { none: 0 }]) error(() => validate(field), `procedures/save/input/${Object.keys(field)[0]}`, "Value violates const.");
+});
+
+test("const numbers must be finite", () => {
+  for (const input of [{ type: "object", properties: { a: { const: Infinity } } }, { type: "object", properties: { a: { const: { b: [NaN] } } } }]) expect(() => emitValidation(plan(input as JsonSchema))).toThrow("Input const numbers must be finite");
+  const refused: string[] = [];
+  emitValidation(plan({ type: "object", properties: { a: {}, b: {} }, if: { properties: { a: { const: -Infinity } }, required: ["a"] }, then: { required: ["b"] } } as JsonSchema), (path, text) => refused.push(`${path}: ${text}`));
+  expect(refused).toEqual([expect.stringContaining("if is supported only"), expect.stringContaining("if is supported only")]);
+});
+
+test("an input accepts no fields only without required, anyOf or an else rule", () => {
+  const properties = { a: { type: "string" }, b: { type: "string" } }, when = { properties: { a: { const: "x" } }, required: ["a"] };
+  for (const input of [undefined, { type: "object", properties }, { type: "object", properties, dependentRequired: { a: ["b"] } }, { type: "object", properties, if: when, then: { required: ["b"] } }]) expect(acceptsEmpty(input as JsonSchema | undefined)).toBe(true);
+  for (const input of [{ type: "object", properties, required: ["a"] }, { type: "object", properties, anyOf: [{ required: ["a"] }, { required: ["b"] }] }, { type: "object", properties, if: when, else: { required: ["b"] } }]) expect(acceptsEmpty(input as JsonSchema)).toBe(false);
+});
+
+test("a root $ref's rules decide whether an input accepts no fields", () => {
+  const properties = { a: { type: "string" }, b: { type: "string" } }, when = { properties: { a: { const: "x" } }, required: ["a"] };
+  const via = (target: object) => ({ $ref: "#/$defs/t", $defs: { t: { type: "object", properties, ...target } } }) as JsonSchema;
+  for (const target of [{ required: ["a"] }, { anyOf: [{ required: ["a"] }, { required: ["b"] }] }, { if: when, else: { required: ["b"] } }]) expect(acceptsEmpty(via(target))).toBe(false);
+  expect(acceptsEmpty(via({}))).toBe(true);
+  expect(acceptsEmpty({ $ref: "#/$defs/u", $defs: { u: { $ref: "#/$defs/t" }, t: { type: "object", properties, required: ["a"] } } } as JsonSchema)).toBe(false);
+  for (const input of [{ $ref: "#/$defs/missing" }, { $ref: "#" }, { $ref: "#/$defs/s", $defs: { s: { $ref: "#/$defs/s" } } }]) expect(acceptsEmpty(input as JsonSchema)).toBe(false);
+});
+
+test("a root enum, const or non-object type, also through a root $ref, does not accept no fields", () => {
+  const via = (target: object) => ({ $ref: "#/$defs/t", $defs: { t: target } }) as JsonSchema;
+  for (const target of [{ enum: [{}] }, { const: {} }, { type: "array" }, { type: ["string", "null"] }]) {
+    expect(acceptsEmpty(target as JsonSchema)).toBe(false);
+    expect(acceptsEmpty(via(target))).toBe(false);
+  }
+  for (const target of [{ type: ["object", "null"] }, { type: "object" }]) {
+    expect(acceptsEmpty(target as JsonSchema)).toBe(true);
+    expect(acceptsEmpty(via(target))).toBe(true);
+  }
+});
+
+test("enum numbers must be finite", () => {
+  for (const input of [{ type: "object", properties: { a: { enum: [1, Infinity] } } }, { type: "object", properties: { a: { enum: [{ b: [NaN] }] } } }]) expect(() => emitValidation(plan(input as JsonSchema))).toThrow("Input enum numbers must be finite");
+});
+
+test("format uri is an absolute http or https URL", async () => {
+  const { validate } = await checked({ type: "object", properties: { link: { type: ["string", "null"], format: "uri" } } });
+  for (const link of ["https://example.com/a?b#c", "http://localhost:8080", "HTTPS://EXAMPLE.COM", null]) expect(validate({ link })).toEqual({ link });
+  for (const link of ["javascript:alert(1)", "data:text/html,x", "ftp://example.com", "mailto:a@b", "/relative", "example.com", "", "http://"]) error(() => validate({ link }), "procedures/save/input/link", "Expected an absolute http or https URL.");
+});
+
+test("patterns are compiled once per module", () => {
+  const source = emitValidation(plan({ type: "object", properties: { a: { type: "string", pattern: "^a" }, b: { type: "string", pattern: "^a" }, c: { type: "string", pattern: "^c" } } }))["validation/procedures/save.ts"]!;
+  expect(source.match(/new RegExp\(/g)).toHaveLength(2);
+  expect(source).toStartWith('import { fail } from "@aotter/mantle/validation";\nconst pattern0 = new RegExp("^a");\nconst pattern1 = new RegExp("^c");\n');
+});
+
+test("rules of another shape fail generation with the supported shape", () => {
+  const object = (rules: object) => ({ type: "object", properties: { a: {}, b: {} }, ...rules }) as JsonSchema;
+  for (const [rules, message] of [
+    [{ dependentRequired: { a: ["c"] } }, "dependentRequired maps declared properties"],
+    [{ dependentRequired: { a: [] } }, "dependentRequired maps declared properties"],
+    [{ anyOf: [{ required: ["a"] }, { type: "string" }] }, "anyOf is supported only as branches of exactly { required"],
+    [{ anyOf: [] }, "anyOf is supported only"],
+    [{ if: { properties: { a: { const: 1 } } }, then: { required: ["b"] } }, "so an absent field does not satisfy it"],
+    [{ if: { properties: { a: { const: [1] } }, required: ["a"] }, then: { required: ["b"] } }, "if is supported only"],
+    [{ if: { properties: { a: { enum: [1] } }, required: ["a"] }, then: { required: ["b"] } }, "if is supported only"],
+    [{ if: { properties: { a: { const: 1 } }, required: ["a"] } }, "then and else are supported only"],
+    [{ then: { required: ["b"] } }, "if is supported only"],
+    [{ if: { properties: { a: { const: 1 } }, required: ["a"] }, else: { required: ["b"], properties: {} } }, "then and else are supported only"],
+  ] as const) {
+    const refused: string[] = [];
+    emitValidation(plan(object(rules)), (path, text) => refused.push(`${path}: ${text}`));
+    expect(refused).toEqual([expect.stringContaining(message), expect.stringContaining(message)]);
+    expect(refused[0]).toContain("see docs/handbook/reference/surface.md");
+  }
+  expect(() => emitValidation(plan({ type: "string", format: "hostname" }))).toThrow("Generated input validation does not support format 'hostname'; see docs/handbook/reference/surface.md");
+});
+
+test("AI tool catalogues advertise rules as description sentences, not keywords", () => {
+  const { inputSchema, description } = advertised({ ...body, properties: { ...body.properties, order: { type: "object", properties: { a: {} }, dependentRequired: { a: ["a"] } } } }, { en: "Log a measurement.", zh: "記錄" });
+  expect(JSON.stringify(inputSchema)).not.toMatch(/"(?:dependentRequired|anyOf|if|then|else)"/);
+  expect(inputSchema).toMatchObject({ additionalProperties: false, properties: { undo: { type: "boolean" } } });
+  expect(description).toEqual({ en: "Log a measurement. 'unit' is required when 'weight' is present. At least one of 'weight', 'heightCm', 'bodyFatPct' is required. 'item' is required unless 'undo' is true. In '/order': 'a' is required when 'a' is present.", zh: "記錄 'unit' is required when 'weight' is present. At least one of 'weight', 'heightCm', 'bodyFatPct' is required. 'item' is required unless 'undo' is true. In '/order': 'a' is required when 'a' is present." });
+  expect(body).toHaveProperty("anyOf");
+  const plain = { type: "object" } as JsonSchema;
+  expect(advertised(plain, "Same.")).toEqual({ inputSchema: plain, description: "Same." });
 });

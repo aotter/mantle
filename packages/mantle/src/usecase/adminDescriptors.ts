@@ -2,7 +2,7 @@
 import { DiagnosticError, BUILT_IN_NAV_GROUPS, navGroupProblems, navPlacementProblems, isPrimaryCollection, standaloneParentField, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
-import { emitValidation } from "./validation.js";
+import { advertised, emitValidation } from "./validation.js";
 import { publishingInput, publishingTransitions } from "./publishing.js";
 
 const adminEnum = (p: JsonSchema): JsonSchema => { if(!p.oneOf) return p; const {oneOf,...rest}=p; return {...rest,enum:oneOf.map(c=>c.const)}; };
@@ -54,7 +54,7 @@ export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin
   const adminCatalogue=appCatalog(plan,"admin");
   const catalogues={public:appCatalog(plan,"public"),admin:{views:Object.fromEntries(Object.entries(adminCatalogue.views).map(([name,v])=>[name,{...v,actions:[...v.actions]}])),actions:{...adminCatalogue.actions}}};
   const snapshot=developerConsole(plan);
-  const webmcp={tools:adminTools.map(({name,source,kind,title,description,inputSchema,outputSchema,annotations})=>({name,target:{kind,name:source},...(title?{title:(kind==="view"?plan.views[source]:plan.procedures[source])!.title??title}:{}),description:(kind==="view"?plan.views[source]:plan.procedures[source])!.description??description,inputSchema,...(outputSchema?{outputSchema}:{}),...(annotations?{annotations}:{})})),routes:Object.fromEntries(adminTools.flatMap(t=>{
+  const webmcp={tools:adminTools.map(({name,source,kind,title,description,inputSchema,outputSchema,annotations})=>({name,target:{kind,name:source},...(title?{title:(kind==="view"?plan.views[source]:plan.procedures[source])!.title??title}:{}),...advertised(inputSchema,(kind==="view"?plan.views[source]:plan.procedures[source])!.description??description),...(outputSchema?{outputSchema}:{}),...(annotations?{annotations}:{})})),routes:Object.fromEntries(adminTools.flatMap(t=>{
     if(t.kind==="view")return [[t.name,{path:"/admin/views/"+encodeURIComponent(t.source)}]];
     const target=plan.procedures[t.source]!.target;return target?[[t.name,{path:"/admin/c/"+encodeURIComponent(plan.schemas[target.schema.toLowerCase()]?.name??target.schema),entry:true}]]:[];
   })) as Record<string,{path:string;entry?:boolean}>};

@@ -30,15 +30,35 @@ The generated `validation/views/<name>.ts` and
 also export `query(URLSearchParams)` returning `{ input, limit?, cursor? }`.
 REST and MCP use the same generated checks, with no runtime schema interpreter.
 Supported checks are types/unions and nullable, required/properties/additionalProperties,
-arrays/items and length bounds, enum, local `$defs`/`$ref`, string length/pattern,
-numeric bounds/`multipleOf`, and date/date-time/email. The deliberately permissive
+arrays/items and length bounds, enum, `const`, local `$defs`/`$ref`, string length/pattern,
+numeric bounds/`multipleOf`, and the formats `date`, `date-time`, `email` and `uri`. The deliberately permissive
 email check requires exactly one `@`, non-empty local and domain parts, and no
 whitespace; it does not require a dot, verify deliverability, or implement full
-RFC mailbox syntax. Integers must be safe; fractional
-`multipleOf` uses a 1e-9 quotient tolerance. `const`, `oneOf`, `uniqueItems` and
-object property-count bounds are refused, alongside other unsupported keywords
-and formats. Defaults remain
+RFC mailbox syntax. `uri` means an absolute `http:` or `https:` URL, stricter than
+JSON Schema's any-scheme URI, so `javascript:` and `data:` links fail. Integers must be safe; fractional
+`multipleOf` uses a 1e-9 quotient tolerance. Defaults remain
 annotations and are not inserted into request input.
+
+View and Procedure input objects (not Schemas or outputs) also take three rules
+between their declared properties, each failing with one `INPUT_VALIDATION_FAILED`
+error whose message names the rule:
+
+- `dependentRequired: { weight: [unit] }`: "'unit' is required when 'weight' is
+  present.", at the missing field.
+- `anyOf` whose every branch is exactly `{ required: [...] }`: "At least one of
+  'weight', 'heightCm' is required.", at the object.
+- `if: { properties: { undo: { const: true } }, required: [undo] }` with `then`
+  and/or `else` each exactly `{ required: [...] }`: "'item' is required unless
+  'undo' is true.", at the missing field. `if` must list its field in `required`:
+  otherwise an absent field would satisfy it.
+
+Any other `anyOf`/`if`/`then`/`else`, `oneOf`, `uniqueItems`, object property-count
+bounds and other keywords and formats are refused at generation. The rules only
+validate: types, SQL binds and Admin forms keep the declared fields, and Admin
+shows the server's error at its field. `describe` keeps them as written; MCP and
+WebMCP tools advertise the schema without them and append each rule's sentence to
+the tool description, since some model APIs refuse these keywords in a tool's
+input schema. [Trigger](trigger.md#input-rules) has an example.
 
 Native `paged/views/<name>.ts` has a default export, callable as
 `page(db, caller, input, { limit?, cursor? })` after importing it as `page`,
@@ -133,7 +153,10 @@ const tags = await site.head(request, env); // HTML string, empty for unknown/mi
 ```
 
 Page parameter names must exactly match the View's declared input properties.
-Page and list Views must return the page parameters; list Views must accept empty input. Markdown
+Page and list Views must return the page parameters; list Views must accept empty input: no
+`required`, no root `anyOf`, `enum` or `const`, no `else` rule, and a root `type`, when given, that includes `object`.
+These conditions also apply to each schema a root `$ref` chain reaches, and an unresolved or cyclic chain fails them.
+`web()` throws a `TypeError` for any other list View. Markdown
 must name a textual output column. HTML remains application-owned.
 
 `/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head

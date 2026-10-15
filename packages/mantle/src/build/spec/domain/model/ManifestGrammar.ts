@@ -541,4 +541,7 @@ export const RESERVED_ENTRY_COLUMNS = [
  * New reserved names need an ADR (ADR-0022).
  */
 export const EXPECTED_VERSION_PROPERTY = "expectedVersion" as const;
+/** Rules between an input object's fields: only View and Procedure input takes them, and AI tool catalogues advertise them as sentences. */
+export const INPUT_RULE_KEYWORDS = ["dependentRequired", "anyOf", "if", "then", "else"] as const;
+
 export const RESERVED_PROCEDURE_INPUT_NAMES = [EXPECTED_VERSION_PROPERTY] as const;

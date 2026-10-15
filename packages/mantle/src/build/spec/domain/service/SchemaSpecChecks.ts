@@ -1,5 +1,5 @@
 /** Schema.spec: its JSON Schema subset, local refs, indexes, search and Admin UI. */
-import { MANTLE_BIND_KEYWORD, RESERVED_ENTRY_COLUMNS, RESERVED_PROCEDURE_INPUT_NAMES, type SchemaManifest } from "../model/ManifestGrammar.js";
+import { INPUT_RULE_KEYWORDS, MANTLE_BIND_KEYWORD, RESERVED_ENTRY_COLUMNS, RESERVED_PROCEDURE_INPUT_NAMES, type SchemaManifest } from "../model/ManifestGrammar.js";
 import { ManifestParseError, V01_LIFECYCLE_MODES, escapeJsonPointerSegment, rejectUnknownKeys, validateLocalizedText } from "./ManifestFieldChecks.js";
 import { checkSchemaAdminUi } from "./SchemaAdminUiChecker.js";
 import { checkSchemaIndexes, schemaIndexDiagnosticCode } from "./SchemaIndexChecker.js";
@@ -256,12 +256,8 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
 }
 
 const UNSUPPORTED_JSON_SCHEMA_KEYWORDS = new Set([
-  "anyOf",
   "allOf",
   "not",
-  "if",
-  "then",
-  "else",
   "$anchor",
   "$dynamicAnchor",
   "$dynamicRef",
@@ -305,6 +301,17 @@ export function validateJsonSchema(
       if (keyword in value) {
         throw new ManifestParseError(
           `${kind} '${name}' uses unsupported JSON Schema keyword '${keyword}'`,
+          idx,
+          `${pointer}/${escapeJsonPointerSegment(keyword)}`,
+          "JSON_SCHEMA_UNSUPPORTED",
+        );
+      }
+    }
+    // Generated input validation checks these rules (their shapes are checked at generate); nothing checks them elsewhere.
+    if (basePointer !== "/spec/input") for (const keyword of INPUT_RULE_KEYWORDS) {
+      if (keyword in value) {
+        throw new ManifestParseError(
+          `${kind} '${name}' uses JSON Schema keyword '${keyword}', which is supported only in View and Procedure input`,
           idx,
           `${pointer}/${escapeJsonPointerSegment(keyword)}`,
           "JSON_SCHEMA_UNSUPPORTED",
