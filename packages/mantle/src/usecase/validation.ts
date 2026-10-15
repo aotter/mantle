@@ -1,5 +1,5 @@
 /** Compile boundary checks into each operation; no schema enters the request bundle. */
-import { INPUT_RULE_KEYWORDS, type JsonSchema } from "../build/compiler.js";
+import { INPUT_RULE_KEYWORDS, lookupLocalRef as lookup, rootRefChain, type JsonSchema } from "../build/compiler.js";
 import { q } from "../domain/entry.js";
 import { publishingInput } from "./publishing.js";
 const pointer = (key: string) => key.replace(/~/g, "~0").replace(/\//g, "~1");
@@ -42,24 +42,11 @@ function rules(schema: JsonSchema): Rule[] | string {
 }
 /** Whether an input schema accepts `{}`: a list View is read with no input, so web indexes need this. */
 export function acceptsEmpty(input: JsonSchema | undefined): boolean {
+  if (input === undefined) return true;
   // Validation applies a root `$ref`'s target too, so each schema along the chain must accept `{}`; an unresolved or cyclic chain does not.
-  const seen = new Set<JsonSchema>();
-  for (let schema = input; schema !== undefined; schema = lookup(input!, schema.$ref)) {
-    // dependentRequired needs a present key; an if needs its field, so `{}` meets only an else.
-    if (seen.has(schema) || schema.required?.length || schema.anyOf !== undefined || (schema.else as JsonSchema | undefined)?.required?.length) return false;
-    if (schema.$ref === undefined) return true;
-    seen.add(schema);
-  }
-  return input === undefined;
-}
-/** The schema a local JSON pointer `ref` names in `root`, or undefined. */
-function lookup(root: JsonSchema, ref: unknown): JsonSchema | undefined {
-  if (typeof ref !== "string" || !ref.startsWith("#/")) return undefined;
-  let value: unknown = root;
-  try {
-    for (const key of decodeURIComponent(ref.slice(2)).split("/").map(key=>key.replace(/~1/g,"/").replace(/~0/g,"~"))) value = value && typeof value === "object" && Object.hasOwn(value,key) ? (value as Record<string,unknown>)[key] : undefined;
-  } catch { return undefined; }
-  return value && typeof value === "object" ? value as JsonSchema : undefined;
+  // dependentRequired needs a present key; an if needs its field, so `{}` meets only an else.
+  return rootRefChain(input)?.every(schema => !schema.required?.length && schema.anyOf === undefined && !(schema.else as JsonSchema | undefined)?.required?.length
+    && schema.enum === undefined && schema.const === undefined && (schema.type === undefined || [schema.type].flat().includes("object"))) ?? false;
 }
 type Text = string | Readonly<Record<string, string>>;
 /**

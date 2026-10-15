@@ -135,6 +135,18 @@ test("a root $ref's rules decide whether an input accepts no fields", () => {
   for (const input of [{ $ref: "#/$defs/missing" }, { $ref: "#" }, { $ref: "#/$defs/s", $defs: { s: { $ref: "#/$defs/s" } } }]) expect(acceptsEmpty(input as JsonSchema)).toBe(false);
 });
 
+test("a root enum, const or non-object type, also through a root $ref, does not accept no fields", () => {
+  const via = (target: object) => ({ $ref: "#/$defs/t", $defs: { t: target } }) as JsonSchema;
+  for (const target of [{ enum: [{}] }, { const: {} }, { type: "array" }, { type: ["string", "null"] }]) {
+    expect(acceptsEmpty(target as JsonSchema)).toBe(false);
+    expect(acceptsEmpty(via(target))).toBe(false);
+  }
+  for (const target of [{ type: ["object", "null"] }, { type: "object" }]) {
+    expect(acceptsEmpty(target as JsonSchema)).toBe(true);
+    expect(acceptsEmpty(via(target))).toBe(true);
+  }
+});
+
 test("enum numbers must be finite", () => {
   for (const input of [{ type: "object", properties: { a: { enum: [1, Infinity] } } }, { type: "object", properties: { a: { enum: [{ b: [NaN] }] } } }]) expect(() => emitValidation(plan(input as JsonSchema))).toThrow("Input enum numbers must be finite");
 });

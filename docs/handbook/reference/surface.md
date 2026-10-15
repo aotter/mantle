@@ -154,7 +154,9 @@ const tags = await site.head(request, env); // HTML string, empty for unknown/mi
 
 Page parameter names must exactly match the View's declared input properties.
 Page and list Views must return the page parameters; list Views must accept empty input: no
-`required`, no root `anyOf` and no `else` rule. `web()` throws a `TypeError` for any other list View. Markdown
+`required`, no root `anyOf`, `enum` or `const`, no `else` rule, and a root `type`, when given, that includes `object`.
+These conditions also apply to each schema a root `$ref` chain reaches, and an unresolved or cyclic chain fails them.
+`web()` throws a `TypeError` for any other list View. Markdown
 must name a textual output column. HTML remains application-owned.
 
 `/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head
