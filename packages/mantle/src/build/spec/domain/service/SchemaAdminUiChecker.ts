@@ -384,14 +384,20 @@ function checkNav(
     };
   }
 
+  // without standalone, parentField only chooses which required reference folds the Schema (any required reference)
   if (parentField !== undefined && standalone !== true) {
-    return {
+    const required = new Set(schema.spec.schema.required ?? []);
+    const ok = !schema.spec.translates && required.has(parentField as string)
+      && resolveMantleRef(schema.spec.schema.properties?.[parentField as string]) !== null;
+    return ok ? { nav: null } : {
       nav: null,
       problem: problem(
         "/spec/uiSchema/nav/parentField",
         parentField,
-        "parentField only with standalone: true",
-        "Schema.spec.uiSchema.nav.parentField requires nav.standalone: true.",
+        "a required x-mantle-ref field of a Schema that is not a translates child",
+        schema.spec.translates
+          ? `Schema '${schema.metadata.name}' cannot declare nav.parentField because it is a translates child.`
+          : `Schema '${schema.metadata.name}' nav.parentField must name a required x-mantle-ref field.`,
       ),
     };
   }
@@ -441,17 +447,8 @@ function checkNav(
     };
   }
 
-  if (typeof parentField !== "string") {
-    return {
-      nav: null,
-      problem: problem(
-        "/spec/uiSchema/nav/parentField",
-        parentField,
-        `one of ${eligible.map((item) => item.field).join(", ")}`,
-        `Schema '${schema.metadata.name}' declares more than one required x-mantle-ref; nav.parentField is required.`,
-      ),
-    };
-  }
+  // ambiguous: the graph-time check reports it with the candidates and the line that keeps today's choice
+  if (typeof parentField !== "string") return { nav: null };
   const matched = eligible.find((item) => item.field === parentField);
   if (!matched) {
     return {
@@ -488,30 +485,78 @@ export function requiredMantleRefFields(
   return fields;
 }
 
-/** Graph-time: standalone parent collection must exist and not be a translates child. */
+/** Graph-time: the fold parent must exist and not be a translates child; two or
+ *  more eligible `id` references need nav.parentField; a declared parentField
+ *  must not close a parent cycle. */
 export function checkSchemaNavTargets(
   schema: SchemaManifest,
   schemasByName: ReadonlyMap<string, SchemaManifest>,
 ): SchemaAdminUiProblem | null {
   const { nav, problems } = checkSchemaAdminUi(schema);
-  if (problems.length > 0 || !nav) return null;
-  const parent = schemasByName.get(nav.parentCollection);
-  if (!parent || parent.spec.translates) {
-    const declaredParentField = schema.spec.uiSchema
-      && typeof schema.spec.uiSchema === "object"
-      && !Array.isArray(schema.spec.uiSchema)
-      && schema.spec.uiSchema["nav"]
-      && typeof schema.spec.uiSchema["nav"] === "object"
-      && !Array.isArray(schema.spec.uiSchema["nav"])
-      && "parentField" in (schema.spec.uiSchema["nav"] as Record<string, unknown>);
+  if (problems.length > 0 || schema.spec.translates) return null;
+  const declared = declaredParentField(schema);
+  const target = nav?.parentCollection
+    ?? (declared === undefined ? undefined : resolveMantleRef(schema.spec.schema.properties?.[declared])?.schema);
+  if (target !== undefined && !isFoldParent(schemasByName.get(target))) {
     return problem(
-      declaredParentField ? "/spec/uiSchema/nav/parentField" : "/spec/uiSchema/nav/standalone",
-      nav.parentCollection,
+      declared === undefined ? "/spec/uiSchema/nav/standalone" : "/spec/uiSchema/nav/parentField",
+      target,
       "the metadata.name of an existing non-translates Schema",
-      `Schema '${schema.metadata.name}' nav parent collection '${nav.parentCollection}' is not an eligible fold parent.`,
+      `Schema '${schema.metadata.name}' nav parent collection '${target}' is not an eligible fold parent.`,
     );
   }
+  if (declared === undefined) {
+    const eligible = eligibleIdRefs(schema, schemasByName);
+    if (eligible.length < 2) return null;
+    const names = eligible.join(", ");
+    return problem(
+      "/spec/uiSchema/nav/parentField",
+      undefined,
+      `one of ${names}`,
+      `Schema '${schema.metadata.name}' has more than one required id x-mantle-ref (${names}); set uiSchema.nav.parentField to choose its parent. To keep the current choice, add nav: { parentField: ${eligible[0]} }.`,
+    );
+  }
+  const seen = new Set<string>();
+  for (let at: string | undefined = target; at !== undefined && !seen.has(at); at = foldParentOf(schemasByName.get(at), schemasByName)) {
+    if (at === schema.metadata.name) {
+      return problem(
+        "/spec/uiSchema/nav/parentField",
+        declared,
+        "a reference whose parent chain does not lead back to this Schema",
+        `Schema '${schema.metadata.name}' nav.parentField '${declared}' creates a parent cycle.`,
+      );
+    }
+    seen.add(at);
+  }
   return null;
+}
+
+function declaredParentField(schema: SchemaManifest): string | undefined {
+  const nav = (schema.spec.uiSchema as Record<string, unknown> | undefined)?.["nav"] as Record<string, unknown> | undefined;
+  return typeof nav?.["parentField"] === "string" ? nav["parentField"] : undefined;
+}
+
+const isFoldParent = (s: SchemaManifest | undefined): boolean => !!s && !s.spec.translates;
+
+/** Required `id` references to existing non-translates Schemas, in declaration order (the Admin descriptor's default parent is the first). */
+function eligibleIdRefs(schema: SchemaManifest, schemasByName: ReadonlyMap<string, SchemaManifest>): string[] {
+  return requiredMantleRefFields(schema.spec.schema).filter((r) => isFoldParent(schemasByName.get(r.collection))).map((r) => r.field);
+}
+
+/** The Schema a collection folds under, as the Admin descriptor resolves it. */
+function foldParentOf(schema: SchemaManifest | undefined, schemasByName: ReadonlyMap<string, SchemaManifest>): string | undefined {
+  if (!schema || schema.spec.translates) return undefined;
+  const field = foldParentField(schema.spec.schema, declaredParentField(schema), (name) => isFoldParent(schemasByName.get(name)));
+  return field === undefined ? undefined : resolveMantleRef(schema.spec.schema.properties?.[field])?.schema;
+}
+
+/** @internal The field a collection folds under its parent by, shared by the Admin descriptor and the cycle check:
+ *  the declared nav.parentField, else the first required `id` reference, else the first required reference, each to a Schema `isParent` accepts. */
+export function foldParentField(body: JsonSchema, declared: string | undefined, isParent: (name: string) => boolean): string | undefined {
+  const props = body.properties ?? {};
+  const required = new Set(body.required ?? []);
+  const refs = Object.keys(props).filter((f) => required.has(f) && isParent(resolveMantleRef(props[f])?.schema ?? ""));
+  return declared ?? requiredMantleRefFields(body).find((r) => isParent(r.collection))?.field ?? refs[0];
 }
 
 const NATIVE_LIST_FIELDS: ReadonlySet<string> = new Set(RESERVED_ENTRY_COLUMNS);

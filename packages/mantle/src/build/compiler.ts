@@ -18,7 +18,7 @@ export * as sqliteCompiler from "./d1/compile/index.js";
 export * as postgresCompiler from "./postgres/compile/index.js";
 export { initialStorageSql as sqliteSchema } from "./d1/storage.js";
 export { initialStorageSql as postgresSchema } from "./postgres/storage.js";
-export { collectionOf, isPrimaryCollection, standaloneParentField, adminIndexColumns } from "./admin/collections.js";
+export { collectionOf, isPrimaryCollection, adminIndexColumns } from "./admin/collections.js";
 export { developerConsole } from "./admin/developerConsole.js";
 export { rowPreconditions } from "./admin/procedureFlow.js";
 export { checkPlanUiExtensions, planUiExtensionRefs, formSchemaProblem } from "./admin/extensions.js";
