@@ -92,6 +92,9 @@ test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 bef
   expect((await call(open,"http://127.0.0.1:8787/mcp",{origin:"https://evil.test","cf-connecting-ip":"127.0.0.1"})).status).toBe(403);
   expect((await call(open,"http://127.0.0.1:8787/mcp",{origin:"null"})).status).toBe(403);
   expect(refusals).toHaveLength(14);
+  // The refused POST body is read (bounded) before the 403, so the connection stays usable under wrangler dev.
+  const unread=new Request("https://app.test/mcp",{method:"POST",headers:{"content-type":"application/json",origin:"https://evil.test"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/list"})});
+  expect((await open(unread,{},{})).status).toBe(403);expect(unread.bodyUsed).toBe(true);
   // No Origin is a server-side client: any Host passes, as behind wrangler routes or dev.host (Host rewritten, peer still loopback).
   for(const host of ["app.example.com","evil.example.com"]) expect((await call(open,`http://${host}/mcp`,{host,"cf-connecting-ip":"127.0.0.1"})).status).toBe(200);
   // Loopback Origins pass on any port.
@@ -102,6 +105,8 @@ test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 bef
   // allowedOrigins is parsed once: full origins and bare hosts pass, anything else fails at configuration.
   expect(()=>mcp({db:()=>db,allowedOrigins:["https://a.test","a.test","localhost:8787","[::1]","http://[::1]:8787"]})).not.toThrow();
   for(const bad of ["https://a.test/mcp","a.test/path","https://","","https://a.test?x=1","https://user@a.test"]) expect(()=>mcp({db:()=>db,allowedOrigins:[bad]})).toThrow(`mcp allowedOrigins: "${bad}"`);
+  // Wildcards never match an exact hostname, so they fail at configuration.
+  for(const wild of ["*","https://*.example.com","*.example.com"]) expect(()=>mcp({db:()=>db,allowedOrigins:[wild]})).toThrow(`mcp allowedOrigins: "${wild}" is not an origin (https://host[:port]) or a host[:port]; wildcards never match.`);
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });
 

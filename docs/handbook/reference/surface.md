@@ -227,12 +227,18 @@ site lists that origin: `allowedOrigins: ["https://app.example"]`. Entries are
 compared by hostname as the official SDK does (not scheme or port); each is a
 full origin (`https://console.example`) or the SDK's bare host
 (`console.example`, `localhost:8787`), and anything else, such as a path, throws
-when `mcp(...)` is configured. `Host` is not checked. Cookie writes also need
-the full same-origin check. Under `wrangler dev` with `routes`, Miniflare
-rewrites an `Origin` equal to the request's own origin to the route origin, and a
-DNS-rebinding request always has that shape. Listing the route host would admit
-rebinding against the local server, so keep it out of `allowedOrigins` in local
-development and serve a local browser client from another loopback origin.
+when `mcp(...)` is configured; so does a wildcard such as `*` or
+`https://*.example.com`, since entries are matched by exact hostname. `Host` is
+not checked. Cookie writes also need the full same-origin check.
+
+`/mcp` sends no CORS headers. `allowedOrigins` therefore serves pages on the
+same origin as the endpoint, or clients behind a proxy that forwards their
+`Origin`; a browser client on another origin also needs the app to answer
+preflight and add CORS headers itself. Under `wrangler dev` with `routes` or
+`dev.host`, Miniflare rewrites an `Origin` equal to the request's own origin to
+the route or `dev.host` origin, and a DNS-rebinding request always has that
+shape. Listing that host would admit rebinding against the local server, so keep
+the route and `dev.host` hosts out of `allowedOrigins` in local development.
 
 `onObservation` receives request refusals and invocation attempt/completion
 metadata, including duration and outcome. Its Caller and scopes are frozen copies.

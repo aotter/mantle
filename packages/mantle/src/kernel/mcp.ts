@@ -88,7 +88,7 @@ function originHostnames(origins: readonly string[] = []): readonly string[] {
   return Object.freeze(origins.map(origin => {
     let url: URL | undefined;
     try { url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(origin) ? origin : `http://${origin}`); } catch {}
-    if (!url?.hostname || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new TypeError(`mcp allowedOrigins: "${origin}" is not an origin (https://host[:port]) or a host[:port].`);
+    if (origin.includes("*") || !url?.hostname || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new TypeError(`mcp allowedOrigins: "${origin}" is not an origin (https://host[:port]) or a host[:port]; wildcards never match.`);
     return url.hostname;
   }));
 }

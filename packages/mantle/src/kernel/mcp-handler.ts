@@ -33,6 +33,8 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       const sdk = await import("@modelcontextprotocol/server");
       const foreign = sdk.originValidationResponse(request, [...sdk.localhostAllowedOrigins(), ...allowed]);
       if (foreign) {
+        // Read the body (bounded, as below) before refusing: an unread POST body breaks the next request under wrangler dev.
+        if (request.body) await sdk.readRequestBody(request as Parameters<typeof sdk.readRequestBody>[0], 1024 * 1024).catch(() => undefined);
         access?.finish(new ContractError("AUTH_DENIED", "Origin is not allowed.", "request:origin"));
         observe(options.onObservation, { kind: "request-refused", at: Date.now(), surface, status: 403 });
         observe(options.onRefusal, { at: Date.now(), status: 403, reason: "origin" });
