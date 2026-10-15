@@ -3,7 +3,7 @@ import { SQL } from "bun";
 import { betterAuth } from "better-auth/minimal";
 import { jwt } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { bunSqlAdapter } from "../src/auth/adapter.js";
+import { postgresAdapter } from "../src/auth/adapter.js";
 import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 import { assertActiveUserGrant, oauthConsents, oauthGrantExtension } from "../src/auth/oauth.js";
 
@@ -13,7 +13,7 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
   const admin = new SQL(url!); await admin.unsafe(`CREATE SCHEMA "${schema}"`);
   const sql = new SQL(url!, { max: 1 }); await sql.unsafe(`SET search_path TO "${schema}"`);
   try {
-    const options: import("@better-auth/core").BetterAuthOptions = { baseURL: "https://oauth.test", secret: "oauth-postgres-secret-oauth-postgres-secret", database: bunSqlAdapter(sql), plugins: [jwt({ disableSettingJwtHeader: true }), oauthProvider({ loginPage: "/login", consentPage: "/oauth/consent", extensions: [oauthGrantExtension] })] };
+    const options: import("@better-auth/core").BetterAuthOptions = { baseURL: "https://oauth.test", secret: "oauth-postgres-secret-oauth-postgres-secret", database: postgresAdapter(sql), plugins: [jwt({ disableSettingJwtHeader: true }), oauthProvider({ loginPage: "/login", consentPage: "/oauth/consent", extensions: [oauthGrantExtension] })] };
     for (const ddl of authSchemaSql(options, "postgres")) await sql.unsafe(ddl);
     const auth = betterAuth(options), { adapter } = await auth.$context;
     const now = new Date(), expiresAt = new Date(Date.now()+60000);

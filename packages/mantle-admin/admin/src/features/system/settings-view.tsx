@@ -4,7 +4,6 @@ import { Save } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
-import { asRenderable } from "../../lib/errors";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
 import { Textarea } from "@aotter/mantle-ui/kit";
@@ -55,7 +54,7 @@ export function SettingsView(): React.ReactElement {
         title={t(language, "settings.page.title")}
         description={t(language, "settings.page.body")}
       />
-      {save.isError ? <OperationErrorBox error={asRenderable(save.error)} /> : null}
+      {save.isError ? <OperationErrorBox error={save.error} /> : null}
 
       <SectionCard className="grid max-w-5xl gap-4">
         <SectionIntro title={t(language, "settings.brandSection")} body={t(language, "settings.brandSectionBody")} />

@@ -89,3 +89,11 @@ export function llmsTxt(origin: string, lists: readonly (readonly [Locale, reado
     ...lists.flatMap(([locale, rows]) => [`## ${text[locale].name} (${locale})`, "",
       ...rows.map(r => `- [${r.title}](${origin}${recipePath(locale, r.slug)}.md): ${r.summary.replace(/\s+/g, " ")}`), ""])].join("\n");
 }
+
+/** sitemap.xml: each locale's list page and every published recipe in it (only published rows reach `lists`). */
+export function sitemapXml(origin: string, lists: readonly (readonly [Locale, readonly Listed[]])[]) {
+  const paths = lists.flatMap(([locale, rows]) => [`/${locale}/`, ...rows.map(r => recipePath(locale, r.slug))]);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${paths.map(path => `<url><loc>${escape(origin + path)}</loc></url>`).join("")}</urlset>\n`;
+}
+
+export const robotsTxt = (origin: string) => `User-agent: *\nDisallow: /admin/\nSitemap: ${origin}/sitemap.xml\n`;

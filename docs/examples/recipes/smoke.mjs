@@ -1,5 +1,5 @@
 // Recipes acceptance: drafts stay hidden, publishing via the Admin API makes both locales visible with SEO, JSON-LD,
-// hreflang, Markdown alternates and llms.txt.
+// hreflang, Markdown alternates, llms.txt, sitemap and robots.
 import assert from "node:assert/strict";
 import { smoke } from "./smoke-kit.mjs";
 
@@ -31,7 +31,8 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   assert.equal((await call("GET", "/zh-TW/recipes/scallion-pancake", { cookie: admin })).status, 404);
   assert.ok(!(await call("GET", "/zh-TW/")).body.includes("scallion-pancake"));
   assert.ok(!(await call("GET", "/llms.txt")).body.includes("scallion-pancake"));
-  step("drafts are invisible to visitors: detail, Markdown, list and llms.txt");
+  assert.ok(!(await call("GET", "/sitemap.xml")).body.includes("scallion-pancake"));
+  step("drafts are invisible to visitors: detail, Markdown, list, llms.txt and sitemap");
 
   assert.equal((await publish("recipe_translations", translation)).status, 409);
   const published = await publish("recipes", parent);
@@ -92,5 +93,10 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   const home = await fetch(`${origin}/`, { redirect: "manual" });
   assert.equal(home.status, 302);
   assert.equal(home.headers.get("location"), `${origin}/zh-TW/`);
-  step("llms.txt and the locale lists show the published recipe; / redirects to the default locale");
+  const sitemap = await call("GET", "/sitemap.xml");
+  assert.match(sitemap.headers.get("content-type"), /^application\/xml/);
+  for (const path of ["/zh-TW/", "/en/", "/zh-TW/recipes/scallion-pancake", "/en/recipes/scallion-pancake"]) assert.ok(sitemap.body.includes(`<loc>${origin}${path}</loc>`), path);
+  const robots = await call("GET", "/robots.txt");
+  assert.ok(robots.body.includes("Disallow: /admin/") && robots.body.includes(`Sitemap: ${origin}/sitemap.xml`));
+  step("llms.txt, sitemap (both locales), robots and the locale lists show the published recipe; / redirects to the default locale");
 });

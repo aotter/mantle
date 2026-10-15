@@ -123,13 +123,14 @@ export function OperationErrorBox({ error }: { error: unknown }): React.ReactEle
   if (is401) return null;
   const detail = error instanceof Error ? error.message : String(error);
   // A 4xx refusal is the server declining the input (validation, a check, a stale version): nothing ran, and its
-  // message plus the field it names is what the operator needs. Only failures keep the generic line.
+  // message plus the field it names is what the operator needs. Only failures keep the generic line. The message is
+  // the error's, not the body's: request() adds the current version and what to do to a write conflict.
   const refusal = error instanceof ApiError && error.status < 500 ? refusalOf(error.body) : undefined;
   if (refusal?.message) {
-    const field = /\/input\/([^/]+)$/.exec(refusal.path ?? "")?.[1];
+    const field = /\/input\/([^/]+)$/.exec(refusal.path ?? "")?.[1], message = (error as ApiError).message;
     return (
       <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-        {t(language, "ops.error.refused", { message: field ? `${field}: ${refusal.message}` : refusal.message })}
+        {t(language, "ops.error.refused", { message: field ? `${field}: ${message}` : message })}
       </div>
     );
   }
