@@ -18,6 +18,7 @@ import { FormActionBar } from "../src/ui/page";
 import { operationsQueryOptions, viewsManifestQueryOptions } from "../src/lib/queries";
 import { DataCell } from "../src/ui/data-cell";
 import { SchemaFields } from "../src/features/content/entry-edit-view";
+import { ProjectPage } from "../src/features/system/project-page";
 
 interface Types {
   readonly views: { readonly "pending-requests": { readonly input: object; readonly row: { readonly id: string; readonly amount: number } } };
@@ -47,6 +48,15 @@ describe("Admin's built-in components through their slots", () => {
     const withFooter = shell(sidebar, defineAdmin(admin, { components: { Sidebar: (props: SlotProps<SidebarProps>) => props.renderDefault({ ...props, footer: <p>Need help?</p> }) } }).layers);
     expect(withFooter).toContain("Need help?");
     expect(withFooter).toContain("Requests");
+  });
+
+  it("renders an application page at its path in the shell, and an unknown path as not found", () => {
+    const { nav, pages } = defineAdmin(admin, { pages: [{ path: "budget", title: { en: "Budget", "zh-TW": "預算" }, element: <p>spent 3</p> }] });
+    const page = (path: string) => shell(<ProjectNavProvider nav={{ ...nav, pages }}><ProjectPage path={path} /></ProjectNavProvider>, {});
+    const html = page("budget");
+    expect(html).toContain("spent 3");
+    expect(html).toContain("Budget");
+    expect(page("nope")).not.toContain("spent 3");
   });
 
   it("highlights only the preset item on a preset URL, not the default entry of the same collection", () => {

@@ -9,7 +9,7 @@ const MANTLE_VERSION = (JSON.parse(readFileSync(new URL("../../package.json", im
 // Line endings are normalized so a CRLF checkout (core.autocrlf) matches the LF fingerprint.
 const digest = (path: string) => existsSync(path) ? createHash("sha256").update(readFileSync(path, "utf8").replaceAll("\r\n", "\n")).digest("hex") : null;
 
-/** The target and the manifests and option modules (`--auth`, `--site`, `--admin-extensions`) one generate run read, by path relative to its output. */
+/** The target and the manifests and option modules (`--auth`, `--site`) one generate run read, by path relative to its output. */
 export function inputsFingerprint(destination: string, paths: readonly string[], target: string): string {
   const inputs = Object.fromEntries(paths.map(path => [relative(resolve(destination), resolve(path)).replaceAll("\\", "/"), digest(path)]));
   return JSON.stringify({ mantle: MANTLE_VERSION, target, inputs }, null, 2) + "\n";

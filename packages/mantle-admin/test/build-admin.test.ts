@@ -12,16 +12,18 @@ const { adminVitePlugin, buildAdmin } = await import(resolve(pkg, "dist/build/in
 const assets = (dir: string, ext: string) => readdirSync(join(dir, "assets")).filter(file => file.endsWith(ext)).map(file => readFileSync(join(dir, "assets", file), "utf8")).join("\n");
 
 describe("@aotter/mantle-admin/build", () => {
-  it("builds the built-in entry: shell, preview document, bridge, public files and extension shims", async () => {
+  it("builds the built-in entry: shell, preview document, bridge, and public files", async () => {
     const out = join(temp, "default");
     // an installed package sits under the application: an upward search would reach the application's PostCSS config
     const planted = resolve(pkg, "dist/postcss.config.mjs");
     writeFileSync(planted, 'export default { plugins: [{ postcssPlugin: "app", Once() { throw new Error("app postcss plugin ran on Admin CSS"); } }] };\n');
     try { await buildAdmin({ outDir: out }); }
     finally { rmSync(planted, { force: true }); }
-    for (const file of ["index.html", "preview.html", "host-bridge.js", "theme.js", "favicon.svg", "shared/kit.js", "shared/react.js", "shared/extension.js"]) expect(existsSync(join(out, file)), file).toBe(true);
+    for (const file of ["index.html", "preview.html", "host-bridge.js", "theme.js", "favicon.svg"]) expect(existsSync(join(out, file)), file).toBe(true);
+    // the application bundle holds the one React there is: no import map, no shared shim modules
+    expect(existsSync(join(out, "shared")), "shared").toBe(false);
     const html = readFileSync(join(out, "index.html"), "utf8");
-    expect(html).toContain('<script type="importmap">{"imports":{"react":"./shared/react.js",');
+    expect(html).not.toContain("importmap");
     expect(html).toMatch(/<script type="module" crossorigin src="\.\/assets\/index-[\w-]+\.js"><\/script>/);
     expect(readFileSync(join(out, "preview.html"), "utf8")).toContain('<meta name="mantle-admin-preview" content="1"><meta http-equiv="Content-Security-Policy" content="connect-src \'none\'; form-action \'none\'">');
     // Tailwind sees Admin's library and the kit: their classes are generated

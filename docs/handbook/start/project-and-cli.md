@@ -34,7 +34,6 @@ Other handles may adapt to the same [structural driver contracts](../guides/adap
 | `--admin` | Emit native Admin bindings and `admin/*` modules; install the separate Admin package. |
 | `--auth <module>` | Read plain `authOptions(env)` (or an exported auth instance's options) and append selected Better Auth DDL. Repeat it once per Better Auth instance. Prefer plain options without initialization side effects. |
 | `--site <module>` | Read `siteDefaults`; emit site/media bindings and deployment SQL. |
-| `--admin-extensions <module>` | Read the named/default `adminExtensions` array and the optional `navGroups` (legacy sidebar groups; `defineAdmin` `nav.groups` declares them now, see native-admin.md "Sidebar"). The app shell passes `src/admin.ts`. |
 | `--wrangler <path>` | Existing JSONC/JSON/TOML config; default finds one or creates `wrangler.jsonc`. TOML receives manual-edit instructions. |
 | `--entry <path>` | Worker source entry; default `src/worker.ts`. |
 | `--outdir <path>` | Bundle output; default `dist`. The Worker goes to `<outdir>/worker`. Keep separate from source/generated files. |
@@ -43,7 +42,7 @@ Other handles may adapt to the same [structural driver contracts](../guides/adap
 ## Outputs
 
 `generated/.mantle-inputs.json` records the Mantle version, the target, and a hash of every input the run read (manifests and the
-`--auth`, `--site`, `--admin-extensions` modules). `mantle bundle`, which Wrangler runs for `wrangler dev` and every
+`--auth` and `--site` modules). `mantle bundle`, which Wrangler runs for `wrangler dev` and every
 deploy, refuses to build when an input changed since, so stale generated code cannot run; regenerate and rebuild.
 Commit it with the other generated files.
 The bundle also prints notes, never errors, for SQL in the app's own code against Better Auth's tables (read users

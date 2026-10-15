@@ -6,12 +6,31 @@ import { describe, expect, it } from "vitest";
 const pkg = resolve(import.meta.dirname, "..");
 
 describe("@aotter/mantle-admin/app", () => {
+  it("no longer exports the extension mechanism", () => {
+    const exports = Object.keys(JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")).exports);
+    expect(exports).not.toContain("./extension");
+    expect(exports).not.toContain("./server/extensions");
+    expect(exports).toContain("./app");
+  });
+
   it("publishes defineAdmin and MantleAdmin from the built library", async () => {
     const target = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")).exports["./app"];
     expect(target).toEqual({ types: "./dist/admin-app/index.d.ts", import: "./dist/admin-app/index.js" });
     const app = await import(resolve(pkg, target.import));
     expect(Object.keys(app).sort()).toEqual(["AdminLink", "MantleAdmin", "defineAdmin"]);
-    expect(app.defineAdmin({})).toEqual({ meta: {}, nav: { groups: {}, items: [] }, layers: {} });
+    expect(app.defineAdmin({})).toEqual({ meta: {}, pages: [], nav: { groups: {}, items: [] }, layers: {} });
+    const page = (path: string) => ({ path, title: "T", element: null });
+    const errors: string[] = [], log = console.error;
+    console.error = (message: string) => { errors.push(message); };
+    try {
+      expect(app.defineAdmin({}, { pages: [page("Budget"), page("a/b"), page("ok"), page("ok")] }).pages.map((p: { path: string }) => p.path)).toEqual(["ok"]);
+    } finally { console.error = log; }
+    expect(errors).toEqual([
+      "defineAdmin: page path 'Budget' must be lowercase letters, digits and hyphens; the page is skipped.",
+      "defineAdmin: page path 'a/b' must be lowercase letters, digits and hyphens; the page is skipped.",
+      "defineAdmin: page path 'ok' is already used by an earlier page; the page is skipped.",
+    ]);
+    expect(app.defineAdmin({}, { pages: [page("budget-2026")] }).pages).toHaveLength(1);
   });
 
   it("publishes the data hooks from a chunk shared with the app library, so both see one Admin context", async () => {
@@ -85,18 +104,20 @@ describe("@aotter/mantle-admin/app", () => {
       'defineAdmin(typed, { components: { Sidebar: ({ surface }) => String(surface) } });',
       "interface NavTypes extends Types {",
       '  readonly navGroups: "approvals" | "billing";',
-      '  readonly requiredNavGroups: "approvals";',
       "}",
       "const navMeta: AdminMeta<NavTypes> = {};",
       "const Icon = (): null => null;",
       "export const navigation: AdminDefinition = defineAdmin(navMeta, { nav: {",
-      '  groups: { approvals: { title: { en: "Approvals", "zh-TW": "簽核" }, order: 5 } },',
+      '  groups: { approvals: { title: { en: "Approvals", "zh-TW": "簽核" }, order: 5 }, billing: { title: "Billing" } },',
       "  items: [",
       '    { group: "approvals", title: "Waiting for me", to: { view: "pending-requests", input: { q: "x" } } },',
       '    { group: "reports", title: "Closed", icon: Icon, order: 1, to: { collection: "requests", filter: { status: "closed" } } },',
       '    { group: "billing", title: "All", to: { collection: "requests" } },',
       "  ],",
       "} });",
+      "export const withPage: AdminDefinition = defineAdmin(navMeta, { nav: { groups: { approvals: { title: \"A\" }, billing: { title: \"B\" } } }, pages: [{ path: \"budget\", title: \"Budget\", element: null, nav: { group: \"billing\", order: 1 } }, { path: \"plain\", title: \"Plain\", element: null }] });",
+      '// @ts-expect-error a page is placed in a group the manifest or Admin has',
+      'defineAdmin(navMeta, { nav: { groups: { approvals: { title: "A" }, billing: { title: "B" } } }, pages: [{ path: "x", title: "X", element: null, nav: { group: "billng" } }] });',
       "// a manifest that uses only Admin's groups needs no declaration; the config stays optional",
       "export const plain: AdminDefinition = defineAdmin(typed);",
       '// @ts-expect-error a group the manifest places items in is not declared',
@@ -107,7 +128,7 @@ describe("@aotter/mantle-admin/app", () => {
       "defineAdmin(navMeta);",
       '// @ts-expect-error a group title is text or a locale map',
       "defineAdmin(navMeta, { nav: { groups: { approvals: { title: 5 } } } });",
-      "const declared = { nav: { groups: { approvals: { title: \"A\" } } } } as const;",
+      "const declared = { nav: { groups: { approvals: { title: \"A\" }, billing: { title: \"B\" } } } } as const;",
       '// @ts-expect-error a collection that is not in the manifest',
       'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { collection: "request" } }] } });',
       '// @ts-expect-error a View that is not in the manifest',
@@ -121,7 +142,7 @@ describe("@aotter/mantle-admin/app", () => {
       '// @ts-expect-error the list filters on one field: a second key would be dropped',
       'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { collection: "requests", filter: { status: "open", title: "late" } } }] } });',
       '// @ts-expect-error Admin\'s own groups are not redeclared',
-      'defineAdmin(navMeta, { nav: { groups: { approvals: { title: "A" }, more: { title: "Extras" } } } });',
+      'defineAdmin(navMeta, { nav: { groups: { approvals: { title: "A" }, billing: { title: "B" }, more: { title: "Extras" } } } });',
       '// @ts-expect-error a group that neither Admin nor the manifest has',
       'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "approval", title: "x", to: { collection: "requests" } }] } });',
       "const props: MantleAdminProps = { admin };",

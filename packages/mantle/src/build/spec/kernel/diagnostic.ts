@@ -64,11 +64,6 @@ export const DIAGNOSTIC_CODES = [
   "SCHEMA_SEARCH_FIELD_UNKNOWN",
   "SCHEMA_TTL_INVALID",
   "SCHEMA_UI_INVALID",
-  // Admin extensions (ADR-lite 1376): a bad declaration, and a uiSchema name that is missing, of the wrong target or given bad options.
-  "UI_EXTENSION_INVALID",
-  "UI_EXTENSION_UNKNOWN",
-  "UI_EXTENSION_TARGET",
-  "UI_EXTENSION_OPTIONS",
   "SCHEMA_NAME_CASE_COLLISION",
   // ADR-0043: two Schemas project to one `store.db` reader name, or a name is reserved.
   "SCHEMA_READER_NAME_COLLISION",

@@ -1,7 +1,7 @@
 {
   "name": "@aotter/mantle-admin",
   "version": "0.2.0-alpha.7",
-  "description": "Admin app library and build, extension client API, design preview and Admin MCP App; the SDK remains a peer.",
+  "description": "Admin app library and build, design preview and Admin MCP App; the SDK remains a peer.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
@@ -35,10 +35,6 @@
       "types": "./dist/build/index.d.ts",
       "default": "./dist/build/index.js"
     },
-    "./extension": {
-      "types": "./dist/extension/index.d.ts",
-      "import": "./dist/extension/index.js"
-    },
     "./admin-preview": {
       "types": "./dist/admin-preview/index.d.ts",
       "import": "./dist/admin-preview/index.js"
@@ -63,10 +59,6 @@
     "./server/site": {
       "types": "./dist/server/site.d.ts",
       "import": "./dist/server/site.js"
-    },
-    "./server/extensions": {
-      "types": "./dist/server/extensions.d.ts",
-      "import": "./dist/server/extensions.js"
     },
     "./server/webmcp": {
       "types": "./dist/server/webmcp.d.ts",
@@ -129,7 +121,7 @@
   },
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
-    "build": "tsc -b tsconfig.lib.json && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config vite.app.config.ts && node scripts/emit-app-types.mjs && vite build --config vite.shared.config.ts && vite build --config vite.preview.config.ts",
+    "build": "tsc -b tsconfig.lib.json && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config vite.app.config.ts && node scripts/emit-app-types.mjs && vite build --config vite.preview.config.ts",
     "typecheck": "tsc -p tsconfig.mcp-app.json && tsc --noEmit -p admin/tsconfig.json",
     "test": "bun test tests/native/*.test.ts && vitest run",
     "test:browser": "MANTLE_BROWSER_TESTS=1 vitest run admin/test/preview-boundary.test.ts admin/test/atom-graph-browser.test.ts test/mcp-app-browser.test.ts",

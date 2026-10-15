@@ -1,7 +1,6 @@
 import { sdkFixtureCaller as fixtureCaller } from "../../../mantle/tests/apps/fixtures.js";
 import assert from "node:assert/strict";
 import { admin as adminFunction} from "../../src/server/index.js";
-import {extensionOptions} from "../../src/server/extensions.js";
 import {nativeEntryGet,nativeEntryPage,nativeEntryProcedure} from "../../src/server/native.js";
 import {entries} from "../../src/server/entries.js";
 import {ContractError} from "@aotter/mantle/contracts";
@@ -97,28 +96,5 @@ export async function verifyAdminBindings(bindings:any,handle:any,reads:()=>numb
  for(const filter of [null,{}, {in:null}, {in:[]}, {in:[NaN]}])await assert.rejects(()=>nativeEntryPage(notes.binding,adapter,provider,admin,{...q,match:{filters:{title:filter}}}),(error:any)=>error.code==="INPUT_VALIDATION_FAILED");
  assert.equal(invalidProviders,0);assert.equal(reads(),before);
  before=reads();const removed=await ask(`/entries/${removable.id}?collection=notes`,"DELETE");assert.equal(removed?.status,200);assert.deepEqual(await removed!.json(),{affected:1});assert.equal(reads()-before,1);assert.equal(await nativeEntryGet(notes.binding,adapter,handle,admin,removable.id),null);
-await verifyExtensionVersions(notes,adapter,handle,reads);
-return {ok:true,checks:14,extensionLocks:true};
-}
-
-/** Real generated Procedure writes, not a mocked SQL adapter. */
-async function verifyExtensionVersions(notes:any,adapter:any,handle:any,reads:()=>number){
- const row=await nativeEntryProcedure(notes.binding,adapter,handle,admin,"create",notes.values(notes.validate({title:"extension before"},true)));
- let providers=0,attempts=0;
- const declaration={apiVersion:1 as const,id:"versions",title:"Versions",contributes:{}};
- const facets=extensionOptions([{id:"versions",declaration:JSON.stringify(declaration),public:declaration,source:false,settings:[],actions:[{id:"change",target:"record/v1",schema:["notes"]}]}],{},[{...declaration,handlers:{actions:{change:{run:async(caller,input,ctx)=>{
-  attempts++;const record=input.record!;
-  const changed=await nativeEntryProcedure(notes.binding,adapter,ctx.db,caller,"patch",notes.values(notes.validate({title:"extension safe"},false)),record.id,record.version!);
-  return {version:String(changed.version),lock:record.version};
- }}}}}]);
- const fetch=adminFunction({collections:[],views:[],operations:[],webmcp:{tools:[],routes:{}}},[],[],{db:()=>{providers++;return handle;},caller:()=>admin,routes:facets.routes});
- const ask=(version:number|string)=>fetch(new Request("https://app.test/admin/api/x/versions/actions/change",{method:"POST",headers:{origin:"https://app.test"},body:JSON.stringify({record:{schema:"notes",id:row.id,version}})}),{});
- const before=reads();
- for(const version of [Number.MAX_SAFE_INTEGER+1,"9007199254740993"]){assert.equal((await ask(version))?.status,400);assert.equal(providers,0);assert.equal(attempts,0);assert.equal(reads(),before);}
- assert.equal((await nativeEntryGet(notes.binding,adapter,handle,admin,row.id)).title,"extension before");
- const first=await ask(1);assert.equal(first?.status,200);assert.deepEqual((await first!.json()).result,{version:"2",lock:1});
- assert.equal((await ask(1))?.status,409);
- const second=await ask(2);assert.equal(second?.status,200);assert.deepEqual((await second!.json()).result,{version:"3",lock:2});
- assert.equal(String((await nativeEntryGet(notes.binding,adapter,handle,admin,row.id)).version),"3");
- assert.equal(providers,3);assert.equal(attempts,3);
+return {ok:true,checks:14};
 }

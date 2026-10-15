@@ -17,7 +17,6 @@ export interface AppAdminTypes {
   readonly collections: { readonly "activity": { readonly data: { readonly "kind": string; readonly "subject": string; readonly "detail"?: string;  } }; readonly "items": { readonly data: { readonly "sku": string; readonly "name": string; readonly "priceCents"?: number; readonly "stock": number;  } }; readonly "orders": { readonly data: { readonly "itemId": string; readonly "qty": number; readonly "orderStatus": "placed" | "cancelled"; readonly "placedAt"?: string;  } } };
   readonly operations: { readonly "restock": { readonly input: { readonly "sku": string; readonly "name": string; readonly "qty": number;  }; readonly output: Output } };
   readonly navGroups: never;
-  readonly requiredNavGroups: never;
 }
 
 /** Pass to `defineAdmin(admin)`: the column names a View's rows carry in the browser, for an MCP App to match. */

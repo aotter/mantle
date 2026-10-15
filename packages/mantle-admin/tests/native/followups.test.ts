@@ -75,30 +75,6 @@ test("resolved session supplies current menu display fields without a separate A
  expect(await(await fetch(request,{}))!.json()).toMatchObject({login:"ada",image:"/avatar.png"});
  expect(reads).toBe(1);expect(profiles).toBe(1);expect(providers).toBe(0);
 });
-
-test("generated extension metadata binds declarations and compiled settings checks",async()=>{
- const {generateFromSources}=await import("../../../mantle/src/infrastructure/generate.js");
- const declaration={apiVersion:1 as const,id:"preferences",title:"Preferences",contributes:{settings:[{id:"theme",title:"Theme",role:"admin" as const,schema:{type:"object" as const,properties:{accent:{type:"string" as const,enum:["blue","green"]},"choice/path":{type:"integer" as const,oneOf:[{const:1},{const:2}]}},required:["accent"]}}]}};
- const result=await generateFromSources({target:"bun-sqlite",admin:true,sources:{sources:[]},adminExtensions:[declaration]});
- expect(result.ok).toBe(true);if(!result.ok)throw Error(JSON.stringify(result.diagnostics));
- const dir=await mkdtemp(join(import.meta.dir,"../../../mantle/tests/apps/.admin-extension-followups-"));
- try{
-  await writeAdminFixture(dir,result.files);
-  const {extensionBindings}=await import(join(dir,"admin-extensions.ts"));
-  let saves=0;
-  const definition={...declaration,handlers:{settings:{theme:{load:async()=>({accent:"blue"}),save:async(_caller:unknown,value:unknown)=>{saves++;return value;}}}}};
-  const facets=extensionBindings([definition]);
-  expect(()=>extensionBindings([{...definition,title:"Drift"}])).toThrow("differs from generation");
-  const fetch=createAdmin({collections:[],views:[],operations:[],webmcp:{tools:[]}},[],[],{db:()=>null,caller:()=>admin,...facets});
-  const ask=(accent:string,choice=1)=>fetch(new Request("https://app.test/admin/api/x/preferences/settings/theme",{method:"PATCH",headers:{origin:"https://app.test"},body:JSON.stringify({value:{accent,"choice/path":choice}})}),{});
-  expect((await ask("red"))!.status).toBe(400);expect(saves).toBe(0);
-  const invalid=(await ask("green",3))!;expect(invalid.status).toBe(400);expect((await invalid.json()).error.fields["choice/path"]).toContain("enum");
-  expect((await ask("green"))!.status).toBe(200);expect(saves).toBe(1);
-  const source=await generateFromSources({target:"bun-sqlite",admin:true,sources:{sources:[]},adminExtensions:[{...declaration,source:"export default {}"}]});
-  expect(source.ok).toBe(false);
- }finally{await rm(dir,{recursive:true,force:true});}
-});
-
 test("WebMCP localizes declarations and View export validates before streaming",async()=>{
  let reads=0;
  const metadata={collections:[],operations:[],views:[{name:"people",list:{columns:["name"]}}],webmcp:{tools:[{name:"people",description:{en:"People","zh-TW":"人員"},title:{en:"Admin","zh-TW":"團隊"}}]}};

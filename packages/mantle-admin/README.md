@@ -1,7 +1,7 @@
 # @aotter/mantle-admin
 
-The complete Mantle Admin product: the Admin app library and its build, extension
-client API, same-origin iframe preview and Admin MCP App. It uses the public `@aotter/mantle-ui` kit
+The complete Mantle Admin product: the Admin app library and its build,
+same-origin iframe preview and Admin MCP App. It uses the public `@aotter/mantle-ui` kit
 and declares `@aotter/mantle` as a peer. The SDK never imports this package.
 
 ## Package migration
@@ -10,7 +10,6 @@ These exports moved from `@aotter/mantle-ui` without compatibility aliases:
 
 | Former UI subpath | New Admin subpath |
 | --- | --- |
-| `/extension` | `@aotter/mantle-admin/extension` |
 | `/admin-preview` | `@aotter/mantle-admin/admin-preview` |
 | `/mcp-app` | `@aotter/mantle-admin/mcp-app` |
 
@@ -35,7 +34,7 @@ CLI). The entry is `admin.tsx` beside the Worker entry, default-exporting
 packages are dependencies of this package, so the application adds none; the
 build needs no install scripts (`npm ci --ignore-scripts` works). A `package-lock.json` made on one OS can lack the native build binaries (rolldown, `@tailwindcss/oxide`, lightningcss) that npm installs per platform from `optionalDependencies`, so a lockfile made on macOS can fail the build on a Linux host; create the lockfile on the build platform or use pnpm.
 The build writes the shell, the preview
-document, `host-bridge.js`, the extension shims and hashed assets.
+document, `host-bridge.js` and hashed assets.
 
 Serve that directory through an app-owned asset binding or reader at `/admin/`;
 `adminShell`'s `assets(path)` receives paths relative to it. Bun hosts read it
@@ -66,9 +65,8 @@ site/media/identity routes with `/server/site`; Admin's resolver accepts only a
 fresh admin cookie session. The API router handles `/admin/api` and returns
 `undefined` for other paths, so the application must serve the SPA shell for
 `/admin` and client routes, including `/admin/sign-in`, after mounting auth.
-Keep missing `/admin/assets/*` and `/admin/shared/*` as 404 responses. Supply a
-CSP that allows the built import map by its exact SHA-256 hash; never authorize
-inline extension scripts. The API cannot serve or rewrite assets.
+Keep missing `/admin/assets/*` as 404 responses. The built shell has no inline
+script to authorize. The API cannot serve or rewrite assets.
 
 All 22 languages are retained. English is the fallback in the entry; the saved
 language loads before rendering, and switching waits for its language chunk.
@@ -84,31 +82,15 @@ with no generated metadata, Admin reads its collections, Views and operations
 from `/admin/api` at runtime. The application builds that entry when it has no `admin.tsx`.
 `components` replace or wrap named regions of Admin (`Shell`, `Sidebar`, `Home`, `cell:<schema>.<field>`, `input:<schema>.<field>`, ...)
 through `renderDefault`, and `plugins` compose such fragments; see the Native Admin guide, "Customising Admin".
+`pages` adds pages of the application's own at `/admin/p/<path>`.
 `nav` declares the sidebar groups the manifest uses (`ManifestNavGroup` in `generated/admin-client.ts`, checked by `tsc`) and adds `items` that lead to a collection, preset to a field's value, or to a View; see "Sidebar" in the same guide.
 `@aotter/mantle-admin/build` also exports the optional `adminVitePlugin()` for hot reload in a Vite dev server.
-Admin extensions load only in Admin built by `buildAdmin`: its page supplies the
-import map and shared modules that extension modules resolve `react` and the kit
-through. An app that renders `<MantleAdmin>` in its own build has neither, so
-extension client modules fail to load there.
 
 `@aotter/mantle-admin/hooks` exports the data hooks (`useView`, `useOperation`, `useEntries`, `useEntry`,
 `useCollectionTotal`, `useMe`, `useHost`, `useAdminSurface`, `useOpenLink`) and `createAdminHooks<Types>()`, which `mantle generate --admin` calls
 in `generated/admin-client.ts` to bind them to the application's View, collection and operation types. They call only the
 caller-authorized `/admin/api` routes (or, in an MCP host, the admin MCP tools through `mcpAppTransport`), read a 403 and a 404
 as `unavailable`, and share Admin's query cache. Browser only: the Worker's startup graph refuses them.
-
-## Extensions
-
-```ts
-import { defineAdminExtension } from "@aotter/mantle-admin/extension";
-import { Button } from "@aotter/mantle-ui/kit";
-```
-
-Admin's build-time import map shares React and its kit with extensions. An
-extension module must resolve these imports through that map; do not bundle
-another React instance. The app owns extension asset hosting and supplies the
-module URL and integrity metadata. Runtime Admin does not fetch modules to
-calculate integrity.
 
 ## Preview
 
@@ -143,7 +125,7 @@ a later page failure aborts the stream after partial bytes may have arrived.
 ## Development
 
 Build `@aotter/mantle-ui` before this package. The browser tests exercise the
-actual built shell, extensions, framing rules, field rendering and conflict
+actual built shell, framing rules, field rendering and conflict
 handling. Writes that may have committed are never retried automatically;
 conflict re-reads preserve the person's draft. Native login and Store tests
 require the selected SDK and Admin server integration, in addition to the SPA.

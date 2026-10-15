@@ -101,7 +101,8 @@ test("optional site and media stay out of an app's bundle unless imported",async
 test("site and media projections preserve the Admin SPA envelope and null convenience fields",async()=>{
  const {siteInfo}=await import("../src/kernel/site.js"),{mediaItem}=await import("../src/kernel/media.js");
  const projected=siteInfo({brand:"Brand",title:"Title",description:"",origin:"",locales:[],canonicalLocale:null,icons:[],media:{purposes:[]}},{origin:"https://app.test",mcpEndpoints:{public:"/mcp",admin:"/mcp/admin"},media:true,invitationEmail:false});
- expect(projected).toMatchObject({publicUrl:"https://app.test",mcpEndpoints:{public:"https://app.test/mcp",admin:"https://app.test/mcp/admin"},capabilities:{siteSettings:true,media:true,invitationEmail:false,statistics:false},extensions:[]});
+ expect(projected).toMatchObject({publicUrl:"https://app.test",mcpEndpoints:{public:"https://app.test/mcp",admin:"https://app.test/mcp/admin"},capabilities:{siteSettings:true,media:true,invitationEmail:false,statistics:false}});
+ expect(projected).not.toHaveProperty("extensions");
  expect(mediaItem({id:"id",createdAt:1234,variants:[]})).toEqual({id:"id",createdAt:1234,variants:[],primaryUrl:null,mime:null,byteSize:null,alt:null,caption:null});
 });
 for (const target of ["bun-sqlite","bun-postgres"] as const) {
