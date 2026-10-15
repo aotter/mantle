@@ -3,7 +3,7 @@ import { forwarded, wire, ContractError, type Caller, type Gateway, type Request
 import type { UserFields } from "./user-fields.js";
 import { convert, decode, type Conversions } from "./surface.js";
 
-/** An app's public Views: row type and input keys per View, and the Views a list may name (no required input). */
+/** An app's public Views: row type and input keys per View, and the Views a list may name (input that accepts no fields). */
 export interface App { Rows: Record<string, any>; Inputs: Record<string, string>; List: string }
 type At<T, K> = K extends keyof T ? T[K] : never;
 type Params<S extends string> = S extends `${string}{${infer P}}${infer Rest}` ? P | Params<Rest> : never;
@@ -16,6 +16,8 @@ export type Options<A extends App, Database, P extends Record<string, Page<A>>, 
 /** One public View: its query-string reader, paged boundary, bind conversions and boolean input keys. */
 export interface View<Database> {
   readonly check?: (caller: Caller) => void;
+  /** The input rejects an empty query, so a list cannot name this View. */
+  readonly unlisted?: true;
   readonly query: (params: URLSearchParams) => { input: Record<string, unknown> };
   readonly page: (db: Database, caller: Caller, input: never, paging: { limit: number; cursor?: string }) => Promise<{ rows: Record<string, unknown>[]; nextCursor?: string }>;
   readonly convert?: Conversions;
@@ -40,6 +42,7 @@ export function web<Database, E>(options: WebOptions<Database, E>, table: readon
     convert(input, view.convert);
     return view.page(db, caller, input as never, { limit: 500, cursor });
   };
+  for (const [path, page] of Object.entries(options.pages)) if (page.list && views.get(page.list)?.unlisted) throw new TypeError(`Page ${path} lists View '${page.list}', whose input rejects an empty query; a list View must accept no input.`);
   const origin = new URL(options.origin);
   if (!/^https?:$/.test(origin.protocol) || origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) throw new TypeError("origin must be an HTTP(S) origin.");
   const pages = Object.entries(options.pages).map(([path, page]) => {

@@ -3,18 +3,20 @@ import type { AppDescription } from "../domain/describe/index.js";
 import { mcpToolNameSegment, procedureAnnotations, toolTitle, viewAnnotations, type RuntimePlan, type PlanLowered, type LoweredStatement } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
 import { emitMcpMedia, mediaDefinitions } from "./mcp-media.js";
-import { emitValidation } from "./validation.js";
+import { advertised, emitValidation } from "./validation.js";
 import { databaseImport, q } from "../domain/entry.js";
 import { authLines, conversions } from "../domain/input.js";
 import { publishingAnnotations, publishingInput } from "./publishing.js";
+import { versioned } from "./tool-version.js";
 import { boundaryPage, outputConversions } from "../domain/columns.js";
 export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target, description: AppDescription, refuse: (path: string, message: string) => void, media = false): Record<string, string> {
   if (!Object.values(plan.views).some(view=>view.surface!=="internal") && !Object.values(plan.triggers).some(trigger=>trigger.source.kind==="mcp")) return {};
   const reads: { name: string; surface: string }[] = [];
   const imports: string[] = plan.access ? ['import { userBinds } from "@aotter/mantle/user-fields";'] : [], tools: { fields: string[]; schema: string }[] = [];
-  const files:Record<string,string> = media ? emitMcpMedia(refuse) : {};
+  const mediaTools = media ? mediaDefinitions().map(({action,...tool})=>({action,...versioned({...tool,title:toolTitle(tool.name)})})) : [];
+  const files:Record<string,string> = media ? emitMcpMedia(mediaTools, refuse) : {};
   let hasRef=false,hasWire=false;
-  const names = new Set<string>(media ? mediaDefinitions().map(tool=>"admin:"+tool.name) : []);
+  const names = new Set<string>(mediaTools.map(tool=>"admin:"+tool.name));
 
   const guard = (requires: RuntimePlan["views"][string]["requires"], path: string, binds: LoweredStatement["binds"] = [], trustedOnly = false) => {
     const lines = authLines(requires, path, binds, !target.endsWith("postgres"), trustedOnly);
@@ -35,7 +37,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
       imports.push(`const run${index}: typeof import(${q(module)}).default = async (...args) => (await import(${q(module)})).default(...args);`);
     }
     // The kernel adds a View tool's `limit` and `cursor` paging properties.
-    const schema = q(kind === "views" ? operation.input ?? {type:"object",additionalProperties:false} : operation.input);
+    const { inputSchema, description: about } = advertised(kind === "views" ? operation.input ?? {type:"object",additionalProperties:false} : operation.input, operation.description ?? operation.title ?? name), schema = q(inputSchema);
     if (kind === "views" && ("limit" in (operation.input?.properties ?? {}) || "cursor" in (operation.input?.properties ?? {}))) refuse(`views/${name}`, "MCP View input reserves limit and cursor for paging.");
     if(names.has(surface+":"+tool)) refuse(`${kind}/${name}`,`MCP tool name ${tool} collides on ${surface}.`);
     names.add(surface+":"+tool);
@@ -44,10 +46,12 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
     const output=kind === "procedures" ? ref ? (procedure?.output.type === "object" ? procedure.output : undefined) : {type:"object",properties:{results:{type:"array",items:{type:"array",items:{type:"object"}}}},required:["results"]} : undefined;
     const annotations=kind === "views" ? viewAnnotations : procedure ? procedureAnnotations(procedure) : operation.mcp;
     const wire = kind === "views" ? outputConversions(plan, name, target) : [];
+    // Hashed as listed: the kernel adds a View tool's paging properties exactly so.
+    const listed = versioned({name:tool,title:operation.title ?? toolTitle(name),description:about,inputSchema:kind === "views" ? {...inputSchema,properties:{...inputSchema?.properties,limit:{type:"integer",minimum:1,maximum:500},cursor:{type:"string"}}} : inputSchema,outputSchema:output,annotations});
     hasWire ||= wire.length > 0;
-    const fields=[...(description.targets.find(t => t._meta.id === `${kind === "views" ? "view" : "procedure"}:${name}`)?._meta.readOnly ? ["readOnly: true"] : []),`target: ${q({kind:kind === "views" ? "view" : "procedure",name})}${guard(operation.requires,`${kind}/${name}`, binds, procedure?.trustedOnly)}`,`name: ${q(tool)}`,`surface: ${q(surface)}`,`title: ${q(operation.title ?? toolTitle(name))}`,`description: ${q(operation.description ?? operation.title ?? name)}`,"inputSchema",...(output?[`outputSchema: ${q(output)}`]:[]),...(annotations?[`annotations: ${q(annotations)}`]:[]),...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: ${kind === "views" ? `validate${index}` : `async (raw) => (await import("./validation/procedures/${file}.js")).validate(raw)`}`,...(convert?[`convert: ${convert}`]:[]),
+    const fields=[...(description.targets.find(t => t._meta.id === `${kind === "views" ? "view" : "procedure"}:${name}`)?._meta.readOnly ? ["readOnly: true"] : []),`target: ${q({kind:kind === "views" ? "view" : "procedure",name})}${guard(operation.requires,`${kind}/${name}`, binds, procedure?.trustedOnly)}`,`name: ${q(tool)}`,`surface: ${q(surface)}`,`title: ${q(listed.title)}`,`description: ${q(listed.description)}`,"inputSchema",...(output?[`outputSchema: ${q(output)}`]:[]),...(annotations?[`annotations: ${q(annotations)}`]:[]),...((operation.requires?.auth?.all.length ?? 0)>0?["closed: true"]:[]),...(scopes.length?[`scopes: ${q(scopes)}`]:[]),`validate: ${kind === "views" ? `validate${index}` : `async (raw) => (await import("./validation/procedures/${file}.js")).validate(raw)`}`,...(convert?[`convert: ${convert}`]:[]),
       ...(kind === "views" ? [`path: ${q(`views/${name}`)}`,`page: ${boundaryPage(`run${index}`, wire)}`] : [`run: ${ref ? `(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)` : `async (db, caller, input) => (await import("./procedures/${file}.js")).default(db, caller, input)`}`])];
-    tools.push({ fields, schema });
+    tools.push({ fields: [...fields, `version: ${q(listed.version)}`], schema });
   };
   for (const [name, view] of Object.entries(plan.views)) if (view.surface !== "internal") add(name,"views",view.surface);
   const exposed = new Set<string>();
@@ -75,7 +79,7 @@ export const tools: readonly Tool<Database, Handlers>[] = [
 ${tools.map(({ fields, schema }) => `  { ${fields.map(field => field === "inputSchema" ? `inputSchema: ${shared.get(schema) ?? schema}` : field).join(", ")} },`).join("\n")}
 ];
 export function mcp<Env = unknown>(options: Options<Env>): (request: Request, env: Env, ctx?: import("@aotter/mantle/contracts").RequestContext) => Promise<Response | undefined> {
-  return serve<Env, Database, Handlers>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/admin" ? (await import("./mcp-media.js")).mediaTools<Handlers>(() => options.media!(env)) : [])]` : "tools"}, ${plan.access ? `{...options, fields: ${q(plan.access.userFields)}, accessTargets: () => import("./access-targets.js").then(m => m.targets)}` : '{...options, accessTargets: () => import("./access-targets.js").then(m => m.targets)}'}, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaDefinitions().filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"admin"})))} : [])]` : q(reads)});
+  return serve<Env, Database, Handlers>(${media ? `async (request, env) => [...tools, ...(options.media && new URL(request.url).pathname.replace(/\\/+$/, "") === "/mcp/admin" ? (await import("./mcp-media.js")).mediaTools<Handlers>(() => options.media!(env)) : [])]` : "tools"}, ${plan.access ? `{...options, fields: ${q(plan.access.userFields)}, accessTargets: () => import("./access-targets.js").then(m => m.targets)}` : '{...options, accessTargets: () => import("./access-targets.js").then(m => m.targets)}'}, ${media ? `[...${q(reads)}, ...(options.media ? ${q(mediaTools.filter(tool => tool.annotations.readOnlyHint).map(tool => ({name:tool.name,surface:"admin"})))} : [])]` : q(reads)});
 }
 `};
 }

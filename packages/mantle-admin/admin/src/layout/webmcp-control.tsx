@@ -7,7 +7,7 @@ import { t } from "../app/i18n";
 import { queryClient } from "../app/query-client";
 import { adminWebMcpQueryOptions } from "../lib/queries";
 import { isAdminPreview } from "../app/frame-policy";
-import { adminPath, callAdminTool, resultPath, type AdminModelContext, type AdminToolCatalog } from "../lib/admin-tools";
+import { adminPath, callAdminTool, resultPath, toolFailure, type AdminModelContext, type AdminToolCatalog } from "../lib/admin-tools";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@aotter/mantle-ui/kit";
 
@@ -68,10 +68,7 @@ export function WebMcpControl(): React.ReactElement | null {
             controller.signal.throwIfAborted();
             await model.registerTool({ ...tool, execute: async (input, context) => {
               try { return await execute(tool.name, input, context?.signal); }
-              catch (error) {
-                return { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : "Admin tool failed." }],
-                  ...(error && typeof error === "object" && "body" in error ? { structuredContent: { diagnostic: error.body } } : {}) };
-              }
+              catch (error) { return toolFailure(error); }
             } }, { signal: registration.signal });
           }
           if (!controller.signal.aborted) setCatalog(catalog);

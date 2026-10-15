@@ -278,10 +278,10 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
   await writeGenerated(dir,files);db.exec(files['schema.sql']!);const {mcp}=await import(resolve(dir,'mcp.ts'));
   const handle=mcp({db:()=>db,caller:()=>caller,locale:'zh',instructions:'Use these tools.',serverInfo:{name:'example',title:'Example',version:'7'},requiredScopes:['custom'],resourceMetadata:'https://proxy.test/resource',onObservation:(event:any)=>{observations.push(event);if(event.kind==='invocation'){expect(Object.isFrozen(event.caller)).toBe(true);expect(Object.isFrozen(event.caller.scopes)).toBe(true);}return Promise.reject(new Error('ignored listener'));},onRefusal:(event:any)=>{refusals.push(event);throw Error('ignored listener');}});
   const call=async(method:string,params:any={},path='/mcp',headers:any={})=>{const response=await handle(new Request('https://app.test'+path,{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream',...headers},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});const body=await response.text();return {response,data:JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body)};};
-  const init=await call('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}});expect(init.data.result.instructions).toBe('Use these tools.');expect(init.data.result.serverInfo.name).toBe('example');
+  const init=await call('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}});expect(init.data.result.instructions).toBe('Use these tools.');expect(init.data.result.serverInfo).toMatchObject({name:'example',version:'7'});
   const listed=(await call('tools/list')).data.result.tools;
-  expect(listed[0]).toMatchObject({title:'項目',description:'項目',annotations:{readOnlyHint:true}});
-  expect(listed[1]).toMatchObject({title:'新增項目',description:'新增資料',annotations:{destructiveHint:true},outputSchema:{required:['results']}});
+  expect(listed[0]).toMatchObject({title:'項目',description:expect.stringMatching(/^項目 \(tool version [0-9a-f]{8}\)$/),annotations:{readOnlyHint:true}});
+  expect(listed[1]).toMatchObject({title:'新增項目',description:expect.stringMatching(/^新增資料 \(tool version [0-9a-f]{8}\)$/),annotations:{destructiveHint:true},outputSchema:{required:['results']}});
   const ok=await call('tools/call',{name:'add_item',arguments:{title:'Works'}});expect(ok.data.result.structuredContent.results[0][0].id).toBeString();
   const bad=await call('tools/call',{name:'add_item',arguments:{title:''}});expect(bad.data.result.isError).toBe(true);expect(bad.data.result.structuredContent).toBeUndefined();
   expect(observations.filter(event=>event.phase==='completion').map(event=>event.outcome)).toEqual(['succeeded','failed']);
@@ -291,7 +291,7 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
   expect(refusals.map(event=>event.reason)).toEqual(['credential','credential','origin']);expect(db.query('SELECT COUNT(*) n FROM items').get()).toEqual({n:1});
   for(const locale of [undefined,'constructor','toString','fr']) {
    const response=await mcp({db:()=>db,caller:()=>caller,locale})(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})}),{});
-   const body=await response.text(),data=JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);expect(data.result.tools[0].title).toBe('Items');expect(data.result.tools[1].description).toBe('Add a row');
+   const body=await response.text(),data=JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);expect(data.result.tools[0].title).toBe('Items');expect(data.result.tools[1].description).toStartWith('Add a row (tool version ');
   }
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });
@@ -303,4 +303,34 @@ test("MCP preflights all batch calls before any work and reports expired caller 
  const handle=mcp(tools,{db:()=>({}),caller:()=>({kind:'anonymous'})});
  const response=await handle(request(['open','closed'].map((name,id)=>({jsonrpc:'2.0',id,method:'tools/call',params:{name,arguments:{}}}))),{});expect(response!.status).toBe(401);expect(runs).toBe(0);expect(response!.headers.get('www-authenticate')).toContain('scope="mcp write"');
  const expired=await mcp(tools,{db:()=>({}),caller:()=>{throw new ContractError('UNAUTHENTICATED','Expired.','request:authorization');},resourceMetadata:'https://proxy.test/metadata'})(request({jsonrpc:'2.0',id:1,method:'tools/list'}),{});expect(expired!.status).toBe(401);expect(expired!.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/metadata"');
+});
+
+test("MCP tools advertise input rules as description sentences and enforce them",async()=>{
+ const text=source+`---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: log-item}
+spec:
+  description: Log an item.
+  input: {type: object, properties: {title: {type: string}, weight: {type: number}, unit: {type: string}}, dependentRequired: {weight: [unit]}, anyOf: [{required: [title]}, {required: [weight]}], additionalProperties: false}
+  output: {type: object}
+  handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: log-item-mcp}
+spec: {source: {kind: mcp, surface: public}, target: {procedure: log-item}}
+`;
+ const files=await generateOrThrow('bun-sqlite',[{sourceId:'rules.yaml',text}]);const dir=await mkdtemp(resolve(import.meta.dir,'.mcp-rules-')),db=new Database(':memory:');
+ try {
+  await writeGenerated(dir,files);db.exec(files['schema.sql']!);const {mcp}=await import(resolve(dir,'mcp.ts'));
+  const handle=mcp({db:()=>db,caller:()=>({kind:'anonymous'})});
+  const call=async(method:string,params:any={})=>{const response=await handle(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});const body=await response.text();return JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);};
+  const tool=(await call('tools/list')).result.tools.find((t:any)=>t.name==='log_item');
+  expect(tool.description).toMatch(/^Log an item\. 'unit' is required when 'weight' is present\. At least one of 'title', 'weight' is required\. \(tool version [0-9a-f]{8}\)$/);
+  expect(Object.keys(tool.inputSchema).sort()).toEqual(['additionalProperties','properties','type']);
+  const bad=await call('tools/call',{name:'log_item',arguments:{title:'A',weight:1}});
+  expect(JSON.parse(bad.result.content[0].text).diagnostics[0]).toMatchObject({code:'INPUT_VALIDATION_FAILED',path:'procedures/log-item/input/unit',message:"'unit' is required when 'weight' is present."});
+  expect((await call('tools/call',{name:'log_item',arguments:{title:'A'}})).result.isError).toBeUndefined();
+ } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });

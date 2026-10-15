@@ -88,7 +88,9 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       if (!options.gateway && caller.kind === "user" && caller.credential !== "session" && requiredScopes.some(scope => !(caller as Extract<Caller, {kind: "user"}>).scopes.includes(scope))) return challenge(new ContractError("AUTH_DENIED", "The credential needs the required MCP scopes.", "mcp"), union(caller.scopes, requiredScopes));
     } catch (error) { return challenge(error); }
     if (surface === "admin") selected = await select();
-    const { McpServer, createMcpHandler, fromJsonSchema } = await import("@modelcontextprotocol/server");
+    // Before per-caller filtering, so every caller of a deploy sees one catalogue version.
+    const version = catalogueVersion(selected);
+    const { McpServer, ProtocolError, ProtocolErrorCode, createMcpHandler, fromJsonSchema } = await import("@modelcontextprotocol/server");
     if (request.method === "POST" && !cookieOnly && !options.gateway) await parse();
     if (tooLarge && access) return challenge(new ContractError("INPUT_VALIDATION_FAILED", "MCP body exceeds its limit.", "mcp"), undefined, true);
     if (tooLarge) return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Request body exceeds 1048576 bytes." } }, { status: 413 });
@@ -144,15 +146,28 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         }
       } catch (error) { return challenge(error); }
     }
+    const serverInfo = { name: "aotter.mantle", ...options.serverInfo, version: options.serverInfo?.version ?? version };
     // Host calls execute in the SDK callback, after transport validation.
     const handler = createMcpHandler(() => {
       const schema = (value: unknown) => fromJsonSchema(value as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } });
-      const server = new McpServer({ name: "aotter.mantle", version: "0.2.0", ...options.serverInfo }, { capabilities: { tools: { listChanged: false } }, ...(options.instructions ? { instructions: options.instructions } : {}) });
+      // Tools capability after construction: given to the constructor, the SDK installs its tools/call handler before the wrap below.
+      const server = new McpServer(serverInfo, options.instructions ? { instructions: options.instructions } : {});
+      server.server.registerCapabilities({ tools: { listChanged: false } });
       if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
       const appMeta = links ? registerApps(server, links, parsedBody) : undefined;
+      // A host's stale copy names a tool this catalogue lacks: say so, with the catalogue version, instead of the SDK's bare "not found".
+      // Wrapped where the SDK stores it, so transport and request validation still answer first.
+      const registered = new Set<string>(), set = server.server.setRequestHandler.bind(server.server) as (method: string, handler: unknown) => void;
+      server.server.setRequestHandler = ((method: string, handler: unknown) => set(method, method === "tools/call" && typeof handler === "function" ? (request: { params: { name: string } }, context: unknown) => {
+        if (!registered.has(request.params.name)) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `No tool named ${JSON.stringify(request.params.name)} exists in the current catalogue (catalogue version ${serverInfo.version}).`);
+        return handler(request, context);
+      } : handler)) as typeof server.server.setRequestHandler;
       for (const tool of selected) {
         const meta = appMeta?.(tool.name);
         if (meta === false) continue;
+        registered.add(tool.name);
+        // Not part of structured output: the version, and on failure the current input contract.
+        const about = (contract: boolean) => { const text = [tool.version && `tool version ${tool.version}`, contract && `input schema ${JSON.stringify(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema)}`].filter(Boolean).join("; "); return text ? [{ type: "text" as const, text }] : []; };
         server.registerTool(tool.name, { ...(meta ? { _meta: meta } : {}), ...(tool.title ? { title: text(tool.title, locale) } : {}), description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name, inputSchema: schema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) }, async (raw: unknown) => {
         const metadata = options.onObservation ? { kind: "invocation" as const, surface, invocationId: crypto.randomUUID(), tool: tool.name, caller: Object.freeze(caller.kind === "user" ? { ...caller, scopes: Object.freeze([...caller.scopes]) } : { ...caller }) } : undefined;
         const started = metadata ? performance.now() : 0;
@@ -163,19 +178,21 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
           if (tool.run && (!host || !tool.readOnly)) checkOrigin(request, caller);
           const data = await callTool(tool, raw as Record<string, unknown>, () => options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
           if (host) access?.finish();
-          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
+          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }, ...about(false)], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {
           if (host) access?.finish(error);
           const diagnostic = host ? (await (await import("./host-caller.js")).hostFailure(error, caller, `mcp ${tool.name}`).json() as {error: ReturnType<typeof surfaceError>["error"]}).error : surfaceError(error, `mcp ${tool.name}`).error;
           code = diagnostic.code; outcome = code === "AUTH_DENIED" || code === "UNAUTHENTICATED" ? "denied" : "failed";
           if (diagnostic.path === "request:origin") observe(options.onRefusal, { at: Date.now(), status: 403, reason: "origin" });
           const payload = { diagnostics: [diagnostic] };
-          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), isError: true, content: [{ type: "text" as const, text: JSON.stringify(payload) }], ...(tool.outputSchema ? {} : { structuredContent: payload }) };
+          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), isError: true, content: [{ type: "text" as const, text: JSON.stringify(payload) }, ...about(outcome === "failed")], ...(tool.outputSchema ? {} : { structuredContent: payload }) };
         } finally {
           if (metadata) observe(options.onObservation, { ...metadata, phase: "completion", at: Date.now(), outcome, durationMs: Math.max(0, performance.now() - started), ...(code ? { code } : {}) });
         }
       });
       }
+      // An empty catalogue still answers tools/list and refuses calls the same way.
+      if (registered.size === 0) { server.server.setRequestHandler("tools/list", () => ({ tools: [] })); server.server.setRequestHandler("tools/call", () => ({ content: [] })); }
       return server;
     }, { legacy: "stateless", maxRequestBodySize: 1024 * 1024, onerror: error => console.error("[mantle mcp] request failed", error) });
     const response = await handler.fetch(request, { parsedBody });
@@ -188,6 +205,12 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       return (await import("./host-caller.js")).hostFailure(error, resolved, "mcp");
     }
   };
+}
+
+/** A hash of the tools an endpoint serves (`surface:name:version`, sorted), as 32-bit FNV-1a hex: it changes with any tool's definition. */
+function catalogueVersion(tools: readonly { readonly surface: string; readonly name: string; readonly version?: string }[]): string {
+  const text = JSON.stringify(tools.map(tool => `${tool.surface}:${tool.name}:${tool.version ?? ""}`).sort());
+  return [...text].reduce((h, c) => Math.imul(h ^ c.codePointAt(0)!, 16777619) >>> 0, 2166136261).toString(16).padStart(8, "0");
 }
 
 const CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities";
