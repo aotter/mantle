@@ -268,12 +268,10 @@ export function buildNavGroups(
         : []),
     ],
   };
-  // an empty group is not shown, except Content while every group is empty: its empty state is the start of the console
-  const placed = titled.map((g) => ({ id: g.id, title: g.title, items: itemsOf(g.id) }));
-  const empty = placed.every((g) => g.items.length === 0);
-  const placedGroups: NavGroupData[] = placed
-    .filter((g) => g.items.length > 0 || (empty && g.id === "content"))
-    .map(({ id: _id, ...g }) => g);
+  // an empty group is not shown, except Content while nothing is placed anywhere (More included): its empty state is the start of the console
+  const placedGroups: NavGroupData[] = titled
+    .filter((g) => buckets.has(g.id) || (buckets.size === 0 && g.id === "content"))
+    .map((g) => ({ title: g.title, items: itemsOf(g.id) }));
 
   const moreGroup: NavGroupData = {
     title: t(language, "nav.more"),

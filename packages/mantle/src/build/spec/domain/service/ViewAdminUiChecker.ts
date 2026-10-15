@@ -1,7 +1,7 @@
 /** View.spec.uiSchema: the Admin list a View presents. */
 import type { ViewManifest } from "../model/ManifestGrammar.js";
 import { checkCells, type SchemaAdminUiProblem } from "./SchemaAdminUiChecker.js";
-import { NAV_PLACEMENT_KEYS, navPlacementProblem } from "../model/AdminNav.js";
+import { navPlacementProblems } from "../model/AdminNav.js";
 
 const problem = (pointer: string, value: unknown, expected: string, message: string): SchemaAdminUiProblem => ({ pointer, value, expected, message });
 
@@ -52,10 +52,8 @@ export function checkViewAdminUi(view: ViewManifest): {
   const nav = uiSchema["nav"];
   if (nav !== undefined) {
     if (!nav || typeof nav !== "object" || Array.isArray(nav)) return { list: EMPTY_VIEW_LIST, problems: [problem("/spec/uiSchema/nav", nav, "an object", "View.spec.uiSchema.nav must be an object.")] };
-    for (const [key, value] of Object.entries(nav)) {
-      const expected = (NAV_PLACEMENT_KEYS as readonly string[]).includes(key) ? navPlacementProblem(key, value) : "group, order or hidden";
-      if (expected) return { list: EMPTY_VIEW_LIST, problems: [problem(`/spec/uiSchema/nav/${key}`, value, expected, `View.spec.uiSchema.nav.${key} must be ${expected}.`)] };
-    }
+    const bad = navPlacementProblems(nav as Record<string, unknown>);
+    if (bad) return { list: EMPTY_VIEW_LIST, problems: [problem(`/spec/uiSchema/nav/${bad[0]}`, (nav as Record<string, unknown>)[bad[0]], bad[1], `View.spec.uiSchema.nav.${bad[0]} must be ${bad[1]}.`)] };
   }
   const list = uiSchema["list"];
   if (list === undefined) return { list: EMPTY_VIEW_LIST, problems: [] };

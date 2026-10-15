@@ -26,3 +26,42 @@ test("generate refuses unknown groups, bad placement values and bad navGroups", 
   expect(codes(await run([schema("quotes")], [], page("sales")))).toEqual(["UI_EXTENSION_INVALID admin/extensions/tools/pages/browser/nav/group"]);
   for (const group of ["more", "settings", "reports"]) expect((await run([schema("quotes")], [], page(group))).ok).toBe(true);
 });
+
+const doc = (name: string, spec: object) => JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind: "Schema", metadata: { name }, spec });
+const child = (nav: object) => doc("lines", { title: "Lines", lifecycle: "operational", uiSchema: { nav }, schema: { type: "object", required: ["quoteId"], properties: { quoteId: { type: "string", "x-mantle-ref": "quotes" } } } });
+const posts = doc("posts", { title: "Posts", lifecycle: "publishing", indexes: [["slug"]], schema: { type: "object", required: ["slug", "title"], properties: { slug: { type: "string" }, title: { type: "string" } } } });
+const locales = (nav: object) => doc("postlocales", { title: "Post locales", lifecycle: "publishing", localized: true, translates: { parent: "posts", on: "slug" }, indexes: [["slug"]], uiSchema: { nav }, schema: { type: "object", required: ["slug", "locale", "title"], properties: { slug: { type: "string" }, locale: { type: "string" }, title: { type: "string" } } } });
+
+test("generate refuses placement on a Schema with no sidebar entry of its own", async () => {
+  expect(codes(await run([schema("quotes"), child({ group: "operations", hidden: true })]))).toEqual(["SCHEMA_UI_INVALID schemas/lines/uiSchema/nav/group", "SCHEMA_UI_INVALID schemas/lines/uiSchema/nav/hidden"]);
+  const folded = await run([schema("quotes"), child({ order: 1 })]);
+  expect(folded.ok ? "" : folded.diagnostics[0]!.message).toContain("nav.standalone: true");
+  expect((await run([schema("quotes"), child({ standalone: true, group: "operations", order: 1 })])).ok).toBe(true);
+  expect(codes(await run([posts, locales({ order: 1 })]))).toEqual(["SCHEMA_UI_INVALID schemas/postlocales/uiSchema/nav/order"]);
+});
+
+test("a child folded by a unique-field reference is not told to use standalone, which the checker refuses", async () => {
+  const quotes = doc("quotes", { title: "Quotes", lifecycle: "operational", uniqueIndexes: [["code"]], schema: { type: "object", required: ["code"], properties: { code: { type: "string" } } } });
+  const byCode = (nav: object) => doc("lines", { title: "Lines", lifecycle: "operational", uiSchema: { nav }, schema: { type: "object", required: ["quoteCode"], properties: { quoteCode: { type: "string", "x-mantle-ref": { schema: "quotes", field: "code" } } } } });
+  const placed = await run([quotes, byCode({ order: 1 })]);
+  expect(codes(placed)).toEqual(["SCHEMA_UI_INVALID schemas/lines/uiSchema/nav/order"]);
+  const message = placed.ok ? "" : placed.diagnostics[0]!.message;
+  expect(message).not.toContain("nav.standalone: true");
+  expect(message).toContain("parent's workbench");
+  expect((await run([quotes, byCode({ standalone: true })])).ok).toBe(false);
+});
+
+test("generate reports a non-object navGroups entry instead of throwing", async () => {
+  expect(codes(await run([schema("quotes")], [null, 1]))).toEqual(["SCHEMA_UI_INVALID admin/navGroups/0", "SCHEMA_UI_INVALID admin/navGroups/1"]);
+});
+
+test("generate refuses a non-integer extension page order", async () => {
+  for (const group of ["more", "settings"]) expect(codes(await run([schema("quotes")], [], [{ id: "tools", contributes: { pages: [{ id: "browser", title: "Browser", role: "admin", nav: { group, order: 1.5 } }] } }])))
+    .toEqual(["UI_EXTENSION_INVALID admin/extensions/tools/pages/browser/nav/order"]);
+});
+
+test("generate refuses an extension page nav that is not an object with a string group", async () => {
+  const page = (nav: unknown) => [{ id: "tools", contributes: { pages: [{ id: "browser", title: "Browser", role: "admin", nav }] } }];
+  for (const nav of [{}, { order: 1 }, "more", null, [], { group: 1 }]) expect(codes(await run([schema("quotes")], [], page(nav)))).toEqual(["UI_EXTENSION_INVALID admin/extensions/tools/pages/browser/nav"]);
+  expect((await run([schema("quotes")], [], page(undefined))).ok).toBe(true);
+});
