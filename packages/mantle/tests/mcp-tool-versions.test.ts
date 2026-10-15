@@ -187,6 +187,12 @@ test("transport and request validation answer before the unknown-tool error; bat
     const known=await post(handle,call("public_records"),headers),unknown=await post(handle,call("gone"),headers);
     expect(known.status).toBeGreaterThanOrEqual(400);expect(unknown).toEqual(known);
    }
+   // a tool the caller's tools/list hides behind authentication or authorization is challenged before any transport check
+   const closed=tools.find(tool=>tool.surface==="public"&&tool.closed).name,denied=mcp({db:()=>db,caller:()=>({kind:"user",id:"person",role:"editor",credential:"session",scopes:[]}),authorize:()=>false});
+   for(const headers of [{},{accept:"text/html"},{"content-type":"text/plain"},{"mcp-protocol-version":"bogus"}] as Record<string,string>[]){
+    expect((await post(handle,call(closed),headers)).status).toBe(401);
+    expect((await post(denied,call("public_records"),headers)).status).toBe(403);
+   }
    for(const body of [{...call("gone"),jsonrpc:"1.0"},{...call("gone"),id:{}}]){const refused=await post(handle,body);expect(refused.status).toBe(400);expect(JSON.stringify(refused.messages)).not.toContain("No tool named");}
   } finally {console.error=quiet;}
   const batch=await post(handle,[call("gone",1),call("public_records",2)],{"mcp-protocol-version":"2025-03-26"});
