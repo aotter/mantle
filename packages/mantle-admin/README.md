@@ -57,6 +57,16 @@ All 22 languages are retained. English is the fallback in the entry; the saved
 language loads before rendering, and switching waits for its language chunk.
 Rich-text editors and the complete developer workspace load on demand.
 
+## App library
+
+`@aotter/mantle-admin/app` exports `defineAdmin(meta)` and `<MantleAdmin admin>`.
+An Admin entry default-exports `defineAdmin(...)`; `<MantleAdmin>` is the root
+for an app that mounts Admin inside its own providers. The prebuilt SPA is the
+built-in entry, `defineAdmin({})`: with no generated metadata, Admin reads its
+collections, Views and operations from `/admin/api` at runtime. The library
+keeps its packages as imports, so it is meant for an application's own Vite
+build; the prebuilt SPA above remains the supported way to serve Admin.
+
 ## Extensions
 
 ```ts

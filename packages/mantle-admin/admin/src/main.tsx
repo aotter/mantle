@@ -1,15 +1,10 @@
 import { canRenderAdmin, installPreviewPolicy, isAdminPreview } from "./app/frame-policy";
 import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { AdminApp } from "./app/admin-app";
 import { loadLanguage } from "./app/i18n";
-import { PreferencesProvider, readInitialLanguage, usePreferences } from "./app/preferences";
-import { queryClient } from "./app/query-client";
-import { AdminRouterProvider } from "./app/router";
-import { ConfirmProvider } from "./ui/confirm-dialog";
-import { TooltipProvider } from "@aotter/mantle-ui/kit";
-import { Toaster } from "@aotter/mantle-ui/kit";
+import { MantleAdmin } from "./app/mantle-admin";
+import { readInitialLanguage } from "./app/preferences";
+import admin from "./default-entry";
 import "./styles/global.css";
 import { installExtensionShared } from "./app/extension-shared";
 
@@ -23,28 +18,12 @@ installExtensionShared();
 const preview = isAdminPreview();
 if (preview && canRenderAdmin(window, true)) installPreviewPolicy(window);
 if (canRenderAdmin(window, preview)) {
-const initialLanguage = readInitialLanguage();
-void loadLanguage(initialLanguage)
-  .catch(error => console.error("Admin language could not be loaded", error))
-  .then(() => ReactDOM.createRoot(rootElement).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <PreferencesProvider initialLanguage={initialLanguage}>
-        <AdminRouterProvider>
-          <TooltipProvider>
-            <ConfirmProvider>
-              <AdminApp preview={preview} />
-              <AdminToaster />
-            </ConfirmProvider>
-          </TooltipProvider>
-        </AdminRouterProvider>
-      </PreferencesProvider>
-    </QueryClientProvider>
-  </StrictMode>,
-));
-}
-
-function AdminToaster(): React.ReactElement {
-  const { theme } = usePreferences();
-  return <Toaster theme={theme} position="bottom-right" />;
+  // The locale loads before first paint; <MantleAdmin> reads the same stored or browser choice.
+  void loadLanguage(readInitialLanguage())
+    .catch(error => console.error("Admin language could not be loaded", error))
+    .then(() => ReactDOM.createRoot(rootElement).render(
+      <StrictMode>
+        <MantleAdmin admin={admin} preview={preview} />
+      </StrictMode>,
+    ));
 }

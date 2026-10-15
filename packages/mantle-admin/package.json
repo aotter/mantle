@@ -23,6 +23,10 @@
     "README.md"
   ],
   "exports": {
+    "./app": {
+      "types": "./dist/admin-app/index.d.ts",
+      "import": "./dist/admin-app/index.js"
+    },
     "./extension": {
       "types": "./dist/extension/index.d.ts",
       "import": "./dist/extension/index.js"
@@ -120,7 +124,7 @@
   },
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
-    "build": "tsc -b tsconfig.lib.json && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config admin/vite.config.ts && vite build --config vite.shared.config.ts && vite build --config vite.preview.config.ts",
+    "build": "tsc -b tsconfig.lib.json && vite build --config vite.mcp-app.config.ts && node scripts/emit-mcp-app-module.mjs && vite build --config admin/vite.config.ts && vite build --config vite.app.config.ts && node scripts/emit-app-types.mjs && vite build --config vite.shared.config.ts && vite build --config vite.preview.config.ts",
     "typecheck": "tsc -p tsconfig.mcp-app.json && tsc --noEmit -p admin/tsconfig.json",
     "test": "bun test tests/native/*.test.ts && vitest run",
     "test:browser": "MANTLE_BROWSER_TESTS=1 vitest run admin/test/preview-boundary.test.ts test/mcp-app-browser.test.ts",
