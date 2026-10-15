@@ -83,7 +83,7 @@ function outputNameWarnings(plan: RuntimePlan): string[] {
   return [...new Set(warnings)];
 }
 
-export interface GenerateRequest { readonly target: Target; readonly admin?: boolean; readonly sources: ManifestSourceSet; /** Select the optional generated site/media capability and deployment tables. */ readonly site?: import("../build/compiler.js").SiteDefaults; readonly adminExtensions?: readonly AdminExtension[] }
+export interface GenerateRequest { readonly target: Target; readonly admin?: boolean; readonly sources: ManifestSourceSet; /** Select the optional generated site/media capability and deployment tables. */ readonly site?: import("../build/compiler.js").SiteDefaults; readonly adminExtensions?: readonly AdminExtension[]; /** Project sidebar groups (`navGroups` of the `--admin-extensions` module). */ readonly navGroups?: readonly import("../build/compiler.js").AdminNavGroup[] }
 
 export async function generateFromSources(request: GenerateRequest, schema?: () => readonly string[]): Promise<GenerateResult> {
   const postgres = request.target.endsWith("postgres");
@@ -136,7 +136,7 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
   const adminReads=request.admin?await adminBindingsOf(compiled.plan,dialect,paging,wire,refusals):undefined;
   const {adminPages,adminEntries}=adminReads??{};
   const report = await describeApp(compiled.plan);
-  const result = generate({ description: report, target: request.target, admin:request.admin, adminPages, adminEntries, site: request.site, plan: compiled.plan, lowered, wireLowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), adminExtensions: request.adminExtensions, paging });
+  const result = generate({ description: report, target: request.target, admin:request.admin, adminPages, adminEntries, site: request.site, plan: compiled.plan, lowered, wireLowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), adminExtensions: request.adminExtensions, navGroups: request.navGroups, paging });
   if (refusals.length) {
     const diagnostics = result.ok ? [] : result.diagnostics.filter(d =>
       !searchProblems.some(p => p.path === d.path) ||

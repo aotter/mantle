@@ -9,3 +9,4 @@ export * from "./MediaMimeAccept.js";
 export * from "./Locale.js";
 export * from "./SqlIr.js";
 export * from "./RuntimePlan.js";
+export * from "./AdminNav.js";

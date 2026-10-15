@@ -33,4 +33,4 @@ Bare `views/<encoded-name>.ts` returns row arrays. Proved pageable exposed/inter
 
 Publishing Schema fields may be NULL in drafts even when required, so public View paging cannot order by them. `published_at` is accepted by Store ordering but rejected as a View paging key. Use `ORDER BY id`, or keep the business date in an operational Schema as an indexed, required non-null field.
 
-Internal Views have no public route/tool. Public and admin Views use selected REST/MCP/Admin bindings. `uiSchema.list` selects admin search/filter/display metadata. See [surfaces](surface.md) for validation, paging and wire conversions and [typed queries](../guides/typed-queries.md) for a complete example.
+Internal Views have no public route/tool. Public and admin Views use selected REST/MCP/Admin bindings. `uiSchema.list` selects admin search/filter/display metadata; `uiSchema.nav.group/order/hidden` places an admin View in the sidebar ([sidebar](../guides/native-admin.md#sidebar)). See [surfaces](surface.md) for validation, paging and wire conversions and [typed queries](../guides/typed-queries.md) for a complete example.

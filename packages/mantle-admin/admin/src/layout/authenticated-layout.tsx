@@ -33,6 +33,7 @@ import {
   type SidebarStatus,
   type AdminOperation,
   type ViewManifestInfo,
+  type NavPlacement,
 } from "../lib/types";
 import { useAdminLocation } from "../app/router";
 import { usePreferences, type AdminLanguage } from "../app/preferences";
@@ -127,8 +128,9 @@ export function AuthenticatedLayout({
             (operation.interactions ?? []).length === 0 && !operation.uiSchema?.["collectionAction"]),
           site.data?.capabilities,
           site.data?.extensions,
+          site.data?.navGroups,
         ),
-    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.admin, workspace, site.data?.capabilities, site.data?.extensions],
+    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.admin, workspace, site.data?.capabilities, site.data?.extensions, site.data?.navGroups],
   );
   const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
   const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
@@ -217,10 +219,43 @@ export function buildNavGroups(
   hasGlobalOperations = false,
   capabilities?: SiteInfo["capabilities"],
   extensions?: SiteInfo["extensions"],
+  navGroups?: SiteInfo["navGroups"],
 ): ReadonlyArray<NavGroupData> {
-  const primaryCollections = collections.filter(isPrimaryNavCollection);
-  const contentCollections = primaryCollections.filter((c) => c.lifecycle === "publishing");
-  const operationalCollections = primaryCollections.filter((c) => c.lifecycle !== "publishing");
+  // Sidebar placement (`uiSchema.nav` and navGroups): presentation only, so the server's visibility filtering stands.
+  // Without any placement this yields Admin's default groups: content, operations, reports, more.
+  type Placed = { order: number | undefined; item: NavItem };
+  const buckets = new Map<string, Placed[]>();
+  const place = (group: string, order: number | undefined, item: NavItem) => { const list = buckets.get(group) ?? []; list.push({ order, item }); buckets.set(group, list); };
+  for (const c of collections.filter(isPrimaryNavCollection)) {
+    const nav = (c.uiSchema?.["nav"] ?? {}) as NavPlacement;
+    if (!nav.hidden) place(nav.group ?? (c.lifecycle === "publishing" ? "content" : "operations"), nav.order, collectionNavItem(c, language, canonical));
+  }
+  // the manifest lists admin Views only: public and member Views belong to the application surface
+  for (const v of views) {
+    if (v.nav?.hidden) continue;
+    place(v.nav?.group ?? "reports", v.nav?.order, {
+      title: resolveLocalizedText(v.title, language, canonical) ?? fieldLabel(v.name),
+      icon: BarChart3,
+      url: `/admin/views/${encodeURIComponent(v.name)}`,
+    });
+  }
+  // extension pages placed in a sidebar group other than more/settings
+  for (const extension of extensions ?? []) for (const page of extension.contributes?.pages ?? []) {
+    if (page.nav && page.nav.group !== "more" && page.nav.group !== "settings") place(page.nav.group, page.nav.order ?? 0, {
+      title: resolveLocalizedText(page.title, language, canonical) ?? page.id,
+      url: `/admin/x/${encodeURIComponent(extension.id)}/${encodeURIComponent(page.id)}`,
+      icon: Puzzle,
+    });
+  }
+  // within a group: ordered entries first by order, then the rest in Admin's order (a stable sort)
+  const itemsOf = (group: string) => (buckets.get(group) ?? []).sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity)).map((p) => p.item);
+  // project groups sort among the built-in ones (more is always last); a stable sort keeps declaration order
+  const titled = [
+    { id: "content", title: t(language, "nav.content"), order: 10 },
+    { id: "operations", title: t(language, "nav.operations"), order: 20 },
+    { id: "reports", title: t(language, "nav.reports"), order: 30 },
+    ...(navGroups ?? []).map((g) => ({ id: g.id, title: resolveLocalizedText(g.title, language, canonical) ?? g.id, order: g.order ?? 50 })),
+  ].sort((a, b) => a.order - b.order);
   const homeGroup: NavGroupData = {
     items: [
       {
@@ -233,33 +268,11 @@ export function buildNavGroups(
         : []),
     ],
   };
-
-  const contentGroup: NavGroupData = {
-    title: t(language, "nav.content"),
-    items: contentCollections.map((c) => collectionNavItem(c, language, canonical)),
-  };
-
-  const recordsGroup: NavGroupData | null =
-    operationalCollections.length > 0
-      ? {
-          title: t(language, "nav.operations"),
-          items: operationalCollections.map((c) => collectionNavItem(c, language, canonical)),
-        }
-      : null;
-
-  // the manifest lists admin Views only: public and member Views belong to the application surface
-  const adminViews = views;
-  const reportsGroup: NavGroupData | null =
-    adminViews.length > 0
-      ? {
-          title: t(language, "nav.reports"),
-          items: adminViews.map((v) => ({
-            title: resolveLocalizedText(v.title, language, canonical) ?? fieldLabel(v.name),
-            icon: BarChart3,
-            url: `/admin/views/${encodeURIComponent(v.name)}`,
-          })),
-        }
-      : null;
+  // content stays even when empty (its empty state is the start of the console); other groups need an item
+  const placedGroups: NavGroupData[] = titled
+    .map((g) => ({ title: g.title, items: itemsOf(g.id), keep: g.id === "content" }))
+    .filter((g) => g.keep || g.items.length > 0)
+    .map(({ keep: _keep, ...g }) => g);
 
   const moreGroup: NavGroupData = {
     title: t(language, "nav.more"),
@@ -280,7 +293,7 @@ export function buildNavGroups(
       // extension pages and settings (ADR-lite 1376), already filtered to this admin member's role by the server;
       // a page appears only when it asks for a place, a settings page always does
       ...(extensions ?? []).flatMap((extension) => [
-        ...(extension.contributes?.pages ?? []).filter((p) => p.nav).map((p) => ({ ...p, order: p.nav!.order ?? 0, group: p.nav!.group })),
+        ...(extension.contributes?.pages ?? []).filter((p) => p.nav?.group === "more" || p.nav?.group === "settings").map((p) => ({ ...p, order: p.nav!.order ?? 0, group: p.nav!.group })),
         ...(extension.contributes?.settings ?? []).map((s) => ({ ...s, order: 0, group: "settings" as const })),
       ].map((c) => ({
         order: c.order,
@@ -292,14 +305,13 @@ export function buildNavGroups(
         // settings next to Admin's own settings, then the rest; a stable sort keeps declaration order within one order
         .sort((a, b) => (a.group === b.group ? a.order - b.order : a.group === "settings" ? -1 : 1))
         .map(({ order: _order, group: _group, ...item }) => item),
+      ...itemsOf("more"),
     ],
   };
 
   return [
     homeGroup,
-    contentGroup,
-    ...(recordsGroup ? [recordsGroup] : []),
-    ...(reportsGroup ? [reportsGroup] : []),
+    ...placedGroups,
     ...(moreGroup.items.length > 0 ? [moreGroup] : []),
   ];
 }

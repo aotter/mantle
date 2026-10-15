@@ -248,3 +248,32 @@ describe("collection nav helpers", () => {
     expect(shouldOpenParentWorkbench(collections, parent)).toBe(workbench);
   });
 });
+
+describe("sidebar placement (uiSchema.nav and navGroups)", () => {
+  const collection = (name: string, lifecycle: "operational" | "publishing", nav?: object) => ({ name, title: name, description: null, lifecycle, parent: null, localized: false, hasTranslations: false, exportFields: [], uiSchema: nav ? { nav } : null }) as never;
+  const view = (name: string, nav?: object) => ({ name, title: name, description: null, input: null, list: { columns: [], searchFields: [], filterFields: [] }, columns: {}, ...(nav ? { nav } : {}) }) as never;
+  const shape = (groups: ReturnType<typeof buildNavGroups>) => groups.map((g) => [g.title ?? "", g.items.map((i) => i.title)]);
+
+  it("keeps Admin's default grouping when nothing is placed", () => {
+    expect(shape(buildNavGroups([collection("posts", "publishing"), collection("orders", "operational")], [view("open-orders")], "en", null, false)).slice(1))
+      .toEqual([["Content", ["posts"]], ["Records", ["orders"]], ["Reports", ["open-orders"]]]);
+  });
+
+  it("orders entries, moves them into project groups ordered among the built-in ones, and hides entries", () => {
+    const groups = buildNavGroups(
+      [collection("types", "operational", { group: "catalog", order: 1 }), collection("categories", "operational", { group: "catalog", order: 2 }), collection("quotes", "operational", { group: "sales" }), collection("audit", "operational", { hidden: true }), collection("customers", "operational")],
+      [view("pipeline", { group: "sales", order: 1 }), view("totals")],
+      "en", null, false, false, undefined,
+      [{ extension: "x" }].map(() => ({ id: "pages", contributes: { pages: [{ id: "browser", title: "Catalog browser", role: "admin", nav: { group: "catalog", order: 3 } }] } })) as never,
+      [{ id: "sales", title: { en: "Sales", "zh-TW": "業務" }, order: 5 }, { id: "catalog", title: "Catalog" }],
+    );
+    expect(shape(groups).slice(1)).toEqual([
+      ["Sales", ["pipeline", "quotes"]],
+      ["Content", []],
+      ["Records", ["customers"]],
+      ["Reports", ["totals"]],
+      ["Catalog", ["types", "categories", "Catalog browser"]],
+    ]);
+    expect(JSON.stringify(groups)).not.toContain("/admin/c/audit");
+  });
+});

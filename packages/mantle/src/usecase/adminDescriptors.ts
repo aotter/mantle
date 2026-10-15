@@ -1,5 +1,5 @@
 /** Build-time projections only; generated exports are static, independently tree-shakable data. */
-import { DiagnosticError, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
+import { DiagnosticError, BUILT_IN_NAV_GROUPS, navGroupProblems, formSchemaProblem, type JsonSchema, mcpTools, mcpToolNameSegment, collectionOf, developerConsole, rowPreconditions, checkPlanUiExtensions, planUiExtensionRefs, appCatalog, entrySchema, type AppRowAction } from "../build/compiler.js";
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
 import { emitValidation } from "./validation.js";
@@ -7,7 +7,13 @@ import { publishingInput, publishingTransitions } from "./publishing.js";
 
 const adminEnum = (p: JsonSchema): JsonSchema => { if(!p.oneOf) return p; const {oneOf,...rest}=p; return {...rest,enum:oneOf.map(c=>c.const)}; };
 
-export function emitAdminDescriptors({plan,adminExtensions=[],admin=false}:Pick<GenerateInput,"plan"|"adminExtensions"|"admin">,diagnostics:GenerateDiagnostic[]):Record<string,string> {
+export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin=false}:Pick<GenerateInput,"plan"|"adminExtensions"|"navGroups"|"admin">,diagnostics:GenerateDiagnostic[]):Record<string,string> {
+  // Sidebar placement: every nav.group names a built-in group or a declared navGroups id (presentation only).
+  for(const [path,message] of navGroupProblems(navGroups))diagnostics.push({code:"SCHEMA_UI_INVALID",path,message});
+  const groupIds=new Set<string>([...Object.keys(BUILT_IN_NAV_GROUPS),...(Array.isArray(navGroups)?navGroups.map(g=>g.id):[])]);
+  const placed=[...Object.values(plan.schemas).map(s=>["schemas/"+s.name,s.uiSchema] as const),...Object.entries(plan.views).map(([name,v])=>["views/"+name,v.uiSchema] as const)];
+  for(const [path,ui] of placed){const group=(ui?.["nav"] as {group?:unknown}|undefined)?.group;if(typeof group==="string"&&!groupIds.has(group))diagnostics.push({code:"SCHEMA_UI_INVALID",path:path+"/uiSchema/nav/group",message:`Unknown nav group '${group}': use content, operations, reports or more, or declare it in navGroups of the --admin-extensions module.`});}
+  for(const e of adminExtensions)for(const p of e.contributes.pages??[]){const group=p.nav?.group;if(group!==undefined&&group!=="settings"&&!groupIds.has(group))diagnostics.push({code:"UI_EXTENSION_INVALID",path:`admin/extensions/${e.id}/pages/${p.id}/nav/group`,message:`Unknown nav group '${group}'.`});}
   try {checkPlanUiExtensions(plan,adminExtensions);} catch(error) {
     if(!(error instanceof DiagnosticError))throw error;
     const {code,path,message}=error.diagnostic;diagnostics.push({code,path,message});return {};
@@ -23,7 +29,7 @@ export function emitAdminDescriptors({plan,adminExtensions=[],admin=false}:Pick<
       return [output,{schema:schema.name,field}];
     }));
     const list=(v.uiSchema?.list??{}) as {columns?:string[];searchFields?:string[];filterFields?:string[];cells?:Record<string,string>};
-    return {name,title:v.title??null,description:v.description??null,input:v.input??null,list:{columns:list.columns??[],searchFields:list.searchFields??[],filterFields:list.filterFields??[],cells:list.cells??{}},columns};
+    return {name,title:v.title??null,description:v.description??null,input:v.input??null,list:{columns:list.columns??[],searchFields:list.searchFields??[],filterFields:list.filterFields??[],cells:list.cells??{}},columns,...(v.uiSchema?.nav?{nav:v.uiSchema.nav}:{})};
   });
   const adminTools=mcpTools(plan,"admin"),toolNames=new Set(adminTools.map(t=>t.name));
   const operations=adminTools.filter(t=>t.kind==="procedure").map(t=>{
@@ -76,8 +82,8 @@ export function emitAdminDescriptors({plan,adminExtensions=[],admin=false}:Pick<
   }
   const settingsKeys=adminExtensions.flatMap(e=>(e.contributes.settings??[]).map(s=>e.id+"/"+s.id));
   const bindings = "import {extensionOptions} from '@aotter/mantle-admin/server/extensions';\nimport type {AdminExtension} from '@aotter/mantle-admin/server/extensions';\nimport {extensionMetadata} from './admin-descriptors.js';\nimport {ContractError} from '@aotter/mantle/contracts';\n"+checks.join("\n")+"\nconst checks={"+settingsKeys.map((key,n)=>`${q(key)}:(value:unknown)=>{try{check${n}(value);return {};}catch(error){if(!(error instanceof ContractError))throw error;return {[(error.path.split('/input/')[1]??'').replace(/~1/g,'/').replace(/~0/g,'~')]:error.message};}}`).join(",")+"};\nexport const extensionBindings=<Env,DB>(definitions:readonly AdminExtension<Env,DB>[])=>extensionOptions<Env,DB>(extensionMetadata,checks,definitions);\n";
-  const data={allCollections,views,operations,fieldNames:Object.fromEntries(schemas.map(s=>[s.name,s.names])),viewNames,authorizations,developerConsole:snapshot,mcpAppCatalogues:catalogues,webmcp,extensionBindings:planUiExtensionRefs(plan),extensionMetadata};
-  return {...validationFiles,...(adminExtensions.length && admin ? {"admin-extensions.ts":bindings} : {}),"admin-descriptors.ts":"// Generated static Admin metadata. Import only the exports the application uses.\n"+literals(data)+"\nexport const collections = ["+schemas.filter(s=>!s.translates).map(s=>"allCollections["+q(s.name)+"]").join(",")+"] as const;\nexport const bootstrap = {collections, allCollections, operations, views, webmcp, developerConsole} as const;\n"};
+  const data={allCollections,views,operations,navGroups,fieldNames:Object.fromEntries(schemas.map(s=>[s.name,s.names])),viewNames,authorizations,developerConsole:snapshot,mcpAppCatalogues:catalogues,webmcp,extensionBindings:planUiExtensionRefs(plan),extensionMetadata};
+  return {...validationFiles,...(adminExtensions.length && admin ? {"admin-extensions.ts":bindings} : {}),"admin-descriptors.ts":"// Generated static Admin metadata. Import only the exports the application uses.\n"+literals(data)+"\nexport const collections = ["+schemas.filter(s=>!s.translates).map(s=>"allCollections["+q(s.name)+"]").join(",")+"] as const;\nexport const bootstrap = {collections, allCollections, operations, views, navGroups, webmcp, developerConsole} as const;\n"};
 }
 
 /**

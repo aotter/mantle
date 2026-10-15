@@ -104,6 +104,8 @@ export interface Metadata {
     readonly operations: readonly Descriptor[];
     readonly webmcp: unknown;
     readonly developerConsole?: unknown;
+    /** Project sidebar groups (`navGroups`); Schemas, admin Views and pages place items in them with `nav.group`. */
+    readonly navGroups?: readonly { readonly id: string; readonly title: string | Readonly<Record<string, string>>; readonly order?: number }[];
 }
 export interface View<Database> {
     readonly name: string;
@@ -151,7 +153,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     const webmcp = metadata.webmcp as { tools?: readonly Record<string, unknown>[] };
     const catalogue = { ...webmcp, tools: webmcp.tools?.map(tool => { const {target: _target, ...display} = tool; return { ...display, ...(tool.title ? { title: localized(tool.title) } : {}), description: localized(tool.description) ?? localized(tool.title) ?? tool.name }; }) };
     const me = async ({ caller, request, env }: Context<Env, Database>) => { const user = (options.getUser ? await options.getUser(caller.subject, request, env) : undefined) ?? userOf(caller); return { userId: caller.subject, role: caller.role, admin: isAdmin(caller), login: user?.githubLogin || user?.name || user?.email || null, image: user?.image ?? null }; };
-    const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendAdminInvitation, mcpEndpoints: options.mcpEndpoints, extensions: options.extensions }); return { ...info, capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics") } }; };
+    const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendAdminInvitation, mcpEndpoints: options.mcpEndpoints, extensions: options.extensions }); return { ...info, navGroups: metadata.navGroups ?? [], capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics") } }; };
     const checkTarget = async (target: Target, caller: Caller) => (await import("@aotter/mantle/authorization")).authorizeTarget(options.authorize!, target, caller);
     const visibleMetadata = async (c: Context<Env, Database>) => {
         if (!options.authorize) return { ...metadata, views: sees(metadata.views, views, c.caller), operations: sees(metadata.operations, operations, c.caller), webmcp: catalogue };

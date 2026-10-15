@@ -56,10 +56,12 @@ try {
     const site = values.site ? (await load(values.site)).siteDefaults : undefined;
     if (values.site && !site) throw new Error(`${values.site} must export siteDefaults.`);
     const extensionModule = values["admin-extensions"] ? await load(values["admin-extensions"]) : undefined;
-    const adminExtensions = extensionModule?.adminExtensions ?? extensionModule?.default;
-    if (values["admin-extensions"] && !Array.isArray(adminExtensions)) throw new Error(`${values["admin-extensions"]} must export an adminExtensions array (named or default).`);
+    // The Admin presentation module: extensions and/or the project's sidebar groups.
+    const adminExtensions = extensionModule?.adminExtensions ?? extensionModule?.default ?? (extensionModule?.navGroups ? [] : undefined);
+    const navGroups = extensionModule?.navGroups;
+    if (values["admin-extensions"] && !Array.isArray(adminExtensions)) throw new Error(`${values["admin-extensions"]} must export an adminExtensions array (named or default) or navGroups.`);
     const { generateFromSources } = await (auth.length ? import("./generateAuth.js") : import("./generate.js"));
-    const result = await generateFromSources({ target: target as Target, sources: { sources }, admin:values.admin, auth, site, adminExtensions });
+    const result = await generateFromSources({ target: target as Target, sources: { sources }, admin:values.admin, auth, site, adminExtensions, navGroups });
     if (!result.ok) throw new Error(JSON.stringify(result.diagnostics, null, 2));
     for (const warning of result.warnings ?? []) console.warn(`warning: ${warning}`);
     const read = [...paths, ...(values.auth ?? []), ...[values.site, values["admin-extensions"]].filter((path): path is string => !!path)];

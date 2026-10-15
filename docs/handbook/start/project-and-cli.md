@@ -34,7 +34,7 @@ Other handles may adapt to the same [structural driver contracts](../guides/adap
 | `--admin` | Emit native Admin bindings and `admin/*` modules; install the separate Admin package. |
 | `--auth <module>` | Read plain `authOptions(env)` (or an exported auth instance's options) and append selected Better Auth DDL. Repeat it once per Better Auth instance. Prefer plain options without initialization side effects. |
 | `--site <module>` | Read `siteDefaults`; emit site/media bindings and deployment SQL. |
-| `--admin-extensions <module>` | Read the named/default `adminExtensions` array. |
+| `--admin-extensions <module>` | Read the named/default `adminExtensions` array and the optional `navGroups` (sidebar groups; see native-admin.md "Sidebar"). The app shell passes `src/admin.ts`. |
 | `--wrangler <path>` | Existing JSONC/JSON/TOML config; default finds one or creates `wrangler.jsonc`. TOML receives manual-edit instructions. |
 | `--entry <path>` | Worker source entry; default `src/worker.ts`. |
 | `--outdir <path>` | Split bundle output; default `dist`. Keep separate from source/generated files. |

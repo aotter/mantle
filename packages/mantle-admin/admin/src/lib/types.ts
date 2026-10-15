@@ -203,7 +203,14 @@ export interface ListEntriesResult {
   next_cursor: string | null;
 }
 
+/** `uiSchema.nav` placement in Admin's sidebar (presentation only). */
+export interface NavPlacement { group?: string; order?: number; hidden?: boolean }
+/** A project sidebar group from `navGroups` of the `--admin-extensions` module. */
+export interface NavGroupInfo { id: string; title: LocalizedText; order?: number }
+
 export interface SiteInfo {
+  /** Project sidebar groups; empty when the project declares none. */
+  navGroups?: NavGroupInfo[];
   title: string;
   description: string;
   brand: string;
@@ -236,7 +243,7 @@ export interface AdminExtensionInfo {
   title: LocalizedText;
   module?: string;
   contributes: {
-    pages: { id: string; title: LocalizedText; role: AdminRole; nav?: { group: "more" | "settings"; order?: number } }[];
+    pages: { id: string; title: LocalizedText; role: AdminRole; nav?: { group: string; order?: number } }[];
     settings: { id: string; title: LocalizedText; role: AdminRole; schema: JsonSchema }[];
     actions: { id: string; title: LocalizedText; role: AdminRole; target: "record/v1" | "list.selection/v1" | "list.toolbar/v1"; presentation: "run" | "confirm" | "dialog"; destructive?: boolean; when?: AdminExtensionWhen }[];
     panels: { id: string; title: LocalizedText; role: AdminRole; target: "record.sidebar/v1" | "home/v1"; when?: AdminExtensionWhen }[];
@@ -326,6 +333,8 @@ export interface ViewManifestInfo {
   /** `searchFields` and `filterFields` are the outputs the View's search box and filters match (ADR-0032 decision 5). */
   list: { columns: string[]; searchFields: string[]; filterFields: string[]; cells?: Record<string, string> };
   columns: Record<string, { schema: string; field: string }>;
+  /** `uiSchema.nav` of the View. */
+  nav?: NavPlacement;
 }
 
 export interface DeveloperSchemaModel {
