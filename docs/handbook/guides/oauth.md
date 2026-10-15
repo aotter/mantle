@@ -109,10 +109,23 @@ authorization codes. The events and the sessions each one ends:
 | Password change with `revokeOtherSessions` | all; Better Auth gives the current device a new session |
 | Admin ban (`/admin/ban-user`, or `/admin/update-user` setting `banned: true`) | all (Better Auth) |
 | Admin session revocation (`/admin/revoke-user-sessions`) | all (Better Auth) |
+| Email OTP or magic-link sign-in (`/sign-in/email-otp`, `/magic-link/verify`) that proves the address of an unverified user | all, and its password and linked accounts (Better Auth) |
 
-A failed attempt, sign-out, session expiry and a password change without
-`revokeOtherSessions` end nothing; unbanning does not restore grants. An access
-token already issued is rejected at once. Better Auth's `/oauth2/introspect` reports a refreshed
+The last row covers account pre-hijacking: someone who signed up with another
+person's address before it was verified loses their OAuth grants as well as the
+password, linked accounts and sessions that Better Auth strips when the owner
+proves the address.
+
+A failed attempt, session expiry, a password change without `revokeOtherSessions`,
+and the user's own sign-out, `/revoke-sessions` and `/revoke-other-sessions`
+("sign out everywhere") end no OAuth grant, as in Better Auth; the user ends a
+connected app's grant by disconnecting it on the connected-apps page
+(`/oauth/consents`). Unbanning does not restore grants. An access token issued
+before the event is rejected on its next use, with one exception: an
+`offline_access` access token of a first-party `skip_consent` client passes again,
+until it expires (one hour by default), once the user grants that client offline
+access anew, because it is checked against any live `offline_access` refresh token
+of the same user and client. Better Auth's `/oauth2/introspect` reports a refreshed
 token inactive once its original session has expired, while Mantle's resource
 check accepts it; Mantle does not use introspection.
 Database failures remain server errors, rather than silently authenticating.

@@ -13,7 +13,7 @@ import type { BetterAuthOptions } from "better-auth/types";
 import { afterAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { betterAuth } from "better-auth/minimal";
-import { admin as adminFunction, customSession, emailOTP, jwt, phoneNumber } from "better-auth/plugins";
+import { admin as adminFunction, customSession, emailOTP, jwt, magicLink, phoneNumber } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -31,10 +31,10 @@ afterAll(() => { for (const server of servers) server.stop(true); });
 
 type App = Awaited<ReturnType<typeof makeApp>>;
 
-async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean; additionalFields?: NonNullable<BetterAuthOptions["user"]>["additionalFields"]; derivedRegion?: boolean; localOnly?: boolean } = {}) {
+async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean; additionalFields?: NonNullable<BetterAuthOptions["user"]>["additionalFields"]; derivedRegion?: boolean; localOnly?: boolean; magicLinkStore?: "plain" | "hashed" } = {}) {
   const sqlite = new Database(":memory:");
   sqlite.run("PRAGMA foreign_keys = ON");
-  const otps: { email: string; otp: string }[] = [], resets: string[] = [], phoneOtps: string[] = [];
+  const otps: { email: string; otp: string }[] = [], resets: string[] = [], phoneOtps: string[] = [], links: string[] = [];
   const statements: string[] = [], native = d1Shim(sqlite);
   // Serve the handler first: baseURL (and so the JWKS URL and token issuer) must name the real port.
   let handle: (request: Request) => Promise<Response> = async () => new Response("not ready", { status: 503 });
@@ -62,6 +62,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
       ...(options.derivedRegion ? [customSession(async ({ user, session }) => ({ user: { ...user, region: ['TW'] }, session }))] : []),
       emailOTP({ sendVerificationOTP: async ({ email, otp }) => { otps.push({ email, otp }); } }),
       phoneNumber({ sendOTP: () => {}, sendPasswordResetOTP: async ({ code }) => { phoneOtps.push(code); } }),
+      magicLink({ storeToken: options.magicLinkStore ?? "plain", sendMagicLink: async ({ token }) => { links.push(token); } }),
       options.customAdmin ? adminFunction({ adminRoles: ["admin"], ac, roles: { admin: ac.newRole(defaultStatements) } }) : adminFunction(),
       jwt({ disableSettingJwtHeader: true }),
       oauthGrantRevocation(),
@@ -94,7 +95,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
     return { cookie, userId: body.user.id, setCookies: response.headers.getSetCookie() };
   }
   const request = (headers: Record<string, string> = {}) => new Request(`${origin}/some/route`, { headers });
-  return { sqlite, auth, loader, post, signIn, request, baseURL, resets, otps, phoneOtps, loads: () => loads, breakCache: () => { cacheBroken = true; }, cache, statements };
+  return { sqlite, auth, loader, post, signIn, request, baseURL, resets, otps, phoneOtps, links, origin, loads: () => loads, breakCache: () => { cacheBroken = true; }, cache, statements };
 }
 
 describe("resolveCaller: session cookie", () => {
@@ -383,12 +384,14 @@ describe("OAuth grant revocation and consent routes", () => {
       const again = current ?? (await app.signIn(email)).cookie;
       expect((await authorize(app, again, grant.clientId, "mcp offline_access")).location, name).toContain("/oauth/consent?");
     }
-    // Failed resets, a non-ban update, sign-out and a password change that keeps other devices end nothing.
+    // Failed resets, a non-ban update, sign-out, signing out everywhere and a password change that keeps other devices end nothing.
     const keeps: [string, End][] = [
       ["short-reset", async ({ email }) => app.post("/reset-password", { newPassword: "short", token: await resetLink(email) })],
       ["short-otp", async ({ email }) => app.post("/email-otp/reset-password", { email, otp: await resetOtp(email), password: "short" })],
       ["rename", ({ userId }) => asAdmin("/admin/update-user", { userId, data: { name: "renamed" } })],
       ["sign-out", ({ cookie }) => app.post("/sign-out", {}, { cookie })],
+      ["revoke-sessions", ({ cookie }) => app.post("/revoke-sessions", {}, { cookie })],
+      ["revoke-other-sessions", ({ cookie }) => app.post("/revoke-other-sessions", {}, { cookie })],
       ["keep-change", ({ cookie }) => app.post("/change-password", { currentPassword: "first-password-123", newPassword: password }, { cookie })],
     ];
     for (const [name, end] of keeps) {
@@ -398,8 +401,58 @@ describe("OAuth grant revocation and consent routes", () => {
       expect((await refresh(grant)).status, name).toBe(200);
       app.sqlite.run("DELETE FROM session WHERE userId = ?", [userId]);
       expect(await use(grant.accessToken), name).toMatchObject({ subject: userId });
-      expect((await authorize(app, (await app.signIn(email)).cookie, grant.clientId, "mcp offline_access")).location, name).toStartWith(REDIRECT);
+      // keep-change signed up unverified: an email OTP sign-in would prove the address and end its grants (next test).
+      const again = name === "keep-change" ? cookieOf(await app.post("/sign-in/email", { email, password })) : (await app.signIn(email)).cookie;
+      expect((await authorize(app, again, grant.clientId, "mcp offline_access")).location, name).toStartWith(REDIRECT);
     }
+  });
+  test("an email OTP or magic-link sign-in that proves an unverified address ends the grants of whoever signed it up first", async () => {
+    for (const store of ["plain", "hashed"] as const) {
+      const app = await makeApp({ magicLinkStore: store });
+      const cookieOf = (response: Response) => response.headers.getSetCookie().map(line => line.split(";")[0]).join("; ");
+      const use = (token: string) => resolveCaller(app.request({ authorization: `Bearer ${token}` }), app.loader, { audience: AUDIENCE });
+      const refresh = (grant: { refreshToken?: string; clientId: string }) => fetch(`${app.baseURL}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: grant.refreshToken!, client_id: grant.clientId, resource: AUDIENCE }) });
+      const link = async (email: string, callback: string) => {
+        expect((await app.post("/sign-in/magic-link", { email })).status).toBe(200);
+        return app.auth.handler(new Request(`${app.baseURL}/magic-link/verify?token=${app.links.at(-1)}${callback}`, { headers: { origin: app.origin } }));
+      };
+      const proofs: [string, (email: string) => Promise<Response>][] = [
+        ["otp", async email => { await app.post("/email-otp/send-verification-otp", { email, type: "sign-in" }); return app.post("/sign-in/email-otp", { email, otp: app.otps.findLast(x => x.email === email)!.otp }); }],
+        ["link", email => link(email, "")],
+        ["link-redirect", email => link(email, "&callbackURL=%2Fhome")],
+      ];
+      for (const [kind, prove] of proofs) {
+        const name = `${store}-${kind}`, email = `${name}@example.test`;
+        // The attacker registers the owner's address first (unverified) and connects their own client.
+        const signedUp = await app.post("/sign-up/email", { email, password: "attacker-password-1", name: "attacker" });
+        expect(signedUp.status, name).toBe(200);
+        const attacker = cookieOf(signedUp), userId = (await signedUp.json() as { user: { id: string } }).user.id;
+        const grant = await oauthAccessToken(app, attacker, "mcp offline_access");
+        const pending = await authorize(app, attacker, grant.clientId, "mcp offline_access");
+        expect(pending.location, name).toStartWith(REDIRECT);
+        const proved = await prove(email);
+        expect(proved.status, name).toBe(kind === "link-redirect" ? 302 : 200);
+        expect(app.sqlite.query("SELECT emailVerified AS v FROM user WHERE id = ?").get(userId), name).toEqual({ v: 1 });
+        expect((await refresh(grant)).status, name).not.toBe(200);
+        expect(app.sqlite.query("SELECT count(*) AS n FROM oauthConsent WHERE userId = ?").get(userId), name).toEqual({ n: 0 });
+        expect((await exchange(app, grant.clientId, new URL(pending.location).searchParams.get("code")!, pending.verifier)).status, name).not.toBe(200);
+        await expect(use(grant.accessToken), name).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+        // The owner's own session works and their next grant survives a later sign-in of the now verified address.
+        const owner = cookieOf(proved);
+        expect(await app.auth.api.getSession({ headers: new Headers({ cookie: owner }) }), name).toMatchObject({ user: { id: userId } });
+        const own = await oauthAccessToken(app, owner, "mcp offline_access");
+        expect((await prove(email)).status, name).toBe(kind === "link-redirect" ? 302 : 200);
+        expect((await refresh(own)).status, name).toBe(200);
+      }
+    }
+  });
+  test("a reset ends sessions before grants, so a failure in between cannot leave the old sessions alive", async () => {
+    const app = await makeApp(), { cookie, userId } = await app.signIn("order@example.test");
+    await oauthAccessToken(app, cookie, "mcp offline_access");
+    app.sqlite.run("CREATE TRIGGER fail_consent BEFORE DELETE ON oauthConsent BEGIN SELECT RAISE(ABORT, 'consent delete failed'); END");
+    await app.post("/request-password-reset", { email: "order@example.test", redirectTo: "/" });
+    expect((await app.post("/reset-password", { newPassword: "another-password-123", token: app.resets.at(-1) })).status).toBeGreaterThanOrEqual(500);
+    expect(app.sqlite.query("SELECT count(*) AS n FROM session WHERE userId = ?").get(userId)).toEqual({ n: 0 });
   });
   test("sign-out follows Better Auth: session-bound grants end, offline_access refresh tokens survive", async () => {
     const app = await makeApp(); const { cookie, userId } = await app.signIn();
