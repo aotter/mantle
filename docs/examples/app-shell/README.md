@@ -20,6 +20,11 @@ pnpm dev                       # one-time codes print to this log
 pnpm smoke                     # when the copied example has smoke.mjs
 ```
 
+npm works too (`npm install`, `npm run …`). `package.json` pins `@better-auth/core` and `@better-auth/utils` even though
+the shell does not import them: they are the exact versions the SDK's Better Auth peers require, and without them a fresh
+install resolves newer ones (npm ERESOLVE, or a second Better Auth type tree under pnpm). Keep every Better Auth package
+on one version.
+
 ## Files you edit
 
 | File | What it is for |
