@@ -40,7 +40,7 @@ test("--admin emits generated/admin-client.ts: typed names and bound hooks, with
   const imports = client.split("\n").filter(line => line.startsWith("import "));
   expect(imports.filter(line => !line.startsWith("import type "))).toEqual(['import { createAdminHooks } from "@aotter/mantle-admin/hooks";']);
   expect(client).not.toMatch(/from "\.\/(?:generated|admin-descriptors|admin-bindings)/);
-  expect(client).toContain("export const { useView, useEntries, useEntry, useOperation, useCollectionTotal, useMe } = createAdminHooks<AppAdminTypes>();");
+  expect(client).toContain("export const { useView, useEntries, useEntry, useOperation, useCollectionTotal, useMe, useBadges } = createAdminHooks<AppAdminTypes>();");
 });
 
 test("the MCP tool name the hooks derive is the compiler's (the same cases as the hooks' own test)", () => {

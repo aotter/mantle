@@ -283,6 +283,18 @@ describe("sidebar placement (uiSchema.nav and defineAdmin nav)", () => {
       expect(links(groups, "Reports")!.map((l) => [l.title, l.url])).toEqual([["Mine", "/admin/views/pending?owner=me&limit=5&flag=true"], ["pending", "/admin/views/pending"]]);
     });
 
+    it("carries an item's badge to its link, for a collection and for a View, and gives none to an item without one", () => {
+      const badge = { view: "pending", field: "count" };
+      const groups = build(project({ items: [
+        { group: "content", title: "Waiting", to: { collection: "requests" }, badge },
+        { group: "reports", title: "Queue", to: { view: "pending" }, badge },
+        { group: "reports", title: "Plain", to: { view: "pending" } },
+      ] }));
+      expect(links(groups, "Content")!.find((l) => l.title === "Waiting")!.badge).toEqual(badge);
+      expect(links(groups, "Reports")!.find((l) => l.title === "Queue")!.badge).toEqual(badge);
+      expect(links(groups, "Reports")!.find((l) => l.title === "Plain")).not.toHaveProperty("badge");
+    });
+
     it("shows no item whose collection or View the caller cannot see, and adds no permission", () => {
       const nav = project({ items: [{ group: "content", title: "Secret", to: { collection: "secrets" } }, { group: "reports", title: "Hidden view", to: { view: "private" } }] });
       expect(JSON.stringify(build(nav))).not.toMatch(/Secret|Hidden view|secrets|private/);

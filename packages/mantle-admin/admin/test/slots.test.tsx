@@ -80,6 +80,20 @@ describe("slots", () => {
     // @ts-expect-error a browser slot has no surface
     defineAdmin(admin, { components: { Header: ({ surface }) => String(surface) } });
   });
+
+  it("types a nav badge by the generated View and one of its row's columns, and reports more than 20 badged Views", () => {
+    const item = { group: "reports", title: "Waiting", to: { view: "pending-requests" } } as const;
+    expect(defineAdmin(admin, { nav: { items: [{ ...item, badge: { view: "pending-requests", field: "amount" } }] } }).nav.items[0]!.badge).toEqual({ view: "pending-requests", field: "amount" });
+    // @ts-expect-error a badge names a View of the manifest
+    defineAdmin(admin, { nav: { items: [{ ...item, badge: { view: "pending", field: "amount" } }] } });
+    // @ts-expect-error a badge reads a column the View returns
+    defineAdmin(admin, { nav: { items: [{ ...item, badge: { view: "pending-requests", field: "count" } }] } });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const open = defineAdmin({} as AdminMeta, { nav: { items: Array.from({ length: 21 }, (_, i) => ({ group: "reports", title: "v" + i, to: { view: "v" + i }, badge: { view: "v" + i, field: "count" } })) } });
+    expect(open.nav.items).toHaveLength(21);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("only the first 20"));
+    error.mockRestore();
+  });
 });
 
 describe("matching a View's tool to its slots", () => {

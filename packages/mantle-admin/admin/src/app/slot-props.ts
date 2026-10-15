@@ -10,6 +10,8 @@ export interface NavLink {
   readonly marker?: React.ElementType;
   readonly markerLabel?: string;
   readonly external?: boolean;
+  /** A count after the title: `field` of the first row of this aggregate admin View, read as the caller (`useBadges`). */
+  readonly badge?: { readonly view: string; readonly field: string };
 }
 
 /** A sidebar entry that opens a list of links. */

@@ -64,7 +64,7 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
     "/** Pass to `defineAdmin(admin)`: the column names a View's rows carry in the browser, for an MCP App to match. */",
     `export const admin: AdminMeta<AppAdminTypes> = { rowNames: ${q(Object.fromEntries(views.flatMap(([name], n) => Object.keys(renames[n]!).length ? [[name, renames[n]]] : [])))} };`,
     "",
-    "export const { useView, useEntries, useEntry, useOperation, useCollectionTotal, useMe } = createAdminHooks<AppAdminTypes>();",
+    "export const { useView, useEntries, useEntry, useOperation, useCollectionTotal, useMe, useBadges } = createAdminHooks<AppAdminTypes>();",
     "",
   ].join("\n") };
 }

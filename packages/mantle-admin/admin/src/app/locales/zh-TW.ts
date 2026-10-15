@@ -245,6 +245,8 @@ export default {
     "nav.admin": "管理員",
     "nav.members": "會員管理",
     "nav.reports": "報表",
+    "nav.badgeLoading": "正在讀取數量",
+    "nav.badgeError": "無法讀取數量",
     "nav.localizedContent": "包含多語內容",
     "common.yes": "是",
     "common.no": "否",

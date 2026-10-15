@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AdminTypes } from "./define-admin";
+import type { AdminBadge, AdminTypes } from "./define-admin";
 import { useAdminContext } from "./hooks-context";
-import { createMcpAppTransport } from "./transport";
+import { MAX_BADGE_VIEWS, createMcpAppTransport } from "./transport";
+import { invalidateAfterWrite } from "../lib/after-write";
 
 export { useOpenLink } from "./slots";
 
@@ -52,6 +53,15 @@ export interface AdminHost {
   requestDisplayMode(mode: "inline" | "fullscreen" | "pip"): Promise<"inline" | "fullscreen" | "pip" | null>;
 }
 
+/** One View in a badge batch. */
+export type BadgeAnswer = { readonly rows: readonly Row[] } | { readonly unavailable: true } | { readonly error: true };
+
+/** A badge as the sidebar shows it: loading, a count (zero included), unavailable (shows nothing) or error. */
+export interface BadgeState {
+  readonly count: number | undefined;
+  readonly status: ReadStatus;
+}
+
 /** An MCP tool result, as a host returns it. */
 export interface McpToolResult {
   readonly content?: readonly { readonly type: string; readonly text?: string }[];
@@ -71,6 +81,8 @@ export interface AdminTransport {
   entry(collection: string, id: string): Promise<Reply<AdminEntry<Row>>>;
   total(collection: string): Promise<Reply<number>>;
   me(): Promise<Reply<AdminMe>>;
+  /** One read of up to `MAX_BADGE_VIEWS` Views' first rows, each as the caller: a refused or missing View is `unavailable`, one that could not answer is `error`. */
+  badges(names: readonly string[]): Promise<Reply<{ readonly [name: string]: BadgeAnswer }>>;
   run(name: string, input: Row): Promise<Reply<unknown>>;
 }
 
@@ -149,9 +161,13 @@ export interface AdminHooks<T extends AdminTypes> {
   useCollectionTotal(collection: keyof T["collections"] & string): TotalState;
   /** `GET /admin/api/me`. Browser only. */
   useMe(): MeState;
+  /**
+   * The counts of `refs` in one `GET /admin/api/view-batch`, in the order given: each is `field` of the first row of an aggregate
+   * admin View, run as the caller. Cached 30 s, refreshed on window focus and after a mutation, never polled; keyed by the signed-in
+   * user. Reads `unavailable` in an MCP host. Reads only the first `MAX_BADGE_VIEWS` distinct Views.
+   */
+  useBadges(refs: readonly AdminBadge<T>[]): readonly BadgeState[];
 }
-
-const AFFECTED = ["view", "entries", "entry-editor", "collection-statistics"] as const;
 
 const statusOf = (query: { isPending: boolean; isError: boolean }, reply: Reply<unknown> | undefined): ReadStatus =>
   query.isError ? "error" : query.isPending ? "loading" : reply?.status === "unavailable" ? "unavailable" : "ready";
@@ -185,7 +201,7 @@ const implementation = {
         return reply.data;
       },
       // the shared cache: what Admin shows and what the application's own components read both refetch
-      onSuccess: () => { for (const key of AFFECTED) void client.invalidateQueries({ queryKey: [key] }); },
+      onSuccess: () => invalidateAfterWrite(client),
     });
     return { run: transport.writable ? mutation.mutateAsync : undefined, pending: mutation.isPending };
   },
@@ -198,6 +214,23 @@ const implementation = {
     const { transport } = useAdminContext();
     const query = useQuery({ queryKey: ["me", "hook", transport.surface], queryFn: () => transport.me() });
     return { me: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
+  },
+  useBadges(refs: readonly { readonly view: string; readonly field: string }[]): readonly BadgeState[] {
+    const { transport } = useAdminContext();
+    const me = useQuery({ queryKey: ["me", "hook", transport.surface], queryFn: () => transport.me() });
+    const names = [...new Set(refs.map(ref => ref.view))].slice(0, MAX_BADGE_VIEWS);
+    // the user is in the key: another identity never reads this one's counts
+    const userId = me.data?.status === "ok" ? me.data.data.userId : undefined;
+    const query = useQuery({ queryKey: ["badges", userId, transport.surface, names], queryFn: () => transport.badges(names), enabled: names.length > 0 && userId !== undefined });
+    return refs.map((ref): BadgeState => {
+      if (!names.includes(ref.view)) return { count: undefined, status: "unavailable" };
+      if (me.isError || query.isError) return { count: undefined, status: "error" };
+      if (me.isPending || query.isPending || userId === undefined) return { count: undefined, status: me.data?.status === "unavailable" ? "unavailable" : "loading" };
+      const answer = query.data?.status === "ok" ? query.data.data[ref.view] : undefined;
+      if (!answer || "unavailable" in answer) return { count: undefined, status: "unavailable" };
+      const count = "rows" in answer ? answer.rows.length ? Number(answer.rows[0]![ref.field]) : 0 : NaN;
+      return Number.isFinite(count) ? { count, status: "ready" } : { count: undefined, status: "error" };
+    });
   },
 };
 
@@ -213,6 +246,7 @@ export const useEntry: AdminHooks<AdminTypes>["useEntry"] = implementation.useEn
 export const useOperation: AdminHooks<AdminTypes>["useOperation"] = implementation.useOperation as AdminHooks<AdminTypes>["useOperation"];
 export const useCollectionTotal: AdminHooks<AdminTypes>["useCollectionTotal"] = implementation.useCollectionTotal;
 export const useMe: AdminHooks<AdminTypes>["useMe"] = implementation.useMe;
+export const useBadges: AdminHooks<AdminTypes>["useBadges"] = implementation.useBadges;
 
 /** The MCP host's API, or null in the browser. Handle the null: a component that renders in both surfaces must work in both. */
 export function useHost(): AdminHost | null {

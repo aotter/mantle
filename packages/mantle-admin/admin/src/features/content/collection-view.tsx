@@ -80,6 +80,7 @@ import { LocaleBadge, LocaleStatusBadges } from "./locale-badge";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 import { entryEditPath, entryLandingPath, hasFoldedChildCollections } from "../../lib/collection-nav";
 import { IdValue, isIdField } from "../../ui/id-value";
+import { invalidateAfterWrite } from "../../lib/after-write";
 
 type SortDirection = "asc" | "desc";
 
@@ -252,8 +253,8 @@ function CollectionList({
     : t(language, "collection.table.title");
   const refreshEntries = React.useCallback(() => {
     clearSelection();
-    void queryClient.invalidateQueries({ queryKey: ["entries", collectionName] });
-  }, [collectionName, queryClient, clearSelection]);
+    invalidateAfterWrite(queryClient);
+  }, [queryClient, clearSelection]);
 
   const titleMutation = useMutation({
     mutationFn: ({ id, title, version }: { id: string; title: string; version: number | string }) =>

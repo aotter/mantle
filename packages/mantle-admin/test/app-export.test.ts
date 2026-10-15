@@ -37,7 +37,7 @@ describe("@aotter/mantle-admin/app", () => {
     const target = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")).exports["./hooks"];
     expect(target).toEqual({ types: "./dist/admin-app/hooks.d.ts", import: "./dist/admin-app/hooks.js" });
     const hooks = await import(resolve(pkg, target.import));
-    expect(Object.keys(hooks).sort()).toEqual(["AdminUnavailableError", "createAdminHooks", "mcpAppTransport", "useAdminSurface", "useCollectionTotal", "useEntries", "useEntry", "useHost", "useMe", "useOpenLink", "useOperation", "useView"]);
+    expect(Object.keys(hooks).sort()).toEqual(["AdminUnavailableError", "createAdminHooks", "mcpAppTransport", "useAdminSurface", "useBadges", "useCollectionTotal", "useEntries", "useEntry", "useHost", "useMe", "useOpenLink", "useOperation", "useView"]);
     const context = (file: string) => /from"?\s*"\.\/(transport-[\w-]+\.js)"/.exec(readFileSync(resolve(pkg, "dist/admin-app", file), "utf8"))?.[1];
     const root = readFileSync(resolve(pkg, "dist/admin-app/index.js"), "utf8").match(/from\s*"\.\/(admin-root-[\w-]+\.js)"/)![1]!;
     expect(context("hooks.js")).toBeDefined();

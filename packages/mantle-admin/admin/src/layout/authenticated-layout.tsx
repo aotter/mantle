@@ -342,12 +342,12 @@ function projectNavLink(item: ProjectNav["items"][number], collections: Readonly
     if (!found) return null;
     const [field] = scalars(filter);
     const query = field ? `?filter_field=${encodeURIComponent(field[0])}&filter_value=${encodeURIComponent(field[1])}` : "";
-    return { title: title(name), icon: item.icon ?? Folder, url: `/admin/c/${encodeURIComponent(name)}${query}` };
+    return { title: title(name), icon: item.icon ?? Folder, url: `/admin/c/${encodeURIComponent(name)}${query}`, ...(item.badge ? { badge: item.badge } : {}) };
   }
   const { view: name, input } = item.to;
   if (!views.some((v) => v.name === name)) return null;
   const query = new URLSearchParams(scalars(input)).toString();
-  return { title: title(name), icon: item.icon ?? BarChart3, url: `/admin/views/${encodeURIComponent(name)}${query ? `?${query}` : ""}` };
+  return { title: title(name), icon: item.icon ?? BarChart3, url: `/admin/views/${encodeURIComponent(name)}${query ? `?${query}` : ""}`, ...(item.badge ? { badge: item.badge } : {}) };
 }
 
 export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<NavGroupData> {

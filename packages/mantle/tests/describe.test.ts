@@ -179,6 +179,14 @@ test("WebMCP dispatch includes publishing and media tools and cannot claim readO
   expect(target(empty, "admin:GET /views/:name").readOnly).toBe(false);
 });
 
+test("the Admin view batch is a read-only dispatcher over exactly the admin Views the single route reaches", async () => {
+  const report = await describeApp(await fixture());
+  const batch = target(report, "admin:GET /view-batch"), single = target(report, "admin:GET /views/:name");
+  expect(batch.variants.map(v => v.id)).toEqual(single.variants.map(v => v.id));
+  expect(batch.variants.length).toBeGreaterThan(0);
+  expect(batch.readOnly).toBe(single.readOnly);
+});
+
 test("public MCP and REST exposure survives an admin MCP binding with independent gates", async () => {
   const plan = await compile(dual + `---\n${H}kind: Trigger\nmetadata: {name: add-public}\nspec: {source: {kind: mcp, surface: public}, target: {procedure: add-thing}}\n---\n${H}kind: Trigger\nmetadata: {name: add-http}\nspec: {source: {kind: http, method: POST, path: /api/things}, target: {procedure: add-thing}}\n`);
   const m = target(await describeApp(plan), "procedure:add-thing");

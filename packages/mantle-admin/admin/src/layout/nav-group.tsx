@@ -28,6 +28,8 @@ import {
 import { cn } from "../lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "../app/preferences";
+import { useBadges } from "../app/hooks";
+import { t } from "../app/i18n";
 import { entriesQueryArgsFromSearch, entriesQueryOptions } from "../lib/queries";
 import {
   isCollapsible,
@@ -136,10 +138,28 @@ function NavLinkItem({
           {item.icon && <item.icon aria-hidden />}
           <span data-sidebar-label className="flex-1 truncate">{item.title}</span>
           <NavMarker item={item} />
+          {item.badge && <NavBadge item={item} links={links} />}
         </a>
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
+}
+
+/**
+ * The count of an item. Every badge of the sidebar asks `useBadges` for the same list, so they share one request. Loading,
+ * zero, unavailable and error differ; unavailable shows nothing, so a queue the caller cannot read is not revealed.
+ */
+function NavBadge({ item, links }: { item: NavLink; links: ReadonlyArray<NavLink> }): React.ReactElement | null {
+  const { language } = usePreferences();
+  const refs = links.flatMap((link) => (link.badge ? [link.badge] : []));
+  const states = useBadges(refs);
+  const state = states[refs.findIndex((ref) => ref.view === item.badge!.view && ref.field === item.badge!.field)];
+  if (!state || state.status === "unavailable") return null;
+  const base = "ms-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs tabular-nums";
+  if (state.status === "loading") return <span data-sidebar-label data-badge="loading" role="status" aria-label={t(language, "nav.badgeLoading")} className={cn(base, "animate-pulse bg-muted text-transparent")}>0</span>;
+  if (state.status === "error") return <span data-sidebar-label data-badge="error" title={t(language, "nav.badgeError")} className={cn(base, "text-muted-foreground")}>!</span>;
+  const zero = state.count === 0;
+  return <span data-sidebar-label data-badge={zero ? "zero" : "count"} className={cn(base, zero ? "text-muted-foreground" : "bg-primary text-primary-foreground")}>{state.count! > 99 ? "99+" : state.count}</span>;
 }
 
 function NavCollapsibleExpanded({
