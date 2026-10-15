@@ -21,7 +21,7 @@ export default defineConfig({
     emptyOutDir: true,
     copyPublicDir: false,
     lib: {
-      entry: { index: resolve(admin, "app/index.ts"), mount: resolve(admin, "app/mount.tsx"), "default-entry": resolve(admin, "default-entry.tsx") },
+      entry: { index: resolve(admin, "app/index.ts"), hooks: resolve(admin, "app/hooks.ts"), mount: resolve(admin, "app/mount.tsx"), "default-entry": resolve(admin, "default-entry.tsx") },
       formats: ["es"],
       fileName: (_format, name) => `${name}.js`,
     },

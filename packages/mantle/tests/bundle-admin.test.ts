@@ -154,3 +154,33 @@ test("mantle bundle for a bun-* target builds only Admin: Bun runs the server as
     expect(await builds()).toHaveLength(2);
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
+
+test("mantle bundle keeps Admin's UI and hooks, which the generated Admin client imports, out of the Worker's startup graph", async () => {
+  const { dir, entry } = await app();
+  try {
+    const pkg = join(dir, "node_modules/@aotter/mantle-admin");
+    const manifestFile = join(pkg, "package.json"), manifest = JSON.parse(await readFile(manifestFile, "utf8"));
+    manifest.exports["./hooks"] = "./dist/admin-app/hooks.js";
+    await writeFile(manifestFile, JSON.stringify(manifest));
+    await mkdir(join(pkg, "dist/admin-app"), { recursive: true });
+    await writeFile(join(pkg, "dist/admin-app/hooks.js"), "export const createAdminHooks = () => ({ useView: () => 1 });\n");
+    await mkdir(join(dir, "node_modules/react"), { recursive: true });
+    await writeFile(join(dir, "node_modules/react/package.json"), JSON.stringify({ name: "react", version: "19.0.0", main: "index.js" }));
+    await writeFile(join(dir, "node_modules/react/index.js"), "module.exports = { createElement: () => 1 };\n");
+    // the generated client calls createAdminHooks at the top level, so it cannot be dropped from the graph
+    await writeFile(join(dir, "admin-client.ts"), 'import { createAdminHooks } from "@aotter/mantle-admin/hooks";\nexport const { useView } = createAdminHooks();\n');
+    const worker = (imports: string) => writeFile(entry, `import { shell } from "@aotter/mantle-admin/server";\n${imports}\nexport default { fetch: () => new Response(shell) };\n`);
+    const dist = join(dir, "dist");
+
+    await worker('import { createAdminHooks } from "@aotter/mantle-admin/hooks";\nexport const x = createAdminHooks;');
+    await expect(bundleApp(entry, dist)).rejects.toThrow("Admin's UI");
+    await worker('import { useView } from "../admin-client.js";\nexport const x = useView;');
+    await expect(bundleApp(entry, dist)).rejects.toThrow("Admin's UI");
+    // React alone is not Admin's: an app may render its own pages with it
+    await worker('import React from "react";\nexport const x = React;');
+    await bundleApp(entry, dist);
+    // only the startup graph counts: a request-time import is its own module
+    await worker('export const x = () => import("../admin-client.js");');
+    await bundleApp(entry, dist);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);

@@ -25,6 +25,8 @@ const refused: ReadonlyArray<readonly [RegExp, string]> = [
   [/(?:^|\/)node_modules\/@modelcontextprotocol\//, "Load MCP through a request-time import(...)."],
   // the compiler: the package's own generator layers (installed, or workspace dist/source) and its parser, YAML and SQL dependencies
   [/(?:^|\/)node_modules\/(?:@aotter\/mantle\/dist\/(?:build|infrastructure)\/|yaml\/|pgsql-deparser\/|libpg-query\/)|(?:^|\/)mantle\/(?:dist|src)\/(?:build|infrastructure)\//, "Generator code must not run in a Worker; import runtime entry points such as @aotter/mantle/rest."],
+  // Admin's UI is built into <assets>/admin by the app's admin.tsx; the Worker serves it, never runs it.
+  [/(?:^|\/)node_modules\/@aotter\/mantle-admin\/dist\/admin-app\/|(?:^|\/)mantle-admin\/(?:dist\/admin-app|admin\/src)\//, "Admin's UI (@aotter/mantle-admin/app, /hooks) runs in the browser: import it only from src/admin.tsx, which `mantle bundle` builds into the assets directory."],
 ];
 
 export function guardStartup(metafile: Metafile, entry: string): void {
