@@ -51,22 +51,27 @@ export function web(url: string): boolean {
 /** `McpUiStyleVariableKey`: the colors, fonts, radii, borders and shadows a host may set. */
 const HOST_STYLE_VARIABLE = /^--(color-(background|text|border|ring)-[a-z]+|font-(sans|mono|weight-[a-z]+|(text|heading)-[a-z0-9]+-(size|line-height))|border-radius-[a-z]+|border-width-regular|shadow-[a-z]+)$/;
 const size = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0;
-function zone(value: unknown): boolean {
-  if (typeof value !== "string") return false;
-  try { new Intl.DateTimeFormat(undefined, { timeZone: value }); return true; } catch { return false; }
+
+// Presentational fields the App cannot use are dropped, not fatal: a newer
+// spec's display mode or a zone this browser lacks must not block the handshake.
+function presentational(value: Record<string, unknown>): Record<string, unknown> {
+  const { timeZone, displayMode, availableDisplayModes: modes, containerDimensions: box, safeAreaInsets: insets, ...rest } = value;
+  return {
+    ...rest,
+    // an unknown zone falls back in the formatter
+    ...(typeof timeZone === "string" ? { timeZone } : {}),
+    ...(MODES.includes(displayMode) ? { displayMode } : {}),
+    ...(Array.isArray(modes) ? { availableDisplayModes: modes.filter(mode => MODES.includes(mode)) } : {}),
+    ...(record(box) && ["height", "maxHeight", "width", "maxWidth"].every(key => box[key] === undefined || size(box[key])) ? { containerDimensions: box } : {}),
+    ...(record(insets) && ["top", "right", "bottom", "left"].every(key => size(insets[key])) ? { safeAreaInsets: insets } : {}),
+  };
 }
 
-// Everything the App applies to its layout, CSS or formatters is checked here first.
+// The rest of what the App applies to its CSS or formatters is checked here first.
 function context(value: unknown): value is McpUiHostContext {
   if (!record(value)) return false;
   if (value.locale !== undefined && typeof value.locale !== "string") return false;
   if (value.theme !== undefined && value.theme !== "light" && value.theme !== "dark") return false;
-  if (value.timeZone !== undefined && !zone(value.timeZone)) return false;
-  if (value.displayMode !== undefined && !MODES.includes(value.displayMode)) return false;
-  if (value.availableDisplayModes !== undefined && (!Array.isArray(value.availableDisplayModes) || !value.availableDisplayModes.every(mode => MODES.includes(mode)))) return false;
-  const { containerDimensions: box, safeAreaInsets: insets } = value;
-  if (box !== undefined && (!record(box) || ["height", "maxHeight", "width", "maxWidth"].some(key => box[key] !== undefined && !size(box[key])))) return false;
-  if (insets !== undefined && (!record(insets) || !["top", "right", "bottom", "left"].every(key => size(insets[key])))) return false;
   if (value.toolInfo !== undefined && (!record(value.toolInfo) || !record(value.toolInfo.tool) || typeof value.toolInfo.tool.name !== "string")) return false;
   if (value.styles !== undefined) {
     if (!record(value.styles)) return false;
@@ -139,7 +144,7 @@ export function connectHost(handlers: {
         if (!ready) {
           const value = message.result;
           if (!record(value) || (typeof value.protocolVersion !== "string" || !SUPPORTED_PROTOCOL_VERSIONS.includes(value.protocolVersion)) || !record(value.hostCapabilities)
-            || !record(value.hostInfo) || typeof value.hostInfo.name !== "string" || typeof value.hostInfo.version !== "string" || !context(value.hostContext)) {
+            || !record(value.hostInfo) || typeof value.hostInfo.name !== "string" || typeof value.hostInfo.version !== "string" || !record(value.hostContext) || !context(value.hostContext = presentational(value.hostContext))) {
             entry.clean(); entry.reject(new Error("Invalid host handshake")); return;
           }
           origin = event.origin;
@@ -172,7 +177,7 @@ export function connectHost(handlers: {
       case "ui/notifications/tool-cancelled":
         if (params.reason === undefined || typeof params.reason === "string") handlers.cancelled(); break;
       case "ui/notifications/host-context-changed":
-        if (context(params)) { if (params.availableDisplayModes) modes = params.availableDisplayModes; handlers.context(params); } break;
+        { const update = presentational(params); if (context(update)) { if (update.availableDisplayModes) modes = update.availableDisplayModes; handlers.context(update); } } break;
     }
   };
   win.addEventListener("message", receive);
@@ -238,13 +243,14 @@ export function applyHostContext(value: McpUiHostContext, doc: Document = docume
   if (value.theme) { root.dataset.theme = value.theme; root.style.colorScheme = value.theme; root.classList.toggle("dark", value.theme === "dark"); }
   // only the spec's style variables: a host cannot reach the App's own tokens (its primary color)
   for (const [key, item] of Object.entries(value.styles?.variables ?? {})) if (typeof item === "string" && HOST_STYLE_VARIABLE.test(key)) root.style.setProperty(key, item);
-  if (value.displayMode) root.dataset.displayMode = value.displayMode;
   const insets = value.safeAreaInsets, box = value.containerDimensions as Partial<Record<"height" | "maxHeight" | "width" | "maxWidth", number>> | undefined;
   if (insets) root.style.padding = `${insets.top}px ${insets.right}px ${insets.bottom}px ${insets.left}px`;
   if (box) {
-    for (const key of ["height", "maxHeight", "width", "maxWidth"] as const) root.style[key] = box[key] === undefined ? "" : `${box[key]}px`;
-    // a bounded frame scrolls its content, and the reported height stays within the bound
-    root.style.overflow = box.height !== undefined || box.maxHeight !== undefined ? "auto" : "";
+    for (const key of ["height", "width", "maxWidth"] as const) root.style[key] = box[key] === undefined ? "" : `${box[key]}px`;
+    // a bounded frame scrolls its content; the max-height also holds the measured size within a fixed height
+    const bound = Math.min(box.height ?? Infinity, box.maxHeight ?? Infinity);
+    root.style.maxHeight = bound === Infinity ? "" : `${bound}px`;
+    root.style.overflow = bound === Infinity ? "" : "auto";
   }
   const fonts = value.styles?.css?.fonts;
   if (fonts !== undefined) {

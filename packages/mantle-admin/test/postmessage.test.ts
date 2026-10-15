@@ -103,13 +103,20 @@ test("advertised host requests use the spec's methods; only http(s) links are op
  disconnect();
 });
 
-test("host context the App applies is checked first: dimensions, insets, display modes, time zone",async()=>{
- const {context,send,disconnect}=await handshake({});
- for(const params of [{timeZone:"Not/AZone"},{displayMode:"theatre"},{availableDisplayModes:["inline","huge"]},{containerDimensions:{maxHeight:-1}},{containerDimensions:{width:Infinity}},{safeAreaInsets:{top:1,right:0,bottom:0}},{safeAreaInsets:{top:"1px",right:0,bottom:0,left:0}}])
+test("host context fields the App cannot use are dropped, never fatal to the handshake or an update",async()=>{
+ const {ready,error,context,send,host,answer,postMessage,disconnect}=await handshake({},{theme:"dark",timeZone:"Etc/Unknown",availableDisplayModes:["inline","fullscreen","sidebar"],displayMode:"sidebar",safeAreaInsets:{top:1,right:0,bottom:0}});
+ expect(error).not.toHaveBeenCalled();
+ expect(ready.mock.calls[0]![1]).toEqual({theme:"dark",timeZone:"Etc/Unknown",availableDisplayModes:["inline","fullscreen"]});
+ expect(await answer(host!.requestDisplayMode("fullscreen"),{mode:"fullscreen"})).toBe("fullscreen");
+ expect(postMessage.mock.lastCall![0]).toMatchObject({method:"ui/request-display-mode"});
+ for(const params of [{theme:"light",displayMode:"theatre"},{theme:"light",containerDimensions:{maxHeight:-1}},{theme:"light",containerDimensions:{width:"320px"}},{theme:"light",safeAreaInsets:{top:"1px",right:0,bottom:0,left:0}},{theme:"light",timeZone:7}])
   send({jsonrpc:"2.0",method:"ui/notifications/host-context-changed",params});
- expect(context).not.toHaveBeenCalled();
+ expect(context.mock.calls.map(call=>call[0])).toEqual(Array(5).fill({theme:"light"}));
  send({jsonrpc:"2.0",method:"ui/notifications/host-context-changed",params:{timeZone:"Asia/Taipei",displayMode:"fullscreen",containerDimensions:{maxHeight:400,width:320},safeAreaInsets:{top:10,right:0,bottom:20,left:0}}});
- expect(context).toHaveBeenCalledOnce();
+ expect(context.mock.lastCall![0]).toEqual({timeZone:"Asia/Taipei",displayMode:"fullscreen",containerDimensions:{maxHeight:400,width:320},safeAreaInsets:{top:10,right:0,bottom:20,left:0}});
+ // the fields develop already checked still refuse an update
+ send({jsonrpc:"2.0",method:"ui/notifications/host-context-changed",params:{theme:"sepia"}});
+ expect(context).toHaveBeenCalledTimes(6);
  disconnect();
 });
 
@@ -120,10 +127,13 @@ test("applyHostContext: dark as both .dark and data-theme, only spec style varia
  const doc={documentElement:root} as unknown as Document;
  applyHostContext({theme:"dark",displayMode:"fullscreen",safeAreaInsets:{top:10,right:1,bottom:20,left:2},containerDimensions:{maxHeight:400,width:320},
   styles:{variables:{"--color-background-primary":"#000","--border-radius-md":"4px","--font-text-sm-size":"13px","--font-weight-medium":"550","--mantle-app-primary":"red","--color-primary":"red"} as never}},doc);
- expect(root.dataset).toEqual({theme:"dark",displayMode:"fullscreen"});
+ expect(root.dataset).toEqual({theme:"dark"});
  expect([...classes]).toEqual(["dark"]);
  expect(Object.fromEntries(properties)).toEqual({"--color-background-primary":"#000","--border-radius-md":"4px","--font-text-sm-size":"13px","--font-weight-medium":"550"});
  expect(style).toMatchObject({padding:"10px 1px 20px 2px",maxHeight:"400px",width:"320px",height:"",maxWidth:"",overflow:"auto"});
  applyHostContext({theme:"light"},doc);
  expect([...classes]).toEqual([]);
+ // a fixed height is also the measured size's bound
+ applyHostContext({containerDimensions:{height:300}},doc);
+ expect(style).toMatchObject({height:"300px",maxHeight:"300px",overflow:"auto"});
 });

@@ -2,6 +2,7 @@
 import { authorized, authorizeTarget } from "./authorization.js";
 import { forwarded, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceError, wire, type Caller, type RequestContext } from "./contracts.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
+import { MAX_PAGE_SIZE } from "./paging.js";
 import type { Tools, Options } from "./mcp.js";
 import { RESOURCE_MIME_TYPE, linkSurface, type McpAppResource } from "./mcp-apps.js";
 type LocalizedText = string | Readonly<Record<string, string>>;
@@ -13,7 +14,14 @@ const text = (value: LocalizedText | undefined, locale: string): string | undefi
 function observe<T>(listener: ((event: T) => void | Promise<void>) | undefined, event: T): void {
   if (listener) try { void Promise.resolve(listener(event)).catch(() => {}); } catch {}
 }
-const paging = (schema: { properties?: object }) => ({ ...schema, properties: { ...schema.properties, limit: { type: "integer", minimum: 1, maximum: 500 }, cursor: { type: "string" } } });
+/**
+ * An MCP page holds at most 100 rows, so a wide View's result (its rows twice: text and
+ * `structuredContent`) stays well under the ~150k characters at which hosts are reported to
+ * truncate. A limit up to 500 is still accepted and returns 100 rows with the next cursor.
+ */
+const MCP_PAGE_SIZE = 100;
+const paging = (schema: { properties?: object }) => ({ ...schema, properties: { ...schema.properties, limit: { type: "integer", minimum: 1, maximum: MCP_PAGE_SIZE }, cursor: { type: "string" } } });
+const pageLimit = (raw: Record<string, unknown>) => { const limit = raw?.limit; return Number.isSafeInteger(limit) && (limit as number) > MCP_PAGE_SIZE && (limit as number) <= MAX_PAGE_SIZE ? { ...raw, limit: MCP_PAGE_SIZE } : raw; };
 /** The scopes a challenge asks for: the credential's, plus what the request needs. */
 const union = (scopes: readonly string[], extra: readonly string[]) => [...new Set([...scopes, ...extra])].join(" ");
 
@@ -177,7 +185,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         try {
           if (host) tool.check?.(caller);
           if (tool.run && (!host || !tool.readOnly)) checkOrigin(request, caller);
-          const data = await callTool(tool, raw as Record<string, unknown>, () => options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
+          const data = await callTool(tool, tool.page ? pageLimit(raw as Record<string, unknown>) : raw as Record<string, unknown>, () => options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
           if (host) access?.finish();
           return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }, ...about(false)], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {

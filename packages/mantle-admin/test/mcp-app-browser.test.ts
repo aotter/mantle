@@ -57,7 +57,7 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     await app.locator('input[type="time"]').fill("12:34");
     // Closing the popover leaves the selected day in the shared form draft.
     await date.press("Escape");
-    // the primary color is the App's own (D13), not the host's inverse background
+    // the primary color is the App's own brand color, not the host's inverse background
     expect(await app.getByRole("button", { name: "執行", exact: true }).evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(250, 250, 250)");
     await app.getByRole("button", { name: "執行", exact: true }).click();
     await page.waitForFunction(() => (window as any).host.calls.length >= 2);
@@ -79,6 +79,9 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     // a bounded container: the App scrolls and reports a height within the bound
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { maxHeight: 200 } }));
     await expect.poll(() => page.evaluate(() => (window as any).host.sizes.at(-1).height)).toBeLessThanOrEqual(200);
+    // a fixed height bounds the reported size too
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { height: 120 } }));
+    await expect.poll(() => page.evaluate(() => (window as any).host.sizes.at(-1).height)).toBe(120);
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "en", theme: "light" }));
     await expect.poll(() => app.locator("html").getAttribute("lang")).toBe("en");
     await expect.poll(() => app.locator("html").getAttribute("data-theme")).toBe("light");

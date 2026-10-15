@@ -15,7 +15,7 @@
 /* Mantle tokens resolve to the host's MCP Apps style variables when the host
    provides them (applyHostContext), and to the App's own palette otherwise.
    Neutral colors, fonts and radii follow the host; the primary color is the
-   App's own (D13). The host's theme arrives as `data-theme` and `.dark` on the
+   App's own brand color. The host's theme arrives as `data-theme` and `.dark` on the
    root; without one, the App follows the system color scheme. */
 @theme inline {
   --color-background: var(--color-background-primary, var(--mantle-app-background));
@@ -26,9 +26,6 @@
   --color-destructive: var(--color-text-danger, var(--mantle-app-destructive));
   --color-primary: var(--mantle-app-primary);
   --color-primary-foreground: var(--mantle-app-primary-foreground);
-  --color-info: var(--color-text-info, var(--mantle-app-muted-foreground));
-  --color-success: var(--color-text-success, var(--mantle-app-foreground));
-  --color-warning: var(--color-text-warning, var(--mantle-app-foreground));
   /* the kit's field controls (SchemaFields) read these */
   --color-input: var(--color-border-primary, var(--mantle-app-border));
   --color-ring: var(--color-ring-primary, var(--mantle-app-muted-foreground));

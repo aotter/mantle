@@ -72,23 +72,29 @@ the host advertises in `hostCapabilities`:
   `fullscreen` in its context.
 - `appInfo.version` is the `@aotter/mantle-admin` version.
 
-Host context is validated before it is applied. `locale` and `timeZone` format
-dates; `safeAreaInsets` become root padding; `containerDimensions` bound the
-root (a bounded height scrolls, and the reported size stays within it);
-`displayMode` is the root's `data-display-mode`. `theme: "dark"` sets both
-`data-theme` and the `.dark` class. Only the spec's style variables are
-applied. Neutral colors (background, text, border, ring, danger, info,
-success, warning), `--font-sans`, `--font-mono`, font weights, text sizes and
-radii follow the host; the primary color stays the App's own.
+Host context is validated before it is applied. A presentational field the
+App cannot use (an unknown display mode, insets missing a side, a negative
+size) is dropped and the rest of the context still applies; display modes the
+App does not know are filtered out of `availableDisplayModes`. `locale` and
+`timeZone` format dates (an unknown zone falls back to the browser's);
+`safeAreaInsets` become root padding; `containerDimensions` bound the root: a
+fixed or maximum height scrolls, and the reported size stays within it.
+`theme: "dark"` sets both `data-theme` and the `.dark` class. Only the spec's
+style variables are applied. Neutral colors (background, text, border, ring,
+danger), `--font-sans`, `--font-mono`, font weights, text sizes and radii
+follow the host; the primary color stays the App's own.
 
 A View result carries its rows twice, as the JSON text block and as
-`structuredContent`, and `limit` goes up to 500. Hosts may truncate long tool
-results, and a truncated text block is no longer JSON, so keep the pages an
-App renders small; the default is 50 rows.
+`structuredContent`. Hosts truncate long tool results (about 150k characters
+is reported for some), and a truncated text block is no longer JSON. So an MCP
+View page holds at most 100 rows: `tools/list` advertises `limit` up to 100,
+and a `limit` from 101 to 500 returns 100 rows with the next cursor. The
+default is 50 rows. REST and native paging keep their 500-row limit.
 
 Checks against real hosts need an account and a public HTTPS endpoint, so
 they are manual: add the endpoint as a custom connector in each host, call a
 View tool with an App, and check light and dark themes, a narrow window,
-full screen, a row action, and a link. The automated interoperability test
+full screen, a row action, and a link. Check too that the host advertises
+`hostCapabilities.serverTools`; without it the App is read-only. The automated interoperability test
 uses the official `AppBridge` (`pnpm --filter @aotter/mantle-admin test:browser`).
 
