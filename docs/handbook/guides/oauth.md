@@ -82,9 +82,10 @@ stop working when that session expires or the user signs out. A refresh that
 narrows the scope to drop `offline_access` after the session ends returns
 `invalid_grant`, so it never yields an unusable token. An `offline_access` grant
 outlives the browser session. Expiry, deletion and sign-out of the session leave
-it usable until its refresh token expires (`refreshTokenExpiresIn`, 30 days by
-default) or is revoked. That includes disconnect, refresh-token revocation and
-Better Auth's reuse detection. Without a live session, its access tokens need an
+it usable until its current refresh token expires or is revoked. Revocation
+includes disconnect, refresh-token revocation and Better Auth's reuse detection.
+Each refresh rotates the token with a fresh `refreshTokenExpiresIn` (30 days by
+default), so an offline grant that keeps refreshing does not expire. Without a live session, its access tokens need an
 unrevoked, unexpired `offline_access` refresh token for the same user and client.
 The consent, client, scope, resource and ban checks still apply. An access token
 issued before sign-out stays valid until it expires (one hour by default).
