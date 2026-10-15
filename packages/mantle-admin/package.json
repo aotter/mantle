@@ -27,6 +27,10 @@
       "types": "./dist/admin-app/index.d.ts",
       "import": "./dist/admin-app/index.js"
     },
+    "./hooks": {
+      "types": "./dist/admin-app/hooks.d.ts",
+      "import": "./dist/admin-app/hooks.js"
+    },
     "./build": {
       "types": "./dist/build/index.d.ts",
       "default": "./dist/build/index.js"
