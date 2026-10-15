@@ -14,6 +14,17 @@ describe("@aotter/mantle-admin/app", () => {
     expect(app.defineAdmin({})).toEqual({ meta: {} });
   });
 
+  it("publishes the data hooks from a chunk shared with the app library, so both see one Admin context", async () => {
+    const target = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")).exports["./hooks"];
+    expect(target).toEqual({ types: "./dist/admin-app/hooks.d.ts", import: "./dist/admin-app/hooks.js" });
+    const hooks = await import(resolve(pkg, target.import));
+    expect(Object.keys(hooks).sort()).toEqual(["AdminUnavailableError", "createAdminHooks", "mcpAppTransport", "useAdminSurface", "useCollectionTotal", "useEntries", "useEntry", "useHost", "useMe", "useOperation", "useView"]);
+    const context = (file: string) => /from"?\s*"\.\/(transport-[\w-]+\.js)"/.exec(readFileSync(resolve(pkg, "dist/admin-app", file), "utf8"))?.[1];
+    const root = readFileSync(resolve(pkg, "dist/admin-app/index.js"), "utf8").match(/from\s*"\.\/(admin-root-[\w-]+\.js)"/)![1]!;
+    expect(context("hooks.js")).toBeDefined();
+    expect(context(root)).toBe(context("hooks.js"));
+  });
+
   it("ships no prebuilt SPA: the application builds Admin", () => {
     const { exports } = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")) as { exports: Record<string, unknown> };
     expect(Object.keys(exports).filter(key => key.startsWith("./admin/"))).toEqual([]);
@@ -23,6 +34,34 @@ describe("@aotter/mantle-admin/app", () => {
   it("types resolve for a NodeNext consumer", () => {
     const consumer = resolve(pkg, "test/__app-consumer.ts");
     const source = [
+      'import { createAdminHooks, mcpAppTransport, type AdminHost } from "@aotter/mantle-admin/hooks";',
+      "interface Types {",
+      '  readonly views: { readonly "pending-requests": { readonly input: { readonly q?: string }; readonly row: { readonly id: string; readonly amount: number } } };',
+      '  readonly collections: { readonly requests: { readonly data: { readonly title: string; readonly status: "open" | "closed" } } };',
+      '  readonly operations: { readonly approve: { readonly input: { readonly id: string }; readonly output: { readonly ok: true } } };',
+      "}",
+      "const hooks = createAdminHooks<Types>();",
+      "export function Component(): number {",
+      '  const pending = hooks.useView("pending-requests", { q: "x" });',
+      "  const amount: number | undefined = pending.rows[0]?.amount;",
+      '  const entries = hooks.useEntries("requests", { filter: { field: "status", value: "open" } });',
+      "  const title: string | undefined = entries.items[0]?.data.title;",
+      '  const { run } = hooks.useOperation("approve");',
+      '  void run?.({ id: "1" });',
+      "  // @ts-expect-error a View name that is not in the manifest",
+      '  hooks.useView("pending-request", {});',
+      "  // @ts-expect-error an input the View does not declare",
+      '  hooks.useView("pending-requests", { nope: 1 });',
+      "  // @ts-expect-error a field the collection does not have",
+      '  hooks.useEntries("requests", { filter: { field: "nope", value: "x" } });',
+      "  // @ts-expect-error an operation input of the wrong type",
+      '  void run?.({ id: 1 });',
+      "  // @ts-expect-error a collection that is not in the manifest",
+      '  hooks.useCollectionTotal("nope");',
+      "  return (amount ?? 0) + (title ?? \"\").length + (pending.status === \"unavailable\" ? 1 : 0);",
+      "}",
+      "export const host: AdminHost | null = null;",
+      "export const transport = mcpAppTransport;",
       'import { defineAdmin, MantleAdmin, type AdminDefinition, type MantleAdminProps } from "@aotter/mantle-admin/app";',
       "const admin: AdminDefinition = defineAdmin({});",
       "const props: MantleAdminProps = { admin };",

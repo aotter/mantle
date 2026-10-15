@@ -18,6 +18,12 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
   const views = Object.entries(plan.views).filter(([, v]) => v.surface === "admin").sort(([a], [b]) => a < b ? -1 : 1);
   const operations = Object.entries(plan.procedures).filter(([name]) => tool("procedure", name)).sort(([a], [b]) => a < b ? -1 : 1);
   const schemas = Object.values(plan.schemas).sort((a, b) => a.name < b.name ? -1 : 1);
+  // the scope column belongs to the caller, so an entry's data has no such field
+  const dataOf = (s: (typeof schemas)[number]) => {
+    const scope = s.scope ? s.names[s.scope] ?? s.scope : undefined, { [scope ?? ""]: _scope, ...properties } = s.schema.properties ?? {};
+    const schema = { ...s.schema, properties, ...(s.schema.required ? { required: s.schema.required.filter(f => f !== scope) } : {}) };
+    return s.translates ? typeOf(schema) : closed(typeOf, schema);
+  };
   const rows = views.map(([name], n) => `import type { WireRow as View${n}Row } from "./views/${encodeURIComponent(name)}.js";`);
   const sql = operations.some(([, p]) => "sql" in p.handler);
   return { "admin-client.ts": [
@@ -30,11 +36,11 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
     "/** The input and row of each admin View, the `data` of each collection's entries, and the input and output of each admin operation. */",
     "export interface AppAdminTypes {",
     `  readonly views: { ${views.map(([name, v], n) => `readonly ${q(name)}: { readonly input: ${closed(typeOf, v.input)}; readonly row: View${n}Row }`).join("; ")} };`,
-    `  readonly collections: { ${schemas.map(s => `readonly ${q(s.name)}: { readonly data: ${s.translates ? typeOf(s.schema) : closed(typeOf, s.schema)} }`).join("; ")} };`,
+    `  readonly collections: { ${schemas.map(s => `readonly ${q(s.name)}: { readonly data: ${dataOf(s)} }`).join("; ")} };`,
     `  readonly operations: { ${operations.map(([name, p]) => `readonly ${q(name)}: { readonly input: ${closed(typeOf, p.input)}; readonly output: ${"sql" in p.handler ? "Output" : "unknown"} }`).join("; ")} };`,
     "}",
     "",
-    "/** Pass to `defineAdmin(admin, { ... })`: names the admin MCP tool behind each View and operation. */",
+    "/** Pass to `defineAdmin(admin)`: names the admin MCP tool behind each View and operation. */",
     `export const admin: AdminMeta<AppAdminTypes> = { views: { ${views.map(([name]) => `${q(name)}: { tool: ${q(tool("view", name))} }`).join(", ")} }, operations: { ${operations.map(([name]) => `${q(name)}: { tool: ${q(tool("procedure", name))} }`).join(", ")} } };`,
     "",
     "const hooks = createAdminHooks<AppAdminTypes>();",

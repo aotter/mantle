@@ -155,7 +155,7 @@ const statusOf = (query: { isPending: boolean; isError: boolean }, reply: Reply<
   query.isError ? "error" : query.isPending ? "loading" : reply?.status === "unavailable" ? "unavailable" : "ready";
 
 const toolOf = (declared: { readonly [name: string]: { readonly tool: string | null } } | undefined, name: string): string | null =>
-  declared && Object.hasOwn(declared, name) ? declared[name]!.tool : null;
+  declared && Object.prototype.hasOwnProperty.call(declared, name) ? declared[name]!.tool : null;
 
 const implementation = {
   useView(name: string, input: object, options: ViewOptions = {}): ViewState<object> {

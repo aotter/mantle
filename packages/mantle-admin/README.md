@@ -87,6 +87,12 @@ import map and shared modules that extension modules resolve `react` and the kit
 through. An app that renders `<MantleAdmin>` in its own build has neither, so
 extension client modules fail to load there.
 
+`@aotter/mantle-admin/hooks` exports the data hooks (`useView`, `useOperation`, `useEntries`, `useEntry`,
+`useCollectionTotal`, `useMe`, `useHost`, `useAdminSurface`) and `createAdminHooks<Types>()`, which `mantle generate --admin` calls
+in `generated/admin-client.ts` to bind them to the application's View, collection and operation types. They call only the
+caller-authorized `/admin/api` routes (or, in an MCP host, the admin MCP tools through `mcpAppTransport`), read a 403 and a 404
+as `unavailable`, and share Admin's query cache. Browser only: the Worker's startup graph refuses them.
+
 ## Extensions
 
 ```ts
