@@ -1,6 +1,9 @@
 /** Build-time proofs for the compiler's keyset keys. No AST reaches a generated operation. */
-import { NATIVE_NOT_NULL, notNullColumns, type LoweredPage, type RuntimePlan, type PlanSchema, type SqlNode } from "../build/compiler.js";
+import { NATIVE_COLUMNS, NATIVE_NOT_NULL, notNullColumns, type LoweredPage, type RuntimePlan, type PlanSchema, type SqlNode } from "../build/compiler.js";
 import { declaredType } from "./columns.js";
+
+/** Storage column -> the native field a manifest index names. */
+const NATIVE_FIELDS = new Map(Object.entries(NATIVE_COLUMNS).map(([field, column]) => [column, field]));
 
 type Field = { schema: PlanSchema; name: string; type: string; notNull: boolean; source: object };
 type Relation = { fields: Map<string, Field>; names: ReadonlySet<string>; single: boolean; unique: boolean; fixed: Set<string>; sets: Set<string> };
@@ -143,11 +146,13 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
             return order.every((f, n) => index[i + n] === f.name);
           });
           if (!serving(base.fixed)) {
-            const index = serving(new Set([...base.fixed, ...base.sets])), named = (c: string) => schema.names?.[c] ?? c, columns = order.map(f => named(f.name)).join(", ");
-            if (!index) return fail(`Missing index for ORDER BY (${columns}): declare a Schema index with these ordered columns after any fixed equality prefix.`);
+            // SQL names a column (`created_at`), a manifest index the field (`createdAt`).
+            const index = serving(new Set([...base.fixed, ...base.sets])), named = (c: string) => schema.names?.[c] ?? c, field = (c: string) => schema.names?.[c] ?? NATIVE_FIELDS.get(c) ?? c;
+            const columns = order.map(f => named(f.name)).join(", "), fields = order.map(f => field(f.name)).join(", ");
+            if (!index) return fail(`Missing index for ORDER BY (${columns}): declare a Schema index with [${fields}] in this order after any fixed equality prefix.`);
             const prefix = index.slice(0, index.indexOf(order[0]!.name)), set = prefix.filter(c => !base!.fixed.has(c));
             // The suggested order is the index from its first set-bound column: an equality-fixed column between stays in it.
-            const lead = prefix.slice(prefix.indexOf(set[0]!)), quoted = (cs: string[]) => cs.map(c => `'${named(c)}'`).join(", ");
+            const lead = prefix.slice(prefix.indexOf(set[0]!)), quoted = (cs: string[]) => cs.map(c => `'${field(c)}'`).join(", ");
             // The scope-first order is offered only when SQL can name every added column and none can be null. The owner
             // scope column is NOT NULL in storage, but a View cannot address it.
             const notNull = notNullColumns(schema), owner = lead.filter(c => c === schema.scope), nullable = lead.filter(c => !NATIVE_NOT_NULL.has(c) && !notNull.has(c) && c !== schema.scope);
@@ -156,10 +161,10 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
             const desc = order.some(f => dir(f)) ? ", read backwards; on PostgreSQL confirm with EXPLAIN that no Sort remains" : "";
             // `{ all: true }` drops only scope terms: offer it an index on the View's equality-fixed columns, unless a restrict remains.
             const eq = [...base.fixed].filter(c => c !== "id" && !order.some(f => f.name === c));
-            const ways = [...nullable.length || owner.length ? [] : [`ORDER BY ${sorted} (same index${desc})`], ...restricts(ast) ? [] : [`for { all: true } callers only, index [${[...eq.map(named), columns].join(", ")}, id]`]];
+            const ways = [...nullable.length || owner.length ? [] : [`ORDER BY ${sorted} (same index${desc})`], ...restricts(ast) ? [] : [`for { all: true } callers only, index [${[...eq.map(field), fields].join(", ")}, id]`]];
             const why = [...owner.length ? [`${quoted(owner)} is the owner column, which SQL cannot name`] : [], ...nullable.length ? [`${quoted(nullable)} can be null`] : []];
             const unavailable = why.length ? ` Scope-first ORDER BY unavailable: ${why.join("; ")}${ways.length ? "." : ""}` : "";
-            return fail(`ORDER BY (${columns}) needs index [${index.map(named).join(", ")}] past ${quoted(set)}, which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows.${unavailable}${ways.length ? ` Bounded: ${ways.join("; ")}` : ""} (handbook: reference/schema.md#index-prefixes-for-paged-views).`);
+            return fail(`ORDER BY (${columns}) needs index [${index.map(field).join(", ")}] past ${quoted(set)}, which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows.${unavailable}${ways.length ? ` Bounded: ${ways.join("; ")}` : ""} (handbook: reference/schema.md#index-prefixes-for-paged-views).`);
           }
         }
       }

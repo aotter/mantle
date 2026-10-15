@@ -68,20 +68,37 @@ export function mcpTools(plan: RuntimePlan, surface: "public" | "admin", locale 
   }
   for (const [name, v] of Object.entries(plan.views)) {
     if (v.surface !== surface) continue;
-    // Validation applies a root `$ref` chain's schemas to the input too: the tool merges their properties, required and rules
-    // (the nearest schema's rule wins when two declare the same keyword).
+    // Validation applies every schema of a root `$ref` chain to the input: the tool merges their properties and required, and keeps
+    // each schema's rules, under `allOf` when more than one declares any, since they all hold.
     const chain = (v.input ? rootRefChain(v.input) ?? [v.input] : []).reverse();
     const props = Object.assign({}, ...chain.map((s) => s.properties ?? {})) as Record<string, JsonSchema>;
     const required = [...new Set(chain.flatMap((s) => s.required ?? []))];
     if ("limit" in props || "cursor" in props) throw new TypeError(`View '${name}' declares an input named limit or cursor; the MCP tool reserves both for paging.`);
+    // Input rules stay: describe keeps them, AI tool catalogues turn them into sentences.
+    const rules = chain.map((s) => Object.fromEntries(INPUT_RULE_KEYWORDS.flatMap((k) => s[k] === undefined ? [] : [[k, s[k]]]))).filter((r) => Object.keys(r).length);
+    const defs = v.input ? referencedDefs(v.input, props) : {};
     const title = text(v.title);
     add({
       name: mcpToolNameSegment(name), kind: "view", source: name, title: title ?? toolTitle(name), description: text(v.description) ?? title ?? name,
       inputSchema: { type: "object", properties: { ...props, limit: { type: "integer", minimum: 1, maximum: 500 }, cursor: { type: "string" } }, ...(required.length ? { required } : {}),
-        // Input rules stay: describe keeps them, AI tool catalogues turn them into sentences.
-        ...Object.fromEntries(chain.flatMap((s) => INPUT_RULE_KEYWORDS.flatMap((k) => s[k] === undefined ? [] : [[k, s[k]]]))) } as JsonSchema,
+        ...(rules.length > 1 ? { allOf: rules } : rules[0]), ...(Object.keys(defs).length ? { $defs: defs } : {}) } as JsonSchema,
       annotations: viewAnnotations, requires: v.requires,
     });
   }
   return [...tools.values()];
 }
+
+/** The root `$defs` entries that `$ref`s under `node` reach, transitively: lifted properties keep resolving in the tool's schema. */
+function referencedDefs(root: JsonSchema, node: unknown, found: Record<string, JsonSchema> = {}): Record<string, JsonSchema> {
+  if (!node || typeof node !== "object") return found;
+  // The pointer is decoded as `lookupLocalRef` decodes it.
+  const ref = (node as JsonSchema).$ref, [head, segment] = typeof ref === "string" && ref.startsWith("#/") ? decoded(ref.slice(2)).split("/") : [];
+  const key = head === "$defs" ? segment?.replace(/~1/g, "/").replace(/~0/g, "~") : undefined;
+  if (key !== undefined && !Object.hasOwn(found, key) && root.$defs && Object.hasOwn(root.$defs, key)) {
+    found[key] = root.$defs[key]!;
+    referencedDefs(root, found[key], found);
+  }
+  for (const child of Object.values(node)) referencedDefs(root, child, found);
+  return found;
+}
+const decoded = (pointer: string): string => { try { return decodeURIComponent(pointer); } catch { return ""; } };

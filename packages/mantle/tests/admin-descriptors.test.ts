@@ -4,7 +4,7 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {compilePlan,type RuntimePlan} from "../src/build/compiler.js";
 import * as compiler from "../src/build/d1/compile/index.js";
-import {collectionOf,developerConsole,rowPreconditions} from "../src/build/compiler.js";
+import {collectionOf,developerConsole,lookupLocalRef,rowPreconditions} from "../src/build/compiler.js";
 import {appCatalog} from "../src/build/compiler.js";
 import {emitAdminDescriptors} from "../src/usecase/adminDescriptors.js";
 import {describeApp} from "../src/domain/describe/index.js";
@@ -117,4 +117,26 @@ test("WebMCP advertises View and Procedure input rules as description sentences;
   expect(referred.inputSchema).not.toHaveProperty("anyOf");
   const described=(await describeApp(plan)).targets.find(t=>t._meta.id==="view:titled")!;
   expect(described.inputSchema).toMatchObject({anyOf:[{required:["a"]},{required:["b"]}]});
+});
+
+test("a View tool keeps every rule of its root $ref chain",async()=>{
+  // Validation applies both dependentRequired rules: an 'a' needs 'b' and 'c'.
+  const properties={a:{type:"string"},b:{type:"string"},c:{type:"string"}};
+  const plan=await planOf([...sources,manifest("View","chained",{surface:"admin",description:"Find tasks.",input:{type:"object",properties,dependentRequired:{a:["b"]},$ref:"#/$defs/t",
+    $defs:{t:{type:"object",properties,dependentRequired:{a:["c"]}}}},sql:"SELECT id,title FROM tasks ORDER BY id"})]);
+  const {loaded:m}=await metadata(plan);
+  const tool=m.webmcp.tools.find((t:any)=>t.name==="chained");
+  expect(tool.description).toBe(`Find tasks. 'c' is required when 'a' is present. 'b' is required when 'a' is present. (tool version ${tool.version})`);
+  expect(tool.inputSchema).not.toHaveProperty("allOf");
+  const described=(await describeApp(plan)).targets.find(t=>t._meta.id==="view:chained")!;
+  expect(described.inputSchema).toMatchObject({allOf:[{dependentRequired:{a:["c"]}},{dependentRequired:{a:["b"]}}]});
+});
+
+test("a View tool keeps the definitions its lifted fields reference",async()=>{
+  const plan=await planOf([...sources,manifest("View","counted",{surface:"admin",input:{type:"object",properties:{},$ref:"#/$defs/t",
+    $defs:{count:{type:"integer",minimum:1},unused:{type:"string"},t:{type:"object",properties:{count:{$ref:"#/$defs/count"}}}}},sql:"SELECT id,title FROM tasks ORDER BY id"})]);
+  const {loaded:m}=await metadata(plan);
+  const tool=m.webmcp.tools.find((t:any)=>t.name==="counted");
+  expect(tool.inputSchema.$defs).toEqual({count:{type:"integer",minimum:1}});
+  expect(lookupLocalRef(tool.inputSchema,tool.inputSchema.properties.count.$ref)).toEqual({type:"integer",minimum:1});
 });

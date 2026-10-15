@@ -54,7 +54,7 @@ Owner and field columns prefix every unique index in that order. User reads/writ
 
 ## Indexes, checks and search
 
-Indexes are ordered composite scalar/native columns. A paged View's `ORDER BY` must match an index on the base Schema after any fixed equality prefix ([index prefixes](#index-prefixes-for-paged-views)), ending with `id` as the tiebreak: `ORDER BY createdAt DESC, id DESC` needs `indexes: [[createdAt, id]]` (generation reports `Missing index for ORDER BY ...` otherwise). Required operational fields are NOT NULL; publishing drafts may be incomplete. Store sortable types use indexed/non-null columns, with explicit nullable published_at support.
+Indexes are ordered composite scalar/native columns. A paged View's `ORDER BY` must match an index on the base Schema after any fixed equality prefix ([index prefixes](#index-prefixes-for-paged-views)), ending with `id` as the tiebreak: `ORDER BY created_at DESC, id DESC` needs `indexes: [[createdAt, id]]` (generation reports `Missing index for ORDER BY ...` otherwise). Required operational fields are NOT NULL; publishing drafts may be incomplete. Store sortable types use indexed/non-null columns, with explicit nullable published_at support.
 
 ### Index prefixes for paged Views
 
