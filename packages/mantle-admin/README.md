@@ -92,8 +92,9 @@ permissions as ordinary MCP calls; the document holds no credentials. Reserve
 
 Unsafe native integer versions remain exact in transport; generic UI
 interactions require safe numeric versions. Entries outside that range are
-read-only rather than rounded. CSV reads ordinary authorized pages and derives
-its fields from generated export metadata; a failed page creates no partial file.
+read-only rather than rounded. CSV streams authorized pages and derives its
+fields from generated export metadata. The first page is read before responding;
+a later page failure aborts the stream after partial bytes may have arrived.
 
 ## Development
 

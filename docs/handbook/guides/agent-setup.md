@@ -12,23 +12,41 @@ carries.
 
 The Mantle plugin carries one OSS authoring skill, `mantle`, and local
 acceptance references. It does not configure a hosted-service connection.
+Install from the Git tag matching the exact SDK version you selected (currently
+`v0.2.0-alpha.7`). Alpha releases integrate on `develop`; an unqualified
+`aotter/mantle` source follows `main` and can install older, incompatible
+instructions. A skill install does not upgrade the application's SDK.
 
-```bash
-# Claude Code: two separate prompts
-/plugin marketplace add aotter/mantle
-/plugin install mantle@mantle
+For Codex, pin the marketplace checkout:
 
-# Codex
-codex plugin marketplace add aotter/mantle
+```sh
+codex plugin marketplace add aotter/mantle --ref v0.2.0-alpha.7
 codex plugin add mantle@mantle
 ```
 
-Cursor and GitHub Copilot read the plugin manifests from the repository.
-Without a plugin host, install the skill alone:
+For Claude Code, first clone the release into a directory you will keep:
 
 ```sh
-npx skills add aotter/mantle
+git clone --depth 1 --branch v0.2.0-alpha.7 https://github.com/aotter/mantle.git mantle-plugin
 ```
+
+Then, in Claude Code, use that checkout's absolute path:
+
+```text
+/plugin marketplace add /absolute/path/to/mantle-plugin
+/plugin install mantle@mantle
+```
+
+Cursor and GitHub Copilot use their plugin manifests from the same tagged
+checkout. Without a plugin host, install only the consumer skill by name:
+
+```sh
+npx skills add https://github.com/aotter/mantle/tree/v0.2.0-alpha.7 --skill mantle
+```
+
+When upgrading the SDK, update the marketplace ref or local tagged checkout and
+refresh/reinstall the plugin using the host's native workflow. Verify the loaded
+manifest version and skill source. Do not reset a checkout containing local edits.
 
 Read the path the installer prints (for project-local Codex,
 `.agents/skills/mantle/SKILL.md`). The skill installs no SDK, creates no

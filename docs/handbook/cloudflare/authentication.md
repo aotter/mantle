@@ -154,7 +154,12 @@ Better Auth adapter code stays outside the Worker startup graph.
 
 `@aotter/mantle/auth/admin` exports `guardAuthAdminRequest(request, resolveFreshCaller, basePath?)` for selected auth transports. It resolves authority only for raw/encoded admin paths, requires an admin cookie session and checks mutation origin. Both the app-owned template and OAuth routes use this same guard.
 
-`ctx.admin` role names are open and must match `^[a-z][a-zA-Z0-9_]{0,62}$`. Bare `ctx.admin` admits any admin; a list admits admins holding one of its roles. Better Auth’s `adminRoles` decides who is an admin. Member role names alone grant no privilege.
+Bare `ctx.admin` admits any verified admin layer classified by Better Auth's
+`adminRoles` / `adminUserIds`. Role lists in `requires` are refused; decide
+per-target permissions in `authorize(target, caller)`, using `hasAdminRole`
+when appropriate. Verified role names match `^[a-z][a-zA-Z0-9_-]{0,62}$`.
+Member role names alone grant no privilege. See
+[authorization requirements](../reference/authorization.md).
 
 The generated auth DDL adds a native `(createdAt, id)` member-paging index (respecting schema field/table names). Unfiltered forward/backward paging orders native timestamps through that index; PostgreSQL cursors retain all six fractional digits and bind as text before timestamp casting. Member search (`%term%` over id/name/email, casting UUID ids to text only in the search expression) is a full scan; the index does not accelerate it.
 

@@ -111,14 +111,14 @@ dist-tag DELETE only added failure and re-run state, and Actions
    git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
 
-   Leave the consumer cold-start entry **untagged**: `npx skills add
-   aotter/mantle`, `/plugin marketplace add aotter/mantle`,
-   `codex plugin marketplace add aotter/mantle` and the plugin-manifest
-   descriptions carry no `@v…` / `--ref`. Untagged resolves to `main`, which
-   normally moves at a release but may contain a source-only hotfix; the
-   installed npm package remains the version authority
-   (#995, #998). Only "installed version" statements such as
-   `(currently \`X.Y.Z\`)` are bumped.
+   Pin consumer skill/plugin installation examples to the release's Git tag;
+   follow the client syntax in [agent setup](handbook/guides/agent-setup.md).
+   Alpha releases stay on `develop`, so unqualified installs from `main` can
+   return an incompatible older skill. Update the root README, agent setup,
+   skills README and versioned reference-service links together. Keep plugin
+   descriptions version-neutral; the installed npm package remains the API
+   authority. The new tag becomes installable only after the controller creates
+   it. Do not create it manually or promote `main` just to deliver alpha skills.
 
 3. Review API compatibility and migration instructions for actual consumers.
    Frozen legacy consumers stay on their pinned version; do not make them
@@ -127,9 +127,10 @@ dist-tag DELETE only added failure and re-run state, and Actions
    tarballs, skills, release invariants, types and tests. The controller runs
    the same `pnpm check` against a PostgreSQL service (`MANTLE_PG_URL`), then
    four-target native conformance (`test:native`), before it tags. Inspect the `@aotter/mantle` docs payload
-   (`scripts/sync-package-docs.mjs`: the upgrade guide, ADRs, handbook,
-   examples and package skills): no workspace dependencies, secrets or local
-   state.
+   (`scripts/sync-package-docs.mjs`: the upgrade guide, handbook, selected
+   runnable examples, workflow skills and plugin skill): no workspace
+   dependencies, secrets or local state. ADRs and the reference-service source
+   stay in the repository; packaged links to them must use a versioned URL.
 5. Freeze the PR head for self review; CI must pass before merge. Merge into
    `develop` with a merge commit for every version. For an alpha, dispatch
    release.yml from that merge with `version` (without v). For beta, RC and
@@ -249,7 +250,7 @@ from the source branch. Resolve recovers using the existing tag SHA when
 that commit is an ancestor of the tip and package versions on the tip still
 match. The tag owns the release SHA; the tip only carries controller fixes.
 Tagged recovery skips the Core source check because that tree was already
-released from the immutable tag. When `tag_exists` and both npmjs
+released from the immutable tag. When `tag_exists` and all three npmjs
 packages already exist at that version, that same existence check skips
 packing, immutable tarball comparison, and the public-registry Worker gate.
 The controller tip must not rebuild an artifact whose identity is already
