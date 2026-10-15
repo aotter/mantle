@@ -74,7 +74,7 @@ client routes such as `/admin/sign-in`; missing assets stay 404. Do not serve
 that directory bare: `adminShell(request, assets)` from
 `@aotter/mantle-admin/server` returns the shell for every `/admin` page with
 `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `no-store` and `nosniff`, and
-refuses traversal, encoded separators and NUL (`assets` fetches one built file
+refuses traversal, encoded separators and control characters (`assets` fetches one built file
 by its path within that directory; a 404 means missing; it returns `undefined` for other requests). Read the
 installed Admin README for asset bindings, CSP/import-map hashes and preview
 framing. `@aotter/mantle-ui` continues to supply the shared kit. See

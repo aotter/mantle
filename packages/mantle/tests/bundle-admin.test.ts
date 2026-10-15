@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { existsSync, readdirSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
+import { cp, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bundleApp } from "../src/infrastructure/bundle.js";
@@ -81,5 +81,43 @@ test("mantle bundle builds no Admin for a Worker that does not serve it", async 
     await bundleApp(entry, join(dir, "dist"));
     expect(existsSync(join(dir, "dist/client"))).toBe(false);
     expect(await builds()).toEqual([]);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
+test("mantle bundle refuses an outdir or assets directory that is the working directory or holds the source", async () => {
+  const { dir, entry } = await app();
+  const cwd = process.cwd();
+  try {
+    await mkdir(join(dir, "worker"));
+    await writeFile(join(dir, "worker/keep.ts"), "");
+    await writeFile(join(dir, "src/keep.ts"), "");
+    // absolute paths: esbuild resolves a relative outdir against the directory the process started in
+    const real = realpathSync(dir);
+    process.chdir(real);
+    await expect(bundleApp(entry, real)).rejects.toThrow("Bundle outdir must not be the working directory");
+    await expect(bundleApp(entry, join(real, "src"))).rejects.toThrow("Bundle outdir must not contain the source entry");
+    await expect(bundleApp(entry, join(real, "dist"), join(real, "src"))).rejects.toThrow("The assets directory must not contain the source entry");
+    await expect(bundleApp(entry, join(real, "dist"), real)).rejects.toThrow("The assets directory must not be the working directory");
+    expect([existsSync(join(dir, "worker/keep.ts")), existsSync(join(dir, "src/keep.ts")), existsSync(join(dir, "dist"))]).toEqual([true, true, false]);
+  } finally { process.chdir(cwd); await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
+test("mantle bundle rebuilds the built-in entry when the installed Admin moves at the same version (a patch or a link)", async () => {
+  const { dir, entry, builds } = await app();
+  try {
+    // pnpm's layout: node_modules/@aotter/mantle-admin links into the store, whose directory names a patch by its hash
+    const pkg = join(dir, "node_modules/@aotter/mantle-admin"), dist = join(dir, "dist");
+    const store = (name: string) => join(dir, `node_modules/.pnpm/${name}/node_modules/@aotter/mantle-admin`);
+    await mkdir(join(store("orig"), ".."), { recursive: true });
+    await rename(pkg, store("orig"));
+    await cp(store("orig"), store("patched"), { recursive: true });
+    await symlink(store("orig"), pkg, "dir");
+    await bundleApp(entry, dist);
+    await bundleApp(entry, dist);
+    expect(await builds()).toHaveLength(1);
+    await rm(pkg);
+    await symlink(store("patched"), pkg, "dir");
+    await bundleApp(entry, dist);
+    expect(await builds()).toHaveLength(2);
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
