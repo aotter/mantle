@@ -33,7 +33,7 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
     const config = parse(await readFile(join(dir, "wrangler.jsonc"), "utf8"));
     expect(config).toEqual({
       name: "your-worker-name", compatibility_date: "2026-09-28", compatibility_flags: ["nodejs_compat"],
-      main: "dist/worker.js", no_bundle: true, find_additional_modules: true, base_dir: "dist",
+      main: "dist/worker/worker.js", no_bundle: true, find_additional_modules: true, base_dir: "dist/worker",
       rules: [{ type: "ESModule", globs: ["**/*.js"], fallthrough: true }],
       build: { command: "mantle bundle src/worker.ts dist", watch_dir: ["src", "generated"] },
     });
@@ -46,7 +46,7 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
     expect(edited).toContain("/* keep flag comment */");
     const updated = parse(edited);
     expect(updated.compatibility_flags).toEqual(["other_flag", "nodejs_compat"]);
-    expect(updated.main).toBe("build/index.js");
+    expect(updated.main).toBe("build/worker/index.js");
     expect(updated.build).toEqual({ cwd: "app", command: "mantle bundle worker/index.ts build", watch_dir: ["worker", "generated"] });
     expect(updated.rules).toEqual([{ type: "Text", globs: ["**/*.md"] }, { type: "ESModule", globs: ["**/*.js"], fallthrough: true }]);
     generate(dir, "--entry", "worker/index.ts", "--outdir", "build");
@@ -63,7 +63,7 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
     generate(dir, "--wrangler", "config/worker.jsonc");
     const nested = parse(await readFile(join(dir, "config/worker.jsonc"), "utf8"));
     expect(nested.compatibility_date).toBe("2026-01-02");
-    expect(nested.main).toBe("../dist/worker.js");
+    expect(nested.main).toBe("../dist/worker/worker.js");
     expect(nested.build).toEqual({ command: "mantle bundle src/worker.ts dist", watch_dir: ["../src", "../generated"] });
     await writeFile(join(dir, "wrangler.jsonc"), '{"name": "bad",');
     const failed = spawnSync("node", [cli, "generate", "cloudflare-d1", "generated", manifest], { cwd: dir, encoding: "utf8" });
@@ -80,9 +80,30 @@ test("generate leaves Wrangler TOML untouched and prints the exact build keys", 
     await writeFile(join(dir, "wrangler.toml"), original);
     const instructions = generate(dir);
     expect(await readFile(join(dir, "wrangler.toml"), "utf8")).toBe(original);
-    for (const key of ['main = "dist/worker.js"', 'no_bundle = true', 'find_additional_modules = true', 'base_dir = "dist"', 'compatibility_flags = ["nodejs_compat"]', '[[rules]]', 'fallthrough = true', 'command = "mantle bundle src/worker.ts dist"', 'watch_dir = ["src","generated"]']) expect(instructions).toContain(key);
+    for (const key of ['main = "dist/worker/worker.js"', 'no_bundle = true', 'find_additional_modules = true', 'base_dir = "dist/worker"', 'compatibility_flags = ["nodejs_compat"]', '[[rules]]', 'fallthrough = true', 'command = "mantle bundle src/worker.ts dist"', 'watch_dir = ["src","generated"]']) expect(instructions).toContain(key);
     expect(spawnSync("node", [cli, "generate", "cloudflare-postgres", "generated", manifest, "--wrangler", "wrangler.toml"], { cwd: dir }).status).toBe(0);
     expect(await readFile(join(dir, "wrangler.toml"), "utf8")).toBe(original);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
+test("generate --admin manages only assets.directory, and --assets reaches the build command", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "next-cli-assets-"));
+  try {
+    await writeFile(join(dir, "wrangler.jsonc"), '{ "name": "app", "assets": { "directory": "node_modules/old", "binding": "ASSETS", "run_worker_first": true } }');
+    generate(dir, "--admin");
+    const config = parse(await readFile(join(dir, "wrangler.jsonc"), "utf8"));
+    expect(config.assets).toEqual({ directory: "dist/client", binding: "ASSETS", run_worker_first: true });
+    expect(config.build.command).toBe("mantle bundle src/worker.ts dist");
+    generate(dir, "--admin", "--assets", "public");
+    const custom = parse(await readFile(join(dir, "wrangler.jsonc"), "utf8"));
+    expect(custom.assets.directory).toBe("public");
+    expect(custom.build.command).toBe("mantle bundle src/worker.ts dist --assets public");
+    await writeFile(join(dir, "wrangler.jsonc"), '{ "name": "api" }');
+    generate(dir);
+    expect(parse(await readFile(join(dir, "wrangler.jsonc"), "utf8")).assets).toBeUndefined();
+    await rm(join(dir, "wrangler.jsonc"));
+    await writeFile(join(dir, "wrangler.toml"), 'name = "app"\n');
+    expect(generate(dir, "--admin")).toContain('[assets]\ndirectory = "dist/client"');
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
 

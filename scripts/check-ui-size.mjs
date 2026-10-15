@@ -38,7 +38,9 @@ try {
     measured[`${name}:unpacked`] = unpacked;
   }
   if (selection !== "mantle-ui") {
-  const admin = join(root, "packages/mantle-admin/dist/admin");
+  // An application's Admin as `mantle bundle` builds it with the built-in entry.
+  const admin = join(temp, "admin");
+  await (await import(join(root, "packages/mantle-admin/dist/build/index.js"))).buildAdmin({ outDir: admin });
   const html = readFileSync(join(admin, "index.html"), "utf8");
   const entry = /<script[^>]+type="module"[^>]+src="([^"]+)"/.exec(html)?.[1];
   if (!entry) throw new Error("Admin entry module is missing");

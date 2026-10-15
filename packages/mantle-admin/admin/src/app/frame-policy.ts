@@ -1,3 +1,5 @@
+import { PREVIEW_CSP } from "../../../src/build/preview-csp";
+
 declare global {
   interface Window {
     /** Installed by a same-origin sandbox host before preview.html boots. */
@@ -16,8 +18,6 @@ export function canRenderAdmin(win: Window, preview: boolean): boolean {
     return false;
   }
 }
-
-export const PREVIEW_CSP = "connect-src 'none'; form-action 'none'";
 
 export function isAdminPreview(): boolean {
   return typeof document !== "undefined"

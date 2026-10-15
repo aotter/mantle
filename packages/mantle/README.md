@@ -97,16 +97,18 @@ For `cloudflare-d1` and `cloudflare-postgres`, generation configures Wrangler to
 `mantle bundle <entry> <outdir>` automatically. Node 22.22 or newer is required. Run from the project root;
 regenerate after manifest or auth option changes.
 
-`--entry` defaults to `src/worker.ts`, `--outdir` to `dist`. `--wrangler` defaults to the
+`--entry` defaults to `src/worker.ts`, `--outdir` to `dist`; with `--admin`, `--assets` (Wrangler's `assets.directory`) defaults to `<outdir>/client`. `--wrangler` defaults to the
 existing `wrangler.jsonc`, `wrangler.json` or `wrangler.toml`, otherwise `wrangler.jsonc`.
 JSONC edits preserve comments and unrelated settings and are idempotent. A new config
 needs its `name`, `compatibility_date` and bindings filled in. TOML only prints instructions.
 
-esbuild emits minified split ESM; Wrangler uploads it with `no_bundle`,
+esbuild emits minified split ESM into `<outdir>/worker`; Wrangler uploads it with `no_bundle`,
 `find_additional_modules`, `base_dir` and an ESModule rule. `nodejs_compat` is ensured.
 The metafile guard rejects `better-auth` / `@better-auth/*` in the static startup graph:
 use `authLoader(() => import(...))` ([Auth](./docs/handbook/cloudflare/authentication.md#worker-entry)).
-The output directory is cleaned first; keep source and generated code elsewhere.
+The Worker directory is cleaned first; keep source and generated code elsewhere. A Worker that imports
+`@aotter/mantle-admin/server` also gets Admin, built with Vite into `<assets>/admin` (default `<outdir>/client/admin`)
+from `admin.tsx` beside the entry or the built-in entry, and skipped when its inputs are unchanged.
 
 ## D1 Sessions
 

@@ -66,14 +66,16 @@ Do not manufacture an admin/system Caller from request input. Views and operatio
 also retain their own generated `requires` checks. Share one request-local
 resolver with auth, consent, MCP and REST; preserve its response cookie headers.
 
-The API handles `/admin/api/*`. The app separately serves
-`@aotter/mantle-admin/admin/index.html` and its directory at `/admin`, including
+The API handles `/admin/api/*`. The app separately serves the Admin that
+`mantle bundle` builds into `<assets>/admin` (default `dist/client/admin`; on Bun,
+which does not run `mantle bundle` yet, the directory of
+`@aotter/mantle-admin/admin/index.html`) at `/admin`, including
 client routes such as `/admin/sign-in`; missing assets stay 404. Do not serve
 that directory bare: `adminShell(request, assets)` from
 `@aotter/mantle-admin/server` returns the shell for every `/admin` page with
 `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `no-store` and `nosniff`, and
 refuses traversal, encoded separators and NUL (`assets` fetches one built file
-by path; a 404 means missing; it returns `undefined` for other requests). Read the
+by its path within that directory; a 404 means missing; it returns `undefined` for other requests). Read the
 installed Admin README for asset bindings, CSP/import-map hashes and preview
 framing. `@aotter/mantle-ui` continues to supply the shared kit. See
 [service composition](../cloudflare/service-entry.md) for the complete Fetch/Bun wiring.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolve, relative } from "node:path";
+import { join, resolve, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { configureWrangler } from "./wrangler.js";
@@ -18,10 +18,10 @@ async function load(path: string) {
   }
 }
 const targets: readonly Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
-const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>]... (one per Better Auth instance) [--admin-extensions <module>] [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>]\n       mantle bundle <entry> <outdir>\n       mantle describe <target> <manifest>... [--diff <old.json>]";
+const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>]... (one per Better Auth instance) [--admin-extensions <module>] [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>] [--assets <static assets directory>]\n       mantle bundle <entry> <outdir> [--assets <static assets directory>]\n       mantle describe <target> <manifest>... [--diff <old.json>]";
 try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-    diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, "admin-extensions": { type: "string" }, auth: { type: "string", multiple: true }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" },
+    diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, "admin-extensions": { type: "string" }, auth: { type: "string", multiple: true }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" }, assets: { type: "string" },
   } });
   const command = positionals[0] === "bundle" || positionals[0] === "generate" || positionals[0] === "describe" ? positionals.shift()! : "generate";
   if (command === "describe") {
@@ -40,7 +40,7 @@ try {
   } else if (command === "bundle") {
     const [entry, outdir] = positionals;
     if (!entry || !outdir || positionals.length !== 2 || values.admin || values.site || values.auth || values["admin-extensions"] || values.wrangler || values.check) throw new Error(usage);
-    await (await import("./bundle.js")).bundle(entry, outdir);
+    await (await import("./bundle.js")).bundleApp(entry, outdir, values.assets);
   } else {
     const [target, destination, ...paths] = positionals;
     if (!target || !targets.includes(target as Target) || !destination || !paths.length) throw new Error(usage);
@@ -68,7 +68,8 @@ try {
     const changed = await writeArtifacts(destination, { ...result.files, [INPUTS_FILE]: inputsFingerprint(destination, read) }, values.check);
     if (target.startsWith("cloudflare-")) {
       const wrangler = values.wrangler ?? ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].find(existsSync) ?? "wrangler.jsonc";
-      if (configureWrangler(wrangler, values.entry!, values.outdir!, destination, values.check)) changed.push(wrangler);
+      const assets = values.admin ? values.assets ?? join(values.outdir!, "client") : undefined;
+      if (configureWrangler(wrangler, values.entry!, values.outdir!, destination, values.check, assets)) changed.push(wrangler);
     }
     if (values.check && changed.length) throw new Error(`Generated output is stale. Run mantle generate with the same options:\n${changed.join("\n")}`);
     if (!values.check) console.log(`Commit generated output and Wrangler config edits; keep dist/ untracked. Add to .gitattributes: ${JSON.stringify(relative(process.cwd(), resolve(destination)).replaceAll("\\", "/") + "/**")} linguist-generated=true`);

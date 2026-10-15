@@ -103,13 +103,15 @@ its collection parameter selects only a generated table and visibility policy.
 ## Workers assets and secrets
 
 `mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --admin`
-updates the split-build Wrangler keys. Configure the rest explicitly; JSONC
+updates the split-build Wrangler keys (`main` and `base_dir` under `dist/worker`)
+and, with `--admin`, `assets.directory`: `mantle bundle` builds Admin into
+`dist/client/admin`, served at `/admin`. Configure the rest explicitly; JSONC
 comments and unrelated settings survive regeneration:
 
 ```jsonc
 {
   "assets": {
-    "directory": "node_modules/@aotter/mantle-admin/dist/admin",
+    "directory": "dist/client",
     "binding": "ASSETS",
     "run_worker_first": true,
     "html_handling": "none"
@@ -119,7 +121,9 @@ comments and unrelated settings survive regeneration:
 ```
 
 `run_worker_first` lets the application supply shell/security/cache headers;
-`none` keeps `index.html` available by name. Admin assets are not a public database
+`none` keeps `index.html` available by name. `adminShell(request, assets)` passes
+paths relative to the Admin directory, so the app fetches them under `/admin/`:
+`path => env.ASSETS.fetch(new Request(new URL("/admin/" + path, request.url), request))`. Admin assets are not a public database
 API. PostgreSQL uses application-owned Hyperdrive/postgres.js wiring,
 with Hyperdrive query caching disabled for authority and mutation visibility.
 
@@ -190,7 +194,7 @@ untracked. Deployment uses committed generated source; it does not regenerate.
 # CI, with the project's exact installed SDK and peer versions:
 pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --admin --check
 pnpm exec tsc --noEmit
-pnpm exec mantle bundle src/worker.ts dist
+pnpm exec mantle bundle src/worker.ts dist   # dist/worker, and dist/client/admin with --admin
 ```
 
 `--check` regenerates in memory, lists missing/changed/obsolete SDK-owned files

@@ -15,21 +15,25 @@ function compatibilityDate(dir: string): string {
   return "2026-09-28";
 }
 
-export function configureWrangler(configPath: string, entry: string, outdir: string, generated: string, check = false): boolean {
+/** `assets`: with `--admin`, the static assets directory `mantle bundle` builds Admin into (`<assets>/admin`). */
+export function configureWrangler(configPath: string, entry: string, outdir: string, generated: string, check = false, assets?: string): boolean {
   const configDir = dirname(resolve(configPath));
   const local = (path: string) => relative(configDir, resolve(path)).replaceAll("\\", "/") || ".";
   const output = local(outdir);
   const quote = (arg: string) => /^[\w./-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", "'\\''")}'`;
+  const worker = `${output}/worker`;
+  const assetsFlag = assets !== undefined && resolve(assets) !== resolve(outdir, "client") ? ` --assets ${quote(assets)}` : "";
   const keys = {
-    main: `${output}/${basename(entry).replace(/\.[^.]+$/, "")}.js`, no_bundle: true,
-    find_additional_modules: true, base_dir: output,
+    main: `${worker}/${basename(entry).replace(/\.[^.]+$/, "")}.js`, no_bundle: true,
+    find_additional_modules: true, base_dir: worker,
     rules: [{ type: "ESModule", globs: ["**/*.js"], fallthrough: true }],
-    build: { command: `mantle bundle ${quote(entry)} ${quote(outdir)}`, watch_dir: [local(dirname(entry)), local(generated)] },
+    build: { command: `mantle bundle ${quote(entry)} ${quote(outdir)}${assetsFlag}`, watch_dir: [local(dirname(entry)), local(generated)] },
   };
   if (configPath.endsWith(".toml")) {
     if (check) throw new Error("--check requires a JSON or JSONC Wrangler config; TOML generation only prints manual edits.");
     console.log(`Leave ${configPath} unchanged. Add these Wrangler TOML keys (include nodejs_compat in any existing compatibility_flags):\n` +
-      `main = ${JSON.stringify(keys.main)}\nno_bundle = true\nfind_additional_modules = true\nbase_dir = ${JSON.stringify(output)}\ncompatibility_flags = ["nodejs_compat"]\n\n` +
+      `main = ${JSON.stringify(keys.main)}\nno_bundle = true\nfind_additional_modules = true\nbase_dir = ${JSON.stringify(worker)}\ncompatibility_flags = ["nodejs_compat"]\n\n` +
+      (assets === undefined ? "" : `[assets]\ndirectory = ${JSON.stringify(local(assets))}\n\n`) +
       `[[rules]]\ntype = "ESModule"\nglobs = ["**/*.js"]\nfallthrough = true\n\n[build]\ncommand = ${JSON.stringify(keys.build.command)}\nwatch_dir = ${JSON.stringify(keys.build.watch_dir)}`);
     return false;
   }
@@ -52,6 +56,8 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
   };
   for (const [key, value] of Object.entries(top)) edit([key], value);
   for (const [key, value] of Object.entries(buildKeys)) edit(["build", key], value);
+  // Only the directory: the binding, run_worker_first and html_handling stay the application's.
+  if (assets !== undefined) edit(["assets", "directory"], local(assets));
   if (!(config.rules ?? []).some((r: unknown) => isDeepStrictEqual(r, rule))) edit(config.rules === undefined ? ["rules"] : ["rules", -1], config.rules === undefined ? [rule] : rule);
   if (!flags.includes("nodejs_compat")) edit(config.compatibility_flags === undefined ? ["compatibility_flags"] : ["compatibility_flags", -1], config.compatibility_flags === undefined ? ["nodejs_compat"] : "nodejs_compat");
   const changed = !exists || text !== original;

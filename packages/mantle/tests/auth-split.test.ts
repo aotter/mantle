@@ -49,7 +49,11 @@ test("bundle splits Better Auth behind import() and refuses a static auth import
     await bundle(routes, join(dir, "routes-dist"));
     await writeFile(join(dir, "dist/stale.js"), "stale");
     execFileSync("node", [cli, "bundle", entry, join(dir, "dist")], { stdio: "pipe" });
-    expect(existsSync(join(dir, "dist/stale.js"))).toBe(false);
+    // the CLI writes the Worker to <outdir>/worker and cleans only that directory
+    expect(existsSync(join(dir, "dist/worker/worker.js"))).toBe(true);
+    await writeFile(join(dir, "dist/worker/stale.js"), "stale");
+    execFileSync("node", [cli, "bundle", entry, join(dir, "dist")], { stdio: "pipe" });
+    expect(existsSync(join(dir, "dist/worker/stale.js"))).toBe(false);
     await expect(bundle(entry, ".")).rejects.toThrow("working directory");
     await expect(bundle(entry, new URL("apps/", import.meta.url).pathname)).rejects.toThrow("contain the source entry");
     expect(existsSync(entry)).toBe(true);
