@@ -32,5 +32,5 @@ test("a PostgreSQL handle without begin runs single statements and refuses a mul
   const rows = Object.assign([{ id: 1 }], { count: 1 });
   const tx = { unsafe: async () => rows } as never;
   expect(await procedure(tx, [{ sql: "SELECT 1", binds: [] }], "p")).toEqual([rows]);
-  await expect(procedure(tx, [{ sql: "SELECT 1", binds: [] }, { sql: "SELECT 2", binds: [] }], "p")).rejects.toThrow(/cannot begin a transaction/);
+  await expect(procedure(tx, [{ sql: "SELECT 1", binds: [] }, { sql: "SELECT 2", binds: [] }], "p")).rejects.toThrow(/cannot begin another/);
 });
