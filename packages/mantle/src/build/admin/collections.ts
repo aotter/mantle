@@ -1,5 +1,5 @@
 /** Pure collection metadata, shared by Admin and the deployment compiler. */
-import { MCP_HINT_KEYWORD, NATIVE_NOT_NULL, isMediaMcpHint, enumOptions, notNullColumns, resolveMantleRef, type JsonSchema, type PlanSchema } from "../spec/domain/index.js";
+import { MCP_HINT_KEYWORD, NATIVE_NOT_NULL, requiredMantleRefFields, isMediaMcpHint, enumOptions, notNullColumns, resolveMantleRef, type JsonSchema, type PlanSchema } from "../spec/domain/index.js";
 
 type Props = Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 export const propsOf = (s: JsonSchema) => (s.properties ?? {}) as Props;
@@ -22,7 +22,7 @@ export function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
   const filterField = list["filterField"] as string | undefined;
   // a required reference is composition: the child sits under its parent, an `id` reference first, else one by a unique field
   const refs = Object.keys(props).filter((f) => required.has(f) && names.has(resolveMantleRef(props[f])?.schema ?? ""));
-  const byId = refs.find((f) => resolveMantleRef(props[f])!.field === "id");
+  const byId = standaloneParentField(s, schemas);
   const parentField = byId ?? refs[0];
   // a standalone list's parent picker scopes by the parent's entry id, so only an `id` reference composes there (the checker agrees)
   const navField = nav?.["standalone"] === true ? (nav["parentField"] as string | undefined) ?? byId : undefined;
@@ -42,6 +42,13 @@ export function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
     list: { primaryField: (list["primaryField"] as string | undefined) ?? null, columns: (list["columns"] as string[] | undefined) ?? [] },
     nav: navField && navParent ? { standalone: true, parentField: navField, parentCollection: navParent.schema } : null,
   };
+}
+
+/** @internal The default parent field of a standalone list: the first required `id` reference to a non-translation Schema, as the checker's `nav.standalone` rule requires; undefined when standalone is refused. */
+export function standaloneParentField(s: PlanSchema, schemas: readonly PlanSchema[]): string | undefined {
+  if (s.translates) return undefined;
+  const names = new Set(schemas.filter((x) => !x.translates).map((x) => x.name));
+  return requiredMantleRefFields(s.schema).find((r) => names.has(r.collection))?.field;
 }
 
 /** @internal Whether a Schema has its own sidebar entry: not a translation, and top-level or an opt-in standalone child (Admin's `isPrimaryNavCollection` agrees). */

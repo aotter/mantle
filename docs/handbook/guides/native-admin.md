@@ -234,8 +234,9 @@ Store keeps `find({ search })`, `first({ search })` and `count(where?)`. See [St
 A Schema with a required `x-mantle-ref` folds under its parent collection: it
 opens from the parent entry's workbench and stays out of the sidebar, while
 `/admin/c/<schema>` still lists it; translation children remain on language
-tabs. Set `Schema.spec.uiSchema.nav.standalone: true` to put a required-ref child
-at the top level instead. With multiple eligible references, set
+tabs. Set `Schema.spec.uiSchema.nav.standalone: true` to put a child with a required `id`
+reference at the top level instead; a child folded only by a unique-field reference stays in its
+parent's workbench. With multiple eligible references, set
 `nav.parentField` to the chosen reference field.
 
 ### Sidebar
@@ -252,7 +253,7 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
 - Built-in groups need no declaration: `content`, `operations`, `reports`, `more`. Project groups are declared once
   as `navGroups` in the `--admin-extensions` module, with a title (text or `{ locale: text }`) and an `order` among
   the built-in groups' content 10, operations 20 and reports 30 (default 50); More always stays last.
-- Extension pages use the same ids: `pages[].nav: { group, order }` (`more` and `settings` keep their places).
+- Extension pages use the same ids: `pages[].nav: { group, order? }` (`more` and `settings` keep their places); a page without `nav` keeps its route and stays out of the sidebar.
 
 ```ts
 // src/admin.ts, passed as --admin-extensions src/admin.ts (the app shell already does)

@@ -410,7 +410,7 @@ function checkNav(
     };
   }
 
-  const eligible = requiredMantleRefFields(schema);
+  const eligible = requiredMantleRefFields(schema.spec.schema);
   if (eligible.length === 0) {
     return {
       nav: null,
@@ -473,10 +473,10 @@ function checkNav(
  *  `properties` declaration — callers must not treat that order as a
  *  standalone-filter default when more than one field is eligible. */
 export function requiredMantleRefFields(
-  schema: SchemaManifest,
+  body: JsonSchema,
 ): readonly { readonly field: string; readonly collection: string }[] {
-  const required = new Set(schema.spec.schema.required ?? []);
-  const properties = schema.spec.schema.properties ?? {};
+  const required = new Set(body.required ?? []);
+  const properties = body.properties ?? {};
   const fields: Array<{ field: string; collection: string }> = [];
   for (const [field, property] of Object.entries(properties)) {
     if (!required.has(field)) continue;

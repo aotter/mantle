@@ -107,10 +107,10 @@ describe("x-mantle-ref object form", () => {
     } as SchemaManifest);
     expect(errors([requisitions(), lines({ schema: "requisitions", field: "item" })]))
       .toEqual([expect.objectContaining({ code: "MANTLE_REF_INVALID" })]);
-    expect(requiredMantleRefFields(lines({ schema: "requisitions", field: "id" })))
+    expect(requiredMantleRefFields(lines({ schema: "requisitions", field: "id" }).spec.schema))
       .toEqual([{ field: "parent", collection: "requisitions" }]);
-    expect(requiredMantleRefFields(lines({ schema: "requisitions", field: "requestNumber" }))).toEqual([]);
-    expect(requiredMantleRefFields(lines("requisitions"))).toEqual([{ field: "parent", collection: "requisitions" }]);
+    expect(requiredMantleRefFields(lines({ schema: "requisitions", field: "requestNumber" }).spec.schema)).toEqual([]);
+    expect(requiredMantleRefFields(lines("requisitions").spec.schema)).toEqual([{ field: "parent", collection: "requisitions" }]);
   });
 });
 
