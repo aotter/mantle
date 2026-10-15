@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Database, type SQLQueryBindings } from 'bun:sqlite';
+import { SQL } from 'bun';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { userCaller } from '../src/kernel/user-caller.js';
@@ -240,21 +241,68 @@ test('an undefined scope value is not given: one partition autofills, several st
   expect(() => scopeInsert(scopes, two, { region: undefined })).toThrow(/several 'region' values/);
   expect(() => scopeInsert(scopes, { kind: 'system', reason: 'test' }, { region: undefined })).toThrow(/explicit 'region' value/);
 });
-test('ADR-0046 §Paging: a caller IN scope is a fixed prefix, so [region, orderNo] serves ORDER BY orderNo across regions',async()=>{
- const scoped=JSON.parse(schema);scoped.spec.scope="region IN auth.user('region')";scoped.spec.indexes=[['region','orderNo']];
- scoped.spec.schema.required.push('orderNo');scoped.spec.schema.properties.orderNo={type:'integer'};
- const text=(order:string,surface='public')=>[JSON.stringify(scoped),JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'View',metadata:{name:'listed'},spec:{surface,sql:`SELECT id,orderNo AS "orderNo",region FROM orders ORDER BY ${order}`}})].join('\n---\n');
+// #1644: `col IN auth.user(...)` binds a set, so only equality fixes an index prefix. Accepted Views are checked by the plan
+// of the SQL that actually runs, for every caller variant: one value, several values, { all: true } and system (trusted).
+const inScoped=(scope:boolean)=>{const o=JSON.parse(schema);if(scope)o.spec.scope="region IN auth.user('region')";o.spec.indexes=[['region','orderNo','id']];
+ o.spec.schema.required.push('orderNo');o.spec.schema.properties.orderNo={type:'integer'};return JSON.stringify(o);};
+const inView=(name:string,sql:string,surface='public',more:object={})=>JSON.stringify({apiVersion:'cms.mantle.aotter.net/v2',kind:'View',metadata:{name},spec:{surface,sql:`SELECT id,orderNo AS "orderNo",region FROM orders ${sql}`,...more}});
+test('#1644: an IN-scoped or IN-restricted prefix does not serve ORDER BY; the refusal names the bounded ways',async()=>{
+ const cases=[[inScoped(true),inView('listed','ORDER BY orderNo')],[inScoped(false),inView('listed','ORDER BY orderNo','public',{restrict:{orders:"region IN auth.user('region')"}})]];
  for(const target of ['bun-sqlite','bun-postgres'] as const){
-  await generateOrThrow(target,[{sourceId:'a.yaml',text:text('orderNo')}]);
-  // The prefix only helps the column after it: an order the index does not serve is still refused.
-  await expect(generateOrThrow(target,[{sourceId:'b.yaml',text:text('tier')}])).rejects.toThrow(/Missing index for ORDER BY/);
+  for(const [s,v] of cases){
+   const error=await generateOrThrow(target,[{sourceId:'a.yaml',text:[s,v].join('\n---\n')}]).then(()=>undefined,(e:Error)=>e.message);
+   expect(error).toContain("ORDER BY (orderNo) is served by index [region, orderNo, id] only after 'region', which a user-field scope or restrict fixes to a set of values, not one value: every page would read and sort all of the caller's rows.");
+   expect(error).toContain('ORDER BY region, orderNo (served by the same index)');
+   expect(error).toContain('WHERE region = input.region, which fixes the prefix (the scope or restrict still applies)');
+   expect(error).toContain('for Views read by { all: true } callers, an index on the ORDER BY columns alone, e.g. [orderNo] (not bounded for scoped callers)');
+  }
+  // The suggested order keeps the authored direction, and every set-bound prefix column needs its own equality.
+  const desc=await generateOrThrow(target,[{sourceId:'d.yaml',text:[inScoped(true),inView('listed','ORDER BY orderNo DESC')].join('\n---\n')}]).then(()=>'',(e:Error)=>e.message);
+  expect(desc).toContain('ORDER BY region DESC, orderNo DESC (served by the same index, read backwards; on PostgreSQL confirm with EXPLAIN that no Sort remains)');
+  const two=JSON.parse(inScoped(true));two.spec.scope+=" AND store IN auth.user('store')";two.spec.indexes=[['region','store','orderNo','id']];two.spec.schema.required.push('store');two.spec.schema.properties.store={type:'string'};
+  const both=await generateOrThrow(target,[{sourceId:'e.yaml',text:[JSON.stringify(two),inView('listed','ORDER BY orderNo')].join('\n---\n')}]).then(()=>'',(e:Error)=>e.message);
+  expect(both).toContain("only after 'region', 'store', which");
+  expect(both).toContain('ORDER BY region, store, orderNo (served by the same index); a View input bound with equality, e.g. WHERE region = input.region AND store = input.store, which fixes the prefix');
+  // An equality-fixed column between the set-bound one and the order stays in the suggestion, and following it generates.
+  const mid=JSON.parse(inScoped(true));mid.spec.indexes=[['region','tier','orderNo','id']];
+  const tiered=(sql:string)=>[JSON.stringify(mid),inView('listed',sql,'public',{input:{type:'object',required:['tier'],properties:{tier:{type:'string'}}}})].join('\n---\n');
+  const midError=await generateOrThrow(target,[{sourceId:'m.yaml',text:tiered('WHERE tier = input.tier ORDER BY orderNo')}]).then(()=>'',(e:Error)=>e.message);
+  expect(midError).toContain('ORDER BY region, tier, orderNo (served by the same index)');
+  await generateOrThrow(target,[{sourceId:'n.yaml',text:tiered('WHERE tier = input.tier ORDER BY region, tier, orderNo')}]);
+  // An order no index serves keeps the plain message.
+  await expect(generateOrThrow(target,[{sourceId:'b.yaml',text:[inScoped(true),inView('listed','ORDER BY tier')].join('\n---\n')}])).rejects.toThrow(/Missing index for ORDER BY \(tier\): declare a Schema index/);
  }
- const files=await generateOrThrow('bun-sqlite',[{sourceId:'c.yaml',text:text('orderNo','internal')}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/in-prefix-')),db=new Database(':memory:');
- try{await writeGenerated(dir,files);const app=await import(resolve(dir,'generated.ts')),{default:page}=await import(resolve(dir,'paged/views/listed.ts'));db.exec(files['schema.sql']!);const sys={kind:'system',reason:'fixture'} as const;
-  for(const [region,tier,orderNo] of [['TW','a',3],['JP','b',1],['US','c',2],['TW','d',4],['JP','e',5]] as const)await app.store(db,sys).collection('orders').insert({region,tier,orderno:orderNo});
-  const caller=userCaller({id:'u',region:['TW','JP']},{fields});
-  const seen:number[]=[];let cursor:string|undefined;
-  do{const p=await page(db,caller,{},{limit:2,...(cursor?{cursor}:{})});seen.push(...p.rows.map((r:any)=>r.orderNo));cursor=p.nextCursor??undefined;}while(cursor);
-  expect(seen).toEqual([1,3,4,5]);
- }finally{db.close();await rm(dir,{recursive:true,force:true});}
 });
+const sorts=(plan:any):boolean=>!!plan&&typeof plan==='object'&&(plan['Node Type']==='Sort'||Object.values(plan).some(sorts));
+for(const pg of [false,true])(pg&&!process.env.MANTLE_NEXT_BUN_PG_URL?test.skip:test)(`#1644: accepted IN-scoped Views page without sorting the caller's rows on ${pg?'PostgreSQL':'SQLite'}`,async()=>{
+ const text=[inScoped(true),inView('listed','ORDER BY region, orderNo','internal'),inView('backward','ORDER BY region DESC, orderNo DESC','internal'),inView('one','WHERE region = input.region ORDER BY orderNo','internal',{input:{type:'object',required:['region'],properties:{region:{type:'string'}}}})].join('\n---\n');
+ const files=await generateOrThrow(pg?'bun-postgres':'bun-sqlite',[{sourceId:'c.yaml',text}]),dir=await mkdtemp(resolve(import.meta.dir,'apps/.generated/in-prefix-')),namespace='in_prefix_'+crypto.randomUUID().replaceAll('-','');
+ const raw:any=pg?new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!,{max:1}):new Database(':memory:'),ran:[string,unknown[]][]=[];
+ const run=(sql:string,values:unknown[]=[])=>pg?raw.unsafe(sql,values):Promise.resolve(raw.query(sql).all(...values));
+ const db=pg?{unsafe:(sql:string,values:unknown[])=>(ran.push([sql,values]),raw.unsafe(sql,values))}:{query:(sql:string)=>{const q=raw.query(sql);return {columnNames:q.columnNames,all:(...values:unknown[])=>(ran.push([sql,values]),q.all(...values)),run:(...values:unknown[])=>q.run(...values)};},exec:(sql:string)=>raw.exec(sql),transaction:(fn:any)=>raw.transaction(fn)};
+ try{await writeGenerated(dir,files);
+  if(pg){await run(`CREATE SCHEMA ${namespace}`);await run(`SET search_path TO ${namespace}`);await run(files['schema.sql']!);}else raw.exec(files['schema.sql']!);
+  const app=await import(resolve(dir,'generated.ts')),sys={kind:'system',reason:'fixture'} as const;
+  for(const [region,tier,orderNo] of [['TW','a',3],['JP','b',1],['US','c',2],['TW','d',4],['JP','e',5]] as const)await app.store(raw,sys).collection('orders').insert({region,tier,orderno:orderNo});
+  // Rows come back in index order across the caller's regions.
+  const {default:listed}=await import(resolve(dir,'paged/views/listed.ts')),{default:backward}=await import(resolve(dir,'paged/views/backward.ts')),{default:one}=await import(resolve(dir,'paged/views/one.ts'));
+  const walk=async(page:any,caller:any,input:object)=>{const seen:number[]=[];let cursor:string|undefined;do{const p=await page(db,caller,input,{limit:2,...(cursor?{cursor}:{})});seen.push(...p.rows.map((r:any)=>Number(r.orderNo)));cursor=p.nextCursor??undefined;}while(cursor);return seen;};
+  expect(await walk(listed,userCaller({id:'u',region:['TW','JP']},{fields}),{})).toEqual([1,5,3,4]);
+  expect(await walk(backward,userCaller({id:'u',region:['TW','JP']},{fields}),{})).toEqual([4,3,5,1]);
+  expect(await walk(one,userCaller({id:'u',region:['TW','JP']},{fields}),{region:'TW'})).toEqual([3,4]);
+  // Enough rows that a planner prefers the index to a scan and sort. PostgreSQL's DESC next page for one value can
+  // still cost a Sort over a misestimated `= ANY(CAST(...))` range, so only SQLite pins the backward plan.
+  if(pg)await run(`INSERT INTO orders(id,version,created_at,updated_at,region,tier,orderno) SELECT 'g'||i,1,now(),now(),'R'||(i%20),'t',i FROM generate_series(1,20000) i`);
+  else raw.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<20000) INSERT INTO orders(id,version,created_at,updated_at,region,tier,orderno) SELECT 'g'||i,1,0,0,'R'||(i%20),'t',i FROM n`);
+  await run('ANALYZE');
+  const callers=[userCaller({id:'u',region:['R1']},{fields}),userCaller({id:'u',region:['R1','R2','R3']},{fields}),userCaller({id:'u',region:{all:true}},{fields}),sys];
+  for(const caller of callers)for(const [page,input] of [[listed,{}],[one,{region:'R1'}],...(pg?[]:[[backward,{}]] as const)] as const){
+   ran.length=0;const first=await page(db,caller,input,{limit:10});expect(first.nextCursor).toBeDefined();await page(db,caller,input,{limit:10,cursor:first.nextCursor});
+   expect(ran.length).toBe(2);
+   for(const [sql,values] of ran){
+    if(pg){const [row]=await raw.unsafe(`EXPLAIN (FORMAT JSON) ${sql}`,values);expect({sql,sort:sorts(row["QUERY PLAN"])}).toEqual({sql,sort:false});}
+    else{const plan=raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...values).map((r:any)=>r.detail).join(' | ');expect(plan).not.toContain('USE TEMP B-TREE FOR ORDER BY');}
+   }
+  }
+ }finally{if(pg){await run(`DROP SCHEMA IF EXISTS ${namespace} CASCADE`);await raw.close();}else raw.close();await rm(dir,{recursive:true,force:true});}
+},60000);
