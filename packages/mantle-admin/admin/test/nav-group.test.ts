@@ -269,11 +269,37 @@ describe("sidebar placement (uiSchema.nav and navGroups)", () => {
     );
     expect(shape(groups).slice(1)).toEqual([
       ["Sales", ["pipeline", "quotes"]],
-      ["Content", []],
       ["Records", ["customers"]],
       ["Reports", ["totals"]],
       ["Catalog", ["types", "categories", "Catalog browser"]],
     ]);
     expect(JSON.stringify(groups)).not.toContain("/admin/c/audit");
+  });
+
+  const pages = (...list: object[]) => [{ id: "pages", contributes: { pages: list } }] as never;
+
+  it("lists an unordered page after the ordered collections of its group", () => {
+    const groups = buildNavGroups(
+      [collection("types", "operational", { group: "catalog", order: 1 }), collection("categories", "operational", { group: "catalog", order: 2 })],
+      [], "en", null, false, false, undefined,
+      pages({ id: "browser", title: "Catalog browser", role: "admin", nav: { group: "catalog" } }),
+      [{ id: "catalog", title: "Catalog" }],
+    );
+    expect(shape(groups).slice(1)).toEqual([["Catalog", ["types", "categories", "Catalog browser"]]]);
+  });
+
+  it("shows no empty Content heading once a project moves every collection out of it", () => {
+    const groups = buildNavGroups([collection("posts", "publishing", { group: "editorial" })], [], "en", null, false, false, undefined, undefined, [{ id: "editorial", title: "Editorial" }]);
+    expect(shape(groups).slice(1)).toEqual([["Editorial", ["posts"]]]);
+    expect(shape(buildNavGroups([], [], "en", null, false)).slice(1)).toEqual([["Content", []]]);
+  });
+
+  it("orders pages and collections together in More", () => {
+    const groups = buildNavGroups(
+      [collection("archive", "operational", { group: "more", order: 1 })],
+      [], "en", null, false, false, undefined,
+      pages({ id: "tools", title: "Tools", role: "admin", nav: { group: "more", order: 100 } }),
+    );
+    expect(shape(groups).slice(-1)).toEqual([["More", ["archive", "Tools"]]]);
   });
 });

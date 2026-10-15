@@ -145,6 +145,8 @@ export const MANTLE_BIND_KEYWORD = "x-mantle-bind" as const;
  * with `resolveLocalizedText`.
  */
 export type LocalizedText = string | Readonly<Record<string, string>>;
+/** A non-empty string or a non-empty `{ locale: non-empty string }` map. */
+export const isLocalizedText = (v: unknown): v is LocalizedText => (typeof v === "string" && v.length > 0) || (typeof v === "object" && v !== null && !Array.isArray(v) && Object.keys(v).length > 0 && Object.values(v).every((x) => typeof x === "string" && x.length > 0));
 
 /**
  * Resolve a `LocalizedText` value to a single displayable string for

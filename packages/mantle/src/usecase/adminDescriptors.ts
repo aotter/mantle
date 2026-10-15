@@ -10,7 +10,7 @@ const adminEnum = (p: JsonSchema): JsonSchema => { if(!p.oneOf) return p; const 
 export function emitAdminDescriptors({plan,adminExtensions=[],navGroups=[],admin=false}:Pick<GenerateInput,"plan"|"adminExtensions"|"navGroups"|"admin">,diagnostics:GenerateDiagnostic[]):Record<string,string> {
   // Sidebar placement: every nav.group names a built-in group or a declared navGroups id (presentation only).
   for(const [path,message] of navGroupProblems(navGroups))diagnostics.push({code:"SCHEMA_UI_INVALID",path,message});
-  const groupIds=new Set<string>([...Object.keys(BUILT_IN_NAV_GROUPS),...(Array.isArray(navGroups)?navGroups.map(g=>g.id):[])]);
+  const groupIds=new Set<string>([...BUILT_IN_NAV_GROUPS,...(Array.isArray(navGroups)?navGroups.map(g=>g.id):[])]);
   const placed=[...Object.values(plan.schemas).map(s=>["schemas/"+s.name,s.uiSchema] as const),...Object.entries(plan.views).map(([name,v])=>["views/"+name,v.uiSchema] as const)];
   for(const [path,ui] of placed){const group=(ui?.["nav"] as {group?:unknown}|undefined)?.group;if(typeof group==="string"&&!groupIds.has(group))diagnostics.push({code:"SCHEMA_UI_INVALID",path:path+"/uiSchema/nav/group",message:`Unknown nav group '${group}': use content, operations, reports or more, or declare it in navGroups of the --admin-extensions module.`});}
   for(const e of adminExtensions)for(const p of e.contributes.pages??[]){const group=p.nav?.group;if(group!==undefined&&group!=="settings"&&!groupIds.has(group))diagnostics.push({code:"UI_EXTENSION_INVALID",path:`admin/extensions/${e.id}/pages/${p.id}/nav/group`,message:`Unknown nav group '${group}'.`});}
