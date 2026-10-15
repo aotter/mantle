@@ -2,6 +2,7 @@
 import { INPUT_RULE_KEYWORDS, lookupLocalRef as lookup, rootRefChain, type JsonSchema } from "../build/compiler.js";
 import { q } from "../domain/entry.js";
 import { publishingInput } from "./publishing.js";
+import { equal } from "../kernel/validation.js";
 const pointer = (key: string) => key.replace(/~/g, "~0").replace(/\//g, "~1");
 const supported = new Set([..."$defs $ref $schema $id type nullable properties required additionalProperties items enum const format pattern minLength maxLength minimum maximum exclusiveMinimum exclusiveMaximum multipleOf minItems maxItems title description default readOnly writeOnly examples deprecated x-mantle-ref x-mcp-hint".split(" "), ...INPUT_RULE_KEYWORDS]);
 const shapes = "see docs/handbook/reference/surface.md";
@@ -44,9 +45,9 @@ function rules(schema: JsonSchema): Rule[] | string {
 export function acceptsEmpty(input: JsonSchema | undefined): boolean {
   if (input === undefined) return true;
   // Validation applies a root `$ref`'s target too, so each schema along the chain must accept `{}`; an unresolved or cyclic chain does not.
-  // dependentRequired needs a present key; an if needs its field, so `{}` meets only an else.
+  // dependentRequired needs a present key; an if needs its field, so `{}` meets only an else. An enum or const must admit `{}`.
   return rootRefChain(input)?.every(schema => !schema.required?.length && schema.anyOf === undefined && !(schema.else as JsonSchema | undefined)?.required?.length
-    && schema.enum === undefined && schema.const === undefined && (schema.type === undefined || [schema.type].flat().includes("object"))) ?? false;
+    && (schema.enum === undefined || schema.enum.some(option => equal({}, option))) && (schema.const === undefined || equal({}, schema.const)) && (schema.type === undefined || [schema.type].flat().includes("object"))) ?? false;
 }
 type Text = string | Readonly<Record<string, string>>;
 /**
@@ -58,8 +59,14 @@ export function advertised(input: JsonSchema | undefined, description: Text): { 
   const sentences: string[] = [], copy = JSON.parse(q(input)) as Record<string, unknown>;
   const strip = (node: unknown, at: string): void => {
     if (!node || typeof node !== "object") return;
-    const schema = node as Record<string, unknown>, found = rules(schema);
-    if (typeof found !== "string") for (const rule of found) sentences.push(at ? `In '${at}': ${rule.message}` : rule.message);
+    const schema = node as Record<string, unknown>;
+    // An MCP View tool keeps each rule set of its root `$ref` chain as an `allOf` branch over the merged properties.
+    const branches = Array.isArray(schema.allOf) ? schema.allOf as JsonSchema[] : [];
+    for (const branch of [schema, ...branches.map(branch => ({ ...branch, properties: schema.properties }) as JsonSchema)]) {
+      const found = rules(branch);
+      if (typeof found !== "string") for (const rule of found) sentences.push(at ? `In '${at}': ${rule.message}` : rule.message);
+    }
+    if (branches.length && branches.every(branch => Object.keys(branch).every(key => (INPUT_RULE_KEYWORDS as readonly string[]).includes(key)))) delete schema.allOf;
     for (const keyword of INPUT_RULE_KEYWORDS) delete schema[keyword];
     for (const [key, child] of Object.entries((schema.properties ?? {}) as object)) strip(child, `${at}/${key}`);
     for (const [key, child] of Object.entries((schema.$defs ?? {}) as object)) strip(child, `#/$defs/${key}`);
@@ -94,6 +101,14 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
     // Identical bodies share one function.
     const nodes = new Map<JsonSchema,string>(), bodies = new Map<string,string>(), functions:string[] = [], formats = new Set<string>(), patterns = new Map<string,string>();
     let equality = false;
+    // An object literal's "__proto__" key sets the prototype instead of an own key: such a value is parsed from JSON once instead.
+    const parsed = new Map<string,string>();
+    const literal = (value: unknown): string => {
+      const json = q(value);
+      if (!json.includes('"__proto__"')) return json;
+      if (!parsed.has(json)) parsed.set(json,`constant${parsed.size}`);
+      return parsed.get(json)!;
+    };
     const resolve = (ref:string): JsonSchema => {
       const found = lookup(root, ref);
       if (!found) refuse(base,"Input ref must be a valid local JSON pointer.");
@@ -114,8 +129,8 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
       // After a single type check `fail` (never) has narrowed `value`: that type's guard is implied.
       const only = types.length === 1 ? types[0] : undefined;
       const guard = (type:string, test = `(${condition(type)})`) => only === type || type === "number" && only === "integer" ? "" : test + " && ";
-      if (schema.enum) { if (!finite(schema.enum)) refuse(base, "Input enum numbers must be finite; JSON has no Infinity or NaN."); equality = true; check(`!${q(schema.enum)}.some(option=>equal(value,option))`,"Value is not in enum."); }
-      if (schema.const !== undefined) { if (!finite(schema.const)) refuse(base, "Input const numbers must be finite; JSON has no Infinity or NaN."); equality = true; check(`!equal(value,${q(schema.const)})`,"Value violates const."); }
+      if (schema.enum) { if (!finite(schema.enum)) refuse(base, "Input enum numbers must be finite; JSON has no Infinity or NaN."); equality = true; check(`!${literal(schema.enum)}.some(option=>equal(value,option))`,"Value is not in enum."); }
+      if (schema.const !== undefined) { if (!finite(schema.const)) refuse(base, "Input const numbers must be finite; JSON has no Infinity or NaN."); equality = true; check(`!equal(value,${literal(schema.const)})`,"Value violates const."); }
       for (const [type,measure,keywords] of bounds) for (const [key,operator] of Object.entries(keywords)) if (schema[key] !== undefined) check(`${guard(type)}${measure} ${operator} ${schema[key]}`, `Value violates ${key}.`);
       if (schema.multipleOf !== undefined) check(`${guard("number",'typeof value === "number"')}!(Math.abs(value / ${schema.multipleOf} - Math.round(value / ${schema.multipleOf})) < 1e-9)`,"Number violates multipleOf.");
       if (schema.pattern !== undefined) {
@@ -153,7 +168,7 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
       return type === "boolean" || type === "integer" || type === "number" ? [key,type] : [key];
     }) : undefined;
     const helpers = [...(functions.length ? ["fail"] : []), ...(equality ? ["equal"] : []), ...(fields ? ["query as read"] : [])];
-    const code = `${helpers.length ? `import { ${helpers.join(", ")} } from "@aotter/mantle/validation";\n` : ""}${formats.size ? `import { ${[...formats].join(", ")} } from "@aotter/mantle/scalars";\n` : ""}${[...patterns].map(([pattern,name])=>`const ${name} = new RegExp(${q(pattern)});\n`).join("")}${functions.join("\n")}
+    const code = `${helpers.length ? `import { ${helpers.join(", ")} } from "@aotter/mantle/validation";\n` : ""}${formats.size ? `import { ${[...formats].join(", ")} } from "@aotter/mantle/scalars";\n` : ""}${[...patterns].map(([pattern,name])=>`const ${name} = new RegExp(${q(pattern)});\n`).join("")}${[...parsed].map(([json,name])=>`const ${name} = JSON.parse(${q(json)});\n`).join("")}${functions.join("\n")}
 export function validate(raw:unknown):Record<string,unknown> { ${validate}(raw,${q(base)}${recursive ? ",0" : ""}); return raw as Record<string,unknown>; }
 ${fields ? `export const query = (params:URLSearchParams) => read(params, validate, ${q(`${kind}/${name}`)}, ${q(fields)});\n` : ""}`;
     files[file]=code;
