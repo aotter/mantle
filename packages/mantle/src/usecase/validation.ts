@@ -1,6 +1,6 @@
 /** Compile boundary checks into each operation; no schema enters the request bundle. */
 import { INPUT_RULE_KEYWORDS, lookupLocalRef as lookup, rootRefChain, type JsonSchema } from "../build/compiler.js";
-import { q } from "../domain/entry.js";
+import { literal, q } from "../domain/entry.js";
 import { publishingInput } from "./publishing.js";
 import { equal } from "../kernel/validation.js";
 const pointer = (key: string) => key.replace(/~/g, "~0").replace(/\//g, "~1");
@@ -101,14 +101,6 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
     // Identical bodies share one function.
     const nodes = new Map<JsonSchema,string>(), bodies = new Map<string,string>(), functions:string[] = [], formats = new Set<string>(), patterns = new Map<string,string>();
     let equality = false;
-    // An object literal's "__proto__" key sets the prototype instead of an own key: such a value is parsed from JSON once instead.
-    const parsed = new Map<string,string>();
-    const literal = (value: unknown): string => {
-      const json = q(value);
-      if (!json.includes('"__proto__"')) return json;
-      if (!parsed.has(json)) parsed.set(json,`constant${parsed.size}`);
-      return parsed.get(json)!;
-    };
     const resolve = (ref:string): JsonSchema => {
       const found = lookup(root, ref);
       if (!found) refuse(base,"Input ref must be a valid local JSON pointer.");
@@ -168,7 +160,7 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
       return type === "boolean" || type === "integer" || type === "number" ? [key,type] : [key];
     }) : undefined;
     const helpers = [...(functions.length ? ["fail"] : []), ...(equality ? ["equal"] : []), ...(fields ? ["query as read"] : [])];
-    const code = `${helpers.length ? `import { ${helpers.join(", ")} } from "@aotter/mantle/validation";\n` : ""}${formats.size ? `import { ${[...formats].join(", ")} } from "@aotter/mantle/scalars";\n` : ""}${[...patterns].map(([pattern,name])=>`const ${name} = new RegExp(${q(pattern)});\n`).join("")}${[...parsed].map(([json,name])=>`const ${name} = JSON.parse(${q(json)});\n`).join("")}${functions.join("\n")}
+    const code = `${helpers.length ? `import { ${helpers.join(", ")} } from "@aotter/mantle/validation";\n` : ""}${formats.size ? `import { ${[...formats].join(", ")} } from "@aotter/mantle/scalars";\n` : ""}${[...patterns].map(([pattern,name])=>`const ${name} = new RegExp(${q(pattern)});\n`).join("")}${functions.join("\n")}
 export function validate(raw:unknown):Record<string,unknown> { ${validate}(raw,${q(base)}${recursive ? ",0" : ""}); return raw as Record<string,unknown>; }
 ${fields ? `export const query = (params:URLSearchParams) => read(params, validate, ${q(`${kind}/${name}`)}, ${q(fields)});\n` : ""}`;
     files[file]=code;

@@ -207,3 +207,12 @@ test("transport and request validation answer before the unknown-tool error; bat
   expect((await post(empty,call("gone"))).messages[0].error).toEqual({code:-32602,message:`No tool named "gone" exists in the current catalogue (catalogue version ${catalogue([])}).`});
  });
 });
+
+test("a listed schema keeps a \"__proto__\" const key as an own key, and still hashes to its version",async()=>{
+ const text=source.replace("title: {type: string, minLength: 1}}","title: {type: string, minLength: 1}, p: {const: {\"__proto__\": 1}}}");
+ await withApp(await generateOrThrow("bun-sqlite",[{sourceId:"v.yaml",text}]),async(mcp,db,tools)=>{
+  expect(Object.hasOwn(tools.find(t=>t.name==="add_item").inputSchema.properties.p.const,"__proto__")).toBe(true);
+  const client=await connect(mcp({db:()=>db,caller:()=>({kind:"anonymous"})}),eras[1]);const {tools:listed}=await client.listTools();
+  expect(JSON.stringify(listed.find(t=>t.name==="add_item")!.inputSchema.properties!.p)).toBe('{"const":{"__proto__":1}}');expectListedHashes(listed);await client.close();
+ });
+});
