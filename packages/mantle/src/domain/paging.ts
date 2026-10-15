@@ -7,6 +7,11 @@ type Relation = { fields: Map<string, Field>; names: ReadonlySet<string>; single
 export type PagingProof = { types: string[]; single: boolean; reason?: string };
 const fieldName = (n: SqlNode) => n.ColumnRef?.fields?.at(-1)?.String?.sval;
 const scalar = (n: SqlNode): boolean => !!(n.ParamRef || n.A_Const || n.TypeCast && scalar(n.TypeCast.arg));
+// A user-field term lowers to the dialect's anyOf, `(col) IN (SELECT value FROM json_each((?)))` or `(col) = ANY(CAST(...(?)...))`.
+const anyOf = (raw: SqlNode) => raw?.length === 8 && raw[1]?.ColumnRef && raw[5]?.ParamRef && /^ (IN \(SELECT value FROM json_each\(|= ANY\()/.test(raw[3]);
+// A scope prints `/*s:field*/ kept /*|*/ kept OR 1 = 1 /*;*/`, so `{ all: true }` drops it; any other anyOf is a restrict, which it never lifts.
+const scopeTerm = (raw: SqlNode) => typeof raw?.[0] === "string" && raw[0].startsWith("/*s:");
+const restricts = (n: SqlNode): boolean => !!n && typeof n === "object" && (anyOf(n.Raw?.parts) || !scopeTerm(n.Raw?.parts) && Object.values(n).some(restricts));
 const aggregate = (n: SqlNode): boolean => !!n && !n.SubLink && !n.SelectStmt && (n.FuncCall && !n.FuncCall.over && ["count", "sum", "min", "max", "avg"].includes(n.FuncCall.funcname?.at(-1)?.String?.sval) || Object.values(n).some(v => v && typeof v === "object" && (Array.isArray(v) ? v.some(aggregate) : aggregate(v))));
 
 /** Only complete grouped tuples, base ids and non-fanning singleton joins are proved. */
@@ -97,12 +102,9 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       if (n?.BoolExpr?.boolop === "AND_EXPR") n.BoolExpr.args.forEach(fixed);
       // `col IN auth.user(field)` (a scope or restrict) never fixes a prefix (#1644): the plan is prepared for a set, so
       // native ORDER BY after it reads and sorts all the caller's rows. It is only remembered for the refusal's guidance.
-      // `{ all: true }`'s `kept OR 1 = 1` only drops IN terms, so this caller proof bounds that variant too.
-      // A scope prints `/*s:field*/ kept /*|*/ kept OR 1 = 1 /*;*/`; `kept` is the dialect's anyOf lowering,
-      // `(col) IN (SELECT value FROM json_each((?)))` or `(col) = ANY(CAST(...(?)...))`.
       const raw = n?.Raw?.parts;
-      if (raw && typeof raw[0] === "string" && raw[0].startsWith("/*s:")) return fixed(raw[1]);
-      if (raw?.length === 8 && raw[1]?.ColumnRef && raw[5]?.ParamRef && /^ (IN \(SELECT value FROM json_each\(|= ANY\()/.test(raw[3])) {
+      if (scopeTerm(raw)) return fixed(raw[1]);
+      if (anyOf(raw)) {
         const col = resolve(raw[1], false);
         if (col && col.source === base!.fields.get("id")?.source) base!.sets.add(col.name);
         return;
@@ -142,14 +144,22 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
           });
           if (!serving(base.fixed)) {
             const index = serving(new Set([...base.fixed, ...base.sets])), named = (c: string) => schema.names?.[c] ?? c, columns = order.map(f => named(f.name)).join(", ");
-            if (!index) return fail(`Missing index for ORDER BY (${order.map(f => f.name).join(", ")}): declare a Schema index with these ordered columns after any fixed equality prefix.`);
-            const prefix = index.slice(0, index.indexOf(order[0]!.name)), set = prefix.filter(c => !base!.fixed.has(c)).map(named);
+            if (!index) return fail(`Missing index for ORDER BY (${columns}): declare a Schema index with these ordered columns after any fixed equality prefix.`);
+            const prefix = index.slice(0, index.indexOf(order[0]!.name)), set = prefix.filter(c => !base!.fixed.has(c));
             // The suggested order is the index from its first set-bound column: an equality-fixed column between stays in it.
-            const lead = prefix.slice(prefix.findIndex(c => !base!.fixed.has(c))).map(named);
+            const lead = prefix.slice(prefix.indexOf(set[0]!)), quoted = (cs: string[]) => cs.map(c => `'${named(c)}'`).join(", ");
+            // The scope-first order is offered only when SQL can name every added column and none can be null. The owner
+            // scope column is NOT NULL in storage, but a View cannot address it.
+            const notNull = notNullColumns(schema), owner = lead.filter(c => c === schema.scope), nullable = lead.filter(c => !NATIVE_NOT_NULL.has(c) && !notNull.has(c) && c !== schema.scope);
             const dir = (f: Field) => sorts[keys.indexOf(f)]!.SortBy.sortby_dir === "SORTBY_DESC" ? " DESC" : "";
-            const sorted = [...lead.map(c => c + dir(order[0]!)), ...order.map(f => named(f.name) + dir(f))].join(", ");
+            const sorted = [...lead.map(c => named(c) + dir(order[0]!)), ...order.map(f => named(f.name) + dir(f))].join(", ");
             const desc = order.some(f => dir(f)) ? ", read backwards; on PostgreSQL confirm with EXPLAIN that no Sort remains" : "";
-            return fail(`ORDER BY (${columns}) is served by index [${index.map(named).join(", ")}] only after ${set.map(c => `'${c}'`).join(", ")}, which a user-field scope or restrict fixes to a set of values, not one value: every page would read and sort all of the caller's rows. Bounded ways: ORDER BY ${sorted} (served by the same index${desc}); a View input bound with equality, e.g. WHERE ${set.map(c => `${c} = input.${c}`).join(" AND ")}, which fixes the prefix (the scope or restrict still applies); or, for Views read by { all: true } callers, an index on the ORDER BY columns alone, e.g. [${columns}] (not bounded for scoped callers).`);
+            // `{ all: true }` drops only scope terms: offer it an index on the View's equality-fixed columns, unless a restrict remains.
+            const eq = [...base.fixed].filter(c => c !== "id" && !order.some(f => f.name === c));
+            const ways = [...nullable.length || owner.length ? [] : [`ORDER BY ${sorted} (same index${desc})`], ...restricts(ast) ? [] : [`for { all: true } callers only, index [${[...eq.map(named), columns].join(", ")}, id]`]];
+            const why = [...owner.length ? [`${quoted(owner)} is the owner column, which SQL cannot name`] : [], ...nullable.length ? [`${quoted(nullable)} can be null`] : []];
+            const unavailable = why.length ? ` Scope-first ORDER BY unavailable: ${why.join("; ")}${ways.length ? "." : ""}` : "";
+            return fail(`ORDER BY (${columns}) needs index [${index.map(named).join(", ")}] past ${quoted(set)}, which a user-field scope or restrict binds to a set of values: every page would sort all of the caller's rows.${unavailable}${ways.length ? ` Bounded: ${ways.join("; ")}` : ""} (handbook: reference/schema.md#index-prefixes-for-paged-views).`);
           }
         }
       }
