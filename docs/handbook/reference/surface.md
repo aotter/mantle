@@ -77,6 +77,8 @@ REST/MCP use separate `paged/wire/views/<name>.ts` SQL when declared integers
 require exact transport projections. Web pages and internal paged Views keep
 driver-native rows. Internal paging creates no public route/tool.
 Authored SQL `LIMIT` caps each page, up to 500, rather than the whole cursor walk.
+An MCP View page holds at most 100 rows, so a result stays under host truncation
+limits; a larger `limit` up to 500 returns 100 rows and the next cursor.
 A pageable Schema View has a complete NOT NULL scalar tuple ending in the
 compiler's `id` tiebreak. Its ordered columns must match an index after fixed
 equality prefixes; a user-field `IN` scope or restrict is not one (see

@@ -2,7 +2,7 @@ import { connectHost } from "../src/app/postmessage.js";
 const inputs: unknown[] = [], results: unknown[] = [], contexts: unknown[] = [], errors: string[] = [];
 const probe = { inputs, results, contexts, errors, cancelled: 0, call: undefined as unknown, close: () => {} };
 probe.close = connectHost({
-  ready: (call, context) => { probe.call = call; contexts.push(context); },
+  ready: (host, context) => { probe.call = host.call; contexts.push(context); },
   input: value => { inputs.push(value); }, result: value => { results.push(value); },
   cancelled: () => { probe.cancelled++; }, context: value => { contexts.push(value); }, error: error => { errors.push(error.message); },
 });

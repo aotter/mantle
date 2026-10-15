@@ -1,13 +1,18 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 
+const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, "package.json"), "utf8")) as { version: string };
+
 // One self-contained HTML file (ADR-0029 D7): hosts load MCP App resources
 // in a sandbox with no network access to extra assets by default.
 export default defineConfig({
   root: resolve(import.meta.dirname, "src/mcp-app"),
+  // `appInfo.version` in `ui/initialize`, so a host can tell App builds apart
+  define: { __MANTLE_VERSION__: JSON.stringify(version) },
   plugins: [{
     name: "mantle-app-native-date",
     enforce: "pre",

@@ -14,6 +14,8 @@ export interface AppLabels {
   readonly viewFailed: string;
   readonly viewCancelled: string;
   readonly refreshFailed: string;
+  readonly fullscreen: string;
+  readonly exitFullscreen: string;
 }
 
 const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
@@ -55,6 +57,8 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "These results could not be shown.",
     viewCancelled: "The request was cancelled.",
     refreshFailed: "The list could not be refreshed. It may be out of date.",
+    fullscreen: "Full screen",
+    exitFullscreen: "Exit full screen",
   },
   "zh-TW": {
     fields: { emptyOption: "無值", clearOption: "未設定", chooseOption: "請選擇…", boolean: "啟用", dateTimeSelect: "選擇日期與時間", dateTimeTime: "時間", removeItem: "移除項目", addItem: "新增項目" },
@@ -94,6 +98,8 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "無法顯示這些結果。",
     viewCancelled: "請求已取消。",
     refreshFailed: "無法重新整理清單，內容可能不是最新的。",
+    fullscreen: "全螢幕",
+    exitFullscreen: "結束全螢幕",
   },
   "zh-CN": {
     fields: { emptyOption: "无值", clearOption: "未设置", chooseOption: "请选择…", boolean: "启用", dateTimeSelect: "选择日期与时间", dateTimeTime: "时间", removeItem: "移除项目", addItem: "新增项目" },
@@ -133,6 +139,8 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "无法显示这些结果。",
     viewCancelled: "请求已取消。",
     refreshFailed: "无法刷新列表，内容可能不是最新的。",
+    fullscreen: "全屏",
+    exitFullscreen: "退出全屏",
   },
 };
 

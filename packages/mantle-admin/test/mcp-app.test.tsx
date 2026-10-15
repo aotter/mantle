@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { MantleApp } from "../src/mcp-app/app.js";
+import { MantleApp, appValue } from "../src/mcp-app/app.js";
+import type { HostApi } from "../src/app/postmessage.js";
+import { adminMcpApps } from "../src/server/mcp.js";
 import { actionsFor, APP_TOOL_META_KEY, hiddenInputs, invokeTool, outputOf, readCatalog, rowsOf, toolOf, type AppCatalog, type ToolResult } from "../src/app/bridge.js";
 
 const action = {
@@ -67,7 +69,8 @@ describe("MCP App bridge", () => {
 });
 
 describe("MantleApp", () => {
-  const render = (props: Partial<Parameters<typeof MantleApp>[0]> = {}) => renderToStaticMarkup(<MantleApp catalog={catalog} call={vi.fn()} result={viewResult} input={{}} {...props} />);
+  const host = (capabilities: HostApi["capabilities"] = { serverTools: {} }): HostApi => ({ capabilities, ...(capabilities.serverTools ? { call: vi.fn() } : {}), openLink: vi.fn(), sendMessage: vi.fn(), updateModelContext: vi.fn(), requestDisplayMode: vi.fn() });
+  const render = (props: Partial<Parameters<typeof MantleApp>[0]> = {}) => renderToStaticMarkup(<MantleApp catalog={catalog} host={host()} result={viewResult} input={{}} {...props} />);
 
   it("shows rows as Admin does: field titles, money, option titles, and the row's actions", () => {
     const html = render();
@@ -100,5 +103,35 @@ describe("MantleApp", () => {
     expect(bare).toContain("Laptops");
     expect(bare).toContain("123456");
     expect(bare).not.toContain("Review requisition");
+  });
+
+  it("is read-only when the host offers no server tools: the rows, but no action to open", () => {
+    const html = render({ host: host({}) });
+    expect(html).toContain("Laptops");
+    expect(html).not.toContain("Review requisition");
+  });
+
+  it("shows date-times in the host's time zone and language, and opens http(s) links only through a host that can", () => {
+    const at = "2026-10-01T15:20:00.000Z", date = { type: "string", format: "date-time" } as const;
+    // ICU spaces vary by version
+    expect(renderToStaticMarkup(<>{appValue(date, at, "en-US", "Asia/Taipei")}</>)).toMatch(new RegExp(`^<time dateTime="${at}">10/1/26,\\s11:20\\sPM</time>$`));
+    expect(renderToStaticMarkup(<>{appValue(date, at, "en-US", "America/New_York")}</>)).toMatch(/11:20\sAM/);
+    expect(renderToStaticMarkup(<>{appValue({ type: "integer", "x-mcp-hint": "timestamp-ms" }, Date.parse(at), "zh-TW", "Asia/Taipei")}</>)).toMatch(/^2026\/10\/1\s晚上11:20$/);
+    const uri = { type: "string", format: "uri" } as const, openLink = vi.fn();
+    expect(renderToStaticMarkup(<>{appValue(uri, "https://example.com/a", "en", undefined, openLink)}</>)).toBe('<a href="https://example.com/a" class="underline">https://example.com/a</a>');
+    expect(renderToStaticMarkup(<>{appValue(uri, "javascript:alert(1)", "en", undefined, openLink)}</>)).toBe("javascript:alert(1)");
+    expect(renderToStaticMarkup(<>{appValue(uri, "https://example.com/a", "en")}</>)).toBe("https://example.com/a");
+  });
+});
+
+describe("adminMcpApps", () => {
+  it("embeds the catalogue as this caller sees it: no View or action its tools/list hides", async () => {
+    const [resource] = adminMcpApps({ catalogue: catalog, html: "<head></head>", domain: "admin.apps.example" }).resources;
+    expect(resource!.domain).toBe("admin.apps.example");
+    const embedded = async (tools: string[]) => JSON.parse((await (resource!.html as (render: { tools: Set<string> }) => Promise<string>)({ tools: new Set(tools) })).match(/<script[^>]*>(.*)<\/script>/)![1]!) as unknown;
+    // "gone" is no tool of this caller's either
+    expect(await embedded(["pending", "review_requisition"])).toEqual({ ...catalog, views: { pending: { ...catalog.views["pending"], actions: ["review_requisition"] } } });
+    expect(await embedded(["pending"])).toEqual({ views: { pending: { ...catalog.views["pending"], actions: [] } }, actions: {} });
+    expect(await embedded(["review_requisition"])).toEqual({ views: {}, actions: { review_requisition: action } });
   });
 });
