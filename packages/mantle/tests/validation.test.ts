@@ -126,6 +126,19 @@ test("an input accepts no fields only without required, anyOf or an else rule", 
   for (const input of [{ type: "object", properties, required: ["a"] }, { type: "object", properties, anyOf: [{ required: ["a"] }, { required: ["b"] }] }, { type: "object", properties, if: when, else: { required: ["b"] } }]) expect(acceptsEmpty(input as JsonSchema)).toBe(false);
 });
 
+test("a root $ref's rules decide whether an input accepts no fields", () => {
+  const properties = { a: { type: "string" }, b: { type: "string" } }, when = { properties: { a: { const: "x" } }, required: ["a"] };
+  const via = (target: object) => ({ $ref: "#/$defs/t", $defs: { t: { type: "object", properties, ...target } } }) as JsonSchema;
+  for (const target of [{ required: ["a"] }, { anyOf: [{ required: ["a"] }, { required: ["b"] }] }, { if: when, else: { required: ["b"] } }]) expect(acceptsEmpty(via(target))).toBe(false);
+  expect(acceptsEmpty(via({}))).toBe(true);
+  expect(acceptsEmpty({ $ref: "#/$defs/u", $defs: { u: { $ref: "#/$defs/t" }, t: { type: "object", properties, required: ["a"] } } } as JsonSchema)).toBe(false);
+  for (const input of [{ $ref: "#/$defs/missing" }, { $ref: "#" }, { $ref: "#/$defs/s", $defs: { s: { $ref: "#/$defs/s" } } }]) expect(acceptsEmpty(input as JsonSchema)).toBe(false);
+});
+
+test("enum numbers must be finite", () => {
+  for (const input of [{ type: "object", properties: { a: { enum: [1, Infinity] } } }, { type: "object", properties: { a: { enum: [{ b: [NaN] }] } } }]) expect(() => emitValidation(plan(input as JsonSchema))).toThrow("Input enum numbers must be finite");
+});
+
 test("format uri is an absolute http or https URL", async () => {
   const { validate } = await checked({ type: "object", properties: { link: { type: ["string", "null"], format: "uri" } } });
   for (const link of ["https://example.com/a?b#c", "http://localhost:8080", "HTTPS://EXAMPLE.COM", null]) expect(validate({ link })).toEqual({ link });

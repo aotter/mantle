@@ -42,8 +42,24 @@ function rules(schema: JsonSchema): Rule[] | string {
 }
 /** Whether an input schema accepts `{}`: a list View is read with no input, so web indexes need this. */
 export function acceptsEmpty(input: JsonSchema | undefined): boolean {
-  // dependentRequired needs a present key; an if needs its field, so `{}` meets only an else.
-  return !input?.required?.length && input?.anyOf === undefined && !(input?.else as JsonSchema | undefined)?.required?.length;
+  // Validation applies a root `$ref`'s target too, so each schema along the chain must accept `{}`; an unresolved or cyclic chain does not.
+  const seen = new Set<JsonSchema>();
+  for (let schema = input; schema !== undefined; schema = lookup(input!, schema.$ref)) {
+    // dependentRequired needs a present key; an if needs its field, so `{}` meets only an else.
+    if (seen.has(schema) || schema.required?.length || schema.anyOf !== undefined || (schema.else as JsonSchema | undefined)?.required?.length) return false;
+    if (schema.$ref === undefined) return true;
+    seen.add(schema);
+  }
+  return input === undefined;
+}
+/** The schema a local JSON pointer `ref` names in `root`, or undefined. */
+function lookup(root: JsonSchema, ref: unknown): JsonSchema | undefined {
+  if (typeof ref !== "string" || !ref.startsWith("#/")) return undefined;
+  let value: unknown = root;
+  try {
+    for (const key of decodeURIComponent(ref.slice(2)).split("/").map(key=>key.replace(/~1/g,"/").replace(/~0/g,"~"))) value = value && typeof value === "object" && Object.hasOwn(value,key) ? (value as Record<string,unknown>)[key] : undefined;
+  } catch { return undefined; }
+  return value && typeof value === "object" ? value as JsonSchema : undefined;
 }
 type Text = string | Readonly<Record<string, string>>;
 /**
@@ -92,13 +108,9 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
     const nodes = new Map<JsonSchema,string>(), bodies = new Map<string,string>(), functions:string[] = [], formats = new Set<string>(), patterns = new Map<string,string>();
     let equality = false;
     const resolve = (ref:string): JsonSchema => {
-      let value: unknown = root;
-      try {
-        if (typeof ref !== "string" || !ref.startsWith("#/")) throw Error();
-        for (const key of decodeURIComponent(ref.slice(2)).split("/").map(key=>key.replace(/~1/g,"/").replace(/~0/g,"~"))) value = value && typeof value === "object" && Object.hasOwn(value,key) ? (value as Record<string,unknown>)[key] : undefined;
-        if (value && typeof value === "object") return value as JsonSchema;
-      } catch {}
-      refuse(base,"Input ref must be a valid local JSON pointer."); return {};
+      const found = lookup(root, ref);
+      if (!found) refuse(base,"Input ref must be a valid local JSON pointer.");
+      return found ?? {};
     };
     const emit = (schema:JsonSchema): string => {
       if (nodes.has(schema)) return nodes.get(schema)!;
@@ -115,7 +127,7 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
       // After a single type check `fail` (never) has narrowed `value`: that type's guard is implied.
       const only = types.length === 1 ? types[0] : undefined;
       const guard = (type:string, test = `(${condition(type)})`) => only === type || type === "number" && only === "integer" ? "" : test + " && ";
-      if (schema.enum) { equality = true; check(`!${q(schema.enum)}.some(option=>equal(value,option))`,"Value is not in enum."); }
+      if (schema.enum) { if (!finite(schema.enum)) refuse(base, "Input enum numbers must be finite; JSON has no Infinity or NaN."); equality = true; check(`!${q(schema.enum)}.some(option=>equal(value,option))`,"Value is not in enum."); }
       if (schema.const !== undefined) { if (!finite(schema.const)) refuse(base, "Input const numbers must be finite; JSON has no Infinity or NaN."); equality = true; check(`!equal(value,${q(schema.const)})`,"Value violates const."); }
       for (const [type,measure,keywords] of bounds) for (const [key,operator] of Object.entries(keywords)) if (schema[key] !== undefined) check(`${guard(type)}${measure} ${operator} ${schema[key]}`, `Value violates ${key}.`);
       if (schema.multipleOf !== undefined) check(`${guard("number",'typeof value === "number"')}!(Math.abs(value / ${schema.multipleOf} - Math.round(value / ${schema.multipleOf})) < 1e-9)`,"Number violates multipleOf.");
