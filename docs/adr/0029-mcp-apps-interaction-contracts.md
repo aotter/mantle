@@ -1,6 +1,6 @@
 # ADR-0029: Official MCP SDK, interaction contracts and MCP Apps
 
-**Status:** Accepted
+**Status:** Accepted; amended by [ADR-lite 1376](adr-lite-1376-admin-extensions.md) revision 4
 
 **Date:** 2026-09-25
 
@@ -162,7 +162,10 @@ mantle-spec ◄── mantle-runtime ◄── mantle-mcp ◄── adapters, ma
 > **Amendment ([ADR-lite 1376](adr-lite-1376-admin-extensions.md) revision
 > 4, decision 8):** the Admin App is built by the application from its Admin
 > entry and served from the assets directory; the prebuilt `mantleAppHtml`
-> goes away.
+> (`@aotter/mantle-admin/mcp-app`) goes away. The catalog embedded when
+> `ui://mantle-admin/admin` is read is limited to the tools that caller can
+> list: names and fields only, never rows. This is an exception to §10's "no
+> caller data": that resource must not be cached or shared across callers.
 - `@aotter/mantle-admin-ui/kit` re-exports from `@aotter/mantle-ui` for one
   minor release, then is removed.
 - No exported UI module depends on Admin's router, global API client, query

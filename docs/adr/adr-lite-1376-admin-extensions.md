@@ -2,7 +2,8 @@
 
 **Status:** Accepted, revision 4. Supersedes revision 3 entirely.
 Revision 3 shipped only in the 0.2.0 alpha prereleases (alpha.6 and alpha.7),
-never in a stable release. Amends [ADR-lite 909](adr-lite-909-admin-ui-kit.md).
+never in a stable release. Amends [ADR-lite 909](adr-lite-909-admin-ui-kit.md) and
+[ADR-0029](0029-mcp-apps-interaction-contracts.md).
 
 **Implementation:** in progress. Until the removals below land,
 [revision 3](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/adr-lite-1376-admin-extensions.md)
@@ -77,26 +78,30 @@ authorizes.
      separately;
    - routes reachable from a project's Admin origin act only on that project;
      anything wider lives on another origin.
-8. **MCP Apps.** The Admin MCP App stays one View's rows plus row actions; the
-   full Admin (shell, sidebar, router) does not run inside an MCP host.
+8. **MCP Apps.** By default the Admin MCP App is one View's rows plus row
+   actions, with the record view in fullscreen; the full Admin (shell,
+   sidebar, router) does not run inside an MCP host.
    - `mantle bundle` builds it from the same entry as a single-file
      `<assets>/admin/mcp-app.html`, served as `ui://mantle-admin/admin`.
      The file holds no catalog; the server embeds it when the resource is
-     read, limited to the tools that caller can list.
-   - Each slot is typed `browser` or `both`. Cells, inputs, record actions and
-     the record view are `both`; Shell, Sidebar, Header, Brand, Home,
-     CollectionList, pages and navigation are `browser`.
+     read, limited to the tools that caller can list. Served over HTTP, the
+     file keeps Admin's anti-framing headers.
+   - Each slot is typed `browser` or `both`. Cells, inputs and record actions
+     are `both`; the record view and record asides are `both` in fullscreen
+     only. Shell, Sidebar, Header, Brand, Home, CollectionList, list (bulk)
+     actions, pages and navigation are `browser`.
+   - A custom page may opt in with `pages[].mcp: { renders: <view> }`. It is
+     then type-checked like a `both` slot and served as its own App.
    - In a host, `both` slots read and write through MCP tool calls to the
      View and Procedure tools rather than `/admin/api`, open links through
      the host, and take the host's neutral colours and fonts while the
      application keeps its brand colours. Hooks without a matching tool read
      as unavailable; no tools are added for the App.
-   - Authorization is unchanged: the server checks the MCP caller with the
-     same `requires`, scope and TTL as the browser caller.
    - The build fails any App output that calls `/admin/api`, reads
      `document.cookie` or loads an undeclared origin, and `mantle generate`
      emits a compatibility test that loads the App in the official
-     `AppBridge` for every overridden `both` slot.
+     `AppBridge` for every overridden `both` slot and every `pages[].mcp`
+     page.
 
 **Removed:** `adminExtensions`, `--admin-extensions`, `defineAdminExtension`,
 the import map and shared shims, extension server handlers and
@@ -116,7 +121,7 @@ document and its host bridge. The kit's contract is otherwise unchanged.
 - A second prebuilt distribution.
 - A dashboard or query engine.
 - Arbitrary SQL from hooks.
-- The full Admin inside an MCP host, or MCP tools added only for the App.
+- MCP tools added only for the App.
 
 ## Consequences
 
@@ -125,8 +130,6 @@ document and its host bridge. The kit's contract is otherwise unchanged.
 - Each application installs Admin's UI and build dependencies and spends a few
   seconds of build time.
 - Bun hosts add `mantle bundle` to their build.
-- Overrides reach the MCP App as well as the browser, and a generated test
-  fails a `both` override that only works in the browser.
 - Breaking for alpha users of:
   - `navGroups` and `adminExtensions`;
   - manifests that use `fields.<name>.widget: <extension>/<contribution>`,
