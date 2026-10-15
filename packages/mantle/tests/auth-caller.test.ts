@@ -325,6 +325,7 @@ describe("OAuth grant revocation and consent routes", () => {
     const use = (token: string) => resolveCaller(app.request({ authorization: `Bearer ${token}` }), app.loader, { audience: AUDIENCE });
     const events: [string, (userId: string, email: string) => Promise<Response>][] = [
       ["reset", async (_userId, email) => { await app.post("/request-password-reset", { email, redirectTo: "/" }); return app.post("/reset-password", { newPassword: "another-password-123", token: app.resets.at(-1) }); }],
+      ["query", async (_userId, email) => { await app.post("/request-password-reset", { email, redirectTo: "/" }); return app.post(`/reset-password?token=${app.resets.at(-1)}`, { newPassword: "another-password-123" }); }],
       ["ban", userId => asAdmin("/admin/ban-user", { userId })],
       ["sessions", userId => asAdmin("/admin/revoke-user-sessions", { userId })],
       ["password", userId => asAdmin("/admin/set-user-password", { userId, newPassword: "another-password-123" })],

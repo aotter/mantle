@@ -74,7 +74,8 @@ export function oauthGrantRevocation() {
     hooks: {
       // The reset token names its user only until Better Auth consumes it, so this runs before; a valid token proves the email.
       before: [{ matcher: ctx => ctx.path === "/reset-password", handler: createAuthMiddleware(async ctx => {
-        const token = (ctx.body as { token?: unknown } | undefined)?.token;
+        // Better Auth reads the token from the body or the query, in that order.
+        const token = (ctx.body as { token?: unknown } | undefined)?.token || (ctx.query as { token?: unknown } | undefined)?.token;
         const value = typeof token === "string" && token ? await ctx.context.internalAdapter.findVerificationValue(`reset-password:${token}`) : null;
         if (value && new Date(value.expiresAt).getTime() > Date.now()) await revoke(ctx.context, value.value);
       }) }],
