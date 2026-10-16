@@ -18,7 +18,8 @@ test("admin probes resolve authority before loading the SDK or reading a body", 
       const response = await handle(request, {});
       assert.equal(response.status, 401);
       assert.ok(response.headers.get("www-authenticate").includes("resource_metadata="));
-      assert.equal(request.bodyUsed, false);
+      // the body is never read to decide (clone throws above); it is drained after the answer so the next request survives
+      assert.equal(request.bodyUsed, true);
       assert.equal(loaded, false);
     }
   `;

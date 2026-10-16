@@ -1,12 +1,13 @@
 /** Route matching and caller enforcement load on the first request. */
 import { forwarded, ContractError, checkOrigin, surfaceCaller, type Caller, type RequestContext } from "./contracts.js";
 import { decode, invalid } from "./surface.js";
+import { draining } from "./drain.js";
 import type { Options, Route } from "./rest.js";
 const isApi = (path: string): boolean => path === "/api" || path.startsWith("/api/");
 const fail: (message: string) => never = message => invalid(message, "rest");
 /** Shared matching/auth/error envelope; selected dispatch is supplied by the surface. */
 export function router<Env, Database, Handlers>(routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database>, send: (route: Route<Database, Handlers, Env>, request: Request, env: Env, caller: Caller, params: Record<string, string>, access?: ReturnType<typeof import("./host-access.js").accessRequest>) => Promise<Response>): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
-  return async (request, env, ctx) => {
+  return draining(async (request, env, ctx) => {
     let caller: Caller | undefined;
     const isForwarded = forwarded(ctx, options.gateway);
     const access = options.gateway ? (await import("./host-access.js")).accessRequest(ctx, options) : undefined;
@@ -36,6 +37,6 @@ export function router<Env, Database, Handlers>(routes: readonly Route<Database,
       if (isApi(path!)) throw new ContractError("NOT_FOUND", "No such route.", "rest");
       return undefined;
     } catch (error) { access?.finish(error); return (await import("./host-caller.js")).hostFailure(error, caller, `rest ${request.method} ${new URL(request.url).pathname}`); }
-  };
+  });
 }
 

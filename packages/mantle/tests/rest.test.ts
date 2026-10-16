@@ -70,7 +70,7 @@ test("REST selected routes: paging, validation, auth, OCC, method, composition a
   expect((await request("/api/notes/a")).status).toBe(405);
   expect((await request("/api/unknown")).status).toBe(404);
   const before=calls;expect(await request("/custom")).toBeUndefined();expect(await request("/custom/%ZZ")).toBeUndefined();expect(calls).toBe(before);
-  const oversized=new Request("https://app.test/api/notes/a",{method:"PUT",body:"{}",headers:{"content-length":"1000001"}});expect((await fetch(oversized,{})).status).toBe(400);expect(oversized.bodyUsed).toBe(false);
+  const oversized=new Request("https://app.test/api/notes/a",{method:"PUT",body:"{}",headers:{"content-length":"1000001"}});expect((await fetch(oversized,{})).status).toBe(400);expect(oversized.bodyUsed).toBe(true); // refused on its declared length, then drained (bounded) for the next request
   expect((await request("/api/notes/a","PUT",JSON.stringify({title:"😀".repeat(300000),version:2}))).status).toBe(400);
   caller=user("admin","session");
   for(const headers of [{} as Record<string,string>,{origin:"https://evil.test"},{"sec-fetch-site":"cross-site",origin:"https://app.test"}]) expect((await request("/api/notes/a","PUT",'{"title":"y","version":2}',headers)).status).toBe(403);

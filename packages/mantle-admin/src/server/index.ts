@@ -257,7 +257,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 return new Response(result.body, { status: result.status, statusText: result.statusText, headers });
             } };
     });
-    return async (request, env, ctx) => {
+    const serve = async (request: Request, env: Env, ctx?: RequestContext) => {
         const path = new URL(request.url).pathname;
         if (path !== "/admin/api" && !path.startsWith("/admin/api/"))
             return;
@@ -315,6 +315,11 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             access?.finish(error);
             return (await import("@aotter/mantle/host-caller")).hostFailure(error, caller, "admin");
         }
+    };
+    // the drain loads on an Admin request only (it is request-time code), never at Worker startup
+    return async (request, env, ctx) => {
+        const path = new URL(request.url).pathname;
+        return path === "/admin/api" || path.startsWith("/admin/api/") ? (await import("@aotter/mantle/host-caller")).draining(serve)(request, env, ctx) : undefined;
     };
 }
 export { adminShell } from "./shell.js";

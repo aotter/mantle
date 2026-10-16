@@ -536,6 +536,12 @@ describe("OAuth grant revocation and consent routes", () => {
     expect(response!.status).toBe(400); expect(response!.headers.get("cache-control")).toContain("no-store");
     expect(() => authRoutes(app.loader as never, { methods: [], connectedAppsPage: "/\\evil.test" })).toThrow("same-origin");
   });
+  test("a refused consent POST leaves no unread body", async () => {
+    const app = await makeApp(); const origin = new URL(app.baseURL).origin;
+    const request = new Request(`${origin}/oauth/consent`, { method: "POST", headers: { origin }, body: "decision=approve" });
+    expect((await authRoutes(app.loader as never, { methods: [] })(request))!.status).toBe(401);
+    expect(request.bodyUsed).toBe(true);
+  });
   test("raw and encoded SDK admin routes ignore stale admin KV after demotion, ban or session deletion", async () => {
     const app = await makeApp({ sessionCache: true, customAdmin: true });
     const signed = await app.signIn();

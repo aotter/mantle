@@ -1,10 +1,11 @@
 // Runs the service under `wrangler dev` on a fresh local D1 and drives it the way people and agents would: console email-OTP
 // sign-in, REST, both MCP surfaces, Admin's API and a cron. Each step asserts what the manifests promise.
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 const port = 18000 + Math.floor(Math.random() * 1000);
 const origin = `http://127.0.0.1:${port}`;
@@ -199,20 +200,20 @@ try {
   assert.equal(editedOrder.status, 200, JSON.stringify(editedOrder.body));
   const affected = (await call("GET", "/admin/api/views/recent-activity", { cookie: admin })).body.rows.filter(row => row.subject === adminOrder.id);
   assert.deepEqual(affected.map(row => row.detail).sort(), ["placed x1", "placed x3"]);
-  const execute = command => {
-    const result = spawnSync("pnpm", ["exec", "wrangler", "d1", "execute", "mantle-reference", "--local", "--persist-to", state, "--command", command, "--json"], { encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } });
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    return JSON.parse(result.stdout)[0].results;
+  // async, as smoke-kit's `sql`: a blocked event loop leaves a socket workerd already closed in undici's pool
+  const execute = async command => {
+    const { stdout } = await promisify(execFile)("pnpm", ["exec", "wrangler", "d1", "execute", "mantle-reference", "--local", "--persist-to", state, "--command", command, "--json"], { encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } });
+    return JSON.parse(stdout)[0].results;
   };
-  const actors = execute(`SELECT DISTINCT u.email FROM activity a JOIN user u ON u.id = a.author_id WHERE a.subject = '${adminOrder.id}'`);
+  const actors = await execute(`SELECT DISTINCT u.email FROM activity a JOIN user u ON u.id = a.author_id WHERE a.subject = '${adminOrder.id}'`);
   assert.deepEqual(actors, [{ email: owner }]);
-  execute("CREATE TRIGGER reference_fail_activity BEFORE INSERT ON activity BEGIN SELECT RAISE(ABORT, 'synthetic after failure'); END");
+  await execute("CREATE TRIGGER reference_fail_activity BEFORE INSERT ON activity BEGIN SELECT RAISE(ABORT, 'synthetic after failure'); END");
   const beforeFailure = (await call("GET", "/api/views/catalog")).body.rows.find(row => row.id === itemId).stock;
   const committed = await call("POST", "/api/orders", { cookie: admin, body: { itemId, qty: 1 } });
   assert.equal(committed.status, 200, JSON.stringify(committed.body));
   assert.equal((await call("GET", "/api/views/catalog")).body.rows.find(row => row.id === itemId).stock, beforeFailure - 1);
   assert.equal((await call("GET", "/api/views/my-orders", { cookie: admin })).body.rows.length, 2);
-  execute("DROP TRIGGER reference_fail_activity");
+  await execute("DROP TRIGGER reference_fail_activity");
   step("Admin affected rows record the actual caller; failed after effects preserve committed stock/order and never retry the business write");
 
   const version = JSON.parse(readFileSync("node_modules/@aotter/mantle/package.json", "utf8")).version;

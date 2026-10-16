@@ -1,4 +1,5 @@
 /** Request-only host contract validation. */
+export { draining } from "./drain.js";
 import { forwarded, ContractError, surfaceError, surfaceFailure, type Caller, type Gateway, type RequestContext } from "./contracts.js";
 import { userCaller } from "./user-caller.js";
 import type { UserFields, UserValue } from "./user-fields.js";

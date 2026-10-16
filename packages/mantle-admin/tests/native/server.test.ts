@@ -30,6 +30,16 @@ test("admin session gate and builtin JSON byte limits precede database providers
   expect((await f.ask("/entries/%E0%A4"))?.status).toBe(400);
   expect(await f.fetch(new Request("https://app.test/admin/assets/app.js"),{})).toBeUndefined();
 });
+test("a refused Admin request leaves no unread body for the next request",async()=>{
+  const f=fixture([{method:"PATCH",path:"/save",run:c=>c.input}]);
+  const refused=async(status:number,method="PATCH",path="/save",headers:Record<string,string>={})=>{
+    const request=new Request("https://app.test/admin/api"+path,{method,body:"x".repeat(2048),headers:{origin:"https://app.test",...headers}});
+    expect((await f.fetch(request,{}))?.status).toBe(status);expect(request.bodyUsed).toBe(true);
+  };
+  f.caller({kind:"anonymous"});await refused(401);
+  f.caller(fixtureCaller({...admin,kind:"user",credential:"api-key"}));await refused(403);
+  f.caller(admin);await refused(403,"PATCH","/save",{origin:"https://foreign.test"});await refused(405,"POST");await refused(404,"POST","/nowhere");
+});
 test("empty Schema declarations emit no entry routes and bootstrap does no row queries",async()=>{
   expect(entries([],unused)).toEqual([]);
   const f=fixture();const result=await(await f.ask("/bootstrap"))?.json();expect(result.collections).toEqual([]);expect(result.webmcp).toEqual({tools:[],routes:{}});expect(result).not.toHaveProperty("entries");expect((await f.ask("/entries"))?.status).toBe(404);
