@@ -45,7 +45,9 @@ authorizes.
      preview contract holds.
    - There is no prebuilt-SPA path.
 2. **Composition.** `defineAdmin(generatedAdmin, { nav, pages, components,
-   plugins })`; pages are React routes. The Admin bundle is public static
+   plugins })`; pages are React routes. `pages[].header` composes localized description and
+   React actions beside the native page title on both surfaces when explicitly
+   supplied; `false` delegates the heading to the page element (#1711). The Admin bundle is public static
    content: generated code contributes types and only the names the
    application's own code references, never Procedure statements, guards,
    audiences, authorization predicates or full lists of Views and
@@ -78,10 +80,11 @@ authorizes.
      separately;
    - routes reachable from a project's Admin origin act only on that project;
      anything wider lives on another origin.
-8. **MCP Apps.** By default the Admin MCP App is one View's rows plus row
-   actions, with the record view in fullscreen; the full Admin (shell,
+8. **MCP Apps.** By default the Admin MCP App is one View's rows plus Procedure row
+   actions; the full Admin (shell,
    sidebar, router) does not run inside an MCP host.
-   - `mantle bundle` builds it from the same entry as a single-file
+   - `mantle bundle` builds it from the same entry by default (an optional
+     `src/admin.mcp.tsx` isolates browser-only imports, #1712), as a single-file
      `<assets>/admin/mcp-app.html`, served as `ui://mantle-admin/admin/<digest>`
      by default (#1705): the Admin contributor hashes its HTML, catalogue and
      resource metadata; Core validates and serves the resulting links without
@@ -89,10 +92,12 @@ authorizes.
      The file holds no catalog; the server embeds it when the resource is
      read, limited to the tools that caller can list. Served over HTTP, the
      file keeps Admin's anti-framing headers.
-   - Each slot is typed `browser` or `both`. Cells, inputs and record actions
-     are `both`; the record view and record asides are `both` in fullscreen
-     only. Shell, Sidebar, Header, Brand, Home, CollectionList, list (bulk)
-     actions, pages and navigation are `browser`.
+   - Each slot reflects its mounted surface. View cells are `both`. Collection
+     cells, record inputs, record actions, record views and record asides are
+     browser-only (#1710); fullscreen does not introduce record CRUD. A
+     Procedure action input is not a collection record input. Shell, Sidebar,
+     Header, Brand, Home, CollectionList, list (bulk) actions, pages and
+     navigation are `browser`.
    - A custom page may opt in with `pages[].mcp: { renders: <view> }`. It is
      then type-checked like a `both` slot and served as its own App.
    - In a host, `both` slots read and write through MCP tool calls to the

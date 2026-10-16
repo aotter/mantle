@@ -181,9 +181,8 @@ uses the official `AppBridge`; your app runs its generated version ([Run the com
 `mantle bundle` builds the Admin MCP App from the same entry as the browser Admin
 (`src/admin.tsx`, or the built-in one) into one self-contained file,
 `<assets>/admin/mcp-app.html`, which `adminMcpApps` serves as
-`ui://mantle-admin/admin/<digest>` by default. So what `defineAdmin` customises reaches a host too:
-your components, your plugins, your Tailwind classes, your CSS, your pages. Each
-one must work in both places, and the build and the types hold you to it.
+`ui://mantle-admin/admin/<digest>` by default. Shared View cells and opted-in pages reach the host, with application plugins,
+Tailwind classes and CSS. Browser-only record/input overrides do not mount there.
 
 ### Which slots render where
 
@@ -191,11 +190,58 @@ one must work in both places, and the build and the types hold you to it.
 | --- | --- | --- |
 | `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `list.actions:<schema>` | yes | never: the App has no shell, sidebar or router |
 | `cell:view:<view>.<column>` | yes | yes: each column of the rows the host's View tool returned |
-| `cell:<schema>.<field>`, `input:<schema>.<field>`, `record.aside:<schema>`, `record.actions:<schema>`, `RecordView` | yes | typed `both`, so they receive `surface` and must work in a host; the App shows no record and its row-action form is not the record form, so they run in the browser only (`mantle bundle` warns) |
+| `cell:<schema>.<field>`, `input:<schema>.<field>`, `record.aside:<schema>`, `record.actions:<schema>`, `RecordView` | yes | never: browser-only record/collection slots; their `surface` is `"browser"` (`mantle bundle` reminds you) |
 | `pages[]`, `nav`, `home`, nav badges | yes | only a page that declares `mcp` (below) |
 
 A component for a `both` slot gets `surface` (`"browser"` or `"mcp-app"`). The
-types decide: a `both` slot's props carry `surface`, a browser slot's do not.
+record/collection slots keep `surface: "browser"` for an explicit, truthful contract.
+Other browser-only slots have no `surface` prop.
+
+Migration (#1710): remove unreachable `surface === "mcp-app"` branches from
+record/input/collection overrides. Their surface is now typed as the browser
+literal. Move shared interactions to a View cell or opted-in page; changing
+this type does not add a record editor, entry tool, or automatic CRUD to MCP.
+
+### Record input versus Procedure action input
+
+`input:requests.title` wraps the browser record editor's `value`, `onChange`,
+`readOnly` and JSON Schema property. It does not customize an MCP action dialog.
+The native App builds that dialog from the Procedure's declared input schema,
+binds the row identity and observed version, validates input, and runs the
+existing authorized Procedure tool. There is no View `actions` field.
+Declare `Procedure.spec.target: { schema: requests, id: id, version: expectedVersion }`
+and expose it with a Trigger whose `source: { kind: mcp, surface: admin }` and
+`target: { procedure: approve }`. Return the target row's unchanged `id` and
+`version` in the View, preserving their column provenance (do not replace them
+with a computed label, joined row identity or synthetic version). Admin derives
+row bindings from that target and the View's proven columns. See
+[Procedure targets and row placement](native-admin.md#collection-navigation-and-operation-placement)
+and the shipped [purchasing manifest](../../examples/purchasing/manifests/purchasing.yaml)
+for complete Procedure/Trigger syntax. Changing the UI grants no execution rights.
+
+For custom MCP interaction, use an opted-in page with `useView` and
+`useOperation` instead of trying to render a record editor. The shared-page example below demonstrates page opt-in;
+[Native Admin](native-admin.md) describes generated typed hooks. An operation
+component follows the same public contract:
+
+```tsx
+// In a typed opted-in page; replace approve/input with your generated names.
+function Approve({ id }: { id: string }) {
+  const { run, pending } = useOperation("approve");
+  const [message, setMessage] = useState("");
+  return <><button disabled={!run || pending} onClick={() => {
+    void run?.({ id }).then(() => setMessage("Done"), () => setMessage("Not available"));
+  }}>Approve</button><p role="status">{message}</p></>;
+}
+```
+
+Import `useState` from React and `useOperation` from your generated
+`admin-client` (its types are tied to your manifests). Include observed-version
+input when the Procedure declares OCC; never replace it with an unguarded write.
+Without serverTools capability, `run` is absent and this button stays disabled.
+A missing or denied tool is reported as unavailable when invoked; an enabled
+button does not establish permission. To ship a record-oriented MCP UI today, explicitly
+declare its read View and write Procedure; `useEntry` is unavailable in MCP.
 
 ### Rules for a component that renders in a host
 
@@ -272,10 +318,18 @@ A custom page may also be an App view. Name a View that has an admin MCP tool:
 export default defineAdmin(admin, {
   pages: [{
     path: "queue", title: "Queue", element: <QueuePage />,
+    header: { description: "Items awaiting review", actions: <QueueActions /> },
     mcp: { renders: "pending-requests" },
   }],
 });
 ```
+
+The explicit `header` object shares the native title, localized description and
+React actions with browser Admin. Its actions must use the same host-safe hooks
+and capability fallbacks as the page. `header: false` delegates the heading to
+the element; omit `header` to preserve element-only MCP presentation (and the
+browser's native title). Do not render a second h1 inside `element` when using
+the native heading.
 
 When the host's tool is that View's tool, the App shows `<QueuePage />` instead
 of the default rows table, in the host's frame and theme. The page reads its own data
@@ -309,14 +363,74 @@ loads the App under the spec's default CSP and fails on any network request, is
 the backstop at run time. `document.cookie` in Mantle's own library code (the kit's
 sidebar remembers its state in one) does not fail the build; in yours it does.
 
-`window.open` and `target="_blank"` in your own code only warn. The whole Admin
-entry graph is checked, not only the slots a host renders: the file holds every
-module your entry imports, so browser-only code (a `Shell`, a `Home`, a page)
-must avoid direct `/admin/api` fetches and cookies too. Read data through the
-hooks, which use the browser's route in the browser and the host's tools in a host. The build prints the
-App's size.
+`window.open` and `target="_blank"` in your own code only warn. The whole selected
+MCP entry graph is checked, not only the slots a host renders. By default it is
+the Admin entry, so browser-only code (a `Shell`, a `Home`, a page) imported there
+must avoid direct `/admin/api` fetches and cookies too. Shared components read
+through the hooks, which use the browser route in the browser and host tools in
+a host. For integrations that need browser APIs, select a separate entry below.
+The build prints the App's size.
+
+### Isolate browser-only integrations
+
+`pages[].mcp` opts a page into rendering; it does not remove other imports from
+the build. To isolate browser-only integrations, add `admin.mcp.tsx` beside the
+Worker entry and `admin.tsx`. `mantle bundle` discovers this optional file and
+uses it for `mcp-app.html`; the browser SPA and preview keep `admin.tsx`. With the
+build API, pass `buildAdmin({ entry: "src/admin.tsx", mcpEntry: "src/admin.mcp.tsx", outDir: "dist/client/admin" })`.
+Without the optional file/option, the shared-entry behavior is unchanged.
+
+Keep a single host-safe config and components module, composed through the same
+`defineAdmin` contract in both roots. For example, with an admin View `queue`:
+
+```tsx
+// src/admin-shared.tsx
+import type { AdminConfig } from "@aotter/mantle-admin/app";
+import type { AppAdminTypes } from "../generated/admin-client.js";
+import { QueuePage } from "./queue-page.js"; // native hooks, host-safe components
+import "./shared.css";
+export const shared = {
+  pages: [{ path: "queue", title: "Queue", element: <QueuePage />, mcp: { renders: "queue" } }],
+} satisfies AdminConfig<AppAdminTypes>;
+```
+
+```tsx
+// src/admin.tsx: only the browser root imports this integration
+import { defineAdmin } from "@aotter/mantle-admin/app";
+import { admin } from "../generated/admin-client.js";
+import { shared } from "./admin-shared.js";
+import { BrowserReport } from "./browser-report.js";
+export default defineAdmin(admin, {
+  ...shared,
+  pages: [...shared.pages, { path: "browser-report", title: "Browser report", element: <BrowserReport /> }],
+});
+```
+
+```tsx
+// src/admin.mcp.tsx: no import of admin.tsx or browser-report.js
+import { defineAdmin } from "@aotter/mantle-admin/app";
+import { admin } from "../generated/admin-client.js";
+import { shared } from "./admin-shared.js";
+export default defineAdmin(admin, shared);
+```
+
+Only code excluded from the MCP graph may use browser-only integrations. The
+selected MCP entry is still read in Node to obtain its definition: do not access
+`window` or `document` at module initialization there. An explicit entry that
+fails to load fails the build; it does not fall back to the browser entry.
+The MCP guard, declared CSP, catalogue, resource ownership and built-HTML cache
+identity apply to the selected graph exactly as before. Entry selection changes
+no server permissions and adds no provider or transport.
 
 ### Run the compatibility test
+
+For an interactive test in another official host, load the HTML returned by an
+authenticated MCP `resources/read`, discovered through `resources/list` or the
+tool's UI resource link. Do not serve the raw built `mcp-app.html` directly: the
+server embeds the caller-filtered catalogue when reading the resource, and
+without that catalogue native row actions are absent. The generated test below
+supplies its own synthetic catalogue and checks rendering, not a real host's
+authorization flow or a completed action dialog.
 
 The build check reads text; this test runs the App. `mantle generate --admin` writes
 `generated/admin-mcp-app.check.mjs`. After `npm run build`, run
@@ -340,9 +454,8 @@ catalogue; when the file has no record at all, every View. It fails on:
 After the result it waits until the App has made no request and logged nothing for
 400 ms, at most 5 s. The test checks the slots a host renders today: `cell:view:` and
 pages. `input:`, `record.aside:`, `record.actions:`, `cell:<schema>.<field>` and
-`RecordView` are typed `both` but the App shows no record, and its row-action form is
-a Procedure's, not the record form `input:` replaces, so they run in the browser Admin
-only and `mantle bundle` warns when you override one.
+`RecordView` are browser-only, so the generated compatibility check does not
+claim to test them. A Procedure action form does not mount these slots.
 
 It needs `playwright-core` (`npm install -D playwright-core`) and Chrome or Chromium:
 run `npx playwright-core install chromium`, or set `MANTLE_TEST_CHROMIUM` to a Chrome or

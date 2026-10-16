@@ -164,6 +164,8 @@ says which. `@aotter/mantle-admin/hooks` also exports the same hooks untyped, fo
 An application replaces or wraps regions of Admin from `src/admin.tsx`. The entry passes the generated metadata and, beside it,
 what to change; the built-in entry needs none of this.
 
+If browser-only integrations need APIs that an MCP host forbids, keep their implementations outside the host graph: add a sibling `src/admin.mcp.tsx`, also default-exporting `defineAdmin(...)`, and share the host-safe config and components between the two entries. `mantle bundle` selects it automatically for the MCP asset; the SPA and preview still use `admin.tsx`. The direct build API accepts `mcpEntry`. See [isolate browser-only integrations](mcp-apps.md#isolate-browser-only-integrations).
+
 ```tsx
 import { defineAdmin } from "@aotter/mantle-admin/app";
 import { admin } from "../generated/admin-client.js";
@@ -197,13 +199,13 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 | `Brand` | browser | `title`, `image?`, `href?` |
 | `Home` | browser | `collections`, `site` (what the page shows; the built-in page loads its own data) |
 | `CollectionList` | browser | `collection` (filters come from the page's location) |
-| `RecordView` | both | `collection`, `entryId`, `surface` |
-| `record.aside:<schema>` | both | `collection`, `entry`, `surface` |
-| `record.actions:<schema>` | both | `collection`, `entry`, `surface` |
+| `RecordView` | browser | `collection`, `entryId`, `surface` |
+| `record.aside:<schema>` | browser | `collection`, `entry`, `surface` |
+| `record.actions:<schema>` | browser | `collection`, `entry`, `surface` |
 | `list.actions:<schema>` | browser | `collection`, `selection` (empty in the toolbar, the selected ids in the bulk bar) |
-| `cell:<schema>.<field>` | both | `value`, `row` (the list's columns only, `null` when empty), `property`, `surface` |
+| `cell:<schema>.<field>` | browser | `value`, `row` (the list's columns only, `null` when empty), `property`, `surface` |
 | `cell:view:<view>.<column>` | both | `value`, `row`, `property`, `surface` |
-| `input:<schema>.<field>` | both | `value`, `onChange`, `readOnly`, `property`, `surface` |
+| `input:<schema>.<field>` | browser | `value`, `onChange`, `readOnly`, `property`, `surface` |
 
 `record.aside:` and `record.actions:` render beside Admin's own side cards and actions, which they do not replace. A
 record form's top-level fields go through `input:`; a View's parameters and a Procedure's inputs do not. A read-only field
@@ -226,7 +228,8 @@ checks every route, View and Procedure.
 
 ### Components that also render in an MCP host
 
-A slot marked both renders in Admin's browser page and in an MCP host (`surface` is `"browser"` or `"mcp-app"`). A component
+Record/collection slots carry `surface: "browser"` and do not mount in an MCP
+Procedure action form. A slot marked both renders in Admin's browser page and in an MCP host (`surface` is `"browser"` or `"mcp-app"`). A component
 for one of these slots must:
 
 1. read and write data only through the hooks, not `fetch`, and keep no login state in `document.cookie` or `localStorage`;
@@ -460,6 +463,25 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
   content, or your `Home` override) moves to `/admin/setup`, listed first under More. When the caller cannot see the target, or without
   `home`, `/admin` stays the built-in home. Choosing a landing page grants and denies nothing; the target's own route still decides.
   The landing is browser only.
+
+`pages[].header` composes actions beside the native page title without replacing
+Admin's shell or targeting its internal DOM:
+
+```tsx
+pages: [{ path: "queue", title: { en: "Queue", "zh-TW": "待辦" },
+  header: { description: "Items awaiting review", actions: <QueueActions /> },
+  element: <QueuePage />, mcp: { renders: "pending-requests" } }]
+```
+
+The explicit object renders the same native heading on both surfaces. `title`
+and `description` resolve using the browser preference or MCP host locale;
+`actions` is React content, so its component may use the existing hooks and
+host-aware links. Keep action controls disabled or provide a fallback when the
+host lacks a capability. Do not add another h1 to `element` with this header.
+Use `header: false` if the element owns its heading. Omitted preserves existing
+behavior: native title in the browser, element alone in MCP. This option does
+not customize the global application `Header` slot.
+
 
 `src/admin.tsx` is JSX and runs in the browser, so `tsconfig.json` needs `"jsx": "react-jsx"` and `"lib": ["ES2023", "DOM"]` beside the Worker's `types` (`@cloudflare/workers-types`, `node`) and must include `src/**/*.tsx`; `node_modules/@aotter/mantle/docs/examples/app-shell/tsconfig.json` is the working file. The app also depends on `react`, `react-dom` and `@types/react` (see the example's `package.json`). The app owns `react` and `react-dom` (Admin and the kit take them as peers), so pin both to the same exact version: `react-dom` refuses to run beside a different `react`. `mantle bundle` stops with a message when they differ; add `lucide-react` (or another icon package) yourself if you use icons.
 

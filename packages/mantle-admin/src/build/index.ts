@@ -16,6 +16,8 @@ const ENTRY = "virtual:mantle-admin/entry";
 export interface BuildAdminOptions {
   /** The application's Admin entry, which default-exports `defineAdmin(...)`. The built-in entry when omitted. */
   readonly entry?: string;
+  /** Optional host-safe entry, also default-exporting `defineAdmin(...)`. Defaults to `entry`; it must not import browser-only implementations. */
+  readonly mcpEntry?: string;
   /** Where Admin's static files go, served at `/admin/`: `<assets>/admin`. It is emptied first. */
   readonly outDir: string;
 }
@@ -77,15 +79,15 @@ async function adminCore(entry: string | undefined, mcp = false) {
 
 /**
  * Build Admin with Vite into `outDir`: the shell (`index.html`), the same-origin preview document (`preview.html`) and
- * its `host-bridge.js`, hashed assets, and the MCP App as one file (`mcp-app.html`) from the same entry, checked for what a
- * host refuses. `mantle bundle` calls this; it is not a CLI.
+ * its `host-bridge.js`, hashed assets, and the MCP App as one file (`mcp-app.html`), checked for what a host refuses.
+ * The App uses `mcpEntry` when supplied, otherwise the same entry. `mantle bundle` calls this; it is not a CLI.
  */
-export async function buildAdmin({ entry, outDir }: BuildAdminOptions): Promise<void> {
+export async function buildAdmin({ entry, mcpEntry, outDir }: BuildAdminOptions): Promise<void> {
   const { build } = await import("vite");
   const { plugins, config } = await adminCore(entry);
   outDir = resolve(outDir);
   await build({ ...config, base: "./", logLevel: "warn", plugins: [...plugins, previewDocument(outDir)], build: { outDir, emptyOutDir: true } });
-  await buildMcpApp(entry, outDir);
+  await buildMcpApp(mcpEntry ?? entry, outDir, mcpEntry !== undefined);
 }
 
 const NATIVE_CALENDAR = "\0mantle-admin/native-calendar";
@@ -96,7 +98,7 @@ const NATIVE_CALENDAR = "\0mantle-admin/native-calendar";
  * the browser's `/admin/api` transport is not reachable, and the result is checked (`checkMcpApp`): a build that a host would
  * break fails here, naming the module.
  */
-async function buildMcpApp(entry: string | undefined, outDir: string): Promise<void> {
+async function buildMcpApp(entry: string | undefined, outDir: string, explicitEntry = false): Promise<void> {
   const [{ build, normalizePath }, { viteSingleFile }] = await Promise.all([import("vite"), import("vite-plugin-singlefile")]);
   const core = await adminCore(entry, true);
   const mount = resolve(dist, "admin-app/mcp-mount.js");
@@ -107,9 +109,9 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
     // what the entry declares must not vanish because it could not be read: the CSP, the components and pages the compatibility test
     // is to run, the plugins that add components
     const declares = entry ? /\b(csp|components|plugins|pages|mcp)\s*:/.exec(readFileSync(entry, "utf8"))?.[1] : undefined;
-    if (entry && declares) throw new Error(`The Admin MCP App cannot be built: ${entry} declares ${declares}, but ${problem}. The build fails rather than drop it. ${fix}\nSee ${GUIDE}.`);
+    if (entry && (explicitEntry || declares)) throw new Error(`The Admin MCP App cannot be built: ${entry}${declares ? ` declares ${declares}, but` : ":"} ${problem}. The build fails rather than drop it. ${fix}\nSee ${GUIDE}.`);
   }
-  if (idle.length) console.warn(`warning: Admin MCP App: ${idle.join(", ")} ${idle.length === 1 ? "is" : "are"} not shown by the App yet (it renders cell:view: slots and pages[].mcp), so ${idle.length === 1 ? "this override runs" : "these overrides run"} in the browser Admin only.`);
+  if (idle.length) console.warn(`warning: Admin MCP App: ${idle.join(", ")} ${idle.length === 1 ? "is a browser-only slot" : "are browser-only slots"} (the App renders cell:view: slots and pages[].mcp), so ${idle.length === 1 ? "this override runs" : "these overrides run"} in the browser Admin only.`);
   const invalid = cspProblems(csp);
   if (invalid.length) throw new Error(`The Admin MCP App cannot be built:\n${invalid.map(line => `  - ${line}`).join("\n")}\nSee ${GUIDE}.`);
   const sources: Source[] = [...slots];
@@ -181,7 +183,7 @@ async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>): Prom
     // what the App shows of the application's customising, which the compatibility test renders: the `cell:view:` slots, and the Views its MCP pages are for
     const slots = Object.keys(admin.layers ?? {});
     const manifest = { slots: slots.filter(slot => slot.startsWith("cell:view:")), pages: (admin.pages ?? []).flatMap(page => page.mcp ? [page.mcp.renders] : []) };
-    // typed for a host, but the App shows no record yet
+    // record/collection slots are browser-only, unlike View cells
     const idle = slots.filter(slot => slot === "RecordView" || /^(?:cell:(?!view:)|input:|record\.aside:|record\.actions:)/.test(slot));
     return { ...(admin.mcp?.csp ? { csp: admin.mcp.csp } : {}), sources, manifest, idle };
   } catch (error) {

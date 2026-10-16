@@ -20,7 +20,7 @@ const catalogue = {
 };
 
 /** An application whose `cell:view:pending.item` override is the body of `Cell`, beside a page for the `queue` View; returns the built file. */
-async function build(name: string, cell: string, options = "", queue = 'function Queue() { const { rows } = useView("queue", {}); return <ul>{rows.map(row => <li key={String(row["id"])}>{String(row["id"])}</li>)}</ul>; }'): Promise<string> {
+async function build(name: string, cell: string, options = "", queue = 'function Queue() { const { rows } = useView("queue", {}); return <ul>{rows.map(row => <li key={String(row["id"])}>{String(row["id"])}</li>)}</ul>; }', pageOptions = ""): Promise<string> {
   const src = join(temp, name, "src");
   mkdirSync(src, { recursive: true });
   writeFileSync(join(src, "admin.tsx"), [
@@ -29,7 +29,7 @@ async function build(name: string, cell: string, options = "", queue = 'function
     'import { useEffect } from "react";',
     `function Cell({ value }: { value: unknown }) { ${cell} return <b>{String(value)}</b>; }`,
     queue,
-    'export default defineAdmin({}, { components: { "cell:view:pending.item": Cell }, pages: [{ path: "queue", title: "Queue", element: <Queue />, mcp: { renders: "queue" } }]' + options + ' });',
+    'export default defineAdmin({}, { components: { "cell:view:pending.item": Cell }, pages: [{ path: "queue", title: "Queue", element: <Queue />, mcp: { renders: "queue" }' + pageOptions + ' }]' + options + ' });',
   ].join("\n"));
   const out = join(temp, name, "dist/client/admin");
   await buildAdmin({ entry: join(src, "admin.tsx"), outDir: out });
@@ -79,6 +79,17 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
     expect(never).toContain("the App did not render the page");
     const nothing = await attempt(await build("nothing", "", "", "function Queue() { void useView; return null; }"));
     expect(nothing).toContain("the App did not render the page (the page is empty or missing)");
+  }, 180_000);
+
+  it("fails empty layout wrappers and whitespace with an element-owned heading", async () => {
+    const message = await attempt(await build("empty-wrappers", "", "", 'function Queue() { return <section><div>{"   "}</div></section>; }', ", header: false"));
+    expect(message).toContain("the App did not render the page (the page is empty or missing)");
+  }, 180_000);
+
+  it("accepts visible non-text page content and an explicitly composed native heading", async () => {
+    expect(await attempt(await build("canvas-page", "", "", 'function Queue() { return <canvas width={200} height={40} aria-label="Chart" />; }'))).toBeUndefined();
+    // A requested title/description is legitimate page content, not the outer fullscreen toggle.
+    expect(await attempt(await build("header-page", "", "", 'function Queue() { return null; }', ', header: { description: "About this queue" }'))).toBeUndefined();
   }, 180_000);
 
   it("fails an App that never renders the View, saying so", async () => {

@@ -136,12 +136,20 @@ export async function checkMcpApp({ catalogue, html: file = "dist/client/admin/m
       let shown = { rows: false, page: false, waiting: true, dark: false };
       const started = Date.now();
       for (;;) {
-        const host = await state(), seen = await frame()?.evaluate(() => ({
-          rows: document.querySelector('[data-slot="app-rows"]') !== null,
-          page: (document.querySelector('[data-slot="app-page"]')?.children.length ?? 0) > 0,
-          waiting: /Waiting for results/.test(document.body.innerText),
-          dark: document.documentElement.classList.contains("dark"),
-        })).catch(() => undefined);
+        const host = await state(), seen = await frame()?.evaluate(() => {
+          const page = document.querySelector<HTMLElement>('[data-slot="app-page"]');
+          const visible = (node: Element) => node.getClientRects().length > 0 && getComputedStyle(node).visibility !== "hidden";
+          // Empty layout wrappers are not content. A native page heading is text;
+          // a canvas, image or control may legitimately render without any text.
+          const content = page && visible(page) && (page.innerText.trim().length > 0
+            || [...page.querySelectorAll('img, svg, canvas, video, audio, iframe, object, embed, input:not([type="hidden"]), button, select, textarea')].some(visible));
+          return {
+            rows: document.querySelector('[data-slot="app-rows"]') !== null,
+            page: !!content,
+            waiting: /Waiting for results/.test(document.body.innerText),
+            dark: document.documentElement.classList.contains("dark"),
+          };
+        }).catch(() => undefined);
         if (seen) shown = seen;
         if (host?.state.done && !shown.waiting && shown[shows]) break;
         if (Date.now() - started > 10_000) { note(`the App did not render the ${shows === "page" ? "page" : "View's rows"} (${shown.waiting ? "it still shows its waiting text" : shows === "page" ? "the page is empty or missing" : "no rows table"})`); break; }

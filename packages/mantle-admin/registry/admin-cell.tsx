@@ -2,7 +2,7 @@ import { AdminLink, type CellProps, type SurfaceProp } from "@aotter/mantle-admi
 
 /**
  * Surface: both (the browser, and the Admin MCP App in an MCP host's sandboxed iframe).
- * Slots: cell:<schema>.<field>, cell:view:<view>.<column>
+ * Slots: cell:view:<view>.<column>
  * Rules: read data only through @aotter/mantle-admin/hooks, link only with <AdminLink> or useOpenLink(), make no
  * network calls of your own, keep no auth in cookies or browser storage, open no windows, assume no width, load
  * nothing from a remote origin. Branch on `surface` if you must; both branches have to render.

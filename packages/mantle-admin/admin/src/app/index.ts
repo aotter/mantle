@@ -4,6 +4,6 @@ export type { AdminBadge, AdminDefinition, AdminMeta, AdminTypes } from "./defin
 export { MantleAdmin } from "./mantle-admin";
 export type { MantleAdminProps } from "./mantle-admin";
 export { AdminLink } from "./slots";
-export type { AdminComponents, AdminConfig, AdminMcpCsp, AdminNav, AdminPage, AdminNavGroup, AdminNavGroups, AdminNavItem, AdminNavTarget, AdminOptions, AdminPlugin, AdminText, BuiltInNavGroup } from "./define-admin";
+export type { AdminComponents, AdminConfig, AdminMcpCsp, AdminNav, AdminPage, AdminPageHeader, AdminNavGroup, AdminNavGroups, AdminNavItem, AdminNavTarget, AdminOptions, AdminPlugin, AdminText, BuiltInNavGroup } from "./define-admin";
 export type { SlotComponent, SlotProps } from "./slots";
 export type * from "./slot-props";

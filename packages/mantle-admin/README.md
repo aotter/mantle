@@ -123,7 +123,9 @@ workspace remains part of the product.
 
 ## MCP App
 
-`buildAdmin` (so `mantle bundle`) also builds the App from the same Admin entry as the page, into the
+For browser-only integrations, an optional `src/admin.mcp.tsx` selects a separate host-safe entry graph; `mantle bundle` discovers it beside `admin.tsx` (beside the Worker entry). With the build API, pass `buildAdmin({ entry, mcpEntry, outDir })`. Both entries use the existing `defineAdmin` API and can import one shared config/components/CSS module; the MCP entry must not import the browser entry or browser-only integrations. Without it, authoring and the whole-entry guard are unchanged. See [separate entry example](../../docs/handbook/guides/mcp-apps.md#isolate-browser-only-integrations).
+
+`buildAdmin` (so `mantle bundle`) also builds the App from the same Admin entry by default, into the
 single file `<assets>/admin/mcp-app.html`: your `defineAdmin` components, plugins, CSS, Tailwind classes and `pages`
 that declare `mcp` are in it, and the build refuses an App that reads `/admin/api` or `document.cookie` or loads a
 remote origin that `defineAdmin({ mcp: { csp } })` does not declare. `adminMcpApps({ catalogue: mcpAppCatalogues.admin })` (imported from the generated `generated/admin-descriptors.ts`) registers it

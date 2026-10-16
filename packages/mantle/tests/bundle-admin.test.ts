@@ -22,11 +22,11 @@ async function app() {
   await writeFile(join(pkg, "dist/build.js"), [
     'import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";',
     'import { join } from "node:path";',
-    "export async function buildAdmin({ entry, outDir }) {",
+    "export async function buildAdmin({ entry, mcpEntry, outDir }) {",
     "  mkdirSync(outDir, { recursive: true });",
     '  writeFileSync(join(outDir, "index.html"), String(entry));',
     // the real build writes the MCP App beside the page
-    '  writeFileSync(join(outDir, "mcp-app.html"), "app");',
+    '  writeFileSync(join(outDir, "mcp-app.html"), String(mcpEntry));',
     `  appendFileSync(${JSON.stringify(join(dir, "builds.log"))}, String(entry) + "\\n");`,
     "}",
   ].join("\n"));
@@ -69,6 +69,28 @@ test("mantle bundle: the Worker into <outdir>/worker, Admin into <assets>/admin;
     expect(existsSync(join(dir, "public/admin/index.html"))).toBe(true);
     await expect(bundleApp(entry, dist, dist)).rejects.toThrow("must not overlap the Worker directory");
     await expect(bundleApp(entry, dist, join(dist, "worker/static"))).rejects.toThrow("must not overlap the Worker directory");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
+test("mantle bundle selects a sibling admin.mcp.tsx and rebuilds it even with the built-in browser entry", async () => {
+  const { dir, entry, builds } = await app();
+  try {
+    const dist = join(dir, "dist"), mcpEntry = join(dir, "src/admin.mcp.tsx");
+    await bundleApp(entry, dist);
+    expect(await readFile(join(dist, "client/admin/mcp-app.html"), "utf8")).toBe("undefined");
+    await writeFile(mcpEntry, "export default {};\n");
+    await bundleApp(entry, dist);
+    expect(await readFile(join(dist, "client/admin/index.html"), "utf8")).toBe("undefined");
+    expect(await readFile(join(dist, "client/admin/mcp-app.html"), "utf8")).toBe(realpathSync(mcpEntry));
+    await bundleApp(entry, dist);
+    expect(await builds()).toHaveLength(3);
+    await writeFile(join(dir, "src/admin.tsx"), "export default {};\n");
+    await bundleApp(entry, dist);
+    expect(await readFile(join(dist, "client/admin/index.html"), "utf8")).toEndWith("/src/admin.tsx");
+    expect(await readFile(join(dist, "client/admin/mcp-app.html"), "utf8")).toBe(realpathSync(mcpEntry));
+    await rm(mcpEntry);
+    await bundleApp(entry, dist);
+    expect(await readFile(join(dist, "client/admin/mcp-app.html"), "utf8")).toBe("undefined");
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
 

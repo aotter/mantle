@@ -56,13 +56,13 @@ describe("the checks on the built MCP App", () => {
     } finally { warn.mockRestore(); }
   }, 180_000);
 
-  it("warns about an override of a slot the App does not show yet", async () => {
+  it("warns about an override of a browser-only record slot", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     try {
       const fixture = app("idle", "export const Cell = () => <b>x</b>;");
       writeFileSync(fixture.entry, readFileSync(fixture.entry, "utf8").replace('components: { "cell:view:pending.item": Cell', 'components: { "input:requests.title": () => null, "cell:view:pending.item": Cell'));
       expect(await attempt(fixture)).toBeUndefined();
-      expect(warn.mock.calls.map(call => String(call[0])).join("\n")).toContain("input:requests.title is not shown by the App yet");
+      expect(warn.mock.calls.map(call => String(call[0])).join("\n")).toContain("input:requests.title is a browser-only slot");
     } finally { warn.mockRestore(); }
   }, 120_000);
 

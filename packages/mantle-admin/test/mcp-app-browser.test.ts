@@ -148,10 +148,22 @@ it("renders an application's pages[].mcp page for its View's tool, not the rows,
     await app.getByText("page:Laptops").waitFor();
     await app.getByText("entries:unavailable").waitFor();
     expect(await app.getByText("FromResult").count()).toBe(0);
-    expect(await app.locator("section").evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(192, 255, 238)");
+    expect(await app.locator("h1").allTextContents()).toEqual(["待辦"]);
+    expect(await app.getByText("工作待辦").count()).toBe(1);
+    expect(await app.getByRole("link", { name: "Queue help" }).count()).toBe(1);
+    expect(await app.getByRole("heading", { name: "queue-page" }).locator("..").evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(192, 255, 238)");
     const state = await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors }));
     expect(state.errors).toEqual([]);
     expect(state.calls).toMatchObject([{ name: "queue", arguments: {} }]);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?read-only`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    await page.evaluate(async () => {
+      await (window as any).host.bridge.sendToolResult({ content: [], structuredContent: { rows: [] }, _meta: { "net.aotter.mantle/tool": "queue" } });
+    });
+    await app.getByText("Help unavailable").waitFor();
+    expect(await app.locator("h1").allTextContents()).toEqual(["待辦"]);
+    expect(await app.getByRole("link", { name: "Queue help" }).count()).toBe(0);
+
   } finally { await browser.close(); await server.close(); }
 }, 45_000);
 

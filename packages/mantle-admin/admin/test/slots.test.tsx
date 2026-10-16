@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { defineAdmin, type AdminMeta } from "../src/app/define-admin";
 import type { AdminHost } from "../src/app/hooks";
-import { AdminLink, Slot, SurfaceProvider, useOpenLink, useViewCellNames, type SlotProps } from "../src/app/slots";
+import { AdminLink, isBothSlot, Slot, SurfaceProvider, useOpenLink, useViewCellNames, type SlotProps } from "../src/app/slots";
 import type { SidebarProps } from "../src/app/slot-props";
 
 /** The generated types of a small application: what `generated/admin-client.ts` describes. */
@@ -44,14 +44,23 @@ describe("slots", () => {
     expect(show(composed.layers, "Home")).toBe("app(second(first(<p data-default=\"true\">built-in</p>)))");
   });
 
-  it("gives a component the surface only where the slot renders in both", () => {
+  it("keeps record/collection slots browser-only and passes the host surface to View cells", () => {
     const seen: unknown[] = [];
     const probe = (props: object) => { seen.push("surface" in props ? (props as { surface: string }).surface : "none"); return null; };
-    const composed = defineAdmin(admin, { components: { Sidebar: probe, "record.aside:requests": probe, "cell:requests.title": probe } });
+    const composed = defineAdmin(admin, { components: {
+      Sidebar: probe, "record.aside:requests": probe, "input:requests.title": probe,
+      "cell:requests.title": probe, "cell:view:pending-requests.amount": probe,
+    } });
     show(composed.layers, "Sidebar");
-    show(composed.layers, "record.aside:requests", {}, "mcp-app");
-    show(composed.layers, "cell:requests.title", {}, "browser");
-    expect(seen).toEqual(["none", "mcp-app", "browser"]);
+    // These slots mount on the browser record/collection pages, never the MCP Procedure action form.
+    for (const name of ["record.aside:requests", "input:requests.title", "cell:requests.title"]) {
+      expect(isBothSlot(name)).toBe(false);
+      show(composed.layers, name);
+    }
+    expect(isBothSlot("cell:view:pending-requests.amount")).toBe(true);
+    show(composed.layers, "cell:view:pending-requests.amount", {}, "browser");
+    show(composed.layers, "cell:view:pending-requests.amount", {}, "mcp-app");
+    expect(seen).toEqual(["none", "browser", "browser", "browser", "browser", "mcp-app"]);
   });
 
   it("stacks a View column's component on the Schema field's, which sits on the built-in one", () => {

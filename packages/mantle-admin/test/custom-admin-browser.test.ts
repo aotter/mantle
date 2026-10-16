@@ -51,6 +51,9 @@ it("the app's both cell, CSS and useView page work in browser Admin as in the MC
     expect(await cell.evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(254, 220, 186)");
     await page.goto(origin + "/admin/p/queue");
     await page.getByText("page:first").waitFor();
+    expect(await page.locator("h1").allTextContents()).toEqual(["Queue"]);
+    expect(await page.getByText("Work queue").count()).toBe(1);
+    expect(await page.getByRole("link", { name: "Queue help" }).getAttribute("href")).toBe("https://example.test/help");
     expect(await page.getByRole("heading", { name: "queue-page" }).locator("..").evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(192, 255, 238)");
     await page.getByRole("button", { name: "More queue" }).click();
     await page.getByText("page:second").waitFor();

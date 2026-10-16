@@ -32,6 +32,8 @@ export interface AdminMeta<T extends AdminTypes = AdminTypes> {
 type Browser<P> = SlotComponent<P>;
 /** A component for a slot that renders in the browser and in an MCP host: its props carry `surface`. */
 type Both<P> = SlotComponent<P, SurfaceProp>;
+/** A record/collection slot keeps its explicit surface, but is mounted only in browser Admin. */
+type BrowserRecord<P> = SlotComponent<P, { readonly surface: "browser" }>;
 
 type Name<K> = K & string;
 type Collections<T extends AdminTypes> = Name<keyof T["collections"]>;
@@ -61,11 +63,9 @@ type Of<K extends string, Prefix extends string> = K extends `${Prefix}${infer R
  * `<view>.<column>` a column of an admin View.
  *
  * Surface: `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList` and `list.actions:` exist in the browser only.
- * `cell:view:` renders in an MCP host today: it is a column of the rows the App shows. `RecordView`, `record.aside:`,
- * `record.actions:`, `cell:<schema>.<field>` and `input:` are typed `both`, so they must work in a host (read data only
- * through the hooks, link only with `<AdminLink>` or `useOpenLink()`, expect no particular width), but the App shows no record
- * and its row-action form is not the record form, so they run in the browser Admin only; `mantle bundle` warns when you
- * override one.
+ * `cell:view:` renders in both surfaces. `RecordView`, `record.aside:`, `record.actions:`, collection cells and
+ * record inputs render only in browser Admin; their `surface` is the literal `"browser"`. An MCP row-action form
+ * edits a Procedure's input, not a collection record, and never mounts record/input overrides.
  */
 export type AdminComponents<T extends AdminTypes = AdminTypes> = {
   readonly Shell?: Browser<ShellProps>;
@@ -74,19 +74,19 @@ export type AdminComponents<T extends AdminTypes = AdminTypes> = {
   readonly Brand?: Browser<BrandProps>;
   readonly Home?: Browser<HomeProps>;
   readonly CollectionList?: Browser<CollectionListProps>;
-  readonly RecordView?: Both<RecordViewProps>;
+  readonly RecordView?: BrowserRecord<RecordViewProps>;
 } & {
-  readonly [K in `record.aside:${Collections<T>}`]?: Both<RecordAsideProps<DataOf<T, Of<K, "record.aside:">>>>;
+  readonly [K in `record.aside:${Collections<T>}`]?: BrowserRecord<RecordAsideProps<DataOf<T, Of<K, "record.aside:">>>>;
 } & {
-  readonly [K in `record.actions:${Collections<T>}`]?: Both<RecordActionsProps<DataOf<T, Of<K, "record.actions:">>>>;
+  readonly [K in `record.actions:${Collections<T>}`]?: BrowserRecord<RecordActionsProps<DataOf<T, Of<K, "record.actions:">>>>;
 } & {
   readonly [K in `list.actions:${Collections<T>}`]?: Browser<ListActionsProps>;
 } & {
-  readonly [K in `cell:${FieldKey<T>}`]?: Both<CellProps<FieldOf<T, Of<K, "cell:">>, ListRow<DataOf<T, Of<K, "cell:"> extends `${infer C}.${string}` ? C : never>>>>;
+  readonly [K in `cell:${FieldKey<T>}`]?: BrowserRecord<CellProps<FieldOf<T, Of<K, "cell:">>, ListRow<DataOf<T, Of<K, "cell:"> extends `${infer C}.${string}` ? C : never>>>>;
 } & {
   readonly [K in `cell:view:${ColumnKey<T>}`]?: Both<CellProps<ColumnOf<T, Of<K, "cell:view:">>, RowOf<T, Of<K, "cell:view:"> extends `${infer V}.${string}` ? V : never>>>;
 } & {
-  readonly [K in `input:${FieldKey<T>}`]?: Both<InputProps<FieldOf<T, Of<K, "input:">>>>;
+  readonly [K in `input:${FieldKey<T>}`]?: BrowserRecord<InputProps<FieldOf<T, Of<K, "input:">>>>;
 };
 
 /** A reusable fragment of `defineAdmin`'s `components`, such as an audit trail panel. */
@@ -149,6 +149,13 @@ export interface AdminNavItem<T extends AdminTypes = AdminTypes> {
   readonly badge?: AdminBadge<T>;
 }
 
+/** Explicitly compose a custom page's native heading in browser Admin and its opted-in MCP App. */
+export interface AdminPageHeader {
+  readonly description?: AdminText;
+  /** React content rendered beside the title; use hooks and host-aware links in an MCP page. */
+  readonly actions?: React.ReactNode;
+}
+
 /**
  * A page of the application's own, inside Admin's shell at `/admin/p/<path>`. `nav` places it in the sidebar beside the items
  * `uiSchema.nav` produces, in the same groups as `nav.items`. Showing a page grants nothing: what it reads or writes is
@@ -163,6 +170,12 @@ export interface AdminPage<T extends AdminTypes = AdminTypes> {
   readonly path: string;
   readonly title: AdminText;
   readonly element: React.ReactNode;
+  /**
+   * An object renders the same native title/description/actions on both surfaces; `false` lets `element` own its heading.
+   * Omitted preserves the browser's native title and the MCP App's element-only presentation. Do not add another h1
+   * inside `element` when using the native heading. Description, like title, can be localized.
+   */
+  readonly header?: AdminPageHeader | false;
   /** Any icon component; the default is a page. */
   readonly icon?: React.ElementType;
   /** Without `nav` the page keeps its route and stays out of the sidebar. */

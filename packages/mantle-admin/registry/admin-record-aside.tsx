@@ -1,16 +1,14 @@
-import { type RecordAsideProps, type SurfaceProp } from "@aotter/mantle-admin/app";
+import { type RecordAsideProps } from "@aotter/mantle-admin/app";
 import { useView } from "@aotter/mantle-admin/hooks";
 
 /**
- * Surface: both (the browser, and the Admin MCP App in an MCP host's sandboxed iframe).
+ * Surface: browser (the record page; never an MCP Procedure action form).
  * Slots: record.aside:<schema>
- * Rules: read data only through @aotter/mantle-admin/hooks, link only with <AdminLink> or useOpenLink(), make no
- * network calls of your own, keep no auth in cookies or browser storage, open no windows, assume no width, load
- * nothing from a remote origin. Branch on `surface` if you must; both branches have to render.
+ * Server authorization still applies to reads and writes; replacing this component grants nothing.
  */
 
 /** A card beside the record listing the rows of the admin View `record-history` for this record. Rename the View and its input. */
-export function AdminRecordAside({ entry }: RecordAsideProps<object> & SurfaceProp) {
+export function AdminRecordAside({ entry }: RecordAsideProps<object>) {
   const history = useView("record-history", { id: entry.id }, { limit: 5 });
   return (
     <section className="rounded-lg border p-4">
