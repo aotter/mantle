@@ -256,6 +256,7 @@ export default {
     "nav.operations": "Records",
     "nav.media": "Media library",
     "nav.more": "More",
+    "nav.setup": "Setup",
     "nav.settings": "Settings",
     "nav.admin": "Administrators",
     "nav.members": "Members",

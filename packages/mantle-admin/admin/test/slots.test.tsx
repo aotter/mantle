@@ -81,6 +81,15 @@ describe("slots", () => {
     defineAdmin(admin, { components: { Header: ({ surface }) => String(surface) } });
   });
 
+  it("types the landing target by the generated manifest, and keeps it as given", () => {
+    expect(defineAdmin(admin, {}).home).toBeUndefined();
+    expect(defineAdmin(admin, { home: { view: "pending-requests" } }).home).toEqual({ view: "pending-requests" });
+    expect(defineAdmin(admin, { home: { collection: "requests", filter: { status: "open" } } }).home).toEqual({ collection: "requests", filter: { status: "open" } });
+    expect(defineAdmin(admin, { home: { page: "budget" } }).home).toEqual({ page: "budget" });
+    // @ts-expect-error a landing collection is one of the manifest's
+    defineAdmin(admin, { home: { collection: "orders" } });
+  });
+
   it("types a nav badge by the generated View and one of its row's columns, and reports more than 20 badged Views", () => {
     const item = { group: "reports", title: "Waiting", to: { view: "pending-requests" } } as const;
     expect(defineAdmin(admin, { nav: { items: [{ ...item, badge: { view: "pending-requests", field: "amount" } }] } }).nav.items[0]!.badge).toEqual({ view: "pending-requests", field: "amount" });

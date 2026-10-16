@@ -48,6 +48,7 @@ import { t } from "../app/i18n";
 import { FormActionBarHostContext } from "../ui/page";
 import { Slot } from "../app/slots";
 import { useProjectNav, type ProjectNav } from "../app/project-nav";
+import type { AdminNavTarget } from "../app/define-admin";
 import type { ShellProps } from "../app/slot-props";
 import { ShellContext, type ShellContextValue } from "./shell-context";
 import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
@@ -308,6 +309,8 @@ export function buildNavGroups(
   const moreGroup: NavGroupData = {
     title: t(language, "nav.more"),
     items: [
+      // with a landing page `/admin` leaves for it, so the built-in home (setup and connector content) lives here
+      ...(landingUrl(project, collections, views) ? [{ title: t(language, "nav.setup"), url: "/admin/setup", icon: LayoutDashboard }] : []),
       ...(admin
         ? [
             // Media stays when it is off: its page is the setup guide
@@ -332,22 +335,33 @@ export function buildNavGroups(
   ];
 }
 
-/** The sidebar link of an application item, or null when the caller cannot see its collection or View (the server lists only those it may read). */
-function projectNavLink(item: ProjectNav["items"][number], collections: ReadonlyArray<Collection>, views: ReadonlyArray<ViewManifestInfo>, language: AdminLanguage, canonical: string | null): NavLink | null {
+/** The URL a target leads to, or null when the caller cannot see its collection or View (the server lists only those it may read). */
+export function navTargetUrl(to: AdminNavTarget, collections: ReadonlyArray<Collection>, views: ReadonlyArray<ViewManifestInfo>): string | null {
   const scalars = (values: object | undefined) => Object.entries(values ?? {}).flatMap(([k, v]) => typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? [[k, String(v)] as [string, string]] : []);
-  const title = (name: string) => resolveLocalizedText(item.title, language, canonical) ?? fieldLabel(name);
-  if ("collection" in item.to) {
-    const { collection: name, filter } = item.to;
-    const found = collections.find((c) => c.name === name);
-    if (!found) return null;
-    const [field] = scalars(filter);
-    const query = field ? `?filter_field=${encodeURIComponent(field[0])}&filter_value=${encodeURIComponent(field[1])}` : "";
-    return { title: title(name), icon: item.icon ?? Folder, url: `/admin/c/${encodeURIComponent(name)}${query}`, ...(item.badge ? { badge: item.badge } : {}) };
+  if ("collection" in to) {
+    if (!collections.some((c) => c.name === to.collection)) return null;
+    const [field] = scalars(to.filter);
+    return `/admin/c/${encodeURIComponent(to.collection)}${field ? `?filter_field=${encodeURIComponent(field[0])}&filter_value=${encodeURIComponent(field[1])}` : ""}`;
   }
-  const { view: name, input } = item.to;
-  if (!views.some((v) => v.name === name)) return null;
-  const query = new URLSearchParams(scalars(input)).toString();
-  return { title: title(name), icon: item.icon ?? BarChart3, url: `/admin/views/${encodeURIComponent(name)}${query ? `?${query}` : ""}`, ...(item.badge ? { badge: item.badge } : {}) };
+  if (!views.some((v) => v.name === to.view)) return null;
+  const query = new URLSearchParams(scalars(to.input)).toString();
+  return `/admin/views/${encodeURIComponent(to.view)}${query ? `?${query}` : ""}`;
+}
+
+/** Where `/admin` leads when the application set `home` and the caller can see its target; null shows Admin's own home. */
+export function landingUrl(project: Pick<ProjectNav, "home" | "pages"> | undefined, collections: ReadonlyArray<Collection>, views: ReadonlyArray<ViewManifestInfo>): string | null {
+  const home = project?.home;
+  if (!home) return null;
+  if ("page" in home) return project.pages?.some((p) => p.path === home.page) ? `/admin/p/${home.page}` : null;
+  return navTargetUrl(home, collections, views);
+}
+
+/** The sidebar link of an application item, or null when the caller cannot see its collection or View. */
+function projectNavLink(item: ProjectNav["items"][number], collections: ReadonlyArray<Collection>, views: ReadonlyArray<ViewManifestInfo>, language: AdminLanguage, canonical: string | null): NavLink | null {
+  const url = navTargetUrl(item.to, collections, views);
+  if (!url) return null;
+  const name = "collection" in item.to ? item.to.collection : item.to.view;
+  return { title: resolveLocalizedText(item.title, language, canonical) ?? fieldLabel(name), icon: item.icon ?? ("collection" in item.to ? Folder : BarChart3), url, ...(item.badge ? { badge: item.badge } : {}) };
 }
 
 export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<NavGroupData> {

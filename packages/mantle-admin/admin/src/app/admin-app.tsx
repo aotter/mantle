@@ -1,4 +1,4 @@
-import { entriesQueryArgsFromSearch, entriesQuerySearchParams, entriesQueryOptions, withNavigationTools } from "../lib/queries";
+import { entriesQueryArgsFromSearch, entriesQuerySearchParams, entriesQueryOptions, viewsManifestQueryOptions, withNavigationTools } from "../lib/queries";
 import { canRenderAdmin } from "./frame-policy";
 import { usePreferences } from "./preferences";
 import { t } from "./i18n";
@@ -10,7 +10,9 @@ import { api, ApiError } from "../lib/api";
 import type { AdminUser, Collection, SiteInfo, AdminOperation, ViewManifestInfo } from "../lib/types";
 import type { AdminToolCatalog } from "../lib/admin-tools";
 
-import { useAdminLocation } from "./router";
+import { useAdminLocation, useAdminRouter } from "./router";
+import { useProjectNav } from "./project-nav";
+import { landingUrl } from "../layout/authenticated-layout";
 import {
   AccessDeniedView,
   ConnectedAppsPage,
@@ -156,7 +158,9 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
     );
   }
 
-  if (path === "/admin" || path === "/admin/") {
+  if (path === "/admin" || path === "/admin/") return <Landing />;
+
+  if (path === "/admin/setup") {
     return (
       <AuthenticatedLayout>
         <HomePage />
@@ -270,6 +274,22 @@ function CollectionPage({ collection }: CollectionListProps): React.ReactElement
 
 function RecordPage({ collection, entryId }: RecordViewProps): React.ReactElement {
   return <EntryEditView collectionName={collection} entryId={entryId} />;
+}
+
+/** `/admin`: the application's landing page (`defineAdmin` `home`) when the caller can see it, otherwise Admin's own home. */
+function Landing(): React.ReactElement {
+  const project = useProjectNav();
+  const { navigate } = useAdminRouter();
+  const collections = useQuery<Collection[]>({
+    queryKey: ["collections"],
+    queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
+    enabled: !!project.home,
+  });
+  const views = useQuery<ViewManifestInfo[]>({ ...viewsManifestQueryOptions(), enabled: !!project.home });
+  const url = landingUrl(project, collections.data ?? [], views.data ?? []);
+  React.useEffect(() => { if (url) navigate(url, { replace: true }); }, [url, navigate]);
+  if (project.home && (url || collections.isPending || views.isPending)) return <GateLoading />;
+  return <AuthenticatedLayout><HomePage /></AuthenticatedLayout>;
 }
 
 function HomePage(): React.ReactElement {

@@ -182,6 +182,12 @@ export interface AdminOptions<T extends AdminTypes = AdminTypes> {
   readonly components?: AdminComponents<T>;
   /** Fragments applied in order: each one's `renderDefault` is the plugin before it, or the built-in component. */
   readonly plugins?: readonly AdminPlugin[];
+  /**
+   * Where `/admin` leads: a collection (with an optional preset filter), an admin View, or one of `pages` by its `path`.
+   * Without it, or when the caller cannot see the target, `/admin` is Admin's own home; with it, that home moves to
+   * `/admin/setup`, listed under More. Surface: browser. Showing or skipping the landing grants and denies nothing.
+   */
+  readonly home?: AdminNavTarget<T> | { readonly page: string };
   /** What the Admin MCP App may load, for a host's CSP. */
   readonly mcp?: { readonly csp?: AdminMcpCsp };
 }
@@ -193,6 +199,8 @@ export interface AdminDefinition {
   readonly nav: { readonly groups: { readonly [id: string]: AdminNavGroup }; readonly items: readonly AdminNavItem[] };
   /** The application's own pages, as `defineAdmin` was given them. */
   readonly pages: readonly AdminPage[];
+  /** Where `/admin` leads, as `defineAdmin` was given it. */
+  readonly home?: AdminNavTarget | { readonly page: string };
   /** The components of each slot, nearest the built-in first. */
   readonly layers: AdminLayers;
   readonly mcp?: { readonly csp?: AdminMcpCsp };
@@ -218,5 +226,5 @@ export function defineAdmin<T extends AdminTypes>(
   });
   const badged = new Set((config.nav?.items ?? []).flatMap(item => item.badge ? [item.badge.view] : []));
   if (badged.size > MAX_BADGE_VIEWS) console.error(`defineAdmin: nav badges read ${badged.size} Views; only the first ${MAX_BADGE_VIEWS} are counted.`);
-  return { meta: meta as AdminMeta, pages, nav: { groups: config.nav?.groups ?? {}, items: (config.nav?.items ?? []) as unknown as readonly AdminNavItem[] }, layers, ...(config.mcp ? { mcp: config.mcp } : {}) };
+  return { meta: meta as AdminMeta, pages, nav: { groups: config.nav?.groups ?? {}, items: (config.nav?.items ?? []) as unknown as readonly AdminNavItem[] }, layers, ...(config.home ? { home: config.home as AdminNavTarget | { readonly page: string } } : {}), ...(config.mcp ? { mcp: config.mcp } : {}) };
 }

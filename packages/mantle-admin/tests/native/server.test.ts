@@ -2,7 +2,7 @@ import { sdkFixtureCaller as fixtureCaller } from "../../../mantle/tests/apps/fi
 import {test, expect} from "bun:test";
 import { admin as adminFunction, type Route, type Metadata} from "../../src/server/index.js";
 import {entries, type EntrySchema} from "../../src/server/entries.js";
-import {ContractError, type Caller} from "@aotter/mantle/contracts";
+import {ContractError, type Caller, type Target} from "@aotter/mantle/contracts";
 import type {NativeCollection,NativeProcedureAdapter} from "../../src/server/native.js";
 const mode={projection:"id, version, title",from:"FROM fixture",policy:"",binds:[],fields:{title:{column:"title",insert:"@value",update:"title=@value"}},create:{prefix:"create(",between:")(",suffix:")",columns:[],values:[],binds:[],returning:""},patch:{prefix:"patch ",sets:[],where:"",returning:"",binds:[{k:"input" as const,name:"id"},{k:"version" as const}]},remove:{sql:"remove",binds:[{k:"input" as const,name:"id"},{k:"version" as const}],row:true}};
 const compiled:NativeCollection={path:"admin/entries",marker:"@value",id:"id",cursorAliases:[{name:"_cursor0",sql:"_cursor0"},{name:"_cursor1",sql:"_cursor1"}],fields:{id:{expression:"id",value:"@value",wire:"id",kind:"text",nullable:false}},orderFields:["id"],caller:mode,trusted:mode,statistics:{time:"created_at",subtype:"NULL",rowsAlias:{name:"_statistics",sql:"_statistics"}}};
@@ -187,4 +187,21 @@ test("view-batch runs each View as the caller; a refused, missing or authorize-d
   for(const names of ["","?names=","?names="+Array.from({length:21},(_,i)=>"v"+i).join(",")])expect((await many.ask(names))!.status).toBe(400);
   expect(many.providers()).toBe(0);
   expect((await many.ask("?names="+Array.from({length:20},(_,i)=>"v"+i).join(",")))!.status).toBe(200);
+});
+test("reference titles resolve as the caller with one query per referenced collection; missing, deleted and denied targets look alike",async()=>{
+  const customers=[{id:"c1",version:1,name:"Acme",created_at:0,updated_at:0}],orders=[{id:"o1",version:1,customer:"c1",created_at:0,updated_at:0},{id:"o2",version:1,customer:"c1",created_at:0,updated_at:0},{id:"o3",version:1,customer:"gone",created_at:0,updated_at:0}];
+  let reads:string[]=[];
+  const query=(params:URLSearchParams)=>{const ids=params.get("filter_values");return {input:{},order:"id:asc",...(ids?{match:{filters:{id:{in:JSON.parse(ids)}}}}:{})};};
+  const base={binding:compiled,publishing:false,readOnly:false,fields:{},defaults:{},query,validate:(d:any)=>d,values:(d:any)=>d,row:(r:any)=>r};
+  const order:EntrySchema={...base,name:"orders",descriptor:{name:"orders",list:{columns:["customer"]},schema:{properties:{customer:{type:"string","x-mantle-ref":"customers"}}}}};
+  const customer:EntrySchema={...base,name:"customers",descriptor:{name:"customers",schema:{properties:{name:{type:"string"}},required:["name"]}}};
+  const adapter=(found:object[]):NativeProcedureAdapter<{}>=>({...unused,read:(_db,_sql,values)=>{const customersRead=values.some(value=>value==="c1");reads.push(customersRead?"customers":"orders");return customersRead?found:orders;}});
+  const ask=async(found:object[],authorize?:(t:Target)=>boolean,path="/entries?collection=orders")=>{reads=[];const fetch=adminFunction(metadata,[],[],{db:()=>({}),caller:()=>admin,routes:entries([order,customer],adapter(found)),...(authorize?{authorize}:{})});return (await fetch(new Request("https://app.test/admin/api"+path),{}))!.json();};
+  const resolved=await ask(customers);
+  expect(resolved.ref_titles).toEqual({customer:{c1:{collection:"customers",id:"c1",title:"Acme"}}});expect(reads).toEqual(["orders","customers"]);
+  const missing=await ask([]),denied=await ask(customers,target=>!(target.kind==="schema"&&target.name==="customers"));
+  expect(missing).not.toHaveProperty("ref_titles");expect(denied).toEqual(missing);expect(JSON.stringify(denied)).not.toContain("Acme");
+  expect(reads).toEqual(["orders"]);
+  const editor=await ask(customers,undefined,"/entries/o1?collection=orders");
+  expect(editor.refTitles.customer.c1.title).toBe("Acme");
 });

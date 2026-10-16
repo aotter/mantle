@@ -102,6 +102,36 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
         const params = new URLSearchParams({filter_field: field, filter_value: String(value), limit: String(limit)});
         return (await pageOf(schema, ctx, params)).rows.map(raw => entry(schema, raw));
     };
+    /**
+     * Titles of the records that reference fields point at, read as the caller: one page query per referenced collection and
+     * field, over at most 50 distinct values. A missing, deleted or unreadable target is simply absent, so all three look alike.
+     */
+    const refTitles = async (schema: EntrySchema<DB>, ctx: Context<Env, DB>, rows: readonly Entry[], fields: readonly string[]) => {
+        const properties = descriptor(schema).schema?.properties ?? {}, groups = new Map<string, {target: EntrySchema<DB>; field: string; names: string[]; values: Set<string>}>();
+        for (const name of fields) {
+            const raw = properties[name]?.["x-mantle-ref"], ref = typeof raw === "string" ? {schema: raw, field: "id"} : raw as {schema?: string; field?: string} | undefined;
+            const target = ref?.schema && ref.schema !== "media_assets" ? schemas.find(s => s.name === ref.schema) : undefined;
+            if (!target) continue;
+            const key = target.name + "\0" + (ref!.field ?? "id"), group = groups.get(key) ?? {target, field: ref!.field ?? "id", names: [], values: new Set<string>()};
+            group.names.push(name);
+            for (const row of rows) { const value = valueOf(row, name); if (scalar(value) && value !== "") group.values.add(String(value)); }
+            groups.set(key, group);
+        }
+        const out: Record<string, Record<string, {collection: string; id: string; title: string}>> = {};
+        for (const {target, field, names, values} of groups.values()) {
+            if (!values.size || ctx.authorize && !await ctx.authorize({kind: "schema", name: target.name, action: "read"})) continue;
+            const hits: Record<string, {collection: string; id: string; title: string}> = {};
+            try {
+                const params = new URLSearchParams({filter_field: field, filter_values: JSON.stringify([...values].slice(0, 50)), limit: "50"});
+                for (const raw of (await pageOf(target, ctx, params)).rows) {
+                    const row = entry(target, raw), title = titleOf(target, row), key = valueOf(row, field);
+                    if (typeof title === "string" && scalar(key)) hits[String(key)] = {collection: target.name, id: row.id, title};
+                }
+            } catch (error) { if (!(error instanceof ContractError)) throw error; continue; }
+            for (const name of names) if (Object.keys(hits).length) out[name] = hits;
+        }
+        return out;
+    };
     /** After a committed write, related reads are best effort: a failed read must not turn a committed write into an error. */
     const editor = async (schema: EntrySchema<DB>, row: Row, ctx: Context<Env, DB>, written = false): Promise<any> => {
         const inherited = descriptor(schema).translates?.parent;
@@ -127,7 +157,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
                 return {collection: child.descriptor, relationship: {...relation, parentValue}, entries: await find(child, ctx, relation.childField, parentValue, 50)};
             });
         }));
-        return {collection: schema.descriptor, entry: e, parentEntryId: parent?.id ?? null, parentEntryTitle: parent && parentSchema ? titleOf(parentSchema, parent) ?? parent.id : null, related: related.filter(Boolean)};
+        return {collection: schema.descriptor, entry: e, parentEntryId: parent?.id ?? null, parentEntryTitle: parent && parentSchema ? titleOf(parentSchema, parent) ?? parent.id : null, related: related.filter(Boolean), ...await refTitles(schema, ctx, [e], Object.keys(e.data)).then(refs => Object.keys(refs).length ? {refTitles: refs} : {})};
     };
     const list = async (ctx: Context<Env, DB>) => {
         const schema = schemaOf(ctx.url.searchParams.get("collection")), page = await pageOf(schema, ctx, ctx.url.searchParams);
@@ -151,7 +181,8 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
             for (const row of items) for (const locale of byKey.get(valueOf(row, on)) ?? []) locales.get(row.id)!.add(locale);
         }
         const d = descriptor(schema), preview = [...(d.list?.primaryField ? [d.list.primaryField] : []), ...(d.list?.columns ?? [])];
-        return {items: items.map(row => ({...row, title: schema.publishing ? titleOf(schema, row) : null, translation_locales: [...locales.get(row.id)!], ...(!schema.publishing && preview.length ? {data_preview: Object.fromEntries(preview.map(f => [f, valueOf(row, f) ?? null]))} : {})})), next_cursor: page.nextCursor ?? null};
+        const refs = schema.publishing ? {} : await refTitles(schema, ctx, items, preview);
+        return {...(Object.keys(refs).length ? {ref_titles: refs} : {}), items: items.map(row => ({...row, title: schema.publishing ? titleOf(schema, row) : null, translation_locales: [...locales.get(row.id)!], ...(!schema.publishing && preview.length ? {data_preview: Object.fromEntries(preview.map(f => [f, valueOf(row, f) ?? null]))} : {})})), next_cursor: page.nextCursor ?? null};
     };
     const move = (verb: "publish" | "unpublish" | "archive") => async (ctx: Context<Env, DB>) => {
         const schema = schemaOf(ctx.url.searchParams.get("collection"));
