@@ -2,7 +2,6 @@
 import { authorized, authorizeTarget } from "./authorization.js";
 import { forwarded, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceError, wire, type Caller, type RequestContext } from "./contracts.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
-import { MAX_PAGE_SIZE } from "./paging.js";
 import type { Tools, Options } from "./mcp.js";
 import { RESOURCE_MIME_TYPE, linkSurface, type McpAppResource } from "./mcp-apps.js";
 type LocalizedText = string | Readonly<Record<string, string>>;
@@ -16,13 +15,11 @@ function observe<T>(listener: ((event: T) => void | Promise<void>) | undefined, 
 }
 const paging = (schema: { properties?: object }) => ({ ...schema, properties: { ...schema.properties, limit: { type: "integer", minimum: 1, maximum: 500 }, cursor: { type: "string" } } });
 /**
- * An MCP page holds at most 100 rows, so a wide View's result (its rows twice: text and
- * `structuredContent`) stays well under the ~150k characters at which hosts are reported to
- * truncate. The listed schema, which the tool version hashes, keeps 1..500: a larger limit
- * returns 100 rows with the next cursor, as a View's own LIMIT caps a page.
+ * Characters of `JSON.stringify(page)` an MCP View page may hold. A result carries its rows twice (text block and
+ * `structuredContent`) and hosts are reported to truncate near 150k characters, so one copy stays at 60k.
+ * ponytail: one fixed number; raise it or make it an option if hosts publish their limits.
  */
-const MCP_PAGE_SIZE = 100;
-const pageLimit = (raw: Record<string, unknown>) => { const limit = raw?.limit; return Number.isSafeInteger(limit) && (limit as number) > MCP_PAGE_SIZE && (limit as number) <= MAX_PAGE_SIZE ? { ...raw, limit: MCP_PAGE_SIZE } : raw; };
+const MCP_PAGE_BUDGET = 60_000;
 /** The scopes a challenge asks for: the credential's, plus what the request needs. */
 const union = (scopes: readonly string[], extra: readonly string[]) => [...new Set([...scopes, ...extra])].join(" ");
 
@@ -186,9 +183,21 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         try {
           if (host) tool.check?.(caller);
           if (tool.run && (!host || !tool.readOnly)) checkOrigin(request, caller);
-          const data = await callTool(tool, tool.page ? pageLimit(raw as Record<string, unknown>) : raw as Record<string, unknown>, () => options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
+          const run = (input: Record<string, unknown>) => callTool(tool, input, () => options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
+          let data = await run(raw as Record<string, unknown>), notice = false;
+          // A page is cut before the first row that overflows the budget: the same page re-runs with the limit that fits, so the cursor is the View's own.
+          // Data can change between reads, so the re-run is measured again.
+          for (let tries = 0; tool.page && isRecord(data) && Array.isArray(data.rows); tries++) {
+            const rows = data.rows as unknown[], total = JSON.stringify(data).length;
+            if (total <= MCP_PAGE_BUDGET) break;
+            if (rows.length === 1 || tries === 4) { notice = rows.length === 1; break; }
+            const sizes = rows.map(row => JSON.stringify(row).length);
+            let size = total - sizes.reduce((sum, n) => sum + n, 0) - (rows.length - 1), fit = 0;
+            for (const n of sizes) { size += n + (fit ? 1 : 0); if (size > MCP_PAGE_BUDGET) break; fit++; }
+            data = await run({ ...(raw as Record<string, unknown>), limit: Math.max(1, Math.min(fit, rows.length - 1)) });
+          }
           if (host) access?.finish();
-          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }, ...about(false)], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
+          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }, ...about(false), ...(notice ? [{ type: "text" as const, text: `This page is one row larger than the ${MCP_PAGE_BUDGET}-character page size budget, so a host may truncate it. Continue with nextCursor, if any.` }] : [])], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {
           if (host) access?.finish(error);
           const diagnostic = host ? (await (await import("./host-caller.js")).hostFailure(error, caller, `mcp ${tool.name}`).json() as {error: ReturnType<typeof surfaceError>["error"]}).error : surfaceError(error, `mcp ${tool.name}`).error;

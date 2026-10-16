@@ -216,3 +216,29 @@ test("a listed schema keeps a \"__proto__\" const key as an own key, and still h
   expect(JSON.stringify(listed.find(t=>t.name==="add_item")!.inputSchema.properties!.p)).toBe('{"const":{"__proto__":1}}');expectListedHashes(listed);await client.close();
  });
 });
+
+test("an MCP View page is cut by serialized size: every page fits the budget, paging loses and repeats nothing, one oversized row goes alone with a notice",async()=>{
+ const budget=60_000,big=30;
+ const all=Array.from({length:600},(_,i)=>({id:i,body:(i===big?"y".repeat(70_000):"x".repeat(400))}));
+ const wide={name:"wide_rows",surface:"public",description:"rows",inputSchema:{type:"object",additionalProperties:false},validate:(raw:unknown)=>raw as Record<string,unknown>,path:"wide_rows",
+  page:async(_db:null,_caller:unknown,_input:unknown,paging:{limit?:number;cursor?:string})=>{const from=Number(paging.cursor??0),limit=paging.limit??50,rows=all.slice(from,from+limit);return from+limit<all.length?{rows,nextCursor:String(from+limit)}:{rows};}};
+ const handle=serveMcp([wide as never],{db:()=>null,caller:()=>({kind:"anonymous"})});
+ for(const mode of eras){
+  const client=await connect(handle,mode);
+  for(const limit of [1,7,50,500,undefined]){
+   const got:typeof all=[];let cursor:string|undefined,pages=0,notices=0;
+   do{
+    const result=await client.callTool({name:"wide_rows",arguments:{...(limit?{limit}:{}),...(cursor?{cursor}:{})}});
+    const content=result.content as {text:string}[],data=result.structuredContent as {rows:typeof all;nextCursor?:string};
+    expect(result.isError).toBeFalsy();expect(JSON.parse(content[0]!.text)).toEqual(data);
+    expect(data.rows.length).toBeLessThanOrEqual(limit??50);
+    if(content[0]!.text.length>budget){notices++;expect(data.rows.map(r=>r.id)).toEqual([big]);expect(content.some(c=>c.text.includes("budget"))).toBe(true);}
+    else expect(content[0]!.text.length).toBeLessThanOrEqual(budget);
+    got.push(...data.rows);cursor=data.nextCursor;pages++;
+   }while(cursor);
+   expect(got).toEqual(all);expect(new Set(got.map(r=>r.id)).size).toBe(all.length);expect(notices).toBe(1);
+   if(limit===500) expect(pages).toBeGreaterThan(1);
+  }
+  await client.close();
+ }
+});
