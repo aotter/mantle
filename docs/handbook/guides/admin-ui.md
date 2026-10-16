@@ -69,3 +69,35 @@ Admin marks the active theme as both the `.dark` class and `data-theme="dark"` (
 | `--app-background` | Page backdrop (any CSS background, such as a gradient) |
 
 Every other variable, including `--mantle-blue-*` and `--chrome-glass`, is internal and may change without notice.
+
+## Eject a component
+
+`@aotter/mantle-admin` ships a [shadcn registry](https://ui.shadcn.com/docs/registry) of starting-point components for the `defineAdmin` slots. Ejecting copies one into your source: you own that file and edit it freely, while the hooks it calls (`@aotter/mantle-admin/hooks`) and the slot prop types (`@aotter/mantle-admin/app`) keep upgrading with the package. The registry is inside the installed package, so the copy matches the version you run and nothing is fetched from a host. Install from the package, in the app's root:
+
+```bash
+npx shadcn@latest add ./node_modules/@aotter/mantle-admin/dist/registry/admin-cell.json
+```
+
+The file lands in `src/admin/<item>.tsx` (the app needs a `components.json`, as for any shadcn item; the item's `target` ignores its aliases). Import it in `src/admin.tsx` and name the slot, replacing the sample collection, field, View and operation with your own:
+
+```tsx
+import { AdminCell } from "./admin/admin-cell";
+
+export default defineAdmin(admin, { components: { "cell:requests.status": AdminCell } });
+```
+
+| Item | Slots | Surface |
+| --- | --- | --- |
+| `admin-cell` | `cell:<schema>.<field>`, `cell:view:<view>.<column>` | both |
+| `admin-input` | `input:<schema>.<field>` | both |
+| `admin-record-actions` | `record.actions:<schema>` (runs an operation with `useOperation`) | both |
+| `admin-record-aside` | `record.aside:<schema>` (lists a View's rows with `useView`) | both |
+| `admin-sidebar` | `Sidebar` (`renderDefault` with a footer link) | browser |
+| `admin-home` | `Home` (`renderDefault` under a section that reads a View) | browser |
+
+Each file starts with a comment naming its surface and rules, and imports only `react`, `@aotter/mantle-admin/app` and `@aotter/mantle-admin/hooks`. A `both` component also renders in the Admin MCP App, inside a host's sandboxed iframe, so keep it to these rules:
+
+- Read data only through `useView` and `useOperation`; `useEntries`, `useEntry`, `useCollectionTotal` and `useMe` read `unavailable` there. Declare what a card needs as an admin View.
+- Link only with `<AdminLink>` or `useOpenLink()`; never `window.open` or `target="_blank"`.
+- No `fetch`, no `document.cookie` or `localStorage` authentication, no remote origin that the host's CSP does not allow, and no assumed width.
+- Branch on `useAdminSurface()` (or the `surface` prop) if you must, and render something sensible in both branches.

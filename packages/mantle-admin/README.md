@@ -88,6 +88,8 @@ through `renderDefault`, and `plugins` compose such fragments; see the Native Ad
 `nav` declares the sidebar groups the manifest uses (`ManifestNavGroup` in `generated/admin-client.ts`, checked by `tsc`) and adds `items` that lead to a collection, preset to a field's value, or to a View; see "Sidebar" in the same guide.
 `@aotter/mantle-admin/build` also exports the optional `adminVitePlugin()` for hot reload in a Vite dev server.
 
+`dist/registry/*.json` is a shadcn registry of starting-point components for these slots; `npx shadcn@latest add ./node_modules/@aotter/mantle-admin/dist/registry/admin-cell.json` copies one into the app's `src/admin/` to own (see "Eject a component" in the Admin UI guide).
+
 `@aotter/mantle-admin/hooks` exports the data hooks (`useView`, `useOperation`, `useEntries`, `useEntry`,
 `useCollectionTotal`, `useMe`, `useBadges`, `useHost`, `useAdminSurface`, `useOpenLink`) and `createAdminHooks<Types>()`, which `mantle generate --admin` calls
 in `generated/admin-client.ts` to bind them to the application's View, collection and operation types. They call only the
