@@ -1,5 +1,5 @@
 /** Optional app-mounted auth routes; consent and raw admin routes resolve fresh authority. Better Auth owns tokens. */
-import { checkOrigin, surfaceFailure, ContractError, type Caller } from "../kernel/contracts.js";
+import { checkOrigin, draining, surfaceFailure, ContractError, type Caller } from "../kernel/contracts.js";
 import { guardAuthAdminRequest } from "./admin.js";
 import { resolveCaller, type AuthInstance, type AuthLoader } from "./caller.js";
 import type { oauthConsents, OAuthConsentRequest, OAuthConsentInfo } from "./oauth.js";
@@ -28,7 +28,7 @@ export function authRoutes(loader: AuthLoader<AuthInstance & { handler(request: 
   const base = basePathOf(options);
   if (options.connectedAppsPage && (!options.connectedAppsPage.startsWith("/") || options.connectedAppsPage.startsWith("//") || /[\\\r\n]/.test(options.connectedAppsPage))) throw new Error("connectedAppsPage must be a same-origin absolute path.");
   const resolve = options.resolver ?? ((request: Request) => resolveCaller(request, loader));
-  return async request => {
+  return draining(async request => {
     const { pathname } = new URL(request.url);
     const route = `${request.method} ${pathname}`;
     if (pathname === `${base}/methods` && request.method === "GET") return json({ methods: options.methods });
@@ -48,7 +48,7 @@ export function authRoutes(loader: AuthLoader<AuthInstance & { handler(request: 
       if (request.method === "POST" && Number(request.headers.get("content-length")) > MAX_BODY) return text("request body too large", 413);
       return await consentSurface((await import("./oauth.js")).oauthConsents(await loader.get()), options)(request, caller, route);
     } catch (error) { return surfaceFailure(error, undefined, `auth ${route}`); }
-  };
+  });
 }
 
 function consentSurface(auth: AuthRoutesAuth, options: AuthRoutesOptions): (request: Request, caller: Caller, route: string) => Promise<Response> {

@@ -1,6 +1,6 @@
 /** Request-only MCP implementation, excluded from Worker startup. */
 import { authorized, authorizeTarget } from "./authorization.js";
-import { forwarded, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceError, wire, type Caller, type RequestContext } from "./contracts.js";
+import { forwarded, draining, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceError, wire, type Caller, type RequestContext } from "./contracts.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
 import type { Tools, Options } from "./mcp.js";
 import { RESOURCE_MIME_TYPE, linkSurface, type McpAppResource } from "./mcp-apps.js";
@@ -26,7 +26,7 @@ const union = (scopes: readonly string[], extra: readonly string[]) => [...new S
 /** The handler for `/mcp` (public tools) and `/mcp/admin` (tools for `admin` roles); other paths are undefined. */
 export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, apps: Partial<Record<string, ReturnType<typeof linkSurface>>> = {}, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
   const allowed = options.allowedOrigins ?? [];
-  return async (request, env, ctx) => {
+  return draining(async (request, env, ctx) => {
     const access = options.gateway ? (await import("./host-access.js")).accessRequest(ctx, options) : undefined;
     let resolved: Caller | undefined;
     try {
@@ -227,7 +227,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       access?.finish(error);
       return (await import("./host-caller.js")).hostFailure(error, resolved, "mcp");
     }
-  };
+  });
 }
 
 /** A hash of the tools an endpoint serves (`surface:name:version`, sorted), as 32-bit FNV-1a hex: it changes with any tool's definition. */

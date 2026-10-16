@@ -132,6 +132,21 @@ export interface Postgres {
 /** What a read or a single statement needs: a transaction handle suits it too. */
 export type Unsafe = Pick<Postgres, "unsafe">;
 
+/** Read and discard what is left of a request body, bounded. A response sent over an unread POST body makes local `wrangler dev`
+ *  break the connection, and the next request fails with "Network connection lost". */
+export async function drainBody(request: Request, limit = 1024 * 1024): Promise<void> {
+  try {
+    const reader = request.body?.getReader(); // a body the app consumed is done, one it still holds is locked and throws
+    for (let read = 0, chunk; reader && !(chunk = await reader.read()).done;) if ((read += chunk.value.byteLength) > limit) return reader.cancel();
+  } catch { /* the client went away */ }
+}
+/** A request handler that drains the body once it has answered. `undefined` and `null` mean the request is not this handler's. */
+export const draining = <A extends [Request, ...any[]], R>(handle: (...args: A) => Promise<R>) => async (...args: A): Promise<R> => {
+  const response = await handle(...args);
+  if (response != null) await drainBody(args[0]);
+  return response;
+};
+
 /** A cookie is ambient authority; bearer credentials deliberately supplied by the app are not. */
 export function checkOrigin(request: Request, caller: Caller): void {
   if (!("credential" in caller) || caller.credential !== "session" || ["GET", "HEAD", "OPTIONS"].includes(request.method)) return;

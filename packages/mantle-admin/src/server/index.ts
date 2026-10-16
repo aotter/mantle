@@ -1,6 +1,6 @@
 import type { GatewayOptions } from "@aotter/mantle/contracts";
 /** Optional Admin API: generated data and native calls, with one fresh admin session per request. */
-import { forwarded, deny, isAdmin, ContractError, checkOrigin, surfaceCaller, type Caller, type Target, type Authorize, type Gateway, type RequestContext } from "@aotter/mantle/contracts";
+import { forwarded, draining, deny, isAdmin, ContractError, checkOrigin, surfaceCaller, type Caller, type Target, type Authorize, type Gateway, type RequestContext } from "@aotter/mantle/contracts";
 import { nativeRest, body, type Route as RestRoute } from "@aotter/mantle/rest";
 import { userOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
@@ -257,7 +257,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 return new Response(result.body, { status: result.status, statusText: result.statusText, headers });
             } };
     });
-    return async (request, env, ctx) => {
+    return draining(async (request, env, ctx) => {
         const path = new URL(request.url).pathname;
         if (path !== "/admin/api" && !path.startsWith("/admin/api/"))
             return;
@@ -315,6 +315,6 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
             access?.finish(error);
             return (await import("@aotter/mantle/host-caller")).hostFailure(error, caller, "admin");
         }
-    };
+    });
 }
 export { adminShell } from "./shell.js";
