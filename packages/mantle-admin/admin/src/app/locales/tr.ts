@@ -1,4 +1,6 @@
 export default {
+    "common.reloadPage": "Sayfayı yeniden yükle",
+    "common.reloadPageHint": "Tekrar denemek için bu sayfayı yeniden yükleyin. Kaydedilmemiş değişiklikler kaybolabilir.",
     "ops.details": "Ayrıntılar",
     "ops.conditionConflict": "Kayıt değişti veya artık bu işlemin koşulunu karşılamıyor. Yenileyip tekrar deneyin.",
   "ops.uniqueConflict": "Aynı benzersiz değere sahip bir kayıt zaten var.",

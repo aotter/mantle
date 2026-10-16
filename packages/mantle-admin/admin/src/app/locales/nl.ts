@@ -1,4 +1,6 @@
 export default {
+    "common.reloadPage": "Pagina opnieuw laden",
+    "common.reloadPageHint": "Laad deze pagina opnieuw om het nogmaals te proberen. Niet-opgeslagen wijzigingen kunnen verloren gaan.",
     "ops.details": "Details",
     "ops.conditionConflict": "Het record is gewijzigd of voldoet niet meer aan de voorwaarde van deze actie. Vernieuw en probeer opnieuw.",
   "ops.uniqueConflict": "Er bestaat al een record met dezelfde unieke waarde.",

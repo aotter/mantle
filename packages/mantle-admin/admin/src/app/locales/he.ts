@@ -1,4 +1,6 @@
 export default {
+    "common.reloadPage": "טעינה מחדש של הדף",
+    "common.reloadPageHint": "יש לטעון מחדש את הדף כדי לנסות שוב. שינויים שלא נשמרו עלולים ללכת לאיבוד.",
     "ops.details": "פרטים",
     "ops.conditionConflict": "הרשומה השתנתה או אינה עומדת עוד בתנאי הפעולה. יש לרענן ולנסות שוב.",
   "ops.uniqueConflict": "כבר קיימת רשומה עם אותו ערך ייחודי.",

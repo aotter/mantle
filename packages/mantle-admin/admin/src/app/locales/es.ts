@@ -1,4 +1,6 @@
 export default {
+    "common.reloadPage": "Recargar página",
+    "common.reloadPageHint": "Recarga esta página para volver a intentarlo. Los cambios sin guardar pueden perderse.",
     "ops.details": "Detalles",
     "ops.conditionConflict": "El registro cambió o ya no cumple la condición de esta acción. Actualiza y vuelve a intentarlo.",
   "ops.uniqueConflict": "Ya existe un registro con el mismo valor único.",

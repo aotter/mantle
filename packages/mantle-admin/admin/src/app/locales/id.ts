@@ -1,4 +1,6 @@
 export default {
+    "common.reloadPage": "Muat ulang halaman",
+    "common.reloadPageHint": "Muat ulang halaman ini untuk mencoba lagi. Perubahan yang belum disimpan mungkin hilang.",
     "ops.details": "Detail",
     "ops.conditionConflict": "Catatan berubah atau tidak lagi memenuhi kondisi tindakan ini. Muat ulang dan coba lagi.",
   "ops.uniqueConflict": "Catatan dengan nilai unik yang sama sudah ada.",

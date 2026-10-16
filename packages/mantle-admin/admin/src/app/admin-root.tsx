@@ -11,6 +11,7 @@ import { queryClient } from "./query-client";
 import { AdminRouterProvider } from "./router";
 import { browserTransport } from "./browser-transport";
 import type { AdminDefinition } from "./define-admin";
+import { AdminLoadBoundary } from "./load-recovery";
 
 /**
  * Admin's provider tree around the routed views. Internal: `preview` is set only by the canonical preview document,
@@ -30,7 +31,7 @@ export function AdminRoot(props: { admin: AdminDefinition; preview?: boolean }):
                 <TooltipProvider>
                   <ConfirmProvider>
                     <ProjectNavProvider nav={projectNav}>
-                      <AdminApp preview={props.preview ?? false} />
+                      <AdminLoadBoundary><AdminApp preview={props.preview ?? false} /></AdminLoadBoundary>
                       <AdminToaster />
                     </ProjectNavProvider>
                   </ConfirmProvider>
