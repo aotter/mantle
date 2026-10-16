@@ -152,6 +152,19 @@ it("renders an application's pages[].mcp page for its View's tool, not the rows,
     expect(await app.getByText("工作待辦").count()).toBe(1);
     expect(await app.getByRole("link", { name: "Queue help" }).count()).toBe(1);
     expect(await app.getByRole("heading", { name: "queue-page" }).locator("..").evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(192, 255, 238)");
+    for (const width of [340, 700]) {
+      await page.locator("iframe").evaluate((node, width) => { (node as HTMLIFrameElement).width = String(width); }, width);
+      await expect.poll(() => app.locator("body").evaluate(() => window.innerWidth)).toBe(width);
+      const geometry = await app.locator('[data-slot="app-page"]').evaluate(node => {
+        const heading = node.querySelector("h1")!, header = heading.parentElement!.parentElement!;
+        const body = node.querySelector("h2")!.parentElement!;
+        const inset = (element: Element) => { const box = element.getBoundingClientRect(); return { left: box.left, right: window.innerWidth - box.right }; };
+        return { header: inset(header), body: inset(body), headingLeft: heading.getBoundingClientRect().left, overflow: document.documentElement.scrollWidth > window.innerWidth };
+      });
+      expect(geometry).toEqual({ header: { left: 16, right: 16 }, body: { left: 16, right: 16 }, headingLeft: 16, overflow: false });
+    }
+    await app.getByRole("link", { name: "Queue help" }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).host.links)).toEqual(["https://example.test/help"]);
     const state = await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors }));
     expect(state.errors).toEqual([]);
     expect(state.calls).toMatchObject([{ name: "queue", arguments: {} }]);
