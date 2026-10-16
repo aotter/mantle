@@ -80,8 +80,9 @@ Authored SQL `LIMIT` caps each page, up to 500, rather than the whole cursor wal
 An MCP View page keeps the `limit` of 1 to 500 but holds only as many of those rows
 as fit 60,000 characters of JSON, so a result stays under host truncation limits. It
 is cut before the first row that overflows and its next cursor resumes at that row.
-A single row over the budget is returned alone, with the cursor and a notice that
-hosts may truncate it.
+A single row over the budget is returned alone with the cursor, and a View without an
+order stays one whole page; a page still over the budget carries a notice that hosts
+may truncate it.
 A pageable Schema View has a complete NOT NULL scalar tuple ending in the
 compiler's `id` tiebreak. Its ordered columns must match an index after fixed
 equality prefixes; a user-field `IN` scope or restrict is not one (see

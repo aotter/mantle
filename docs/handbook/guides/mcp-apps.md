@@ -90,8 +90,9 @@ is reported for some), and a truncated text block is no longer JSON. So an MCP
 View page is cut by size: `limit` still accepts 1 to 500, but a page holds only
 as many of those rows as fit 60,000 characters of JSON. It stops before the first
 row that overflows, and the next cursor resumes at that row, so no row is skipped
-or repeated. A single row over the budget is returned alone, with its cursor and a
-notice that hosts may truncate it. The default is 50 rows. REST and native paging keep their 500-row limit.
+or repeated. A single row over the budget is returned alone, with its cursor, and a
+View without an order (one page, no cursor) is returned whole; any page still over the
+budget carries a notice that hosts may truncate it. The default is 50 rows. REST and native paging keep their 500-row limit.
 
 Checks against real hosts need an account and a public HTTPS endpoint, so
 they are manual: add the endpoint as a custom connector in each host, call a
