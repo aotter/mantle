@@ -26,7 +26,7 @@ Admin is themed with CSS variables. Import your own stylesheet from `src/admin.t
 }
 ```
 
-Admin marks the active theme as both the `.dark` class and `data-theme="dark"` (or `"light"`) on the root. Dark tokens and Tailwind's `dark:` variant apply when either is present, so `[data-theme="dark"] {}` is equivalent to `.dark {}`. Your overrides apply in the browser Admin; the [MCP App](mcp-apps.md#theme) uses its own palette.
+Admin marks the active theme as both the `.dark` class and `data-theme="dark"` (or `"light"`) on the root. Dark tokens and Tailwind's `dark:` variant apply when either is present, so `[data-theme="dark"] {}` is equivalent to `.dark {}`. Your overrides apply in the browser Admin and, because the entry imports your CSS, in the [MCP App](mcp-apps.md#theme) too, where the host's neutral colours are laid over them.
 
 | Token | Meaning |
 | --- | --- |
