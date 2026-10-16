@@ -184,20 +184,21 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
           if (host) tool.check?.(caller);
           if (tool.run && (!host || !tool.readOnly)) checkOrigin(request, caller);
           const run = (input: Record<string, unknown>) => callTool(tool, input, () => options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
-          let data = await run(raw as Record<string, unknown>), notice = false;
+          let data = await run(raw as Record<string, unknown>);
           // A page is cut before the first row that overflows the budget: the same page re-runs with the limit that fits, so the cursor is the View's own.
           // Data can change between reads, so the re-run is measured again.
           for (let tries = 0; tool.page && isRecord(data) && Array.isArray(data.rows); tries++) {
             const rows = data.rows as unknown[], total = JSON.stringify(data).length;
             if (total <= MCP_PAGE_BUDGET) break;
-            if (rows.length === 1 || tries === 4) { notice = rows.length === 1; break; }
+            if (rows.length === 1 || tries === 4) break;
             const sizes = rows.map(row => JSON.stringify(row).length);
             let size = total - sizes.reduce((sum, n) => sum + n, 0) - (rows.length - 1), fit = 0;
             for (const n of sizes) { size += n + (fit ? 1 : 0); if (size > MCP_PAGE_BUDGET) break; fit++; }
             data = await run({ ...(raw as Record<string, unknown>), limit: Math.max(1, Math.min(fit, rows.length - 1)) });
           }
           if (host) access?.finish();
-          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }, ...about(false), ...(notice ? [{ type: "text" as const, text: `This page is one row larger than the ${MCP_PAGE_BUDGET}-character page size budget, so a host may truncate it. Continue with nextCursor, if any.` }] : [])], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
+          const notice = tool.page && JSON.stringify(data).length > MCP_PAGE_BUDGET;
+          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }, ...about(false), ...(notice ? [{ type: "text" as const, text: `This page is larger than the ${MCP_PAGE_BUDGET}-character page size budget (a single row over it is returned alone), so a host may truncate it. Continue with nextCursor, if any.` }] : [])], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {
           if (host) access?.finish(error);
           const diagnostic = host ? (await (await import("./host-caller.js")).hostFailure(error, caller, `mcp ${tool.name}`).json() as {error: ReturnType<typeof surfaceError>["error"]}).error : surfaceError(error, `mcp ${tool.name}`).error;
