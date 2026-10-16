@@ -8,6 +8,7 @@ import type { AdminHost } from "../app/hooks";
 import { AdminHooksProvider } from "../app/hooks-context";
 import { toolName } from "../app/slots";
 import { createMcpAppTransport } from "../app/transport";
+import { CustomPage } from "../app/custom-page";
 import type { AdminDefinition } from "../app/define-admin";
 import { MantleApp } from "./app";
 import { appLabels } from "./locale";
@@ -23,12 +24,6 @@ const newQueryClient = () => new QueryClient({ defaultOptions: { queries: { retr
 function Root({ admin }: { admin: AdminDefinition }) {
   // the server embeds it once, when it builds the surface
   const catalog = useMemo(() => readCatalog(), []);
-  // a page declared for a View (`pages[].mcp`) is that View's tool's page; the first page for a View wins
-  const pages = useMemo(() => {
-    const byTool: { [tool: string]: ReactNode } = {};
-    for (const page of admin.pages) if (page.mcp) byTool[toolName(page.mcp.renders)] ??= page.element;
-    return byTool;
-  }, [admin]);
   const [client] = useState(newQueryClient);
   const [result, setResult] = useState<ToolResult | null>(null);
   const [input, setInput] = useState<Record<string, unknown> | null>(null);
@@ -66,6 +61,9 @@ function Root({ admin }: { admin: AdminDefinition }) {
   if (error) return <p role="alert" className="p-4 text-sm text-destructive">{error.message}</p>;
   if (!host || !adminHost || !transport) return <p role="status" className="p-4 text-sm">Connecting to the MCP host…</p>;
   const hostTool = context?.toolInfo?.tool.name;
+  // Explicit headers share the browser composition; omitted headers keep existing element-only MCP pages.
+  const pages: { [tool: string]: ReactNode } = {};
+  for (const page of admin.pages) if (page.mcp) pages[toolName(page.mcp.renders)] ??= <CustomPage page={page} surface="mcp-app" language={locale ?? "en"} />;
   const labels = appLabels(locale);
   // a long form or many columns: the person may ask the host for the whole screen, when it offers one
   const next = context?.displayMode === "fullscreen" ? "inline" : "fullscreen";

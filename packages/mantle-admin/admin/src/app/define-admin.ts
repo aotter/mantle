@@ -149,6 +149,13 @@ export interface AdminNavItem<T extends AdminTypes = AdminTypes> {
   readonly badge?: AdminBadge<T>;
 }
 
+/** Explicitly compose a custom page's native heading in browser Admin and its opted-in MCP App. */
+export interface AdminPageHeader {
+  readonly description?: AdminText;
+  /** React content rendered beside the title; use hooks and host-aware links in an MCP page. */
+  readonly actions?: React.ReactNode;
+}
+
 /**
  * A page of the application's own, inside Admin's shell at `/admin/p/<path>`. `nav` places it in the sidebar beside the items
  * `uiSchema.nav` produces, in the same groups as `nav.items`. Showing a page grants nothing: what it reads or writes is
@@ -163,6 +170,12 @@ export interface AdminPage<T extends AdminTypes = AdminTypes> {
   readonly path: string;
   readonly title: AdminText;
   readonly element: React.ReactNode;
+  /**
+   * An object renders the same native title/description/actions on both surfaces; `false` lets `element` own its heading.
+   * Omitted preserves the browser's native title and the MCP App's element-only presentation. Do not add another h1
+   * inside `element` when using the native heading. Description, like title, can be localized.
+   */
+  readonly header?: AdminPageHeader | false;
   /** Any icon component; the default is a page. */
   readonly icon?: React.ElementType;
   /** Without `nav` the page keeps its route and stays out of the sidebar. */

@@ -45,7 +45,9 @@ authorizes.
      preview contract holds.
    - There is no prebuilt-SPA path.
 2. **Composition.** `defineAdmin(generatedAdmin, { nav, pages, components,
-   plugins })`; pages are React routes. The Admin bundle is public static
+   plugins })`; pages are React routes. `pages[].header` composes localized description and
+   React actions beside the native page title on both surfaces when explicitly
+   supplied; `false` delegates the heading to the page element (#1711). The Admin bundle is public static
    content: generated code contributes types and only the names the
    application's own code references, never Procedure statements, guards,
    audiences, authorization predicates or full lists of Views and
@@ -81,7 +83,8 @@ authorizes.
 8. **MCP Apps.** By default the Admin MCP App is one View's rows plus Procedure row
    actions; the full Admin (shell,
    sidebar, router) does not run inside an MCP host.
-   - `mantle bundle` builds it from the same entry as a single-file
+   - `mantle bundle` builds it from the same entry by default (an optional
+     `src/admin.mcp.tsx` isolates browser-only imports, #1712), as a single-file
      `<assets>/admin/mcp-app.html`, served as `ui://mantle-admin/admin/<digest>`
      by default (#1705): the Admin contributor hashes its HTML, catalogue and
      resource metadata; Core validates and serves the resulting links without

@@ -122,7 +122,7 @@ describe("@aotter/mantle-admin/app", () => {
       '    { group: "billing", title: "All", to: { collection: "requests" } },',
       "  ],",
       "} });",
-      "export const withPage: AdminDefinition = defineAdmin(navMeta, { nav: { groups: { approvals: { title: \"A\" }, billing: { title: \"B\" } } }, pages: [{ path: \"budget\", title: \"Budget\", element: null, nav: { group: \"billing\", order: 1 } }, { path: \"plain\", title: \"Plain\", element: null }] });",
+      "export const withPage: AdminDefinition = defineAdmin(navMeta, { nav: { groups: { approvals: { title: \"A\" }, billing: { title: \"B\" } } }, pages: [{ path: \"budget\", title: \"Budget\", header: { description: { en: \"Budget details\" }, actions: null }, element: null, nav: { group: \"billing\", order: 1 } }, { path: \"plain\", title: \"Plain\", element: null }] });",
       '// @ts-expect-error a page is placed in a group the manifest or Admin has',
       'defineAdmin(navMeta, { nav: { groups: { approvals: { title: "A" }, billing: { title: "B" } } }, pages: [{ path: "x", title: "X", element: null, nav: { group: "billng" } }] });',
       "// a manifest that uses only Admin's groups needs no declaration; the config stays optional",

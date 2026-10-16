@@ -464,6 +464,25 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
   `home`, `/admin` stays the built-in home. Choosing a landing page grants and denies nothing; the target's own route still decides.
   The landing is browser only.
 
+`pages[].header` composes actions beside the native page title without replacing
+Admin's shell or targeting its internal DOM:
+
+```tsx
+pages: [{ path: "queue", title: { en: "Queue", "zh-TW": "待辦" },
+  header: { description: "Items awaiting review", actions: <QueueActions /> },
+  element: <QueuePage />, mcp: { renders: "pending-requests" } }]
+```
+
+The explicit object renders the same native heading on both surfaces. `title`
+and `description` resolve using the browser preference or MCP host locale;
+`actions` is React content, so its component may use the existing hooks and
+host-aware links. Keep action controls disabled or provide a fallback when the
+host lacks a capability. Do not add another h1 to `element` with this header.
+Use `header: false` if the element owns its heading. Omitted preserves existing
+behavior: native title in the browser, element alone in MCP. This option does
+not customize the global application `Header` slot.
+
+
 `src/admin.tsx` is JSX and runs in the browser, so `tsconfig.json` needs `"jsx": "react-jsx"` and `"lib": ["ES2023", "DOM"]` beside the Worker's `types` (`@cloudflare/workers-types`, `node`) and must include `src/**/*.tsx`; `node_modules/@aotter/mantle/docs/examples/app-shell/tsconfig.json` is the working file. The app also depends on `react`, `react-dom` and `@types/react` (see the example's `package.json`). The app owns `react` and `react-dom` (Admin and the kit take them as peers), so pin both to the same exact version: `react-dom` refuses to run beside a different `react`. `mantle bundle` stops with a message when they differ; add `lucide-react` (or another icon package) yourself if you use icons.
 
 ```tsx

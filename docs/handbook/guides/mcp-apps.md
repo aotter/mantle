@@ -309,10 +309,18 @@ A custom page may also be an App view. Name a View that has an admin MCP tool:
 export default defineAdmin(admin, {
   pages: [{
     path: "queue", title: "Queue", element: <QueuePage />,
+    header: { description: "Items awaiting review", actions: <QueueActions /> },
     mcp: { renders: "pending-requests" },
   }],
 });
 ```
+
+The explicit `header` object shares the native title, localized description and
+React actions with browser Admin. Its actions must use the same host-safe hooks
+and capability fallbacks as the page. `header: false` delegates the heading to
+the element; omit `header` to preserve element-only MCP presentation (and the
+browser's native title). Do not render a second h1 inside `element` when using
+the native heading.
 
 When the host's tool is that View's tool, the App shows `<QueuePage />` instead
 of the default rows table, in the host's frame and theme. The page reads its own data
