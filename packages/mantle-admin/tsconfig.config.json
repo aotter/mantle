@@ -10,6 +10,7 @@
   },
   "include": [
     "examples/**/*",
+    "testing-host/**/*",
     "*.config.ts"
   ],
   "exclude": [

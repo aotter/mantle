@@ -100,7 +100,7 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
   const [{ build, normalizePath }, { viteSingleFile }] = await Promise.all([import("vite"), import("vite-plugin-singlefile")]);
   const core = await adminCore(entry, true);
   const mount = resolve(dist, "admin-app/mcp-mount.js");
-  const { csp, sources: slots, problem } = await readDefinition(core);
+  const { csp, sources: slots, manifest, problem } = await readDefinition(core);
   if (problem) {
     console.warn(`warning: Admin MCP App: ${entry ?? "the built-in entry"} ${problem}`);
     // a declared CSP must not vanish because the entry could not be read
@@ -143,7 +143,9 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
   if (errors.length) throw new Error(`The Admin MCP App would break in an MCP host:\n${errors.map(line => `  - ${line}`).join("\n")}\nSee ${GUIDE}.`);
   // the declared CSP rides in the file, so the server sends it with the HTML (`adminMcpApps`) and it is declared once
   const escape = (json: string) => json.replace(/[<'&]/g, character => "\\u" + character.charCodeAt(0).toString(16).padStart(4, "0"));
-  const meta = csp ? "<meta name=\"mantle-mcp-csp\" content='" + escape(JSON.stringify(csp)) + "'>" : "";
+  const declare = (name: string, value: unknown) => "<meta name=\"" + name + "\" content='" + escape(JSON.stringify(value)) + "'>";
+  // what the application customised, for the generated compatibility test (`@aotter/mantle-admin/testing`)
+  const meta = (csp ? declare("mantle-mcp-csp", csp) : "") + (manifest ? declare("mantle-mcp-app", manifest) : "");
   writeFileSync(resolve(outDir, "mcp-app.html"), meta ? html.replace(/<head>/i, head => head + meta) : html);
   console.log(`Admin MCP App: ${(Buffer.byteLength(html) / 1024).toFixed(1)} kB (mcp-app.html).`);
 }
@@ -153,7 +155,7 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
  * The entry is bundled for Node and imported, so an entry that cannot run there (it touches `window` on import) is read as
  * declaring nothing, and the build says so rather than failing it.
  */
-async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>): Promise<{ csp?: McpCsp; sources: Source[]; problem?: string }> {
+async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>): Promise<{ csp?: McpCsp; sources: Source[]; manifest?: { slots: string[]; pages: string[] }; problem?: string }> {
   try {
     const { build } = await import("vite");
     const built = await build({
@@ -165,14 +167,16 @@ async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>): Prom
     // a file, not a data: URL, so the bundle's `import.meta.url` is a real one
     const file = resolve(mkdtempSync(join(tmpdir(), "mantle-admin-entry-")), "entry.mjs");
     writeFileSync(file, chunk.code);
-    let admin: { mcp?: { csp?: McpCsp }; layers?: { [slot: string]: readonly unknown[] } };
+    let admin: { mcp?: { csp?: McpCsp }; layers?: { [slot: string]: readonly unknown[] }; pages?: readonly { mcp?: { renders: string } }[] };
     try { ({ default: admin } = await import(pathToFileURL(file).href) as { default: typeof admin }); }
     finally { rmSync(dirname(file), { recursive: true, force: true }); }
     const sources = Object.entries(admin.layers ?? {}).flatMap(([slot, layers]) => {
       const hits = layers.flatMap(layer => typeof layer === "function" ? hitsOf(layer.toString()) : []);
       return hits.length ? [{ slot, hits }] : [];
     });
-    return { ...(admin.mcp?.csp ? { csp: admin.mcp.csp } : {}), sources };
+    // the slots a host renders (`both`) that the application overrides, and the Views its MCP pages are for
+    const manifest = { slots: Object.keys(admin.layers ?? {}).filter(slot => slot === "RecordView" || /^(?:cell|input|record\.aside|record\.actions):/.test(slot)), pages: (admin.pages ?? []).flatMap(page => page.mcp ? [page.mcp.renders] : []) };
+    return { ...(admin.mcp?.csp ? { csp: admin.mcp.csp } : {}), sources, manifest };
   } catch (error) {
     return { sources: [], problem: `it could not be run in Node to read mcp.csp, so none is assumed: ${error instanceof Error ? error.message : String(error)}` };
   }
