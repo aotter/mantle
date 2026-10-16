@@ -4,6 +4,6 @@
   "inputs": {
     "../manifests/catalog.yaml": "8cde2a9dadef39f64219baf0d37d17620d1f4452c9250d2a62910abf4ef57b20",
     "../manifests/orders.yaml": "199ba2cc08a597ae45b1bb9aee768a672a00afaca38ee3fd31d1dc024045071c",
-    "../src/auth.ts": "d0389e67bbfe04e0a17572a01ef01cf941f7bddffa1ec4a3157905b5cdd18b4b"
+    "../src/auth.ts": "3748d7a3b5146c6469cfb73158c2d07aa324a5d00433f7f3b527811c5c698e8b"
   }
 }

@@ -13,7 +13,7 @@ export type ManifestNavGroup = never;
 
 /** The input and row of each admin View, the `data` of each collection's entries, and the input and output of each admin operation. */
 export interface AppAdminTypes {
-  readonly views: { readonly "recent-activity": { readonly input: {}; readonly row: View0Row } };
+  readonly views: { readonly "recent-activity": { readonly input: {}; readonly row: View0Row; readonly mcp: true } };
   readonly collections: { readonly "activity": { readonly data: { readonly "kind": string; readonly "subject": string; readonly "detail"?: string;  } }; readonly "items": { readonly data: { readonly "sku": string; readonly "name": string; readonly "priceCents"?: number; readonly "stock": number;  } }; readonly "orders": { readonly data: { readonly "itemId": string; readonly "qty": number; readonly "orderStatus": "placed" | "cancelled"; readonly "placedAt"?: string;  } } };
   readonly operations: { readonly "restock": { readonly input: { readonly "sku": string; readonly "name": string; readonly "qty": number;  }; readonly output: Output } };
   readonly navGroups: never;
