@@ -208,8 +208,16 @@ this type does not add a record editor, entry tool, or automatic CRUD to MCP.
 `readOnly` and JSON Schema property. It does not customize an MCP action dialog.
 The native App builds that dialog from the Procedure's declared input schema,
 binds the row identity and observed version, validates input, and runs the
-existing authorized Procedure tool. Declare a row action in the View to use
-this native path; changing its UI grants no execution rights.
+existing authorized Procedure tool. There is no View `actions` field.
+Declare `Procedure.spec.target: { schema: requests, id: id, version: expectedVersion }`
+and expose it with a Trigger whose `source: { kind: mcp, surface: admin }` and
+`target: { procedure: approve }`. Return the target row's unchanged `id` and
+`version` in the View, preserving their column provenance (do not replace them
+with a computed label, joined row identity or synthetic version). Admin derives
+row bindings from that target and the View's proven columns. See
+[Procedure targets and row placement](native-admin.md#collection-navigation-and-operation-placement)
+and the shipped [purchasing manifest](../../examples/purchasing/manifests/purchasing.yaml)
+for complete Procedure/Trigger syntax. Changing the UI grants no execution rights.
 
 For custom MCP interaction, use an opted-in page with `useView` and
 `useOperation` instead of trying to render a record editor. The shared-page example below demonstrates page opt-in;

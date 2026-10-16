@@ -65,8 +65,12 @@ total). Markdown may perform two View reads when checking an exact `.md` page
 before its alternate.
 
 Web indexes have deliberate ceilings: 5,000 scanned rows, 10 queries and 1 MiB
-for `llms.txt`; 50,000 rows, 100 queries and 50 MiB for a sitemap. Small SQL LIMITs
-can truncate sooner. Translation-aware web indexes/hreflang remain a separate
+for `llms.txt`; 50,000 rows, 100 queries and 50 MiB for a sitemap. An authored SQL `LIMIT 3` means at most three rows in the entire index,
+not three rows per query. Omit SQL LIMIT to enumerate the whole authorized
+result up to these web ceilings. The renderer requests pages of up to 500
+through generated paging options; transport page size does not expand the
+authored result set. Migration: remove LIMIT only when it was mistakenly
+being used as a page-size setting; retain a business-defined top-N limit. Translation-aware web indexes/hreflang remain a separate
 follow-up; `locales[0]` supplies the currently supported locale alternate.
 
 The SDK runs this exact Worker against a native SQLite database in

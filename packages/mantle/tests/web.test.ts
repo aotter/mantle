@@ -27,7 +27,7 @@ kind: View
 metadata: {name: posts}
 spec:
   surface: public
-  sql: SELECT id, slug, title FROM posts WHERE visible = true ORDER BY id LIMIT 2
+  sql: SELECT id, slug, title FROM posts WHERE visible = true ORDER BY id
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -73,7 +73,7 @@ spec:
   sql: SELECT id FROM posts ORDER BY id
 `;
 
-test("dynamic web output walks pages, trusts SQL visibility, escapes output and revalidates content",async()=>{
+test("dynamic web output trusts SQL visibility, escapes output and revalidates content",async()=>{
   const files=await generateOrThrow("bun-sqlite",[{sourceId:"blog.yaml",text:source}]);
   const dir=await mkdtemp(join(tmpdir(),"mantle-web-")),db=new Database(":memory:");
   try {
@@ -100,6 +100,23 @@ test("dynamic web output walks pages, trusts SQL visibility, escapes output and 
     expect(await site.fetch(request("/unknown.md"))).toBeUndefined();expect(await site.fetch(request("/posts/a%26b)"))).toBeUndefined();expect(await site.fetch(request("/llms.txt",{method:"POST"}))).toBeUndefined();
     expect(await (await site.fetch(request("/llms.txt",{method:"HEAD"}))).text()).toBe("");
     const multilingual=web({db,caller:{kind:"anonymous"},origin:"https://site.test",title:"x",description:"y",locales:["en","zh"],pages:{"/posts/{slug}":{view:"post-by-slug",markdown:"body"}}});expect(await multilingual.head(request("/posts/a%26b)"))).toContain('hreflang="en"');expect(await multilingual.head(request("/posts/a%26b)"))).not.toContain('hreflang="zh"');
+  }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test("web indexes preserve an authored total LIMIT rather than treating it as a page size",async()=>{
+  const limited=source.replace("FROM posts WHERE visible = true ORDER BY id", "FROM posts WHERE visible = true ORDER BY id LIMIT 3");
+  const files=await generateOrThrow("bun-sqlite",[{sourceId:"limited-blog.yaml",text:limited}]);
+  const dir=await mkdtemp(join(tmpdir(),"mantle-web-limit-")),db=new Database(":memory:");
+  try{
+    await writeGenerated(dir,files);db.exec(files["schema.sql"]!);
+    for(let i=0;i<7;i++)db.query("INSERT INTO posts(id,version,created_at,updated_at,slug,title,body,visible) VALUES (?,1,0,0,?,?,?,?)").run(String(i),"post"+i,"Title "+i,"body",i===0?0:1);
+    const {web}=await import(join(dir,"web.ts"));
+    const site=web({db,caller:{kind:"anonymous"},origin:"https://site.test",title:"Blog",description:"x",pages:{"/posts/{slug}":{view:"post-by-slug",list:"posts",markdown:"body"}}});
+    const sitemap=await (await site.fetch(new Request("https://site.test/sitemap.xml"))).text();
+    expect(sitemap.match(/<url>/g)).toHaveLength(3);
+    expect([...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(match=>match[1])).toEqual([1,2,3].map(i=>"https://site.test/posts/post"+i));
+    const llms=await (await site.fetch(new Request("https://site.test/llms.txt"))).text();
+    expect(llms.match(/^- /gm)).toHaveLength(3);expect(llms).not.toContain("/post4");expect(llms).not.toContain("/post0");
   }finally{db.close();await rm(dir,{recursive:true,force:true});}
 });
 
@@ -157,7 +174,7 @@ test("publishing SQL keeps drafts out of all web outputs",async()=>{
 });
 
 test("web indexes bound row scans and real cursor queries",async()=>{
-  const files=await generateOrThrow("bun-sqlite",[{sourceId:"big-blog.yaml",text:source.replace("LIMIT 2","LIMIT 500")}]);
+  const files=await generateOrThrow("bun-sqlite",[{sourceId:"big-blog.yaml",text:source}]);
   const dir=await mkdtemp(join(tmpdir(),"mantle-web-cap-")),db=new Database(":memory:");
   try{
     await writeGenerated(dir,files);db.exec(files["schema.sql"]!);
@@ -167,10 +184,17 @@ test("web indexes bound row scans and real cursor queries",async()=>{
     const {web}=await import(join(dir,"web.ts"));const site=web({db:handle,caller:{kind:"anonymous"},origin:"https://site.test",title:"Blog",description:"x",pages:{"/posts/{slug}":{view:"post-by-slug",list:"posts",markdown:"body"}}});
     const sitemap=await site.fetch(new Request("https://site.test/sitemap.xml"));expect(sitemap.status).toBe(200);expect((await sitemap.text()).match(/<url>/g)).toHaveLength(50000);expect(queries).toBe(100);
     queries=0;const llms=await site.fetch(new Request("https://site.test/llms.txt"));expect((await llms.text()).match(/^- /gm)).toHaveLength(5000);expect(queries).toBe(10);
-    const oneDir=join(dir,"one");await writeGenerated(oneDir,await generateOrThrow("bun-sqlite",[{sourceId:"one-blog.yaml",text:source.replace("LIMIT 2","LIMIT 1")} ]));
-    const {web:oneWeb}=await import(join(oneDir,"web.ts"));const one=oneWeb({db:handle,caller:{kind:"anonymous"},origin:"https://site.test",title:"x",description:"y",pages:{"/posts/{slug}":{view:"post-by-slug",list:"posts",markdown:"body"}}});
-    queries=0;expect((await (await one.fetch(new Request("https://site.test/sitemap.xml"))).text()).match(/<url>/g)).toHaveLength(100);expect(queries).toBe(100);
-    queries=0;expect((await (await one.fetch(new Request("https://site.test/llms.txt"))).text()).match(/^- /gm)).toHaveLength(10);expect(queries).toBe(10);
+    // An unbounded View with an explicit one-row paging option exercises the query-count ceiling,
+    // independently of authored SQL LIMIT (which bounds the entire result set).
+    const {web:nativeWeb}=await import("../src/kernel/web.js");
+    const {default:postsPage}=await import(join(dir,"paged/views/posts.ts"));
+    const {default:postPage}=await import(join(dir,"paged/views/post-by-slug.ts"));
+    const one=nativeWeb({db:handle,caller:{kind:"anonymous"},origin:"https://site.test",title:"x",description:"y",pages:{"/posts/{slug}":{view:"post-by-slug",list:"posts",markdown:"body"}}},[
+      ["posts",{query:()=>({input:{}}),page:(db,caller,input,paging)=>postsPage(db,caller,input,{...paging,limit:1})}],
+      ["post-by-slug",{query:params=>({input:{slug:params.get("slug")}}),page:postPage}],
+    ]);
+    queries=0;expect((await (await one.fetch(new Request("https://site.test/sitemap.xml")))!.text()).match(/<url>/g)).toHaveLength(100);expect(queries).toBe(100);
+    queries=0;expect((await (await one.fetch(new Request("https://site.test/llms.txt")))!.text()).match(/^- /gm)).toHaveLength(10);expect(queries).toBe(10);
     db.query("UPDATE posts SET slug='.' WHERE id='00000'").run();db.query("UPDATE posts SET slug='..' WHERE id='00001'").run();queries=0;const skip=await (await site.fetch(new Request("https://site.test/llms.txt"))).text();expect(skip).not.toContain("https://site.test/posts/.)");expect(skip).not.toContain("https://site.test/posts/..)");expect(skip.match(/^- /gm)).toHaveLength(4998);expect(queries).toBe(10);
     db.query("UPDATE posts SET title=? WHERE id='00002'").run("x".repeat(1024*1024));queries=0;const bounded=await (await site.fetch(new Request("https://site.test/llms.txt"))).text();expect(new TextEncoder().encode(bounded).length).toBeLessThanOrEqual(1024*1024);expect(queries).toBe(1);
   }finally{db.close();await rm(dir,{recursive:true,force:true});}
@@ -181,7 +205,7 @@ test.skipIf(!process.env.MANTLE_NEXT_BUN_PG_URL)("Bun.SQL web uses real PostgreS
   const admin=new SQL({url:process.env.MANTLE_NEXT_BUN_PG_URL!,max:1});await admin.unsafe('CREATE SCHEMA "'+schema+'"',[]);
   const db=new SQL({url:process.env.MANTLE_NEXT_BUN_PG_URL!,max:1,connection:{search_path:schema}}),dir=await mkdtemp(join(tmpdir(),"mantle-web-pg-"));
   try{
-    const files=await generateOrThrow("bun-postgres",[{sourceId:"pg-blog.yaml",text:source.replace("LIMIT 2","LIMIT 500")}]);await writeGenerated(dir,files);await db.unsafe(files["schema.sql"]!,[]);
+    const files=await generateOrThrow("bun-postgres",[{sourceId:"pg-blog.yaml",text:source}]);await writeGenerated(dir,files);await db.unsafe(files["schema.sql"]!,[]);
     await db.unsafe("INSERT INTO posts(id,version,created_at,updated_at,slug,title,body,visible) SELECT lpad(i::text,4,'0'),1,now(),now(),'post'||i,'Title '||i,'# body '||i,true FROM generate_series(0,1004) i",[]);
     const {web}=await import(join(dir,"web.ts"));let queries=0;
     const handle={unsafe:(sql:string,args:any[])=>{queries++;return db.unsafe(sql,args);},begin:db.begin.bind(db)};
