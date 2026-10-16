@@ -31,16 +31,18 @@ import { authLoader, resolveCaller } from '@aotter/mantle/auth';
 import { authRoutes } from '@aotter/mantle/auth/routes';
 import { withAuthTasks } from '@aotter/mantle/auth/hardening';
 import { checkOrigin, surfaceFailure, type Caller } from '@aotter/mantle/contracts';
-import { admin } from '@aotter/mantle-admin/server';
+import { admin, adminShell } from '@aotter/mantle-admin/server';
+import { adminMcpApps } from '@aotter/mantle-admin/mcp';
 import { entries } from '@aotter/mantle-admin/server/entries';
 import { adminBindings } from '../generated/admin-bindings.js';
-import { adminAssets } from './admin-assets.js'; // app-owned SPA shell, assets and CSP
+import { mcpAppCatalogues } from '../generated/admin-descriptors.js';
 import { mcp } from '../generated/mcp.js';
 import { rest } from '../generated/rest.js';
 import { handlers } from './handlers.js'; // omit when there are no ref Procedures
 
 // Env comes from worker-configuration.d.ts: declare DB, ASSETS, the email provider binding
-// and the ORIGIN, AUTH_SECRET and ADMIN_EMAIL secrets in Wrangler.
+// and the PUBLIC_ORIGIN, BETTER_AUTH_SECRET and ADMIN_EMAIL secrets in Wrangler.
+// createAuth(env) is exported by the app's src/auth.ts (see the auth template).
 let auth: import('@aotter/mantle/auth').AuthLoader<ReturnType<typeof import('./auth.js').createAuth>> | undefined;
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -50,7 +52,7 @@ export default {
       let authority: Promise<Caller> | undefined, readAuthority: Promise<Caller> | undefined;
       const resolve = (readOnly: boolean) => resolveCaller(request, auth!, {
         readOnly,
-        audience: [`${env.ORIGIN}/mcp`, `${env.ORIGIN}/mcp/admin`],
+        audience: [`${env.PUBLIC_ORIGIN}/mcp`, `${env.PUBLIC_ORIGIN}/mcp/admin`],
         responseHeaders: headers,
       }).then(value => { checkOrigin(request, value); return value; });
       const caller = (_request?: Request, _env?: Env, classification = { readOnly: false }) =>
@@ -60,9 +62,9 @@ export default {
       const routes = [
         authRoutes(auth, { methods: [{ kind: 'email-otp' }], resolver: caller }),
         admin(bindings.metadata, bindings.views, bindings.operations, {
-          ...options, routes: entries(bindings.schemas, bindings.adapter),
+          ...options, developerViews: bindings.developerViews, routes: entries(bindings.schemas, bindings.adapter),
         }),
-        mcp(options),
+        mcp({ ...options, apps: { admin: adminMcpApps({ catalogue: mcpAppCatalogues.admin }) } }),
         rest(options),
       ];
       try {
@@ -74,8 +76,9 @@ export default {
           for (const cookie of headers.getSetCookie()) result.headers.append('set-cookie', cookie);
           return result;
         }
-        const asset = await adminAssets(request, env);
-        if (asset) return asset;
+        // Serves the built Admin shell for /admin and its client routes; undefined for any other path.
+        const shell = await adminShell(request, path => env.ASSETS.fetch(new Request(new URL('/admin/' + path, request.url), request)));
+        if (shell) return shell;
         // Your public frontend/web.ts routes can use an anonymous Caller without
         // loading auth; their generated SQL still controls publication visibility.
         return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
@@ -94,8 +97,10 @@ options; do not expose native auth administrative routes without `authRoutes` or
 current request's context; `authHardening` configures the background handler.
 Select `--admin` to emit `admin-bindings.ts`. Admin's API is a separate
 `@aotter/mantle-admin` package; the SDK never imports it. The API handles only
-`/admin/api`. The app-owned asset route serves the built shell for `/admin` and
-client routes, including `/admin/sign-in`, and preserves missing asset 404s.
+`/admin/api`. `adminShell` (in the block above) serves the built shell for `/admin` and
+client routes, including `/admin/sign-in`; it sets `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `no-store` and `nosniff`
+on the shell, answers a missing file under `/admin` with a 404 `Response`, and returns `undefined` for other paths and
+non-GET requests. The app owns the rest of the CSP and the asset cache headers.
 Collection statistics use the generated shared `statisticsView`:
 its collection parameter selects only a generated table and visibility policy.
 
@@ -129,9 +134,9 @@ with Hyperdrive query caching disabled for authority and mutation visibility.
 Commit `.dev.vars.example` containing variable names and placeholders only:
 
 ```dotenv
-ORIGIN=http://localhost:8787
+PUBLIC_ORIGIN=http://localhost:8787
 ADMIN_EMAIL=you@example.test
-AUTH_SECRET=replace-with-a-random-secret
+BETTER_AUTH_SECRET=replace-with-a-random-secret
 ```
 
 Copy it to ignored `.dev.vars`; use deployment secrets for production. Configure
@@ -140,8 +145,7 @@ an app-owned [`EmailSender`](../guides/email.md#application-wiring) and call its
 callbacks. Adapt the auth template's `MAIL.otp`/`MAIL.link` callbacks to this
 sender; it is an object, not a `.dev.vars` value. The auth
 module wires `ADMIN_EMAIL` to the bootstrap helper, which requires verified email.
-`PUBLIC_ORIGIN` can be your application variable instead of `ORIGIN`; map it
-explicitly when constructing auth and keep the trusted origin consistent.
+Name the variables as your `auth.ts` reads them (the app shell uses these three) and keep the trusted origin consistent.
 
 ## Scheduling and Bun
 
@@ -188,7 +192,7 @@ multi-stage build: the build stage installs everything and runs `mantle bundle`
 and `bun build src/server.ts --target bun --outdir dist/server`; the runtime stage
 copies only `dist/` (plus any files the server reads at runtime) and starts
 `bun dist/server/server.js`. Neither the Admin assets nor the bundled server read
-`node_modules`. Run cron work with your native scheduler; neither
+`node_modules` once built. Run cron work with your native scheduler; neither
 imports nor ordinary requests execute DDL, migrations or cron work. OAuth resource
 rows are inserted on first OAuth use from runtime configuration, with no deploy
 step; auth initialization and cookie/bearer/MCP/REST requests do no resource work.

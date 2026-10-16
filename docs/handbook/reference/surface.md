@@ -247,7 +247,12 @@ from initialize, and every call in a batch is checked before any call runs.
 `resourceMetadata` overrides the challenge URL for reverse proxies.
 
 Both endpoints answer a request without `Origin`, which is what server-side MCP
-clients send. A present `Origin` marks a browser: it must name a loopback host
+clients send; a bearer credential needs none. A cookie session is ambient authority, so
+`checkOrigin` also guards it: on a request that is not GET, HEAD or OPTIONS, at least one of
+`Origin` and `Sec-Fetch-Site` must be present and every present one must agree (`Origin` equal
+to the request's own origin; `Sec-Fetch-Site` `same-origin` or `none`), else `AUTH_DENIED` at
+`request:origin`. On MCP it runs only for a tool call that executes (not a read-only call from an
+App host), not for initialize or `tools/list`; `allowedOrigins` does not lift it. A present `Origin` marks a browser: it must name a loopback host
 (`localhost`, `127.0.0.1`, `[::1]`, any port) or an `allowedOrigins` entry, else
 403 before authentication on every credential; `Origin: null` is refused. The
 site's own origin is not implied, because a DNS-rebinding page sends an `Origin`

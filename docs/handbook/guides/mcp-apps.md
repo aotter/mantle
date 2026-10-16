@@ -7,13 +7,19 @@ endpoint accepts one contributor or an array; Admin uses the same public hook:
 import type { McpApps } from '@aotter/mantle/mcp';
 import { adminMcpApps } from '@aotter/mantle-admin/mcp';
 import { mcp } from './generated/mcp.js';
+import { mcpAppCatalogues } from './generated/admin-descriptors.js';
+
+declare const db: (env: Env) => D1Database; // as in service composition
+declare const caller: Parameters<typeof mcp>[0]['caller'];
+declare function loadAppHtml(): string;
 
 const app: McpApps = { resources: [{
   uri: 'ui://my-app/records', name: 'my-app-records',
   html: () => loadAppHtml(), renders: ['records'],
 }] };
 const handler = mcp({ db, caller, apps: {
-  public: app, admin: [adminMcpApps(adminOptions), adminApp],
+  public: app,
+  admin: adminMcpApps({ catalogue: mcpAppCatalogues.admin }), // or an array with your own contributors
 } });
 ```
 
@@ -37,7 +43,8 @@ it embeds holds only the Views and row actions in `tools`. A host that caches
 the resource across callers may hold an older catalogue; a View it does not
 describe still shows its rows, with no action to open.
 
-`adminMcpApps({ catalogue })` needs no `html`: its default loader reads the file
+`adminMcpApps({ catalogue })` takes `mcpAppCatalogues.admin`, which `mantle generate --admin` writes to
+`generated/admin-descriptors.ts` (pass it as is). It needs no `html`: its default loader reads the file
 `mantle bundle` built, `/admin/mcp-app.html`, through `env.ASSETS.fetch` on a
 Worker, and from `dist/client/admin/mcp-app.html` on Bun (`file` names another
 path). The Worker's assets binding must be named `ASSETS` (otherwise pass `html`);
@@ -110,7 +117,7 @@ they are manual: add the endpoint as a custom connector in each host, call a
 View tool with an App, and check light and dark themes, a narrow window,
 full screen, a row action, and a link. Check too that the host advertises
 `hostCapabilities.serverTools`; without it the App is read-only. The automated interoperability test
-uses the official `AppBridge` (`pnpm --filter @aotter/mantle-admin test:browser`).
+uses the official `AppBridge`; your app runs its generated version ([Run the compatibility test](#run-the-compatibility-test)).
 
 
 ## Customising Admin for MCP hosts

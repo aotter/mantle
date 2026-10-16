@@ -7,9 +7,9 @@ here instead of repeating it.
 
 - **Generated `web()`**: list and detail pages straight from public Views, with `llms.txt`, sitemap, Markdown
   alternates and canonical tags. Its contract and limits are in [surface contracts](../reference/surface.md#optional-web-output);
-  the smallest example is `docs/examples/generated-web`.
+  the smallest example is `node_modules/@aotter/mantle/docs/examples/generated-web`.
 - **App-owned pages** in `src/routes.ts`, when the page needs its own layout, JSON-LD or languages. The reference
-  implementation is `docs/examples/recipes` (`src/pages.ts`, `src/routes.ts`; `smoke.mjs` checks every item below).
+  implementation is `node_modules/@aotter/mantle/docs/examples/recipes` (`src/pages.ts`, `src/routes.ts`; `smoke.mjs` checks every item below).
 
 ## Every public page
 
