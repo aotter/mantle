@@ -23,7 +23,8 @@
     "@modelcontextprotocol/server": "2.2.0",
     "better-auth": "1.7.7",
     "@aotter/mantle-admin": "0.2.0-alpha.7",
-    "react": "^19.3.0"
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260904.1",

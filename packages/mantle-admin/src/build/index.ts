@@ -18,12 +18,29 @@ export interface BuildAdminOptions {
 }
 
 /**
+ * `react-dom` runs only beside the exact `react` it was released with, and the application owns both (Admin takes them as
+ * peers). Two installs that drifted (`^` ranges resolved apart) would otherwise surface as React error #527 in the browser.
+ * Both are read from where the application's Admin code resolves them.
+ */
+export function assertReactMatch(from: string): void {
+  const require = createRequire(resolve(from, "noop.js"));
+  const read = (name: string) => {
+    try { return (JSON.parse(readFileSync(require.resolve(`${name}/package.json`), "utf8")) as { version: string }).version; }
+    catch { throw new Error(`Admin needs ${name}, but it does not resolve from ${from}. Install react and react-dom in the application, both at the same exact version.`); }
+  };
+  const [react, reactDom] = [read("react"), read("react-dom")];
+  if (react !== reactDom) throw new Error(`react ${react} and react-dom ${reactDom} are installed; Admin needs the same version of both (React error #527). Pin both to one exact version in the application's package.json, e.g. "react": "${reactDom}" and "react-dom": "${reactDom}", then reinstall.`);
+}
+
+/**
  * What a build and the dev server share: the entry resolved, Admin's and the application's classes seen by Tailwind, and
  * React's JSX whatever `jsxImportSource` the application's tsconfig sets for its Worker.
  */
 async function adminCore(entry: string | undefined) {
   const [{ normalizePath }, { default: react }, { default: tailwindcss }] = await Promise.all([import("vite"), import("@vitejs/plugin-react"), import("@tailwindcss/vite")]);
   const app = resolve(entry ?? resolve(dist, "admin-app/default-entry.js"));
+  // where the application's code finds React, and where Vite bundles it from (Admin's own location)
+  for (const from of new Set([entry ? dirname(app) : process.cwd(), page])) assertReactMatch(from);
   const kit = resolve(dirname(createRequire(import.meta.url).resolve("@aotter/mantle-ui/package.json")), "dist");
   // Tailwind generates the classes Admin, the kit and the application's own Admin code use.
   const sources = [resolve(dist, "admin-app"), kit, ...(entry ? [dirname(app)] : [])].map(source => `@source ${JSON.stringify(source)};`).join("\n");

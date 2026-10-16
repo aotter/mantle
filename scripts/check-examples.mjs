@@ -19,6 +19,9 @@ for (const example of PACKAGED) {
   for (const [name, pinned] of Object.entries(dependencies)) {
     if (name.startsWith("@aotter/mantle") && pinned !== version) throw new Error(`${example} pins ${name}@${pinned}; bump it to ${version}`);
   }
+  // the app owns react and react-dom, and react-dom only runs beside the exact same react: one exact version for both
+  const { react, "react-dom": reactDom } = dependencies;
+  if (example === "app-shell" && (!/^\d+\.\d+\.\d+$/.test(react ?? "") || react !== reactDom)) throw new Error(`${example} must pin react and react-dom to one identical exact version (react ${react ?? "none"}, react-dom ${reactDom ?? "none"})`);
   for (const [name, expected] of Object.entries(pins)) {
     if (dependencies[name] !== expected) throw new Error(`${example} must pin ${name}@${expected} (has ${dependencies[name] ?? "none"})`);
   }

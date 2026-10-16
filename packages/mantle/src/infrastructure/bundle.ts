@@ -108,12 +108,12 @@ async function bundleAdmin(entry: string, outdir: string, out: string): Promise<
 /** The package.json a bare import of `name` finds, read from disk (`exports` may hide it, and require caches realpaths). */
 const lookup = (require: NodeRequire, name: string) => require.resolve.paths(name)?.map(dir => join(dir, name, "package.json")).find(file => existsSync(file));
 
-/** The package's version and the installed version of each of its dependencies. */
+/** The package's version and the installed version of each of its dependencies and peers (React comes from the application). */
 function installed(manifest: string): Record<string, string | null> {
-  const { name, version, dependencies = {} } = JSON.parse(readFileSync(manifest, "utf8")) as { name: string; version: string; dependencies?: Record<string, string> };
+  const { name, version, dependencies = {}, peerDependencies = {} } = JSON.parse(readFileSync(manifest, "utf8")) as { name: string; version: string; dependencies?: Record<string, string>; peerDependencies?: Record<string, string> };
   const require = createRequire(manifest);
   const versions: Record<string, string | null> = { [name]: version };
-  for (const dependency of Object.keys(dependencies).sort()) {
+  for (const dependency of Object.keys({ ...peerDependencies, ...dependencies }).sort()) {
     const found = lookup(require, dependency);
     versions[dependency] = found ? (JSON.parse(readFileSync(found, "utf8")) as { version: string }).version : null;
   }
