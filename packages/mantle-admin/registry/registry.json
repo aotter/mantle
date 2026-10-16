@@ -1,0 +1,55 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "mantle-admin",
+  "homepage": "https://mantle.tools/",
+  "items": [
+    {
+      "name": "admin-cell",
+      "type": "registry:component",
+      "title": "Admin cell",
+      "description": "A cell for a list or report column.",
+      "files": [{ "path": "registry/admin-cell.tsx", "type": "registry:component", "target": "~/src/admin/admin-cell.tsx" }],
+      "meta": { "surface": "both", "slots": ["cell:<schema>.<field>", "cell:view:<view>.<column>"] }
+    },
+    {
+      "name": "admin-input",
+      "type": "registry:component",
+      "title": "Admin input",
+      "description": "The control of one record form field.",
+      "files": [{ "path": "registry/admin-input.tsx", "type": "registry:component", "target": "~/src/admin/admin-input.tsx" }],
+      "meta": { "surface": "both", "slots": ["input:<schema>.<field>"] }
+    },
+    {
+      "name": "admin-record-actions",
+      "type": "registry:component",
+      "title": "Admin record actions",
+      "description": "A button that runs an operation on the record.",
+      "files": [{ "path": "registry/admin-record-actions.tsx", "type": "registry:component", "target": "~/src/admin/admin-record-actions.tsx" }],
+      "meta": { "surface": "both", "slots": ["record.actions:<schema>"] }
+    },
+    {
+      "name": "admin-record-aside",
+      "type": "registry:component",
+      "title": "Admin record aside",
+      "description": "A card beside the record that lists a View's rows.",
+      "files": [{ "path": "registry/admin-record-aside.tsx", "type": "registry:component", "target": "~/src/admin/admin-record-aside.tsx" }],
+      "meta": { "surface": "both", "slots": ["record.aside:<schema>"] }
+    },
+    {
+      "name": "admin-sidebar",
+      "type": "registry:component",
+      "title": "Admin sidebar",
+      "description": "The built-in sidebar with a footer link.",
+      "files": [{ "path": "registry/admin-sidebar.tsx", "type": "registry:component", "target": "~/src/admin/admin-sidebar.tsx" }],
+      "meta": { "surface": "browser", "slots": ["Sidebar"] }
+    },
+    {
+      "name": "admin-home",
+      "type": "registry:component",
+      "title": "Admin home",
+      "description": "The built-in home page under a View-backed section.",
+      "files": [{ "path": "registry/admin-home.tsx", "type": "registry:component", "target": "~/src/admin/admin-home.tsx" }],
+      "meta": { "surface": "browser", "slots": ["Home"] }
+    }
+  ]
+}
