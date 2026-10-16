@@ -49,6 +49,29 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
     expect(await app.getByText("Alice one").count()).toBe(1);
     expect(await app.getByRole("button", { name: "Load more" }).count()).toBe(0);
     expect(await page.evaluate(() => (window as unknown as { host: { calls: unknown[] } }).host.calls)).toMatchObject([{ name: "my_tasks", arguments: { limit: 1, cursor: "next" } }]);
+    // Official content-only replies and optional null cursors are supported.
+    await page.evaluate(async () => {
+      const bridge = (window as any).host.bridge;
+      await bridge.sendToolResult({ content: [{ type: "text", text: JSON.stringify({ rows: [{ id: "c1", title: "Content only", version: 2 }], nextCursor: null }) }] });
+    });
+    await app.getByText("Content only").waitFor();
+    expect(await app.getByRole("button", { name: "Load more" }).count()).toBe(0);
+    await page.evaluate(async () => (window as any).host.bridge.sendToolResult({ content: [{ type: "text", text: "truncated {" }] }));
+    await app.getByRole("alert").waitFor();
+    await page.evaluate(async () => (window as any).host.bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r1", title: "Recovered", version: 3 }], nextCursor: "old" } }));
+    await app.getByText("Recovered").waitFor();
+    expect(await app.getByRole("alert").count()).toBe(0);
+    // A new result supersedes a pending page: its old rows must never append.
+    await page.evaluate(() => { (window as any).host.bridge.oncalltool = () => new Promise(resolve => { (window as any).host.finishPage = resolve; }); });
+    await app.getByRole("button", { name: "Load more" }).click();
+    await page.waitForFunction(() => typeof (window as any).host.finishPage === "function");
+    await page.evaluate(async () => (window as any).host.bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "new", title: "Latest result", version: 4 }] } }));
+    await app.getByText("Latest result").waitFor();
+    await page.evaluate(() => (window as any).host.finishPage({ content: [], structuredContent: { rows: [{ id: "stale", title: "Stale row", version: 1 }] } }));
+    await expect.poll(() => app.locator("main").getAttribute("aria-busy")).toBe("false");
+    await app.getByText("Latest result").waitFor();
+    expect(await app.getByRole("button", { name: "Load more" }).count()).toBe(0);
+    expect(await app.getByText("Stale row").count()).toBe(0);
     expect(errors).toEqual([]);
   } finally { await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); }
 }, 60_000);
