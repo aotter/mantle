@@ -64,7 +64,7 @@ function Root({ admin }: { admin: AdminDefinition }) {
   const transport = useMemo(() => adminHost && createMcpAppTransport({ ...(host?.call ? { call: host.call } : {}), host: adminHost }), [host, adminHost]);
   const locale = context?.locale;
   if (error) return <p role="alert" className="p-4 text-sm text-destructive">{error.message}</p>;
-  if (!host || !adminHost || !transport) return null;
+  if (!host || !adminHost || !transport) return <p role="status" className="p-4 text-sm">Connecting to the MCP host…</p>;
   const hostTool = context?.toolInfo?.tool.name;
   const labels = appLabels(locale);
   // a long form or many columns: the person may ask the host for the whole screen, when it offers one

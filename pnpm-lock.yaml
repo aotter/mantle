@@ -118,6 +118,9 @@ importers:
       '@dagrejs/dagre':
         specifier: ^3.1.1
         version: 3.1.1
+      '@modelcontextprotocol/ext-apps':
+        specifier: 2.0.3
+        version: 2.0.3(@modelcontextprotocol/client@2.1.0)(@modelcontextprotocol/core@2.2.0)(@modelcontextprotocol/server@2.2.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zod@4.6.5)
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1))
@@ -181,13 +184,13 @@ importers:
       vite-plugin-singlefile:
         specifier: ^2.3.0
         version: 2.3.3(vite@8.3.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       '@aotter/mantle':
         specifier: workspace:*
         version: link:../mantle
-      '@modelcontextprotocol/ext-apps':
-        specifier: 2.0.3
-        version: 2.0.3(@modelcontextprotocol/client@2.1.0)(@modelcontextprotocol/core@2.2.0)(@modelcontextprotocol/server@2.2.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zod@3.25.76)
       '@types/node':
         specifier: 'catalog:'
         version: 26.1.1
@@ -4914,12 +4917,12 @@ snapshots:
     dependencies:
       zod: 4.6.5
 
-  '@modelcontextprotocol/ext-apps@2.0.3(@modelcontextprotocol/client@2.1.0)(@modelcontextprotocol/core@2.2.0)(@modelcontextprotocol/server@2.2.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zod@3.25.76)':
+  '@modelcontextprotocol/ext-apps@2.0.3(@modelcontextprotocol/client@2.1.0)(@modelcontextprotocol/core@2.2.0)(@modelcontextprotocol/server@2.2.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zod@4.6.5)':
     dependencies:
       '@modelcontextprotocol/client': 2.1.0
       '@modelcontextprotocol/core': 2.2.0
       '@standard-schema/spec': 1.1.0
-      zod: 3.25.76
+      zod: 4.6.5
     optionalDependencies:
       '@modelcontextprotocol/server': 2.2.0
       react: 19.3.0
