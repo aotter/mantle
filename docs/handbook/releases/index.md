@@ -17,6 +17,78 @@ Pin every package you use to the same exact version and upgrade them together.
 
 ## 0.2.0 — in preparation
 
+### Upgrading to 0.2.0-alpha.8
+
+Pin every selected `@aotter/mantle`, `@aotter/mantle-ui` and
+`@aotter/mantle-admin` dependency to `0.2.0-alpha.8`, refresh the lockfile,
+then regenerate and check the application's owned artifacts. Keep existing
+production migrations application-owned; generated initial DDL is for an empty
+database. This alpha includes breaking Admin authoring and paging changes.
+
+1. **Build output and host configuration.** `mantle bundle` writes server
+   modules to `dist/worker` and static files to `dist/client`, including
+   `dist/client/admin`. Rerun `mantle generate` with the application's `--entry`
+   and check the resulting Wrangler `main`, `base_dir`, asset directory and
+   build command. See [CLI and generated ownership](../start/project-and-cli.md).
+2. **Application-owned React.** Install React and React DOM in the application
+   at the same exact version (the examples use `19.3.0`). Admin takes them as
+   peers; a mismatched pair fails its build.
+3. **Replace extensions with application composition.** Move to
+   `defineAdmin(meta, { nav, pages, home, components, plugins, mcp })` in
+   `src/admin.tsx`. Remove `--admin-extensions`, `adminExtensions`,
+   `defineAdminExtension`, extension handlers and removed manifest widget,
+   `list.cells` and panel references. `navGroups` becomes `nav.groups`.
+   Use the [Admin migration table](../guides/native-admin.md#migrating-from-admin-extensions)
+   rather than carrying the former registration layer forward.
+4. **Build the MCP App with the application.** The prebuilt
+   `@aotter/mantle-admin/mcp-app` / `mantleAppHtml` export is gone. Use
+   `adminMcpApps({ catalogue: mcpAppCatalogues.admin })` with the generated
+   catalogue; it reads the built asset. Declare CSP once in `defineAdmin`.
+   The default resource URI hashes the built HTML, catalogue and metadata;
+   custom HTML functions need an explicit immutable URI. Load interactive
+   host HTML through authenticated `resources/read`, which embeds its
+   catalogue. See [MCP Apps](../guides/mcp-apps.md).
+5. **Run the generated compatibility check.** Run
+   `node --test generated/admin-mcp-app.check.mjs` after building. Install
+   the optional `playwright-core` peer and a browser, or set
+   `MANTLE_TEST_CHROMIUM`; a missing browser fails rather than skips. This
+   checks rendering with a synthetic catalogue, not application authorization
+   or completion of a Procedure action.
+6. **Keep the host graph safe.** The MCP build rejects `/admin/api` access,
+   cookies and undeclared remote loads. Its entry must be readable in Node.
+   An optional `src/admin.mcp.tsx` (or `buildAdmin({ mcpEntry })`) isolates
+   browser-only integrations; both roots can reuse one host-safe config,
+   components and CSS. Without it the whole shared entry graph is checked.
+7. **Distinguish total bounds from page sizes.** Authored SQL `LIMIT` now
+   bounds the complete ordered result set across cursor pages, including web
+   indexes. Use paging `options.limit` for page size; remove an authored limit
+   only if it was incorrectly being used as a page-size setting. MCP accepts
+   sizes of 1–500, but a response budget can return fewer rows: append pages
+   until `nextCursor` is absent, not until a short page. See
+   [View paging](../reference/surface.md).
+8. **Install build dependencies where the build runs.** Wrangler dev/deploy
+   runs its configured build command, so that environment needs
+   `node_modules`. The resulting built server/assets do not read
+   `node_modules` when served. See the
+   [application shell](../../examples/app-shell/README.md).
+
+Record/collection cells, inputs, record actions, asides and `RecordView` are
+now truthfully browser-only (`surface: "browser"`); remove unreachable MCP
+branches. View cells remain `both`, and pages opt in through `pages[].mcp`.
+A Procedure action's input is distinct from a collection record input: use a
+Procedure target and MCP Trigger with the View's unchanged `id` and observed
+`version` for native row actions. [Shared custom-page headers](../guides/mcp-apps.md#customising-admin-for-mcp-hosts)
+can compose localized title, description and actions on both surfaces; omit the
+option to keep prior behavior, or use `header: false` for an element-owned heading.
+
+OAuth issuer verification now follows Better Auth's normalized URL while
+preserving explicit issuer/JWKS settings. Cloudflare OAuth configurations need
+`global_fetch_strictly_public` for public JWKS fetches; generated settings and
+the official examples retain it. Native MCP Apps use the official ext-apps
+client. Browser Admin now displays a localized explicit reload action when a
+lazy page fails, rather than going blank; it does not reload automatically or
+replay writes.
+
 ### Native SDK migration (alpha.7)
 
 Alpha.7 replaces the previous Core runtime and generated service contract.
@@ -40,7 +112,7 @@ Existing alpha.6 applications require a source migration:
   application code. Review [authorization and Caller wiring](../concepts/runtime-and-adapters.md)
   and regenerate all owned artifacts before running `generate --check`.
 
-The [reference Worker](https://github.com/aotter/mantle/tree/v0.2.0-alpha.7/docs/examples/reference-service) and
+The [reference Worker](https://github.com/aotter/mantle/tree/v0.2.0-alpha.8/docs/examples/reference-service) and
 [app shell](../../examples/app-shell/) demonstrate the current composition.
 The following earlier-alpha notes are historical; the current handbook and
 the native migration above supersede their runtime and CLI instructions.
