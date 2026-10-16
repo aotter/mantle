@@ -3,11 +3,11 @@
 /** Read and discard what is left of a request body, at most 1 MiB and 1 s. A response sent over an unread POST body makes local
  *  `wrangler dev` break the connection, and the next request fails with "Network connection lost". */
 async function drain(request: Request): Promise<void> {
-  let reader: { read(): Promise<{ done: boolean; value: Uint8Array }>; cancel(): Promise<void> } | undefined;
+  let reader: { read(): Promise<any>; cancel(): Promise<unknown> } | undefined;
   const timer = setTimeout(() => reader?.cancel().catch(() => {}), 1000);
   try {
     reader = request.body?.getReader(); // a body the app consumed is done; one it still holds is locked and throws
-    for (let read = 0, chunk; reader && !(chunk = await reader.read()).done;) if ((read += chunk.value.byteLength) > 1024 * 1024) return await reader.cancel();
+    for (let read = 0, chunk; reader && !(chunk = await reader.read()).done;) if ((read += chunk.value.byteLength) > 1024 * 1024) { await reader.cancel(); return; }
   } catch { /* the client went away */ } finally { clearTimeout(timer); }
 }
 
