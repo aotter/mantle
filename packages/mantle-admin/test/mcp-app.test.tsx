@@ -179,7 +179,8 @@ describe("MantleApp", () => {
 describe("adminMcpApps", () => {
   it("injects the catalogue right after the opening <head>, even when a script in it holds the text </head>", async () => {
     const html = '<!doctype html><html><head><script type="module">const srcDoc = "<html><head></head></html>";</script></head><body></body></html>';
-    const [resource] = adminMcpApps({ catalogue: catalog, html }).resources;
+    const source = adminMcpApps({ catalogue: catalog, html });
+    const [resource] = (typeof source === "function" ? await source({ env: {}, request: new Request("https://app.test/mcp") }) : source).resources;
     const out = (await (resource!.html as (render: object) => Promise<{ html: string }>)({ tools: new Set(["pending"]), env: {}, request: new Request("https://app.test/mcp") })).html;
     expect(out).toMatch(/^<!doctype html><html><head><script type="application\/json" id="mantle-catalog">/);
     // the module script is whole
@@ -187,7 +188,8 @@ describe("adminMcpApps", () => {
   });
 
   it("embeds the catalogue as this caller sees it: no View or action its tools/list hides", async () => {
-    const [resource] = adminMcpApps({ catalogue: catalog, html: "<head></head>", domain: "admin.apps.example" }).resources;
+    const source = adminMcpApps({ catalogue: catalog, html: "<head></head>", domain: "admin.apps.example" });
+    const [resource] = (typeof source === "function" ? await source({ env: {}, request: new Request("https://app.test/mcp") }) : source).resources;
     expect(resource!.domain).toBe("admin.apps.example");
     const embedded = async (tools: string[]) => JSON.parse((await (resource!.html as (render: { tools: Set<string> }) => Promise<{ html: string }>)({ tools: new Set(tools) })).html.match(/<script[^>]*>(.*)<\/script>/)![1]!) as unknown;
     // "gone" is no tool of this caller's either

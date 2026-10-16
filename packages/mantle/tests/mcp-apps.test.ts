@@ -189,3 +189,128 @@ test("an HTML loader also receives the request's env and request; a zero-argumen
   expect(await read("ui://mantle-admin/none")).toBe("<p>none</p>");
   expect(await read("ui://mantle-admin/tools")).toBe("<p>admin_details,admin_rows</p>");
 });
+
+test("async Admin contributors resolve only after origin, caller and Admin gates", async () => {
+  let role: "anonymous" | "member" | "admin" = "anonymous", resolved = 0;
+  const env = { build: "one" }, seen: unknown[] = [];
+  const api = mcp(tools, {
+    db: () => null,
+    caller: () => role === "anonymous" ? { kind: "anonymous" } : fixtureCaller({ kind: "user", subject: "u", role, admin: role === "admin", scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null }),
+    apps: { admin: async context => { resolved++; seen.push(context); return { resources: [resource("ui://app/" + (context.env as typeof env).build, ["admin_rows"])] }; } },
+  });
+  const list = (origin?: string) => {
+    const request = new Request("https://app.test/mcp/admin", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...(origin ? { origin } : {}) }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+    return api(request, env);
+  };
+  expect(resolved).toBe(0);
+  expect((await list())!.status).toBe(401);
+  role = "member"; expect((await list())!.status).toBe(403);
+  role = "admin"; expect((await list("https://foreign.test"))!.status).toBe(403);
+  expect(resolved).toBe(0);
+  expect((await list())!.status).toBe(200);
+  expect(resolved).toBe(1);
+  expect(seen[0]).toMatchObject({ env });
+  expect((seen[0] as { request: Request }).request.url).toBe("https://app.test/mcp/admin");
+});
+
+test("mixed static and async contributors retain getter-once semantics and refresh links for the same tool names", async () => {
+  let staticReads = 0, resolves = 0;
+  const fixed: McpApps = { get resources() { staticReads++; return [resource("ui://app/fixed", ["public_details"])]; } };
+  const api = mcp<{ build: string }, null>(tools, { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: [fixed, async ({ env }) => {
+    resolves++;
+    const uri = "ui://app/" + (env as { build: string }).build;
+    return { resources: [{ ...resource(uri, ["public_rows"]), html: ({ env }) => "<p>" + (env as { build: string }).build + "</p>" }] };
+  }] } });
+  expect(staticReads).toBe(1); expect(resolves).toBe(0);
+  const request = async (build: string, method: string, params = {}) => {
+    const response = await api(new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }), { build });
+    const text = await response!.text();
+    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
+  };
+  for (const build of ["first", "second", "first"]) {
+    const listed = (await request(build, "tools/list")).result.tools;
+    expect(listed.find((tool: any) => tool.name === "public_rows")._meta.ui.resourceUri).toBe("ui://app/" + build);
+    expect(listed.find((tool: any) => tool.name === "public_details")._meta.ui.resourceUri).toBe("ui://app/fixed");
+    expect((await request(build, "resources/list")).result.resources.map((item: any) => item.uri)).toEqual(["ui://app/fixed", "ui://app/" + build]);
+    expect((await request(build, "resources/read", { uri: "ui://app/" + build })).result.contents[0].text).toBe("<p>" + build + "</p>");
+  }
+  expect(staticReads).toBe(1); expect(resolves).toBe(9);
+});
+
+for (const [name, bad] of [
+  ["URI", { ...resource("ui://app/static"), name: "private-uri-secret" }],
+  ["name", { ...resource("ui://app/private-name-secret"), name: "app/static" }],
+  ["renderer", resource("ui://app/private-renderer-secret", ["public_rows"])],
+  ["foreign tool", resource("ui://app/private-foreign-secret", ["admin_rows"])],
+] as const) test(`request-bound App contributors refuse ${name} conflicts with redacted responses`, async () => {
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    let resolves = 0;
+    const api = handle({ public: [{ resources: [resource("ui://app/static", ["public_rows"])] }, async () => { resolves++; return { resources: [bad] }; }] });
+    expect(resolves).toBe(0);
+    const response = await call(api, "tools/list");
+    expect(response).toMatchObject({ error: { code: "INTERNAL_ERROR" } });
+    expect(JSON.stringify(response)).not.toContain("private-");
+    expect(resolves).toBe(1);
+  } finally { log.mockRestore(); }
+});
+
+test("known static conflicts are eager even beside an unresolved contributor", () => {
+  let resolves = 0;
+  const dynamic = async () => { resolves++; return { resources: [] }; };
+  for (const resources of [
+    [resource("ui://app/a"), resource("ui://app/a")],
+    [resource("ui://app/a", ["admin_rows"])],
+    [resource("ui://app/a", ["public_rows"]), resource("ui://app/b", ["public_rows"])],
+  ]) {
+    expect(() => handle({ public: [{ resources }, dynamic] })).toThrow(ContractError);
+  }
+  expect(resolves).toBe(0);
+});
+
+
+test("a failing contributor is redacted and a later request may resolve it again", async () => {
+  let attempts = 0;
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const api = handle({ public: async () => {
+      if (++attempts === 1) throw new Error("private-loader-secret");
+      return { resources: [resource("ui://app/recovered", ["public_rows"])] };
+    } });
+    const request = () => new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+    const failed = await api(request(), {});
+    expect(failed!.status).toBe(500);
+    const body = await failed!.text();
+    expect(body).toContain("INTERNAL_ERROR"); expect(body).not.toContain("private-loader-secret");
+    expect((await call(api, "tools/list")).result.tools[0]._meta.ui.resourceUri).toBe("ui://app/recovered");
+    expect(attempts).toBe(2);
+  } finally { log.mockRestore(); }
+});
+
+test("authorize filters identity, scopes, checks and application refusals from lists and loader tools; default discovery remains independent", async () => {
+  const open = { ...tools[0]!, name: "open" };
+  const table: Tool<null>[] = [open,
+    { ...open, name: "closed", closed: true },
+    { ...open, name: "scoped", closed: true, scopes: ["private:read"] },
+    { ...open, name: "checked", check: () => { throw new ContractError("AUTH_DENIED", "Not allowed."); } },
+    { ...open, name: "application_denied" },
+  ];
+  let authenticated = false;
+  const options = {
+    db: () => null,
+    caller: () => authenticated ? fixtureCaller({ kind: "user", subject: "u", role: "user", admin: false, scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null }) : { kind: "anonymous" as const },
+    apps: { public: async () => ({ resources: [{ ...resource("ui://app/filtered", ["open"]), html: ({ tools }: { tools: ReadonlySet<string> }) => JSON.stringify([...tools]) }] }) },
+  };
+  const filtered = mcp(table, { ...options, authorize: target => target.name !== "application_denied" });
+  for (const expected of [["open"], ["open", "closed"]]) {
+    expect((await call(filtered, "tools/list")).result.tools.map((tool: any) => tool.name)).toEqual(expected);
+    expect(JSON.parse((await call(filtered, "resources/read", { uri: "ui://app/filtered" })).result.contents[0].text)).toEqual(expected);
+    authenticated = true;
+  }
+  const independent = mcp(table, options);
+  const names = table.map(tool => tool.name);
+  expect((await call(independent, "tools/list")).result.tools.map((tool: any) => tool.name)).toEqual(names);
+  expect(JSON.parse((await call(independent, "resources/read", { uri: "ui://app/filtered" })).result.contents[0].text)).toEqual(names);
+  const denied = await call(filtered, "tools/call", { name: "scoped", arguments: {} });
+  expect(denied.error.code).toBe("AUTH_DENIED");
+});

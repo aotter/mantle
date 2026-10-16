@@ -14,7 +14,7 @@ declare const caller: Parameters<typeof mcp>[0]['caller'];
 declare function loadAppHtml(): string;
 
 const app: McpApps = { resources: [{
-  uri: 'ui://my-app/records', name: 'my-app-records',
+  uri: 'ui://my-app/records/build-1', name: 'my-app-records',
   html: () => loadAppHtml(), renders: ['records'],
 }] };
 const handler = mcp({ db, caller, apps: {
@@ -32,6 +32,44 @@ Resources may supply CSP, permissions, `prefersBorder` and `domain`; each is
 passed through as the resource's `_meta.ui`. `domain` is the dedicated sandbox
 origin for hosts that serve each App from its own origin; use the form that
 host documents.
+
+## Package and application ownership
+
+Core (`@aotter/mantle`) owns tools, resources, endpoint links and server authorization,
+validation, scope and OCC. It has no React, DOM or Admin dependency. The optional
+`@aotter/mantle-ui` owns reusable presentation and interaction controllers: pass it
+data and invocation callbacks; it knows no MCP connection, cookie, role or Admin API.
+`@aotter/mantle-admin` owns the Admin product, its existing hooks/surface transport
+and the thin adapter to the pinned official ext-apps client. The official client
+owns protocol negotiation, messages and connection lifecycle; the separate browser
+source/origin guard is not a protocol implementation.
+
+Applications own domain components and build entries. A frontend MCP App uses its
+own React entry, official ext-apps and optionally mantle-ui, registered through
+Core's generic resources. It needs no Admin package or Admin session. See the
+[standalone frontend example](../../examples/frontend-mcp-app/README.md) for a
+small owner-scoped example. `public` names the frontend endpoint, not anonymous
+access: use the application's verified Caller and generated authorization rules.
+UI visibility and `appOnly` metadata grant no execution authority.
+
+The default Admin App uses the default composition. Custom Admin Apps use the same
+`defineAdmin` entry, slots and hooks, with `pages[].mcp` for explicit page opt-in;
+an application may also supply its own resource. There is no extra Mantle bridge
+package, provider, slot registry or query cache to install for these paths.
+
+When combining a custom renderer with Admin, partition ownership explicitly:
+
+```ts
+// Both views already belong to this endpoint. Custom resources use their own prefix.
+const adminApps = [
+  adminMcpApps({ catalogue: mcpAppCatalogues.admin, renders: ['pending_requests'] }),
+  { resources: [{ uri: 'ui://my-app/details/build-2', name: 'my-details',
+    html: () => loadAppHtml(), renders: ['request_details'] }] },
+];
+```
+
+Register the array on `apps.admin`. Leaving Admin's default ownership of all Views
+while another resource claims one is an error, independent of registration order.
 
 An HTML loader receives `{ tools, env, request }`: `tools` is the same tool names this caller's
 `tools/list` returns on the endpoint (with `authorize` configured, only those
@@ -55,11 +93,30 @@ file carries the `csp` your `defineAdmin({ mcp: { csp } })` declared; a loader m
 `resources/read`; it replaces the resource's own `csp` rather than merging with it. A loader
 that throws answers the host with a redacted error and logs the message on the server.
 
-For static tool tables, construction checks contributors. Request-bound tool tables check on the first matching request and recheck changed tool names. Duplicate
+Resource URIs are immutable cache identities. By default Admin contributes an async
+resource source: after the request passes the origin/identity/Admin gates, Admin
+reads its built asset and hashes the HTML, full static catalogue and material
+resource metadata into `ui://mantle-admin/admin/<digest>`. A new UI build or catalogue
+gets a new URI, used consistently by tools and resource reads. Workers cache only
+the raw immutable asset/identity per contributor and ASSETS binding; caller-filtered
+catalogues are embedded per read. Bun rereads the file so rebuilding in the same
+process changes the identity. Run `mantle bundle` and deploy its assets with the server;
+missing assets can fail discovery when Admin resolves the build identity.
+
+An explicit `uri` keeps application-owned identity. A custom `html` function must
+supply a build-specific `uri`: Core cannot infer its build or safely memoize its
+request-dependent output. A raw `html` string may use the automatic identity.
+
+Core accepts static contributors or async `(context: { env, request }) => McpApps`
+sources, including mixed arrays. Static declarations are checked at construction;
+async sources resolve after the endpoint's origin and caller gates, then their
+links are checked without reusing another request's resource links. Request-bound
+tool tables check on the first matching request and recheck changed tool names. Duplicate
 resource URIs or names, conflicting tool ownership, and absent or foreign-endpoint
 tools throw `ContractError` with code `MCP_APP_CONFLICT`. HTML loaders never run during import or handler construction. Treat descriptors as
-immutable after construction. HTML loads only on `resources/read`; failures
-return a redacted internal error.
+immutable after construction. Static HTML loaders run only on `resources/read`;
+async sources may read immutable build assets to declare their identity. Failures
+return a redacted internal error. Core never reads a build file or computes a UI digest.
 
 Generated media-enabled handlers keep the same cache while resolving their tool
 table against each request's environment. Database handles, storage and Caller
@@ -92,10 +149,9 @@ the host advertises in `hostCapabilities`:
   `fullscreen` in its context.
 - `appInfo.version` is the `@aotter/mantle-admin` version.
 
-Host context is validated before it is applied. A presentational field the
-App cannot use (an unknown display mode, insets missing a side, a negative
-size) is dropped and the rest of the context still applies; display modes the
-App does not know are filtered out of `availableDisplayModes`. `locale` and
+The pinned official client validates host context. Invalid protocol data is not
+reinterpreted by a second Mantle wire parser; connection failures are visible.
+Mantle applies only presentation fields and style variables it supports. `locale` and
 `timeZone` format dates (an unknown zone falls back to the browser's);
 `safeAreaInsets` become root padding; `containerDimensions` bound the root: a
 fixed or maximum height scrolls, and the reported size stays within it.
@@ -125,7 +181,7 @@ uses the official `AppBridge`; your app runs its generated version ([Run the com
 `mantle bundle` builds the Admin MCP App from the same entry as the browser Admin
 (`src/admin.tsx`, or the built-in one) into one self-contained file,
 `<assets>/admin/mcp-app.html`, which `adminMcpApps` serves as
-`ui://mantle-admin/admin`. So what `defineAdmin` customises reaches a host too:
+`ui://mantle-admin/admin/<digest>` by default. So what `defineAdmin` customises reaches a host too:
 your components, your plugins, your Tailwind classes, your CSS, your pages. Each
 one must work in both places, and the build and the types hold you to it.
 

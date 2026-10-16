@@ -1,13 +1,13 @@
 /** MCP request handling for a generated tool table; the official SDK loads on the first MCP request. */
 import type { Caller, Target, Authorize, Gateway, RequestContext, GatewayOptions } from "./contracts.js";
 import type { Conversions } from "./surface.js";
-import { linkApps, linkSurface, resourcesOf } from "./mcp-apps.js";
+import { linkApps, linkSurface, resourcesOf, type McpAppsSource } from "./mcp-apps.js";
 export { callTool, callToolLazy } from "./mcp-call.js";
-export type { McpApps, McpAppResource, McpAppRender, McpAppPage, McpAppCsp } from "./mcp-apps.js";
+export type { McpApps, McpAppsSource, McpAppResource, McpAppRender, McpAppPage, McpAppCsp } from "./mcp-apps.js";
 
 /** Options of a generated `mcp(...)`; it adds required `handlers` when the app declares ref Procedures. */
 export interface Options<Env, Database> extends GatewayOptions {
-  apps?: Readonly<Partial<Record<"public" | "admin", import("./mcp-apps.js").McpApps | readonly import("./mcp-apps.js").McpApps[]>>>;
+  apps?: Readonly<Partial<Record<"public" | "admin", McpAppsSource | readonly McpAppsSource[]>>>;
   authorize?: Authorize;
   gateway?: Gateway;
   fields?: import("./user-fields.js").UserFields;
@@ -65,15 +65,24 @@ export type Tools<Env, Database, Handlers = never> = readonly Tool<Database, Han
 /** The selected MCP routes; all request work loads only when an MCP request arrives. */
 export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
   let serve: ReturnType<typeof import("./mcp-handler.js").handler<Env, Database, Handlers>> | undefined;
-  // a bad App configuration fails here, not on the first request
+  // Check known static App configuration now; factories wait for the request caller gate.
   const linked: Partial<Record<string, ReturnType<typeof linkSurface>>> = {};
-  const apps: Partial<Record<"public" | "admin", ReturnType<typeof resourcesOf>>> = {};
+  const apps: Partial<Record<"public" | "admin", McpAppsSource | readonly McpAppsSource[]>> = {};
   for (const surface of ["public", "admin"] as const) {
     const declared = options.apps?.[surface];
     if (declared) {
-      const app = resourcesOf(declared);
-      apps[surface] = app;
-      typeof tools === "function" ? linkApps(app) : linked[surface] = linkSurface(app, tools.filter(tool => tool.surface === surface));
+      // Read each static contributor's resources getter once, including mixed arrays.
+      const sources = ((Array.isArray(declared) ? declared : [declared]) as readonly McpAppsSource[])
+        .map(source => typeof source === "function" ? source : resourcesOf(source));
+      const fixed = resourcesOf(sources.filter(source => typeof source !== "function"));
+      const dynamic = sources.some(source => typeof source === "function");
+      apps[surface] = dynamic ? sources : fixed;
+      // Known static conflicts still fail before any request or dynamic factory runs.
+      if (typeof tools === "function") linkApps(fixed);
+      else {
+        const current = linkSurface(fixed, tools.filter(tool => tool.surface === surface));
+        if (!dynamic) linked[surface] = current;
+      }
     }
   }
   options = { ...options, apps, allowedOrigins: originHostnames(options.allowedOrigins) };

@@ -1,7 +1,7 @@
 /** The Admin App is an ordinary contributor to the SDK's public MCP Apps hook. */
 import { ContractError } from "@aotter/mantle/contracts";
 import { declaredMeta } from "../app/declared-meta.js";
-import type { McpApps, McpAppPage, McpAppRender, McpAppResource } from "@aotter/mantle/mcp";
+import type { McpApps, McpAppsSource, McpAppPage, McpAppRender, McpAppResource } from "@aotter/mantle/mcp";
 export interface AdminMcpOptions {
     readonly catalogue: {
         readonly views: Readonly<Record<string, unknown>>;
@@ -14,8 +14,11 @@ export interface AdminMcpOptions {
     readonly html?: McpAppResource["html"];
     /** Where Bun reads the built App from when `html` is not given; `dist/client/admin/mcp-app.html` by default. */
     readonly file?: string;
+    /** Immutable cache identity. Omit for built assets: their HTML, catalogue and resource metadata determine it. A custom HTML function must supply its own build-specific URI. */
     readonly uri?: string;
     readonly title?: string;
+    /** Views rendered by this App; all catalogue Views by default. Partition explicitly before registering another renderer. */
+    readonly renders?: readonly string[];
     readonly appOnly?: readonly string[];
     /** Passed through as `_meta.ui.domain`, for a host that serves each App from its own origin. */
     readonly domain?: string;
@@ -53,18 +56,56 @@ const builtApp = (file: string) => async ({ env, request }: McpAppRender): Promi
         return withCsp(await bun.file(file).text());
     throw new Error("The Admin MCP App has no loader here: bind ASSETS, run on Bun, or pass `html`.");
 };
-export function adminMcpApps(options: AdminMcpOptions): McpApps {
-    const uri = options.uri ?? "ui://mantle-admin/admin";
-    if (!/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(uri))
+export function adminMcpApps(options: AdminMcpOptions & { readonly uri: string }): McpApps;
+export function adminMcpApps(options: AdminMcpOptions): McpAppsSource;
+export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
+    if (options.uri !== undefined && !/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(options.uri))
         throw new ContractError("INPUT_VALIDATION_FAILED", "Admin App resources use ui://mantle-admin/….", "mcp/apps");
+    const renders = options.renders ?? Object.keys(options.catalogue.views);
+    for (const view of renders) if (!Object.hasOwn(options.catalogue.views, view))
+        throw new ContractError("MCP_APP_CONFLICT", `Admin App renderer names unknown View '${view}'.`, "mcp/apps");
     const embed = (html: string, render: McpAppRender) => {
         const script = '<script type="application/json" id="mantle-catalog">' + JSON.stringify(visibleCatalogue(options.catalogue, render.tools)).replace(/</g, "\\u003c") + "</script>";
         // right after the opening <head>: the module script that follows may hold the text "</head>" in a string
         return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, start => start + script) : script + html;
     };
-    const html = options.html ?? builtApp(options.file ?? "dist/client/admin/mcp-app.html");
-    return { resources: [{ uri, name: "mantle-admin-admin", title: options.title ?? "Admin", html: async (render: McpAppRender) => {
+    const contribute = (uri: string, html: McpAppResource["html"]): McpApps => ({ resources: [{ uri, name: "mantle-admin-admin", title: options.title ?? "Admin", html: async (render: McpAppRender) => {
         const loaded = typeof html === "string" ? html : await html(render), page = typeof loaded === "string" ? { html: loaded } : loaded;
         return { ...page, html: embed(page.html, render) };
-    }, renders: Object.keys(options.catalogue.views), ...(options.appOnly ? { appOnly: options.appOnly } : {}), ...(options.domain !== undefined ? { domain: options.domain } : {}) }] };
+    }, renders, ...(options.appOnly ? { appOnly: options.appOnly } : {}), ...(options.domain !== undefined ? { domain: options.domain } : {}) }] });
+    const html = options.html ?? builtApp(options.file ?? "dist/client/admin/mcp-app.html");
+    if (options.uri !== undefined) return contribute(options.uri, html);
+    if (typeof options.html === "function")
+        throw new ContractError("INPUT_VALIDATION_FAILED", "A custom Admin HTML loader must declare a build-specific uri; caller-dependent loader output is never cached.", "mcp/apps");
+
+    const prepare = async (page: McpAppPage) => {
+        // The base asset has no caller catalogue. A declaration change also changes the
+        // identity even when the React/CSS build is byte-identical.
+        const identity = JSON.stringify(["mantle-admin-app-v1", page.html, options.catalogue, page.csp ?? null,
+            { title: options.title ?? "Admin", domain: options.domain ?? null, renders, appOnly: options.appOnly ?? [] }]);
+        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity));
+        const revision = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+        return { page, uri: `ui://mantle-admin/admin/${revision}` };
+    };
+    // ASSETS is immutable for a Worker deployment. Keep only its raw asset and
+    // identity, scoped to this contributor and binding; embed caller tools per read.
+    const assets = new WeakMap<object, ReturnType<typeof prepare>>();
+    let inline: ReturnType<typeof prepare> | undefined;
+    return async context => {
+        const binding = (context.env as { ASSETS?: object } | null | undefined)?.ASSETS;
+        const load = async () => prepare(await builtApp(options.file ?? "dist/client/admin/mcp-app.html")({ ...context, tools: new Set() }));
+        let prepared = typeof options.html === "string"
+            ? inline ??= prepare(withCsp(options.html))
+            : binding && assets.get(binding);
+        if (!prepared) {
+            prepared = load();
+            if (binding) {
+                assets.set(binding, prepared);
+                void prepared.catch(() => { if (assets.get(binding) === prepared) assets.delete(binding); });
+            }
+        }
+        // Bun rereads the file: a new build in the same process gets a new identity.
+        const loaded = await prepared;
+        return contribute(loaded.uri, () => loaded.page);
+    };
 }

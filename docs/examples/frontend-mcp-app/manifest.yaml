@@ -1,0 +1,30 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: tasks}
+spec:
+  title: Tasks
+  lifecycle: operational
+  scope: owner = auth.uid()
+  indexes: [[owner, id]]
+  schema:
+    type: object
+    required: [owner, title]
+    properties:
+      owner: {type: string}
+      title: {type: string}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: my-tasks}
+spec:
+  surface: public
+  requires: {auth: {all: [ctx.user]}}
+  sql: SELECT id, title, version FROM tasks ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: administration}
+spec:
+  surface: admin
+  requires: {auth: {all: [ctx.admin]}}
+  sql: SELECT id, title, version FROM tasks ORDER BY id

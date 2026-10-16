@@ -43,10 +43,13 @@ export interface McpApps {
   readonly resources: readonly McpAppResource[];
 }
 
-/** The resources of one endpoint's contributors; a contributor's `resources` may be a getter, so `mcp(...)` reads it once. */
+/** An application-owned contributor resolved after the endpoint's caller gate. */
+export type McpAppsSource = McpApps | ((context: Pick<McpAppRender, "env" | "request">) => McpApps | Promise<McpApps>);
+
+/** Flatten contributors; `mcp(...)` reads static resources getters once at construction. */
 export const resourcesOf = (apps: McpApps | readonly McpApps[]): McpApps => ({ resources: (Array.isArray(apps) ? apps : [apps]).flatMap(app => app.resources) });
 
-/** Checked when `mcp(...)` is built; without a tool table (a request-bound one) only the configuration itself is checked, the tool links wait for the first request. */
+/** Static contributors are checked at construction; resolved factories are checked per request. A request-bound tool table defers tool-link checks until its first request. */
 export function linkApps(apps: McpApps | readonly McpApps[], tools?: ReadonlySet<string>, views?: ReadonlySet<string>) {
   const resources = resourcesOf(apps).resources as McpAppResource[];
   const uris = new Set<string>(), names = new Set<string>(), renders = new Map<string, string>(), appOnly = new Set<string>();

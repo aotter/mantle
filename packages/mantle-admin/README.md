@@ -23,6 +23,16 @@ Admin-specific catalogue and tool-result adapters moved from the UI root to
 `@aotter/mantle-admin/controller`. The generic interaction controller remains
 at `@aotter/mantle-ui/controller`.
 
+### MCP contributor migration
+
+`adminMcpApps({ catalogue })` now returns an async `McpAppsSource` so Admin can
+resolve its build-specific resource URI after the caller gates. Passing it directly
+into `mcpHandler({ apps: { admin: … } })` is unchanged. Code that inspected
+`.resources` on the default contributor must instead resolve the source with its
+request/environment, or declare an explicit immutable `uri` for a static contributor.
+A custom `html` function now requires that explicit build-specific `uri`; update it
+when the served UI changes. Raw HTML strings may use automatic identity.
+
 ## Static assets
 
 `mantle bundle` builds Admin for the application into `<assets>/admin` (default
@@ -126,6 +136,14 @@ through to `_meta.ui`. What the App asks of a host is in the
 [MCP Apps guide](../../docs/handbook/guides/mcp-apps.md#the-admin-app-in-a-host); what an application's
 components must do to render there, and how it upgrades from the prebuilt App, in
 [Customising Admin for MCP hosts](../../docs/handbook/guides/mcp-apps.md#customising-admin-for-mcp-hosts).
+
+Without an explicit `uri`, this is a request-time contributor: after the endpoint's
+origin/identity gates, it derives `ui://mantle-admin/admin/<digest>` from the built
+HTML, full static catalogue and resource metadata. Workers retain only the raw
+immutable asset/identity per ASSETS binding; catalogue filtering happens per read.
+Bun rereads the file so a new build changes the URI in the same process. A custom
+`html` function must supply a build-specific `uri`. Use `renders: ['view_tool']`
+to partition Views when registering another renderer; competing claims fail.
 
 The App uses the pinned official ext-apps `App` and `PostMessageTransport` for initialization, notifications, host requests,
 progress and cancellation. Admin adapts advertised host capabilities to its existing hooks. A separate browser guard pins the

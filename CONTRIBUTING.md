@@ -35,7 +35,13 @@ uncertain commit outcomes remain required.
 |---|---|
 | `@aotter/mantle` | Native SDK, generator and `mantle` CLI. Request modules live in `src/kernel` and selected `src/auth`; the single private compiler closure lives in `src/build`. |
 | `@aotter/mantle-ui` | Pure UI and the framework-free controller, with no SDK or server dependency. |
-| `@aotter/mantle-admin` | Optional thin native Admin API, SPA, extension client API, developer workspace, design preview and MCP App; SDK peer and shared UI dependency. |
+| `@aotter/mantle-admin` | Optional native Admin API, application-built React Admin, public slots/hooks, developer workspace, design preview and MCP App; SDK peer and shared UI dependency. |
+
+Applications own frontend MCP App entries and domain pages. They may use the
+official ext-apps client and optional pure UI without Admin. Core accepts generic
+resources and enforces endpoint/renderer ownership; Admin owns its built-asset
+identity and thin official-client adapter. Do not add another bridge package,
+provider, slot registry or query cache beside the application-built composition.
 
 `skills/*` are versioned consumer product artifacts. Maintainer instructions
 live at the repository root and in `.agents/skills`; do not merge the two

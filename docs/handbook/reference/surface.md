@@ -199,6 +199,19 @@ transport loads on the first matching request. Pass `handlers` when ref
 Procedures are declared, as for REST. Admin tools are listed only on the admin
 endpoint, and publishing visibility belongs to the generated SQL.
 
+`apps.public` and `apps.admin` accept a `McpAppsSource` or an array mixing static
+contributors with async `({ env, request }) => McpApps` factories. Static resources
+are checked once at construction; factories resolve only after the endpoint's
+origin and caller gates, and their resource identities and ownership are checked
+on each request even when the tool names are unchanged.
+
+Discovery is caller-independent by default (ADR-0014); listing a tool grants no
+execution authority. Configure `authorize` to filter `tools/list` and the tool
+names supplied to resource HTML loaders: that mode also excludes tools refused
+by declared identity, scope and `check` requirements. Without `authorize`, the
+complete endpoint catalogue is not a permission-filtered catalogue. Operation
+validation, guards and credential checks still apply to calls.
+
 The app resolves bearer tokens with `resolveCaller(request, auth, { audience:
 new URL('/mcp', request.url).href })` (both surfaces use `<origin>/mcp`). The app
 must also mount Better Auth's `/.well-known/oauth-protected-resource/mcp`
