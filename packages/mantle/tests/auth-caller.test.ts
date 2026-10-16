@@ -31,7 +31,7 @@ afterAll(() => { for (const server of servers) server.stop(true); });
 
 type App = Awaited<ReturnType<typeof makeApp>>;
 
-async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean; additionalFields?: NonNullable<BetterAuthOptions["user"]>["additionalFields"]; derivedRegion?: boolean; localOnly?: boolean; magicLinkStore?: "plain" | "hashed" } = {}) {
+async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean; additionalFields?: NonNullable<BetterAuthOptions["user"]>["additionalFields"]; derivedRegion?: boolean; localOnly?: boolean; magicLinkStore?: "plain" | "hashed"; fullBaseURL?: boolean; basePath?: string; jwtOptions?: (baseURL: string) => Parameters<typeof jwt>[0] } = {}) {
   const sqlite = new Database(":memory:");
   sqlite.run("PRAGMA foreign_keys = ON");
   const otps: { email: string; otp: string }[] = [], resets: string[] = [], phoneOtps: string[] = [], links: string[] = [];
@@ -41,15 +41,15 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
   const server = options.localOnly ? undefined : Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: request => handle(request) });
   if (server) servers.push(server);
   const origin = `http://127.0.0.1:${server?.port ?? 3000}`;
-  // baseURL carries the base path: the resource client derives the JWKS URL and the expected issuer from it as-is.
-  const baseURL = `${origin}/api/auth`;
+  const basePath = options.basePath ?? "/api/auth";
+  const baseURL = `${origin}${basePath}`;
   const cache = new Map<string, string>();
   let cacheBroken = false;
   const ac = createAccessControl(defaultStatements);
   const betterAuthOptions = {
     user: { additionalFields: options.additionalFields },
     ...(options.sessionCache ? { verification: { storeInDatabase: true }, session: { storeSessionInDatabase: true }, secondaryStorage: { get: async (key: string) => cache.get(key) ?? null, set: async (key: string, value: string) => { if (cacheBroken) throw new Error("cache unavailable"); cache.set(key, value); }, delete: async (key: string) => { if (cacheBroken) throw new Error("cache unavailable"); cache.delete(key); }, getAndDelete: async () => { throw new Error("verification must remain in database"); }, increment: async () => { throw new Error("verification must remain in database"); } } } : {}),
-    baseURL,
+    ...(options.fullBaseURL ? { baseURL } : { baseURL: origin, basePath }),
     secret: "test-secret-test-secret-test-secret-0123456789",
     database: d1Adapter({ prepare: sql => { statements.push(sql); return native.prepare(sql); } }),
     disabledPaths: ["/token"],
@@ -64,7 +64,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
       phoneNumber({ sendOTP: () => {}, sendPasswordResetOTP: async ({ code }) => { phoneOtps.push(code); } }),
       magicLink({ storeToken: options.magicLinkStore ?? "plain", sendMagicLink: async ({ token }) => { links.push(token); } }),
       options.customAdmin ? adminFunction({ adminRoles: ["admin"], ac, roles: { admin: ac.newRole(defaultStatements) } }) : adminFunction(),
-      jwt({ disableSettingJwtHeader: true }),
+      jwt({ disableSettingJwtHeader: true, ...options.jwtOptions?.(baseURL) }),
       oauthGrantRevocation(),
       oauthProvider({
         loginPage: "/sign-in",
@@ -80,7 +80,13 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
   };
   for (const text of authSchemaSql(betterAuthOptions as never, "sqlite")) sqlite.run(text);
   const auth = betterAuth(betterAuthOptions);
-  handle = request => auth.handler(request);
+  handle = async request => {
+    if (new URL(request.url).pathname === "/external-jwks") {
+      const keys = sqlite.query("SELECT id, publicKey, alg FROM jwks").all() as { id: string; publicKey: string; alg: string }[];
+      return Response.json({ keys: keys.map(key => ({ ...JSON.parse(key.publicKey), kid: key.id, alg: key.alg })) });
+    }
+    return auth.handler(request);
+  };
   let loads = 0;
   const loader = authLoader(async () => { loads++; return auth as unknown as AuthInstance; }, options.cookiePrefix ?? "better-auth");
   const post = (path: string, body: unknown, headers: Record<string, string> = {}) => auth.handler(new Request(`${baseURL}${path}`, { method: "POST", headers: { "content-type": "application/json", origin, ...headers }, body: JSON.stringify(body) }));
@@ -223,6 +229,52 @@ async function oauthAccessToken(app: App, cookie: string, scope = "mcp", proof?:
 describe("resolveCaller: OAuth bearer", () => {
   const bearer = (app: App, token: string) => app.request({ authorization: `Bearer ${token}` });
   const code = (promise: Promise<unknown>) => promise.then(() => "resolved", (error: unknown) => (error instanceof ContractError ? error.code : `other: ${String(error)}`));
+
+  test.each([
+    ["origin + basePath (shipped app-shell)", {}],
+    ["full-path baseURL", { fullBaseURL: true }],
+    ["custom auth path", { basePath: "/identity" }],
+    ["custom JWT issuer and JWKS path", { jwtOptions: () => ({ jwt: { issuer: "https://issuer.example.test" }, jwks: { jwksPath: "/keys" } }) }],
+    ["remote JWKS URL", { jwtOptions: (baseURL: string) => ({ jwks: { remoteUrl: `${new URL(baseURL).origin}/external-jwks`, keyPairConfig: { alg: "EdDSA" as const } } }) }],
+  ] as const)("issued bearer uses authoritative issuer and JWKS: %s", async (_name, options) => {
+    const app = await makeApp(options), { cookie, userId } = await app.signIn();
+    const { accessToken } = await oauthAccessToken(app, cookie);
+    const claims = JSON.parse(Buffer.from(accessToken.split(".")[1]!, "base64url").toString());
+    expect(await resolveCaller(bearer(app, accessToken), app.loader, { audience: AUDIENCE })).toMatchObject({ subject: userId, issuer: claims.iss });
+
+    // Same valid signing key and live grant: only the issuer is wrong.
+    const resigned = await app.auth.api.signJWT({ body: { payload: claims } });
+    expect(await resolveCaller(bearer(app, resigned.token), app.loader, { audience: AUDIENCE })).toMatchObject({ subject: userId });
+    const wrong = await app.auth.api.signJWT({ body: { payload: { ...claims, iss: "https://wrong-issuer.example.test" } } });
+    expect(JSON.parse(Buffer.from(wrong.token.split(".")[1]!, "base64url").toString())).toEqual({ ...claims, iss: "https://wrong-issuer.example.test" });
+    const failure = await resolveCaller(bearer(app, wrong.token), app.loader, { audience: AUDIENCE }).catch(error => error);
+    expect(failure).toMatchObject({ code: "UNAUTHENTICATED" });
+  });
+
+  test("app-shell issued bearer initializes MCP and lists Admin tools", async () => {
+    const app = await makeApp(), { cookie, userId } = await app.signIn();
+    app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [userId]);
+    const { accessToken } = await oauthAccessToken(app, cookie);
+    const files = await generateOrThrow("bun-sqlite", [{ sourceId: "oauth-mcp.yaml", text: `apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: admin-check}
+spec: {surface: admin, sql: 'SELECT 1 AS answer'}
+` }]);
+    const dir = await mkdtemp(resolve(import.meta.dir, ".oauth-mcp-"));
+    try {
+      await writeGenerated(dir, files);
+      const { mcp } = await import(resolve(dir, "mcp.ts"));
+      const handle = mcp({ db: () => app.sqlite, caller: (request: Request) => resolveCaller(request, app.loader, { audience: AUDIENCE }) });
+      const call = async (method: string, params = {}) => {
+        const response = await handle(new Request(`${app.origin}/mcp/admin`, { method: "POST", headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }), {});
+        expect(response.status).toBe(200);
+        const text = await response.text();
+        return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
+      };
+      expect((await call("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "oauth-regression", version: "1" } })).result.protocolVersion).toBe("2025-03-26");
+      expect((await call("tools/list")).result.tools.map((tool: { name: string }) => tool.name)).toEqual(["admin_check"]);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
 
   test("9. real access token -> oauth user caller; role re-read; wrong audience / garbage / banned / no audience option -> UNAUTHENTICATED", async () => {
     const app = await makeApp();
