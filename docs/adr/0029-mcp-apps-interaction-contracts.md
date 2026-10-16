@@ -70,6 +70,25 @@ metadata. Mantle keeps authorization, guards, OCC, audit, validation and the
 diagnostic vocabulary. Official packages are pinned to exact versions and
 never forked. No hand-written JSON-RPC handling remains in the repository.
 
+**Application-built Apps ownership (#1705).** Core accepts generic static or
+request-time async resource contributors, validates endpoint and renderer ownership,
+and serves them after its origin/identity gates. It does not import React, read UI
+build files or compute UI digests. `mantle-ui` remains presentation/controller code
+receiving data and callbacks, with no Core, Admin or MCP dependency. `mantle-admin`
+owns the default Admin App and its existing typed hooks/surface transport, adapting
+the pinned official client. Applications own frontend App entries and domain
+components; they can use official ext-apps plus optional mantle-ui without Admin.
+No fourth bridge package or parallel provider/slot/query-cache system is introduced.
+
+Resource identity belongs to the UI contributor. Admin hashes its built HTML,
+static catalogue and material resource metadata into its default URI; custom HTML
+functions declare an explicit immutable build URI. A new build updates tool and
+resource links together. Only raw immutable assets may be cached across callers;
+the caller-filtered catalogue is embedded per resource read. Explicit `renders`
+partitioning replaces registration-order overrides. Visibility metadata never
+grants tool execution permission. The existing default caller-independent discovery
+contract remains; `authorize` enables caller-filtered discovery and resource catalogues.
+
 Both protocol eras are served: `2026-07-28` and `2025-*` in stateless mode
 (`createMcpHandler(..., { legacy: "stateless" })`).
 
@@ -163,7 +182,7 @@ mantle-spec ◄── mantle-runtime ◄── mantle-mcp ◄── adapters, ma
 > 4, decision 8):** the Admin App is built by the application from its Admin
 > entry and served from the assets directory; the prebuilt `mantleAppHtml`
 > (`@aotter/mantle-admin/mcp-app`) goes away. The catalog embedded when
-> `ui://mantle-admin/admin` is read is limited to the tools that caller can
+> `ui://mantle-admin/admin/<digest>` is read is limited to the tools that caller can
 > list: names and fields only, never rows. This is an exception to §10's "no
 > caller data": that resource must not be cached or shared across callers.
 - `@aotter/mantle-admin-ui/kit` re-exports from `@aotter/mantle-ui` for one

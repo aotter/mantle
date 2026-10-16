@@ -82,7 +82,10 @@ authorizes.
    actions, with the record view in fullscreen; the full Admin (shell,
    sidebar, router) does not run inside an MCP host.
    - `mantle bundle` builds it from the same entry as a single-file
-     `<assets>/admin/mcp-app.html`, served as `ui://mantle-admin/admin`.
+     `<assets>/admin/mcp-app.html`, served as `ui://mantle-admin/admin/<digest>`
+     by default (#1705): the Admin contributor hashes its HTML, catalogue and
+     resource metadata; Core validates and serves the resulting links without
+     owning a UI build. An explicit custom URI is an immutable build identity.
      The file holds no catalog; the server embeds it when the resource is
      read, limited to the tools that caller can list. Served over HTTP, the
      file keeps Admin's anti-framing headers.
