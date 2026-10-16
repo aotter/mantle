@@ -11,10 +11,14 @@ it("preserves existing default headings on each surface", () => {
   expect(render("browser")).toContain("<h1");
   expect(render("mcp-app")).not.toContain("<h1");
   expect(render("browser")).toContain("待辦");
+  expect(render("browser")).not.toContain('class="p-4"');
+  expect(render("mcp-app")).not.toContain('class="p-4"');
 });
 it("explicit header composes the same localized heading and action on both surfaces", () => {
   const header = { description: { en: "Tasks", "zh-TW": "工作" }, actions: <button>Next</button> };
-  expect(render("browser", { header })).toBe(render("mcp-app", { header }));
+  expect(render("mcp-app", { header })).toContain('<section aria-label="待辦" class="p-4">');
+  expect(render("browser", { header })).not.toContain('class="p-4"');
+  expect(render("mcp-app", { header }).replace(' class="p-4"', "")).toBe(render("browser", { header }));
   expect(render("browser", { header }).match(/<h1/g)).toHaveLength(1);
   expect(render("browser", { header })).toContain("工作");
   expect(render("browser", { header })).toContain("<button>Next</button>");
@@ -24,5 +28,6 @@ it("false gives the page element ownership of its sole heading", () => {
     const html = render(surface, { header: false, element: <h1>Own heading</h1> });
     expect(html.match(/<h1/g)).toHaveLength(1);
     expect(html).toContain("Own heading");
+    expect(html).not.toContain('class="p-4"');
   }
 });

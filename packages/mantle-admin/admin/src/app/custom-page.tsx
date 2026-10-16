@@ -14,7 +14,7 @@ export function CustomPage({ page, surface, language, canonicalLocale = null }: 
   const header = page.header;
   const showHeader = header !== false && (surface === "browser" || header !== undefined);
   const description = header ? resolveLocalizedText(header.description, language, canonicalLocale) : undefined;
-  return <section aria-label={title}>
+  return <section aria-label={title} className={surface === "mcp-app" && header ? "p-4" : undefined}>
     {showHeader ? <PageHeader title={title} description={description} actions={header ? header.actions : undefined} /> : null}
     <React.Fragment key={page.path}>{page.element}</React.Fragment>
   </section>;
