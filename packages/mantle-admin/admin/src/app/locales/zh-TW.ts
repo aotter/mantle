@@ -241,6 +241,7 @@ export default {
     "nav.operations": "營運資料",
     "nav.media": "媒體庫",
     "nav.more": "更多",
+    "nav.setup": "設定與連接",
     "nav.settings": "設定",
     "nav.admin": "管理員",
     "nav.members": "會員管理",

@@ -338,7 +338,14 @@ Admin indexes add write/storage maintenance; an indexed SELECT plan does not
 prove unchanged write latency. Report remaining gates honestly; this guide does not promise measured performance.
 
 Entry lists and editor reads/writes return translation badges and related
-sections in one authorized HTTP response. `/bootstrap?collection=...` can include
+sections in one authorized HTTP response.
+Reference fields show titles, not only IDs: a list of an operational collection (for its `list.columns`) and an entry
+read return `ref_titles` / `refTitles`, the title of each record that a displayed `x-mantle-ref` field points at, keyed by
+field and stored value. The server resolves them for the caller with one page query per referenced collection and field
+(at most 50 distinct values), exactly as the parent entry's title is resolved, so visibility and `authorize` apply to the
+target. A missing, deleted or unreadable target is absent, so the three look the same: Admin shows the exact ID with copy.
+A resolved title links to the related record. Admin Views and the MCP App have no such step, since their rows come from the
+View itself; a View that wants a title selects it (join the referenced table, within its own `requires`). `/bootstrap?collection=...` can include
 the first requested list page. CSV exports use `/entries/export` and
 `/views/{name}/export`; native browser downloads stream paged server output.
 A failure after headers aborts the stream, so a download can fail after partial
@@ -430,6 +437,11 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
   `uiSchema.nav.group` uses; `tsc` refuses any other); without `nav` it keeps its route and stays out of the sidebar. A page has
   no `role`: every Admin member sees it, so hide a part of it with `useMe()` and rely on the `requires` of what it calls. A page's `element` reads through the [data hooks](#typed-data-hooks) and writes through
   Procedures; showing a page grants nothing, because each View or Procedure it calls authorizes on the server.
+- `home` names where `/admin` leads: `{ collection, filter? }`, `{ view, input? }` (typed like `nav.items[].to`) or `{ page: "<path>" }`
+  for one of `pages`. When the caller can see the target, `/admin` redirects to it and Admin's own home (setup and connector
+  content, or your `Home` override) moves to `/admin/setup`, listed first under More. When the caller cannot see the target, or without
+  `home`, `/admin` stays the built-in home. Choosing a landing page grants and denies nothing; the target's own route still decides.
+  The landing is browser only.
 
 `src/admin.tsx` is JSX: the app-shell template sets `jsx: react-jsx` and depends on `react` and `@types/react`; add `lucide-react` (or another icon package) yourself if you use icons.
 

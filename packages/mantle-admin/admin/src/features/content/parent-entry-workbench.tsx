@@ -2,19 +2,20 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, MoreHorizontal } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
-import { usePreferences } from "../../app/preferences";
+import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
 import { entryEditPath, hasFoldedChildCollections, isFoldedFieldChild } from "../../lib/collection-nav";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import type { Collection, EntryEditorPayload, SiteInfo, AdminOperation } from "../../lib/types";
+import type { Collection, EntryEditorPayload, JsonSchema, SiteInfo, AdminOperation } from "../../lib/types";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { Tabs, TabsList, TabsTrigger } from "@aotter/mantle-ui/kit";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { propertyLabel } from "../../lib/field-label";
 import { renderDataValue } from "../../lib/render-data-value";
+import { RefLink, RefTitlesProvider, useRefTarget } from "../../ui/ref-value";
 import { CollectionView } from "./collection-view";
 import { entryTitle } from "./entry-edit-view";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
@@ -95,14 +96,14 @@ export function ParentEntryWorkbench({
       {summary.length > 0 ? (
         // what the parent itself says, as its list shows it: the person reviews the children without opening the editor first
         <SectionCard className="gap-3 p-4">
-          <dl className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-6 gap-y-3 text-sm">
+          <RefTitlesProvider value={payload.refTitles}><dl className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-6 gap-y-3 text-sm">
             {summary.map((field) => (
               <div key={field} className="min-w-0">
                 <dt className="text-xs text-muted-foreground">{propertyLabel(field, payload.collection.schema?.properties?.[field], language, canonical)}</dt>
-                <dd className="truncate">{renderDataValue(payload.collection.schema?.properties?.[field], payload.entry.data[field], language, canonical)}</dd>
+                <dd className="truncate"><SummaryValue field={field} property={payload.collection.schema?.properties?.[field]} value={payload.entry.data[field]} language={language} canonical={canonical} /></dd>
               </div>
             ))}
-          </dl>
+          </dl></RefTitlesProvider>
           <div>
             <Button asChild variant="outline" size="sm">
               <a href={entryEditPath(collectionName, entryId)}>{t(language, "entryWorkbench.editEntry")}</a>
@@ -156,4 +157,10 @@ export function shouldOpenParentWorkbench(
   collectionName: string,
 ): boolean {
   return hasFoldedChildCollections(collections ?? [], collectionName);
+}
+
+/** A summary value as the list shows it; a reference the server resolved is its target's title, linked. */
+function SummaryValue({ field, property, value, language, canonical }: { field: string; property: JsonSchema | undefined; value: unknown; language: AdminLanguage; canonical: string | null }): React.ReactNode {
+  const target = useRefTarget(field, value);
+  return target && typeof value === "string" ? <RefLink target={target} value={value} /> : renderDataValue(property, value, language, canonical);
 }

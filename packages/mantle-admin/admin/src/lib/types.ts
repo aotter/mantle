@@ -131,11 +131,15 @@ export interface CollectionsMetadata {
   allCollections: Record<string, Collection>;
 }
 
+/** Titles of referenced records the caller may read, by referencing field then by the stored value; anything unresolved is absent. */
+export type RefTitles = Readonly<Record<string, Readonly<Record<string, { collection: string; id: string; title: string }>>>>;
+
 export interface EntryEditorPayload {
   collection: EntryEditorCollection;
   entry: EntryEditorEntry;
   parentEntryId: string | null;
   parentEntryTitle?: string | null;
+  refTitles?: RefTitles;
   related: RelatedEntrySection[];
 }
 
@@ -200,6 +204,7 @@ export interface EntryRow {
 
 export interface ListEntriesResult {
   items: EntryRow[];
+  ref_titles?: RefTitles;
   next_cursor: string | null;
 }
 

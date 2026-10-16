@@ -2,7 +2,7 @@ import * as React from "react";
 import type { AdminDefinition } from "./define-admin";
 
 /** What the application's `defineAdmin` declared for the sidebar, and its own pages. */
-export type ProjectNav = AdminDefinition["nav"] & { readonly pages?: AdminDefinition["pages"] };
+export type ProjectNav = AdminDefinition["nav"] & { readonly pages?: AdminDefinition["pages"]; readonly home?: AdminDefinition["home"] };
 
 const NONE: ProjectNav = { groups: {}, items: [] };
 const ProjectNavContext = React.createContext<ProjectNav>(NONE);

@@ -7,6 +7,7 @@ import { renderDataValue } from "../lib/render-data-value";
 import { siteQueryOptions } from "../lib/queries";
 import type { JsonSchema } from "../lib/types";
 import { IdValue, isIdField } from "./id-value";
+import { RefLink, useRefTarget } from "./ref-value";
 
 type Property = Readonly<Record<string, unknown>> | undefined;
 interface DefaultCellProps extends CellProps {
@@ -18,7 +19,10 @@ function DefaultCell({ value, property, field }: DefaultCellProps): React.ReactE
   const { language } = usePreferences();
   const canonical = useQuery(siteQueryOptions()).data?.canonicalLocale ?? null;
   const schema = property as JsonSchema | undefined;
-  return <>{isIdField(field ?? "", schema) && typeof value === "string"
+  const target = useRefTarget(field ?? "", value);
+  return <>{target && typeof value === "string"
+    ? <RefLink target={target} value={value} />
+    : isIdField(field ?? "", schema) && typeof value === "string"
     ? <IdValue value={value} language={language} />
     : renderDataValue(schema, value, language, canonical)}</>;
 }

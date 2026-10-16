@@ -1,7 +1,7 @@
 import type { ViewManifestInfo, Collection } from "../src/lib/types";
 import { describe, expect, it } from "vitest";
 import { isGroupActive, isLinkActive, isSubLinkActive } from "../src/layout/nav-group";
-import { buildDeveloperNavGroups, buildNavGroups } from "../src/layout/authenticated-layout";
+import { buildDeveloperNavGroups, buildNavGroups, landingUrl } from "../src/layout/authenticated-layout";
 import type { ProjectNav } from "../src/app/project-nav";
 import type { NavCollapsible, NavLink } from "../src/layout/types";
 import { initialsFor } from "../src/lib/initials";
@@ -311,5 +311,31 @@ describe("sidebar placement (uiSchema.nav and defineAdmin nav)", () => {
       const groups = build(project(), [collection("requests", "operational", { group: "approvals" })], []);
       expect(shape(groups).slice(1)).toEqual([["Approvals", ["requests"]]]);
     });
+  });
+});
+
+describe("landing page", () => {
+  const orders = { lifecycle: "operational" as const, exportFields: [], name: "orders", title: "Orders", description: null, parent: null, localized: false, hasTranslations: false };
+  const view = { name: "queue", title: "Queue" } as ViewManifestInfo;
+  const pages = [{ path: "budget", title: "Budget", element: null }];
+  const setup = (project?: Pick<ProjectNav, "home" | "pages"> & Partial<ProjectNav>) =>
+    buildNavGroups([orders], [view], "en", null, true, false, undefined, project as ProjectNav).flatMap(({ items }) => items).flatMap((item) => "url" in item ? [item.url] : []);
+
+  it("leads to a visible collection, View or page, and to nothing the caller cannot see", () => {
+    expect(landingUrl({ home: { collection: "orders" } }, [orders], [])).toBe("/admin/c/orders");
+    expect(landingUrl({ home: { view: "queue", input: { q: "a" } } }, [], [view])).toBe("/admin/views/queue?q=a");
+    expect(landingUrl({ home: { page: "budget" }, pages }, [], [])).toBe("/admin/p/budget");
+    expect(landingUrl({ home: { collection: "orders" } }, [], [])).toBeNull();
+    expect(landingUrl({ home: { view: "queue" } }, [orders], [])).toBeNull();
+    expect(landingUrl({ home: { page: "missing" }, pages }, [], [])).toBeNull();
+    expect(landingUrl({}, [orders], [view])).toBeNull();
+  });
+
+  it("moves the built-in home to /admin/setup under More only while a landing page applies", () => {
+    expect(setup()).not.toContain("/admin/setup");
+    expect(setup({ groups: {}, items: [], home: { collection: "orders" } })).toContain("/admin/setup");
+    expect(setup({ groups: {}, items: [], home: { collection: "hidden" } })).not.toContain("/admin/setup");
+    const more = buildNavGroups([orders], [], "en", null, true, false, undefined, { groups: {}, items: [], home: { collection: "orders" } }).find((group) => group.title === "More");
+    expect(more?.items[0]).toMatchObject({ url: "/admin/setup" });
   });
 });

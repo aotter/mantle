@@ -73,6 +73,7 @@ import {
 } from "./row-operations";
 import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
 import { DataCell } from "../../ui/data-cell";
+import { RefTitlesProvider } from "../../ui/ref-value";
 import { Empty, Slot } from "../../app/slots";
 import { optionLabel } from "../../lib/enum-options";
 import { renderTitleText } from "../../lib/entry-title";
@@ -407,7 +408,7 @@ function CollectionList({
         />
       )}
       {displayedEntries && displayedEntries.items.length > 0 && (
-        <>
+        <RefTitlesProvider value={displayedEntries.ref_titles}>
           {selected.size > 0 && canManageContent && !isReadOnlyCollection ? (
             <BulkActionBar
               language={language}
@@ -552,7 +553,7 @@ function CollectionList({
             previousHref={cursorPageHref(listPath, pageQuery)}
             nextHref={displayedEntries.next_cursor ? cursorPageHref(listPath, pageQuery, displayedEntries.next_cursor) : undefined}
           />
-        </>
+        </RefTitlesProvider>
       )}
     </div>
   );
