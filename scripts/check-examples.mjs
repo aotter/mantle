@@ -35,7 +35,8 @@ if (!fresh) {
   for (const example of selected.length ? selected : EXAMPLES) {
     const source = join(examples, example);
     if (!existsSync(join(source, "manifests"))) throw new Error(`${example}: no manifests/`);
-    const steps = ["pnpm generate", "pnpm types", "pnpm check", ...(existsSync(join(source, "smoke.mjs")) ? ["pnpm smoke"] : [])].join(" && ");
+    // build, then the Admin MCP App compatibility test (it needs Chrome: MANTLE_TEST_CHROMIUM, or one playwright-core installed)
+    const steps = ["pnpm generate", "pnpm types", "pnpm check", "pnpm build", "pnpm test", ...(existsSync(join(source, "smoke.mjs")) ? ["pnpm smoke"] : [])].join(" && ");
     console.log(`check-examples: ${example}`);
     consumer("app-shell", ["sh", "-c", `cp -R '${source}'/. . && ${steps}`]);
   }
@@ -45,9 +46,9 @@ if (!selected.length) {
     const run = pm === "npm" ? "npm run" : "pnpm";
     // app-shell has no manifests of its own, so its check runs with the first example on top.
     console.log(`check-examples: fresh app-shell + ${EXAMPLES[0]} with ${pm}`);
-    consumer("app-shell", ["sh", "-c", `cp -R '${join(examples, EXAMPLES[0])}'/. . && ${run} generate && ${run} types && ${run} check`], pm);
+    consumer("app-shell", ["sh", "-c", `cp -R '${join(examples, EXAMPLES[0])}'/. . && ${run} generate && ${run} types && ${run} check && ${run} build && ${run} test`], pm);
     console.log(`check-examples: fresh reference-service with ${pm}`);
-    consumer("reference-service", ["sh", "-c", `${run} check`], pm);
+    consumer("reference-service", ["sh", "-c", `${run} check && ${run} build && ${run} test`], pm);
   }
 }
 
