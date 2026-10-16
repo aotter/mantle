@@ -16,7 +16,7 @@ export const source = (file: { readonly path: string }): string => readFileSync(
 
 /**
  * The registry items that render in the browser and in the Admin MCP App. The MCP App compatibility test
- * (registry.test.ts, "MCP App compatibility") runs each of these through the host bridge.
+ * (registry-compat.test.ts) runs each of these through the host bridge.
  */
 export const bothItems: readonly RegistryItem[] = items.filter(item => item.meta.surface === "both");
 
