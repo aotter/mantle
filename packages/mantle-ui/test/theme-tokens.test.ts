@@ -23,8 +23,8 @@ test("dark values cover every :root token but the radius and internal palette, a
 });
 
 test("dark tokens and the compiled dark: variant answer to .dark and :root[data-theme]", async () => {
-  expect(dark.selector).toMatch(/\.dark/);
-  expect(dark.selector).toContain(':root[data-theme="dark"]');
+  // no part may outrank `.dark`: an application's `.dark {}` override loaded after the defaults must win
+  expect(dark.selector.split(",").map(part => part.trim())).toEqual([".dark", ':where(:root[data-theme="dark"])']);
   for (const css of [read("../src/kit/styles/kit.css"), read("../../mantle-admin/admin/styles.css")]) {
     const out = (await compile(`${/@custom-variant dark [^\n]*;/.exec(css)![0]}\n@tailwind utilities;`)).build(["dark:underline"]);
     expect(out).toContain(".dark *");
