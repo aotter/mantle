@@ -127,7 +127,7 @@ components must do to render there, and how it upgrades from the prebuilt App, i
 [Customising Admin for MCP hosts](../../docs/handbook/guides/mcp-apps.md#customising-admin-for-mcp-hosts).
 
 `@aotter/mantle-admin/testing` exports `checkMcpApp({ catalogue, html })`, the compatibility test `mantle generate --admin` writes as
-`generated/admin-mcp-app.test.mjs`: it loads the built App in the official `AppBridge` under the spec's default CSP and fails on a network
+`generated/admin-mcp-app.check.mjs`: it loads the built App in the official `AppBridge` under the spec's default CSP and fails on a network
 request, a console error, an exception or a missing size. It needs the optional peer `playwright-core` and Chrome (`MANTLE_TEST_CHROMIUM`);
 without a browser it fails. See [Run the compatibility test](../../docs/handbook/guides/mcp-apps.md#run-the-compatibility-test).
 

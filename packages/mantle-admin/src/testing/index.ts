@@ -1,12 +1,16 @@
 /// <reference types="node" />
 /**
  * `@aotter/mantle-admin/testing`: the compatibility test of an application's Admin MCP App. It loads the App `mantle bundle`
- * built in the official ext-apps `AppBridge`, in a sandboxed iframe under the spec's default CSP, and renders every View and page
- * the application customised with sample rows made from the catalogue, in a light and a dark host. It fails on a network request,
- * a console error, an uncaught exception, or an App that never reports a size.
+ * built in the official ext-apps `AppBridge`, in a sandboxed iframe from its own origin under the spec's default CSP, and renders
+ * every View and page the application customised with sample rows made from the catalogue, in a light and a dark host. It fails on
+ * a network request, a console error, an uncaught exception, an App that does not mount, or one that never reports a size.
  */
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { Page, Route } from "playwright-core";
+import { declared, type Kind, type McpCsp } from "../build/mcp-check.js";
+import { declaredMeta } from "../app/declared-meta.js";
+import { toolName } from "../app/tool-name.js";
 
 /** What the test needs of the generated catalogue (`mcpAppCatalogues.admin`). */
 export interface McpAppCatalogue {
@@ -22,27 +26,27 @@ export interface CheckMcpAppOptions {
   readonly html?: string;
 }
 
-/** What `mantle bundle` records in the file: the `both` slots the application overrides and the Views its `pages[].mcp` render. */
+/** What `mantle bundle` records in the file: the Views the application's `cell:view:` slots and `pages[].mcp` pages render. */
 interface Manifest { readonly slots: readonly string[]; readonly pages: readonly string[] }
 
+/** After the last request or console message, how long the App is left quiet before the run is judged, and the longest it waits. */
+const QUIET_MS = 400, SETTLE_CAP_MS = 5_000;
+
 /** The spec's default CSP for an App that declares none, with what the App declared added as a host adds it. */
-function policy(csp: { readonly [list: string]: readonly string[] | undefined }): string {
+function policy(csp: McpCsp): string {
   const add = (base: string, ...lists: (readonly string[] | undefined)[]) => [base, ...lists.flatMap(list => list ?? [])].join(" ");
-  const resources = csp["resourceDomains"], connect = csp["connectDomains"];
+  const { resourceDomains: resources, connectDomains: connect, frameDomains: frames, baseUriDomains: bases } = csp;
   return [
     "default-src 'none'", `script-src ${add("'self' 'unsafe-inline'", resources)}`, `style-src ${add("'self' 'unsafe-inline'", resources)}`,
     `img-src ${add("'self' data:", resources)}`, `media-src ${add("'self' data:", resources)}`, `font-src ${add("'self'", resources)}`,
-    `connect-src ${add("'none'", connect)}`, ...(csp["frameDomains"] ? [`frame-src ${csp["frameDomains"].join(" ")}`] : []), ...(csp["baseUriDomains"] ? [`base-uri ${csp["baseUriDomains"].join(" ")}`] : []),
+    `connect-src ${add("'none'", connect)}`, ...(frames ? [`frame-src ${frames.join(" ")}`] : []), ...(bases ? [`base-uri ${bases.join(" ")}`] : []),
   ].join("; ");
 }
 
-/** The admin MCP tool of a View: its name lowercased, kebab to snake (as `@aotter/mantle`'s compiler names it). */
-const toolName = (view: string): string => view.toLowerCase().replace(/-/g, "_");
-
-/** A plausible value for a column of this schema, so a component sees the shape the View returns. */
+/** A plausible value for a column of this schema, so a component sees the shape the View returns; `n` varies the enum member. */
 function sample(schema: Schema | undefined, name: string, n: number): unknown {
-  const first = schema?.enum?.[0] ?? schema?.const ?? schema?.oneOf?.find(option => option.const !== undefined)?.const;
-  if (first !== undefined) return first;
+  const members = schema?.enum ?? (schema?.const !== undefined ? [schema.const] : schema?.oneOf?.flatMap(option => option.const !== undefined ? [option.const] : []));
+  if (members?.length) return members[(n - 1) % members.length];
   const type = [schema?.type].flat().find(each => each !== "null");
   switch (type) {
     case "integer": return n * 10;
@@ -62,43 +66,41 @@ function sample(schema: Schema | undefined, name: string, n: number): unknown {
   return `${name} ${n}`;
 }
 
-const rowsOf = (columns: { readonly [column: string]: Schema } | undefined) =>
-  [1, 2, 3].map(n => ({ id: `sample-${n}`, version: 1, ...Object.fromEntries(Object.entries(columns ?? {}).map(([column, schema]) => [column, sample(schema, column, n)])) }));
+/** Three full rows, and a fourth with every nullable column null. */
+const rowsOf = (columns: { readonly [column: string]: Schema } | undefined) => [1, 2, 3, 4].map(n => ({
+  id: `sample-${n}`, version: 1,
+  ...Object.fromEntries(Object.entries(columns ?? {}).map(([column, schema]) => [column, n === 4 && [schema.type].flat().includes("null") ? null : sample(schema, column, n)])),
+}));
 
-function declared<T>(html: string, name: string): T | undefined {
-  const content = new RegExp(`<meta name="${name}" content='([^']*)'>`).exec(html)?.[1];
-  return content ? JSON.parse(content) as T : undefined;
-}
-
-type Browser = { newContext(options?: object): Promise<Context>; close(): Promise<void> };
-type Context = { route(url: string, handler: (route: Route) => unknown): Promise<void>; newPage(): Promise<Page>; close(): Promise<void> };
-type Route = { request(): { url(): string; resourceType(): string }; fulfill(response: object): Promise<void>; abort(): Promise<void> };
-type Page = { on(event: string, handler: (value: never) => void): void; addInitScript(script: string): Promise<void>; goto(url: string): Promise<unknown>; evaluate<T>(script: () => T): Promise<T>; waitForTimeout(ms: number): Promise<void> };
+/** The CSP list a request needs, from what loads it. */
+const kindOf = (type: string): Kind => ["fetch", "xhr", "websocket", "eventsource", "ping"].includes(type) ? "connect" : type === "document" ? "frame" : "resource";
 
 /**
  * Renders the application's customised Views and pages in an MCP host and throws one error naming each problem. Needs Chrome or
  * Chromium: set `MANTLE_TEST_CHROMIUM` to its executable, or install one for `playwright-core` (`npx playwright-core install chromium`).
+ * Each run waits until the App has been quiet (no request, no console message) for 400 ms, at most 5 s.
  */
 export async function checkMcpApp({ catalogue, html: file = "dist/client/admin/mcp-app.html" }: CheckMcpAppOptions): Promise<void> {
   const html = readFileSync(file, "utf8");
-  const manifest = declared<Manifest>(html, "mantle-mcp-app") ?? { slots: [], pages: [] };
-  const csp = declared<{ [list: string]: readonly string[] }>(html, "mantle-mcp-csp") ?? {};
-  // each View an override renders, and each View a page is for; any View of the catalogue when the application customised none
+  const manifest = declaredMeta<Manifest>(html, "mantle-mcp-app");
+  const csp = declaredMeta<McpCsp>(html, "mantle-mcp-csp") ?? {};
+  // each View an override renders and each View a page is for; without a manifest (the application customised nothing, or the
+  // file is from an older build) every View of the catalogue
   const scenarios = new Map<string, string>();
-  for (const slot of manifest.slots) {
+  for (const slot of manifest?.slots ?? []) {
     const match = /^cell:view:(.+)\.[^.]+$/.exec(slot);
     if (match) scenarios.set(toolName(match[1]!), slot);
   }
-  for (const view of manifest.pages) scenarios.set(toolName(view), `page for ${view}`);
-  if (scenarios.size === 0) { const [tool = "view"] = Object.keys(catalogue.views); scenarios.set(tool, "the App"); }
+  for (const view of manifest?.pages ?? []) scenarios.set(toolName(view), `page for ${view}`);
+  if (!manifest) for (const tool of Object.keys(catalogue.views)) scenarios.set(tool, `View ${tool}`);
+  if (scenarios.size === 0) scenarios.set(Object.keys(catalogue.views)[0] ?? "view", "the App");
   const rows: { [tool: string]: ReturnType<typeof rowsOf> } = Object.fromEntries(Object.entries(catalogue.views).map(([tool, view]) => [tool, rowsOf(view.columns)]));
   for (const tool of scenarios.keys()) rows[tool] ??= rowsOf(undefined);
 
-  const hostScript = readFileSync(resolve(dirname(new URL(import.meta.url).pathname), "host.js"), "utf8");
+  const hostScript = readFileSync(fileURLToPath(new URL("host.js", import.meta.url)), "utf8");
   const app = html.replace(/<head[^>]*>/i, head => head + '<script type="application/json" id="mantle-catalog">' + JSON.stringify(catalogue).replace(/</g, "\\u003c") + "</script>");
-  const allowed = new Set([...(csp["resourceDomains"] ?? []), ...(csp["connectDomains"] ?? []), ...(csp["frameDomains"] ?? [])].map(domain => { try { return new URL(domain).host; } catch { return domain; } }));
 
-  const playwright = await import("playwright-core" as string).catch(() => { throw new Error("The MCP App compatibility test needs playwright-core: add it to the application's devDependencies (npm install -D playwright-core)."); }) as { chromium: { launch(options: object): Promise<Browser> } };
+  const playwright = await import("playwright-core").catch(() => { throw new Error("The MCP App compatibility test needs playwright-core: add it to the application's devDependencies (npm install -D playwright-core)."); });
   const browser = await playwright.chromium.launch({ headless: true, ...(process.env["MANTLE_TEST_CHROMIUM"] ? { executablePath: process.env["MANTLE_TEST_CHROMIUM"] } : {}) }).catch((error: Error) => {
     throw new Error(`The MCP App compatibility test found no browser to run. Install one with \`npx playwright-core install chromium\`, or set MANTLE_TEST_CHROMIUM to the path of a Chrome or Chromium executable.\n(${error.message.split("\n")[0]})`);
   });
@@ -108,28 +110,45 @@ export async function checkMcpApp({ catalogue, html: file = "dist/client/admin/m
       const where = `${label}, ${theme} host`;
       const context = await browser.newContext();
       const page = await context.newPage();
-      await context.route("**/*", async route => {
-        const url = route.request().url(), { pathname: path, origin, host } = new URL(url), own = origin === "https://host.test";
-        if (own && path === "/host.html") return route.fulfill({ contentType: "text/html", body: '<!doctype html><title>host</title><body><script src="/host.js"></script></body>' });
-        if (own && path === "/host.js") return route.fulfill({ contentType: "text/javascript", body: hostScript });
-        if (own && path === "/app.html") return route.fulfill({ contentType: "text/html", headers: { "content-security-policy": policy(csp) }, body: app });
-        if (own && path === "/favicon.ico") return route.fulfill({ status: 204 });
-        // the App declared this origin: a real host would allow it; there is no network here, so answer nothing
-        if (allowed.has(host)) return route.fulfill({ status: 204 });
-        problems.push(`${where}: a network request to ${url}`);
+      let last = Date.now();
+      const note = (problem: string) => { problems.push(`${where}: ${problem}`); last = Date.now(); };
+      // the host page and the App come from two origins, as in a real host: the App cannot reach its parent
+      await context.route("**/*", async (route: Route) => {
+        last = Date.now();
+        const request = route.request(), url = request.url(), { origin, pathname } = new URL(url);
+        if (origin === "https://host.test" && pathname === "/host.html") return route.fulfill({ contentType: "text/html", body: '<!doctype html><title>host</title><body><script src="/host.js"></script></body>' });
+        if (origin === "https://host.test" && pathname === "/host.js") return route.fulfill({ contentType: "text/javascript", body: hostScript });
+        if (origin === "https://app.test" && pathname === "/app.html") return route.fulfill({ contentType: "text/html", headers: { "content-security-policy": policy(csp) }, body: app });
+        if (pathname === "/favicon.ico") return route.fulfill({ status: 204 });
+        // the App declared this origin for this kind of use: a real host would allow it; there is no network here, so answer nothing
+        if (declared(url, csp, kindOf(request.resourceType()))) return route.fulfill({ status: 204 });
+        note(`a network request to ${url}`);
         return route.abort();
       });
-      page.on("console", (message: { type(): string; text(): string }) => { if (message.type() === "error") problems.push(`${where}: console error: ${message.text()}`); });
-      page.on("pageerror", (error: Error) => problems.push(`${where}: uncaught exception: ${error.message}`));
+      page.on("console", message => { if (message.type() === "error") note(`console error: ${message.text()}`); else last = Date.now(); });
+      page.on("pageerror", error => note(`uncaught exception: ${error.message}`));
       await page.addInitScript(`window.__mantleScenario = ${JSON.stringify({ tool, theme, rows })};`);
       await page.goto("https://host.test/host.html");
-      const sized = async () => page.evaluate(() => (window as unknown as { host?: { sizes: { height: number }[] } }).host?.sizes.some(size => size.height > 0) ?? false);
-      for (let attempt = 0; attempt < 100 && !(await sized()); attempt++) await page.waitForTimeout(100);
-      // a request or an error may come after the first paint: let effects and images settle
-      await page.waitForTimeout(500);
-      if (!(await sized())) problems.push(`${where}: the App reported no size (size-changed with a positive height)`);
-      const host = await page.evaluate(() => (window as unknown as { host?: { errors: string[] } }).host?.errors ?? []);
-      for (const error of host) problems.push(`${where}: host error: ${error}`);
+      const state = () => page.evaluate(() => (window as unknown as { host?: { state: { done: boolean; height: number }; errors: string[] } }).host ?? null);
+      const frame = (): ReturnType<Page["frames"]>[number] | undefined => page.frames().find(each => each.url().startsWith("https://app.test/"));
+      // the result is delivered and the App shows something other than its waiting text
+      let shown = { text: "", dark: false };
+      const started = Date.now();
+      for (;;) {
+        const host = await state(), seen = await frame()?.evaluate(() => ({ text: document.getElementById("root")?.innerText ?? "", dark: document.documentElement.classList.contains("dark") })).catch(() => undefined);
+        if (seen) shown = seen;
+        if (host?.state.done && shown.text.trim() && !/^Waiting for results/.test(shown.text.trim())) break;
+        if (Date.now() - started > 10_000) { note(`the App did not render the View (it shows ${JSON.stringify(shown.text.trim().slice(0, 60))})`); break; }
+        await page.waitForTimeout(100);
+      }
+      if (theme === "dark" && !shown.dark) note("the App did not take the host's dark theme (no .dark on its root)");
+      // a request or an error may come after the first paint: wait for quiet
+      last = Date.now();
+      const quiet = Date.now();
+      while (Date.now() - last < QUIET_MS && Date.now() - quiet < SETTLE_CAP_MS) await page.waitForTimeout(50);
+      const host = await state();
+      if (!host || host.state.height <= 0) note("the App reported no size (size-changed with a positive height)");
+      for (const error of host?.errors ?? []) note(`host error: ${error}`);
       await context.close();
     }
   } finally { await browser.close(); }

@@ -61,8 +61,11 @@ type Of<K extends string, Prefix extends string> = K extends `${Prefix}${infer R
  * `<view>.<column>` a column of an admin View.
  *
  * Surface: `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList` and `list.actions:` exist in the browser only.
- * `RecordView`, `record.aside:`, `record.actions:`, `cell:` and `input:` render in an MCP host too: read data only through
- * the hooks, link only with `<AdminLink>` or `useOpenLink()`, and expect no particular width.
+ * `cell:view:` renders in an MCP host today: it is a column of the rows the App shows. `RecordView`, `record.aside:`,
+ * `record.actions:`, `cell:<schema>.<field>` and `input:` are typed `both`, so they must work in a host (read data only
+ * through the hooks, link only with `<AdminLink>` or `useOpenLink()`, expect no particular width), but the App shows no record
+ * and its row-action form is not the record form, so they run in the browser Admin only; `mantle bundle` warns when you
+ * override one.
  */
 export type AdminComponents<T extends AdminTypes = AdminTypes> = {
   readonly Shell?: Browser<ShellProps>;

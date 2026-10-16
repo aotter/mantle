@@ -100,12 +100,15 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
   const [{ build, normalizePath }, { viteSingleFile }] = await Promise.all([import("vite"), import("vite-plugin-singlefile")]);
   const core = await adminCore(entry, true);
   const mount = resolve(dist, "admin-app/mcp-mount.js");
-  const { csp, sources: slots, manifest, problem } = await readDefinition(core);
+  const { csp, sources: slots, manifest, idle, problem } = await readDefinition(core);
   if (problem) {
     console.warn(`warning: Admin MCP App: ${entry ?? "the built-in entry"} ${problem}`);
-    // a declared CSP must not vanish because the entry could not be read
-    if (entry && /\bcsp\b/.test(readFileSync(entry, "utf8"))) throw new Error(`The Admin MCP App cannot be built: ${entry} declares a csp, but ${problem}\nSee ${GUIDE}.`);
+    // what the entry declares must not vanish because it could not be read: the CSP, the components and pages the compatibility test
+    // is to run, the plugins that add components
+    const declares = entry ? /\b(csp|components|plugins|pages|mcp)\s*:/.exec(readFileSync(entry, "utf8"))?.[1] : undefined;
+    if (entry && declares) throw new Error(`The Admin MCP App cannot be built: ${entry} declares ${declares}, but ${problem}\nSee ${GUIDE}.`);
   }
+  for (const slot of idle) console.warn(`warning: Admin MCP App: ${slot} is not shown by the App yet: it renders cell:view: slots and pages[].mcp, so this override runs in the browser Admin only.`);
   const invalid = cspProblems(csp);
   if (invalid.length) throw new Error(`The Admin MCP App cannot be built:\n${invalid.map(line => `  - ${line}`).join("\n")}\nSee ${GUIDE}.`);
   const sources: Source[] = [...slots];
@@ -155,7 +158,7 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
  * The entry is bundled for Node and imported, so an entry that cannot run there (it touches `window` on import) is read as
  * declaring nothing, and the build says so rather than failing it.
  */
-async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>): Promise<{ csp?: McpCsp; sources: Source[]; manifest?: { slots: string[]; pages: string[] }; problem?: string }> {
+async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>): Promise<{ csp?: McpCsp; sources: Source[]; manifest?: { slots: string[]; pages: string[] }; idle: string[]; problem?: string }> {
   try {
     const { build } = await import("vite");
     const built = await build({
@@ -174,11 +177,14 @@ async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>): Prom
       const hits = layers.flatMap(layer => typeof layer === "function" ? hitsOf(layer.toString()) : []);
       return hits.length ? [{ slot, hits }] : [];
     });
-    // the slots a host renders (`both`) that the application overrides, and the Views its MCP pages are for
-    const manifest = { slots: Object.keys(admin.layers ?? {}).filter(slot => slot === "RecordView" || /^(?:cell|input|record\.aside|record\.actions):/.test(slot)), pages: (admin.pages ?? []).flatMap(page => page.mcp ? [page.mcp.renders] : []) };
-    return { ...(admin.mcp?.csp ? { csp: admin.mcp.csp } : {}), sources, manifest };
+    // what the App shows of the application's customising, which the compatibility test renders: the `cell:view:` slots, and the Views its MCP pages are for
+    const slots = Object.keys(admin.layers ?? {});
+    const manifest = { slots: slots.filter(slot => slot.startsWith("cell:view:")), pages: (admin.pages ?? []).flatMap(page => page.mcp ? [page.mcp.renders] : []) };
+    // typed for a host, but the App shows no record yet
+    const idle = slots.filter(slot => slot === "RecordView" || /^(?:cell:(?!view:)|input:|record\.aside:|record\.actions:)/.test(slot));
+    return { ...(admin.mcp?.csp ? { csp: admin.mcp.csp } : {}), sources, manifest, idle };
   } catch (error) {
-    return { sources: [], problem: `it could not be run in Node to read mcp.csp, so none is assumed: ${error instanceof Error ? error.message : String(error)}` };
+    return { sources: [], idle: [], problem: `it could not be run in Node to read mcp.csp, so none is assumed: ${error instanceof Error ? error.message : String(error)}` };
   }
 }
 

@@ -1,5 +1,6 @@
 /** The Admin App is an ordinary contributor to the SDK's public MCP Apps hook. */
 import { ContractError } from "@aotter/mantle/contracts";
+import { declaredMeta } from "../app/declared-meta.js";
 import type { McpApps, McpAppPage, McpAppRender, McpAppResource } from "@aotter/mantle/mcp";
 export interface AdminMcpOptions {
     readonly catalogue: {
@@ -31,8 +32,8 @@ function visibleCatalogue({ views, actions }: AdminMcpOptions["catalogue"], tool
 }
 /** The CSP `defineAdmin({ mcp: { csp } })` declared, which `mantle bundle` wrote into the file; sent as `_meta.ui.csp` on `resources/read`. */
 const withCsp = (html: string): McpAppPage => {
-    const declared = /<meta name="mantle-mcp-csp" content='([^']*)'>/.exec(html)?.[1];
-    return declared ? { html, csp: JSON.parse(declared) } : { html };
+    const csp = declaredMeta<McpAppPage["csp"]>(html, "mantle-mcp-csp");
+    return csp ? { html, csp } : { html };
 };
 /** The built App: a Worker's `ASSETS` binding (the name `wrangler.jsonc`'s `assets.binding` must have, else pass `html`) serves it at `/admin/mcp-app.html`; Bun reads it from disk. */
 const builtApp = (file: string) => async ({ env, request }: McpAppRender): Promise<McpAppPage> => {

@@ -41,16 +41,28 @@ describe("the checks on the built MCP App", () => {
     expect(await attempt(app("connect-declared", cell, ', mcp: { csp: { connectDomains: ["https://api.example.test"] } }'))).toBeUndefined();
   }, 120_000);
 
-  it("does not read an unreadable entry's csp silently: it warns, and fails when the entry declares one", async () => {
+  it("does not read an unreadable entry silently: it warns, and fails when the entry declares csp, components, plugins, pages or mcp", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     try {
       const plain = app("unreadable", "export const Cell = () => <b>x</b>;");
-      writeFileSync(plain.entry, "const where = window.location.href;\n" + readFileSync(plain.entry, "utf8").replace("components:", "note: where, components:"));
+      writeFileSync(plain.entry, `import { defineAdmin } from ${JSON.stringify(resolve(pkg, "dist/admin-app/index.js"))};\nconst where = window.location.href;\nexport default defineAdmin({}, { nav: { items: [] } });`);
       expect(await attempt(plain)).toBeUndefined();
       expect(warn.mock.calls.map(call => String(call[0])).join("\n")).toMatch(/could not be run in Node to read mcp\.csp/);
-      const declares = app("unreadable-csp", "export const Cell = () => <b>x</b>;", ', mcp: { csp: { resourceDomains: ["https://cdn.example.test"] } }');
-      writeFileSync(declares.entry, "const where = window.location.href;\n" + readFileSync(declares.entry, "utf8"));
-      expect(await attempt(declares)).toMatch(/declares a csp, but it could not be run in Node/);
+      for (const [name, options] of [["csp", ', mcp: { csp: { resourceDomains: ["https://cdn.example.test"] } }'], ["components", ""]] as const) {
+        const declares = app("unreadable-" + name, "export const Cell = () => <b>x</b>;", options);
+        writeFileSync(declares.entry, "const where = window.location.href;\n" + readFileSync(declares.entry, "utf8"));
+        expect(await attempt(declares)).toMatch(/declares (?:csp|components|mcp), but it could not be run in Node/);
+      }
+    } finally { warn.mockRestore(); }
+  }, 180_000);
+
+  it("warns about an override of a slot the App does not show yet", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const fixture = app("idle", "export const Cell = () => <b>x</b>;");
+      writeFileSync(fixture.entry, readFileSync(fixture.entry, "utf8").replace('components: { "cell:view:pending.item": Cell', 'components: { "input:requests.title": () => null, "cell:view:pending.item": Cell'));
+      expect(await attempt(fixture)).toBeUndefined();
+      expect(warn.mock.calls.map(call => String(call[0])).join("\n")).toContain("input:requests.title is not shown by the App yet");
     } finally { warn.mockRestore(); }
   }, 120_000);
 

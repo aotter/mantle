@@ -18,11 +18,11 @@ const result = (tool: string) => {
 const iframe = document.createElement("iframe");
 iframe.title = "Mantle MCP App";
 iframe.width = "700"; iframe.height = "800";
-// the sandbox a host gives an App; the document comes with the spec's default CSP (the test serves the header)
+// the sandbox a host gives an App; the document comes from another origin with the spec's default CSP (the test serves both)
 iframe.setAttribute("sandbox", "allow-scripts allow-same-origin");
 document.body.append(iframe);
 
-const sizes: { width: number; height: number }[] = [], calls: string[] = [], errors: string[] = [];
+const errors: string[] = [], state = { done: false, height: 0 };
 const bridge = new AppBridge(null, { name: "mantle-compatibility-host", version: "1" }, { serverTools: {}, openLinks: {}, message: { text: {} }, updateModelContext: { text: {}, structuredContent: {} } }, {
   hostContext: {
     locale: "en", theme: scenario.theme, timeZone: "UTC",
@@ -30,21 +30,19 @@ const bridge = new AppBridge(null, { name: "mantle-compatibility-host", version:
     toolInfo: { tool: { name: scenario.tool, inputSchema: { type: "object" } } },
   },
 });
-const state = { ready: false, done: false };
 bridge.oninitialized = () => {
-  state.ready = true;
   void (async () => {
     await bridge.sendToolInput({ arguments: {} });
     await bridge.sendToolResult(result(scenario.tool));
     state.done = true;
   })().catch(error => errors.push(String(error)));
 };
-bridge.onsizechange = value => { sizes.push({ width: Number(value.width ?? 0), height: Number(value.height ?? 0) }); };
+bridge.onsizechange = value => { state.height = Math.max(state.height, Number(value.height ?? 0)); };
 bridge.onerror = error => { errors.push(error.message); };
 bridge.onopenlink = async () => ({});
 bridge.onmessage = async () => ({});
 bridge.onupdatemodelcontext = async () => ({});
 bridge.onrequestdisplaymode = async ({ mode }) => ({ mode });
-bridge.oncalltool = async params => { calls.push(params.name); return result(params.name); };
-Object.assign(window, { host: { sizes, calls, errors, state } });
-void bridge.connect(new PostMessageTransport(iframe.contentWindow!, iframe.contentWindow!)).then(() => { iframe.src = "/app.html"; }, error => errors.push(String(error)));
+bridge.oncalltool = async params => result(params.name);
+Object.assign(window, { host: { errors, state } });
+void bridge.connect(new PostMessageTransport(iframe.contentWindow!, iframe.contentWindow!)).then(() => { iframe.src = "https://app.test/app.html"; }, error => errors.push(String(error)));

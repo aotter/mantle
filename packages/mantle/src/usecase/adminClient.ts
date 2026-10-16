@@ -3,7 +3,7 @@ import { BUILT_IN_NAV_GROUPS, mcpTools, type JsonSchema, type RuntimePlan } from
 import { q } from "../domain/entry.js";
 
 /**
- * The compatibility test of the application's Admin MCP App (`node --test generated/admin-mcp-app.test.mjs`): it loads the App
+ * The compatibility test of the application's Admin MCP App (`node --test generated/admin-mcp-app.check.mjs`): it loads the App
  * `mantle bundle` built in the official MCP Apps host and fails on a network request, a console error or an exception. It needs
  * `playwright-core` (a devDependency) and Chrome: `npx playwright-core install chromium`, or `MANTLE_TEST_CHROMIUM=<executable>`.
  * Node strips the types of `admin-descriptors.ts` (Node 22.18 or newer).
@@ -13,8 +13,8 @@ import { test } from "node:test";
 import { checkMcpApp } from "@aotter/mantle-admin/testing";
 import { mcpAppCatalogues } from "./admin-descriptors.ts";
 
-// where \`mantle bundle <entry> dist\` writes the App; change it if the assets directory is elsewhere
-const html = "dist/client/admin/mcp-app.html";
+// \`mantle bundle <entry> dist\` writes the App here; MANTLE_MCP_APP_HTML names another file
+const html = process.env.MANTLE_MCP_APP_HTML ?? "dist/client/admin/mcp-app.html";
 
 test("the Admin MCP App works in an MCP host", { timeout: 300_000 }, async () => {
   if (!existsSync(html)) throw new Error(\`\${html} is missing: run \\\`npm run build\\\` first.\`);
@@ -63,7 +63,7 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
   const toolOf = (name: string) => hasTool("view", name) || null;
   const rows = views.map(([name], n) => `import type { WireRow as View${n}Wire } from "./views/${encodeURIComponent(name)}.js";`);
   const sql = operations.some(([, p]) => "sql" in p.handler);
-  return { "admin-mcp-app.test.mjs": MCP_APP_TEST, "admin-client.ts": [
+  return { "admin-mcp-app.check.mjs": MCP_APP_TEST, "admin-client.ts": [
     "// Browser only: import this from src/admin.tsx, never from the Worker (`mantle bundle` refuses it there).",
     'import type { AdminMeta } from "@aotter/mantle-admin/app";',
     'import { createAdminHooks } from "@aotter/mantle-admin/hooks";',

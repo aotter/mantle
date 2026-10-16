@@ -1,5 +1,6 @@
 import * as React from "react";
 import type { AdminHost, AdminSurface } from "./hooks";
+import { toolName as tool } from "../../../src/app/tool-name";
 
 /** What a slot's component receives: the default's props, and `renderDefault` to render what it replaces. */
 export type SlotProps<P> = P & {
@@ -59,7 +60,7 @@ export function Empty(): null {
 }
 
 /** The admin MCP tool of a View or Procedure: its name lowercased, kebab to snake (`mcpToolNameSegment` in @aotter/mantle's compiler). */
-export const toolName = (name: string): string => name.toLowerCase().replace(/-/g, "_");
+export const toolName: (name: string) => string = tool;
 
 /**
  * The slots for one column of a View an MCP App shows. The App knows a View by its tool, and a slot names the View, so the

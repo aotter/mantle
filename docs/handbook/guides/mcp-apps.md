@@ -128,7 +128,7 @@ one must work in both places, and the build and the types hold you to it.
 | --- | --- | --- |
 | `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `list.actions:<schema>` | yes | never: the App has no shell, sidebar or router |
 | `cell:view:<view>.<column>` | yes | yes: each column of the rows the host's View tool returned |
-| `cell:<schema>.<field>`, `input:<schema>.<field>`, `record.aside:<schema>`, `record.actions:<schema>`, `RecordView` | yes | typed `both`, so they receive `surface` and must work in a host; the App does not show a record yet, so they run in the browser today |
+| `cell:<schema>.<field>`, `input:<schema>.<field>`, `record.aside:<schema>`, `record.actions:<schema>`, `RecordView` | yes | typed `both`, so they receive `surface` and must work in a host; the App shows no record and its row-action form is not the record form, so they run in the browser only (`mantle bundle` warns) |
 | `pages[]`, `nav`, `home`, nav badges | yes | only a page that declares `mcp` (below) |
 
 A component for a `both` slot gets `surface` (`"browser"` or `"mcp-app"`). The
@@ -256,25 +256,37 @@ App's size.
 ### Run the compatibility test
 
 The build check reads text; this test runs the App. `mantle generate --admin` writes
-`generated/admin-mcp-app.test.mjs`, and `npm test` (`node --test
-generated/admin-mcp-app.test.mjs`) runs it after `npm run build`. It loads the built
-`mcp-app.html` in a host page built on the official `AppBridge`, inside a sandboxed
-iframe under the spec's default CSP, and for each View whose `cell:view:` slot you
-override and each `pages[].mcp` page (or any View, when you customised none) sends sample
-rows made from the catalogue's column schemas, in a light and a dark host. It fails on:
+`generated/admin-mcp-app.check.mjs`. After `npm run build`, run
+`node --test generated/admin-mcp-app.check.mjs` (the examples name it `npm test`;
+`MANTLE_MCP_APP_HTML` points it at another built file). It loads the built
+`mcp-app.html` in a host page built on the official `AppBridge`. The App is in a
+sandboxed iframe from its own origin, under the spec's default CSP, so it cannot
+reach the host page. For each View whose `cell:view:` slot you override and each
+`pages[].mcp` page it sends sample rows made from the catalogue's column schemas
+(three full rows and one with every nullable column null), in a light and a dark
+host. When the file records nothing customised it runs the first View of the
+catalogue; when the file has no record at all, every View. It fails on:
 
 - a network request that leaves the frame (the failure names the URL; origins you
-  declared in `mcp.csp` are answered empty, since the test has no network);
+  declared in `mcp.csp`, for the kind of use they were declared for, are answered
+  empty, since the test has no network);
 - a console error, including a CSP refusal, or an uncaught exception;
-- an App that never reports a size.
+- an App that does not show the result (it still waits, or is empty), that does not
+  take the host's dark theme, or that never reports a size.
+
+After the result it waits until the App has made no request and logged nothing for
+400 ms, at most 5 s. The test checks the slots a host renders today: `cell:view:` and
+pages. `input:`, `record.aside:`, `record.actions:`, `cell:<schema>.<field>` and
+`RecordView` are typed `both` but the App shows no record, and its row-action form is
+a Procedure's, not the record form `input:` replaces, so they run in the browser Admin
+only and `mantle bundle` warns when you override one.
 
 It needs `playwright-core` (`npm install -D playwright-core`) and Chrome or Chromium:
 run `npx playwright-core install chromium`, or set `MANTLE_TEST_CHROMIUM` to a Chrome or
-Chromium executable. With no browser the test fails, saying so; it never skips. It
-checks the slots a host renders today (`cell:view:` and pages); the other `both` slots
-run in the browser Admin until the App shows records. Import `checkMcpApp` from
-`@aotter/mantle-admin/testing` to call it yourself. For a real host (Claude's custom
-connector, ChatGPT), follow the manual checks under [The Admin App in a host](#the-admin-app-in-a-host).
+Chromium executable. With no browser the test fails, saying so; it never skips. Import
+`checkMcpApp` from `@aotter/mantle-admin/testing` to call it yourself. For a real host
+(Claude's custom connector, ChatGPT), follow the manual checks under
+[The Admin App in a host](#the-admin-app-in-a-host).
 
 ### Hosts without MCP Apps
 
