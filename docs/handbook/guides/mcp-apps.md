@@ -253,6 +253,29 @@ must avoid direct `/admin/api` fetches and cookies too. Read data through the
 hooks, which use the browser's route in the browser and the host's tools in a host. The build prints the
 App's size.
 
+### Run the compatibility test
+
+The build check reads text; this test runs the App. `mantle generate --admin` writes
+`generated/admin-mcp-app.test.mjs`, and `npm test` (`node --test
+generated/admin-mcp-app.test.mjs`) runs it after `npm run build`. It loads the built
+`mcp-app.html` in a host page built on the official `AppBridge`, inside a sandboxed
+iframe under the spec's default CSP, and for each View whose `cell:view:` slot you
+override and each `pages[].mcp` page (or any View, when you customised none) sends sample
+rows made from the catalogue's column schemas, in a light and a dark host. It fails on:
+
+- a network request that leaves the frame (the failure names the URL; origins you
+  declared in `mcp.csp` are answered empty, since the test has no network);
+- a console error, including a CSP refusal, or an uncaught exception;
+- an App that never reports a size.
+
+It needs `playwright-core` (`npm install -D playwright-core`) and Chrome or Chromium:
+run `npx playwright-core install chromium`, or set `MANTLE_TEST_CHROMIUM` to a Chrome or
+Chromium executable. With no browser the test fails, saying so; it never skips. It
+checks the slots a host renders today (`cell:view:` and pages); the other `both` slots
+run in the browser Admin until the App shows records. Import `checkMcpApp` from
+`@aotter/mantle-admin/testing` to call it yourself. For a real host (Claude's custom
+connector, ChatGPT), follow the manual checks under [The Admin App in a host](#the-admin-app-in-a-host).
+
 ### Hosts without MCP Apps
 
 A host that does not advertise the MCP Apps extension gets no `ui://` resource
