@@ -27,6 +27,9 @@ imports/first requests perform no DDL or schema checks. Keep auth dynamic, produ
 secrets in the host store, trusted HTTPS origin and verified bootstrap rule,
 production email and selected media wiring. Configure Admin ASSETS worker-first
 as in [Workers assets and secrets](../../handbook/cloudflare/service-entry.md#workers-assets-and-secrets). Hyperdrive caching stays off; PG settings are deployment-owned.
+Keep the Workers [public-fetch flags](../../handbook/cloudflare/deploy-and-operate.md#public-fetch-routing),
+including environment overrides; verify deployed MCP with a real OAuth bearer
+(`initialize` and `tools/list`), not only a browser session cookie.
 Bun uses native Database/SQL, an app server and scheduler. Verify admin sign-in
 (role admin), denied access, public reads, a persisted write, MCP and selected UI.
 Report artifact/resources/checks and keep rollback artifacts.

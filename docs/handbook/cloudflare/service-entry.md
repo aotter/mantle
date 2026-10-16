@@ -107,7 +107,8 @@ its collection parameter selects only a generated table and visibility policy.
 ## Workers assets and secrets
 
 `mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --admin`
-updates the split-build Wrangler keys (`main` and `base_dir` under `dist/worker`)
+updates the split-build Wrangler keys (`main` and `base_dir` under `dist/worker`),
+ensures `nodejs_compat` and defaults to `global_fetch_strictly_public` ([public fetch routing](deploy-and-operate.md#public-fetch-routing))
 and, with `--admin`, `assets.directory`: `mantle bundle` builds Admin into
 `dist/client/admin`, served at `/admin`. Configure the rest explicitly; JSONC
 comments and unrelated settings survive regeneration:

@@ -120,7 +120,7 @@ workflow. Local project creation alone is not deployment authorization.
 Preserve the user's manifests, `src/` files, identity, package versions and
 provider resources. The app writes its entry (`src/worker.ts` by default;
 `--entry` selects another). Workers generation creates or updates Wrangler's
-split-build settings. Run the same generation command (target, output directory,
+split-build settings and public-fetch compatibility flags. Run the same generation command (target, output directory,
 manifests and options) with `--check`, and the project's own tests,
 before and after a change.
 
