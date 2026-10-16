@@ -40,7 +40,7 @@ async function adminCore(entry: string | undefined) {
   const [{ normalizePath }, { default: react }, { default: tailwindcss }] = await Promise.all([import("vite"), import("@vitejs/plugin-react"), import("@tailwindcss/vite")]);
   const app = resolve(entry ?? resolve(dist, "admin-app/default-entry.js"));
   // where the application's code finds React, and where Vite bundles it from (Admin's own location)
-  for (const from of new Set([entry ? dirname(app) : process.cwd(), page])) assertReactMatch(from);
+  for (const from of new Set([...(entry ? [dirname(app)] : []), page])) assertReactMatch(from);
   const kit = resolve(dirname(createRequire(import.meta.url).resolve("@aotter/mantle-ui/package.json")), "dist");
   // Tailwind generates the classes Admin, the kit and the application's own Admin code use.
   const sources = [resolve(dist, "admin-app"), kit, ...(entry ? [dirname(app)] : [])].map(source => `@source ${JSON.stringify(source)};`).join("\n");
