@@ -11,8 +11,8 @@ const closed = (typeOf: TypeOf, schema: JsonSchema | undefined): string =>
 /**
  * Types are what the routes take and return, not the Store's rows: an entry's `data` keeps declared field names, an input is
  * what the route validates, a View row is its wire row under the names the browser route gives its columns (an MCP App's
- * `tools/call` returns the SQL names; the hooks rename them with `rowNames`), with the name of its admin MCP tool or null, which
- * types `pages[].mcp.renders` (types only: no tool name ships). The file imports `generated/*` as types only, so nothing of the
+ * `tools/call` returns the SQL names; the hooks rename them with `rowNames`), with `true` when it is an admin MCP tool, else null, which
+ * types `pages[].mcp.renders` (types only; nothing ships). The file imports `generated/*` as types only, so nothing of the
  * Worker enters the browser bundle, and it is refused in the Worker's startup graph (`mantle bundle`).
  */
 export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<string, string> {
@@ -39,8 +39,8 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
   const used = [...new Set([...schemas.flatMap(s => placed(s.uiSchema)), ...views.flatMap(([, v]) => placed(v.uiSchema))])].sort();
   const custom = used.filter(group => !BUILT_IN_NAV_GROUPS.has(group));
   const union = (names: readonly string[]) => names.length ? names.map(name => q(name)).join(" | ") : "never";
-  // the MCP tool an admin View is, which a page declared for an MCP App (`pages[].mcp.renders`) must have
-  const toolOf = (name: string) => tools.find(t => t.kind === "view" && t.source === name)?.name ?? null;
+  // whether an admin View is an MCP tool, which a page declared for an MCP App (`pages[].mcp.renders`) must have
+  const toolOf = (name: string) => hasTool("view", name) || null;
   const rows = views.map(([name], n) => `import type { WireRow as View${n}Wire } from "./views/${encodeURIComponent(name)}.js";`);
   const sql = operations.some(([, p]) => "sql" in p.handler);
   return { "admin-client.ts": [

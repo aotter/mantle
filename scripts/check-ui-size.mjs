@@ -71,7 +71,6 @@ try {
   if (!startupOnly) {
     // the App `mantle bundle` builds from the same (built-in) entry, beside the page
     measured["admin:mcp-html"] = readFileSync(join(admin, "mcp-app.html")).length;
-    if (readdirSync(join(root, "packages/mantle-admin/dist")).includes("mcp-app")) failures.push("Admin publishes a prebuilt MCP App");
   }
   }
   console.log(JSON.stringify(measured, null, 2));

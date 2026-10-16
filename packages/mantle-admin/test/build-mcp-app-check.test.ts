@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { checkMcpApp, declared, hitsOf } from "../src/build/mcp-check.js";
+import { checkMcpApp, cspProblems, declared, hitsOf } from "../src/build/mcp-check.js";
 
 const pkg = resolve(import.meta.dirname, "..");
 const temp = mkdtempSync(join(tmpdir(), "mantle-mcp-check-"));
@@ -24,6 +24,41 @@ function app(name: string, cell: string, options = ""): { entry: string; out: st
 const attempt = async ({ entry, out }: { entry: string; out: string }) => buildAdmin({ entry, outDir: out }).then(() => undefined, (error: Error) => error.message);
 
 describe("the checks on the built MCP App", () => {
+  it("builds an app whose Sidebar override uses the kit's SidebarProvider, which writes the sidebar's cookie", async () => {
+    const kit = resolve(pkg, "../mantle-ui/dist/kit/index.js");
+    const fixture = app("sidebar", "export const Cell = () => <b>x</b>;");
+    writeFileSync(join(fixture.entry, "../side.tsx"), `import { SidebarProvider } from ${JSON.stringify(kit)};\nexport const Side = () => <SidebarProvider>side</SidebarProvider>;`);
+    writeFileSync(fixture.entry, readFileSync(fixture.entry, "utf8").replace("import { Cell }", 'import { Side } from "./side";\nimport { Cell }').replace("components: {", "components: { Sidebar: Side,"));
+    expect(await attempt(fixture)).toBeUndefined();
+    expect(readFileSync(join(fixture.out, "mcp-app.html"), "utf8")).toContain("document.cookie");
+  }, 120_000);
+
+  it("fails on a remote fetch the CSP lists only as a resource, and passes when connectDomains has it", async () => {
+    const cell = 'export const Cell = () => { void fetch("https://api.example.test/rows"); return <b>x</b>; };';
+    const message = await attempt(app("connect", cell, ', mcp: { csp: { resourceDomains: ["https://api.example.test"] } }'));
+    expect(message).toContain("https://api.example.test/rows");
+    expect(message).toContain("connectDomains");
+    expect(await attempt(app("connect-declared", cell, ', mcp: { csp: { connectDomains: ["https://api.example.test"] } }'))).toBeUndefined();
+  }, 120_000);
+
+  it("does not read an unreadable entry's csp silently: it warns, and fails when the entry declares one", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const plain = app("unreadable", "export const Cell = () => <b>x</b>;");
+      writeFileSync(plain.entry, "const where = window.location.href;\n" + readFileSync(plain.entry, "utf8").replace("components:", "note: where, components:"));
+      expect(await attempt(plain)).toBeUndefined();
+      expect(warn.mock.calls.map(call => String(call[0])).join("\n")).toMatch(/could not be run in Node to read mcp\.csp/);
+      const declares = app("unreadable-csp", "export const Cell = () => <b>x</b>;", ', mcp: { csp: { resourceDomains: ["https://cdn.example.test"] } }');
+      writeFileSync(declares.entry, "const where = window.location.href;\n" + readFileSync(declares.entry, "utf8"));
+      expect(await attempt(declares)).toMatch(/declares a csp, but it could not be run in Node/);
+    } finally { warn.mockRestore(); }
+  }, 120_000);
+
+  it("refuses a csp entry that is not an origin", async () => {
+    const message = await attempt(app("bad-csp", "export const Cell = () => <b>x</b>;", ', mcp: { csp: { resourceDomains: ["*"] } }'));
+    expect(message).toContain('mcp.csp.resourceDomains: "*" is not an origin');
+  }, 120_000);
+
   it("fails a build whose override reads Admin's browser route, naming the module and the slot", async () => {
     const fixture = app("api", 'export const Cell = () => { void fetch("/admin/api/views/pending"); return <b>x</b>; };');
     const message = await attempt(fixture);
@@ -69,23 +104,43 @@ describe("the checks on the built MCP App", () => {
 });
 
 describe("checkMcpApp", () => {
-  it("finds each rule, in HTML, JSX props, objects and CSS", () => {
-    const rules = (code: string) => hitsOf(code).map(hit => hit.rule === "remote" ? hit.url : hit.rule);
-    expect(rules('fetch("/admin/api/me")')).toEqual(["api"]);
-    expect(rules("document.cookie = 'a=b'; document['cookie']")).toEqual(["cookie"]);
-    expect(rules("window.open(url)")).toEqual(["open"]);
-    expect(rules('<a target="_blank">x</a>; {target:"_blank"}')).toEqual(["blank"]);
-    expect(rules('<img src="https://a.test/x.png"><link href="//b.test/s.css"> h("img",{src:`https://c.test/y.png`})')).toEqual(["https://a.test/x.png", "//b.test/s.css", "https://c.test/y.png"]);
-    expect(rules("a{background:url(https://d.test/z.png)} b{background:url('//e.test/z.png')} @import url(https://f.test/f.css); @import '//g.test/g.css';"))
-      .toEqual(["https://d.test/z.png", "//e.test/z.png", "https://f.test/f.css", "//g.test/g.css"]);
-    // a namespace or a documentation link is not a resource; neither is a data: URL or a local path
-    expect(rules('h("svg",{xmlns:"http://www.w3.org/2000/svg"}); "https://react.dev/errors/"; <img src="data:image/png;base64,AA"><a href="/admin/c/x">')).toEqual([]);
+  const uses = (code: string) => hitsOf(code).map(hit => hit.rule === "remote" ? `${hit.kind}:${hit.url}` : hit.rule).sort();
+
+  it("finds each rule, in HTML, JSX props, objects, scripts and CSS", () => {
+    expect(uses('fetch("/admin/api/me")')).toEqual(["api"]);
+    expect(uses("document.cookie = 'a=b'; document['cookie']")).toEqual(["cookie"]);
+    expect(uses("window.open(url)")).toEqual(["open"]);
+    expect(uses('<a target="_blank">x</a>; {target:"_blank"}')).toEqual(["blank"]);
+    expect(uses('<img src="https://a.test/x.png"><link rel="stylesheet" href="//b.test/s.css"> h("img",{src:`https://c.test/y.png`}) h("link",{rel:"icon",href:"https://d.test/i.png"})'))
+      .toEqual(["resource://b.test/s.css", "resource:https://a.test/x.png", "resource:https://c.test/y.png", "resource:https://d.test/i.png"]);
+    expect(uses("a{background:url(https://d.test/z.png)} b{background:url('//e.test/z.png')} @import url(https://f.test/f.css); @import '//g.test/g.css';"))
+      .toEqual(["resource://e.test/z.png", "resource://g.test/g.css", "resource:https://d.test/z.png", "resource:https://f.test/f.css"]);
+    // a link's href is navigation, not a load; a namespace or documentation link is not a resource; neither is data: or a local path
+    expect(uses('<a href="https://x.test/page">x</a> h("a",{href:"https://y.test"}) h("svg",{xmlns:"http://www.w3.org/2000/svg"}); "https://react.dev/errors/"; <img src="data:image/png;base64,AA"><a href="/admin/c/x">')).toEqual([]);
   });
 
-  it("declares origins by host, scheme, port and wildcard, across the typed lists", () => {
+  it("sorts each remote use to the CSP list it needs", () => {
+    expect(uses('<iframe src="https://f.test/x"></iframe>')).toEqual(["frame:https://f.test/x"]);
+    expect(uses('h("iframe",{title:"t",src:"https://f.test/x"})')).toEqual(["frame:https://f.test/x"]);
+    expect(uses('fetch("https://c.test/a"); new WebSocket("wss://s.test/ws"); new EventSource(`https://e.test/s`); import("https://m.test/m.js")'))
+      .toEqual(["connect:https://c.test/a", "connect:https://e.test/s", "connect:https://m.test/m.js", "connect:wss://s.test/ws"]);
+    expect(uses('<img srcset="https://a.test/1.png 1x, https://b.test/2.png 2x, /local.png 3x">')).toEqual(["resource:https://a.test/1.png", "resource:https://b.test/2.png"]);
+    expect(uses('a{background:image-set("https://i.test/1.png" 1x, "https://i.test/2.png" 2x)}')).toEqual(["resource:https://i.test/1.png", "resource:https://i.test/2.png"]);
+    expect(uses('el.setAttribute("src", "https://s.test/a.png"); el.setAttribute("href", "https://h.test/a.css"); el.setAttribute("title", "https://t.test")'))
+      .toEqual(["resource:https://h.test/a.css", "resource:https://s.test/a.png"]);
+    // a relative fetch or a computed one is not a remote literal
+    expect(uses('fetch("/api/x"); fetch(url)')).toEqual([]);
+  });
+
+  it("declares origins by scheme, host, port and wildcard, in the list the use needs", () => {
     expect(declared("https://cdn.test/a.png", { resourceDomains: ["https://cdn.test"] })).toBe(true);
-    expect(declared("//cdn.test/a.png", { resourceDomains: ["cdn.test"] })).toBe(true);
-    expect(declared("https://cdn.test/a.png", { connectDomains: ["https://cdn.test"] })).toBe(true);
+    expect(declared("//cdn.test/a.png", { resourceDomains: ["https://cdn.test"] })).toBe(true);
+    // the list matters: a resource origin does not allow a request, nor a frame
+    expect(declared("https://cdn.test/a", { resourceDomains: ["https://cdn.test"] }, "connect")).toBe(false);
+    expect(declared("https://cdn.test/a", { resourceDomains: ["https://cdn.test"] }, "frame")).toBe(false);
+    expect(declared("https://cdn.test/a", { connectDomains: ["https://cdn.test"] }, "connect")).toBe(true);
+    expect(declared("wss://s.test/ws", { connectDomains: ["wss://s.test"] }, "connect")).toBe(true);
+    expect(declared("https://f.test/x", { frameDomains: ["https://f.test"] }, "frame")).toBe(true);
     expect(declared("https://a.cdn.test/a.png", { resourceDomains: ["https://*.cdn.test"] })).toBe(true);
     expect(declared("https://cdn.test/a.png", { resourceDomains: ["https://*.cdn.test"] })).toBe(false);
     expect(declared("http://cdn.test/a.png", { resourceDomains: ["https://cdn.test"] })).toBe(false);
@@ -93,6 +148,11 @@ describe("checkMcpApp", () => {
     expect(declared("https://cdn.test:8443/a.png", { resourceDomains: ["https://cdn.test:8443"] })).toBe(true);
     expect(declared("https://evilcdn.test/a.png", { resourceDomains: ["https://*.cdn.test", "https://cdn.test"] })).toBe(false);
     expect(declared("https://cdn.test/a.png", undefined)).toBe(false);
+  });
+
+  it("validates the declared csp: origins only", () => {
+    expect(cspProblems({ resourceDomains: ["https://cdn.test", "https://*.cdn.test:8443"], connectDomains: ["wss://s.test"] })).toEqual([]);
+    expect(cspProblems({ resourceDomains: ["*", "https:", "https://cdn.test/path", "cdn.test"], frameDomains: ["https://*"] })).toHaveLength(5);
   });
 
   it("names the modules and slots of what it refuses, and warns only about the application's own code", () => {
@@ -105,5 +165,13 @@ describe("checkMcpApp", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain("in /app/src/cell.tsx (slot Home)");
     expect(warnings).toEqual(["/app/src/cell.tsx: window.open does nothing in a host's sandbox. Use <AdminLink> or useOpenLink()."]);
+  });
+
+  it("lets Mantle's own library write a cookie but not the application's code", () => {
+    const libraries = ["/lib/kit"];
+    expect(checkMcpApp("document.cookie = 'x'", undefined, [{ module: "/lib/kit/sidebar.js", hits: [{ rule: "cookie" }] }], { libraries }).errors).toEqual([]);
+    expect(checkMcpApp("document.cookie = 'x'", undefined, [{ module: "/lib/kit/sidebar.js", hits: [{ rule: "cookie" }] }, { module: "/app/src/c.tsx", hits: [{ rule: "cookie" }] }], { libraries }).errors).toHaveLength(1);
+    // a hit nothing names is the application's until shown otherwise
+    expect(checkMcpApp("document.cookie = 'x'", undefined, [], { libraries }).errors).toHaveLength(1);
   });
 });

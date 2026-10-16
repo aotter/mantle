@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { InlineConfig, Plugin, PluginOption } from "vite";
-import { checkMcpApp, GUIDE, hitsOf, type McpCsp, type Source } from "./mcp-check.js";
+import { checkMcpApp, cspProblems, GUIDE, hitsOf, type McpCsp, type Source } from "./mcp-check.js";
 import { PREVIEW_CSP } from "./preview-csp.js";
 
 const dist = resolve(import.meta.dirname, "..");
@@ -100,7 +100,14 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
   const [{ build, normalizePath }, { viteSingleFile }] = await Promise.all([import("vite"), import("vite-plugin-singlefile")]);
   const core = await adminCore(entry, true);
   const mount = resolve(dist, "admin-app/mcp-mount.js");
-  const { csp, sources: slots, problem } = await readDefinition(core, entry);
+  const { csp, sources: slots, problem } = await readDefinition(core);
+  if (problem) {
+    console.warn(`warning: Admin MCP App: ${entry ?? "the built-in entry"} ${problem}`);
+    // a declared CSP must not vanish because the entry could not be read
+    if (entry && /\bcsp\b/.test(readFileSync(entry, "utf8"))) throw new Error(`The Admin MCP App cannot be built: ${entry} declares a csp, but ${problem}\nSee ${GUIDE}.`);
+  }
+  const invalid = cspProblems(csp);
+  if (invalid.length) throw new Error(`The Admin MCP App cannot be built:\n${invalid.map(line => `  - ${line}`).join("\n")}\nSee ${GUIDE}.`);
   const sources: Source[] = [...slots];
   // each module the App is made of, as it is when bundled: the one that is named when the output breaks a rule
   const scan: Plugin = {
@@ -133,7 +140,7 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
   const html = String(asset.source);
   const { errors, warnings } = checkMcpApp(html, csp, sources, { libraries: [resolve(dist, "admin-app"), core.kit].map(normalizePath) });
   for (const warning of warnings) console.warn(`warning: Admin MCP App: ${warning}`);
-  if (errors.length) throw new Error(`The Admin MCP App would break in an MCP host:\n${errors.map(line => `  - ${line}`).join("\n")}${problem ? `\n(${problem})` : ""}\nSee ${GUIDE}.`);
+  if (errors.length) throw new Error(`The Admin MCP App would break in an MCP host:\n${errors.map(line => `  - ${line}`).join("\n")}\nSee ${GUIDE}.`);
   // the declared CSP rides in the file, so the server sends it with the HTML (`adminMcpApps`) and it is declared once
   const escape = (json: string) => json.replace(/[<'&]/g, character => "\\u" + character.charCodeAt(0).toString(16).padStart(4, "0"));
   const meta = csp ? "<meta name=\"mantle-mcp-csp\" content='" + escape(JSON.stringify(csp)) + "'>" : "";
@@ -146,7 +153,7 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
  * The entry is bundled for Node and imported, so an entry that cannot run there (it touches `window` on import) is read as
  * declaring nothing, and the build says so rather than failing it.
  */
-async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>, entry: string | undefined): Promise<{ csp?: McpCsp; sources: Source[]; problem?: string }> {
+async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>): Promise<{ csp?: McpCsp; sources: Source[]; problem?: string }> {
   try {
     const { build } = await import("vite");
     const built = await build({
@@ -167,7 +174,7 @@ async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>, entry
     });
     return { ...(admin.mcp?.csp ? { csp: admin.mcp.csp } : {}), sources };
   } catch (error) {
-    return { sources: [], problem: `${entry ?? "the built-in entry"} could not be run in Node to read mcp.csp, so none is assumed: ${error instanceof Error ? error.message : String(error)}` };
+    return { sources: [], problem: `it could not be run in Node to read mcp.csp, so none is assumed: ${error instanceof Error ? error.message : String(error)}` };
   }
 }
 

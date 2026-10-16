@@ -9,7 +9,7 @@ import type { BrandProps, CellProps, CollectionListProps, HeaderProps, HomeProps
  * generated types, so its names are any string and its shapes are open.
  */
 export interface AdminTypes {
-  readonly views: { readonly [name: string]: { readonly input: object; readonly row: object; /** The View's admin MCP tool, or null when it has none; absent for the built-in entry. */ readonly mcp?: string | null } };
+  readonly views: { readonly [name: string]: { readonly input: object; readonly row: object; /** `true` when the View is an admin MCP tool, null when it is not; absent for the built-in entry. */ readonly mcp?: true | null } };
   readonly collections: { readonly [name: string]: { readonly data: object } };
   readonly operations: { readonly [name: string]: { readonly input: object; readonly output: unknown } };
   /** The sidebar groups beyond Admin's own that the manifest places items in (`uiSchema.nav.group`), which `defineAdmin` must declare in `nav.groups`; any name when absent. */
@@ -51,7 +51,7 @@ type ColumnOf<T extends AdminTypes, K extends string> = K extends `${infer V}.${
 /** What a collection list passes as `row`: the columns it shows, `null` where empty. */
 type ListRow<D> = unknown extends D ? Readonly<Record<string, unknown>> : { readonly [P in keyof D]?: D[P] | null };
 /** The Views an MCP host can open: those with an admin MCP tool. Any View name for the open shape the built-in entry has. */
-type McpViews<T extends AdminTypes> = string extends Views<T> ? string : { [V in Views<T>]: T["views"][V] extends { readonly mcp: string } ? V : never }[Views<T>];
+type McpViews<T extends AdminTypes> = string extends Views<T> ? string : { [V in Views<T>]: T["views"][V] extends { readonly mcp: true } ? V : never }[Views<T>];
 type Of<K extends string, Prefix extends string> = K extends `${Prefix}${infer Rest}` ? Rest : never;
 
 /**

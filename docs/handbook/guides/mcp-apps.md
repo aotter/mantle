@@ -40,10 +40,13 @@ describe still shows its rows, with no action to open.
 `adminMcpApps({ catalogue })` needs no `html`: its default loader reads the file
 `mantle bundle` built, `/admin/mcp-app.html`, through `env.ASSETS.fetch` on a
 Worker, and from `dist/client/admin/mcp-app.html` on Bun (`file` names another
-path). Pass `html` (a string or a loader) to serve the App from elsewhere. The
+path). The Worker's assets binding must be named `ASSETS` (otherwise pass `html`);
+the loader follows the one same-origin redirect the default `html_handling` answers a
+`.html` path with. Pass `html` (a string or a loader) to serve the App from elsewhere. The
 file carries the `csp` your `defineAdmin({ mcp: { csp } })` declared; a loader may return
 `{ html, csp }` instead of a string, and the handler sends that `csp` as `_meta.ui.csp` on
-`resources/read`.
+`resources/read`; it replaces the resource's own `csp` rather than merging with it. A loader
+that throws answers the host with a redacted error and logs the message on the server.
 
 For static tool tables, construction checks contributors. Request-bound tool tables check on the first matching request and recheck changed tool names. Duplicate
 resource URIs or names, conflicting tool ownership, and absent or foreign-endpoint
@@ -145,10 +148,13 @@ types decide: a `both` slot's props carry `surface`, a browser slot's do not.
    `<AdminLink>` shows it as text.
 3. **No assumed width.** The host sets the frame; a narrow one and a full screen
    must both work.
-4. **Remote assets only from origins you declare.** An image, font, stylesheet or
-   script from another origin loads only if `defineAdmin({ mcp: { csp } })` names
-   it: `{ resourceDomains: ["https://cdn.example.com"] }` (also `connectDomains`,
-   `frameDomains`, `baseUriDomains`). You declare it once: the build writes it into
+4. **Remote assets only from origins you declare.** Something from another origin
+   loads only if `defineAdmin({ mcp: { csp } })` names it in the list its use needs:
+   `resourceDomains` for an image, font, stylesheet or script,
+   `connectDomains` for `fetch`, `WebSocket`, `EventSource` and `import()`,
+   `frameDomains` for an iframe (`baseUriDomains` is for `<base>`). Each entry is an
+   origin, `https://host[:port]` or `https://*.host`; the build refuses `*`, a bare
+   scheme or a path. You declare it once: the build writes it into
    `mcp-app.html` and `adminMcpApps` sends it as `_meta.ui.csp` on `resources/read`
    (not on `resources/list`, which names no HTML). Prefer assets bundled into your entry: they are inlined.
 5. **Branch on the surface if you must, but both branches render.**
@@ -213,7 +219,7 @@ of the default rows table, in the host's frame and theme. The page reads its own
 through the hooks (`useView("pending-requests", input)` calls the View's tool through
 the host), so use only `both` hooks and components, and render something sensible
 when a hook reads `unavailable`.
-The generated `admin-client.ts` records each View's tool name or `null`; `tsc`
+The generated `admin-client.ts` records, for each View, `true` when it is an admin MCP tool and `null` when not; `tsc`
 refuses a `renders` that is misspelt, names a collection, or names a View with no
 admin MCP tool. When several pages name one View, the first is shown.
 
@@ -225,8 +231,20 @@ file:
 
 - contains `/admin/api`, which is the browser's route and has no session in a host;
 - reads `document.cookie`;
-- loads a `src`, `href`, `url()` or `@import` from a remote origin (`http(s):` or
-  `//`) that `defineAdmin({ mcp: { csp } })` does not declare.
+- uses a remote origin (`http(s):` or `//`; `ws(s):` for sockets) that
+  `defineAdmin({ mcp: { csp } })` does not declare in the list that use needs.
+
+The check is best effort: it reads the built text, so it catches only what it can
+see as a string. It catches `src` and `poster` attributes and props, `<iframe src>`
+(against `frameDomains`), every URL of a `srcset` and of a CSS `image-set()`, `url()`
+and `@import`, a `<link href>`, `setAttribute("src" | "href", "https://…")`, and a
+remote string literal given to `fetch()`, `new WebSocket()`, `new EventSource()` or
+`import()` (against `connectDomains`). It does not treat `href` on a link
+(`<a>`, `<AdminLink>`) as a load: that is navigation, which opens through the host.
+A URL put together at run time is not seen; the generated compatibility test, which
+loads the App under the spec's default CSP and fails on any network request, is
+the backstop at run time. `document.cookie` in Mantle's own library code (the kit's
+sidebar remembers its state in one) does not fail the build; in yours it does.
 
 `window.open` and `target="_blank"` in your own code only warn. The whole Admin
 entry graph is checked, not only the slots a host renders: the file holds every
@@ -247,8 +265,8 @@ application customises changes what a tool returns.
 Earlier versions shipped the App prebuilt as `@aotter/mantle-admin/mcp-app`
 (`mantleAppHtml`), which ignored your Admin entry. That export is gone. Remove
 the import and the `html:` option from `adminMcpApps({ catalogue })`, run
-`mantle generate` again (the generated `admin-client.ts` now records each View's
-MCP tool) and `mantle bundle`; the App is in `<assets>/admin/mcp-app.html`, and
+`mantle generate` again (the generated `admin-client.ts` now records which Views are admin
+MCP tools) and `mantle bundle`; the App is in `<assets>/admin/mcp-app.html`, and
 your entry's CSS, components and pages are now in it. The Worker's assets
 binding must serve `/admin/mcp-app.html` (it does for the Admin build's output
 directory); on Bun, `dist/client/admin/mcp-app.html` must exist at run time.

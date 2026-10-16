@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { defineAdmin, type AdminMeta } from "../src/app/define-admin";
 
-/** What `generated/admin-client.ts` records for each View: its row and the admin MCP tool it is (null when it has none). */
+/** What `generated/admin-client.ts` records for each View: its row and whether it is an admin MCP tool (true or null). */
 interface Types {
   readonly views: {
-    readonly "pending-requests": { readonly input: object; readonly row: { readonly id: string }; readonly mcp: "pending_requests" };
+    readonly "pending-requests": { readonly input: object; readonly row: { readonly id: string }; readonly mcp: true };
     readonly "internal-audit": { readonly input: object; readonly row: { readonly id: string }; readonly mcp: null };
   };
   readonly collections: { readonly requests: { readonly data: { readonly title: string } } };
