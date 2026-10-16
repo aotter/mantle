@@ -10,7 +10,8 @@ const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, "packag
 
 /**
  * `@aotter/mantle-admin/app`: Admin's source as an ES library for an application's own Vite build; packages stay
- * imports. `mount` and `default-entry` are internal entries of the page `@aotter/mantle-admin/build` builds.
+ * imports. `mount`, `mcp-mount`, `mcp-app` and `default-entry` are internal entries of the page and the MCP App
+ * `@aotter/mantle-admin/build` builds; `mcp-app` is `index` without `<MantleAdmin>`, for the App's bundle.
  */
 export default defineConfig({
   define: { __MANTLE_VERSION__: JSON.stringify(version) },
@@ -21,7 +22,7 @@ export default defineConfig({
     emptyOutDir: true,
     copyPublicDir: false,
     lib: {
-      entry: { index: resolve(admin, "app/index.ts"), hooks: resolve(admin, "app/hooks.ts"), mount: resolve(admin, "app/mount.tsx"), "default-entry": resolve(admin, "default-entry.tsx") },
+      entry: { index: resolve(admin, "app/index.ts"), hooks: resolve(admin, "app/hooks.ts"), mount: resolve(admin, "app/mount.tsx"), "mcp-mount": resolve(admin, "mcp-app/mount.tsx"), "mcp-app": resolve(admin, "app/mcp-index.ts"), "default-entry": resolve(admin, "default-entry.tsx") },
       formats: ["es"],
       fileName: (_format, name) => `${name}.js`,
     },
@@ -39,7 +40,7 @@ function pageTemplate(): Plugin {
     closeBundle() {
       const page = resolve(dist, "admin-build"), from = resolve(import.meta.dirname, "admin");
       mkdirSync(page, { recursive: true });
-      for (const file of ["index.html", "main.js"]) cpSync(resolve(from, file), resolve(page, file));
+      for (const file of ["index.html", "main.js", "mcp-app.html", "mcp-main.js", "mcp-styles.css"]) cpSync(resolve(from, file), resolve(page, file));
       cpSync(resolve(from, "public"), resolve(page, "public"), { recursive: true });
       const shadcn = '@import "shadcn/tailwind.css";';
       const styles = readFileSync(resolve(from, "styles.css"), "utf8");

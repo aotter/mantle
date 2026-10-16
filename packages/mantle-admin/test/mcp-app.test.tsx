@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { MantleApp, appValue, pagesReducer, type Pages } from "../src/mcp-app/app.js";
+import { MantleApp, appValue, pagesReducer, type Pages } from "../admin/src/mcp-app/app";
 import type { HostApi } from "../src/app/postmessage.js";
 import { adminMcpApps } from "../src/server/mcp.js";
 import { defineAdmin } from "../admin/src/app/define-admin.js";
@@ -92,6 +92,17 @@ describe("MantleApp", () => {
     // only the column it names
     expect(html).toContain("1,234.56");
     expect(html).not.toContain("<mark data-surface=\"mcp-app\" data-row=\"r1\">1,234");
+  });
+
+  it("shows a page declared for the host's tool instead of that View's rows, and the rows of any other tool", () => {
+    const pages = { pending: <p>queue-page</p> };
+    const shown = render({ pages });
+    expect(shown).toContain("queue-page");
+    expect(shown).not.toContain("Laptops");
+    expect(render({ pages, result: { ...viewResult, _meta: { [APP_TOOL_META_KEY]: "other" } } })).toContain("Laptops");
+    // a failed call still says so; the page never hides a refusal
+    const failed: ToolResult = { isError: true, content: [{ type: "text", text: JSON.stringify({ diagnostics: [{ code: "FORBIDDEN", message: "Not allowed." }] }) }] };
+    expect(render({ pages, result: { ...failed, _meta: { [APP_TOOL_META_KEY]: "pending" } } })).toContain("Not allowed.");
   });
 
   it("speaks the host's locale, in its own strings and in the plan's titles", () => {

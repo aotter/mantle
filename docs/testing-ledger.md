@@ -35,8 +35,10 @@ Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty va
 | `packages/mantle-admin/admin/test/view-params.test.ts` | Merged into `collection-summary.test.ts`: URL parameters retain declared scalar/null types. |
 | `packages/mantle-admin/test/admin-preview.test.ts` | Preview asset selection and bridge admission. |
 | `packages/mantle-admin/test/business-rules-sql.test.ts` | SQL projection resolves declared names, exact thresholds and handoff predicates without invented semantics. |
-| `packages/mantle-admin/test/mcp-app-browser.test.ts` | Real browser App bridge pins parent/origin and rejects reverse routing; cancelled writes stay uncertain. |
-| `packages/mantle-admin/test/mcp-app.test.tsx` | App catalogue/row/action parsing, controller outcome mapping and localized rendered rows/failures. |
+| `packages/mantle-admin/test/build-mcp-app-check.test.ts` | `buildAdmin` refuses an App that reads `/admin/api` or `document.cookie` or loads an undeclared remote origin, naming module and slot; `window.open` warns; the CSP origin matcher. |
+| `packages/mantle-admin/test/mcp-app-browser.test.ts` | Real browser: the App `buildAdmin` builds from an application entry loads in the official AppBridge with its override, CSS and `pages[].mcp` page; the bridge pins parent/origin and rejects reverse routing; cancelled writes stay uncertain. |
+| `packages/mantle-admin/test/mcp-app-theme.test.ts` | The documented host-variable mapping is the App stylesheet's; brand colours never read a host variable. |
+| `packages/mantle-admin/test/mcp-app.test.tsx` | App catalogue/row/action parsing, controller outcome mapping, localized rendered rows/failures and a page declared for a View's tool. |
 | `packages/mantle-admin/test/postmessage.test.ts` | Supported handshake establishes origin; unsupported versions cannot; teardown disconnects. |
 | `packages/mantle-admin/tests/native/authorize-bypass.test.ts` | WebMCP authorizes its operation; a write grant alone cannot read the resulting entry. |
 | `packages/mantle-admin/tests/native/d1.test.ts` | Shared Admin native scope/OCC/transition/paging oracle executes on actual local storage. |
@@ -46,7 +48,8 @@ Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty va
 | `packages/mantle-admin/tests/native/helpers.test.ts` | Tuple cursors/bind positions/caps, NUL JSON keys, bucket overflow and scoped batch filter intersection. |
 | `packages/mantle-admin/tests/native/server-native.test.ts` | Shared Admin native oracle on PostgreSQL adapters, including committed writes with lost replies. |
 | `packages/mantle-admin/tests/native/server.test.ts` | Admin session/origin/body limits before DB, absent `/x/*` extension routes, scoped operations/preview/metadata and authorize on every route. |
-| `packages/mantle-admin/tests/native/shell.test.ts` | Shell anti-framing/cache/nosniff headers and path/traversal/missing-file confinement. |
+| `packages/mantle-admin/tests/native/mcp-app-loader.test.ts` | The default Admin App loader reads `/admin/mcp-app.html` through `env.ASSETS` or a Bun file; `html` overrides keep working. |
+| `packages/mantle-admin/tests/native/shell.test.ts` | Shell anti-framing/cache/nosniff headers, path/traversal/missing-file confinement, and `mcp-app.html` as a file (never the client-route fallback). |
 | `packages/mantle-ui/test/components.test.tsx` | Rendered interaction state/actions, diagnostics, diffs, host labels and uncertainty acknowledgement. |
 | `packages/mantle-ui/test/controller.test.ts` | Pinned row/version review, conflict/uncertain outcomes, no retries, cancellation, immutable state and input rebasing. |
 | `packages/mantle-ui/test/fields.test.tsx` | Accessible declared fields, typed options/nulls, host rendering, localization/fallback and native value presentation. |

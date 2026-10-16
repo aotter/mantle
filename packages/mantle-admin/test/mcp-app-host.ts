@@ -36,4 +36,4 @@ bridge.oncalltool = async (params, extra) => {
 };
 await bridge.connect(new PostMessageTransport(iframe.contentWindow!, iframe.contentWindow!));
 Object.assign(window, { host: { bridge, calls, aborts, sizes, errors, links, messages, contexts, modes, get ready() { return ready; } } });
-iframe.src = location.search && !readOnly ? "/test/mcp-app-probe.html" : "/src/mcp-app/interaction.html";
+iframe.src = location.search && !readOnly ? "/test/mcp-app-probe.html" : "/mcp-app.html";

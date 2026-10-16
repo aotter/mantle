@@ -20,8 +20,9 @@ export async function adminShell(request: Request, assets: (path: string) => Res
         return notFound();
     const fetchAsset = async (path: string) => { const response = await assets(path); return response.status === 404 ? null : response; };
     const file = rel.split("/").pop()!.includes(".") ? await fetchAsset(rel) : null;
-    // an unknown path is a client route (`/admin/members/a.b@x.test` too), which the shell answers
-    const response = file ?? (rel.startsWith("assets/") ? null : await fetchAsset("index.html"));
+    // an unknown path is a client route (`/admin/members/a.b@x.test` too), which the shell answers; the MCP App is a file the
+    // server reads for a host (`adminMcpApps`), never a route: served when built, with the shell's anti-framing, else missing
+    const response = file ?? (rel.startsWith("assets/") || rel === "mcp-app.html" ? null : await fetchAsset("index.html"));
     if (!response)
         return notFound();
     const headers = new Headers(response.headers);

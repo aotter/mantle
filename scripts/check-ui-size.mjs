@@ -30,8 +30,8 @@ try {
         unpacked += size;
         const path = header.toString("utf8", 0, 100).replace(/\0.*$/s, "");
         if (path.endsWith(".map")) failures.push(`${name} publishes source map ${path}`);
-        // Admin is built by the application (`mantle bundle`); a prebuilt SPA must not come back
-        if (name === "mantle-admin" && /^package\/dist\/admin\//.test(path)) failures.push(`Admin publishes a prebuilt SPA file ${path}`);
+        // Admin and its MCP App are built by the application (`mantle bundle`); a prebuilt one must not come back
+        if (name === "mantle-admin" && /^package\/dist\/(?:admin|mcp-app)\//.test(path)) failures.push(`Admin publishes a prebuilt SPA or MCP App file ${path}`);
         if (name === "mantle-ui" && /\/dist\/(?:admin|mcp-app|admin-preview|app)\//.test(path)) failures.push(`pure UI publishes ${path}`);
       }
       offset += 512 + Math.ceil(size / 512) * 512;
@@ -69,9 +69,9 @@ try {
   // Count the whole static entry graph so a facade cannot conceal startup bytes.
   measured["admin:entry-gzip"] = startup(resolve(admin, entry));
   if (!startupOnly) {
-    const app = await import(join(root, "packages/mantle-admin/dist/mcp-app/index.js"));
-    measured["admin:mcp-html"] = Buffer.byteLength(app.mantleAppHtml);
-    if (readdirSync(join(root, "packages/mantle-admin/dist/mcp-app")).some(file => file.endsWith(".html"))) failures.push("MCP App HTML is shipped twice");
+    // the App `mantle bundle` builds from the same (built-in) entry, beside the page
+    measured["admin:mcp-html"] = readFileSync(join(admin, "mcp-app.html")).length;
+    if (readdirSync(join(root, "packages/mantle-admin/dist")).includes("mcp-app")) failures.push("Admin publishes a prebuilt MCP App");
   }
   }
   console.log(JSON.stringify(measured, null, 2));

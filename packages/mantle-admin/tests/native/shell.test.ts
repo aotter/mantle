@@ -19,6 +19,13 @@ test("every shell page is anti-framed, never cached and nosniff; files only nosn
   const preview=(await get("/admin/preview.html"))!;
   expect([preview.status,preview.headers.get("x-frame-options"),preview.headers.get("x-content-type-options")]).toEqual([200,null,"nosniff"]);
 });
+test("the MCP App is a file, not a client route: anti-framed and never cached when built, 404 and not the shell when it is not",async()=>{
+  const app=(path:string)=>path==="mcp-app.html"?new Response("app",{headers:{"content-type":"text/html"}}):assets(path);
+  const served=(await adminShell(new Request("https://app.test/admin/mcp-app.html"),app))!;
+  expect([served.status,await served.text(),served.headers.get("content-security-policy"),served.headers.get("x-frame-options"),served.headers.get("cache-control")]).toEqual([200,"app","frame-ancestors 'none'","DENY","no-store"]);
+  // `assets` has no mcp-app.html: the shell is for client routes, and a host reads the file only through the MCP resource
+  expect([(await get("/admin/mcp-app.html"))?.status,(await get("/admin/other.html"))?.status]).toEqual([404,200]);
+});
 test("traversal, encoded separators and NUL are refused; missing built files stay 404; other requests pass through",async()=>{
   for(const path of ["/admin/..%2f..%2fsecret.txt","/admin/x%5cy.txt","/admin/a%2Fb","/admin/x%00.js","/admin/%E0%A4","/admin/%2e%2e%2fsecret"])expect([path,(await get(path))?.status]).toEqual([path,404]);
   for(const path of ["/admin/assets/gone.js"])expect([path,(await get(path))?.status]).toEqual([path,404]);

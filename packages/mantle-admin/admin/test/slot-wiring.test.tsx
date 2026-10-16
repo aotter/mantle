@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SidebarProvider, TooltipProvider } from "@aotter/mantle-ui/kit";
 import { defineAdmin, type AdminMeta } from "../src/app/define-admin";
 import { AdminHooksProvider } from "../src/app/hooks-context";
-import { browserTransport } from "../src/app/transport";
+import { browserTransport } from "../src/app/browser-transport";
 import { PreferencesProvider } from "../src/app/preferences";
 import { AdminRouterProvider } from "../src/app/router";
 import { ProjectNavProvider, type ProjectNav } from "../src/app/project-nav";

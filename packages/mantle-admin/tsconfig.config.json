@@ -9,7 +9,6 @@
     ]
   },
   "include": [
-    "src/mcp-app/**/*",
     "examples/**/*",
     "*.config.ts"
   ],

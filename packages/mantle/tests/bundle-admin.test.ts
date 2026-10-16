@@ -25,6 +25,8 @@ async function app() {
     "export async function buildAdmin({ entry, outDir }) {",
     "  mkdirSync(outDir, { recursive: true });",
     '  writeFileSync(join(outDir, "index.html"), String(entry));',
+    // the real build writes the MCP App beside the page
+    '  writeFileSync(join(outDir, "mcp-app.html"), "app");',
     `  appendFileSync(${JSON.stringify(join(dir, "builds.log"))}, String(entry) + "\\n");`,
     "}",
   ].join("\n"));
@@ -67,6 +69,20 @@ test("mantle bundle: the Worker into <outdir>/worker, Admin into <assets>/admin;
     expect(existsSync(join(dir, "public/admin/index.html"))).toBe(true);
     await expect(bundleApp(entry, dist, dist)).rejects.toThrow("must not overlap the Worker directory");
     await expect(bundleApp(entry, dist, join(dist, "worker/static"))).rejects.toThrow("must not overlap the Worker directory");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
+test("mantle bundle does not keep an Admin output that has no MCP App, as one built before the App was part of it", async () => {
+  const { dir, entry, builds } = await app();
+  try {
+    const dist = join(dir, "dist");
+    await bundleApp(entry, dist);
+    await bundleApp(entry, dist);
+    expect(await builds()).toHaveLength(1);
+    await rm(join(dist, "client/admin/mcp-app.html"));
+    await bundleApp(entry, dist);
+    expect(await builds()).toHaveLength(2);
+    expect(existsSync(join(dist, "client/admin/mcp-app.html"))).toBe(true);
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
 

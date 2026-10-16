@@ -9,7 +9,7 @@ import { loadLanguage, STRINGS } from "./i18n";
 import { PreferencesProvider, readInitialLanguage, usePreferences, type AdminLanguage } from "./preferences";
 import { queryClient } from "./query-client";
 import { AdminRouterProvider } from "./router";
-import { browserTransport } from "./transport";
+import { browserTransport } from "./browser-transport";
 import type { AdminDefinition } from "./define-admin";
 
 /**

@@ -57,7 +57,7 @@ export async function fetchService(request: Request, env: Env, context: Executio
       response = await serveAdmin(request, env);
     } else if (/^\/mcp(?:\/admin)?\/*$/.test(url.pathname)) {
       // --- MCP (optional): delete this branch with the MCP plugins in auth.ts if the app has no MCP.
-      serveMcpHandler ??= serveMcp(tools, { ...options, apps: { admin: adminMcpApps({ catalogue: mcpAppCatalogues.admin, html: async () => (await import("@aotter/mantle-admin/mcp-app")).mantleAppHtml }) } });
+      serveMcpHandler ??= serveMcp(tools, { ...options, apps: { admin: adminMcpApps({ catalogue: mcpAppCatalogues.admin }) } });
       response = await serveMcpHandler(request, env);
     } else {
       response = await serveRest(request, env);

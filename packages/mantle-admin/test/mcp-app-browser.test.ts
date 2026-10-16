@@ -1,8 +1,9 @@
-import { expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it } from "vitest";
 import { chromium } from "playwright";
 import { createServer } from "vite";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const catalog = {
   views: { pending: { columns: { item: { type: "string" }, date: { type: "string", format: "date-time", title: "When" }, link: { type: "string", format: "uri", title: "Link" } }, list: { columns: ["item", "date", "link"] }, actions: ["review_requisition"] } },
@@ -10,15 +11,26 @@ const catalog = {
 };
 
 const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, "../package.json"), "utf8")) as { version: string };
+// The App as an application gets it: `buildAdmin` builds `mcp-app.html` from the application's own entry (`fixtures/admin.tsx`: an
+// override of the `pending` View's `item` cell, a page for the `queue` View, and CSS that sets the brand colours).
+const out = mkdtempSync(join(tmpdir(), "mantle-mcp-app-browser-"));
+let appHtml = "";
+beforeAll(async () => {
+  const { buildAdmin } = await import("../dist/build/index.js");
+  await buildAdmin({ entry: resolve(import.meta.dirname, "fixtures/admin.tsx"), outDir: out });
+  appHtml = readFileSync(join(out, "mcp-app.html"), "utf8");
+}, 180_000);
+afterAll(() => rmSync(out, { recursive: true, force: true }));
 const serveApp = async (page: import("playwright").Page) => {
-  const { mantleAppHtml } = await import("../dist/mcp-app/index.js");
-  await page.route("**/src/mcp-app/interaction.html", async route => {
-    await route.fulfill({ contentType: "text/html", body: mantleAppHtml.replace('<div id="root">', `<script type="application/json" id="mantle-catalog">${JSON.stringify(catalog)}</script><div id="root">`) });
+  await page.route("**/mcp-app.html", async route => {
+    await route.fulfill({ contentType: "text/html", body: appHtml.replace('<div id="root">', `<script type="application/json" id="mantle-catalog">${JSON.stringify(catalog)}</script><div id="root">`) });
   });
 };
+// only the host page and its bridge are served by Vite; the App is the built file
+const hostServer = () => createServer({ configFile: false, root: resolve(import.meta.dirname, ".."), server: { host: "127.0.0.1", port: 0 } });
 
 it("interoperates with the official ext-apps AppBridge: context, results, native dates and server tools", async () => {
-  const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.mcp-app.config.ts"), root: resolve(import.meta.dirname, ".."), server: { host: "127.0.0.1", port: 0 } });
+  const server = await hostServer();
   await server.listen();
   const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
   try {
@@ -34,6 +46,9 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
       await bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops", date: "2026-10-01T15:20:00.000Z", link: "https://example.com/r1" }] }, _meta: { "net.aotter.mantle/tool": "pending" } });
     });
     await app.getByText("Laptops").waitFor();
+    // the application's override renders the cell in the `mcp-app` surface, with a Tailwind class only the application uses
+    const cell = app.locator("mark");
+    expect([await cell.getAttribute("data-surface"), await cell.innerText(), await cell.evaluate(node => getComputedStyle(node).backgroundColor)]).toEqual(["mcp-app", "Laptops", "rgb(254, 220, 186)"]);
     expect(await page.evaluate(() => ({ info: (window as any).host.bridge.getAppVersion(), capabilities: (window as any).host.bridge.getAppCapabilities() })))
       .toEqual({ info: { name: "mantle", version }, capabilities: { availableDisplayModes: ["inline", "fullscreen"] } });
     // the host's time zone and language, not the iframe's
@@ -57,8 +72,9 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     await app.locator('input[type="time"]').fill("12:34");
     // Closing the popover leaves the selected day in the shared form draft.
     await date.press("Escape");
-    // the primary color is the App's own brand color, not the host's inverse background
-    expect(await app.getByRole("button", { name: "執行", exact: true }).evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(250, 250, 250)");
+    // the primary colour is the application's own (its CSS, here the dark theme's), not the host's inverse background; the host's neutrals sit over the tokens
+    expect(await app.getByRole("button", { name: "執行", exact: true }).evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(200, 210, 220)");
+    expect(await app.locator("body").evaluate(node => getComputedStyle(node).color)).toBe("rgb(1, 2, 3)");
     await app.getByRole("button", { name: "執行", exact: true }).click();
     await page.waitForFunction(() => (window as any).host.calls.length >= 2);
     const state = await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors, sizes: (window as any).host.sizes }));
@@ -89,7 +105,7 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
 }, 45_000);
 
 it("loads the next page of a View through the host and appends its rows", async () => {
-  const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.mcp-app.config.ts"), root: resolve(import.meta.dirname, ".."), server: { host: "127.0.0.1", port: 0 } });
+  const server = await hostServer();
   await server.listen();
   const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
   try {
@@ -114,8 +130,33 @@ it("loads the next page of a View through the host and appends its rows", async 
   } finally { await browser.close(); await server.close(); }
 }, 45_000);
 
+it("renders an application's pages[].mcp page for its View's tool, not the rows, and its data comes through the host's tools", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  try {
+    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    await page.evaluate(async () => {
+      await (window as any).host.bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r0", item: "FromResult" }] }, _meta: { "net.aotter.mantle/tool": "queue" } });
+    });
+    await app.getByRole("heading", { name: "queue-page" }).waitFor();
+    // `useView` called the View's tool through the host; the browser-only hook read `unavailable`; the rows of the result are not shown beside the page
+    await app.getByText("page:Laptops").waitFor();
+    await app.getByText("entries:unavailable").waitFor();
+    expect(await app.getByText("FromResult").count()).toBe(0);
+    expect(await app.locator("section").evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(192, 255, 238)");
+    const state = await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors }));
+    expect(state.errors).toEqual([]);
+    expect(state.calls).toMatchObject([{ name: "queue", arguments: {} }]);
+  } finally { await browser.close(); await server.close(); }
+}, 45_000);
+
 it("is read-only in a host without server tools: rows and plain links, no action and no tool call", async () => {
-  const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.mcp-app.config.ts"), root: resolve(import.meta.dirname, ".."), server: { host: "127.0.0.1", port: 0 } });
+  const server = await hostServer();
   await server.listen();
   const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
   try {
@@ -136,7 +177,7 @@ it("is read-only in a host without server tools: rows and plain links, no action
 }, 45_000);
 
 it("pins the parent and origin, ignores malformed input and rejects reverse tool routing; aborts stay uncertain", async () => {
-  const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.mcp-app.config.ts"), root: resolve(import.meta.dirname, ".."), server: { host: "127.0.0.1", port: 0 } });
+  const server = await hostServer();
   await server.listen();
   const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
   try {

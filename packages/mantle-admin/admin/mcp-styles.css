@@ -1,0 +1,67 @@
+@import "tailwindcss" source(none);
+@import "@aotter/mantle-ui/tokens.css";
+
+/* @aotter/mantle-admin/build adds the @source lines: the App's own code, the kit and the application's entry directory. */
+
+/* `dark:` follows the host's theme, which marks the root with both `data-theme` and `.dark` */
+@custom-variant dark (&:is(.dark *, :root[data-theme="dark"] *));
+
+/*
+ * Where each color comes from, nearest first: the host's MCP style variable for a neutral, else the token. The tokens are
+ * Admin's own (tokens.css) and then the application's CSS, which the entry imports after them, so the application's `--primary`
+ * or `.dark {}` reach the App. The primary colors and the chart colors are never the host's: they are the application's brand.
+ * `applyHostContext` sets the host's variables on the root, so they are absent in a host that sends none.
+ */
+@theme inline {
+  --color-background: var(--color-background-primary, var(--background));
+  --color-foreground: var(--color-text-primary, var(--foreground));
+  --color-card: var(--color-background-primary, var(--card));
+  --color-card-foreground: var(--color-text-primary, var(--card-foreground));
+  --color-popover: var(--color-background-primary, var(--popover));
+  --color-popover-foreground: var(--color-text-primary, var(--popover-foreground));
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--color-background-secondary, var(--secondary));
+  --color-secondary-foreground: var(--color-text-primary, var(--secondary-foreground));
+  --color-muted: var(--color-background-secondary, var(--muted));
+  --color-muted-foreground: var(--color-text-secondary, var(--muted-foreground));
+  --color-accent: var(--color-background-secondary, var(--accent));
+  --color-accent-foreground: var(--color-text-primary, var(--accent-foreground));
+  --color-destructive: var(--color-text-danger, var(--destructive));
+  --color-border: var(--color-border-primary, var(--border));
+  --color-input: var(--color-border-primary, var(--input));
+  --color-ring: var(--color-ring-primary, var(--ring));
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: var(--border-radius-sm, calc(var(--radius) - 4px));
+  --radius-md: var(--border-radius-md, calc(var(--radius) - 2px));
+  --radius-lg: var(--border-radius-lg, var(--radius));
+  --radius-xl: calc(var(--radius) + 4px);
+  --text-xs: var(--font-text-xs-size, 0.75rem);
+  --text-xs--line-height: var(--font-text-xs-line-height, calc(1 / 0.75));
+  --text-sm: var(--font-text-sm-size, 0.875rem);
+  --text-sm--line-height: var(--font-text-sm-line-height, calc(1.25 / 0.875));
+  --text-base: var(--font-text-md-size, 1rem);
+  --text-base--line-height: var(--font-text-md-line-height, 1.5);
+  /* --font-mono and --font-weight-* are Tailwind's own names: the host's values apply as they are */
+  --font-app: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  body { background: var(--color-background); color: var(--color-foreground); font-family: var(--font-app); margin: 0; }
+}
