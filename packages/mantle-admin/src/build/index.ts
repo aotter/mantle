@@ -47,7 +47,9 @@ async function adminCore(entry: string | undefined, mcp = false) {
   for (const from of new Set([...(entry ? [dirname(app)] : []), page])) assertReactMatch(from);
   const kit = resolve(dirname(createRequire(import.meta.url).resolve("@aotter/mantle-ui/package.json")), "dist");
   // Tailwind generates the classes Admin, the kit and the application's own Admin code use; the App's own code is one file.
-  const sources = [mcp ? resolve(dist, "admin-app/mcp-mount.js") : resolve(dist, "admin-app"), kit, ...(entry ? [dirname(app)] : [])].map(source => `@source ${JSON.stringify(source)};`).join("\n");
+  // the App renders the shared components, the fields and a few controls of the kit, not all of it
+  const appKit = ["react/components.js", "react/fields.js", "kit/components/ui/{button,checkbox,input,popover,select,textarea}.js"].map(file => resolve(kit, file));
+  const sources = [...(mcp ? [resolve(dist, "admin-app/mcp-mount.js"), ...appKit] : [resolve(dist, "admin-app"), kit]), ...(entry ? [dirname(app)] : [])].map(source => `@source ${JSON.stringify(source)};`).join("\n");
   const stylesheet = normalizePath(resolve(page, mcp ? "mcp-styles.css" : "styles.css"));
   const entryPlugin: Plugin = {
     name: "mantle-admin-entry", enforce: "pre",
@@ -132,7 +134,10 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
   const { errors, warnings } = checkMcpApp(html, csp, sources, { libraries: [resolve(dist, "admin-app"), core.kit].map(normalizePath) });
   for (const warning of warnings) console.warn(`warning: Admin MCP App: ${warning}`);
   if (errors.length) throw new Error(`The Admin MCP App would break in an MCP host:\n${errors.map(line => `  - ${line}`).join("\n")}${problem ? `\n(${problem})` : ""}\nSee ${GUIDE}.`);
-  writeFileSync(resolve(outDir, "mcp-app.html"), html);
+  // the declared CSP rides in the file, so the server sends it with the HTML (`adminMcpApps`) and it is declared once
+  const escape = (json: string) => json.replace(/[<'&]/g, character => "\\u" + character.charCodeAt(0).toString(16).padStart(4, "0"));
+  const meta = csp ? "<meta name=\"mantle-mcp-csp\" content='" + escape(JSON.stringify(csp)) + "'>" : "";
+  writeFileSync(resolve(outDir, "mcp-app.html"), meta ? html.replace(/<head>/i, head => head + meta) : html);
   console.log(`Admin MCP App: ${(Buffer.byteLength(html) / 1024).toFixed(1)} kB (mcp-app.html).`);
 }
 

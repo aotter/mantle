@@ -159,6 +159,14 @@ test("an MCP page passes limits 1..500 to the View unchanged and refuses above 5
   expect(limits).toHaveLength(4);
 });
 
+test("a loader may return { html, csp }: the CSP found at read time rides on the resources/read content", async () => {
+  const csp = { resourceDomains: ["https://cdn.example.test"] };
+  const api = handle({ admin: { resources: [{ ...resource("ui://mantle-admin/rows", ["admin_rows"]), html: () => ({ html: "<p>x</p>", csp }) }] } });
+  const read = (await call(api, "resources/read", { uri: "ui://mantle-admin/rows" }, "admin")).result.contents[0];
+  expect(read.text).toBe("<p>x</p>");
+  expect(read._meta.ui.csp).toEqual(csp);
+});
+
 test("an HTML loader also receives the request's env and request; a zero-argument or tools-only loader still works", async () => {
   const seen: { tools: ReadonlySet<string>; env: unknown; request: Request }[] = [];
   const env = { ASSETS: { fetch: async () => new Response("x") } };

@@ -40,9 +40,10 @@ describe still shows its rows, with no action to open.
 `adminMcpApps({ catalogue })` needs no `html`: its default loader reads the file
 `mantle bundle` built, `/admin/mcp-app.html`, through `env.ASSETS.fetch` on a
 Worker, and from `dist/client/admin/mcp-app.html` on Bun (`file` names another
-path). Pass `html` (a string or a loader) to serve the App from elsewhere. `csp`
-is passed through as the resource's `_meta.ui.csp`; give it the object you gave
-`defineAdmin({ mcp: { csp } })`, which the build checked the App against.
+path). Pass `html` (a string or a loader) to serve the App from elsewhere. The
+file carries the `csp` your `defineAdmin({ mcp: { csp } })` declared; a loader may return
+`{ html, csp }` instead of a string, and the handler sends that `csp` as `_meta.ui.csp` on
+`resources/read`.
 
 For static tool tables, construction checks contributors. Request-bound tool tables check on the first matching request and recheck changed tool names. Duplicate
 resource URIs or names, conflicting tool ownership, and absent or foreign-endpoint
@@ -147,9 +148,9 @@ types decide: a `both` slot's props carry `surface`, a browser slot's do not.
 4. **Remote assets only from origins you declare.** An image, font, stylesheet or
    script from another origin loads only if `defineAdmin({ mcp: { csp } })` names
    it: `{ resourceDomains: ["https://cdn.example.com"] }` (also `connectDomains`,
-   `frameDomains`, `baseUriDomains`). Pass the same object to
-   `adminMcpApps({ catalogue, csp })`, so the host's CSP allows what the build
-   checked. Prefer assets bundled into your entry: they are inlined.
+   `frameDomains`, `baseUriDomains`). You declare it once: the build writes it into
+   `mcp-app.html` and `adminMcpApps` sends it as `_meta.ui.csp` on `resources/read`
+   (not on `resources/list`, which names no HTML). Prefer assets bundled into your entry: they are inlined.
 5. **Branch on the surface if you must, but both branches render.**
    `useAdminSurface()` and the `surface` prop say where you are; a component that
    shows nothing in a host is a hole in the host's view.
@@ -191,7 +192,7 @@ colours (`--color-primary`, `--color-primary-foreground`) and the chart colours
 (`--color-chart-1` to `-5`) are your brand's and are never the host's.
 `--sidebar-*` and `--app-*` do not apply in a host. The host's theme marks the
 root with both `data-theme` and the `.dark` class, so your `.dark {}` block and
-`dark:` classes follow it; a host that sends no theme gets the light tokens.
+`dark:` classes follow it; a host that sends no theme gets the system's colour scheme (`prefers-color-scheme`), as the same `.dark` class, and a theme the host sends wins over it.
 The variables a host does not send fall back to the tokens.
 
 ### A page for an MCP App view: `pages[].mcp`
@@ -227,10 +228,11 @@ file:
 - loads a `src`, `href`, `url()` or `@import` from a remote origin (`http(s):` or
   `//`) that `defineAdmin({ mcp: { csp } })` does not declare.
 
-`window.open` and `target="_blank"` in your own code only warn. The check reads
-every module your entry imports, not only the slots a host renders, so a
-browser-only component that calls `/admin/api` fails it too: reach for the
-hooks, or move that code out of the entry's import graph. The build prints the
+`window.open` and `target="_blank"` in your own code only warn. The whole Admin
+entry graph is checked, not only the slots a host renders: the file holds every
+module your entry imports, so browser-only code (a `Shell`, a `Home`, a page)
+must avoid direct `/admin/api` fetches and cookies too. Read data through the
+hooks, which use the browser's route in the browser and the host's tools in a host. The build prints the
 App's size.
 
 ### Hosts without MCP Apps

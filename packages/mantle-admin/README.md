@@ -120,8 +120,8 @@ through the SDK's generic MCP Apps hook and, without `html`, reads that file (`e
 `dist/client/admin/mcp-app.html` on Bun, or `file`). Tools retain the same caller
 permissions as ordinary MCP calls; the document holds no credentials. Reserve
 `ui://mantle-admin/` resources for this contributor. The catalogue it embeds is
-cut to the reading caller's tools, `csp` and `domain` pass through to
-`_meta.ui`. What the App asks of a host is in the
+cut to the reading caller's tools, the `csp` declared in `defineAdmin` (carried in the file) and `domain` pass
+through to `_meta.ui`. What the App asks of a host is in the
 [MCP Apps guide](../../docs/handbook/guides/mcp-apps.md#the-admin-app-in-a-host); what an application's
 components must do to render there, and how it upgrades from the prebuilt App, in
 [Customising Admin for MCP hosts](../../docs/handbook/guides/mcp-apps.md#customising-admin-for-mcp-hosts).

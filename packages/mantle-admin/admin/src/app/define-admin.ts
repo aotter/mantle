@@ -93,8 +93,8 @@ export interface AdminPlugin {
 
 /**
  * The remote origins Admin's MCP App may load from, as the host's CSP (`_meta.ui.csp`). `mantle bundle` refuses an App that
- * references a remote origin none of these names. Give the server the same object (`adminMcpApps({ csp })`), so the host allows
- * what the build checked.
+ * references a remote origin none of these names. The build writes it into the file, and `adminMcpApps` sends it as `_meta.ui.csp` when
+ * a host reads the App, so it is declared once.
  */
 export interface AdminMcpCsp {
   readonly connectDomains?: readonly string[];

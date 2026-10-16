@@ -51,7 +51,10 @@ describe("the checks on the built MCP App", () => {
     expect(message).toMatch(/src\/cell\.tsx/);
     const declaredApp = app("remote-declared", cell, ', mcp: { csp: { resourceDomains: ["https://cdn.example.test"] } }');
     expect(await attempt(declaredApp)).toBeUndefined();
-    expect(readFileSync(join(declaredApp.out, "mcp-app.html"), "utf8")).toContain("https://cdn.example.test/logo.png");
+    const built = readFileSync(join(declaredApp.out, "mcp-app.html"), "utf8");
+    expect(built).toContain("https://cdn.example.test/logo.png");
+    // declared once: the file carries the CSP for the server to send
+    expect(JSON.parse(/<meta name="mantle-mcp-csp" content='([^']*)'>/.exec(built)![1]!)).toEqual({ resourceDomains: ["https://cdn.example.test"] });
   }, 120_000);
 
   it("warns, and builds, when an override calls window.open", async () => {

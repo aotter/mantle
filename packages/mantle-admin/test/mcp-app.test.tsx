@@ -180,7 +180,7 @@ describe("adminMcpApps", () => {
   it("embeds the catalogue as this caller sees it: no View or action its tools/list hides", async () => {
     const [resource] = adminMcpApps({ catalogue: catalog, html: "<head></head>", domain: "admin.apps.example" }).resources;
     expect(resource!.domain).toBe("admin.apps.example");
-    const embedded = async (tools: string[]) => JSON.parse((await (resource!.html as (render: { tools: Set<string> }) => Promise<string>)({ tools: new Set(tools) })).match(/<script[^>]*>(.*)<\/script>/)![1]!) as unknown;
+    const embedded = async (tools: string[]) => JSON.parse((await (resource!.html as (render: { tools: Set<string> }) => Promise<{ html: string }>)({ tools: new Set(tools) })).html.match(/<script[^>]*>(.*)<\/script>/)![1]!) as unknown;
     // "gone" is no tool of this caller's either
     expect(await embedded(["pending", "review_requisition"])).toEqual({ ...catalog, views: { pending: { ...catalog.views["pending"], actions: ["review_requisition"] } } });
     expect(await embedded(["pending"])).toEqual({ views: { pending: { ...catalog.views["pending"], actions: [] } }, actions: {} });

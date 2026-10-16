@@ -4,7 +4,7 @@ import { forwarded, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceE
 import { draining } from "./drain.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
 import type { Tools, Options } from "./mcp.js";
-import { RESOURCE_MIME_TYPE, linkSurface, type McpAppRender, type McpAppResource } from "./mcp-apps.js";
+import { RESOURCE_MIME_TYPE, linkSurface, type McpAppCsp, type McpAppRender, type McpAppResource } from "./mcp-apps.js";
 type LocalizedText = string | Readonly<Record<string, string>>;
 const text = (value: LocalizedText | undefined, locale: string): string | undefined => {
   if (typeof value === "string") return value;
@@ -251,8 +251,8 @@ function clientUiSupport(message: unknown): "supported" | "unsupported" | "unkno
   return "unknown";
 }
 
-function appMeta(r: McpAppResource): { ui: Record<string, unknown> } | undefined {
-  const ui = { ...(r.csp ? { csp: r.csp } : {}), ...(r.permissions ? { permissions: r.permissions } : {}), ...(r.domain !== undefined ? { domain: r.domain } : {}), ...(r.prefersBorder !== undefined ? { prefersBorder: r.prefersBorder } : {}) };
+function appMeta(r: McpAppResource, csp: McpAppCsp | undefined = r.csp): { ui: Record<string, unknown> } | undefined {
+  const ui = { ...(csp ? { csp } : {}), ...(r.permissions ? { permissions: r.permissions } : {}), ...(r.domain !== undefined ? { domain: r.domain } : {}), ...(r.prefersBorder !== undefined ? { prefersBorder: r.prefersBorder } : {}) };
   return Object.keys(ui).length > 0 ? { ui } : undefined;
 }
 
@@ -262,7 +262,11 @@ function registerApps(server: import("@modelcontextprotocol/server").McpServer, 
   if (enabled) for (const resource of links.resources) {
     const meta = appMeta(resource);
     server.registerResource(resource.name, resource.uri, { mimeType: RESOURCE_MIME_TYPE, title: resource.title, description: resource.description, ...(meta ? { _meta: meta } : {}) }, async () => {
-      try { return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: typeof resource.html === "string" ? resource.html : await resource.html({ tools, ...request }), ...(meta ? { _meta: meta } : {}) }] }; }
+      try {
+        const loaded = typeof resource.html === "string" ? resource.html : await resource.html({ tools, ...request });
+        const page = typeof loaded === "string" ? { html: loaded } : loaded, read = page.csp ? appMeta(resource, page.csp) : meta;
+        return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: page.html, ...(read ? { _meta: read } : {}) }] };
+      }
       catch { console.error("[mantle mcp] resource rendering failed"); throw new Error("Internal error."); }
     });
   }

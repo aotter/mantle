@@ -217,7 +217,7 @@ plugin's is the built-in component, and the application's own `components` are o
 
 `mcp: { csp: { connectDomains, resourceDomains, frameDomains, baseUriDomains } }` names the remote origins Admin's MCP App may
 load. `mantle bundle` builds that App from this same entry (`<assets>/admin/mcp-app.html`) and fails it on an origin that is not
-declared; give the same object to `adminMcpApps({ catalogue, csp })` so a host's CSP allows them.
+declared. The build writes the declaration into the file, and `adminMcpApps` sends it to the host as `_meta.ui.csp` on `resources/read`.
 A page may also be an MCP App view: `pages: [{ path, title, element, mcp: { renders: "<view>" } }]`, where `renders` is an admin
 View that has an MCP tool (`tsc` checks it against the generated `admin-client.ts`).
 

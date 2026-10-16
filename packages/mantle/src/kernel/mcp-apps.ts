@@ -12,14 +12,23 @@ export interface McpAppRender {
   readonly request: Request;
 }
 
+/** The CSP a resource asks its host for, as `_meta.ui.csp`. */
+export type McpAppCsp = { readonly connectDomains?: readonly string[]; readonly resourceDomains?: readonly string[]; readonly frameDomains?: readonly string[]; readonly baseUriDomains?: readonly string[] };
+
+/** What a loader may return beside a plain string: the HTML and a CSP known only when it is read (sent on `resources/read`). */
+export interface McpAppPage {
+  readonly html: string;
+  readonly csp?: McpAppCsp;
+}
+
 /** One `ui://` resource. The HTML is a reusable asset and never carries caller data: that travels in tool results. */
 export interface McpAppResource {
   readonly uri: string;
   readonly name: string;
   readonly title?: string;
   readonly description?: string;
-  readonly html: string | ((render: McpAppRender) => string | Promise<string>);
-  readonly csp?: { readonly connectDomains?: readonly string[]; readonly resourceDomains?: readonly string[]; readonly frameDomains?: readonly string[]; readonly baseUriDomains?: readonly string[] };
+  readonly html: string | ((render: McpAppRender) => string | McpAppPage | Promise<string | McpAppPage>);
+  readonly csp?: McpAppCsp;
   readonly permissions?: { readonly camera?: Record<string, never>; readonly microphone?: Record<string, never>; readonly geolocation?: Record<string, never>; readonly clipboardWrite?: Record<string, never> };
   readonly prefersBorder?: boolean;
   /** `_meta.ui.domain`: the dedicated sandbox origin a host should serve this App from, in the form that host documents. */

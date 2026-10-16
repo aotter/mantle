@@ -45,6 +45,16 @@ function Root({ admin }: { admin: AdminDefinition }) {
     error: setError,
   }, window, __MANTLE_VERSION__), []);
   useEffect(() => { if (context) applyHostContext(context); }, [context]);
+  // a host that sends no theme gets the system's: the same `.dark` class a host theme sets, so tokens and `dark:` follow it
+  const hostTheme = context?.theme;
+  useEffect(() => {
+    if (hostTheme) return;
+    const query = window.matchMedia("(prefers-color-scheme: dark)"), root = document.documentElement;
+    const follow = () => { root.classList.toggle("dark", query.matches); root.style.colorScheme = query.matches ? "dark" : "light"; };
+    follow();
+    query.addEventListener("change", follow);
+    return () => query.removeEventListener("change", follow);
+  }, [hostTheme]);
   const adminHost = useMemo<AdminHost | null>(() => host && {
     context: { ...context }, capabilities: { ...host.capabilities },
     openLink: host.openLink, sendMessage: host.sendMessage, requestDisplayMode: host.requestDisplayMode,

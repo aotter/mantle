@@ -155,6 +155,31 @@ it("renders an application's pages[].mcp page for its View's tool, not the rows,
   } finally { await browser.close(); await server.close(); }
 }, 45_000);
 
+it("follows the system colour scheme when the host sends no theme, and an explicit host theme wins", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  try {
+    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    await page.emulateMedia({ colorScheme: "dark" });
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?no-theme`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    const look = () => app.locator("html").evaluate(node => ({ dark: node.classList.contains("dark"), primary: getComputedStyle(node).getPropertyValue("--primary").trim() }));
+    await expect.poll(look).toEqual({ dark: true, primary: "#c8d2dc" });
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect.poll(look).toEqual({ dark: false, primary: "#0a141e" });
+    // a theme from the host wins over the system's
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect.poll(look).toMatchObject({ dark: true });
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ theme: "light" }));
+    await expect.poll(look).toEqual({ dark: false, primary: "#0a141e" });
+    await page.emulateMedia({ colorScheme: "light" }); await page.emulateMedia({ colorScheme: "dark" });
+    expect((await look()).dark).toBe(false);
+  } finally { await browser.close(); await server.close(); }
+}, 45_000);
+
 it("is read-only in a host without server tools: rows and plain links, no action and no tool call", async () => {
   const server = await hostServer();
   await server.listen();

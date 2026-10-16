@@ -1,6 +1,6 @@
 /** The Admin App is an ordinary contributor to the SDK's public MCP Apps hook. */
 import { ContractError } from "@aotter/mantle/contracts";
-import type { McpApps, McpAppRender, McpAppResource } from "@aotter/mantle/mcp";
+import type { McpApps, McpAppPage, McpAppRender, McpAppResource } from "@aotter/mantle/mcp";
 export interface AdminMcpOptions {
     readonly catalogue: {
         readonly views: Readonly<Record<string, unknown>>;
@@ -16,8 +16,6 @@ export interface AdminMcpOptions {
     readonly uri?: string;
     readonly title?: string;
     readonly appOnly?: readonly string[];
-    /** Passed through as `_meta.ui.csp`: the same object as `defineAdmin({ mcp: { csp } })`, which `mantle bundle` checked the App against. */
-    readonly csp?: McpAppResource["csp"];
     /** Passed through as `_meta.ui.domain`, for a host that serves each App from its own origin. */
     readonly domain?: string;
 }
@@ -31,18 +29,23 @@ function visibleCatalogue({ views, actions }: AdminMcpOptions["catalogue"], tool
         actions: Object.fromEntries(Object.entries(actions).filter(([name]) => tools.has(name))),
     };
 }
+/** The CSP `defineAdmin({ mcp: { csp } })` declared, which `mantle bundle` wrote into the file; sent as `_meta.ui.csp` on `resources/read`. */
+const withCsp = (html: string): McpAppPage => {
+    const declared = /<meta name="mantle-mcp-csp" content='([^']*)'>/.exec(html)?.[1];
+    return declared ? { html, csp: JSON.parse(declared) } : { html };
+};
 /** The built App: a Worker's assets binding serves it at `/admin/mcp-app.html`; Bun reads it from disk. */
-const builtApp = (file: string) => async ({ env, request }: McpAppRender): Promise<string> => {
+const builtApp = (file: string) => async ({ env, request }: McpAppRender): Promise<McpAppPage> => {
     const assets = (env as { readonly ASSETS?: { fetch(request: Request): Promise<Response> } } | null | undefined)?.ASSETS;
     if (assets) {
         const response = await assets.fetch(new Request(new URL("/admin/mcp-app.html", request.url)));
         if (!response.ok)
             throw new Error(`The Admin MCP App is not in the assets (/admin/mcp-app.html answered ${response.status}); run \`mantle bundle\`.`);
-        return response.text();
+        return withCsp(await response.text());
     }
     const bun = (globalThis as { Bun?: { file(path: string): { text(): Promise<string> } } }).Bun;
     if (bun)
-        return bun.file(file).text();
+        return withCsp(await bun.file(file).text());
     throw new Error("The Admin MCP App has no loader here: bind ASSETS, run on Bun, or pass `html`.");
 };
 export function adminMcpApps(options: AdminMcpOptions): McpApps {
@@ -54,5 +57,8 @@ export function adminMcpApps(options: AdminMcpOptions): McpApps {
         return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, end => script + end) : script + html;
     };
     const html = options.html ?? builtApp(options.file ?? "dist/client/admin/mcp-app.html");
-    return { resources: [{ uri, name: "mantle-admin-admin", title: options.title ?? "Admin", html: async (render: McpAppRender) => embed(typeof html === "string" ? html : await html(render), render), renders: Object.keys(options.catalogue.views), ...(options.appOnly ? { appOnly: options.appOnly } : {}), ...(options.csp ? { csp: options.csp } : {}), ...(options.domain !== undefined ? { domain: options.domain } : {}) }] };
+    return { resources: [{ uri, name: "mantle-admin-admin", title: options.title ?? "Admin", html: async (render: McpAppRender) => {
+        const loaded = typeof html === "string" ? html : await html(render), page = typeof loaded === "string" ? { html: loaded } : loaded;
+        return { ...page, html: embed(page.html, render) };
+    }, renders: Object.keys(options.catalogue.views), ...(options.appOnly ? { appOnly: options.appOnly } : {}), ...(options.domain !== undefined ? { domain: options.domain } : {}) }] };
 }
