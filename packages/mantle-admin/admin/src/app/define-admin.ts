@@ -9,7 +9,7 @@ import type { BrandProps, CellProps, CollectionListProps, HeaderProps, HomeProps
  * generated types, so its names are any string and its shapes are open.
  */
 export interface AdminTypes {
-  readonly views: { readonly [name: string]: { readonly input: object; readonly row: object } };
+  readonly views: { readonly [name: string]: { readonly input: object; readonly row: object; /** The View's admin MCP tool, or null when it has none; absent for the built-in entry. */ readonly mcp?: string | null } };
   readonly collections: { readonly [name: string]: { readonly data: object } };
   readonly operations: { readonly [name: string]: { readonly input: object; readonly output: unknown } };
   /** The sidebar groups beyond Admin's own that the manifest places items in (`uiSchema.nav.group`), which `defineAdmin` must declare in `nav.groups`; any name when absent. */
@@ -50,6 +50,8 @@ type RowOf<T extends AdminTypes, V extends string> = V extends keyof T["views"] 
 type ColumnOf<T extends AdminTypes, K extends string> = K extends `${infer V}.${infer F}` ? Member<RowOf<T, V>, F> : never;
 /** What a collection list passes as `row`: the columns it shows, `null` where empty. */
 type ListRow<D> = unknown extends D ? Readonly<Record<string, unknown>> : { readonly [P in keyof D]?: D[P] | null };
+/** The Views an MCP host can open: those with an admin MCP tool. Any View name for the open shape the built-in entry has. */
+type McpViews<T extends AdminTypes> = string extends Views<T> ? string : { [V in Views<T>]: T["views"][V] extends { readonly mcp: string } ? V : never }[Views<T>];
 type Of<K extends string, Prefix extends string> = K extends `${Prefix}${infer Rest}` ? Rest : never;
 
 /**
@@ -89,7 +91,11 @@ export interface AdminPlugin {
   readonly components?: AdminComponents;
 }
 
-/** The domains an MCP App may load from, as the host's CSP (`_meta.ui.csp`). A type only until Admin's MCP App is built from the application's entry. */
+/**
+ * The remote origins Admin's MCP App may load from, as the host's CSP (`_meta.ui.csp`). `mantle bundle` refuses an App that
+ * references a remote origin none of these names. Give the server the same object (`adminMcpApps({ csp })`), so the host allows
+ * what the build checked.
+ */
 export interface AdminMcpCsp {
   readonly connectDomains?: readonly string[];
   readonly resourceDomains?: readonly string[];
@@ -144,6 +150,10 @@ export interface AdminNavItem<T extends AdminTypes = AdminTypes> {
  * A page of the application's own, inside Admin's shell at `/admin/p/<path>`. `nav` places it in the sidebar beside the items
  * `uiSchema.nav` produces, in the same groups as `nav.items`. Showing a page grants nothing: what it reads or writes is
  * authorized on the server, by the View or Procedure it calls.
+ *
+ * With `mcp`, the page is also an MCP App view. It then renders in a host, so it may use only what works there: the `both` hooks
+ * (`useView`, `useOperation`) and components, `<AdminLink>` and `useOpenLink()` for links, and no particular width. `mantle bundle`
+ * checks the built App for what a host refuses.
  */
 export interface AdminPage<T extends AdminTypes = AdminTypes> {
   /** One segment of lowercase letters, digits and hyphens, unique among the pages; a page that breaks this is skipped with a console error. */
@@ -154,6 +164,13 @@ export interface AdminPage<T extends AdminTypes = AdminTypes> {
   readonly icon?: React.ElementType;
   /** Without `nav` the page keeps its route and stays out of the sidebar. */
   readonly nav?: { readonly group: BuiltInNavGroup | CustomGroup<T>; readonly order?: number };
+  /**
+   * Also the page of an MCP App: when the host called this admin View's tool, the App shows `element` instead of the View's rows,
+   * in the `mcp-app` surface (browser-only hooks read `unavailable`, links go through the host). `renders` names an admin View that
+   * has an MCP tool; `tsc` refuses any other name. The page reads its data through the hooks, so in a host without server tools it
+   * shows what its components make of `unavailable`. When several pages name one View, the first is shown.
+   */
+  readonly mcp?: { readonly renders: McpViews<T> };
 }
 
 /** Declare a project group for every `uiSchema.nav.group` the manifest uses; `tsc` refuses a missing one, and refuses Admin's own group ids. */
@@ -219,7 +236,7 @@ export function defineAdmin<T extends AdminTypes>(
     for (const [name, component] of Object.entries(components ?? {})) if (component) (layers[name] ??= []).push(component as SlotComponent<never>);
   }
   // A bad page is skipped, not thrown: this runs at module load in the browser, where a throw would blank all of Admin.
-  const pages = ((config.pages ?? []) as readonly AdminPage[]).filter((page, i, all) => {
+  const pages = ((config.pages ?? []) as unknown as readonly AdminPage[]).filter((page, i, all) => {
     const problem = !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(page.path) ? "must be lowercase letters, digits and hyphens" : all.findIndex(other => other.path === page.path) !== i ? "is already used by an earlier page" : "";
     if (problem) console.error(`defineAdmin: page path '${page.path}' ${problem}; the page is skipped.`);
     return !problem;

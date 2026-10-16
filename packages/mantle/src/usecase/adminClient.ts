@@ -11,7 +11,8 @@ const closed = (typeOf: TypeOf, schema: JsonSchema | undefined): string =>
 /**
  * Types are what the routes take and return, not the Store's rows: an entry's `data` keeps declared field names, an input is
  * what the route validates, a View row is its wire row under the names the browser route gives its columns (an MCP App's
- * `tools/call` returns the SQL names; the hooks rename them with `rowNames`). The file imports `generated/*` as types only, so nothing of the
+ * `tools/call` returns the SQL names; the hooks rename them with `rowNames`), with the name of its admin MCP tool or null, which
+ * types `pages[].mcp.renders` (types only: no tool name ships). The file imports `generated/*` as types only, so nothing of the
  * Worker enters the browser bundle, and it is refused in the Worker's startup graph (`mantle bundle`).
  */
 export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<string, string> {
@@ -38,6 +39,8 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
   const used = [...new Set([...schemas.flatMap(s => placed(s.uiSchema)), ...views.flatMap(([, v]) => placed(v.uiSchema))])].sort();
   const custom = used.filter(group => !BUILT_IN_NAV_GROUPS.has(group));
   const union = (names: readonly string[]) => names.length ? names.map(name => q(name)).join(" | ") : "never";
+  // the MCP tool an admin View is, which a page declared for an MCP App (`pages[].mcp.renders`) must have
+  const toolOf = (name: string) => tools.find(t => t.kind === "view" && t.source === name)?.name ?? null;
   const rows = views.map(([name], n) => `import type { WireRow as View${n}Wire } from "./views/${encodeURIComponent(name)}.js";`);
   const sql = operations.some(([, p]) => "sql" in p.handler);
   return { "admin-client.ts": [
@@ -55,7 +58,7 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
     "",
     "/** The input and row of each admin View, the `data` of each collection's entries, and the input and output of each admin operation. */",
     "export interface AppAdminTypes {",
-    `  readonly views: { ${views.map(([name, v], n) => `readonly ${q(name)}: { readonly input: ${closed(typeOf, v.input)}; readonly row: View${n}Row }`).join("; ")} };`,
+    `  readonly views: { ${views.map(([name, v], n) => `readonly ${q(name)}: { readonly input: ${closed(typeOf, v.input)}; readonly row: View${n}Row; readonly mcp: ${q(toolOf(name))} }`).join("; ")} };`,
     `  readonly collections: { ${schemas.map(s => `readonly ${q(s.name)}: { readonly data: ${dataOf(s)} }`).join("; ")} };`,
     `  readonly operations: { ${operations.map(([name, p]) => `readonly ${q(name)}: { readonly input: ${closed(typeOf, p.input)}; readonly output: ${"sql" in p.handler ? "Output" : "unknown"} }`).join("; ")} };`,
     `  readonly navGroups: ${union(custom)};`,
