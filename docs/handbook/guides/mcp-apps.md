@@ -83,22 +83,22 @@ fixed or maximum height scrolls, and the reported size stays within it.
 
 ### Theme
 
-Three layers set a token, later ones winning: Admin's default palette, then your
-own CSS (the prebuilt App carries Admin's palette only; your `admin.css` reaches
-it once the App is built from your entry), then the host's values. Only the style
-variables a host actually provides override; the rest keep the layer below. Only
-the spec's style variables are applied, and `styles.css.fonts` is added as a
-stylesheet.
+The App uses its own neutral palette, a light and a dark one, and does not load
+your application's CSS: your `admin.css` and `.dark {}` overrides apply in the
+browser Admin, not here. Style variables the host provides override that palette;
+the rest keep it. Only the spec's style variables are applied, and
+`styles.css.fonts` is added as a stylesheet. The table lists, for each host
+variable, the App's Tailwind theme variable it feeds.
 
-| Host variable | Admin token (the radius and text rows are Tailwind theme names) |
+| Host variable | App theme variable |
 | --- | --- |
-| `--color-background-primary` | `--background`, `--card`, `--popover` |
-| `--color-text-primary` | `--foreground`, `--card-foreground`, `--popover-foreground`, `--secondary-foreground`, `--accent-foreground` |
-| `--color-background-secondary` | `--muted`, `--secondary`, `--accent` |
-| `--color-text-secondary` | `--muted-foreground` |
-| `--color-border-primary` | `--border`, `--input` |
-| `--color-ring-primary` | `--ring` |
-| `--color-text-danger` | `--destructive` |
+| `--color-background-primary` | `--color-background`, `--color-card`, `--color-popover` |
+| `--color-text-primary` | `--color-foreground`, `--color-card-foreground`, `--color-popover-foreground`, `--color-secondary-foreground`, `--color-accent-foreground` |
+| `--color-background-secondary` | `--color-muted`, `--color-secondary`, `--color-accent` |
+| `--color-text-secondary` | `--color-muted-foreground` |
+| `--color-border-primary` | `--color-border`, `--color-input` |
+| `--color-ring-primary` | `--color-ring` |
+| `--color-text-danger` | `--color-destructive` |
 | `--border-radius-sm` | `--radius-sm` |
 | `--border-radius-md` | `--radius-md` |
 | `--border-radius-lg` | `--radius-lg` |
@@ -110,12 +110,11 @@ stylesheet.
 | `--font-text-md-line-height` | `--text-base--line-height` |
 | `--font-sans` | `--font-app` (the App's font) |
 
-`--font-mono` and `--font-weight-*` apply as they are. `--primary`,
-`--primary-foreground` and `--chart-1` to `--chart-5` stay the App's brand and are
-never mapped. `--sidebar-*` and `--app-*` do not apply in a host. The host's
-theme marks the root as both `data-theme` and `.dark`, so your `.dark {}`
-overrides apply as in the browser; without a host theme the App follows the
-system color scheme.
+`--font-mono` and `--font-weight-*` apply as they are. The primary colors
+(`--color-primary`, `--color-primary-foreground`) are the App's own, never the
+host's, and no chart color is mapped. `--sidebar-*` and `--app-*` do not apply in
+a host. The host's theme marks the root as both `data-theme` and `.dark`; without
+a host theme the App follows the system color scheme.
 
 A View result carries its rows twice, as the JSON text block and as
 `structuredContent`. Hosts truncate long tool results (about 150k characters

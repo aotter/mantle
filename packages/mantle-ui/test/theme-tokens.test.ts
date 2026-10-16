@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { compile } from "tailwindcss";
 import { expect, test } from "vitest";
 
 const read = (...path: string[]) => readFileSync(resolve(import.meta.dirname, ...path), "utf8");
@@ -21,12 +22,12 @@ test("dark values cover every :root token but the radius and internal palette, a
   expect([...root.names].filter(name => !dark.names.has(name) && name !== "--radius" && !name.startsWith("--mantle-"))).toEqual([]);
 });
 
-test("dark tokens and the dark: variant answer to .dark and data-theme", () => {
+test("dark tokens and the compiled dark: variant answer to .dark and :root[data-theme]", async () => {
   expect(dark.selector).toMatch(/\.dark/);
-  expect(dark.selector).toContain('[data-theme="dark"]');
+  expect(dark.selector).toContain(':root[data-theme="dark"]');
   for (const css of [read("../src/kit/styles/kit.css"), read("../../mantle-admin/admin/styles.css")]) {
-    const variant = /@custom-variant dark \(([^\n]*)\);/.exec(css)![1]!;
-    expect(variant).toContain(".dark *");
-    expect(variant).toContain('[data-theme="dark"] *');
+    const out = (await compile(`${/@custom-variant dark [^\n]*;/.exec(css)![0]}\n@tailwind utilities;`)).build(["dark:underline"]);
+    expect(out).toContain(".dark *");
+    expect(out).toContain(':root[data-theme="dark"] *');
   }
 });

@@ -6,7 +6,7 @@
 
 /* `dark:` follows the host's theme (`data-theme` or `.dark`), and the system's only when the host sets none, as the palette below does */
 @custom-variant dark {
-  &:where([data-theme="dark"], [data-theme="dark"] *, .dark, .dark *) { @slot; }
+  &:where(:root[data-theme="dark"], :root[data-theme="dark"] *, .dark, .dark *) { @slot; }
   @media (prefers-color-scheme: dark) {
     &:where(:root:not([data-theme], .dark) *, :root:not([data-theme], .dark)) { @slot; }
   }

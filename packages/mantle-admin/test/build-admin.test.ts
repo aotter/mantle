@@ -57,6 +57,25 @@ describe("@aotter/mantle-admin/build", () => {
     expect(assets(out, ".css")).toContain("#123456");
   }, 120_000);
 
+  it("orders the application's CSS after Admin's default tokens, so its :root and .dark overrides win", async () => {
+    const src = join(temp, "themed/src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "admin.css"), ":root { --primary: #0f766e; }\n.dark { --primary: #2dd4bf; }\n");
+    writeFileSync(join(src, "admin.tsx"), [
+      'import "./admin.css";',
+      `import { defineAdmin } from ${JSON.stringify(resolve(pkg, "dist/admin-app/index.js"))};`,
+      "export default defineAdmin({});",
+    ].join("\n"));
+    const out = join(temp, "themed/dist");
+    await buildAdmin({ entry: join(src, "admin.tsx"), outDir: out });
+    const css = assets(out, ".css");
+    // Admin's defaults are `--primary:var(--mantle-blue-deep)` and `--primary:var(--mantle-blue-mid)`
+    for (const [mine, defaults] of [["#0f766e", "--primary:var(--mantle-blue-deep)"], ["#2dd4bf", "--primary:var(--mantle-blue-mid)"]] as const) {
+      expect(css.indexOf(defaults), defaults).toBeGreaterThan(-1);
+      expect(css.lastIndexOf(mine), mine).toBeGreaterThan(css.indexOf(defaults));
+    }
+  }, 120_000);
+
   it("serves Admin with HMR from a Vite dev server, proxying the service's API", async () => {
     const src = join(temp, "dev/src");
     mkdirSync(src, { recursive: true });
