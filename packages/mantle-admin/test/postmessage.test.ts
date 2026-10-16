@@ -1,123 +1,164 @@
-import {expect,test,vi} from "vitest";
-import {SUPPORTED_PROTOCOL_VERSIONS} from "@modelcontextprotocol/ext-apps/app-bridge";
-import {applyHostContext,connectHost,type HostApi} from "../src/app/postmessage";
+import { expect, test, vi } from "vitest";
+import { applyHostContext, connectHost, type HostApi } from "../src/app/postmessage";
 
-test("official supported versions establish origin; teardown acknowledges and disconnects",async()=>{
- for(const protocolVersion of SUPPORTED_PROTOCOL_VERSIONS){
-  let receive: (event: MessageEvent)=>void = ()=>{};
-  const postMessage=vi.fn(),removeEventListener=vi.fn(),cancelled=vi.fn(),ready=vi.fn();
-  const parent={postMessage};
-  const win={parent,addEventListener:(_name:string,fn:typeof receive)=>{receive=fn;},removeEventListener,requestAnimationFrame:()=>{},document:{documentElement:{},body:{}}} as unknown as Window;
-  vi.stubGlobal("ResizeObserver",class {observe(){} disconnect(){}});
-  const disconnect=connectHost({ready,input:vi.fn(),result:vi.fn(),cancelled,context:vi.fn(),error:vi.fn()},win);
-  const initialize=postMessage.mock.calls[0]![0];
-  const send=(data:unknown,origin="https://host.test")=>receive({source:parent,origin,data} as unknown as MessageEvent);
-  send({jsonrpc:"2.0",id:initialize.id,result:{protocolVersion,hostInfo:{name:"test",version:"1"},hostCapabilities:{serverTools:{}},hostContext:{}}});
-  await Promise.resolve(); await Promise.resolve();
-  expect(ready).toHaveBeenCalledOnce();
-  send({jsonrpc:"2.0",id:1,method:"ui/resource-teardown",params:{}},"https://other.test");
-  expect(cancelled).not.toHaveBeenCalled();
-  send({jsonrpc:"2.0",id:2,method:"ui/resource-teardown",params:{}});
-  expect(postMessage).toHaveBeenLastCalledWith({jsonrpc:"2.0",id:2,result:{}},"https://host.test");
-  expect(cancelled).toHaveBeenCalledOnce(); expect(removeEventListener).toHaveBeenCalled();
-  await expect(ready.mock.calls[0]![0].call("write",{})).rejects.toThrow("Invalid tool call");
-  disconnect(); vi.unstubAllGlobals();
- }
-});
-
-test("unsupported host version cannot establish the bridge",async()=>{
- let receive: (event:MessageEvent)=>void=()=>{};
- const postMessage=vi.fn(),ready=vi.fn(),error=vi.fn();
- const parent={postMessage};
- const win={parent,addEventListener:(_name:string,fn:typeof receive)=>{receive=fn;},removeEventListener:vi.fn()} as unknown as Window;
- const disconnect=connectHost({ready,input:vi.fn(),result:vi.fn(),cancelled:vi.fn(),context:vi.fn(),error},win);
- const result={protocolVersion:"unsupported",hostInfo:{name:"test",version:"1"},hostCapabilities:{},hostContext:{}};
- receive({source:parent,origin:"https://host.test",data:{jsonrpc:"2.0",id:postMessage.mock.calls[0]![0].id,result}} as unknown as MessageEvent);
- await Promise.resolve(); await Promise.resolve();
- expect(ready).not.toHaveBeenCalled(); expect(error).toHaveBeenCalledOnce();
- disconnect();
-});
-
-const handshake=async(hostCapabilities:Record<string,unknown>,hostContext:Record<string,unknown>={})=>{
- let receive: (event:MessageEvent)=>void=()=>{};
- const postMessage=vi.fn(),ready=vi.fn(),error=vi.fn(),context=vi.fn();
- const parent={postMessage};
- const win={parent,addEventListener:(_name:string,fn:typeof receive)=>{receive=fn;},removeEventListener:vi.fn(),requestAnimationFrame:()=>{},document:{documentElement:{},body:{}}} as unknown as Window;
- vi.stubGlobal("ResizeObserver",class {observe(){} disconnect(){}});
- const disconnect=connectHost({ready,input:vi.fn(),result:vi.fn(),cancelled:vi.fn(),context,error},win,"9.9.9");
- const send=(data:unknown)=>receive({source:parent,origin:"https://host.test",data} as unknown as MessageEvent);
- send({jsonrpc:"2.0",id:postMessage.mock.calls[0]![0].id,result:{protocolVersion:"2026-01-26",hostInfo:{name:"test",version:"1"},hostCapabilities,hostContext}});
- await Promise.resolve(); await Promise.resolve();
- // answers the App's next request with `result`
- const answer=async<T>(pending:Promise<T>,result:unknown)=>{const id=postMessage.mock.lastCall![0].id;send({jsonrpc:"2.0",id,result});return pending;};
- return {postMessage,ready,error,context,send,answer,host:ready.mock.calls[0]?.[0] as HostApi|undefined,disconnect:()=>{disconnect();vi.unstubAllGlobals();}};
+// Adapter semantics only. The browser suite exercises these calls against the real
+// official App/AppBridge pair, not a second implementation of their wire protocol.
+const sdk = vi.hoisted(() => ({ apps: [] as any[] }));
+vi.mock("@modelcontextprotocol/ext-apps", () => ({
+  App: class {
+    capabilities: Record<string, unknown> = {};
+    context: Record<string, unknown> = {};
+    connected: Promise<void>;
+    resolve!: () => void;
+    reject!: (error: Error) => void;
+    callServerTool = vi.fn(async () => ({ content: [] }));
+    openLink = vi.fn(async () => ({}));
+    sendMessage = vi.fn(async () => ({}));
+    updateModelContext = vi.fn(async () => ({}));
+    requestDisplayMode = vi.fn(async ({ mode }: { mode: string }) => ({ mode }));
+    stopResize = vi.fn();
+    setupSizeChangedNotifications = vi.fn(() => this.stopResize);
+    close = vi.fn(async () => {});
+    constructor(readonly info: unknown, readonly appCapabilities: unknown, readonly options: unknown) {
+      this.connected = new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; });
+      sdk.apps.push(this);
+    }
+    connect = vi.fn(() => this.connected);
+    getHostCapabilities() { return this.capabilities; }
+    getHostContext() { return this.context; }
+  },
+  PostMessageTransport: class { constructor(readonly target: unknown, readonly source: unknown) {} },
+}));
+const make = async (capabilities = {}, context = {}, initialize = true) => {
+  const ready = vi.fn(), input = vi.fn(), result = vi.fn(), cancelled = vi.fn(), changed = vi.fn(), error = vi.fn();
+  const win = { parent: { postMessage: vi.fn() }, addEventListener: vi.fn(), removeEventListener: vi.fn(), setTimeout } as unknown as Window;
+  const disconnect = connectHost({ ready, input, result, cancelled, context: changed, error }, win, "9.9.9");
+  const app = sdk.apps.at(-1)!;
+  app.capabilities = capabilities; app.context = context;
+  if (initialize) {
+    const guard = vi.mocked(win.addEventListener).mock.calls[0]![1] as (event: MessageEvent) => void;
+    guard({ source: win.parent, origin: "https://host.test", data: {} } as MessageEvent);
+    app.resolve(); await Promise.resolve();
+  }
+  return { app, ready, input, result, cancelled, changed, error, win, disconnect, host: ready.mock.calls[0]?.[0] as HostApi };
 };
 
-test("initialize names the package version and the display modes the App lays out for",async()=>{
- const {postMessage,disconnect}=await handshake({});
- expect(postMessage.mock.calls[0]![0].params).toEqual({appInfo:{name:"mantle",version:"9.9.9"},appCapabilities:{availableDisplayModes:["inline","fullscreen"]},protocolVersion:"2026-01-26"});
- disconnect();
+test("official App owns initialization and resizing, with package version and supported layouts", async () => {
+  const { app, win, disconnect } = await make();
+  expect(app.info).toEqual({ name: "mantle", version: "9.9.9" });
+  expect(app.appCapabilities).toEqual({ availableDisplayModes: ["inline", "fullscreen"] });
+  const transport = app.connect.mock.calls[0][0];
+  expect(transport.source).toBe(win.parent);
+  transport.target.postMessage({ hello: "host" }, "*");
+  expect(win.parent.postMessage).toHaveBeenCalledWith({ hello: "host" }, "https://host.test");
+  expect(app.setupSizeChangedNotifications).toHaveBeenCalledOnce();
+  disconnect(); disconnect();
+  expect(app.stopResize).toHaveBeenCalledOnce();
+  expect(app.close).toHaveBeenCalledOnce();
+  expect(win.removeEventListener).toHaveBeenCalledWith("message", expect.any(Function), true);
 });
 
-test("without serverTools the App gets no tool call, and requests the host did not advertise are never sent",async()=>{
- const {postMessage,host,disconnect}=await handshake({});
- expect(host!.call).toBeUndefined();
- const sent=postMessage.mock.calls.length;
- expect(await host!.openLink("https://example.com/")).toBe(false);
- expect(await host!.sendMessage("hi")).toBe(false);
- expect(await host!.updateModelContext({content:[{type:"text",text:"x"}]})).toBe(false);
- expect(await host!.requestDisplayMode("fullscreen")).toBeNull();
- expect(postMessage.mock.calls.length).toBe(sent);
- disconnect();
+test("missing capabilities expose no tool call and send no unavailable host requests", async () => {
+  const { host, app, disconnect } = await make();
+  expect(host.call).toBeUndefined();
+  expect(await host.openLink("https://example.com")).toBe(false);
+  expect(await host.sendMessage("hi")).toBe(false);
+  expect(await host.updateModelContext({ content: [{ type: "text", text: "x" }] })).toBe(false);
+  expect(await host.requestDisplayMode("fullscreen")).toBeNull();
+  for (const request of [app.callServerTool, app.openLink, app.sendMessage, app.updateModelContext, app.requestDisplayMode]) expect(request).not.toHaveBeenCalled();
+  disconnect();
 });
 
-test("model context carries only the content kinds the host accepts",async()=>{
- const {postMessage,host,answer,disconnect}=await handshake({updateModelContext:{text:{}}});
- const sent=postMessage.mock.calls.length;
- expect(await host!.updateModelContext({structuredContent:{tool:"t"}})).toBe(false);
- expect(postMessage.mock.calls.length).toBe(sent);
- expect(await answer(host!.updateModelContext({content:[{type:"text",text:"done"}],structuredContent:{tool:"t"}}),{})).toBe(true);
- expect(postMessage.mock.lastCall![0].params).toEqual({content:[{type:"text",text:"done"}]});
- disconnect();
+test("host calls use official methods, retain abort signals and limit links and model context", async () => {
+  const { app, host, disconnect } = await make({ serverTools: {}, openLinks: {}, message: { text: {} }, updateModelContext: { text: {} } }, { availableDisplayModes: ["inline", "fullscreen"] });
+  const abort = new AbortController();
+  await host.call!("review", { id: "r1" }, abort.signal);
+  expect(app.callServerTool).toHaveBeenCalledWith({ name: "review", arguments: { id: "r1" } }, { signal: abort.signal });
+  expect(await host.openLink("javascript:alert(1)")).toBe(false);
+  expect(await host.openLink("/relative")).toBe(false);
+  expect(await host.openLink("https://example.com")).toBe(true);
+  expect(app.openLink).toHaveBeenCalledWith({ url: "https://example.com" });
+  app.openLink.mockResolvedValueOnce({ isError: true });
+  expect(await host.openLink("https://example.com")).toBe(false);
+  expect(await host.sendMessage("hi")).toBe(true);
+  expect(app.sendMessage).toHaveBeenCalledWith({ role: "user", content: [{ type: "text", text: "hi" }] });
+  expect(await host.updateModelContext({ structuredContent: { secret: 1 } })).toBe(false);
+  expect(await host.updateModelContext({ content: [{ type: "text", text: "done" }], structuredContent: { omitted: 1 } })).toBe(true);
+  expect(app.updateModelContext).toHaveBeenCalledWith({ content: [{ type: "text", text: "done" }] });
+  expect(await host.requestDisplayMode("fullscreen")).toBe("fullscreen");
+  disconnect();
+  await expect(host.call!("review", {})).rejects.toThrow("Invalid tool call");
+  expect(await host.sendMessage("closed")).toBe(false);
 });
 
-test("advertised host requests use the spec's methods; only http(s) links are opened",async()=>{
- const {postMessage,host,answer,send,disconnect}=await handshake({serverTools:{},openLinks:{},message:{text:{}},updateModelContext:{text:{},structuredContent:{}}},{availableDisplayModes:["inline"]});
- expect(typeof host!.call).toBe("function");
- const sent=postMessage.mock.calls.length;
- expect(await host!.openLink("javascript:alert(1)")).toBe(false);
- expect(await host!.openLink("/relative")).toBe(false);
- expect(postMessage.mock.calls.length).toBe(sent);
- expect(await answer(host!.openLink("https://example.com/a"),{})).toBe(true);
- expect(postMessage.mock.lastCall![0]).toMatchObject({method:"ui/open-link",params:{url:"https://example.com/a"}});
- expect(await answer(host!.openLink("https://example.com/b"),{isError:true})).toBe(false);
- expect(await answer(host!.sendMessage("hi"),{})).toBe(true);
- expect(postMessage.mock.lastCall![0]).toMatchObject({method:"ui/message",params:{role:"user",content:[{type:"text",text:"hi"}]}});
- expect(await answer(host!.updateModelContext({structuredContent:{tool:"t"}}),{})).toBe(true);
- expect(postMessage.mock.lastCall![0]).toMatchObject({method:"ui/update-model-context",params:{structuredContent:{tool:"t"}}});
- // fullscreen only once the host offers it
- expect(await host!.requestDisplayMode("fullscreen")).toBeNull();
- send({jsonrpc:"2.0",method:"ui/notifications/host-context-changed",params:{availableDisplayModes:["inline","fullscreen"]}});
- expect(await answer(host!.requestDisplayMode("fullscreen"),{mode:"fullscreen"})).toBe("fullscreen");
- expect(postMessage.mock.lastCall![0]).toMatchObject({method:"ui/request-display-mode",params:{mode:"fullscreen"}});
- disconnect();
+test("early and late results, cancellation, context and teardown keep their existing semantics", async () => {
+  const state = await make({ serverTools: {} }, {}, false);
+  state.app.ontoolinput({ arguments: { limit: 1 } });
+  state.app.ontoolresult({ content: [], structuredContent: { rows: [] } });
+  expect(state.input).toHaveBeenCalledWith({ limit: 1 });
+  expect(state.result).toHaveBeenCalledOnce();
+  state.app.resolve(); await Promise.resolve();
+  state.app.ontoolcancelled({ reason: "cancelled" });
+  state.app.onhostcontextchanged({ theme: "dark" });
+  expect(state.cancelled).toHaveBeenCalledOnce();
+  expect(state.changed).toHaveBeenCalledWith({ theme: "dark" });
+  expect(state.app.onteardown()).toEqual({});
+  await new Promise(resolve => setTimeout(resolve, 1));
+  expect(state.app.close).toHaveBeenCalledOnce();
+  state.app.ontoolresult({ content: [] });
+  expect(state.result).toHaveBeenCalledOnce();
 });
 
-test("host context fields the App cannot use are dropped, never fatal to the handshake or an update",async()=>{
- const {ready,error,context,send,host,answer,postMessage,disconnect}=await handshake({},{theme:"dark",timeZone:"Etc/Unknown",availableDisplayModes:["inline","fullscreen","sidebar"],displayMode:"sidebar",safeAreaInsets:{top:1,right:0,bottom:0}});
- expect(error).not.toHaveBeenCalled();
- expect(ready.mock.calls[0]![1]).toEqual({theme:"dark",timeZone:"Etc/Unknown",availableDisplayModes:["inline","fullscreen"]});
- expect(await answer(host!.requestDisplayMode("fullscreen"),{mode:"fullscreen"})).toBe("fullscreen");
- expect(postMessage.mock.lastCall![0]).toMatchObject({method:"ui/request-display-mode"});
- for(const params of [{theme:"light",displayMode:"theatre"},{theme:"light",containerDimensions:{maxHeight:-1}},{theme:"light",containerDimensions:{width:"320px"}},{theme:"light",safeAreaInsets:{top:"1px",right:0,bottom:0,left:0}},{theme:"light",timeZone:7}])
-  send({jsonrpc:"2.0",method:"ui/notifications/host-context-changed",params});
- expect(context.mock.calls.map(call=>call[0])).toEqual(Array(5).fill({theme:"light"}));
- send({jsonrpc:"2.0",method:"ui/notifications/host-context-changed",params:{timeZone:"Asia/Taipei",displayMode:"fullscreen",containerDimensions:{maxHeight:400,width:320},safeAreaInsets:{top:10,right:0,bottom:20,left:0}}});
- expect(context.mock.lastCall![0]).toEqual({timeZone:"Asia/Taipei",displayMode:"fullscreen",containerDimensions:{maxHeight:400,width:320},safeAreaInsets:{top:10,right:0,bottom:20,left:0}});
- // the fields develop already checked still refuse an update
- send({jsonrpc:"2.0",method:"ui/notifications/host-context-changed",params:{theme:"sepia"}});
- expect(context).toHaveBeenCalledTimes(6);
- disconnect();
+test("unmount during initialization suppresses late ready/error; a fresh mount reconnects", async () => {
+  const state = await make({}, {}, false);
+  state.disconnect(); state.app.resolve(); await Promise.resolve();
+  expect(state.ready).not.toHaveBeenCalled();
+  expect(state.error).not.toHaveBeenCalled();
+  expect(state.app.setupSizeChangedNotifications).not.toHaveBeenCalled();
+  const fresh = await make();
+  expect(fresh.ready).toHaveBeenCalledOnce();
+  fresh.disconnect();
+  const failed = await make({}, {}, false);
+  failed.app.reject(new Error("host unavailable")); await Promise.resolve(); await Promise.resolve();
+  expect(failed.error.mock.calls[0][0].message).toContain("host unavailable");
+  failed.disconnect();
+});
+
+test("result notifications and calls validate consumed data, not ignored optional protocol fields", async () => {
+  const state = await make({ serverTools: {} });
+  for (const value of [
+    { content: [], structuredContent: { rows: [] }, _meta: undefined },
+    { content: [{ type: "text", text: '{"rows":[]}', annotations: undefined }] },
+  ]) {
+    state.app.ontoolresult(value);
+    expect(state.result).toHaveBeenLastCalledWith(value);
+    state.app.callServerTool.mockResolvedValueOnce(value);
+    await expect(state.host.call!("view", {})).resolves.toEqual(value);
+  }
+  const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
+  for (const value of [
+    { content: [], structuredContent: cyclic },
+    { content: [], structuredContent: JSON.parse('{"rows":[{"__proto__":{"unsafe":true}}]}') },
+    { content: [{ type: "text", text: '{"rows":[{"__proto__":{"unsafe":true}}]}' }] },
+  ]) {
+    state.app.ontoolresult(value);
+    state.app.callServerTool.mockResolvedValueOnce(value);
+    await expect(state.host.call!("view", {})).rejects.toThrow("Invalid tool result");
+  }
+  expect(state.result).toHaveBeenCalledTimes(2);
+  state.disconnect();
+});
+
+test("platform origin continuity guard is separate from the official source-window check", async () => {
+  const { win, disconnect } = await make();
+  const guard = vi.mocked(win.addEventListener).mock.calls[0]![1] as (event: MessageEvent) => void;
+  const event = (source: unknown, origin: string) => ({ source, origin, data: {}, stopImmediatePropagation: vi.fn() });
+  const unrelated = event({}, "https://attacker.test"); guard(unrelated as unknown as MessageEvent);
+  const first = event(win.parent, "https://host.test"); guard(first as unknown as MessageEvent);
+  const navigated = event(win.parent, "https://attacker.test"); guard(navigated as unknown as MessageEvent);
+  expect(first.stopImmediatePropagation).not.toHaveBeenCalled();
+  expect(navigated.stopImmediatePropagation).toHaveBeenCalledOnce();
+  disconnect();
 });
 
 test("applyHostContext: dark as both .dark and data-theme, only spec style variables, insets and the container's bounds",()=>{

@@ -88,7 +88,7 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     expect(state.calls[0]).toMatchObject({ name: "review_requisition", arguments: { id: "r1", expectedVersion: 3 } });
     expect(state.calls[0].arguments.date).toBe(await page.evaluate(() => new Date(2026, 9, 15, 12, 34).toISOString()));
     expect(state.calls[1]).toMatchObject({ name: "pending", arguments: { limit: 5 } });
-    expect(state.calls[0]._meta.progressToken).toMatch(/^[a-f0-9-]+:\d+$/);
+    expect(["number", "string"]).toContain(typeof state.calls[0]._meta.progressToken);
     expect(state.sizes.length).toBeGreaterThan(0);
     const root = await app.locator("html").evaluate(node => ({ lang: node.lang, theme: node.dataset.theme, color: node.style.getPropertyValue("--color-text-primary") }));
     expect(root).toEqual({ lang: "zh-TW", theme: "dark", color: "rgb(1, 2, 3)" });
@@ -201,7 +201,45 @@ it("is read-only in a host without server tools: rows and plain links, no action
   } finally { await browser.close(); await server.close(); }
 }, 45_000);
 
-it("pins the parent and origin, ignores malformed input and rejects reverse tool routing; aborts stay uncertain", async () => {
+it("delivers official result notifications with optional undefined metadata and rejects unsafe consumed output", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  try {
+    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?probe`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const frame = page.frames().find(frame => frame.url().includes("mcp-app-probe.html"))!;
+    for (const field of ["meta", "annotation"]) {
+      await page.evaluate(async field => {
+        const value = { content: [{ type: "text", text: '{"rows":[]}', ...(field === "annotation" ? { annotations: undefined } : {}) }], structuredContent: { rows: [] }, ...(field === "meta" ? { _meta: undefined } : {}) };
+        const { bridge } = (window as any).host;
+        bridge.oncalltool = async () => value;
+        await bridge.sendToolResult(value);
+      }, field);
+      await expect.poll(() => frame.evaluate(() => (window as any).probe.results.length)).toBe(field === "meta" ? 1 : 2);
+      expect(await frame.evaluate(async () => (await (window as any).probe.call("optional_result", {})).structuredContent)).toEqual({ rows: [] });
+    }
+    await page.evaluate(async () => {
+      const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
+      const values = [
+        { content: [], structuredContent: cyclic },
+        { content: [], structuredContent: JSON.parse('{"rows":[{"__proto__":{"unsafe":true}}]}') },
+        { content: [{ type: "text", text: '{"rows":[{"__proto__":{"unsafe":true}}]}' }] },
+      ];
+      const { bridge } = (window as any).host;
+      for (const value of values) await bridge.sendToolResult(value);
+      bridge.oncalltool = async () => values[1];
+    });
+    expect(await frame.evaluate(async () => {
+      try { await (window as any).probe.call("unsafe_result", {}); return "accepted"; } catch (error) { return (error as Error).message; }
+    })).toBe("Invalid tool result");
+    expect(await frame.evaluate(() => ({ count: (window as any).probe.results.length, polluted: ({} as any).unsafe }))).toEqual({ count: 2, polluted: undefined });
+    expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
+  } finally { await browser.close(); await server.close(); }
+}, 45_000);
+
+it("pins the parent and origin after official initialization; reverse calls are refused and aborts stay uncertain", async () => {
   const server = await hostServer();
   await server.listen();
   const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
@@ -215,10 +253,25 @@ it("pins the parent and origin, ignores malformed input and rejects reverse tool
         return original(handler, timeout, ...args);
       }) as typeof window.setTimeout;
     });
+    await page.addInitScript(() => {
+      // Early unrelated parent traffic must not establish the MCP connection's origin.
+      // This runs just before the official initialize response reaches the App.
+      window.addEventListener("message", function beforeHandshake(event) {
+        if (event.source !== window.parent) return;
+        window.removeEventListener("message", beforeHandshake, true);
+        window.dispatchEvent(new MessageEvent("message", { source: window.parent, origin: "https://unrelated.invalid", data: { unrelated: true } }));
+      }, true);
+    });
     await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?probe`);
     await page.waitForFunction(() => (window as any).host?.ready);
     const frame = page.frames().find(frame => frame.url().includes("mcp-app-probe.html"))!;
-    const counts = await frame.evaluate(() => {
+    await frame.evaluate(() => {
+      // Keep the sender's realm: a parent-realm wrapper would change event.source.
+      const send = window.parent.postMessage.bind(window.parent);
+      (window as any).appTargetOrigins = [];
+      window.parent.postMessage = ((message: unknown, origin: string) => { (window as any).appTargetOrigins.push(origin); send(message, origin); }) as typeof window.postMessage;
+    });
+    const counts = await frame.evaluate(async () => {
       const notify = { jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { unsafe: true } } };
       const inject = (data: unknown, source: Window = window.parent, origin = location.origin) => window.dispatchEvent(new MessageEvent("message", { data, source, origin }));
       inject(notify, window); inject(notify, window.parent, "https://attacker.invalid");
@@ -231,37 +284,48 @@ it("pins the parent and origin, ignores malformed input and rejects reverse tool
       inject({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { locale: 1 } });
       inject({ ...notify, id: "reverse", method: "tools/call" });
       inject({ jsonrpc: "2.0", id: "unknown", result: { content: [] } });
+      await new Promise(resolve => setTimeout(resolve, 0));
       const { inputs, results, contexts } = (window as any).probe;
       return { inputs, results, contexts: contexts.length, polluted: ({} as any).polluted };
     });
-    expect(counts).toEqual({ inputs: [], results: [], contexts: 1, polluted: undefined });
+    // The official schema strips unsafe prototype keys; no controller sees them.
+    expect(counts).toEqual({ inputs: [{}], results: [], contexts: 1, polluted: undefined });
     expect(await page.evaluate(() => (window as any).host.calls)).toEqual([]);
-    expect(await frame.evaluate(() => {
+    expect(await frame.evaluate(async () => {
       const deep: Record<string, unknown> = {}, shared = { constructor: "ordinary data", prototype: "ordinary data" };
       let node = deep;
       for (let i = 0; i < 100; i++) { const next = {}; node["next"] = next; node = next; }
       window.dispatchEvent(new MessageEvent("message", { source: window.parent, origin: location.origin,
         data: { jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { deep, one: shared, two: shared } } } }));
-      const [input] = (window as any).probe.inputs;
+      // The official Protocol delivers validated notifications asynchronously.
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const input = (window as any).probe.inputs.at(-1);
       return { accepted: (window as any).probe.inputs.length, shared: input.one === input.two, constructor: input.one.constructor };
-    })).toEqual({ accepted: 1, shared: true, constructor: "ordinary data" });
-    const cancellation = await frame.evaluate(async () => {
-      const signal = new AbortController();
-      const promise = (window as any).probe.call("wait", {}, signal.signal);
-      setTimeout(() => signal.abort(new Error("user cancelled")), 50);
-      try { await promise; return "resolved"; } catch (error) { return (error as Error).message; }
+    })).toEqual({ accepted: 2, shared: true, constructor: "ordinary data" });
+    await frame.evaluate(() => {
+      const signal = new AbortController(), probe = (window as any).probe;
+      probe.pending = probe.call("wait", {}, signal.signal).then(() => "resolved", (error: Error) => error.message);
+      probe.abort = () => signal.abort(new Error("user cancelled"));
     });
-    expect(cancellation).toBe("user cancelled");
+    // Wait for actual host progress to reset the official request timeout before
+    // cancelling; a fixed delay races the host when Chrome is under build load.
+    await frame.waitForFunction(() => (window as any).hostRequestTimers >= 3);
+    const cancellation = await frame.evaluate(async () => { (window as any).probe.abort(); return (window as any).probe.pending; });
+    expect(cancellation).toContain("user cancelled");
+    expect(await frame.evaluate(() => (window as any).appTargetOrigins)).toEqual(expect.arrayContaining([new URL(server.resolvedUrls!.local[0]!).origin]));
+    expect(await frame.evaluate(() => (window as any).appTargetOrigins)).not.toContain("*");
     // Initialize + tool request + an actual official-host progress reset.
-    expect(await frame.evaluate(() => (window as any).hostRequestTimers)).toBe(3);
+    expect(await frame.evaluate(() => (window as any).hostRequestTimers)).toBeGreaterThanOrEqual(3);
     await page.waitForFunction(() => (window as any).host.aborts.length === 1);
     await page.evaluate(async () => { await (window as any).host.bridge.sendToolCancelled({ reason: "host cancelled" }); });
     await expect.poll(() => frame.evaluate(() => (window as any).probe.cancelled)).toBe(1);
+    expect(await page.evaluate(() => (window as any).host.bridge.teardownResource({}))).toEqual({});
+    await expect.poll(() => frame.evaluate(() => (window as any).probe.cancelled)).toBe(2);
     await frame.evaluate(() => (window as any).probe.close());
     expect(await frame.evaluate(async () => { try { await (window as any).probe.call("wait", {}); return "resolved"; } catch (error) { return (error as Error).message; } })).toBe("Invalid tool call");
     await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?bad-handshake`);
     const invalid = page.frames().find(frame => frame.url().includes("mcp-app-probe.html"))!;
-    await expect.poll(() => invalid.evaluate(() => (window as any).probe?.errors)).toEqual(["Invalid host handshake"]);
+    await expect.poll(() => invalid.evaluate(() => (window as any).probe?.errors)).toEqual([expect.stringMatching(/invalid|expected/i)]);
     expect(await page.evaluate(() => (window as any).host.ready)).toBe(false);
     expect(await invalid.evaluate(() => (window as any).probe.call)).toBeUndefined();
   } finally { await browser.close(); await server.close(); }

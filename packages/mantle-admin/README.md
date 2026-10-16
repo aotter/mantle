@@ -127,6 +127,11 @@ through to `_meta.ui`. What the App asks of a host is in the
 components must do to render there, and how it upgrades from the prebuilt App, in
 [Customising Admin for MCP hosts](../../docs/handbook/guides/mcp-apps.md#customising-admin-for-mcp-hosts).
 
+The App uses the pinned official ext-apps `App` and `PostMessageTransport` for initialization, notifications, host requests,
+progress and cancellation. Admin adapts advertised host capabilities to its existing hooks. A separate browser guard pins the
+parent origin after the official handshake and narrows subsequent message delivery to that origin (opaque origins require
+`*`); protocol parsing stays in the official client. Closing the App rejects pending calls without retrying uncertain writes.
+
 `@aotter/mantle-admin/testing` exports `checkMcpApp({ catalogue, html })`, the compatibility test `mantle generate --admin` writes as
 `generated/admin-mcp-app.check.mjs`: it loads the built App in the official `AppBridge` under the spec's default CSP and fails on a network
 request, a console error, an exception or a missing size. It needs the optional peer `playwright-core` and Chrome (`MANTLE_TEST_CHROMIUM`);
