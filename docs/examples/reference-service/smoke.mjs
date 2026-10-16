@@ -5,6 +5,7 @@ import { execFile, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 const port = 18000 + Math.floor(Math.random() * 1000);
 const origin = `http://127.0.0.1:${port}`;
@@ -199,12 +200,10 @@ try {
   assert.equal(editedOrder.status, 200, JSON.stringify(editedOrder.body));
   const affected = (await call("GET", "/admin/api/views/recent-activity", { cookie: admin })).body.rows.filter(row => row.subject === adminOrder.id);
   assert.deepEqual(affected.map(row => row.detail).sort(), ["placed x1", "placed x3"]);
-  // Async, not spawnSync: a blocked event loop leaves undici's idle keep-alive socket pooled after workerd closed it,
-  // and the next fetch then dies with "other side closed". Awaiting lets the pool drop it first.
+  // async, as smoke-kit's `sql`: a blocked event loop leaves a socket workerd already closed in undici's pool
   const execute = async command => {
-    const result = await new Promise(done => execFile("pnpm", ["exec", "wrangler", "d1", "execute", "mantle-reference", "--local", "--persist-to", state, "--command", command, "--json"], { encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } }, (error, stdout, stderr) => done({ status: error ? 1 : 0, stdout, stderr })));
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    return JSON.parse(result.stdout)[0].results;
+    const { stdout } = await promisify(execFile)("pnpm", ["exec", "wrangler", "d1", "execute", "mantle-reference", "--local", "--persist-to", state, "--command", command, "--json"], { encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } });
+    return JSON.parse(stdout)[0].results;
   };
   const actors = await execute(`SELECT DISTINCT u.email FROM activity a JOIN user u ON u.id = a.author_id WHERE a.subject = '${adminOrder.id}'`);
   assert.deepEqual(actors, [{ email: owner }]);
