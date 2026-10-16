@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { t } from "../../app/i18n";
 import { usePreferences } from "../../app/preferences";
@@ -9,7 +9,7 @@ import { renderTitleText } from "../../lib/entry-title";
 import { entriesQueryArgsFromSearch, entriesQueryOptions } from "../../lib/queries";
 import { renderDataValue } from "../../lib/render-data-value";
 import type { Collection, DeveloperSchemaModel, DeveloperViewModel } from "../../lib/types";
-import { EmptyState, ErrorBox } from "../../ui/page";
+import { EmptyState, ErrorBox, LoadMore } from "../../ui/page";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@aotter/mantle-ui/kit";
@@ -34,27 +34,17 @@ function ObservedAt({ time }: { time: number }): React.ReactElement {
 
 export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): React.ReactElement {
   const { language } = usePreferences();
-  const [cursors, setCursors] = React.useState<string[]>([]);
-  React.useEffect(() => setCursors([]), [model.name]);
   const collections = useQuery<Collection[]>({
     queryKey: ["collections"],
     queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
   });
   const collection = previewCollection(collections.data ?? [], model.name);
-  const entries = useQuery({
-    ...entriesQueryOptions({
-      ...entriesQueryArgsFromSearch(model.name, ""),
-      cursor: cursors.slice(-1)[0],
-      cursorDirection: "forward",
-    }),
-    enabled: !!collection,
-    staleTime: 0,
-  });
+  const entries = useInfiniteQuery({ ...entriesQueryOptions(entriesQueryArgsFromSearch(model.name, "")), enabled: !!collection, staleTime: 0 });
   if (collections.isLoading) return <Skeleton className="m-5 h-24 w-auto" />;
   if (collections.isError) return <div className="p-5"><ErrorBox error={collections.error} /></div>;
   if (!collection) return <p className="p-5 text-sm text-muted-foreground">{t(language, "model.liveDataUnavailable")}</p>;
 
-  const rows = entries.data?.items ?? [];
+  const rows = entries.data?.pages.flatMap((page) => page.items) ?? [];
   const fields = [...new Set(rows.flatMap((row) => Object.keys(row.data_preview ?? {})))];
   const base = `/admin/c/${encodeURIComponent(model.name)}`;
   return (
@@ -63,7 +53,7 @@ export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): R
         {entries.dataUpdatedAt ? <ObservedAt time={entries.dataUpdatedAt} /> : null}
         <a className="ms-auto text-sm font-medium text-primary underline-offset-4 hover:underline" href={base}>{t(language, "model.openFullPage")}</a>
       </div>
-      {entries.isError ? <ErrorBox error={entries.error} /> : null}
+      {entries.isError && !entries.data ? <ErrorBox error={entries.error} /> : null}
       {entries.isLoading ? <Skeleton className="h-28 w-full" /> : null}
       {entries.data && rows.length === 0 ? <EmptyState title={t(language, "collection.empty.title")} description={t(language, "collection.empty.all", { collection: model.name })} /> : null}
       {rows.length > 0 ? (
@@ -92,12 +82,7 @@ export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): R
           </Table>
         </div>
       ) : null}
-      {entries.data && (cursors.length || entries.data.next_cursor) ? (
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" disabled={!cursors.length} onClick={() => setCursors(current => current.slice(0, -1))}>{t(language, "collection.previousPage")}</Button>
-          <Button type="button" variant="outline" disabled={!entries.data.next_cursor} onClick={() => setCursors(current => [...current, entries.data!.next_cursor!])}>{t(language, "collection.nextPage")}</Button>
-        </div>
-      ) : null}
+      <LoadMore query={entries} count={rows.length} language={language} />
     </div>
   );
 }

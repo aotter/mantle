@@ -1,23 +1,16 @@
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ContactRound, Search } from "lucide-react";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import type { MemberListResult, AdminRole } from "../../lib/types";
-import { cn } from "../../lib/utils";
+import { pagedQueryOptions } from "../../lib/queries";
 import { formatTimestampMs } from "../content/field-render";
 import { Badge } from "@aotter/mantle-ui/kit";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import {
   Table,
@@ -27,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@aotter/mantle-ui/kit";
-import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { EmptyState, ErrorBox, LoadMore, PageHeader, SectionCard } from "../../ui/page";
 import { IdValue } from "../../ui/id-value";
 
 const MEMBER_PAGE_SIZE = 50;
@@ -38,18 +31,13 @@ export function MembersView(): React.ReactElement {
   const { search: locationSearch } = useAdminLocation();
   const params = new URLSearchParams(locationSearch);
   const search = params.get("search")?.trim() ?? "";
-  const cursor = params.get("cursor") || undefined;
-  const cursorDirection = params.get("cursor_direction") === "backward" ? "backward" : "forward";
-  const members = useQuery<MemberListResult>({
-    queryKey: ["members", search, cursor ?? "first", cursorDirection],
-    queryFn: () => {
-      const query = new URLSearchParams({ limit: String(MEMBER_PAGE_SIZE) });
-      if (search) query.set("search", search);
-      if (cursor) query.set("cursor", cursor);
-      if (cursorDirection === "backward") query.set("cursor_direction", "backward");
-      return api.get<MemberListResult>(`/members?${query.toString()}`);
-    },
-  });
+  const members = useInfiniteQuery(pagedQueryOptions(["members", search], (cursor) => {
+    const query = new URLSearchParams({ limit: String(MEMBER_PAGE_SIZE) });
+    if (search) query.set("search", search);
+    if (cursor) query.set("cursor", cursor);
+    return api.get<MemberListResult>(`/members?${query.toString()}`);
+  }));
+  const items = members.data?.pages.flatMap((page) => page.items) ?? [];
   const promote = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: AdminRole }) =>
       api.patch(`/admin/${encodeURIComponent(userId)}/role`, { role }),
@@ -68,15 +56,15 @@ export function MembersView(): React.ReactElement {
       <MemberSearch search={search} />
       {promote.isError ? <ErrorBox error={promote.error} /> : null}
       {members.isLoading ? <Skeleton className="h-64 w-full" /> : null}
-      {members.isError ? <ErrorBox error={members.error} /> : null}
-      {members.data?.items.length === 0 ? (
+      {members.isError && !members.data ? <ErrorBox error={members.error} /> : null}
+      {members.data && items.length === 0 ? (
         <EmptyState
           icon={ContactRound}
           title={t(language, search ? "members.emptySearch.title" : "members.empty.title")}
           description={t(language, search ? "members.emptySearch.body" : "members.empty.body")}
         />
       ) : null}
-      {members.data && members.data.items.length > 0 ? (
+      {members.data && items.length > 0 ? (
         <>
           <SectionCard className="overflow-x-auto p-0">
             <Table>
@@ -92,7 +80,7 @@ export function MembersView(): React.ReactElement {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {members.data.items.map((member) => (
+                {items.map((member) => (
                   <TableRow key={member.id}>
                     <TableCell><IdValue value={member.id} language={language} /></TableCell>
                     <TableCell className="font-medium">{member.name}</TableCell>
@@ -110,7 +98,7 @@ export function MembersView(): React.ReactElement {
                       <Button
                         variant="outline"
                         disabled={promote.isPending}
-                        onClick={() => promote.mutate({ userId: member.id, role: members.data?.adminRoles?.[0] ?? "admin" })}
+                        onClick={() => promote.mutate({ userId: member.id, role: members.data?.pages[0]?.adminRoles?.[0] ?? "admin" })}
                         aria-label={`${t(language, "members.promote")}: ${member.name}`}
                       >
                         {t(language, "members.promote")}
@@ -121,11 +109,7 @@ export function MembersView(): React.ReactElement {
               </TableBody>
             </Table>
           </SectionCard>
-          <MemberPagination
-            search={search}
-            previousCursor={members.data.previous_cursor}
-            nextCursor={members.data.next_cursor}
-          />
+          <LoadMore query={members} count={items.length} language={language} />
         </>
       ) : null}
     </div>
@@ -163,54 +147,9 @@ function MemberSearch({ search }: { search: string }): React.ReactElement {
   );
 }
 
-function MemberPagination({
-  search,
-  previousCursor,
-  nextCursor,
-}: {
-  search: string;
-  previousCursor: string | null;
-  nextCursor: string | null;
-}): React.ReactElement | null {
-  const { language } = usePreferences();
-  if (!previousCursor && !nextCursor) return null;
-  return (
-    <Pagination className="mt-4 justify-end" aria-label={t(language, "members.pagination")}>
-      <PaginationContent>
-        <PaginationItem>
-          <PaginationPrevious
-            href={previousCursor ? membersHref(search, previousCursor, "backward") : undefined}
-            text={t(language, "members.previousPage")}
-            aria-label={t(language, "members.previousPage")}
-            aria-disabled={!previousCursor || undefined}
-            tabIndex={previousCursor ? undefined : -1}
-            className={cn(!previousCursor && "pointer-events-none opacity-50")}
-          />
-        </PaginationItem>
-        <PaginationItem>
-          <PaginationNext
-            href={nextCursor ? membersHref(search, nextCursor, "forward") : undefined}
-            text={t(language, "members.nextPage")}
-            aria-label={t(language, "members.nextPage")}
-            aria-disabled={!nextCursor || undefined}
-            tabIndex={nextCursor ? undefined : -1}
-            className={cn(!nextCursor && "pointer-events-none opacity-50")}
-          />
-        </PaginationItem>
-      </PaginationContent>
-    </Pagination>
-  );
-}
-
-function membersHref(
-  search: string,
-  cursor?: string,
-  direction: "forward" | "backward" = "forward",
-): string {
+function membersHref(search: string): string {
   const params = new URLSearchParams();
   if (search) params.set("search", search);
-  if (cursor) params.set("cursor", cursor);
-  if (direction === "backward") params.set("cursor_direction", "backward");
   const suffix = params.toString();
   return `/admin/members${suffix ? `?${suffix}` : ""}`;
 }

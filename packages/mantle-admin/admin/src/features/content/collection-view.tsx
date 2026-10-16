@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
@@ -20,7 +20,6 @@ import { api, downloadAdminFile } from "../../lib/api";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import {
-  cursorPageHref,
   entriesQueryOptions,
   entryApiPath,
   entryEditorQueryOptions,
@@ -33,6 +32,7 @@ import type {
   EntryEditorPayload,
   EntryRow,
   ListEntriesResult,
+  RefTitles,
   SiteInfo,
   AdminOperation,
 } from "../../lib/types";
@@ -42,13 +42,6 @@ import { Button } from "@aotter/mantle-ui/kit";
 import { Checkbox } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
 import { Popover, PopoverContent, PopoverTrigger } from "@aotter/mantle-ui/kit";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import {
   Table,
@@ -59,7 +52,7 @@ import {
   TableRow,
 } from "@aotter/mantle-ui/kit";
 import { useConfirm } from "../../ui/confirm-dialog";
-import { CollapsibleDescription, EmptyState, ErrorBox, PageHeader } from "../../ui/page";
+import { CollapsibleDescription, EmptyState, ErrorBox, LoadMore, PageHeader } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
@@ -117,7 +110,7 @@ function CollectionList({
   const exportFile = useMutation({ mutationFn: (path: string) => {
     if (!collection) throw new Error("Collection metadata is unavailable.");
     return downloadAdminFile(path);
-  } });
+  }, meta: { invalidates: false } });
   const params = new URLSearchParams(location.search);
   const status = params.get("status") ?? undefined;
   const searchTerm = params.get("search")?.trim() ?? "";
@@ -126,9 +119,6 @@ function CollectionList({
   const parentQuery = params.get("parent") ?? undefined;
   const sortField = params.get("sort") || "updatedAt";
   const sortDirection: SortDirection = params.get("direction") === "asc" ? "asc" : "desc";
-  const cursors = params.getAll("cursor");
-  const cursor = cursors.slice(-1)[0] || undefined;
-  const cursorDirection = "forward";
 
   const collectionsQuery = useQuery<Collection[]>({
     queryKey: ["collections"],
@@ -161,7 +151,7 @@ function CollectionList({
     () => collectionOperationsFor(operationsQuery.data, collectionName),
     [operationsQuery.data, collectionName],
   );
-  const entries = useQuery<ListEntriesResult>({
+  const entries = useInfiniteQuery({
     ...entriesQueryOptions({
       collectionName,
       status,
@@ -172,12 +162,14 @@ function CollectionList({
       scopeValue: resolvedScopeValue,
       sortField,
       sortDirection,
-      cursor,
-      cursorDirection,
     }),
     enabled: !parentFilter || Boolean(resolvedScopeField) || Boolean(scope),
   });
-  const displayedEntries = entries.data;
+  // every page loaded, with the referenced titles of each (a page's titles are only those its rows reference)
+  const displayedEntries = entries.data && {
+    items: entries.data.pages.flatMap((page) => page.items),
+    ref_titles: mergeRefTitles(entries.data.pages.map((page) => page.ref_titles)),
+  };
   const isLoadingEntries = entries.isFetching && !displayedEntries;
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -207,8 +199,6 @@ function CollectionList({
   };
   const listHref = (state: Parameters<typeof collectionHref>[1] = {}) =>
     collectionHref(listPath, { ...listState, ...state });
-  const pageQuery = new URLSearchParams(listHref().split("?")[1]);
-  for (const cursor of cursors) pageQuery.append("cursor", cursor);
   const listQueryFilter = collectionFilter ? {
     name: collectionFilter.field,
     label: propertyLabel(
@@ -369,7 +359,7 @@ function CollectionList({
               selectedId={parentFilter}
               language={language}
               canonical={canonical}
-              onSelect={(id) => navigate(listHref({ parent: id, cursor: undefined }))}
+              onSelect={(id) => navigate(listHref({ parent: id }))}
             />
           ) : undefined}
           actions={headerActions}
@@ -548,11 +538,7 @@ function CollectionList({
               ))}
             </TableBody>
           </Table>
-          <CollectionPagination
-            language={language}
-            previousHref={cursorPageHref(listPath, pageQuery)}
-            nextHref={displayedEntries.next_cursor ? cursorPageHref(listPath, pageQuery, displayedEntries.next_cursor) : undefined}
-          />
+          <LoadMore query={entries} count={displayedEntries.items.length} language={language} />
         </RefTitlesProvider>
       )}
     </div>
@@ -698,7 +684,6 @@ function collectionHref(
     filterValue?: string;
     sortField?: string;
     sortDirection?: SortDirection;
-    cursor?: string;
     parent?: string;
     extraParams?: Record<string, string>;
   } = {},
@@ -718,7 +703,6 @@ function collectionHref(
   if (state.sortDirection && state.sortDirection !== "desc") {
     params.set("direction", state.sortDirection);
   }
-  if (state.cursor) params.set("cursor", state.cursor);
   const suffix = params.toString();
   return `${path}${suffix ? `?${suffix}` : ""}`;
 }
@@ -732,7 +716,6 @@ function sortHref(
 ): string {
   return collectionHref(path, {
     ...state,
-    cursor: undefined,
     sortField: field,
     sortDirection: activeField === field
       ? (direction === "asc" ? "desc" : "asc")
@@ -766,42 +749,11 @@ function SortableTableHead({
   );
 }
 
-function CollectionPagination({
-  previousHref,
-  nextHref,
-  language,
-}: {
-  previousHref?: string;
-  nextHref?: string;
-  language: AdminLanguage;
-}): React.ReactElement | null {
-  if (!previousHref && !nextHref) return null;
-  return (
-    <Pagination className="mt-4 justify-end" aria-label={t(language, "collection.pagination")}>
-      <PaginationContent>
-        <PaginationItem>
-          <PaginationPrevious
-            href={previousHref}
-            text={t(language, "collection.previousPage")}
-            aria-label={t(language, "collection.previousPage")}
-            aria-disabled={!previousHref || undefined}
-            tabIndex={previousHref ? undefined : -1}
-            className={cn(!previousHref && "pointer-events-none opacity-50")}
-          />
-        </PaginationItem>
-        <PaginationItem>
-          <PaginationNext
-            href={nextHref}
-            text={t(language, "collection.nextPage")}
-            aria-label={t(language, "collection.nextPage")}
-            aria-disabled={!nextHref || undefined}
-            tabIndex={nextHref ? undefined : -1}
-            className={cn(!nextHref && "pointer-events-none opacity-50")}
-          />
-        </PaginationItem>
-      </PaginationContent>
-    </Pagination>
-  );
+/** The referenced titles of every page loaded, field by field. */
+export function mergeRefTitles(pages: ReadonlyArray<RefTitles | undefined>): RefTitles {
+  const all: Record<string, RefTitles[string]> = {};
+  for (const titles of pages) for (const [field, byValue] of Object.entries(titles ?? {})) all[field] = { ...all[field], ...byValue };
+  return all;
 }
 
 function ParentScopeFilter({
@@ -1000,7 +952,7 @@ function EntryRowDisplay({
     void queryClient.fetchQuery(entryEditorQueryOptions(row.collection, row.id))
       .then((payload) => {
         const childQuery = entryLandingChildQueryOptions(payload);
-        if (childQuery) return queryClient.prefetchQuery(childQuery);
+        if (childQuery) return queryClient.prefetchInfiniteQuery(childQuery);
       })
       .catch(() => undefined);
   }, [queryClient, row.collection, row.id]);

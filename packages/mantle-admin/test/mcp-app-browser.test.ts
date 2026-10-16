@@ -88,6 +88,32 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
   } finally { await browser.close(); await server.close(); }
 }, 45_000);
 
+it("loads the next page of a View through the host and appends its rows", async () => {
+  const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.mcp-app.config.ts"), root: resolve(import.meta.dirname, ".."), server: { host: "127.0.0.1", port: 0 } });
+  await server.listen();
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  try {
+    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    await page.evaluate(async () => {
+      const { bridge } = (window as any).host;
+      await bridge.sendToolInput({ arguments: { limit: 1 } });
+      await bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops" }], nextCursor: "c2" }, _meta: { "net.aotter.mantle/tool": "pending" } });
+    });
+    await app.getByText("Laptops").waitFor();
+    await app.getByRole("button", { name: "載入更多" }).click();
+    await app.getByText("Desks").waitFor();
+    // the first page stays, the same tool is called with the same input and the cursor, and the last page has no button
+    expect(await app.getByText("Laptops").count()).toBe(1);
+    expect(await page.evaluate(() => (window as any).host.calls)).toMatchObject([{ name: "pending", arguments: { limit: 1, cursor: "c2" } }]);
+    expect(await app.getByRole("button", { name: "載入更多" }).count()).toBe(0);
+    expect(await app.locator("body").evaluate(() => document.activeElement === document.body)).toBe(false);
+  } finally { await browser.close(); await server.close(); }
+}, 45_000);
+
 it("is read-only in a host without server tools: rows and plain links, no action and no tool call", async () => {
   const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.mcp-app.config.ts"), root: resolve(import.meta.dirname, ".."), server: { host: "127.0.0.1", port: 0 } });
   await server.listen();
@@ -99,10 +125,11 @@ it("is read-only in a host without server tools: rows and plain links, no action
     await page.waitForFunction(() => (window as any).host?.ready);
     const app = page.frameLocator("iframe");
     await page.evaluate(async () => {
-      await (window as any).host.bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops", link: "https://example.com/r1" }] }, _meta: { "net.aotter.mantle/tool": "pending" } });
+      await (window as any).host.bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops", link: "https://example.com/r1" }], nextCursor: "c2" }, _meta: { "net.aotter.mantle/tool": "pending" } });
     });
     await app.getByText("Laptops").waitFor();
     expect(await app.getByRole("button", { name: "Review: r1" }).count()).toBe(0);
+    expect(await app.getByRole("button", { name: "載入更多" }).count()).toBe(0);
     expect(await app.getByRole("link").count()).toBe(0);
     expect(await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors }))).toEqual({ calls: [], errors: [] });
   } finally { await browser.close(); await server.close(); }

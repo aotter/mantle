@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as React from "react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData, type UseInfiniteQueryResult } from "@tanstack/react-query";
 import type { AdminBadge, AdminTypes } from "./define-admin";
 import { useAdminContext } from "./hooks-context";
 import { MAX_BADGE_VIEWS, createMcpAppTransport } from "./transport";
@@ -102,24 +103,33 @@ export class AdminUnavailableError extends Error {
 }
 
 export interface ViewOptions {
+  /** The size of each page; `loadMore()` appends the next one. */
   readonly limit?: number;
-  readonly cursor?: string;
 }
 export interface EntriesOptions<Data> {
   /** One field equal to one value, as the entries route filters. */
   readonly filter?: { readonly field: keyof Data & string; readonly value: string };
   readonly search?: string;
+  /** The size of each page; `loadMore()` appends the next one. */
   readonly limit?: number;
-  readonly cursor?: string;
 }
-export interface ViewState<R> {
+/** The pages loaded so far, in order, and how to load the next. Changing the input starts again from the first page. */
+export interface LoadMoreState {
+  /** Another page follows the ones loaded. */
+  readonly hasMore: boolean;
+  /** Loads and appends the next page. Does nothing when `hasMore` is false, or while any fetch is in flight, a refetch after a write included: that one is not cancelled. */
+  readonly loadMore: () => void;
+  /** The next page, which this hook's `loadMore()` fetches, is loading; the rows already loaded stay. */
+  readonly loadingMore: boolean;
+}
+export interface ViewState<R> extends LoadMoreState {
   readonly rows: readonly R[];
-  readonly nextCursor: string | undefined;
+  /** `error` after a failed `loadMore()` too: the rows already loaded stay, and `loadMore()` retries. */
   readonly status: ReadStatus;
 }
-export interface EntriesState<Data> {
+export interface EntriesState<Data> extends LoadMoreState {
   readonly items: readonly AdminEntry<Data>[];
-  readonly nextCursor: string | undefined;
+  /** `error` after a failed `loadMore()` too: the items already loaded stay, and `loadMore()` retries. */
   readonly status: ReadStatus;
 }
 export interface EntryState<Data> {
@@ -149,9 +159,9 @@ export interface OperationState<I, O> {
  * `browser` and read `unavailable` in an MCP host: declare the data an App needs as an admin View.
  */
 export interface AdminHooks<T extends AdminTypes> {
-  /** `GET /admin/api/views/{name}`, or the View's admin MCP tool in a host. The first page, or the one at `options.cursor`. */
+  /** `GET /admin/api/views/{name}`, or the View's admin MCP tool in a host. All pages loaded so far, appended in order: `loadMore()` fetches the next. */
   useView<N extends keyof T["views"] & string>(name: N, input: T["views"][N]["input"], options?: ViewOptions): ViewState<T["views"][N]["row"]>;
-  /** `GET /admin/api/entries`. Browser only. */
+  /** `GET /admin/api/entries`, appended page by page like `useView`. Browser only. */
   useEntries<N extends keyof T["collections"] & string>(collection: N, options?: EntriesOptions<T["collections"][N]["data"]>): EntriesState<T["collections"][N]["data"]>;
   /** `GET /admin/api/entries/{id}`. Browser only. */
   useEntry<N extends keyof T["collections"] & string>(collection: N, id: string): EntryState<T["collections"][N]["data"]>;
@@ -172,19 +182,44 @@ export interface AdminHooks<T extends AdminTypes> {
 const statusOf = (query: { isPending: boolean; isError: boolean }, reply: Reply<unknown> | undefined): ReadStatus =>
   query.isError ? "error" : query.isPending ? "loading" : reply?.status === "unavailable" ? "unavailable" : "ready";
 
+/** The accumulating state of an infinite query over a transport's `Reply` pages. */
+function useAccumulated<Page extends { readonly nextCursor?: string }, Item>(query: UseInfiniteQueryResult<InfiniteData<Reply<Page>>>, pick: (page: Page) => readonly Item[]) {
+  const first = query.data?.pages[0];
+  const list = React.useMemo(() => (query.data?.pages ?? []).flatMap(reply => reply.status === "ok" ? pick(reply.data) : []), [query.data]);
+  return {
+    list,
+    status: statusOf(query, first),
+    hasMore: query.hasNextPage,
+    // a refetch in flight (after a write) is not cancelled for the next page
+    loadMore: () => { if (query.hasNextPage && !query.isFetching) void query.fetchNextPage({ cancelRefetch: false }); },
+    loadingMore: query.isFetchingNextPage,
+  };
+}
+const nextPage = (reply: Reply<{ readonly nextCursor?: string }>): string | undefined => reply.status === "ok" ? reply.data.nextCursor : undefined;
+
 const implementation = {
   useView(name: string, input: object, options: ViewOptions = {}): ViewState<object> {
     const { meta, transport } = useAdminContext();
-    const page = { limit: options.limit, cursor: options.cursor }, rowNames = meta.rowNames?.[name];
-    const query = useQuery({ queryKey: ["view", name, "hook", transport.surface, input, page], queryFn: () => transport.view(name, input as Row, page, rowNames) });
-    const ok = query.data?.status === "ok" ? query.data.data : undefined;
-    return { rows: ok?.rows ?? [], nextCursor: ok?.nextCursor, status: statusOf(query, query.data) };
+    const rowNames = meta.rowNames?.[name];
+    const query = useInfiniteQuery({
+      queryKey: ["view", name, "hook", transport.surface, input, options.limit],
+      initialPageParam: undefined as string | undefined,
+      queryFn: ({ pageParam }) => transport.view(name, input as Row, { limit: options.limit, cursor: pageParam }, rowNames),
+      getNextPageParam: nextPage,
+    });
+    const { list, ...state } = useAccumulated(query, page => page.rows);
+    return { rows: list, ...state };
   },
   useEntries(collection: string, options: EntriesOptions<object> = {}): EntriesState<object> {
     const { transport } = useAdminContext();
-    const query = useQuery({ queryKey: ["entries", collection, "hook", transport.surface, options], queryFn: () => transport.entries(collection, options) });
-    const ok = query.data?.status === "ok" ? query.data.data : undefined;
-    return { items: ok?.items ?? [], nextCursor: ok?.nextCursor, status: statusOf(query, query.data) };
+    const query = useInfiniteQuery({
+      queryKey: ["entries", collection, "hook", transport.surface, options],
+      initialPageParam: undefined as string | undefined,
+      queryFn: ({ pageParam }) => transport.entries(collection, { ...options, cursor: pageParam }),
+      getNextPageParam: nextPage,
+    });
+    const { list, ...state } = useAccumulated(query, page => page.items);
+    return { items: list, ...state };
   },
   useEntry(collection: string, id: string): EntryState<object> {
     const { transport } = useAdminContext();

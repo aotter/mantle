@@ -6,8 +6,9 @@ import { ApiError, refusalOf } from "../lib/api";
 import { cn } from "../lib/utils";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Card } from "@aotter/mantle-ui/kit";
-import { usePreferences } from "../app/preferences";
+import { usePreferences, type AdminLanguage } from "../app/preferences";
 import { t } from "../app/i18n";
+import { useLoadMore } from "../lib/use-load-more";
 
 export const FormActionBarHostContext = React.createContext<HTMLElement | null>(null);
 
@@ -112,6 +113,36 @@ export function ErrorBox({ error }: { error: unknown }): React.ReactElement | nu
   return (
     <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
       {t(language, "common.failedToLoad")}: {message}
+    </div>
+  );
+}
+
+/** The structural part of an infinite query that `LoadMore` reads. */
+interface PagedList {
+  hasNextPage: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  error: unknown;
+  fetchNextPage: (options?: { cancelRefetch?: boolean }) => unknown;
+}
+
+/**
+ * The "Load more" control of a paged list (`pagedQueryOptions`), `count` rows loaded so far. A failed page keeps the rows already
+ * loaded; see `useLoadMore` for the announcement and focus.
+ */
+export function LoadMore({ query, count, language }: { query: PagedList; count: number; language: AdminLanguage }): React.ReactElement {
+  const { box, status, start } = useLoadMore({ count, hasMore: query.hasNextPage, loading: query.isFetching, message: (added) => t(language, "common.rowsLoaded", { count: String(added) }) });
+  return (
+    <div ref={box} tabIndex={-1} aria-busy={query.isFetching} className="outline-none">
+      {query.isError && count > 0 ? <ErrorBox error={query.error} /> : null}
+      <span role="status" className="sr-only">{status}</span>
+      {query.hasNextPage ? (
+        <div className="mt-4">
+          <Button type="button" variant="secondary" disabled={query.isFetching} onClick={() => { start(); void query.fetchNextPage({ cancelRefetch: false }); }}>
+            {t(language, "common.loadMore")}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

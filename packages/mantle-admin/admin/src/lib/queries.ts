@@ -1,3 +1,4 @@
+import { infiniteQueryOptions } from "@tanstack/react-query";
 import { api } from "./api";
 import { queryClient } from "../app/query-client";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
@@ -17,8 +18,6 @@ export interface EntriesQueryArgs {
   scopeValue?: string;
   sortField: string;
   sortDirection: "asc" | "desc";
-  cursor?: string;
-  cursorDirection: "forward";
 }
 
 export function entriesQueryArgsFromSearch(
@@ -34,12 +33,10 @@ export function entriesQueryArgsFromSearch(
     filterValue: params.get("filter_value") ?? undefined,
     sortField: params.get("sort") || "updatedAt",
     sortDirection: params.get("direction") === "asc" ? "asc" : "desc",
-    cursor: params.getAll("cursor").slice(-1)[0] || undefined,
-    cursorDirection: "forward",
   };
 }
 
-export function entriesQuerySearchParams(args: EntriesQueryArgs): URLSearchParams {
+export function entriesQuerySearchParams(args: EntriesQueryArgs, cursor?: string): URLSearchParams {
   const qs = new URLSearchParams({
     collection: args.collectionName,
     limit: String(COLLECTION_PAGE_SIZE),
@@ -56,37 +53,30 @@ export function entriesQuerySearchParams(args: EntriesQueryArgs): URLSearchParam
     qs.set("scope_field", args.scopeField);
     qs.set("scope_value", args.scopeValue);
   }
-  if (args.cursor) qs.set("cursor", args.cursor);
+  if (cursor) qs.set("cursor", cursor);
   return qs;
 }
 
-/** Forward-only native paging; Previous revisits the preceding opaque cursor. */
-export function cursorPageHref(path: string, query: URLSearchParams, nextCursor?: string): string | undefined {
-  const cursors = query.getAll("cursor");
-  if (!nextCursor && !cursors.length) return;
-  const next = new URLSearchParams(query);
-  next.delete("cursor");
-  next.delete("cursor_direction");
-  // ponytail: URL stacks grow with page depth; use session history if browser URL limits become material.
-  for (const cursor of nextCursor ? [...cursors, nextCursor] : cursors.slice(0, -1)) next.append("cursor", cursor);
-  const suffix = next.toString();
-  return path + (suffix ? "?" + suffix : "");
+/**
+ * A cursor-paged list as one infinite query: the cursor is the page param, not state, so an invalidation
+ * (`invalidateAfterWrite`) refetches every page loaded, and a page in flight never lands in another list.
+ */
+export function pagedQueryOptions<Page extends { next_cursor: string | null }>(queryKey: readonly unknown[], load: (cursor: string | undefined) => Promise<Page>) {
+  return infiniteQueryOptions({
+    queryKey,
+    queryFn: ({ pageParam }) => load(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
+  });
 }
 
 export function entriesQueryOptions(args: EntriesQueryArgs) {
-  const queryKey = [
+  return pagedQueryOptions([
     "entries", args.collectionName, args.status ?? "all", args.searchTerm,
     args.filterField ?? "no-filter", args.filterValue ?? "no-value",
     args.scopeField ?? "no-scope-field", args.scopeValue ?? "no-scope-value",
-    args.sortField, args.sortDirection, args.cursor ?? "first", args.cursorDirection,
-  ] as const;
-  return {
-    queryKey,
-    queryFn: async (): Promise<ListEntriesResult> => {
-      const qs = entriesQuerySearchParams(args);
-      return api.get<ListEntriesResult>(`/entries?${qs}`);
-    },
-  };
+    args.sortField, args.sortDirection,
+  ], (cursor) => api.get<ListEntriesResult>(`/entries?${entriesQuerySearchParams(args, cursor)}`));
 }
 
 export function entryEditorQueryOptions(collectionName: string, entryId: string) {

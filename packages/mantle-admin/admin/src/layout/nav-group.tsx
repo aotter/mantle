@@ -297,7 +297,7 @@ function useCollectionPrefetch(url: string): () => void {
     const target = new URL(url, "http://admin.local");
     const match = target.pathname.match(/^\/admin\/c\/([^/]+)\/?$/);
     if (!match) return;
-    void queryClient.prefetchQuery(entriesQueryOptions(
+    void queryClient.prefetchInfiniteQuery(entriesQueryOptions(
       entriesQueryArgsFromSearch(decodeURIComponent(match[1]!), target.searchParams),
     ));
   }, [queryClient, url]);

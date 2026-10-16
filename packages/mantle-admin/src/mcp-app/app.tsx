@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { createInteractionController, type InteractionController } from "@aotter/mantle-ui/controller";
 import { OperationPanel } from "@aotter/mantle-ui";
 import { SchemaFields, applyFieldEdits } from "@aotter/mantle-ui/kit";
@@ -10,6 +10,7 @@ import {
   hiddenInputs,
   idempotencyInputs,
   invokeTool,
+  nextCursorOf,
   rowsOf,
   toolOf,
   type AppCatalog,
@@ -20,6 +21,7 @@ import {
   type ToolResult,
 } from "../app/bridge.js";
 import { web, type HostApi } from "../app/postmessage.js";
+import { useLoadMore } from "../../admin/src/lib/use-load-more.js";
 import { Slot, useViewCellNames } from "../../admin/src/app/slots.js";
 import type { CellProps } from "../../admin/src/app/slot-props.js";
 import { appLabels, type AppLabels } from "./locale.js";
@@ -97,22 +99,36 @@ export function MantleApp(props: {
   const tool = props.result ? toolOf(props.result, props.hostTool) : null;
   // a View the catalog does not describe still shows its rows, with nothing to open
   const view = tool && Object.prototype.hasOwnProperty.call(props.catalog.views, tool) ? props.catalog.views[tool]! : BARE_VIEW;
-  const [rows, setRows] = useState<Row[] | null>(() => (props.result ? rowsOf(props.result) : null));
+  const [pages, dispatch] = useReducer(pagesReducer, undefined, () => pagesReducer(NO_PAGES, { type: "reset", result: props.result }));
+  const { rows, cursor, more } = pages;
   const [stale, setStale] = useState(false);
   const [open, setOpen] = useState<{ row: Row; action: AppRowAction } | null>(null);
   useEffect(() => {
-    setRows(props.result ? rowsOf(props.result) : null);
+    dispatch({ type: "reset", result: props.result });
     setStale(false);
   }, [props.result]);
 
   const refresh = async () => {
     if (!tool || !call) return;
     try {
-      const fresh = rowsOf(await call(tool, { ...props.input }));
-      if (fresh) setRows(fresh);
+      const result = await call(tool, { ...props.input });
+      const fresh = rowsOf(result) !== null;
+      if (fresh) dispatch({ type: "reset", result });
       setStale(!fresh);
     } catch {
       setStale(true);
+    }
+  };
+
+  // the same View tool and input through the host, at the cursor of the page shown last; the rows already shown stay
+  const loadMore = async () => {
+    if (!tool || !call || !cursor) return;
+    const { generation } = pages;
+    dispatch({ type: "loading" });
+    try {
+      dispatch({ type: "loaded", generation, result: await call(tool, { ...props.input, cursor }) });
+    } catch {
+      dispatch({ type: "failed", generation });
     }
   };
 
@@ -188,7 +204,44 @@ export function MantleApp(props: {
           );
         })}
       </ul>
+      {call ? <MoreRows count={rows.length} hasMore={cursor !== undefined} more={more} labels={labels} onMore={() => { void loadMore(); }} /> : null}
     </CellEnv.Provider>
+  );
+}
+
+/** The rows shown, the cursor of the next page, and how loading it went; `generation` counts the lists the App has shown. */
+export interface Pages {
+  readonly rows: Row[] | null;
+  readonly cursor: string | undefined;
+  readonly more: "idle" | "loading" | "failed";
+  readonly generation: number;
+}
+const NO_PAGES: Pages = { rows: null, cursor: undefined, more: "idle", generation: 0 };
+type PagesAction =
+  | { readonly type: "reset"; readonly result: ToolResult | null }
+  | { readonly type: "loading" }
+  | { readonly type: "loaded"; readonly generation: number; readonly result: ToolResult }
+  | { readonly type: "failed"; readonly generation: number };
+
+/** A new or refreshed result replaces the list and ends any load in flight: its page, when it arrives, is for a list that is gone. */
+export function pagesReducer(state: Pages, action: PagesAction): Pages {
+  if (action.type === "reset") return { rows: action.result ? rowsOf(action.result) : null, cursor: action.result ? nextCursorOf(action.result) : undefined, more: "idle", generation: state.generation + 1 };
+  if (action.type === "loading") return { ...state, more: "loading" };
+  if (action.generation !== state.generation) return state;
+  if (action.type === "failed") return { ...state, more: "failed" };
+  const next = rowsOf(action.result);
+  return next ? { ...state, rows: [...(state.rows ?? []), ...next], cursor: nextCursorOf(action.result), more: "idle" } : { ...state, more: "failed" };
+}
+
+/** "Load more" under the rows: busy while loading; `useLoadMore` announces the rows added and keeps focus. */
+function MoreRows(props: { readonly count: number; readonly hasMore: boolean; readonly more: Pages["more"]; readonly labels: AppLabels; readonly onMore: () => void }): ReactNode {
+  const { box, status, start } = useLoadMore({ count: props.count, hasMore: props.hasMore, loading: props.more === "loading", message: (added) => props.labels.rowsLoaded.replace("{count}", String(added)) });
+  return (
+    <div ref={box} tabIndex={-1} aria-busy={props.more === "loading"} className="grid justify-items-start gap-2 px-3 pb-3 outline-none">
+      <span role="status" className="sr-only">{status}</span>
+      {props.more === "failed" ? <p role="alert" className="text-destructive text-sm">{props.labels.loadMoreFailed}</p> : null}
+      {props.hasMore ? <button type="button" className="rounded-md border px-3 py-1 text-sm font-medium" disabled={props.more === "loading"} onClick={() => { start(); props.onMore(); }}>{props.labels.loadMore}</button> : null}
+    </div>
   );
 }
 

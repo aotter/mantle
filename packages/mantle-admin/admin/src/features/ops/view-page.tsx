@@ -1,11 +1,11 @@
 import * as React from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Search } from "lucide-react";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
-import { usePreferences, type AdminLanguage } from "../../app/preferences";
+import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api, downloadAdminFile } from "../../lib/api";
-import { cursorPageHref, viewsManifestQueryOptions } from "../../lib/queries";
+import { pagedQueryOptions, viewsManifestQueryOptions } from "../../lib/queries";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, JsonSchema, SiteInfo, ViewManifestInfo } from "../../lib/types";
@@ -18,22 +18,14 @@ import {
   TableRow,
 } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
-import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { EmptyState, ErrorBox, LoadMore, PageHeader, SectionCard } from "../../ui/page";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Badge } from "@aotter/mantle-ui/kit";
 import { SchemaFields } from "../content/entry-edit-view";
 import { withNativeSchema } from "../../lib/render-data-value";
 import { DataCell } from "../../ui/data-cell";
 import { enumOptions, optionLabel } from "../../lib/enum-options";
-import { cn } from "../../lib/utils";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from "@aotter/mantle-ui/kit";
 
 const VIEW_PAGE_SIZE = 50;
 
@@ -68,7 +60,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   const { language } = usePreferences();
   const { navigate } = useAdminRouter();
   const location = useAdminLocation();
-  const exportFile = useMutation({ mutationFn: (path: string) => downloadAdminFile(path) });
+  const exportFile = useMutation({ mutationFn: (path: string) => downloadAdminFile(path), meta: { invalidates: false } });
   const urlParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
   const collectionsQuery = useQuery<Collection[]>({
@@ -103,14 +95,11 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   }, [view?.name, view?.input, location.search]);
   const canQuery = hasRequiredViewParams(view?.input, urlParams);
 
-  const query = useQuery<ViewQueryResult>({
-    queryKey: ["view", name, location.search],
-    queryFn: () =>
-      fetchView(name, {
-        ...Object.fromEntries(urlParams),
-        cursor: urlParams.getAll("cursor").slice(-1)[0],
-        limit: VIEW_PAGE_SIZE,
-      }),
+  const query = useInfiniteQuery({
+    ...pagedQueryOptions(["view", name, location.search], async (cursor) => {
+      const page = await fetchView(name, { ...Object.fromEntries(urlParams), cursor, limit: VIEW_PAGE_SIZE });
+      return { rows: page.rows, next_cursor: page.nextCursor ?? null };
+    }),
     enabled: !!view && canQuery,
   });
 
@@ -126,7 +115,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
     );
   }
 
-  const rows = query.data?.rows ?? [];
+  const rows = query.data?.pages.flatMap((page) => page.rows) ?? [];
   const columns = viewColumns(view, rows);
   const viewTitle = resolveLocalizedText(view.title, language, canonical) ?? fieldLabel(view.name);
   const exportHref = viewExportHref(name, urlParams);
@@ -212,7 +201,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
         />
       ) : null}
 
-      {query.isError ? <ErrorBox error={query.error} /> : null}
+      {query.isError && !query.data ? <ErrorBox error={query.error} /> : null}
       {query.isLoading ? <Skeleton className="h-48 w-full" /> : null}
 
       {query.data && rows.length === 0 ? (
@@ -247,43 +236,8 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           </TableBody>
         </Table>
       ) : null}
-      {query.data ? (
-        <ViewPagination name={name} query={urlParams} nextCursor={query.data.nextCursor} language={language} />
-      ) : null}
+      <LoadMore query={query} count={rows.length} language={language} />
     </div>
-  );
-}
-
-/** Cursor paging: the URL keeps the stack of cursors, so Previous drops the last one. */
-function ViewPagination({ name, query, nextCursor, language }: { name: string; query: URLSearchParams; nextCursor?: string; language: AdminLanguage }): React.ReactElement | null {
-  if (!query.has("cursor") && !nextCursor) return null;
-  const previousHref = viewCursorHref(name, query, undefined);
-  const nextHref = nextCursor ? viewCursorHref(name, query, nextCursor) : undefined;
-  return (
-    <Pagination className="mt-4 justify-end" aria-label={t(language, "collection.pagination")}>
-      <PaginationContent>
-        <PaginationItem>
-          <PaginationPrevious
-            href={previousHref}
-            text={t(language, "collection.previousPage")}
-            aria-label={t(language, "collection.previousPage")}
-            aria-disabled={!previousHref || undefined}
-            tabIndex={previousHref ? undefined : -1}
-            className={cn(!previousHref && "pointer-events-none opacity-50")}
-          />
-        </PaginationItem>
-        <PaginationItem>
-          <PaginationNext
-            href={nextHref}
-            text={t(language, "collection.nextPage")}
-            aria-label={t(language, "collection.nextPage")}
-            aria-disabled={!nextHref || undefined}
-            tabIndex={nextHref ? undefined : -1}
-            className={cn(!nextHref && "pointer-events-none opacity-50")}
-          />
-        </PaginationItem>
-      </PaginationContent>
-    </Pagination>
   );
 }
 
@@ -326,10 +280,6 @@ function viewParamsHref(
   // new input starts from the first page
   next.delete("cursor");
   return viewHref(name, next);
-}
-
-function viewCursorHref(name: string, query: URLSearchParams, nextCursor?: string): string | undefined {
-  return cursorPageHref(`/admin/views/${encodeURIComponent(name)}`,query,nextCursor);
 }
 
 /** The export runs the View with the same input, from the first row. */
