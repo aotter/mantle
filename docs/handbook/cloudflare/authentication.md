@@ -12,7 +12,20 @@ Mantle supplies the database adapter, schema generation and caller resolution:
 
 ## `auth.ts`
 
-Copy `src/auth.ts` from the [app shell](../../examples/app-shell/README.md), which CI runs from the packed packages.
+Copy `src/auth.ts` from the [app shell](../../examples/app-shell/README.md), which CI runs from the packed packages;
+installed, it is `node_modules/@aotter/mantle/docs/examples/app-shell/src/auth.ts`. Its essentials:
+
+- Imports: `betterAuth` from `better-auth/minimal`; `admin`, `emailOTP` (and `jwt` for MCP) from `better-auth/plugins`;
+  `createAccessControl` from `better-auth/plugins/access`; `defaultStatements` from `better-auth/plugins/admin/access`;
+  `d1Adapter` from `@aotter/mantle/auth/adapter`; the hardening and bootstrap helpers below.
+- `authOptions(env)` returns plain options and is the module's export for `--auth src/auth.ts`. Generation calls it with an
+  empty `env`, so it must not throw: fall back to placeholders for `secret` and origin there.
+- The bootstrap admin: `d1BootstrapAdmin(env.DB, { match: "email", value: env.ADMIN_EMAIL }, () => ({ options: { plugins } }))`
+  is the value of both `databaseHooks.user.create.after` and `databaseHooks.user.update.after` (see Identity helpers).
+- `createAuth(env)` is the same module's second export: it checks the secrets are set and returns
+  `betterAuth(authOptions(env))`. The Worker's `authLoader(() => import("./auth.js").then(m => m.createAuth(env)))`
+  ([service composition](service-entry.md)) is what calls it.
+
 The application owns Better Auth and its optional plugins. Schema generation reads plain options without constructing
 Better Auth; apply `schema.sql` during deployment, never at boot. OAuth resource
 rows are created on first OAuth use from runtime configuration; they require no

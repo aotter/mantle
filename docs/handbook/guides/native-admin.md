@@ -76,7 +76,7 @@ that directory bare: `adminShell(request, assets)` from
 refuses traversal, encoded separators and control characters (`assets` fetches one built file
 by its path within that directory; a 404 means missing; it returns `undefined` for other requests). Read the
 installed Admin README for asset bindings, CSP/import-map hashes and preview
-framing. `@aotter/mantle-ui` continues to supply the shared kit. See
+framing. Browser pages: a collection at `/admin/c/<schema>`, an admin View at `/admin/views/<view>` (its input as query parameters), a custom page at `/admin/p/<path>`. `@aotter/mantle-ui` continues to supply the shared kit. See
 [service composition](../cloudflare/service-entry.md) for the complete Fetch/Bun wiring.
 
 ## HTTP routes
@@ -208,8 +208,8 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 `record.aside:` and `record.actions:` render beside Admin's own side cards and actions, which they do not replace. A
 record form's top-level fields go through `input:`; a View's parameters and a Procedure's inputs do not. A read-only field
 (a bound or `readOnly` property) has no `input:` component, and `readOnly` tells yours that the caller cannot edit the
-record. A View column that reads a Schema field also goes through that field's `cell:` component, with the column's own
-`cell:view:` component outside it. The developer workspace (`/admin/dev`) is Admin's own tool and does not go through any slot. A record with folded child collections opens on a workbench at `/admin/c/<schema>/<id>`, which is not `RecordView`; the record form (and so `RecordView`, `record.aside:`, `record.actions:` and `input:`) is its `/edit` page. A `Shell` that does not call `renderDefault` has no status bar: the record form's Save and Publish bar then stays in the page.
+record. In the browser Admin, a View column that reads a Schema field also goes through that field's `cell:` component, with the column's own
+`cell:view:` component outside it; the MCP App renders only `cell:view:`. The developer workspace (`/admin/dev`) is Admin's own tool and does not go through any slot. A record with folded child collections opens on a workbench at `/admin/c/<schema>/<id>`, which is not `RecordView`; the record form (and so `RecordView`, `record.aside:`, `record.actions:` and `input:`) is its `/edit` page. A `Shell` that does not call `renderDefault` has no status bar: the record form's Save and Publish bar then stays in the page.
 
 `plugins` are fragments of `components`, applied in order: each one's `renderDefault` is the plugin before it, the first
 plugin's is the built-in component, and the application's own `components` are outermost. A plugin is
@@ -461,7 +461,7 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
   `home`, `/admin` stays the built-in home. Choosing a landing page grants and denies nothing; the target's own route still decides.
   The landing is browser only.
 
-`src/admin.tsx` is JSX: the app-shell template sets `jsx: react-jsx` and depends on `react`, `react-dom` and `@types/react`. The app owns `react` and `react-dom` (Admin and the kit take them as peers), so pin both to the same exact version: `react-dom` refuses to run beside a different `react`. `mantle bundle` stops with a message when they differ; add `lucide-react` (or another icon package) yourself if you use icons.
+`src/admin.tsx` is JSX and runs in the browser, so `tsconfig.json` needs `"jsx": "react-jsx"` and `"lib": ["ES2023", "DOM"]` beside the Worker's `types` (`@cloudflare/workers-types`, `node`) and must include `src/**/*.tsx`; `node_modules/@aotter/mantle/docs/examples/app-shell/tsconfig.json` is the working file. The app also depends on `react`, `react-dom` and `@types/react` (see the example's `package.json`). The app owns `react` and `react-dom` (Admin and the kit take them as peers), so pin both to the same exact version: `react-dom` refuses to run beside a different `react`. `mantle bundle` stops with a message when they differ; add `lucide-react` (or another icon package) yourself if you use icons.
 
 ```tsx
 // src/admin.tsx
@@ -488,7 +488,7 @@ uiSchema: { nav: { group: approvals, order: 1 } }
 `mantle generate` refuses a non-integer `order` and
 placement on a Schema without a sidebar entry of its own: a translation, or a folded child that is not
 [`standalone`](#collection-navigation-and-operation-placement).
-The purchasing example puts its approval queue and requests in an Approvals group.
+The purchasing example (`node_modules/@aotter/mantle/docs/examples/purchasing/`) puts its approval queue and requests in an Approvals group.
 
 Operational collections have no generic create or draft: officers add records through a Procedure placed with `collectionAction` (the list header shows its button and input form), so every write is a declared, validated program. For a user-field scoped Schema, SQL INSERT is system-only, so that Procedure is a ref handler that inserts through `ctx.store` ([procedure.md](../reference/procedure.md)).
 

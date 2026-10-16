@@ -36,7 +36,8 @@ application installs `react` and `react-dom` at one identical exact version, and
 mismatch; the
 build needs no install scripts (`npm ci --ignore-scripts` works). A `package-lock.json` made on one OS can lack the native build binaries (rolldown, `@tailwindcss/oxide`, lightningcss) that npm installs per platform from `optionalDependencies`, so a lockfile made on macOS can fail the build on a Linux host; create the lockfile on the build platform or use pnpm.
 The build writes the shell, the preview
-document, `host-bridge.js` and hashed assets.
+document, `host-bridge.js` and hashed assets. The built directory never reads `node_modules`, but producing it does:
+`wrangler dev` and `wrangler deploy` run the generated `build.command` (`mantle bundle`), so deploy before a pipeline removes `node_modules`.
 
 Serve that directory through an app-owned asset binding or reader at `/admin/`;
 `adminShell`'s `assets(path)` receives paths relative to it. Bun hosts read it
@@ -76,7 +77,7 @@ Rich-text editors and the complete developer workspace load on demand.
 
 ## App library
 
-`@aotter/mantle-admin/app` exports `defineAdmin(meta, { nav, components, plugins, mcp })`, `<AdminLink>` and `<MantleAdmin admin>`.
+`@aotter/mantle-admin/app` exports `defineAdmin(meta, { nav, pages, home, components, plugins, mcp })`, `<AdminLink>` and `<MantleAdmin admin>`.
 An Admin entry default-exports `defineAdmin(...)`; `<MantleAdmin>` is the root
 for an app that mounts Admin inside its own providers, and it renders once the
 stored or browser language has loaded. The built-in entry is `defineAdmin({})`:
@@ -84,7 +85,7 @@ with no generated metadata, Admin reads its collections, Views and operations
 from `/admin/api` at runtime. The application builds that entry when it has no `admin.tsx`.
 `components` replace or wrap named regions of Admin (`Shell`, `Sidebar`, `Home`, `cell:<schema>.<field>`, `input:<schema>.<field>`, ...)
 through `renderDefault`, and `plugins` compose such fragments; see the Native Admin guide, "Customising Admin".
-`pages` adds pages of the application's own at `/admin/p/<path>`.
+`pages` adds pages of the application's own at `/admin/p/<path>`; `home` sets where `/admin` leads (a collection, an admin View or one of `pages`).
 `nav` declares the sidebar groups the manifest uses (`ManifestNavGroup` in `generated/admin-client.ts`, checked by `tsc`) and adds `items` that lead to a collection, preset to a field's value, or to a View; see "Sidebar" in the same guide.
 `@aotter/mantle-admin/build` also exports the optional `adminVitePlugin()` for hot reload in a Vite dev server.
 
@@ -115,7 +116,7 @@ workspace remains part of the product.
 `buildAdmin` (so `mantle bundle`) also builds the App from the same Admin entry as the page, into the
 single file `<assets>/admin/mcp-app.html`: your `defineAdmin` components, plugins, CSS, Tailwind classes and `pages`
 that declare `mcp` are in it, and the build refuses an App that reads `/admin/api` or `document.cookie` or loads a
-remote origin that `defineAdmin({ mcp: { csp } })` does not declare. `adminMcpApps({ catalogue })` registers it
+remote origin that `defineAdmin({ mcp: { csp } })` does not declare. `adminMcpApps({ catalogue: mcpAppCatalogues.admin })` (imported from the generated `generated/admin-descriptors.ts`) registers it
 through the SDK's generic MCP Apps hook and, without `html`, reads that file (`env.ASSETS` on a Worker,
 `dist/client/admin/mcp-app.html` on Bun, or `file`). Tools retain the same caller
 permissions as ordinary MCP calls; the document holds no credentials. Reserve

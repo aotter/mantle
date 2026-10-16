@@ -246,8 +246,11 @@ The scope floor defaults to `["mcp"]` for every credential except cookie session
 from initialize, and every call in a batch is checked before any call runs.
 `resourceMetadata` overrides the challenge URL for reverse proxies.
 
-Both endpoints answer a request without `Origin`, which is what server-side MCP
-clients send. A present `Origin` marks a browser: it must name a loopback host
+Both endpoints answer a request without `Origin` that carries a bearer credential, which is what server-side MCP
+clients send. A cookie-session request is a session mutation (any method but GET, HEAD or OPTIONS, such as an MCP
+tool call): `checkOrigin` refuses it with `AUTH_DENIED` at `request:origin` unless its `Origin` equals the request's own
+origin, or it has no `Origin` and `Sec-Fetch-Site` is `same-origin` or `none`. A cookie request with neither header is
+refused, and `allowedOrigins` does not lift that. A present `Origin` marks a browser: it must name a loopback host
 (`localhost`, `127.0.0.1`, `[::1]`, any port) or an `allowedOrigins` entry, else
 403 before authentication on every credential; `Origin: null` is refused. The
 site's own origin is not implied, because a DNS-rebinding page sends an `Origin`
