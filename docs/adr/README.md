@@ -33,7 +33,7 @@ historical presets, runtime plans or driver choices as current APIs.
 | [0026](0026-progressive-generate.md) | Historical progressive generator with a full default, positive features and saved host selection. | Accepted for 0.1.5; source ownership remains, but presets/flags are replaced by native generation (0045 and the current CLI handbook) |
 | [0027](0027-scheduled-procedure-triggers.md) | Schedule Triggers in the sealed plan with Cloudflare-hosted invocation and system identity. | Accepted for 0.1.5; cron dialect and host requirement amended by 0032 |
 | [0028](0028-schema-ttl-expiry.md) | Logical TTL on Schema reads with preview-first, explicit bounded cleanup. | Accepted for 0.1.5 |
-| [0029](0029-mcp-apps-interaction-contracts.md) | Official MCP SDK for all MCP wire handling; transport-neutral capability catalog with validate-once invocation; `@aotter/mantle-mcp` and `@aotter/mantle-ui`; Manifest-declared interaction contracts and MCP Apps (#1110). | Accepted; amends ADR-lite 909 |
+| [0029](0029-mcp-apps-interaction-contracts.md) | Official MCP SDK for all MCP wire handling; transport-neutral capability catalog with validate-once invocation; `@aotter/mantle-mcp` and `@aotter/mantle-ui`; Manifest-declared interaction contracts and MCP Apps (#1110). | Accepted; amends ADR-lite 909; amended by #1376 revision 4 |
 | [0030](0030-store.md) | Store: one persistence object (`ctx.store` / `runtime.store`) over one relational JSON query AST compiled by each adapter; first slice `select`, `view`, `id`, then `write`, then manifest grammar (#1151). | Accepted; completed for 0.2.0 by 0032; authoring amended by 0034; amended by 0043 |
 | [0031](0031-host-cloud-core-contract.md) | Cloud supplies the Core pin before host artifact hashing; protocol 2 checks the pin through grants/kit; protocol 4 requires a verified source receipt before save. | Accepted |
 | [0032](0032-store-centric-core-and-service-contract.md) | 0.2.0: Store is the only entry persistence path; an application-owned service behind one host-neutral `createMantle`; one `Caller` identity and no Core-owned user or auth; `_mantle_` marks system tables only; two npm packages and one plugin. | Accepted for 0.2.0; decisions 1–5, 10 and 13 amended by 0034; decisions 6 and 12 by 0035; amended by 0043 |
@@ -109,5 +109,5 @@ These retain their issue-based filenames and original decision status.
 | [#845 Frontend client](adr-lite-845-frontend-client.md) | Accepted |
 | [#861 Admin WebMCP](adr-lite-861-admin-webmcp.md) | Accepted |
 | [909 Admin UI kit](adr-lite-909-admin-ui-kit.md) | Accepted; amended by 0029 and #1376 revision 4 |
-| [#1376 Admin customization](adr-lite-1376-admin-extensions.md) | Accepted (revision 4); implementation in progress; amends 909 |
+| [#1376 Admin customization](adr-lite-1376-admin-extensions.md) | Accepted (revision 4); implementation in progress; amends 909 and 0029 |
 | [#1395 Durable Object SQLite driver](adr-lite-1395-durable-object-driver.md) | Accepted; experimental |
