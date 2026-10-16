@@ -1,4 +1,4 @@
-import { appLabels } from "./locale.js";
+import { appLabels } from "./locale";
 
 // Only the App replaces the kit's calendar; Admin keeps its existing picker.
 // DateTimePicker still owns the local time and numeric/ISO field conversion.

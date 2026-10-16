@@ -2,6 +2,26 @@
 import { BUILT_IN_NAV_GROUPS, mcpTools, type JsonSchema, type RuntimePlan } from "../build/compiler.js";
 import { q } from "../domain/entry.js";
 
+/**
+ * The compatibility test of the application's Admin MCP App (`node --test generated/admin-mcp-app.check.mjs`): it loads the App
+ * `mantle bundle` built in the official MCP Apps host and fails on a network request, a console error or an exception. It needs
+ * `playwright-core` (a devDependency) and Chrome: `npx playwright-core install chromium`, or `MANTLE_TEST_CHROMIUM=<executable>`.
+ * Node strips the types of `admin-descriptors.ts` (Node 22.18 or newer).
+ */
+const MCP_APP_TEST = `import { existsSync } from "node:fs";
+import { test } from "node:test";
+import { checkMcpApp } from "@aotter/mantle-admin/testing";
+import { mcpAppCatalogues } from "./admin-descriptors.ts";
+
+// \`mantle bundle <entry> dist\` writes the App here; MANTLE_MCP_APP_HTML names another file
+const html = process.env.MANTLE_MCP_APP_HTML ?? "dist/client/admin/mcp-app.html";
+
+test("the Admin MCP App works in an MCP host", { timeout: 300_000 }, async () => {
+  if (!existsSync(html)) throw new Error(\`\${html} is missing: run \\\`npm run build\\\` first.\`);
+  await checkMcpApp({ catalogue: mcpAppCatalogues.admin, html });
+});
+`;
+
 type TypeOf = (schema: JsonSchema | undefined) => string;
 
 /** A Schema, View input or Procedure input as a closed object type; one that is only a `$ref` stays open. */
@@ -11,7 +31,8 @@ const closed = (typeOf: TypeOf, schema: JsonSchema | undefined): string =>
 /**
  * Types are what the routes take and return, not the Store's rows: an entry's `data` keeps declared field names, an input is
  * what the route validates, a View row is its wire row under the names the browser route gives its columns (an MCP App's
- * `tools/call` returns the SQL names; the hooks rename them with `rowNames`). The file imports `generated/*` as types only, so nothing of the
+ * `tools/call` returns the SQL names; the hooks rename them with `rowNames`), with `true` when it is an admin MCP tool, else null, which
+ * types `pages[].mcp.renders` (types only; nothing ships). The file imports `generated/*` as types only, so nothing of the
  * Worker enters the browser bundle, and it is refused in the Worker's startup graph (`mantle bundle`).
  */
 export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<string, string> {
@@ -38,9 +59,11 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
   const used = [...new Set([...schemas.flatMap(s => placed(s.uiSchema)), ...views.flatMap(([, v]) => placed(v.uiSchema))])].sort();
   const custom = used.filter(group => !BUILT_IN_NAV_GROUPS.has(group));
   const union = (names: readonly string[]) => names.length ? names.map(name => q(name)).join(" | ") : "never";
+  // whether an admin View is an MCP tool, which a page declared for an MCP App (`pages[].mcp.renders`) must have
+  const toolOf = (name: string) => hasTool("view", name) || null;
   const rows = views.map(([name], n) => `import type { WireRow as View${n}Wire } from "./views/${encodeURIComponent(name)}.js";`);
   const sql = operations.some(([, p]) => "sql" in p.handler);
-  return { "admin-client.ts": [
+  return { "admin-mcp-app.check.mjs": MCP_APP_TEST, "admin-client.ts": [
     "// Browser only: import this from src/admin.tsx, never from the Worker (`mantle bundle` refuses it there).",
     'import type { AdminMeta } from "@aotter/mantle-admin/app";',
     'import { createAdminHooks } from "@aotter/mantle-admin/hooks";',
@@ -55,7 +78,7 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
     "",
     "/** The input and row of each admin View, the `data` of each collection's entries, and the input and output of each admin operation. */",
     "export interface AppAdminTypes {",
-    `  readonly views: { ${views.map(([name, v], n) => `readonly ${q(name)}: { readonly input: ${closed(typeOf, v.input)}; readonly row: View${n}Row }`).join("; ")} };`,
+    `  readonly views: { ${views.map(([name, v], n) => `readonly ${q(name)}: { readonly input: ${closed(typeOf, v.input)}; readonly row: View${n}Row; readonly mcp: ${q(toolOf(name))} }`).join("; ")} };`,
     `  readonly collections: { ${schemas.map(s => `readonly ${q(s.name)}: { readonly data: ${dataOf(s)} }`).join("; ")} };`,
     `  readonly operations: { ${operations.map(([name, p]) => `readonly ${q(name)}: { readonly input: ${closed(typeOf, p.input)}; readonly output: ${"sql" in p.handler ? "Output" : "unknown"} }`).join("; ")} };`,
     `  readonly navGroups: ${union(custom)};`,

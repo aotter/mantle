@@ -63,7 +63,7 @@ export async function fetchService(request: Request, env: Env, context: Executio
       response = await serveAdmin(request, env);
     } else if (/^\/mcp(?:\/admin)?\/*$/.test(url.pathname)) {
       if (!serveMcpHandler) {
-        serveMcpHandler = serveMcp([...tools, ...extraTools], { ...options, apps: { admin: adminMcpApps({catalogue:{ ...mcpAppCatalogues.admin, views: { ...mcpAppCatalogues.admin.views, sales_by_item: { columns: { name: { type: "string" } }, list: { columns: [] }, actions: [] } } },html:async()=> (await import("@aotter/mantle-admin/mcp-app")).mantleAppHtml}) } });
+        serveMcpHandler = serveMcp([...tools, ...extraTools], { ...options, apps: { admin: adminMcpApps({catalogue:{ ...mcpAppCatalogues.admin, views: { ...mcpAppCatalogues.admin.views, sales_by_item: { columns: { name: { type: "string" } }, list: { columns: [] }, actions: [] } } }}) } });
       }
       response = await serveMcpHandler(request, env);
     } else {

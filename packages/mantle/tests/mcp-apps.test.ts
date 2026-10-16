@@ -114,7 +114,7 @@ test("App bindings are checked once per endpoint and render failures never expos
   await Promise.all([call(api, "tools/list"), call(api, "tools/list")]);
   expect(bindings).toBe(1);
   const log = spyOn(console, "error").mockImplementation(() => {});
-  try { const result = await call(api, "resources/read", { uri: "ui://app/a" }); expect(JSON.stringify(result)).not.toContain("token-secret"); expect(result.error).toBeDefined(); expect(log.mock.calls.flat().join(" ")).not.toContain("token-secret"); }
+  try { const result = await call(api, "resources/read", { uri: "ui://app/a" }); expect(JSON.stringify(result)).not.toContain("token-secret"); expect(result.error).toBeDefined(); /* the response is redacted; the server log says why */ expect(log.mock.calls.flat().join(" ")).toContain("resource rendering failed: token-secret"); }
   finally { log.mockRestore(); }
 });
 
@@ -157,4 +157,35 @@ test("an MCP page passes limits 1..500 to the View unchanged and refuses above 5
   expect(limits).toEqual([20, 100, 101, 500]);
   expect((await call(api, "tools/call", { name: "public_rows", arguments: { limit: 501 } })).result.isError).toBe(true);
   expect(limits).toHaveLength(4);
+});
+
+test("a loader may return { html, csp }: the CSP found at read time rides on the resources/read content, and replaces the resource's static one", async () => {
+  const csp = { resourceDomains: ["https://cdn.example.test"] };
+  const api = handle({ admin: { resources: [{ ...resource("ui://mantle-admin/rows", ["admin_rows"]), csp: { connectDomains: ["https://static.example.test"] }, html: () => ({ html: "<p>x</p>", csp }) }] } });
+  const read = (await call(api, "resources/read", { uri: "ui://mantle-admin/rows" }, "admin")).result.contents[0];
+  expect(read.text).toBe("<p>x</p>");
+  expect(read._meta.ui.csp).toEqual(csp);
+});
+
+test("an HTML loader also receives the request's env and request; a zero-argument or tools-only loader still works", async () => {
+  const seen: { tools: ReadonlySet<string>; env: unknown; request: Request }[] = [];
+  const env = { ASSETS: { fetch: async () => new Response("x") } };
+  const admin: McpApps = { resources: [
+    { ...resource("ui://mantle-admin/full", ["admin_rows"]), html: render => { seen.push(render); return "<p>full</p>"; } },
+    { ...resource("ui://mantle-admin/none", ["admin_details"]), html: () => "<p>none</p>" },
+    { ...resource("ui://mantle-admin/tools"), html: ({ tools }) => "<p>" + [...tools].sort().join(",") + "</p>" },
+  ] };
+  const api = handle({ admin });
+  const read = async (uri: string) => {
+    const response = await api(new Request("https://app.test/mcp/admin/", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "resources/read", params: { uri, _meta: meta } }) }), env);
+    const text = await response!.text();
+    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result.contents[0].text as string;
+  };
+  expect(await read("ui://mantle-admin/full")).toBe("<p>full</p>");
+  expect(seen).toHaveLength(1);
+  expect(seen[0]!.env).toBe(env);
+  expect(new URL(seen[0]!.request.url).origin).toBe("https://app.test");
+  expect([...seen[0]!.tools].sort()).toEqual(["admin_details", "admin_rows"]);
+  expect(await read("ui://mantle-admin/none")).toBe("<p>none</p>");
+  expect(await read("ui://mantle-admin/tools")).toBe("<p>admin_details,admin_rows</p>");
 });

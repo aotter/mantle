@@ -6,6 +6,7 @@
     "generate": "mantle generate cloudflare-d1 generated manifests/catalog.yaml manifests/orders.yaml --auth src/auth.ts --entry src/index.ts --admin",
     "types": "wrangler types --include-runtime=false",
     "build": "mantle bundle src/index.ts dist",
+    "test": "node --test generated/admin-mcp-app.check.mjs",
     "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
     "check": "mantle generate cloudflare-d1 generated manifests/catalog.yaml manifests/orders.yaml --auth src/auth.ts --entry src/index.ts --admin && mantle generate cloudflare-d1 generated manifests/catalog.yaml manifests/orders.yaml --auth src/auth.ts --entry src/index.ts --admin --check && wrangler types --include-runtime=false --check && tsc --noEmit && node smoke.mjs"
   },
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260904.1",
     "@types/node": "^26",
+    "playwright-core": "1.62.1",
     "typescript": "^6.0.3",
     "wrangler": "4.129.0"
   },

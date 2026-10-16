@@ -10,7 +10,7 @@ const calls: unknown[] = [], aborts: string[] = [], sizes: unknown[] = [], error
 const readOnly = location.search.includes("read-only");
 const bridge = new AppBridge(null, { name: "mantle-app-host-test", version: "1" }, readOnly ? {} : { serverTools: {}, openLinks: {}, message: { text: {} }, updateModelContext: { text: {}, structuredContent: {} } }, {
   hostContext: {
-    locale: location.search.includes("bad-handshake") ? 1 as unknown as string : "zh-TW", theme: "dark", timeZone: "Asia/Taipei",
+    locale: location.search.includes("bad-handshake") ? 1 as unknown as string : "zh-TW", ...(location.search.includes("no-theme") ? {} : { theme: "dark" as const }), timeZone: "Asia/Taipei",
     availableDisplayModes: ["inline", "fullscreen"], displayMode: "inline", safeAreaInsets: { top: 0, right: 0, bottom: 24, left: 0 },
     toolInfo: { tool: { name: "pending", inputSchema: { type: "object" } } },
     styles: { variables: { "--color-text-primary": "rgb(1, 2, 3)", "--color-background-inverse": "rgb(7, 8, 9)", "--color-ring-primary": "rgb(4, 5, 6)", "--border-radius-md": "3px", "--font-weight-medium": "550" } as never },
@@ -36,4 +36,4 @@ bridge.oncalltool = async (params, extra) => {
 };
 await bridge.connect(new PostMessageTransport(iframe.contentWindow!, iframe.contentWindow!));
 Object.assign(window, { host: { bridge, calls, aborts, sizes, errors, links, messages, contexts, modes, get ready() { return ready; } } });
-iframe.src = location.search && !readOnly ? "/test/mcp-app-probe.html" : "/src/mcp-app/interaction.html";
+iframe.src = /probe|bad-handshake/.test(location.search) ? "/test/mcp-app-probe.html" : "/mcp-app.html";

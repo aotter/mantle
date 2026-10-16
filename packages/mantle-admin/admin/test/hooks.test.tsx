@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminUnavailableError, mcpAppTransport, useAdminSurface, useBadges, useCollectionTotal, useEntries, useEntry, useHost, useMe, useOperation, useView, type AdminHost, type AdminTransport, type McpToolResult } from "../src/app/hooks";
 import { AdminHooksProvider } from "../src/app/hooks-context";
-import { browserTransport } from "../src/app/transport";
+import { browserTransport } from "../src/app/browser-transport";
 import type { AdminMeta } from "../src/app/define-admin";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });

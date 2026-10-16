@@ -11,10 +11,10 @@ These exports moved from `@aotter/mantle-ui` without compatibility aliases:
 | Former UI subpath | New Admin subpath |
 | --- | --- |
 | `/admin-preview` | `@aotter/mantle-admin/admin-preview` |
-| `/mcp-app` | `@aotter/mantle-admin/mcp-app` |
+| `/mcp-app` | none: `@aotter/mantle-admin/mcp-app` (the prebuilt `mantleAppHtml`) is gone too; the application builds the App (see MCP App) |
 
-The package ships no prebuilt SPA: `admin/index.html`, `admin/preview.html` and
-`admin/host-bridge.js` are not exports. The application builds them (see Static
+The package ships no prebuilt SPA or MCP App: `admin/index.html`, `admin/preview.html`,
+`admin/mcp-app.html` and `admin/host-bridge.js` are not exports. The application builds them (see Static
 assets); the same-origin preview document and its bridge are written beside
 `index.html`. An app that copied them from `node_modules` serves `<assets>/admin`
 instead (breaking).
@@ -112,13 +112,24 @@ workspace remains part of the product.
 
 ## MCP App
 
-The `/mcp-app` entry exports `mantleAppHtml`. The Admin contributor registers
-it through the SDK's generic MCP Apps hook. Tools retain the same caller
+`buildAdmin` (so `mantle bundle`) also builds the App from the same Admin entry as the page, into the
+single file `<assets>/admin/mcp-app.html`: your `defineAdmin` components, plugins, CSS, Tailwind classes and `pages`
+that declare `mcp` are in it, and the build refuses an App that reads `/admin/api` or `document.cookie` or loads a
+remote origin that `defineAdmin({ mcp: { csp } })` does not declare. `adminMcpApps({ catalogue })` registers it
+through the SDK's generic MCP Apps hook and, without `html`, reads that file (`env.ASSETS` on a Worker,
+`dist/client/admin/mcp-app.html` on Bun, or `file`). Tools retain the same caller
 permissions as ordinary MCP calls; the document holds no credentials. Reserve
 `ui://mantle-admin/` resources for this contributor. The catalogue it embeds is
-cut to the reading caller's tools, and `domain` passes through to
-`_meta.ui.domain`. What the App asks of a host is in the
-[MCP Apps guide](../../docs/handbook/guides/mcp-apps.md#the-admin-app-in-a-host).
+cut to the reading caller's tools, the `csp` declared in `defineAdmin` (carried in the file) and `domain` pass
+through to `_meta.ui`. What the App asks of a host is in the
+[MCP Apps guide](../../docs/handbook/guides/mcp-apps.md#the-admin-app-in-a-host); what an application's
+components must do to render there, and how it upgrades from the prebuilt App, in
+[Customising Admin for MCP hosts](../../docs/handbook/guides/mcp-apps.md#customising-admin-for-mcp-hosts).
+
+`@aotter/mantle-admin/testing` exports `checkMcpApp({ catalogue, html })`, the compatibility test `mantle generate --admin` writes as
+`generated/admin-mcp-app.check.mjs`: it loads the built App in the official `AppBridge` under the spec's default CSP and fails on a network
+request, a console error, an exception or a missing size. It needs the optional peer `playwright-core` and Chrome (`MANTLE_TEST_CHROMIUM`);
+without a browser it fails. See [Run the compatibility test](../../docs/handbook/guides/mcp-apps.md#run-the-compatibility-test).
 
 Unsafe native integer versions remain exact in transport; generic UI
 interactions require safe numeric versions. Entries outside that range are

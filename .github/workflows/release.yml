@@ -168,9 +168,16 @@ jobs:
           MANTLE_NEXT_BUN_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
           MANTLE_NEXT_WORKER_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
 
+      # the examples' MCP App compatibility test (npm test) runs in Chrome
+      - name: Install Chrome
+        if: steps.ver.outputs.tag_exists != 'true'
+        run: pnpm --filter @aotter/mantle-admin exec playwright install --with-deps chrome
+
       - name: Fresh copies of packaged examples (npm and pnpm 10)
         if: steps.ver.outputs.tag_exists != 'true'
         run: node scripts/check-examples.mjs --fresh
+        env:
+          MANTLE_TEST_CHROMIUM: /usr/bin/google-chrome
 
       - name: Admin build under npm ci --ignore-scripts, served without node_modules
         if: steps.ver.outputs.tag_exists != 'true'

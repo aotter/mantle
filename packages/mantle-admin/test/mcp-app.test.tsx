@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { MantleApp, appValue, pagesReducer, type Pages } from "../src/mcp-app/app.js";
+import { MantleApp, appValue, pagesReducer, type Pages } from "../admin/src/mcp-app/app";
 import type { HostApi } from "../src/app/postmessage.js";
 import { adminMcpApps } from "../src/server/mcp.js";
 import { defineAdmin } from "../admin/src/app/define-admin.js";
@@ -94,6 +94,17 @@ describe("MantleApp", () => {
     expect(html).not.toContain("<mark data-surface=\"mcp-app\" data-row=\"r1\">1,234");
   });
 
+  it("shows a page declared for the host's tool instead of that View's rows, and the rows of any other tool", () => {
+    const pages = { pending: <p>queue-page</p> };
+    const shown = render({ pages });
+    expect(shown).toContain("queue-page");
+    expect(shown).not.toContain("Laptops");
+    expect(render({ pages, result: { ...viewResult, _meta: { [APP_TOOL_META_KEY]: "other" } } })).toContain("Laptops");
+    // a failed call still says so; the page never hides a refusal
+    const failed: ToolResult = { isError: true, content: [{ type: "text", text: JSON.stringify({ diagnostics: [{ code: "FORBIDDEN", message: "Not allowed." }] }) }] };
+    expect(render({ pages, result: { ...failed, _meta: { [APP_TOOL_META_KEY]: "pending" } } })).toContain("Not allowed.");
+  });
+
   it("speaks the host's locale, in its own strings and in the plan's titles", () => {
     const html = render({ locale: "zh-TW" });
     expect(html).toContain("總額");
@@ -166,10 +177,19 @@ describe("MantleApp", () => {
 });
 
 describe("adminMcpApps", () => {
+  it("injects the catalogue right after the opening <head>, even when a script in it holds the text </head>", async () => {
+    const html = '<!doctype html><html><head><script type="module">const srcDoc = "<html><head></head></html>";</script></head><body></body></html>';
+    const [resource] = adminMcpApps({ catalogue: catalog, html }).resources;
+    const out = (await (resource!.html as (render: object) => Promise<{ html: string }>)({ tools: new Set(["pending"]), env: {}, request: new Request("https://app.test/mcp") })).html;
+    expect(out).toMatch(/^<!doctype html><html><head><script type="application\/json" id="mantle-catalog">/);
+    // the module script is whole
+    expect(out).toContain('<script type="module">const srcDoc = "<html><head></head></html>";</script>');
+  });
+
   it("embeds the catalogue as this caller sees it: no View or action its tools/list hides", async () => {
     const [resource] = adminMcpApps({ catalogue: catalog, html: "<head></head>", domain: "admin.apps.example" }).resources;
     expect(resource!.domain).toBe("admin.apps.example");
-    const embedded = async (tools: string[]) => JSON.parse((await (resource!.html as (render: { tools: Set<string> }) => Promise<string>)({ tools: new Set(tools) })).match(/<script[^>]*>(.*)<\/script>/)![1]!) as unknown;
+    const embedded = async (tools: string[]) => JSON.parse((await (resource!.html as (render: { tools: Set<string> }) => Promise<{ html: string }>)({ tools: new Set(tools) })).html.match(/<script[^>]*>(.*)<\/script>/)![1]!) as unknown;
     // "gone" is no tool of this caller's either
     expect(await embedded(["pending", "review_requisition"])).toEqual({ ...catalog, views: { pending: { ...catalog.views["pending"], actions: ["review_requisition"] } } });
     expect(await embedded(["pending"])).toEqual({ views: { pending: { ...catalog.views["pending"], actions: [] } }, actions: {} });

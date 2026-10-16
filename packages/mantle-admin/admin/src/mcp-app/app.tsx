@@ -19,12 +19,12 @@ import {
   type AppRowAction,
   type CallTool,
   type ToolResult,
-} from "../app/bridge.js";
-import { web, type HostApi } from "../app/postmessage.js";
-import { useLoadMore } from "../../admin/src/lib/use-load-more.js";
-import { Slot, useViewCellNames } from "../../admin/src/app/slots.js";
-import type { CellProps } from "../../admin/src/app/slot-props.js";
-import { appLabels, type AppLabels } from "./locale.js";
+} from "../../../src/app/bridge";
+import { web, type HostApi } from "../../../src/app/postmessage";
+import { useLoadMore } from "../lib/use-load-more";
+import { Slot, useViewCellNames } from "../app/slots";
+import type { CellProps } from "../app/slot-props";
+import { appLabels, type AppLabels } from "./locale";
 
 type Row = Readonly<Record<string, unknown>>;
 
@@ -91,6 +91,8 @@ export function MantleApp(props: {
   readonly locale?: string;
   /** The host's IANA time zone, for date-times. */
   readonly timeZone?: string;
+  /** The application's pages declared for a View (`pages[].mcp`), by that View's tool: shown instead of the rows when the host's tool is theirs. */
+  readonly pages?: Readonly<Record<string, ReactNode>>;
 }): ReactNode {
   const { call, capabilities } = props.host;
   const openLink = capabilities.openLinks ? props.host.openLink : undefined;
@@ -161,6 +163,8 @@ export function MantleApp(props: {
       />
     );
   }
+  // the page reads its own data through the hooks, so a View's rows are not shown beside it
+  if (tool && props.pages && Object.prototype.hasOwnProperty.call(props.pages, tool)) return <div data-slot="app-page">{props.pages[tool]}</div>;
   const notice = stale ? <p role="status" className="text-destructive px-3 pt-3 text-sm">{labels.refreshFailed}</p> : null;
   if (rows.length === 0) return <>{notice}<p className="text-muted-foreground p-4 text-sm">{labels.nothing}</p></>;
   const columns = columnsOf(view, rows);

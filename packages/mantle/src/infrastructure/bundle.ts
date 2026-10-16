@@ -95,7 +95,7 @@ async function bundleAdmin(entry: string, outdir: string, out: string): Promise<
   // the installed path too: a patched or linked Admin keeps its version but not its path
   const manifest = realpathSync(lookup(require, "@aotter/mantle-admin") ?? require.resolve("@aotter/mantle-admin/package.json"));
   const key = custom ? undefined : JSON.stringify({ out: resolve(out), path: dirname(manifest), packages: installed(manifest) });
-  if (key && existsSync(join(out, "index.html")) && existsSync(stamp) && readFileSync(stamp, "utf8") === key) {
+  if (key && existsSync(join(out, "index.html")) && existsSync(join(out, "mcp-app.html")) && existsSync(stamp) && readFileSync(stamp, "utf8") === key) {
     console.log(`Admin inputs unchanged; kept ${relative(process.cwd(), out)}.`);
     return;
   }

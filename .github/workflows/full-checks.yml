@@ -68,13 +68,13 @@ jobs:
       - name: Packed-consumer provenance self-test
         run: node scripts/check-packed-consumer.mjs --self-test
       - run: pnpm check:worker-consumer
+      - name: Install Chrome
+        run: pnpm --filter @aotter/mantle-admin exec playwright install --with-deps chrome
       - run: pnpm check:examples
       - name: Admin build under npm ci --ignore-scripts, served without node_modules
         run: node scripts/check-admin-build.mjs
       - run: pnpm check:doc-examples
       - run: pnpm check:oss-plugin
-      - name: Install Chrome
-        run: pnpm --filter @aotter/mantle-admin exec playwright install --with-deps chrome
       - name: Admin sandbox boundaries (Chrome)
         run: pnpm --filter @aotter/mantle-admin test:browser
       - name: SDK bundle size report

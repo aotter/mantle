@@ -3,7 +3,7 @@ import type { Caller, Target, Authorize, Gateway, RequestContext, GatewayOptions
 import type { Conversions } from "./surface.js";
 import { linkApps, linkSurface, resourcesOf } from "./mcp-apps.js";
 export { callTool, callToolLazy } from "./mcp-call.js";
-export type { McpApps, McpAppResource, McpAppRender } from "./mcp-apps.js";
+export type { McpApps, McpAppResource, McpAppRender, McpAppPage, McpAppCsp } from "./mcp-apps.js";
 
 /** Options of a generated `mcp(...)`; it adds required `handlers` when the app declares ref Procedures. */
 export interface Options<Env, Database> extends GatewayOptions {

@@ -9,8 +9,8 @@
     ]
   },
   "include": [
-    "src/mcp-app/**/*",
     "examples/**/*",
+    "testing-host/**/*",
     "*.config.ts"
   ],
   "exclude": [

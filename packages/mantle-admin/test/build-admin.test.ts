@@ -31,7 +31,9 @@ describe("@aotter/mantle-admin/build", () => {
     writeFileSync(planted, 'export default { plugins: [{ postcssPlugin: "app", Once() { throw new Error("app postcss plugin ran on Admin CSS"); } }] };\n');
     try { await buildAdmin({ outDir: out }); }
     finally { rmSync(planted, { force: true }); }
-    for (const file of ["index.html", "preview.html", "host-bridge.js", "theme.js", "favicon.svg"]) expect(existsSync(join(out, file)), file).toBe(true);
+    for (const file of ["index.html", "preview.html", "mcp-app.html", "host-bridge.js", "theme.js", "favicon.svg"]) expect(existsSync(join(out, file)), file).toBe(true);
+    // the built-in entry's App, with none of the browser's transport
+    expect(readFileSync(join(out, "mcp-app.html"), "utf8")).not.toContain("/admin/api");
     // the application bundle holds the one React there is: no import map, no shared shim modules
     expect(existsSync(join(out, "shared")), "shared").toBe(false);
     const html = readFileSync(join(out, "index.html"), "utf8");
@@ -74,6 +76,38 @@ describe("@aotter/mantle-admin/build", () => {
       expect(css.indexOf(defaults), defaults).toBeGreaterThan(-1);
       expect(css.lastIndexOf(mine), mine).toBeGreaterThan(css.indexOf(defaults));
     }
+  }, 120_000);
+
+  it("builds the MCP App from the same entry: its override, its Tailwind class, its CSS over Admin's tokens, in one file", async () => {
+    const src = join(temp, "mcp/src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "brand.css"), ":root { --primary: #123456; }\n");
+    writeFileSync(join(src, "admin.tsx"), [
+      `import { defineAdmin } from ${JSON.stringify(resolve(pkg, "dist/admin-app/index.js"))};`,
+      'import "./brand.css";',
+      "export default defineAdmin({}, {",
+      '  components: { "cell:view:pending.item": ({ value }) => <b className="bg-[#fedcba] bg-primary bg-background">cell-override:{String(value)}</b> },',
+      '  pages: [{ path: "queue", title: "Queue", element: <p className="text-[#abc123]">queue-page</p>, mcp: { renders: "pending" } }],',
+      "});",
+    ].join("\n"));
+    const out = join(temp, "mcp/dist/client/admin");
+    await buildAdmin({ entry: join(src, "admin.tsx"), outDir: out });
+    const html = readFileSync(join(out, "mcp-app.html"), "utf8");
+    // the application's override and its page, and Tailwind classes only the application uses
+    expect(html).toContain("cell-override:");
+    expect(html).toContain("queue-page");
+    expect(html).toContain("#fedcba");
+    expect(html).toContain("#abc123");
+    // one file: no script, style or asset beside it
+    expect(html).not.toMatch(/^\s*<(?:script[^>]*\ssrc=|link[^>]*rel="(?:stylesheet|modulepreload)")/m);
+    // theme: Admin's tokens, then the application's CSS, then the host's neutrals over the tokens; the brand colour is never the host's
+    const css = /<style[^>]*>([\s\S]*?)<\/style>/.exec(html)![1]!;
+    expect(css.indexOf("--primary:var(--mantle-blue-deep)")).toBeGreaterThan(-1);
+    expect(css.indexOf("--primary:#123456")).toBeGreaterThan(css.indexOf("--primary:var(--mantle-blue-deep)"));
+    expect(css).toContain("background-color:var(--color-background-primary,var(--background))");
+    expect(css).toMatch(/\.bg-primary\{background-color:var\(--primary\)\}/);
+    // nothing of the browser's transport
+    expect(html).not.toContain("/admin/api");
   }, 120_000);
 
   it("serves Admin with HMR from a Vite dev server, proxying the service's API", async () => {

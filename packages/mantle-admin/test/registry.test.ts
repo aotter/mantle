@@ -99,6 +99,5 @@ describe("registry items", () => {
     }
   });
 
-  // The MCP App compatibility test loads the app-built MCP App in the host's AppBridge and checks each `both` item as an override.
-  for (const item of bothItems) it.todo(`MCP App compatibility: ${item.name} renders in the Admin MCP App under AppBridge (${item.meta.slots.join(", ")})`);
+  // MCP App compatibility of each `both` item runs in a real host: registry-compat.test.ts (`pnpm test:browser`).
 });

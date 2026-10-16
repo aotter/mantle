@@ -9,7 +9,7 @@ There are three packages, pinned to matching versions:
 | Package | Owns |
 | --- | --- |
 | `@aotter/mantle` | One native Core SDK: compiler, generator, query kernel and optional auth/surface primitives. |
-| `@aotter/mantle-admin` | Optional Admin server, app-built SPA library, design preview and Admin MCP App. |
+| `@aotter/mantle-admin` | Optional Admin server, the library an application builds its Admin SPA and MCP App from, design preview and `adminMcpApps`. |
 | `@aotter/mantle-ui` | Shared UI kit and generic interaction controller. |
 
 The SDK does not import Admin or its assets. Selecting Admin emits application
@@ -215,8 +215,11 @@ record. A View column that reads a Schema field also goes through that field's `
 plugin's is the built-in component, and the application's own `components` are outermost. A plugin is
 `{ components: { ... } }`, so one can be written once and shared.
 
-`mcp: { csp: { connectDomains, resourceDomains, frameDomains, baseUriDomains } }` is accepted and typed, and nothing reads it
-yet: it will name what Admin's MCP App may load once that App is built from your entry.
+`mcp: { csp: { connectDomains, resourceDomains, frameDomains, baseUriDomains } }` names the remote origins Admin's MCP App may
+load. `mantle bundle` builds that App from this same entry (`<assets>/admin/mcp-app.html`) and fails it on an origin that is not
+declared. The build writes the declaration into the file, and `adminMcpApps` sends it to the host as `_meta.ui.csp` on `resources/read`.
+A page may also be an MCP App view: `pages: [{ path, title, element, mcp: { renders: "<view>" } }]`, where `renders` is an admin
+View that has an MCP tool (`tsc` checks it against the generated `admin-client.ts`).
 
 Authorization is unchanged by any of this. A component that shows or hides something grants or denies nothing; the server
 checks every route, View and Procedure.
@@ -234,6 +237,10 @@ for one of these slots must:
 4. render something on both surfaces when it branches on `surface` or `useAdminSurface()`.
 
 `useOpenLink()` resolves `false` for anything but an http(s) URL, and when a host cannot or refuses to open it.
+
+`mantle bundle` enforces 1 and 2 on the built App (no `/admin/api`, no `document.cookie`, no undeclared remote origin; `window.open`
+and `target="_blank"` warn), and your CSS and Tailwind classes reach the App. The surface table, the theme mapping and the full
+rules are in [Customising Admin for MCP hosts](mcp-apps.md#customising-admin-for-mcp-hosts).
 
 ### Hot reload while you work on `src/admin.tsx`
 

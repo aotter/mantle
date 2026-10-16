@@ -6,6 +6,19 @@ export const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 export interface McpAppRender {
   /** The tools this caller's `tools/list` shows on the endpoint, so the HTML names none it cannot see. */
   readonly tools: ReadonlySet<string>;
+  /** The request's environment as the handler received it: Worker bindings such as `ASSETS`, or whatever a Bun host passes. */
+  readonly env: unknown;
+  /** The `resources/read` request, for its origin. */
+  readonly request: Request;
+}
+
+/** The CSP a resource asks its host for, as `_meta.ui.csp`. */
+export type McpAppCsp = { readonly connectDomains?: readonly string[]; readonly resourceDomains?: readonly string[]; readonly frameDomains?: readonly string[]; readonly baseUriDomains?: readonly string[] };
+
+/** What a loader may return beside a plain string: the HTML and a CSP known only when it is read. It is sent on `resources/read` and replaces the resource's static `csp` (lists are not merged). */
+export interface McpAppPage {
+  readonly html: string;
+  readonly csp?: McpAppCsp;
 }
 
 /** One `ui://` resource. The HTML is a reusable asset and never carries caller data: that travels in tool results. */
@@ -14,8 +27,8 @@ export interface McpAppResource {
   readonly name: string;
   readonly title?: string;
   readonly description?: string;
-  readonly html: string | ((render: McpAppRender) => string | Promise<string>);
-  readonly csp?: { readonly connectDomains?: readonly string[]; readonly resourceDomains?: readonly string[]; readonly frameDomains?: readonly string[]; readonly baseUriDomains?: readonly string[] };
+  readonly html: string | ((render: McpAppRender) => string | McpAppPage | Promise<string | McpAppPage>);
+  readonly csp?: McpAppCsp;
   readonly permissions?: { readonly camera?: Record<string, never>; readonly microphone?: Record<string, never>; readonly geolocation?: Record<string, never>; readonly clipboardWrite?: Record<string, never> };
   readonly prefersBorder?: boolean;
   /** `_meta.ui.domain`: the dedicated sandbox origin a host should serve this App from, in the form that host documents. */
