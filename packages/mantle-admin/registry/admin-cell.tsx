@@ -1,3 +1,5 @@
+import { AdminLink, type CellProps, type SurfaceProp } from "@aotter/mantle-admin/app";
+
 /**
  * Surface: both (the browser, and the Admin MCP App in an MCP host's sandboxed iframe).
  * Slots: cell:<schema>.<field>, cell:view:<view>.<column>
@@ -5,7 +7,6 @@
  * network calls of your own, keep no auth in cookies or browser storage, open no windows, assume no width, load
  * nothing from a remote origin. Branch on `surface` if you must; both branches have to render.
  */
-import { AdminLink, type CellProps, type SurfaceProp } from "@aotter/mantle-admin/app";
 
 const isWeb = (text: string): boolean => /^https?:\/\//i.test(text);
 

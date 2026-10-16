@@ -1,3 +1,6 @@
+import { type RecordAsideProps, type SurfaceProp } from "@aotter/mantle-admin/app";
+import { useView } from "@aotter/mantle-admin/hooks";
+
 /**
  * Surface: both (the browser, and the Admin MCP App in an MCP host's sandboxed iframe).
  * Slots: record.aside:<schema>
@@ -5,8 +8,6 @@
  * network calls of your own, keep no auth in cookies or browser storage, open no windows, assume no width, load
  * nothing from a remote origin. Branch on `surface` if you must; both branches have to render.
  */
-import { type RecordAsideProps, type SurfaceProp } from "@aotter/mantle-admin/app";
-import { useView } from "@aotter/mantle-admin/hooks";
 
 /** A card beside the record listing the rows of the admin View `record-history` for this record. Rename the View and its input. */
 export function AdminRecordAside({ entry }: RecordAsideProps<object> & SurfaceProp) {

@@ -1,11 +1,12 @@
+import { type HomeProps, type SlotProps } from "@aotter/mantle-admin/app";
+import { useView } from "@aotter/mantle-admin/hooks";
+
 /**
  * Surface: browser (Admin's own page only; an MCP host never renders it).
  * Slots: Home
  * Rules: read data only through @aotter/mantle-admin/hooks and link with <AdminLink>. Pass the props you
  * received to `renderDefault`; spread them to change some.
  */
-import { type HomeProps, type SlotProps } from "@aotter/mantle-admin/app";
-import { useView } from "@aotter/mantle-admin/hooks";
 
 /** The built-in home page under a section listing the first rows of the admin View `pending-requests`. */
 export function AdminHome(props: SlotProps<HomeProps>) {

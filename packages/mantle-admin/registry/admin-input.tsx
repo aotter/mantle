@@ -1,3 +1,5 @@
+import { type InputProps, type SurfaceProp } from "@aotter/mantle-admin/app";
+
 /**
  * Surface: both (the browser, and the Admin MCP App in an MCP host's sandboxed iframe).
  * Slots: input:<schema>.<field>
@@ -5,7 +7,6 @@
  * network calls of your own, keep no auth in cookies or browser storage, open no windows, assume no width, load
  * nothing from a remote origin. Branch on `surface` if you must; both branches have to render.
  */
-import { type InputProps, type SurfaceProp } from "@aotter/mantle-admin/app";
 
 /** The control of one text field. Narrow `InputProps` to `InputProps<string>` once your generated types name the field. */
 export function AdminInput({ value, onChange, readOnly, property }: InputProps & SurfaceProp) {

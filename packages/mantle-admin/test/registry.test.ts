@@ -23,36 +23,40 @@ function specifiers(name: string, text: string): string[] {
 }
 
 describe("registry items", () => {
-  it("import only react and the public Admin entry points, or a file of the same item", () => {
-    const own = new Set(sources.map(({ file }) => basename(file.path)));
+  it("import only react and the public Admin entry points", () => {
     for (const { item, file, text } of sources) {
       for (const specifier of specifiers(file.path, text)) {
-        const sibling = specifier.startsWith("./") && own.has(specifier.slice(2).replace(/\.js$/, ".tsx"));
-        expect(allowed.has(specifier) || sibling, `${file.path} (${item.name}) imports ${specifier}`).toBe(true);
+        expect(allowed.has(specifier), `${file.path} (${item.name}) imports ${specifier}`).toBe(true);
       }
     }
   });
 
   it("`both` items use no network call, credential storage, new window, absolute URL or Admin API path", () => {
     const forbidden: readonly [string, RegExp][] = [
-      ["fetch(", /\bfetch\s*\(/],
+      ["fetch", /\bfetch\b/],
+      ["a network or storage API", /XMLHttpRequest|WebSocket|EventSource|sendBeacon|sessionStorage|indexedDB/],
+      ["bracket access to open", /\[\s*["'`]open["'`]\s*\]/],
+      ["navigation through location or window.top", /location\.(?:href|assign|replace)|window\.top/],
+      ["a fixed pixel width", /\b(?:min-|max-)?w-\[\d+px\]|width\s*:\s*\d/],
       ["document.cookie", /document\.cookie/],
       ["localStorage", /localStorage/],
       ["window.open", /window\.open/],
       ['target="_blank"', /target\s*=\s*\{?\s*["'`]_blank/],
       ["/admin/api", /\/admin\/api/],
-      ["an absolute URL in src/href", /\b(?:src|href)\s*=\s*\{?\s*["'`]\s*https?:/i],
+      ["an absolute URL in src/href", /\b(?:src|href)\s*=\s*\{?\s*["'`]\s*(?:https?:)?\/\//i],
       ["an absolute URL in url()", /url\(\s*["']?\s*https?:/i],
     ];
     expect(bothItems.length).toBeGreaterThan(0);
-    for (const { item, text, file } of sources.filter(({ item }) => item.meta.surface === "both")) {
+    for (const { item, text, file } of sources.filter(({ item }) => bothItems.includes(item))) {
       for (const [label, pattern] of forbidden) expect(pattern.test(text), `${file.path} (${item.name}) contains ${label}`).toBe(false);
     }
   });
 
   it("declare their surface in the header comment, and it matches the slots they implement", () => {
     for (const { item, file, text } of sources) {
-      const header = /^\/\*\*([\s\S]*?)\*\//.exec(text)?.[1] ?? "";
+      // shadcn's `add` drops a comment before the first import, so the header follows the imports
+      const header = /\/\*\*([\s\S]*?Surface:[\s\S]*?)\*\//.exec(text)?.[1] ?? "";
+      expect(text.indexOf("Surface:"), `${file.path} header after the imports`).toBeGreaterThan(text.lastIndexOf("\nimport "));
       expect(/Surface: (both|browser)\b/.exec(header)?.[1], `${file.path} header`).toBe(item.meta.surface);
       expect(/Slots: (.+)/.exec(header)?.[1]?.split(",").map(slot => slot.trim()), `${file.path} header slots`).toEqual([...item.meta.slots]);
       expect(item.meta.slots.length).toBeGreaterThan(0);
@@ -74,8 +78,7 @@ describe("registry items", () => {
     virtual.set(consumer, [`import { defineAdmin } from "@aotter/mantle-admin/app";`, ...imports, `export default defineAdmin({}, { components: {`, ...components, "} });"].join("\n"));
     const options: ts.CompilerOptions = { module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, strict: true, noEmit: true, skipLibCheck: false, types: [] };
     const host = ts.createCompilerHost(options);
-    const { getSourceFile, fileExists, readFile } = host;
-    const { directoryExists } = host;
+    const { getSourceFile, fileExists, readFile, directoryExists } = host;
     host.directoryExists = file => file === dir || (directoryExists?.(file) ?? false);
     host.fileExists = file => virtual.has(file) || fileExists(file);
     host.readFile = file => virtual.get(file) ?? readFile(file);
