@@ -109,7 +109,8 @@ export async function resolveCaller(request: Request, auth: AuthLoader, options:
     const { oauthProviderResourceClient } = await import("@better-auth/oauth-provider/resource-client");
     const { createDpopReplayStore } = await import("better-auth/oauth2");
     const context = await instance.$context as import("@better-auth/core").AuthContext;
-    const verifier = oauthProviderResourceClient(instance).getActions();
+    // Issuance uses the normalized auth context URL, not the raw origin-only baseURL option.
+    const verifier = oauthProviderResourceClient({ options: { ...instance.options, baseURL: context.baseURL, basePath: "" }, $context: instance.$context }).getActions();
     let claims: Awaited<ReturnType<typeof verifier.verifyAccessTokenRequest>>;
     try {
       claims = await verifier.verifyAccessTokenRequest(request, { verifyOptions: { audience: options.audience as string | string[] }, dpop: { replayStore: createDpopReplayStore(context.internalAdapter) } });
