@@ -102,7 +102,7 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
       // Core visits public/caller before trusted. Prove the real caller equality prefixes;
       // a trusted all-scope read does not acquire a fictional scope predicate.
       if (!Object.hasOwn(paging, name)) paging[name] = provePaging(compiled.plan, ast);
-      return { SelectStmt: { ...ast.SelectStmt, limitCount: undefined, limitOption: "LIMIT_OPTION_DEFAULT" } };
+      return ast;
     },
     project(ast, kind, name, page) {
       if (kind === "procedure") return wireReturning(ast, compiled.plan.schemas, wire);

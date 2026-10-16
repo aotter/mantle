@@ -76,7 +76,8 @@ their contracts. Native integer bigint cursor keys are serialized separately.
 REST/MCP use separate `paged/wire/views/<name>.ts` SQL when declared integers
 require exact transport projections. Web pages and internal paged Views keep
 driver-native rows. Internal paging creates no public route/tool.
-Authored SQL `LIMIT` caps each page, up to 500, rather than the whole cursor walk.
+Authored SQL `LIMIT` bounds the complete ordered row set, including across cursor pages.
+Use `limit` in the paging options to choose each page size (up to 500); it does not expand the View's declared result set.
 An MCP View page keeps the `limit` of 1 to 500 but holds only as many of those rows
 as fit 60,000 characters of JSON, so a result stays under host truncation limits. It
 is cut before the first row that overflows and its next cursor resumes at that row.

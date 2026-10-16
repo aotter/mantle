@@ -22,9 +22,9 @@ kind: View
 metadata: {name: items}
 spec:
   surface: public
-  sql: SELECT id, rank FROM items ORDER BY rank, id LIMIT 2
+  sql: SELECT id, rank FROM items ORDER BY rank, id
 `;
-test("selected View pages ties across three pages, caps limit and refuses foreign/malformed cursors", async () => {
+test("selected View pages ties across three pages and refuses foreign/malformed cursors", async () => {
   const files = await generateOrThrow("bun-sqlite", [{ sourceId: "items.yaml", text: source }]);
   expect(files["paged/views/items.ts"]).not.toContain("_k2");
   const aliased=await generateOrThrow("bun-sqlite",[{sourceId:"alias.yaml",text:source.replace("SELECT id, rank FROM items ORDER BY rank, id", "SELECT rank AS id FROM items ORDER BY id")}]);
@@ -36,12 +36,12 @@ test("selected View pages ties across three pages, caps limit and refuses foreig
     db.exec(files["schema.sql"]!);
     for (let i = 0; i < 6; i++) db.query("INSERT INTO items(id,version,created_at,updated_at,rank) VALUES (?,1,0,0,?)").run(String(i), Math.floor(i / 3));
     const caller = { kind: "anonymous" };
-    const first = await page(db, caller, {alpha:1,beta:2}, { limit: 100 });
+    const first = await page(db, caller, {alpha:1,beta:2}, { limit: 2 });
     expect(JSON.parse(decodeURIComponent(first.nextCursor))[2]).toBe("views/items");
     expect(first.rows.map((r: any) => r.id)).toEqual(["0", "1"]);
-    const second = await page(db, caller, {beta:2,alpha:1}, { cursor: first.nextCursor });
+    const second = await page(db, caller, {beta:2,alpha:1}, { limit: 2, cursor: first.nextCursor });
     expect(second.rows.map((r: any) => r.id)).toEqual(["2", "3"]);
-    const third = await page(db, caller, {}, { cursor: second.nextCursor });
+    const third = await page(db, caller, {}, { limit: 2, cursor: second.nextCursor });
     expect(third).toEqual({ rows: [{ id: "4", rank: 1 }, { id: "5", rank: 1 }] });
     for (const cursor of ["%", "[]", encodeURIComponent(JSON.stringify([0,"1","views/other[]"])), encodeURIComponent(JSON.stringify([null,"1","views/items[]"]))]) await expect(page(db, caller, {}, { cursor })).rejects.toMatchObject({ code: "INPUT_VALIDATION_FAILED", path: "views/items/cursor" });
     for (const limit of [0, -1, 1.5, Infinity]) await expect(page(db, caller, {}, { limit })).rejects.toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
@@ -66,7 +66,7 @@ test("wire preserves contract fields/status and hides native errors", () => {
 });
 
 test("date-time keyset retains wire microseconds across SQLite pages", async () => {
-  const text = source.replace("indexes: [[rank]]", "indexes: [[at]]").replace("required: [rank]", "required: [at]").replace("properties: {rank: {type: integer}}", "properties: {at: {type: string, format: date-time}}").replace("SELECT id, rank FROM items ORDER BY rank, id LIMIT 2", "SELECT i.id, i.at FROM items i ORDER BY i.at DESC, i.id DESC LIMIT 2");
+  const text = source.replace("indexes: [[rank]]", "indexes: [[at]]").replace("required: [rank]", "required: [at]").replace("properties: {rank: {type: integer}}", "properties: {at: {type: string, format: date-time}}").replace("SELECT id, rank FROM items ORDER BY rank, id", "SELECT i.id, i.at FROM items i ORDER BY i.at DESC, i.id DESC");
   const files = await generateOrThrow("bun-sqlite", [{ sourceId: "dates.yaml", text }]);
   const dir = await mkdtemp(join(tmpdir(), "mantle-date-page-")), db = new Database(":memory:");
   try {
@@ -74,13 +74,13 @@ test("date-time keyset retains wire microseconds across SQLite pages", async () 
     const { default: page } = await import(join(dir, "paged/views/items.ts"));
     db.exec(files["schema.sql"]!);
     for (let i = 0; i < 5; i++) db.query("INSERT INTO items(id,version,created_at,updated_at,at) VALUES (?,1,0,0,?)").run(String(i), 1791676800123456 + i);
-    const first = await page(db, {kind:"anonymous"}, {});
+    const first = await page(db, {kind:"anonymous"}, {}, {limit:2});
     expect(first.rows).toEqual([{id:"4",at:"2026-10-11T00:00:00.123460Z"},{id:"3",at:"2026-10-11T00:00:00.123459Z"}]);
     const forged = JSON.parse(decodeURIComponent(first.nextCursor)); forged[0] = "not a date";
     await expect(page(db, {kind:"anonymous"}, {}, {cursor:encodeURIComponent(JSON.stringify(forged))})).rejects.toMatchObject({code:"INPUT_VALIDATION_FAILED",path:"views/items/cursor"});
-    const second = await page(db, {kind:"anonymous"}, {}, {cursor:first.nextCursor});
+    const second = await page(db, {kind:"anonymous"}, {}, {limit:2,cursor:first.nextCursor});
     expect(second.rows.map((r:any)=>r.id)).toEqual(["2","1"]);
-    const third = await page(db, {kind:"anonymous"}, {}, {cursor:second.nextCursor});
+    const third = await page(db, {kind:"anonymous"}, {}, {limit:2,cursor:second.nextCursor});
     expect(third).toEqual({rows:[{id:"0",at:"2026-10-11T00:00:00.123456Z"}]});
   } finally {db.close();await rm(dir,{recursive:true,force:true});}
   const postgres = await generateOrThrow("bun-postgres", [{sourceId:"dates.yaml",text}]);
@@ -97,9 +97,9 @@ test("TTL clock changes do not invalidate a View cursor", async () => {
     db.exec(files["schema.sql"]!);
     for(let i=0;i<4;i++)db.query("INSERT INTO items(id,version,created_at,updated_at,rank,expiresat) VALUES (?,1,0,0,0,?)").run(String(i),clock()*1000+1e12);
     Date.now=()=>1000;
-    const first=await page(db,{kind:"anonymous"},{});
+    const first=await page(db,{kind:"anonymous"},{},{limit:2});
     Date.now=()=>2000;
-    expect((await page(db,{kind:"anonymous"},{},{cursor:first.nextCursor})).rows.map((r:any)=>r.id)).toEqual(["2","3"]);
+    expect((await page(db,{kind:"anonymous"},{},{limit:2,cursor:first.nextCursor})).rows.map((r:any)=>r.id)).toEqual(["2","3"]);
   } finally {Date.now=clock;db.close();await rm(dir,{recursive:true,force:true});}
 });
 
@@ -167,8 +167,8 @@ test("to-one LEFT JOIN preserves base pages, including missing and nullable refe
       db.exec("INSERT INTO vendors(id,version,created_at,updated_at,name) VALUES ('vendor',1,0,0,'vendor')");
       for (const [id, ref] of [["0","vendor"],["1",null],["2","missing"],["3","vendor"]] as const) db.query("INSERT INTO items(id,version,created_at,updated_at,rank,vendorid) VALUES (?,1,0,0,1,?)").run(id,ref);
       const {default:page} = await import(join(dir,"paged/views/items.ts"));
-      const first = await page(db,{kind:"anonymous"},{});
-      const next = await page(db,{kind:"anonymous"},{},{cursor:first.nextCursor});
+      const first = await page(db,{kind:"anonymous"},{},{limit:2});
+      const next = await page(db,{kind:"anonymous"},{},{limit:2,cursor:first.nextCursor});
       expect([...first.rows,...next.rows]).toEqual([{id:"0",rank:1,name:"vendor"},{id:"1",rank:1,name:null},{id:"2",rank:1,name:null},{id:"3",rank:1,name:"vendor"}]);
     } finally {db.close();await rm(dir,{recursive:true,force:true});}
   }
