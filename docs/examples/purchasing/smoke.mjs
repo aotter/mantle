@@ -3,7 +3,8 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { createServer } from "node:http";
-import { smoke } from "./smoke-kit.mjs";
+import { assertMcpDiscovery, smoke } from "./smoke-kit.mjs";
+import { developerConsole } from "./generated/admin-descriptors.ts";
 
 const SECRET = "local-supplier-secret", DAILY = "0 9 * * *", DAY_US = 86_400 * 1_000_000;
 
@@ -22,7 +23,7 @@ const supplier = createServer((request, response) => {
 await new Promise(resolve => supplier.listen(0, "127.0.0.1", resolve));
 
 try {
-  await smoke(async ({ owner, call, mcp, signIn, sql, cron, waitForLog, step, logs }) => {
+  await smoke(async ({ origin, owner, call, mcp, signIn, sql, cron, waitForLog, step, logs }) => {
     const query = sql;
     const row = async id => (await query(`SELECT requeststatus AS status, version, supplierorderid AS "supplierOrderId" FROM requests WHERE id = '${id}'`))[0];
     const statusAndOrder = async id => { const { status, supplierOrderId } = await row(id); return { status, supplierOrderId }; };
@@ -77,9 +78,14 @@ try {
 
     const version = async id => (await row(id)).version;
     assert.equal((await operation(alice, "approve-request", { id: laptop, expectedVersion: await version(laptop) })).status, 403);
-    const publicTools = (await mcp("/mcp", alice)).body.result.tools.map(t => t.name);
+    // Generated static metadata uses the MCP tool names; the app chooses the surface and test identity.
+    const declared = developerConsole.interfaces.callable;
+    const publicTools = await assertMcpDiscovery(`${origin}/mcp`, { headers: { cookie: alice, origin }, tools: declared.filter(tool => tool.surface === "public") });
     assert.ok(!publicTools.includes("approve_request") && !publicTools.includes("reject_request"), publicTools.join());
-    const adminTools = (await mcp("/mcp/admin", admin)).body.result.tools.map(t => t.name);
+    const adminTools = await assertMcpDiscovery(`${origin}/mcp/admin`, { headers: { cookie: admin, origin }, tools: declared.filter(tool => tool.surface === "admin") });
+    // Denial is separate from successful initialized discovery.
+    assert.equal((await mcp("/mcp/admin")).status, 401);
+    assert.equal((await mcp("/mcp/admin", alice)).status, 403);
     assert.ok(adminTools.includes("approve_request") && adminTools.includes("reject_request"), adminTools.join());
     for (const hidden of ["confirm_order", "mark_ordered", "approve_request_write", "reject_request_write"])
       assert.ok(!adminTools.includes(hidden) && !publicTools.includes(hidden), hidden);
