@@ -32,7 +32,7 @@ Existing alpha.6 applications require a source migration:
   runs DDL at boot. Apply generated `schema.sql` only to an empty database;
   migrate existing data explicitly. PostgreSQL uses Bun.SQL on Bun and
   postgres.js on Workers. See [native execution](../guides/native-execution.md).
-- Install the separate `@aotter/mantle-admin` package when selecting Admin.
+- Install the separate `@aotter/mantle-admin` package when selecting Admin, with `react` and `react-dom` in the application pinned to one identical exact version (Admin no longer installs them).
   Compose its [native bindings](../guides/native-admin.md) in the application.
   Bare queries retain driver-native values; selected REST/MCP/Admin boundaries
   own validation and declared-column wire conversion.

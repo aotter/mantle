@@ -22,7 +22,7 @@ export interface BuildAdminOptions {
  * peers). Two installs that drifted (`^` ranges resolved apart) would otherwise surface as React error #527 in the browser.
  * Both are read from where the application's Admin code resolves them.
  */
-export function assertReactMatch(from: string): void {
+function assertReactMatch(from: string): void {
   const require = createRequire(resolve(from, "noop.js"));
   const read = (name: string) => {
     try { return (JSON.parse(readFileSync(require.resolve(`${name}/package.json`), "utf8")) as { version: string }).version; }
