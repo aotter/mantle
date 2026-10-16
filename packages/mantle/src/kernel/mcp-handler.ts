@@ -4,7 +4,7 @@ import { forwarded, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceE
 import { draining } from "./drain.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
 import type { Tools, Options } from "./mcp.js";
-import { RESOURCE_MIME_TYPE, linkSurface, type McpAppCsp, type McpAppRender, type McpAppResource } from "./mcp-apps.js";
+import { RESOURCE_MIME_TYPE, linkSurface, resourcesOf, type McpAppsSource, type McpAppCsp, type McpAppRender, type McpAppResource } from "./mcp-apps.js";
 type LocalizedText = string | Readonly<Record<string, string>>;
 const text = (value: LocalizedText | undefined, locale: string): string | undefined => {
   if (typeof value === "string") return value;
@@ -130,7 +130,16 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       }
     }
     const app = options.apps?.[surface];
-    const links = app ? (apps[surface] = linkSurface(app, selected, apps[surface])).links : undefined;
+    let links: ReturnType<typeof linkSurface>["links"] | undefined;
+    if (app) {
+      const sources = (Array.isArray(app) ? app : [app]) as readonly McpAppsSource[];
+      const dynamic = sources.some(source => typeof source === "function");
+      const resolved = resourcesOf(await Promise.all(sources.map(source => typeof source === "function" ? source({ env, request }) : source)));
+      // Equal tool names say nothing about request-bound resource identity or ownership.
+      const current = linkSurface(resolved, selected, dynamic ? undefined : apps[surface]);
+      if (!dynamic) apps[surface] = current;
+      links = current.links;
+    }
     if (options.authorize) {
       try {
         for (const message of Array.isArray(parsedBody) ? parsedBody : [parsedBody]) {
