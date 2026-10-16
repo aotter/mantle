@@ -201,6 +201,44 @@ it("is read-only in a host without server tools: rows and plain links, no action
   } finally { await browser.close(); await server.close(); }
 }, 45_000);
 
+it("delivers official result notifications with optional undefined metadata and rejects unsafe consumed output", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  try {
+    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?probe`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const frame = page.frames().find(frame => frame.url().includes("mcp-app-probe.html"))!;
+    for (const field of ["meta", "annotation"]) {
+      await page.evaluate(async field => {
+        const value = { content: [{ type: "text", text: '{"rows":[]}', ...(field === "annotation" ? { annotations: undefined } : {}) }], structuredContent: { rows: [] }, ...(field === "meta" ? { _meta: undefined } : {}) };
+        const { bridge } = (window as any).host;
+        bridge.oncalltool = async () => value;
+        await bridge.sendToolResult(value);
+      }, field);
+      await expect.poll(() => frame.evaluate(() => (window as any).probe.results.length)).toBe(field === "meta" ? 1 : 2);
+      expect(await frame.evaluate(async () => (await (window as any).probe.call("optional_result", {})).structuredContent)).toEqual({ rows: [] });
+    }
+    await page.evaluate(async () => {
+      const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
+      const values = [
+        { content: [], structuredContent: cyclic },
+        { content: [], structuredContent: JSON.parse('{"rows":[{"__proto__":{"unsafe":true}}]}') },
+        { content: [{ type: "text", text: '{"rows":[{"__proto__":{"unsafe":true}}]}' }] },
+      ];
+      const { bridge } = (window as any).host;
+      for (const value of values) await bridge.sendToolResult(value);
+      bridge.oncalltool = async () => values[1];
+    });
+    expect(await frame.evaluate(async () => {
+      try { await (window as any).probe.call("unsafe_result", {}); return "accepted"; } catch (error) { return (error as Error).message; }
+    })).toBe("Invalid tool result");
+    expect(await frame.evaluate(() => ({ count: (window as any).probe.results.length, polluted: ({} as any).unsafe }))).toEqual({ count: 2, polluted: undefined });
+    expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
+  } finally { await browser.close(); await server.close(); }
+}, 45_000);
+
 it("pins the parent and origin after official initialization; reverse calls are refused and aborts stay uncertain", async () => {
   const server = await hostServer();
   await server.listen();

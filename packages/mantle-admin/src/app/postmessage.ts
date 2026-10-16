@@ -1,6 +1,6 @@
 import { App, PostMessageTransport } from "@modelcontextprotocol/ext-apps";
 import type { McpUiDisplayMode, McpUiHostCapabilities, McpUiHostContext, McpUiUpdateModelContextRequest } from "@modelcontextprotocol/ext-apps";
-import type { CallTool, ToolResult } from "./bridge.js";
+import { outputOf, type CallTool, type ToolResult } from "./bridge.js";
 
 /** What the host lets the App do beyond rendering; each request is sent only when the host advertised it. */
 export interface HostApi {
@@ -46,13 +46,15 @@ export function web(url: string): boolean {
 }
 /** `McpUiStyleVariableKey`: the colors, fonts, radii, borders and shadows a host may set. */
 const HOST_STYLE_VARIABLE = /^--(color-(background|text|border|ring)-[a-z]+|font-(sans|mono|weight-[a-z]+|(text|heading)-[a-z0-9]+-(size|line-height))|border-radius-[a-z]+|border-width-regular|shadow-[a-z]+)$/;
-/** The interaction controller consumes object-shaped structured output only. */
+/** Validate what the controller consumes; ignored optional protocol metadata may be undefined. */
 function result(value: unknown): value is ToolResult {
-  return record(value) && Array.isArray(value.content)
+  if (!(record(value) && Array.isArray(value.content)
     && value.content.every(item => record(item) && typeof item.type === "string" && (item.type === "text" ? typeof item.text === "string" : item.text === undefined || typeof item.text === "string"))
     && (value.structuredContent === undefined || record(value.structuredContent))
     && (value._meta === undefined || record(value._meta))
-    && (value.isError === undefined || typeof value.isError === "boolean");
+    && (value.isError === undefined || typeof value.isError === "boolean"))) return false;
+  const output = outputOf(value as ToolResult);
+  return output === undefined || json(output);
 }
 
 export function connectHost(handlers: {
@@ -79,7 +81,7 @@ export function connectHost(handlers: {
   win.addEventListener("message", guard, true);
   const active = () => !closed;
   app.ontoolinput = ({ arguments: args }) => { if (active() && json(args ?? {})) handlers.input(args ?? {}); };
-  app.ontoolresult = value => { if (active() && json(value) && result(value)) handlers.result(value); };
+  app.ontoolresult = value => { if (active() && result(value)) handlers.result(value); };
   app.ontoolcancelled = () => { if (active()) handlers.cancelled(); };
   app.onhostcontextchanged = value => { if (active()) handlers.context(value); };
   app.onclose = () => {

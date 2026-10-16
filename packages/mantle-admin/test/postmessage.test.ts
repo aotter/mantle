@@ -124,6 +124,31 @@ test("unmount during initialization suppresses late ready/error; a fresh mount r
   failed.disconnect();
 });
 
+test("result notifications and calls validate consumed data, not ignored optional protocol fields", async () => {
+  const state = await make({ serverTools: {} });
+  for (const value of [
+    { content: [], structuredContent: { rows: [] }, _meta: undefined },
+    { content: [{ type: "text", text: '{"rows":[]}', annotations: undefined }] },
+  ]) {
+    state.app.ontoolresult(value);
+    expect(state.result).toHaveBeenLastCalledWith(value);
+    state.app.callServerTool.mockResolvedValueOnce(value);
+    await expect(state.host.call!("view", {})).resolves.toEqual(value);
+  }
+  const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
+  for (const value of [
+    { content: [], structuredContent: cyclic },
+    { content: [], structuredContent: JSON.parse('{"rows":[{"__proto__":{"unsafe":true}}]}') },
+    { content: [{ type: "text", text: '{"rows":[{"__proto__":{"unsafe":true}}]}' }] },
+  ]) {
+    state.app.ontoolresult(value);
+    state.app.callServerTool.mockResolvedValueOnce(value);
+    await expect(state.host.call!("view", {})).rejects.toThrow("Invalid tool result");
+  }
+  expect(state.result).toHaveBeenCalledTimes(2);
+  state.disconnect();
+});
+
 test("platform origin continuity guard is separate from the official source-window check", async () => {
   const { win, disconnect } = await make();
   const guard = vi.mocked(win.addEventListener).mock.calls[0]![1] as (event: MessageEvent) => void;
