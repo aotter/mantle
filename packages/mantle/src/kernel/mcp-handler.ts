@@ -267,7 +267,7 @@ function registerApps(server: import("@modelcontextprotocol/server").McpServer, 
         const page = typeof loaded === "string" ? { html: loaded } : loaded, read = page.csp ? appMeta(resource, page.csp) : meta;
         return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: page.html, ...(read ? { _meta: read } : {}) }] };
       }
-      catch { console.error("[mantle mcp] resource rendering failed"); throw new Error("Internal error."); }
+      catch (error) { console.error("[mantle mcp] resource rendering failed:", error instanceof Error ? error.message : String(error)); throw new Error("Internal error."); }
     });
   }
   return (tool: string) => {

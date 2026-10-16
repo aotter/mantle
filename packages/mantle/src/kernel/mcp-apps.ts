@@ -15,7 +15,7 @@ export interface McpAppRender {
 /** The CSP a resource asks its host for, as `_meta.ui.csp`. */
 export type McpAppCsp = { readonly connectDomains?: readonly string[]; readonly resourceDomains?: readonly string[]; readonly frameDomains?: readonly string[]; readonly baseUriDomains?: readonly string[] };
 
-/** What a loader may return beside a plain string: the HTML and a CSP known only when it is read (sent on `resources/read`). */
+/** What a loader may return beside a plain string: the HTML and a CSP known only when it is read. It is sent on `resources/read` and replaces the resource's static `csp` (lists are not merged). */
 export interface McpAppPage {
   readonly html: string;
   readonly csp?: McpAppCsp;

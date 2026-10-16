@@ -34,11 +34,15 @@ const withCsp = (html: string): McpAppPage => {
     const declared = /<meta name="mantle-mcp-csp" content='([^']*)'>/.exec(html)?.[1];
     return declared ? { html, csp: JSON.parse(declared) } : { html };
 };
-/** The built App: a Worker's assets binding serves it at `/admin/mcp-app.html`; Bun reads it from disk. */
+/** The built App: a Worker's `ASSETS` binding (the name `wrangler.jsonc`'s `assets.binding` must have, else pass `html`) serves it at `/admin/mcp-app.html`; Bun reads it from disk. */
 const builtApp = (file: string) => async ({ env, request }: McpAppRender): Promise<McpAppPage> => {
     const assets = (env as { readonly ASSETS?: { fetch(request: Request): Promise<Response> } } | null | undefined)?.ASSETS;
     if (assets) {
-        const response = await assets.fetch(new Request(new URL("/admin/mcp-app.html", request.url)));
+        const url = new URL("/admin/mcp-app.html", request.url);
+        let response = await assets.fetch(new Request(url, { redirect: "manual" }));
+        // the default `html_handling` answers a `.html` path with a redirect to the extensionless one: follow one, on this origin
+        const location = response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
+        if (location && new URL(location, url).origin === url.origin) response = await assets.fetch(new Request(new URL(location, url), { redirect: "manual" }));
         if (!response.ok)
             throw new Error(`The Admin MCP App is not in the assets (/admin/mcp-app.html answered ${response.status}); run \`mantle bundle\`.`);
         return withCsp(await response.text());
@@ -54,7 +58,8 @@ export function adminMcpApps(options: AdminMcpOptions): McpApps {
         throw new ContractError("INPUT_VALIDATION_FAILED", "Admin App resources use ui://mantle-admin/….", "mcp/apps");
     const embed = (html: string, render: McpAppRender) => {
         const script = '<script type="application/json" id="mantle-catalog">' + JSON.stringify(visibleCatalogue(options.catalogue, render.tools)).replace(/</g, "\\u003c") + "</script>";
-        return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, end => script + end) : script + html;
+        // right after the opening <head>: the module script that follows may hold the text "</head>" in a string
+        return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, start => start + script) : script + html;
     };
     const html = options.html ?? builtApp(options.file ?? "dist/client/admin/mcp-app.html");
     return { resources: [{ uri, name: "mantle-admin-admin", title: options.title ?? "Admin", html: async (render: McpAppRender) => {

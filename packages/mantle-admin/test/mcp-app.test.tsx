@@ -177,6 +177,15 @@ describe("MantleApp", () => {
 });
 
 describe("adminMcpApps", () => {
+  it("injects the catalogue right after the opening <head>, even when a script in it holds the text </head>", async () => {
+    const html = '<!doctype html><html><head><script type="module">const srcDoc = "<html><head></head></html>";</script></head><body></body></html>';
+    const [resource] = adminMcpApps({ catalogue: catalog, html }).resources;
+    const out = (await (resource!.html as (render: object) => Promise<{ html: string }>)({ tools: new Set(["pending"]), env: {}, request: new Request("https://app.test/mcp") })).html;
+    expect(out).toMatch(/^<!doctype html><html><head><script type="application\/json" id="mantle-catalog">/);
+    // the module script is whole
+    expect(out).toContain('<script type="module">const srcDoc = "<html><head></head></html>";</script>');
+  });
+
   it("embeds the catalogue as this caller sees it: no View or action its tools/list hides", async () => {
     const [resource] = adminMcpApps({ catalogue: catalog, html: "<head></head>", domain: "admin.apps.example" }).resources;
     expect(resource!.domain).toBe("admin.apps.example");

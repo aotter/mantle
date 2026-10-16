@@ -27,6 +27,19 @@ test("the CSP the build wrote into the file is sent with the HTML, and a file wi
   expect((await page({}, env("<head></head>"))).csp).toBeUndefined();
 });
 
+test("the default loader follows the one same-origin redirect the default html_handling answers a .html path with", async () => {
+  const asked: string[] = [];
+  const env = { ASSETS: { fetch: async (asked_: Request) => {
+    asked.push(asked_.url);
+    return asked_.url.endsWith(".html") ? new Response(null, { status: 307, headers: { location: "/admin/mcp-app" } }) : new Response("<head></head><p>redirected</p>");
+  } } };
+  expect(await load({}, env)).toContain("<p>redirected</p>");
+  expect(asked).toEqual(["https://svc.test/admin/mcp-app.html", "https://svc.test/admin/mcp-app"]);
+  // a redirect to another origin is not followed
+  const away = { ASSETS: { fetch: async () => new Response(null, { status: 307, headers: { location: "https://elsewhere.test/x" } }) } };
+  await expect(load({}, away)).rejects.toThrow("answered 307");
+});
+
 test("a missing built App is a loader failure the MCP handler redacts, not an empty page", async () => {
   const env = { ASSETS: { fetch: async () => new Response("missing", { status: 404 }) } };
   await expect(load({}, env)).rejects.toThrow("run `mantle bundle`");
