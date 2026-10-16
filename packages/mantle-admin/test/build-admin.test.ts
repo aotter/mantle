@@ -98,8 +98,10 @@ describe("@aotter/mantle-admin/build", () => {
     }
   }, 120_000);
 
-  it("declares every package its shipped build and library import as a dependency", () => {
-    const { name, dependencies } = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")) as { name: string; dependencies: Record<string, string> };
+  it("declares every package its shipped build and library import as a dependency or peer", () => {
+    const { name, dependencies: own, peerDependencies } = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")) as { name: string; dependencies: Record<string, string>; peerDependencies: Record<string, string> };
+    // React is the application's: Admin takes it as a peer
+    const dependencies = { ...own, ...peerDependencies };
     const files = [resolve(pkg, "dist/build/index.js"), resolve(pkg, "dist/admin-build/main.js"), resolve(pkg, "dist/admin-build/styles.css"), ...readdirSync(resolve(pkg, "dist/admin-app")).filter(file => file.endsWith(".js")).map(file => resolve(pkg, "dist/admin-app", file))];
     const missing = new Set<string>();
     for (const file of files) for (const [, spec] of readFileSync(file, "utf8").matchAll(/(?:from|import)\s*\(?\s*["']([^"'./\s][^"'\s]*)["']/g)) {
