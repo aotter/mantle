@@ -21,6 +21,7 @@ import {
   type ToolResult,
 } from "../app/bridge.js";
 import { web, type HostApi } from "../app/postmessage.js";
+import { useLoadMore } from "../../admin/src/lib/use-load-more.js";
 import { Slot, useViewCellNames } from "../../admin/src/app/slots.js";
 import type { CellProps } from "../../admin/src/app/slot-props.js";
 import { appLabels, type AppLabels } from "./locale.js";
@@ -111,8 +112,9 @@ export function MantleApp(props: {
     if (!tool || !call) return;
     try {
       const result = await call(tool, { ...props.input });
-      if (rowsOf(result)) dispatch({ type: "reset", result });
-      setStale(!rowsOf(result));
+      const fresh = rowsOf(result) !== null;
+      if (fresh) dispatch({ type: "reset", result });
+      setStale(!fresh);
     } catch {
       setStale(true);
     }
@@ -231,21 +233,14 @@ export function pagesReducer(state: Pages, action: PagesAction): Pages {
   return next ? { ...state, rows: [...(state.rows ?? []), ...next], cursor: nextCursorOf(action.result), more: "idle" } : { ...state, more: "failed" };
 }
 
-/** "Load more" under the rows: busy while loading, the rows added announced, and focus kept here when the last page removes the button. */
+/** "Load more" under the rows: busy while loading; `useLoadMore` announces the rows added and keeps focus. */
 function MoreRows(props: { readonly count: number; readonly hasMore: boolean; readonly more: Pages["more"]; readonly labels: AppLabels; readonly onMore: () => void }): ReactNode {
-  const box = useRef<HTMLDivElement>(null), focused = useRef(false), shown = useRef(props.count);
-  const [added, setAdded] = useState(0);
-  useEffect(() => { setAdded(Math.max(0, props.count - shown.current)); shown.current = props.count; }, [props.count]);
-  useEffect(() => {
-    if (props.hasMore || !focused.current) return;
-    focused.current = false;
-    box.current?.focus();
-  }, [props.hasMore]);
+  const { box, status, start } = useLoadMore({ count: props.count, hasMore: props.hasMore, loading: props.more === "loading", message: (added) => props.labels.rowsLoaded.replace("{count}", String(added)) });
   return (
     <div ref={box} tabIndex={-1} aria-busy={props.more === "loading"} className="grid justify-items-start gap-2 px-3 pb-3 outline-none">
-      <span role="status" className="sr-only">{added > 0 ? props.labels.rowsLoaded.replace("{count}", String(added)) : ""}</span>
+      <span role="status" className="sr-only">{status}</span>
       {props.more === "failed" ? <p role="alert" className="text-destructive text-sm">{props.labels.loadMoreFailed}</p> : null}
-      {props.hasMore ? <button type="button" className="rounded-md border px-3 py-1 text-sm font-medium" disabled={props.more === "loading"} onFocus={() => { focused.current = true; }} onClick={props.onMore}>{props.labels.loadMore}</button> : null}
+      {props.hasMore ? <button type="button" className="rounded-md border px-3 py-1 text-sm font-medium" disabled={props.more === "loading"} onClick={() => { start(); props.onMore(); }}>{props.labels.loadMore}</button> : null}
     </div>
   );
 }

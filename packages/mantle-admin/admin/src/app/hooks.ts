@@ -117,9 +117,9 @@ export interface EntriesOptions<Data> {
 export interface LoadMoreState {
   /** Another page follows the ones loaded. */
   readonly hasMore: boolean;
-  /** Loads and appends the next page; does nothing while one is loading or when `hasMore` is false. */
+  /** Loads and appends the next page. Does nothing when `hasMore` is false, or while any fetch is in flight, a refetch after a write included: that one is not cancelled. */
   readonly loadMore: () => void;
-  /** The next page is loading; the rows already loaded stay. */
+  /** The next page, which this hook's `loadMore()` fetches, is loading; the rows already loaded stay. */
   readonly loadingMore: boolean;
 }
 export interface ViewState<R> extends LoadMoreState {

@@ -302,6 +302,14 @@ describe("data hooks", () => {
     }
   });
 
+  it("do not refresh the lists after a download, which writes nothing", async () => {
+    const { queryClient } = await import("../src/app/query-client");
+    queryClient.setQueryData(["entries", "c"], 1);
+    await queryClient.getMutationCache().build(queryClient, { mutationFn: async () => 1, meta: { invalidates: false } }).execute(undefined);
+    expect(queryClient.getQueryState(["entries", "c"])?.isInvalidated).toBe(false);
+    queryClient.clear();
+  });
+
   it("do not refresh anything when an operation fails, and read a refusal as unavailable", async () => {
     const client = new QueryClient();
     client.setQueryData(["view", "pending", "x"], 1);

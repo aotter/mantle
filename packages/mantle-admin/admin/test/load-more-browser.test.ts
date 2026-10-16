@@ -21,8 +21,9 @@ it("appends the next page of a View and of the members list, and offers no Previ
       if (path === '/admin/api/site') return Response.json({brand:'Fixture',icons:[],locales:['en'],canonicalLocale:'en'});
       if (path === '/admin/api/collections') return Response.json({collections:[],allCollections:{}});
       if (path === '/admin/api/operations') return Response.json({operations:[]});
-      if (path === '/admin/api/views-manifest') return Response.json({views:[{ name:'orders', title:null, description:null, input:null, list:{columns:['item'],searchFields:[],filterFields:[]}, columns:{} }]});
+      if (path === '/admin/api/views-manifest') return Response.json({views:[{ name:'orders', title:null, description:null, input:null, list:{columns:['item'],searchFields:['item'],filterFields:[]}, columns:{} }]});
       if (path === '/admin/api/webmcp') return Response.json({tools:[],routes:{}});
+      if (path === '/admin/api/views/orders' && url.searchParams.get('search')) return Response.json({ rows: [{ id: 'o9', item: 'Filtered order' }] });
       if (path === '/admin/api/views/orders') return Response.json(cursor ? { rows: [{ id: 'o3', item: 'Third order' }] } : { rows: [{ id: 'o1', item: 'First order' }, { id: 'o2', item: 'Second order' }], nextCursor: 'c2' });
       if (path === '/admin/api/members') return Response.json(cursor ? { items: [member('m3')], previous_cursor: 'c1', next_cursor: null } : { items: [member('m1'), member('m2')], previous_cursor: null, next_cursor: 'c2' });
       return Response.json({});
@@ -53,6 +54,17 @@ it("appends the next page of a View and of the members list, and offers no Previ
       page.setDefaultTimeout(15_000);
       await page.goto(`${origin}${path}`);
       await page.getByText(first).waitFor();
+      if (path.includes("views")) {
+        // a new query that ends the list is not a Load more: focus is not taken by the list (the toolbar itself remounts on a new query)
+        const search = page.getByPlaceholder(/search/i);
+        await search.fill("x");
+        await search.press("Enter");
+        await page.getByText("Filtered order").waitFor();
+        expect(await page.getByRole("button", { name: "Load more" }).count()).toBe(0);
+        expect(await page.evaluate(() => document.activeElement?.getAttribute("tabindex"))).not.toBe("-1");
+        await page.goto(`${origin}${path}`);
+        await page.getByText(first).waitFor();
+      }
       expect(await page.getByRole("link", { name: /previous/i }).count()).toBe(0);
       await page.getByRole("button", { name: "Load more" }).click();
       await page.getByText(last).waitFor();

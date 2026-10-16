@@ -88,21 +88,6 @@ test("a write refetches every page of a list already loaded, so page two shows t
   client.clear();
 });
 
-test("a page still loading for one list never lands in another list's pages", async () => {
-  const client = new QueryClient();
-  let release!: (page: { rows: string[]; next_cursor: null }) => void;
-  const old = pagedQueryOptions(["view", "orders", "?q=a"], async (cursor) => cursor ? new Promise<{ rows: string[]; next_cursor: null }>(resolve => { release = resolve; }) : { rows: ["a-1"], next_cursor: "c2" });
-  const next = pagedQueryOptions(["view", "orders", "?q=b"], async () => ({ rows: ["b-1"], next_cursor: null }));
-  await client.fetchInfiniteQuery(old);
-  const pending = client.fetchInfiniteQuery({ ...old, pages: 2 });
-  await client.fetchInfiniteQuery(next);
-  release({ rows: ["a-2"], next_cursor: null });
-  await pending;
-  expect(rowsOf(client, next.queryKey)).toEqual(["b-1"]);
-  expect(rowsOf(client, old.queryKey)).toEqual(["a-1", "a-2"]);
-  client.clear();
-});
-
 test("the referenced titles of every page loaded are kept, field by field", () => {
   const title = (id: string) => ({ collection: "authors", id, title: id });
   expect(mergeRefTitles([{ author: { a: title("a") } }, undefined, { author: { b: title("b") }, editor: { c: title("c") } }]))

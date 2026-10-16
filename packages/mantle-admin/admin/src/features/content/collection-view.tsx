@@ -110,7 +110,7 @@ function CollectionList({
   const exportFile = useMutation({ mutationFn: (path: string) => {
     if (!collection) throw new Error("Collection metadata is unavailable.");
     return downloadAdminFile(path);
-  } });
+  }, meta: { invalidates: false } });
   const params = new URLSearchParams(location.search);
   const status = params.get("status") ?? undefined;
   const searchTerm = params.get("search")?.trim() ?? "";
