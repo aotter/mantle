@@ -103,10 +103,11 @@ exactly as the console does:
 language, for applications that do not embed the Admin product: the
 primitives, the email sign-in flow and the compiled theme. Its libraries are
 optional peers, so `/controller` consumers install none of them.
-Install them with the kit:
+Install them with the kit (pin `react` and `react-dom` to the same exact version):
 
 ```sh
-pnpm add @aotter/mantle-ui react react-dom radix-ui lucide-react class-variance-authority clsx tailwind-merge sonner input-otp react-day-picker
+pnpm add --save-exact react react-dom
+pnpm add @aotter/mantle-ui radix-ui lucide-react class-variance-authority clsx tailwind-merge sonner input-otp react-day-picker
 ```
 
 Then:

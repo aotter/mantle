@@ -30,8 +30,10 @@ at `@aotter/mantle-ui/controller`.
 (for a `bun-*` generate target it builds only Admin, since Bun runs the server as TypeScript),
 through `buildAdmin({ entry, outDir })` from `@aotter/mantle-admin/build` (not a
 CLI). The entry is `admin.tsx` beside the Worker entry, default-exporting
-`defineAdmin(...)`, or the built-in entry. Vite, Tailwind, React and Admin's UI
-packages are dependencies of this package, so the application adds none; the
+`defineAdmin(...)`, or the built-in entry. Vite, Tailwind and Admin's UI
+packages are dependencies of this package, so the application adds none of them. React is not: the
+application installs `react` and `react-dom` at one identical exact version, and `mantle bundle` refuses a
+mismatch; the
 build needs no install scripts (`npm ci --ignore-scripts` works). A `package-lock.json` made on one OS can lack the native build binaries (rolldown, `@tailwindcss/oxide`, lightningcss) that npm installs per platform from `optionalDependencies`, so a lockfile made on macOS can fail the build on a Linux host; create the lockfile on the build platform or use pnpm.
 The build writes the shell, the preview
 document, `host-bridge.js` and hashed assets.

@@ -443,7 +443,7 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
   `home`, `/admin` stays the built-in home. Choosing a landing page grants and denies nothing; the target's own route still decides.
   The landing is browser only.
 
-`src/admin.tsx` is JSX: the app-shell template sets `jsx: react-jsx` and depends on `react` and `@types/react`; add `lucide-react` (or another icon package) yourself if you use icons.
+`src/admin.tsx` is JSX: the app-shell template sets `jsx: react-jsx` and depends on `react`, `react-dom` and `@types/react`. The app owns `react` and `react-dom` (Admin and the kit take them as peers), so pin both to the same exact version: `react-dom` refuses to run beside a different `react`. `mantle bundle` stops with a message when they differ; add `lucide-react` (or another icon package) yourself if you use icons.
 
 ```tsx
 // src/admin.tsx
