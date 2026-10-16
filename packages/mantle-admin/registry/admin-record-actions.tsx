@@ -25,7 +25,7 @@ export function AdminRecordActions({ entry }: RecordActionsProps<object>) {
       <button type="button" className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50" disabled={pending || !run} onClick={press}>
         Approve
       </button>
-      {/* a caller that cannot run the operation shows the button disabled, with a note */}
+      {/* an unavailable host transport disables the button; the server still authorizes each invocation */}
       {!run ? <span className="text-sm text-muted-foreground">Read-only here</span> : null}
       {message ? <span role="status" className="text-sm text-muted-foreground">{message}</span> : null}
     </>

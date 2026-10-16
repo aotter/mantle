@@ -230,8 +230,9 @@ function Approve({ id }: { id: string }) {
 Import `useState` from React and `useOperation` from your generated
 `admin-client` (its types are tied to your manifests). Include observed-version
 input when the Procedure declares OCC; never replace it with an unguarded write.
-Without a corresponding tool or serverTools capability, `run` is absent and
-this button stays disabled. To ship a record-oriented MCP UI today, explicitly
+Without serverTools capability, `run` is absent and this button stays disabled.
+A missing or denied tool is reported as unavailable when invoked; an enabled
+button does not establish permission. To ship a record-oriented MCP UI today, explicitly
 declare its read View and write Procedure; `useEntry` is unavailable in MCP.
 
 ### Rules for a component that renders in a host
