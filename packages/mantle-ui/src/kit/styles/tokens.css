@@ -46,7 +46,8 @@
   --sidebar-ring: var(--mantle-blue-light);
 }
 
-.dark {
+.dark,
+[data-theme="dark"] {
   color-scheme: dark;
   --app-base: #171717;
   --chrome-glass: #202020;

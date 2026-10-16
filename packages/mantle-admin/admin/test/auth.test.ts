@@ -19,7 +19,7 @@ import {
 } from "../src/features/auth/auth-views";
 import { SignInFlow, SIGN_IN_FLOW_INITIAL, signInFlowReducer } from "@aotter/mantle-ui/kit";
 import { signOut } from "../src/lib/auth";
-import { PreferencesProvider, readInitialLanguage, resolveTheme } from "../src/app/preferences";
+import { PreferencesProvider, markTheme, readInitialLanguage, resolveTheme } from "../src/app/preferences";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -119,6 +119,14 @@ describe("sign-in", () => {
     expect(resolveTheme("system", false)).toBe("light");
     expect(resolveTheme("light", true)).toBe("light");
     expect(resolveTheme("dark", false)).toBe("dark");
+  });
+
+  it("marks the resolved theme as both .dark and data-theme", () => {
+    const classes = new Set<string>(), root = { dataset: {} as Record<string, string>, classList: { toggle: (name: string, on: boolean) => (on ? classes.add(name) : classes.delete(name)) } };
+    markTheme(root as unknown as HTMLElement, "dark");
+    expect([root.dataset.theme, [...classes]]).toEqual(["dark", ["dark"]]);
+    markTheme(root as unknown as HTMLElement, "light");
+    expect([root.dataset.theme, [...classes]]).toEqual(["light", []]);
   });
 
   it("keeps return navigation on the same origin", () => {
