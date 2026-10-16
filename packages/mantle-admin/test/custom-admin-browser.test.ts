@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { chromium } from "playwright";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:http";
@@ -59,5 +59,71 @@ it("the app's both cell, CSS and useView page work in browser Admin as in the MC
     await page.getByText("page:second").waitFor();
     expect(await page.getByText("page:first").count()).toBe(1);
     expect(requests.filter(path => path.startsWith("/admin/api/views/queue")).map(path => new URL(path, origin).searchParams.get("cursor"))).toEqual([null, "q2"]);
+  } finally { await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
+}, 120_000);
+
+it("recovers a failed lazy editor chunk only on explicit reload and rechecks authentication", async () => {
+  const root = await mkdtemp(join(tmpdir(), "mantle-admin-recovery-"));
+  const { buildAdmin } = await import("../dist/build/index.js");
+  const dist = join(root, "admin"), entry = join(root, "entry.tsx");
+  await writeFile(entry, `import { defineAdmin, AdminLink } from ${JSON.stringify(resolve(import.meta.dirname, "../dist/admin-app/index.js"))};\nexport default defineAdmin({}, { pages: [{ path: "start", title: "Start", element: <AdminLink href="/admin/c/requests/r1">Open record</AdminLink> }] });\n`);
+  await buildAdmin({ entry, outDir: dist });
+  const collection = { name: "requests", title: "Requests", description: null, lifecycle: "publishing", localized: false, hasTranslations: false, exportFields: ["title"], translates: null, uiSchema: {}, list: { primaryField: "title", columns: [] }, schema: { type: "object", properties: { title: { type: "string", title: "Title" } }, required: ["title"] } };
+  let missingChunk = true, signedIn = true, htmlLoads = 0, entryReads = 0;
+  const failedChunks: string[] = [], writes: string[] = [];
+  const server = createServer(async (request, response) => {
+    const url = new URL(request.url!, "http://localhost");
+    if (request.method !== "GET") writes.push(request.method + " " + url.pathname);
+    if (url.pathname === "/admin/api/me") {
+      response.writeHead(signedIn ? 200 : 401, { "content-type": "application/json" });
+      response.end(JSON.stringify(signedIn ? { role: "admin", admin: true, login: "fixture", image: null } : { error: { code: "UNAUTHENTICATED", message: "Sign in" } })); return;
+    }
+    if (url.pathname.startsWith("/admin/api/") || url.pathname === "/api/auth/methods") {
+      const fixed: Record<string, unknown> = {
+        "/admin/api/site": { brand: "Fixture", icons: [], locales: ["en"], canonicalLocale: "en" },
+        "/admin/api/collections": { collections: [collection], allCollections: { requests: collection } },
+        "/admin/api/operations": { operations: [] }, "/admin/api/views-manifest": { views: [] },
+        "/admin/api/webmcp": { tools: [], routes: {} }, "/api/auth/methods": { methods: [{ kind: "email-otp" }] },
+        "/admin/api/entries/r1": { collection, entry: { id: "r1", collection: "requests", locale: null, status: "draft", version: 1, data: { title: "Recovered record" }, updated_at: 0 }, related: [], parentEntryId: null },
+      };
+      if (url.pathname === "/admin/api/entries/r1") entryReads++;
+      response.writeHead(200, { "content-type": "application/json" }); response.end(JSON.stringify(fixed[url.pathname] ?? {})); return;
+    }
+    try {
+      const path = url.pathname.slice("/admin/".length);
+      if (/^[\w/-]+\.(?:js|css|svg)$/.test(path)) {
+        if (missingChunk && /entry-edit-view-[^/]+\.js$/.test(path)) {
+          failedChunks.push(path); response.writeHead(404, { "content-type": "text/plain" }); response.end("Not found"); return;
+        }
+        response.setHeader("content-type", path.endsWith(".js") ? "text/javascript" : path.endsWith(".css") ? "text/css" : "image/svg+xml");
+        response.end(await readFile(resolve(dist, path))); return;
+      }
+      htmlLoads++; response.setHeader("content-type", "text/html"); response.setHeader("cache-control", "no-store");
+      response.end(await readFile(join(dist, "index.html")));
+    } catch { response.statusCode = 404; response.end(); }
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  try {
+    const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const page = await browser.newPage(); page.setDefaultTimeout(15_000);
+    await page.addInitScript(() => localStorage.setItem("cms.preference.language", "zh-TW"));
+    await page.goto(origin + "/admin/p/start");
+    await page.getByRole("link", { name: "Open record" }).click();
+    const failure = page.getByRole("alert");
+    await failure.getByRole("button", { name: "重新載入頁面", exact: true }).waitFor();
+    expect(await failure.innerText()).toContain("尚未儲存的變更可能會遺失");
+    expect(await failure.innerText()).not.toContain("entry-edit-view-");
+    await page.waitForTimeout(250);
+    expect(failedChunks).toHaveLength(1); expect(htmlLoads).toBe(1); expect(entryReads).toBe(0); expect(writes).toEqual([]);
+    missingChunk = false;
+    await failure.getByRole("button", { name: "重新載入頁面", exact: true }).click();
+    await expect.poll(() => page.getByRole("textbox", { name: "Title", exact: true }).inputValue()).toBe("Recovered record");
+    expect(htmlLoads).toBe(2); expect(await page.getByRole("alert").count()).toBe(0);
+    const reads = entryReads;
+    signedIn = false; await page.reload();
+    await page.getByRole("heading", { name: "登入", exact: true }).waitFor();
+    expect(await page.getByRole("textbox", { name: "Title", exact: true }).count()).toBe(0);
+    expect(entryReads).toBe(reads); expect(writes).toEqual([]);
   } finally { await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
 }, 120_000);

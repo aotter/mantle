@@ -1,4 +1,6 @@
 export default {
+    "common.reloadPage": "Seite neu laden",
+    "common.reloadPageHint": "Laden Sie diese Seite neu, um es erneut zu versuchen. Nicht gespeicherte Änderungen können verloren gehen.",
     "ops.details": "Details",
     "ops.conditionConflict": "Der Datensatz wurde geändert oder erfüllt die Bedingung dieser Aktion nicht mehr. Aktualisiere die Seite und versuche es erneut.",
   "ops.uniqueConflict": "Ein Datensatz mit demselben eindeutigen Wert existiert bereits.",

@@ -10,6 +10,8 @@ const REQUIRED_TRANSLATED_KEYS = new Set([
   "developer.workspaceTitle",
   "common.breadcrumb",
   "common.close",
+  "common.reloadPage",
+  "common.reloadPageHint",
   "common.contentAdmin",
   "common.mobileSidebar",
   "common.mobileSidebarDescription",

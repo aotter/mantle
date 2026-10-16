@@ -1,4 +1,6 @@
 export default {
+    "common.reloadPage": "Recharger la page",
+    "common.reloadPageHint": "Rechargez cette page pour réessayer. Les modifications non enregistrées risquent d’être perdues.",
     "ops.details": "Détails",
     "ops.conditionConflict": "L’enregistrement a changé ou ne remplit plus la condition de cette action. Actualisez et réessayez.",
   "ops.uniqueConflict": "Un enregistrement avec la même valeur unique existe déjà.",

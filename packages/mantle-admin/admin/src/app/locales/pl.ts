@@ -1,4 +1,6 @@
 export default {
+    "common.reloadPage": "Odśwież stronę",
+    "common.reloadPageHint": "Odśwież tę stronę, aby spróbować ponownie. Niezapisane zmiany mogą zostać utracone.",
     "ops.details": "Szczegóły",
     "ops.conditionConflict": "Rekord zmienił się lub nie spełnia już warunku tej akcji. Odśwież i spróbuj ponownie.",
   "ops.uniqueConflict": "Rekord z tą samą unikalną wartością już istnieje.",
