@@ -158,3 +158,26 @@ test("an MCP page passes limits 1..500 to the View unchanged and refuses above 5
   expect((await call(api, "tools/call", { name: "public_rows", arguments: { limit: 501 } })).result.isError).toBe(true);
   expect(limits).toHaveLength(4);
 });
+
+test("an HTML loader also receives the request's env and request; a zero-argument or tools-only loader still works", async () => {
+  const seen: { tools: ReadonlySet<string>; env: unknown; request: Request }[] = [];
+  const env = { ASSETS: { fetch: async () => new Response("x") } };
+  const admin: McpApps = { resources: [
+    { ...resource("ui://mantle-admin/full", ["admin_rows"]), html: render => { seen.push(render); return "<p>full</p>"; } },
+    { ...resource("ui://mantle-admin/none", ["admin_details"]), html: () => "<p>none</p>" },
+    { ...resource("ui://mantle-admin/tools"), html: ({ tools }) => "<p>" + [...tools].sort().join(",") + "</p>" },
+  ] };
+  const api = handle({ admin });
+  const read = async (uri: string) => {
+    const response = await api(new Request("https://app.test/mcp/admin/", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "resources/read", params: { uri, _meta: meta } }) }), env);
+    const text = await response!.text();
+    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result.contents[0].text as string;
+  };
+  expect(await read("ui://mantle-admin/full")).toBe("<p>full</p>");
+  expect(seen).toHaveLength(1);
+  expect(seen[0]!.env).toBe(env);
+  expect(new URL(seen[0]!.request.url).origin).toBe("https://app.test");
+  expect([...seen[0]!.tools].sort()).toEqual(["admin_details", "admin_rows"]);
+  expect(await read("ui://mantle-admin/none")).toBe("<p>none</p>");
+  expect(await read("ui://mantle-admin/tools")).toBe("<p>admin_details,admin_rows</p>");
+});

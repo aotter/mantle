@@ -4,7 +4,7 @@ import { forwarded, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceE
 import { draining } from "./drain.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
 import type { Tools, Options } from "./mcp.js";
-import { RESOURCE_MIME_TYPE, linkSurface, type McpAppResource } from "./mcp-apps.js";
+import { RESOURCE_MIME_TYPE, linkSurface, type McpAppRender, type McpAppResource } from "./mcp-apps.js";
 type LocalizedText = string | Readonly<Record<string, string>>;
 const text = (value: LocalizedText | undefined, locale: string): string | undefined => {
   if (typeof value === "string") return value;
@@ -160,7 +160,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       const server = new McpServer(serverInfo, options.instructions ? { instructions: options.instructions } : {});
       server.server.registerCapabilities({ tools: { listChanged: false } });
       if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
-      const appMeta = links ? registerApps(server, links, parsedBody, new Set(selected.map(tool => tool.name))) : undefined;
+      const appMeta = links ? registerApps(server, links, parsedBody, new Set(selected.map(tool => tool.name)), { env, request }) : undefined;
       // A host's stale copy names a tool this catalogue lacks: say so, with the catalogue version, instead of the SDK's bare "not found".
       // Wrapped where the SDK stores it, so transport and request validation still answer first.
       const registered = new Set<string>(), set = server.server.setRequestHandler.bind(server.server) as (method: string, handler: unknown) => void;
@@ -257,12 +257,12 @@ function appMeta(r: McpAppResource): { ui: Record<string, unknown> } | undefined
 }
 
 /** Registration uses the official SDK; HTML loaders run only on resources/read. */
-function registerApps(server: import("@modelcontextprotocol/server").McpServer, links: ReturnType<typeof linkSurface>["links"], message: unknown, tools: ReadonlySet<string>) {
+function registerApps(server: import("@modelcontextprotocol/server").McpServer, links: ReturnType<typeof linkSurface>["links"], message: unknown, tools: ReadonlySet<string>, request: Pick<McpAppRender, "env" | "request">) {
   const enabled = clientUiSupport(message) !== "unsupported";
   if (enabled) for (const resource of links.resources) {
     const meta = appMeta(resource);
     server.registerResource(resource.name, resource.uri, { mimeType: RESOURCE_MIME_TYPE, title: resource.title, description: resource.description, ...(meta ? { _meta: meta } : {}) }, async () => {
-      try { return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: typeof resource.html === "string" ? resource.html : await resource.html({ tools }), ...(meta ? { _meta: meta } : {}) }] }; }
+      try { return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: typeof resource.html === "string" ? resource.html : await resource.html({ tools, ...request }), ...(meta ? { _meta: meta } : {}) }] }; }
       catch { console.error("[mantle mcp] resource rendering failed"); throw new Error("Internal error."); }
     });
   }

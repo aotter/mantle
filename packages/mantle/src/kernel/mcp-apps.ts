@@ -6,6 +6,10 @@ export const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 export interface McpAppRender {
   /** The tools this caller's `tools/list` shows on the endpoint, so the HTML names none it cannot see. */
   readonly tools: ReadonlySet<string>;
+  /** The request's environment as the handler received it: Worker bindings such as `ASSETS`, or whatever a Bun host passes. */
+  readonly env: unknown;
+  /** The `resources/read` request, for its origin. */
+  readonly request: Request;
 }
 
 /** One `ui://` resource. The HTML is a reusable asset and never carries caller data: that travels in tool results. */
