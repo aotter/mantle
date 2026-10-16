@@ -15,7 +15,7 @@ export function AdminHome(props: SlotProps<HomeProps>) {
     <>
       {queue.status === "ready" ? (
         <section className="mb-6 rounded-lg border p-4">
-          <h2 className="mb-2 text-sm font-semibold">Waiting for you ({queue.rows.length}{queue.nextCursor ? "+" : ""})</h2>
+          <h2 className="mb-2 text-sm font-semibold">Waiting for you ({queue.rows.length}{queue.hasMore ? "+" : ""})</h2>
           <ul className="space-y-1 text-sm">
             {queue.rows.map((row, index) => <li key={index} className="truncate">{String(Object.values(row)[0] ?? "")}</li>)}
           </ul>
