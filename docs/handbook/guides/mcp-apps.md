@@ -424,6 +424,14 @@ no server permissions and adds no provider or transport.
 
 ### Run the compatibility test
 
+For an interactive test in another official host, load the HTML returned by an
+authenticated MCP `resources/read`, discovered through `resources/list` or the
+tool's UI resource link. Do not serve the raw built `mcp-app.html` directly: the
+server embeds the caller-filtered catalogue when reading the resource, and
+without that catalogue native row actions are absent. The generated test below
+supplies its own synthetic catalogue and checks rendering, not a real host's
+authorization flow or a completed action dialog.
+
 The build check reads text; this test runs the App. `mantle generate --admin` writes
 `generated/admin-mcp-app.check.mjs`. After `npm run build`, run
 `node --test generated/admin-mcp-app.check.mjs` (the examples name it `npm test`;
