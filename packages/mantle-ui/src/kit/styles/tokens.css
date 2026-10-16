@@ -46,7 +46,9 @@
   --sidebar-ring: var(--mantle-blue-light);
 }
 
-.dark {
+/* `:where` keeps this at the specificity of `.dark`, so an application's own `.dark {}` loaded later still wins */
+.dark,
+:where(:root[data-theme="dark"]) {
   color-scheme: dark;
   --app-base: #171717;
   --chrome-glass: #202020;

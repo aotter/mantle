@@ -89,7 +89,7 @@ export function PreferencesProvider({
     const applyTheme = () => {
       const resolved = resolveTheme(theme, systemPrefersDark());
       setResolvedTheme(resolved);
-      document.documentElement.classList.toggle("dark", resolved === "dark");
+      markTheme(document.documentElement, resolved);
     };
     applyTheme();
     if (theme !== "system" || typeof matchMedia === "undefined") return;
@@ -145,6 +145,12 @@ function readInitialTheme(): AdminTheme {
 function systemPrefersDark(): boolean {
   return typeof matchMedia !== "undefined" &&
     matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+/** `.dark` and `data-theme` mark the same theme, as in an MCP host. */
+export function markTheme(root: HTMLElement, resolved: ResolvedTheme): void {
+  root.classList.toggle("dark", resolved === "dark");
+  root.dataset.theme = resolved;
 }
 
 export function resolveTheme(theme: AdminTheme, systemDark: boolean): ResolvedTheme {

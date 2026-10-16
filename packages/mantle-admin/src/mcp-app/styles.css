@@ -4,11 +4,11 @@
 @source "../../../mantle-ui/src/react/fields.tsx";
 @source "../../../mantle-ui/src/kit/components/ui/{button,checkbox,input,popover,select,textarea}.tsx";
 
-/* `dark:` follows the host's theme (`data-theme`), and the system's only when the host sets none, as the palette below does */
+/* `dark:` follows the host's theme (`data-theme` or `.dark`), and the system's only when the host sets none, as the palette below does */
 @custom-variant dark {
-  &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
+  &:where(:root[data-theme="dark"], :root[data-theme="dark"] *, .dark, .dark *) { @slot; }
   @media (prefers-color-scheme: dark) {
-    &:where(:root:not([data-theme]) *, :root:not([data-theme])) { @slot; }
+    &:where(:root:not([data-theme], .dark) *, :root:not([data-theme], .dark)) { @slot; }
   }
 }
 
@@ -74,7 +74,7 @@
       --mantle-app-primary-foreground: #18181b;
     }
   }
-  :root[data-theme="dark"] {
+  :root[data-theme="dark"], :root.dark {
     --mantle-app-background: #18181b;
     --mantle-app-foreground: #fafafa;
     --mantle-app-muted: #27272a;

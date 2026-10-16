@@ -79,10 +79,42 @@ App does not know are filtered out of `availableDisplayModes`. `locale` and
 `timeZone` format dates (an unknown zone falls back to the browser's);
 `safeAreaInsets` become root padding; `containerDimensions` bound the root: a
 fixed or maximum height scrolls, and the reported size stays within it.
-`theme: "dark"` sets both `data-theme` and the `.dark` class. Only the spec's
-style variables are applied. Neutral colors (background, text, border, ring,
-danger), `--font-sans`, `--font-mono`, font weights, text sizes and radii
-follow the host; the primary color stays the App's own.
+`theme: "dark"` sets both `data-theme` and the `.dark` class.
+
+### Theme
+
+The App uses its own neutral palette, a light and a dark one, and does not load
+your application's CSS: your `admin.css` and `.dark {}` overrides apply in the
+browser Admin, not here. Style variables the host provides override that palette;
+the rest keep it. Only the spec's style variables are applied, and
+`styles.css.fonts` is added as a stylesheet. The table lists, for each host
+variable, the App's Tailwind theme variable it feeds.
+
+| Host variable | App theme variable |
+| --- | --- |
+| `--color-background-primary` | `--color-background`, `--color-card`, `--color-popover` |
+| `--color-text-primary` | `--color-foreground`, `--color-card-foreground`, `--color-popover-foreground`, `--color-secondary-foreground`, `--color-accent-foreground` |
+| `--color-background-secondary` | `--color-muted`, `--color-secondary`, `--color-accent` |
+| `--color-text-secondary` | `--color-muted-foreground` |
+| `--color-border-primary` | `--color-border`, `--color-input` |
+| `--color-ring-primary` | `--color-ring` |
+| `--color-text-danger` | `--color-destructive` |
+| `--border-radius-sm` | `--radius-sm` |
+| `--border-radius-md` | `--radius-md` |
+| `--border-radius-lg` | `--radius-lg` |
+| `--font-text-xs-size` | `--text-xs` |
+| `--font-text-xs-line-height` | `--text-xs--line-height` |
+| `--font-text-sm-size` | `--text-sm` |
+| `--font-text-sm-line-height` | `--text-sm--line-height` |
+| `--font-text-md-size` | `--text-base` |
+| `--font-text-md-line-height` | `--text-base--line-height` |
+| `--font-sans` | `--font-app` (the App's font) |
+
+`--font-mono` and `--font-weight-*` apply as they are. The primary colors
+(`--color-primary`, `--color-primary-foreground`) are the App's own, never the
+host's, and no chart color is mapped. `--sidebar-*` and `--app-*` do not apply in
+a host. The host's theme marks the root as both `data-theme` and `.dark`; without
+a host theme the App follows the system color scheme.
 
 A View result carries its rows twice, as the JSON text block and as
 `structuredContent`. Hosts truncate long tool results (about 150k characters

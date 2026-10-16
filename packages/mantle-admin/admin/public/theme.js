@@ -59,6 +59,7 @@
       ((!pref || pref === "system") && matchMedia("(prefers-color-scheme: dark)").matches)
     ) {
       document.documentElement.classList.add("dark");
+      document.documentElement.dataset.theme = "dark";
     }
   } catch (_) {}
 })();
