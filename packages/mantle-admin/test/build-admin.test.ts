@@ -110,6 +110,50 @@ describe("@aotter/mantle-admin/build", () => {
     expect(html).not.toContain("/admin/api");
   }, 120_000);
 
+  it("isolates a browser-only integration while sharing opted-in pages, cells and CSS through an explicit MCP entry", async () => {
+    const src = join(temp, "split/src");
+    mkdirSync(src, { recursive: true });
+    const sdk = JSON.stringify(resolve(pkg, "dist/admin-app/index.js"));
+    writeFileSync(join(src, "shared.css"), ".shared-host-page { color: #123abc; }\n");
+    writeFileSync(join(src, "shared.tsx"), [
+      'import "./shared.css";',
+      'export const shared = { components: { "cell:view:pending.item": ({ value }) => <b>shared-host-cell:{String(value)}</b> },',
+      'pages: [{ path: "queue", title: "Queue", element: <p className="shared-host-page">shared-host-page</p>, mcp: { renders: "pending" } }],',
+      'mcp: { csp: { resourceDomains: ["https://images.example.test"] } } };',
+    ].join("\n"));
+    writeFileSync(join(src, "admin.tsx"), [
+      `import { defineAdmin } from ${sdk};`,
+      'import { shared } from "./shared";',
+      'function BrowserOnlyPage() { return <button onClick={() => { void fetch("/admin/api/views/example"); console.log(document.cookie); }}>browser-only-integration</button>; }',
+      'export default defineAdmin({}, { ...shared, pages: [...shared.pages, { path: "browser-report", title: "Browser report", element: <BrowserOnlyPage /> }] });',
+    ].join("\n"));
+    const mcpEntry = join(src, "admin.mcp.tsx");
+    writeFileSync(mcpEntry, `import { defineAdmin } from ${sdk};\nimport { shared } from "./shared";\nexport default defineAdmin({}, shared);\n`);
+    const out = join(temp, "split/out");
+    // Existing single-entry authoring keeps the guard; page rendering opt-in is not graph isolation.
+    await expect(buildAdmin({ entry: join(src, "admin.tsx"), outDir: out })).rejects.toThrow(/The Admin MCP App would break.*|Admin's browser route/s);
+    await buildAdmin({ entry: join(src, "admin.tsx"), mcpEntry, outDir: out });
+    const browser = assets(out, ".js"), html = readFileSync(join(out, "mcp-app.html"), "utf8");
+    expect(browser).toContain("browser-only-integration");
+    expect(browser).toContain("/admin/api/views/example");
+    for (const excluded of ["browser-only-integration", "/admin/api", "document.cookie"]) expect(html).not.toContain(excluded);
+    for (const shared of ["shared-host-page", "shared-host-cell:", "#123abc", "https://images.example.test"]) expect(html).toContain(shared);
+    expect(html).toContain('"pages":["pending"]');
+    // The selected MCP graph is still checked, not exempted by the separate entry.
+    writeFileSync(mcpEntry, `import { defineAdmin } from ${sdk};\nexport default defineAdmin({}, { pages: [{ path: "bad", title: "Bad", mcp: { renders: "pending" }, element: <button onClick={() => fetch("/admin/api/views/example")}>Bad</button> }] });\n`);
+    await expect(buildAdmin({ entry: join(src, "admin.tsx"), mcpEntry, outDir: out })).rejects.toThrow("Admin's browser route");
+  }, 180_000);
+
+  it("fails an explicit MCP entry that cannot be read, instead of falling back to the browser entry", async () => {
+    const src = join(temp, "broken-mcp/src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "admin.tsx"), `import { defineAdmin } from ${JSON.stringify(resolve(pkg, "dist/admin-app/index.js"))};\nexport default defineAdmin({});\n`);
+    const mcpEntry = join(src, "admin.mcp.tsx");
+    // No config declaration for the older readDefinition fallback to notice.
+    writeFileSync(mcpEntry, 'throw new Error("MCP entry unavailable");\nexport default {};\n');
+    await expect(buildAdmin({ entry: join(src, "admin.tsx"), mcpEntry, outDir: join(temp, "broken-mcp/out") })).rejects.toThrow(/cannot be built:.*MCP entry unavailable/);
+  }, 120_000);
+
   it("serves Admin with HMR from a Vite dev server, proxying the service's API", async () => {
     const src = join(temp, "dev/src");
     mkdirSync(src, { recursive: true });

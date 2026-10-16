@@ -164,6 +164,8 @@ says which. `@aotter/mantle-admin/hooks` also exports the same hooks untyped, fo
 An application replaces or wraps regions of Admin from `src/admin.tsx`. The entry passes the generated metadata and, beside it,
 what to change; the built-in entry needs none of this.
 
+If browser-only integrations need APIs that an MCP host forbids, keep their implementations outside the host graph: add a sibling `src/admin.mcp.tsx`, also default-exporting `defineAdmin(...)`, and share the host-safe config and components between the two entries. `mantle bundle` selects it automatically for the MCP asset; the SPA and preview still use `admin.tsx`. The direct build API accepts `mcpEntry`. See [isolate browser-only integrations](mcp-apps.md#isolate-browser-only-integrations).
+
 ```tsx
 import { defineAdmin } from "@aotter/mantle-admin/app";
 import { admin } from "../generated/admin-client.js";

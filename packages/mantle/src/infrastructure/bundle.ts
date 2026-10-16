@@ -80,12 +80,14 @@ export async function bundleApp(entry: string, outdir: string, assets = join(out
 }
 
 /**
- * Admin from `<dirname(entry)>/admin.tsx`, or the built-in entry, with `@aotter/mantle-admin/build` as the app installed
+ * Admin from `<dirname(entry)>/admin.tsx`, or the built-in entry; an optional `admin.mcp.tsx` selects the host-safe graph.
+ * Uses `@aotter/mantle-admin/build` as the app installed
  * it. The built-in entry is skipped when the installed Admin and its direct dependencies are unchanged since the last
  * build; an application entry always builds, because what it imports is only known by building it.
  */
 async function bundleAdmin(entry: string, outdir: string, out: string): Promise<void> {
   const source = join(dirname(entry), "admin.tsx"), custom = existsSync(source);
+  const mcpSource = join(dirname(entry), "admin.mcp.tsx"), customMcp = existsSync(mcpSource);
   assertCleanable("The Admin output directory", out, entry);
   const require = createRequire(entry);
   let builder: string;
@@ -94,14 +96,14 @@ async function bundleAdmin(entry: string, outdir: string, out: string): Promise<
   const stamp = join(outdir, ".admin-inputs");
   // the installed path too: a patched or linked Admin keeps its version but not its path
   const manifest = realpathSync(lookup(require, "@aotter/mantle-admin") ?? require.resolve("@aotter/mantle-admin/package.json"));
-  const key = custom ? undefined : JSON.stringify({ out: resolve(out), path: dirname(manifest), packages: installed(manifest) });
+  const key = custom || customMcp ? undefined : JSON.stringify({ out: resolve(out), path: dirname(manifest), packages: installed(manifest) });
   if (key && existsSync(join(out, "index.html")) && existsSync(join(out, "mcp-app.html")) && existsSync(stamp) && readFileSync(stamp, "utf8") === key) {
     console.log(`Admin inputs unchanged; kept ${relative(process.cwd(), out)}.`);
     return;
   }
   rmSync(stamp, { force: true });
-  const { buildAdmin } = await import(pathToFileURL(builder).href) as { buildAdmin(options: { entry?: string; outDir: string }): Promise<void> };
-  await buildAdmin({ entry: custom ? source : undefined, outDir: out });
+  const { buildAdmin } = await import(pathToFileURL(builder).href) as { buildAdmin(options: { entry?: string; mcpEntry?: string; outDir: string }): Promise<void> };
+  await buildAdmin({ entry: custom ? source : undefined, ...(customMcp ? { mcpEntry: mcpSource } : {}), outDir: out });
   if (key) writeFileSync(stamp, key);
 }
 
