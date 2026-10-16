@@ -103,7 +103,9 @@ JSONC edits preserve comments and unrelated settings and are idempotent. A new c
 needs its `name`, `compatibility_date` and bindings filled in. TOML only prints instructions.
 
 esbuild emits minified split ESM into `<outdir>/worker`; Wrangler uploads it with `no_bundle`,
-`find_additional_modules`, `base_dir` and an ESModule rule. `nodejs_compat` is ensured.
+`find_additional_modules`, `base_dir` and an ESModule rule. Generation ensures
+`nodejs_compat` and defaults to `global_fetch_strictly_public`, including explicit
+environment flag overrides; see [Workers deployment](./docs/handbook/cloudflare/deploy-and-operate.md).
 The metafile guard rejects `better-auth` / `@better-auth/*` in the static startup graph:
 use `authLoader(() => import(...))` ([Auth](./docs/handbook/cloudflare/authentication.md#worker-entry)).
 The Worker directory is cleaned first; keep source and generated code elsewhere. A Worker that imports

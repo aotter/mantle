@@ -64,7 +64,8 @@ try {
     if (target.startsWith("cloudflare-")) {
       const wrangler = values.wrangler ?? ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].find(existsSync) ?? "wrangler.jsonc";
       const assets = values.admin ? values.assets ?? join(values.outdir!, "client") : undefined;
-      if (configureWrangler(wrangler, values.entry!, values.outdir!, destination, values.check, assets)) changed.push(wrangler);
+      const publicFetchRequired = auth.some(options => options.plugins?.some((plugin: { id: string }) => plugin.id === "oauth-provider" || plugin.id === "cimd"));
+      if (configureWrangler(wrangler, values.entry!, values.outdir!, destination, values.check, assets, publicFetchRequired)) changed.push(wrangler);
     }
     if (values.check && changed.length) throw new Error(`Generated output is stale. Run mantle generate with the same options:\n${changed.join("\n")}`);
     if (!values.check) console.log(`Commit generated output and Wrangler config edits; keep dist/ untracked. Add to .gitattributes: ${JSON.stringify(relative(process.cwd(), resolve(destination)).replaceAll("\\", "/") + "/**")} linguist-generated=true`);

@@ -5,6 +5,27 @@ description: Install schema explicitly, migrate before deploying, and operate a 
 
 Run the same generation command with `--check`, typecheck the application and test its selected routes before deploying. Keep generated TypeScript, SQL and Wrangler edits committed; keep bundle `dist/` untracked. The app owns the database, auth secrets, trusted origin and assets.
 
+## Public fetch routing
+
+Workers use `compatibility_flags: ["nodejs_compat", "global_fetch_strictly_public"]`.
+The public-fetch flag routes native `fetch` through Cloudflare's public Internet
+boundary. OAuth verification needs it to fetch JWKS on the service's own public
+hostname; CIMD also requires this boundary for client metadata. `nodejs_compat`
+alone does not establish it.
+
+`mantle generate cloudflare-*` adds these flags without replacing other flags,
+including in environments with their own `compatibility_flags` array. The same
+command with `--check` refuses missing flags without writing. JSON/JSONC configs
+are updated; TOML receives manual-edit instructions. Keep both flags in every
+TOML environment override. An explicit `global_fetch_private_origin` is preserved
+for applications without OAuth/CIMD, but conflicts with selected OAuth/CIMD auth
+and with the public-fetch flag: generation refuses that config without rewriting
+it. Such applications must use public routing for their OAuth/CIMD transport.
+
+After deployment, complete a real OAuth sign-in and use the resulting bearer
+for MCP `initialize` and `tools/list`. Local development and cookie-only Admin
+checks do not verify production public-hostname routing.
+
 ## Install and change schemas
 
 The runtime never creates, alters or checks tables. Boot and requests run no DDL, introspection or schema checks.

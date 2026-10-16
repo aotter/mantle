@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, delimiter } from "node:path";
 import { parse } from "jsonc-parser";
@@ -33,7 +33,7 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
     expect(generate(dir)).toContain("Set name and compatibility_date");
     const config = parse(await readFile(join(dir, "wrangler.jsonc"), "utf8"));
     expect(config).toEqual({
-      name: "your-worker-name", compatibility_date: "2026-09-28", compatibility_flags: ["nodejs_compat"],
+      name: "your-worker-name", compatibility_date: "2026-09-28", compatibility_flags: ["nodejs_compat", "global_fetch_strictly_public"],
       main: "dist/worker/worker.js", no_bundle: true, find_additional_modules: true, base_dir: "dist/worker",
       rules: [{ type: "ESModule", globs: ["**/*.js"], fallthrough: true }],
       build: { command: "mantle bundle src/worker.ts dist", watch_dir: ["src", "generated"] },
@@ -46,7 +46,7 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
     expect(edited).not.toMatch(/(?<!\r)\n/);
     expect(edited).toContain("/* keep flag comment */");
     const updated = parse(edited);
-    expect(updated.compatibility_flags).toEqual(["other_flag", "nodejs_compat"]);
+    expect(updated.compatibility_flags).toEqual(["other_flag", "nodejs_compat", "global_fetch_strictly_public"]);
     expect(updated.main).toBe("build/worker/index.js");
     expect(updated.build).toEqual({ cwd: "app", command: "mantle bundle worker/index.ts build", watch_dir: ["worker", "generated"] });
     expect(updated.rules).toEqual([{ type: "Text", globs: ["**/*.md"] }, { type: "ESModule", globs: ["**/*.js"], fallthrough: true }]);
@@ -74,6 +74,72 @@ test("generate creates valid Wrangler config; edits preserve unrelated keys, com
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
 
+test.each(["cloudflare-d1", "cloudflare-postgres"])("%s repairs public fetch flags and checks environment overrides without writing", async target => {
+  const dir = await mkdtemp(join(tmpdir(), "next-public-fetch-"));
+  try {
+    const args = [cli, "generate", target, "generated", manifest];
+    execFileSync("node", args, { cwd: dir });
+    const path = join(dir, "wrangler.jsonc"), config = parse(await readFile(path, "utf8"));
+    config.compatibility_flags = ["nodejs_compat", "other_flag"];
+    config.env = { production: { compatibility_flags: ["nodejs_compat", "production_flag"] }, preview: { vars: { KEEP: "value" } } };
+    const original = JSON.stringify(config);
+    await writeFile(path, original);
+    expect(spawnSync("node", [...args, "--check"], { cwd: dir }).status).toBe(1);
+    expect(await readFile(path, "utf8")).toBe(original);
+    execFileSync("node", args, { cwd: dir });
+    const repaired = parse(await readFile(path, "utf8"));
+    expect(repaired.compatibility_flags).toEqual(["nodejs_compat", "other_flag", "global_fetch_strictly_public"]);
+    expect(repaired.env.production.compatibility_flags).toEqual(["nodejs_compat", "production_flag", "global_fetch_strictly_public"]);
+    expect(repaired.env.preview).toEqual(config.env.preview);
+    expect(spawnSync("node", [...args, "--check"], { cwd: dir }).status).toBe(0);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
+test("explicit private fetch routing survives without OAuth and conflicts fail without rewriting config", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "next-private-fetch-"));
+  try {
+    const path = join(dir, "wrangler.jsonc"), auth = join(dir, "auth.mjs");
+    for (const inEnvironment of [false, true]) {
+      await writeFile(auth, `export const authOptions = () => ({ plugins: [{ id: "${inEnvironment ? "cimd" : "oauth-provider"}" }, { id: "mantle-oauth-grant-revocation" }] });`);
+      const flags = { compatibility_flags: ["global_fetch_private_origin"] };
+      await writeFile(path, JSON.stringify(inEnvironment ? { env: { production: flags } } : flags));
+      generate(dir);
+      const original = await readFile(path, "utf8"), config = parse(original);
+      expect((inEnvironment ? config.env.production : config).compatibility_flags).toEqual(["global_fetch_private_origin", "nodejs_compat"]);
+      const failed = spawnSync("node", [cli, "generate", "cloudflare-d1", "generated", manifest, "--auth", auth], { cwd: dir, encoding: "utf8" });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain("global_fetch_private_origin");
+      expect(await readFile(path, "utf8")).toBe(original);
+    }
+    const contradictory = JSON.stringify({ compatibility_flags: ["global_fetch_private_origin", "global_fetch_strictly_public"] });
+    await writeFile(path, contradictory);
+    expect(spawnSync("node", [cli, "generate", "cloudflare-d1", "generated", manifest], { cwd: dir }).status).toBe(1);
+    expect(await readFile(path, "utf8")).toBe(contradictory);
+    const malformed = JSON.stringify({ env: { production: { compatibility_flags: "nodejs_compat" } } });
+    await writeFile(path, malformed);
+    const invalid = spawnSync("node", [cli, "generate", "cloudflare-d1", "generated", manifest], { cwd: dir, encoding: "utf8" });
+    expect(invalid.status).toBe(1);
+    expect(invalid.stderr).toContain("env.production.compatibility_flags must be an array of strings");
+    expect(await readFile(path, "utf8")).toBe(malformed);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
+test("every shipped Cloudflare example enables public fetch routing", async () => {
+  const examples = resolve(base, "../../docs/examples");
+  for (const example of await readdir(examples, { withFileTypes: true })) {
+    if (!example.isDirectory()) continue;
+    for (const file of await readdir(join(examples, example.name))) {
+      if (!/^wrangler\.jsonc?$/.test(file)) continue;
+      const path = join(examples, example.name, file);
+      const config = parse(await readFile(path, "utf8"));
+      expect(config.compatibility_flags, path).toContain("global_fetch_strictly_public");
+      for (const [name, environment] of Object.entries(config.env ?? {}) as [string, { compatibility_flags?: string[] }][]) {
+        if (environment.compatibility_flags !== undefined) expect(environment.compatibility_flags, `${path}: env.${name}`).toContain("global_fetch_strictly_public");
+      }
+    }
+  }
+});
+
 test("generate leaves Wrangler TOML untouched and prints the exact build keys", async () => {
   const dir = await mkdtemp(join(tmpdir(), "next-toml-"));
   try {
@@ -81,7 +147,7 @@ test("generate leaves Wrangler TOML untouched and prints the exact build keys", 
     await writeFile(join(dir, "wrangler.toml"), original);
     const instructions = generate(dir);
     expect(await readFile(join(dir, "wrangler.toml"), "utf8")).toBe(original);
-    for (const key of ['main = "dist/worker/worker.js"', 'no_bundle = true', 'find_additional_modules = true', 'base_dir = "dist/worker"', 'compatibility_flags = ["nodejs_compat"]', '[[rules]]', 'fallthrough = true', 'command = "mantle bundle src/worker.ts dist"', 'watch_dir = ["src","generated"]']) expect(instructions).toContain(key);
+    for (const key of ['main = "dist/worker/worker.js"', 'no_bundle = true', 'find_additional_modules = true', 'base_dir = "dist/worker"', 'compatibility_flags = ["nodejs_compat","global_fetch_strictly_public"]', '[[rules]]', 'fallthrough = true', 'command = "mantle bundle src/worker.ts dist"', 'watch_dir = ["src","generated"]']) expect(instructions).toContain(key);
     expect(spawnSync("node", [cli, "generate", "cloudflare-postgres", "generated", manifest, "--wrangler", "wrangler.toml"], { cwd: dir }).status).toBe(0);
     expect(await readFile(join(dir, "wrangler.toml"), "utf8")).toBe(original);
   } finally { await rm(dir, { recursive: true, force: true }); }

@@ -2,6 +2,7 @@
   "name": "mantle-generated-web",
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-28",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "vars": { "PUBLIC_ORIGIN": "http://localhost:8787" },
   "d1_databases": [{ "binding": "DB", "database_name": "mantle-generated-web", "database_id": "local-example" }]
 }
