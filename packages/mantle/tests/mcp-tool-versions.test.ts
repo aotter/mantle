@@ -216,3 +216,58 @@ test("a listed schema keeps a \"__proto__\" const key as an own key, and still h
   expect(JSON.stringify(listed.find(t=>t.name==="add_item")!.inputSchema.properties!.p)).toBe('{"const":{"__proto__":1}}');expectListedHashes(listed);await client.close();
  });
 });
+
+test("an MCP View page is cut by serialized size: every page fits the budget, paging loses and repeats nothing, one oversized row goes alone with a notice",async()=>{
+ const budget=60_000,big=30;
+ const all=Array.from({length:600},(_,i)=>({id:i,body:(i===big?"y".repeat(70_000):"x".repeat(400))}));
+ const wide={name:"wide_rows",surface:"public",description:"rows",inputSchema:{type:"object",additionalProperties:false},validate:(raw:unknown)=>raw as Record<string,unknown>,path:"wide_rows",
+  page:async(_db:null,_caller:unknown,_input:unknown,paging:{limit?:number;cursor?:string})=>{const from=Number(paging.cursor??0),limit=paging.limit??50,rows=all.slice(from,from+limit);return from+limit<all.length?{rows,nextCursor:String(from+limit)}:{rows};}};
+ const handle=serveMcp([wide as never],{db:()=>null,caller:()=>({kind:"anonymous"})});
+ for(const mode of eras){
+  const client=await connect(handle,mode);
+  for(const limit of [1,7,50,500,undefined]){
+   const got:typeof all=[];let cursor:string|undefined,pages=0,notices=0;
+   do{
+    const result=await client.callTool({name:"wide_rows",arguments:{...(limit?{limit}:{}),...(cursor?{cursor}:{})}});
+    const content=result.content as {text:string}[],data=result.structuredContent as {rows:typeof all;nextCursor?:string};
+    expect(result.isError).toBeFalsy();expect(JSON.parse(content[0]!.text)).toEqual(data);
+    expect(data.rows.length).toBeLessThanOrEqual(limit??50);
+    if(content[0]!.text.length>budget){notices++;expect(data.rows.map(r=>r.id)).toEqual([big]);expect(content.some(c=>c.text.includes("budget"))).toBe(true);}
+    else expect(content[0]!.text.length).toBeLessThanOrEqual(budget);
+    got.push(...data.rows);cursor=data.nextCursor;pages++;
+   }while(cursor);
+   expect(got).toEqual(all);expect(new Set(got.map(r=>r.id)).size).toBe(all.length);expect(notices).toBe(1);
+   if(limit===500) expect(pages).toBeGreaterThan(1);
+  }
+  await client.close();
+ }
+});
+
+test("a size cut through the kernel's keyset page() resumes at the first row not returned; a wide View without an order stays one whole page",async()=>{
+ const {page}=await import("../src/kernel/paging.js");
+ const all=Array.from({length:300},(_,i)=>({id:i+1,body:"x".repeat(i%7===0?3_000:400)}));
+ const keyed={path:"keyed",cap:500,sqlite:true,cursor:["int"] as const,keys:1,values:{},caller:{binds:[],first:{sql:"first",extra:[-1]},next:{sql:"next",extra:[0,-1]}},
+  read:(_db:unknown,sql:string,b:unknown[])=>all.filter(r=>sql==="first"||r.id>(b[0] as number)).slice(0,b.at(-1) as number).map(r=>({...r,_k0:r.id}))};
+ const unordered={path:"unordered",cap:500,sqlite:true,cursor:[] as const,keys:0,values:{},caller:{binds:[],first:{sql:"first",extra:[-1]},next:{sql:"next",extra:[-1]}},
+  read:()=>all.slice(0,10).map(r=>({...r,body:"z".repeat(8_000)}))};
+ const tool=(name:string,spec:unknown)=>({name,surface:"public",description:name,inputSchema:{type:"object",additionalProperties:false},validate:(raw:unknown)=>raw as Record<string,unknown>,path:name,
+  page:(db:unknown,caller:never,input:unknown,paging:{limit?:number;cursor?:string})=>page(spec as never,db,caller,input,paging)});
+ const handle=serveMcp([tool("keyed_rows",keyed),tool("unordered_rows",unordered)] as never,{db:()=>null,caller:()=>({kind:"anonymous"})});
+ for(const mode of eras){
+  const client=await connect(handle,mode);
+  for(const limit of [37,500]){
+   const got:typeof all=[];let cursor:string|undefined;
+   do{
+    const result=await client.callTool({name:"keyed_rows",arguments:{limit,...(cursor?{cursor}:{})}});
+    const data=result.structuredContent as {rows:typeof all;nextCursor?:string};
+    expect(result.isError).toBeFalsy();expect((result.content as {text:string}[])[0]!.text.length).toBeLessThanOrEqual(60_000);
+    got.push(...data.rows);cursor=data.nextCursor;
+   }while(cursor);
+   expect(got).toEqual(all);
+  }
+  const whole=await client.callTool({name:"unordered_rows",arguments:{}});
+  expect(whole.isError).toBeFalsy();expect((whole.structuredContent as {rows:unknown[]}).rows).toHaveLength(10);
+  expect((whole.content as {text:string}[]).some(c=>c.text.includes("budget"))).toBe(true);
+  await client.close();
+ }
+});

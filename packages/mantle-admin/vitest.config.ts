@@ -15,5 +15,7 @@ export default defineConfig({
     include: withBrowser ? browser : ["test/**/*.test.{ts,tsx}", "admin/{src,test}/**/*.test.{ts,tsx}"],
     exclude: withBrowser ? [] : browser,
     typecheck: { enabled: false },
+    // several tests run tsc or import the built library, which takes seconds while the workspace tests run in parallel
+    testTimeout: 60_000,
   },
 });
