@@ -1,17 +1,15 @@
 import { useState } from "react";
-import { type RecordActionsProps, type SurfaceProp } from "@aotter/mantle-admin/app";
+import { type RecordActionsProps } from "@aotter/mantle-admin/app";
 import { AdminUnavailableError, useOperation } from "@aotter/mantle-admin/hooks";
 
 /**
- * Surface: both (the browser, and the Admin MCP App in an MCP host's sandboxed iframe).
+ * Surface: browser (the record page; never an MCP Procedure action form).
  * Slots: record.actions:<schema>
- * Rules: read data only through @aotter/mantle-admin/hooks, link only with <AdminLink> or useOpenLink(), make no
- * network calls of your own, keep no auth in cookies or browser storage, open no windows, assume no width, load
- * nothing from a remote origin. Branch on `surface` if you must; both branches have to render.
+ * Server authorization still applies to reads and writes; replacing this component grants nothing.
  */
 
 /** A button that runs the declared operation `approve` on this record. Rename the operation and shape its input. */
-export function AdminRecordActions({ entry }: RecordActionsProps<object> & SurfaceProp) {
+export function AdminRecordActions({ entry }: RecordActionsProps<object>) {
   const { run, pending } = useOperation("approve");
   const [message, setMessage] = useState<string>();
   const press = () => {
@@ -27,7 +25,7 @@ export function AdminRecordActions({ entry }: RecordActionsProps<object> & Surfa
       <button type="button" className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50" disabled={pending || !run} onClick={press}>
         Approve
       </button>
-      {/* a surface that cannot write (an MCP host without server tools) shows the button disabled, with a note */}
+      {/* a caller that cannot run the operation shows the button disabled, with a note */}
       {!run ? <span className="text-sm text-muted-foreground">Read-only here</span> : null}
       {message ? <span role="status" className="text-sm text-muted-foreground">{message}</span> : null}
     </>

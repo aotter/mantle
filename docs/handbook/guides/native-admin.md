@@ -197,13 +197,13 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 | `Brand` | browser | `title`, `image?`, `href?` |
 | `Home` | browser | `collections`, `site` (what the page shows; the built-in page loads its own data) |
 | `CollectionList` | browser | `collection` (filters come from the page's location) |
-| `RecordView` | both | `collection`, `entryId`, `surface` |
-| `record.aside:<schema>` | both | `collection`, `entry`, `surface` |
-| `record.actions:<schema>` | both | `collection`, `entry`, `surface` |
+| `RecordView` | browser | `collection`, `entryId`, `surface` |
+| `record.aside:<schema>` | browser | `collection`, `entry`, `surface` |
+| `record.actions:<schema>` | browser | `collection`, `entry`, `surface` |
 | `list.actions:<schema>` | browser | `collection`, `selection` (empty in the toolbar, the selected ids in the bulk bar) |
-| `cell:<schema>.<field>` | both | `value`, `row` (the list's columns only, `null` when empty), `property`, `surface` |
+| `cell:<schema>.<field>` | browser | `value`, `row` (the list's columns only, `null` when empty), `property`, `surface` |
 | `cell:view:<view>.<column>` | both | `value`, `row`, `property`, `surface` |
-| `input:<schema>.<field>` | both | `value`, `onChange`, `readOnly`, `property`, `surface` |
+| `input:<schema>.<field>` | browser | `value`, `onChange`, `readOnly`, `property`, `surface` |
 
 `record.aside:` and `record.actions:` render beside Admin's own side cards and actions, which they do not replace. A
 record form's top-level fields go through `input:`; a View's parameters and a Procedure's inputs do not. A read-only field
@@ -226,7 +226,8 @@ checks every route, View and Procedure.
 
 ### Components that also render in an MCP host
 
-A slot marked both renders in Admin's browser page and in an MCP host (`surface` is `"browser"` or `"mcp-app"`). A component
+Record/collection slots carry `surface: "browser"` and do not mount in an MCP
+Procedure action form. A slot marked both renders in Admin's browser page and in an MCP host (`surface` is `"browser"` or `"mcp-app"`). A component
 for one of these slots must:
 
 1. read and write data only through the hooks, not `fetch`, and keep no login state in `document.cookie` or `localStorage`;

@@ -109,7 +109,7 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
     const declares = entry ? /\b(csp|components|plugins|pages|mcp)\s*:/.exec(readFileSync(entry, "utf8"))?.[1] : undefined;
     if (entry && declares) throw new Error(`The Admin MCP App cannot be built: ${entry} declares ${declares}, but ${problem}. The build fails rather than drop it. ${fix}\nSee ${GUIDE}.`);
   }
-  if (idle.length) console.warn(`warning: Admin MCP App: ${idle.join(", ")} ${idle.length === 1 ? "is" : "are"} not shown by the App yet (it renders cell:view: slots and pages[].mcp), so ${idle.length === 1 ? "this override runs" : "these overrides run"} in the browser Admin only.`);
+  if (idle.length) console.warn(`warning: Admin MCP App: ${idle.join(", ")} ${idle.length === 1 ? "is a browser-only slot" : "are browser-only slots"} (the App renders cell:view: slots and pages[].mcp), so ${idle.length === 1 ? "this override runs" : "these overrides run"} in the browser Admin only.`);
   const invalid = cspProblems(csp);
   if (invalid.length) throw new Error(`The Admin MCP App cannot be built:\n${invalid.map(line => `  - ${line}`).join("\n")}\nSee ${GUIDE}.`);
   const sources: Source[] = [...slots];
@@ -181,7 +181,7 @@ async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>): Prom
     // what the App shows of the application's customising, which the compatibility test renders: the `cell:view:` slots, and the Views its MCP pages are for
     const slots = Object.keys(admin.layers ?? {});
     const manifest = { slots: slots.filter(slot => slot.startsWith("cell:view:")), pages: (admin.pages ?? []).flatMap(page => page.mcp ? [page.mcp.renders] : []) };
-    // typed for a host, but the App shows no record yet
+    // record/collection slots are browser-only, unlike View cells
     const idle = slots.filter(slot => slot === "RecordView" || /^(?:cell:(?!view:)|input:|record\.aside:|record\.actions:)/.test(slot));
     return { ...(admin.mcp?.csp ? { csp: admin.mcp.csp } : {}), sources, manifest, idle };
   } catch (error) {

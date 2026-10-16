@@ -87,7 +87,7 @@ export interface CollectionListProps {
   readonly collection: string;
 }
 
-/** `RecordView`: one entry's page, which loads the entry itself. Surface: both. */
+/** `RecordView`: one entry's page, which loads the entry itself. Surface: browser. */
 export interface RecordViewProps {
   readonly collection: string;
   readonly entryId: string;
@@ -98,13 +98,13 @@ export interface SurfaceProp {
   readonly surface: "browser" | "mcp-app";
 }
 
-/** `record.aside:<schema>`: beside a record's form, in the browser's record page. Surface: both. */
+/** `record.aside:<schema>`: beside a record's form, in the browser's record page. Surface: browser. */
 export interface RecordAsideProps<Data = Readonly<Record<string, unknown>>> {
   readonly collection: string;
   readonly entry: AdminEntry<Data>;
 }
 
-/** `record.actions:<schema>`: buttons in a record's header. Surface: both. */
+/** `record.actions:<schema>`: buttons in a record's header. Surface: browser. */
 export interface RecordActionsProps<Data = Readonly<Record<string, unknown>>> {
   readonly collection: string;
   readonly entry: AdminEntry<Data>;
@@ -117,7 +117,7 @@ export interface ListActionsProps {
   readonly selection: ReadonlyArray<string>;
 }
 
-/** `cell:<schema>.<field>` and `cell:view:<view>.<column>`: one value in a list or report. Surface: both. */
+/** `cell:<schema>.<field>` and `cell:view:<view>.<column>`: one value in a list or report. Surface: browser for collection cells; both for View cells. */
 export interface CellProps<Value = unknown, Row = Readonly<Record<string, unknown>>> {
   readonly value: Value;
   readonly row: Row;
@@ -125,7 +125,7 @@ export interface CellProps<Value = unknown, Row = Readonly<Record<string, unknow
   readonly property: Readonly<Record<string, unknown>> | undefined;
 }
 
-/** `input:<schema>.<field>`: the control of one field in the record form. Surface: both. */
+/** `input:<schema>.<field>`: the control of one field in the record form. Surface: browser. This is not a Procedure action input. */
 export interface InputProps<Value = unknown> {
   readonly value: Value;
   readonly onChange: (next: Value) => void;

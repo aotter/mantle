@@ -181,9 +181,8 @@ uses the official `AppBridge`; your app runs its generated version ([Run the com
 `mantle bundle` builds the Admin MCP App from the same entry as the browser Admin
 (`src/admin.tsx`, or the built-in one) into one self-contained file,
 `<assets>/admin/mcp-app.html`, which `adminMcpApps` serves as
-`ui://mantle-admin/admin/<digest>` by default. So what `defineAdmin` customises reaches a host too:
-your components, your plugins, your Tailwind classes, your CSS, your pages. Each
-one must work in both places, and the build and the types hold you to it.
+`ui://mantle-admin/admin/<digest>` by default. Shared View cells and opted-in pages reach the host, with application plugins,
+Tailwind classes and CSS. Browser-only record/input overrides do not mount there.
 
 ### Which slots render where
 
@@ -191,11 +190,49 @@ one must work in both places, and the build and the types hold you to it.
 | --- | --- | --- |
 | `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `list.actions:<schema>` | yes | never: the App has no shell, sidebar or router |
 | `cell:view:<view>.<column>` | yes | yes: each column of the rows the host's View tool returned |
-| `cell:<schema>.<field>`, `input:<schema>.<field>`, `record.aside:<schema>`, `record.actions:<schema>`, `RecordView` | yes | typed `both`, so they receive `surface` and must work in a host; the App shows no record and its row-action form is not the record form, so they run in the browser only (`mantle bundle` warns) |
+| `cell:<schema>.<field>`, `input:<schema>.<field>`, `record.aside:<schema>`, `record.actions:<schema>`, `RecordView` | yes | never: browser-only record/collection slots; their `surface` is `"browser"` (`mantle bundle` reminds you) |
 | `pages[]`, `nav`, `home`, nav badges | yes | only a page that declares `mcp` (below) |
 
 A component for a `both` slot gets `surface` (`"browser"` or `"mcp-app"`). The
-types decide: a `both` slot's props carry `surface`, a browser slot's do not.
+record/collection slots keep `surface: "browser"` for an explicit, truthful contract.
+Other browser-only slots have no `surface` prop.
+
+Migration (#1710): remove unreachable `surface === "mcp-app"` branches from
+record/input/collection overrides. Their surface is now typed as the browser
+literal. Move shared interactions to a View cell or opted-in page; changing
+this type does not add a record editor, entry tool, or automatic CRUD to MCP.
+
+### Record input versus Procedure action input
+
+`input:requests.title` wraps the browser record editor's `value`, `onChange`,
+`readOnly` and JSON Schema property. It does not customize an MCP action dialog.
+The native App builds that dialog from the Procedure's declared input schema,
+binds the row identity and observed version, validates input, and runs the
+existing authorized Procedure tool. Declare a row action in the View to use
+this native path; changing its UI grants no execution rights.
+
+For custom MCP interaction, use an opted-in page with `useView` and
+`useOperation` instead of trying to render a record editor. The shared-page example below demonstrates page opt-in;
+[Native Admin](native-admin.md) describes generated typed hooks. An operation
+component follows the same public contract:
+
+```tsx
+// In a typed opted-in page; replace approve/input with your generated names.
+function Approve({ id }: { id: string }) {
+  const { run, pending } = useOperation("approve");
+  const [message, setMessage] = useState("");
+  return <><button disabled={!run || pending} onClick={() => {
+    void run?.({ id }).then(() => setMessage("Done"), () => setMessage("Not available"));
+  }}>Approve</button><p role="status">{message}</p></>;
+}
+```
+
+Import `useState` from React and `useOperation` from your generated
+`admin-client` (its types are tied to your manifests). Include observed-version
+input when the Procedure declares OCC; never replace it with an unguarded write.
+Without a corresponding tool or serverTools capability, `run` is absent and
+this button stays disabled. To ship a record-oriented MCP UI today, explicitly
+declare its read View and write Procedure; `useEntry` is unavailable in MCP.
 
 ### Rules for a component that renders in a host
 
@@ -340,9 +377,8 @@ catalogue; when the file has no record at all, every View. It fails on:
 After the result it waits until the App has made no request and logged nothing for
 400 ms, at most 5 s. The test checks the slots a host renders today: `cell:view:` and
 pages. `input:`, `record.aside:`, `record.actions:`, `cell:<schema>.<field>` and
-`RecordView` are typed `both` but the App shows no record, and its row-action form is
-a Procedure's, not the record form `input:` replaces, so they run in the browser Admin
-only and `mantle bundle` warns when you override one.
+`RecordView` are browser-only, so the generated compatibility check does not
+claim to test them. A Procedure action form does not mount these slots.
 
 It needs `playwright-core` (`npm install -D playwright-core`) and Chrome or Chromium:
 run `npx playwright-core install chromium`, or set `MANTLE_TEST_CHROMIUM` to a Chrome or

@@ -1,15 +1,13 @@
-import { type InputProps, type SurfaceProp } from "@aotter/mantle-admin/app";
+import { type InputProps } from "@aotter/mantle-admin/app";
 
 /**
- * Surface: both (the browser, and the Admin MCP App in an MCP host's sandboxed iframe).
+ * Surface: browser (the record page; never an MCP Procedure action form).
  * Slots: input:<schema>.<field>
- * Rules: read data only through @aotter/mantle-admin/hooks, link only with <AdminLink> or useOpenLink(), make no
- * network calls of your own, keep no auth in cookies or browser storage, open no windows, assume no width, load
- * nothing from a remote origin. Branch on `surface` if you must; both branches have to render.
+ * Server authorization still applies to reads and writes; replacing this component grants nothing.
  */
 
 /** The control of one text field. Narrow `InputProps` to `InputProps<string>` once your generated types name the field. */
-export function AdminInput({ value, onChange, readOnly, property }: InputProps & SurfaceProp) {
+export function AdminInput({ value, onChange, readOnly, property }: InputProps) {
   const maxLength = typeof property["maxLength"] === "number" ? property["maxLength"] : undefined;
   return (
     <input

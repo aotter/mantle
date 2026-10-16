@@ -33,7 +33,7 @@ export function SurfaceProvider(props: React.PropsWithChildren<SurfaceValue>): R
 }
 
 /** The slots that render in both surfaces get `surface` in their props. */
-export const isBothSlot = (name: string): boolean => name === "RecordView" || /^(?:cell|input|record\.aside|record\.actions):/.test(name);
+export const isBothSlot = (name: string): boolean => name.startsWith("cell:view:");
 
 /**
  * Render a built-in component through its slot: the registered layers wrap `Default`, the last one outermost. Several
@@ -45,7 +45,8 @@ export function Slot<P extends object>({ name, Default, props }: { name: string 
   const names = typeof name === "string" ? [name] : name;
   const layers = context ? names.flatMap(each => context.layers[each] ?? []) : [];
   if (!context || layers.length === 0) return <Default {...props} />;
-  const extra = isBothSlot(names[0]!) ? { surface: context.surface } : {};
+  const extra = isBothSlot(names[0]!) ? { surface: context.surface }
+    : names[0] === "RecordView" || /^(?:cell|input|record\.aside|record\.actions):/.test(names[0]!) ? { surface: "browser" } : {};
   const at = (index: number) => (next: P): React.ReactNode => {
     if (index < 0) return <Default {...props} {...next} />;
     const Layer = layers[index] as unknown as React.ComponentType<P & { renderDefault: (props: P) => React.ReactNode }>;

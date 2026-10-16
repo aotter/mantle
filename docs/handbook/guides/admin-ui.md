@@ -101,10 +101,10 @@ export default defineAdmin(admin, { components: { "cell:requests.status": AdminC
 
 | Item | Slots | Surface |
 | --- | --- | --- |
-| `admin-cell` | `cell:<schema>.<field>`, `cell:view:<view>.<column>` | both |
-| `admin-input` | `input:<schema>.<field>` | both |
-| `admin-record-actions` | `record.actions:<schema>` (runs an operation with `useOperation`) | both |
-| `admin-record-aside` | `record.aside:<schema>` (lists a View's rows with `useView`) | both |
+| `admin-cell` | `cell:view:<view>.<column>` | both (also reusable as a browser collection cell) |
+| `admin-input` | `input:<schema>.<field>` | browser |
+| `admin-record-actions` | `record.actions:<schema>` (runs an operation with `useOperation`) | browser |
+| `admin-record-aside` | `record.aside:<schema>` (lists a View's rows with `useView`) | browser |
 | `admin-sidebar` | `Sidebar` (`renderDefault` with a footer link) | browser |
 | `admin-home` | `Home` (`renderDefault` under a section that reads a View) | browser |
 
