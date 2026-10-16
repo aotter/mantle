@@ -9,7 +9,7 @@ There are three packages, pinned to matching versions:
 | Package | Owns |
 | --- | --- |
 | `@aotter/mantle` | One native Core SDK: compiler, generator, query kernel and optional auth/surface primitives. |
-| `@aotter/mantle-admin` | Optional Admin server, SPA, extensions, design preview and Admin MCP App. |
+| `@aotter/mantle-admin` | Optional Admin server, app-built SPA library, design preview and Admin MCP App. |
 | `@aotter/mantle-ui` | Shared UI kit and generic interaction controller. |
 
 The SDK does not import Admin or its assets. Selecting Admin emits application
@@ -26,7 +26,7 @@ pnpm exec tsc --noEmit
 
 Targets are `bun-sqlite`, `bun-postgres`, `cloudflare-d1` and
 `cloudflare-postgres`. Programmatic generation accepts `admin: true` with the
-same target/source options. Optional `--auth`, `--site` and `--admin-extensions`
+same target/source options. Optional `--auth` and `--site`
 modules follow their [generation contracts](../cloudflare/service-entry.md).
 Generate, typecheck, implement every printed `Handlers` key, then typecheck
 again. Commit generated TypeScript, SQL and Wrangler edits. Never edit the
@@ -67,14 +67,13 @@ also retain their own generated `requires` checks. Share one request-local
 resolver with auth, consent, MCP and REST; preserve its response cookie headers.
 
 The API handles `/admin/api/*`. The app separately serves the Admin that
-`mantle bundle` builds into `<assets>/admin` (default `dist/client/admin`; on Bun,
-which does not run `mantle bundle` yet, the directory of
-`@aotter/mantle-admin/admin/index.html`) at `/admin`, including
+`mantle bundle` builds into `<assets>/admin` (default `dist/client/admin`, on Workers
+and on Bun, where it builds only Admin) at `/admin`, including
 client routes such as `/admin/sign-in`; missing assets stay 404. Do not serve
 that directory bare: `adminShell(request, assets)` from
 `@aotter/mantle-admin/server` returns the shell for every `/admin` page with
 `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `no-store` and `nosniff`, and
-refuses traversal, encoded separators and NUL (`assets` fetches one built file
+refuses traversal, encoded separators and control characters (`assets` fetches one built file
 by its path within that directory; a 404 means missing; it returns `undefined` for other requests). Read the
 installed Admin README for asset bindings, CSP/import-map hashes and preview
 framing. `@aotter/mantle-ui` continues to supply the shared kit. See
@@ -95,6 +94,7 @@ routes. Send JSON with `Content-Type: application/json`.
 | `POST /entries/{id}/unpublish?collection=<schema>` | Body `{ expectedVersion }`; returns the entry to draft. |
 | `POST /operations/{name}` | Body is the Procedure's input; runs an Admin operation (a Procedure with `requires: ctx.admin` or a `target`). |
 | `GET /views/{name}` | Generated admin View query parameters plus `limit`/`cursor`; returns `{ rows, nextCursor? }`. |
+| `GET /view-batch?names=a,b` | One to 20 comma-separated admin View names, deduplicated; reads the first row of each as the caller, with the single route's checks (`requires`, scope, TTL, `authorize`), and returns `{ views: { <name>: { rows } \| { unavailable: true } \| { error: true } } }`. A refused View and a missing one are the same `{ unavailable: true }`; a View that cannot answer with no input is `{ error: true }`. Neither fails the batch. Empty or more than 20 names is a 400, before the database is acquired. |
 | `GET /me` | Returns `{ userId, role, admin, login, image }` for the signed-in caller. |
 
 Entry create/read/patch/transitions return
@@ -103,6 +103,143 @@ Entry create/read/patch/transitions return
 Transitions accept `{}` to use the current version; tests should send the
 observed `expectedVersion` to catch stale writes. Generic writes reject native
 columns inside `data`. See [publishing](../concepts/lifecycle-and-locales.md).
+
+## Typed data hooks
+
+`--admin` emits `generated/admin-client.ts`: the type of each admin View's input and row, of each collection's entry
+`data` (declared field names, no scope field; every field optional for a `publishing` collection, as a draft is only partly
+validated), and of each admin operation's input and output, and the hooks bound to those types. A View's row has the column
+names the browser route gives it (declared case, where the SQL output name is lowercased). An entry such as `src/admin.tsx`
+passes `admin`, which lists those renames, to `defineAdmin(admin)` so that an MCP App's rows match, and its components read
+data through the hooks:
+
+```tsx
+import { useOperation, useView } from "../generated/admin-client.js";
+
+function Queue() {
+  const { rows, status } = useView("pending-requests", {});   // names, input and rows are checked by tsc
+  const approve = useOperation("approve");
+  if (status === "unavailable") return null;
+  return rows.map(row => <button key={String(row.id)} onClick={() => approve.run?.({ id: String(row.id) })}>{row.title}</button>);
+}
+```
+
+The hooks read only the routes above, with the Admin session cookie and Admin's own query cache, so every route still checks
+the caller, `requires`, scope and TTL; a hook has no caller, role or system argument. A 403 and a 404 both read as
+`status: "unavailable"` (an operation's `run` rejects with `AdminUnavailableError`), so the front end cannot tell a
+refused View or collection from a missing one. Showing or hiding a component grants or denies nothing.
+
+| Hook | Route | Surface |
+| --- | --- | --- |
+| `useView(name, input, { limit?, cursor? })` -> `{ rows, nextCursor, status }` | `GET /views/{name}` | browser and MCP App |
+| `useOperation(name)` -> `{ run, pending }`; success refreshes Views, entries, entry editors and totals | `POST /operations/{name}` | browser and MCP App |
+| `useEntries(collection, { filter?, search?, limit?, cursor? })` | `GET /entries` (one `filter_field`/`filter_value`) | browser only |
+| `useEntry(collection, id)` | `GET /entries/{id}` | browser only |
+| `useCollectionTotal(collection)` | `GET /collections/{name}/statistics`, its `total` | browser only |
+| `useMe()` | `GET /me` | browser only |
+| `useBadges(refs)` -> one `{ count, status }` per `{ view, field }`, in order; [freshness below](#sidebar-badges) | `GET /view-batch` | browser only |
+
+In an MCP host, `useView` and `useOperation` call the View's or operation's admin MCP tool (its name lowercased, kebab to snake) through the host (`tools/call`),
+under the caller's MCP authorization; the browser-only hooks read `unavailable` there, so declare the data an App needs as an
+admin View. Without the host's `serverTools`, `run` is `undefined`. `useHost()` is `null` in the browser and the host's API
+(context, capabilities, `openLink`, `sendMessage`, `updateModelContext`, `requestDisplayMode`) in a host; `useAdminSurface()`
+says which. `@aotter/mantle-admin/hooks` also exports the same hooks untyped, for code without generated types.
+
+`@aotter/mantle-admin/app` and `/hooks`, and so `generated/admin-client.ts`, which imports them, run in the browser only:
+`mantle bundle` refuses them in the Worker's startup graph.
+
+## Customising Admin
+
+An application replaces or wraps regions of Admin from `src/admin.tsx`. The entry passes the generated metadata and, beside it,
+what to change; the built-in entry needs none of this.
+
+```tsx
+import { defineAdmin } from "@aotter/mantle-admin/app";
+import { admin } from "../generated/admin-client.js";
+
+export default defineAdmin(admin, {
+  pages: [{ path: "budget", title: "Budget", element: <BudgetPage />, nav: { group: "reports" } }],
+  components: {
+    // wrap: the built-in page below your own section
+    Home: (props) => <><MyQueue />{props.renderDefault(props)}</>,
+    // change a prop: the sidebar with a footer
+    Sidebar: (props) => props.renderDefault({ ...props, footer: <HelpLink /> }),
+    // replace: one value in the requests list, and the control of one field in its record form
+    "cell:requests.amount": ({ value }) => <Money cents={value} />,
+    "input:products.color": ({ value, onChange }) => <ColorPicker value={value} onChange={onChange} />,
+    "record.aside:requests": ({ entry }) => <RequestTimeline id={entry.id} />,
+  },
+  plugins: [auditTrail()],
+});
+```
+
+Every component receives the props of the built-in one and `renderDefault(props)`, which renders what it replaces: pass the
+props you were given (spread them to change some), or ignore it to replace the region. A slot is named by a key that `tsc`
+derives from the generated metadata, so a misspelt collection, field or View column is a type error. In a key `<schema>` is a
+collection's name, `<field>` one of its fields and `<column>` a column of an admin View (names contain no `.`).
+
+| Slot | Surface | Props (besides `renderDefault`) |
+| --- | --- | --- |
+| `Shell` | browser | `children`, `nav` (sidebar groups), `brand` |
+| `Sidebar` | browser | `groups`, `brand`, `footer?` (above the signed-in user) |
+| `Header` | browser | `title?`, `actions?` (before the built-in controls) |
+| `Brand` | browser | `title`, `image?`, `href?` |
+| `Home` | browser | `collections`, `site` (what the page shows; the built-in page loads its own data) |
+| `CollectionList` | browser | `collection` (filters come from the page's location) |
+| `RecordView` | both | `collection`, `entryId`, `surface` |
+| `record.aside:<schema>` | both | `collection`, `entry`, `surface` |
+| `record.actions:<schema>` | both | `collection`, `entry`, `surface` |
+| `list.actions:<schema>` | browser | `collection`, `selection` (empty in the toolbar, the selected ids in the bulk bar) |
+| `cell:<schema>.<field>` | both | `value`, `row` (the list's columns only, `null` when empty), `property`, `surface` |
+| `cell:view:<view>.<column>` | both | `value`, `row`, `property`, `surface` |
+| `input:<schema>.<field>` | both | `value`, `onChange`, `readOnly`, `property`, `surface` |
+
+`record.aside:` and `record.actions:` render beside Admin's own side cards and actions, which they do not replace. A
+record form's top-level fields go through `input:`; a View's parameters and a Procedure's inputs do not. A read-only field
+(a bound or `readOnly` property) has no `input:` component, and `readOnly` tells yours that the caller cannot edit the
+record. A View column that reads a Schema field also goes through that field's `cell:` component, with the column's own
+`cell:view:` component outside it. The developer workspace (`/admin/dev`) is Admin's own tool and does not go through any slot. A record with folded child collections opens on a workbench at `/admin/c/<schema>/<id>`, which is not `RecordView`; the record form (and so `RecordView`, `record.aside:`, `record.actions:` and `input:`) is its `/edit` page. A `Shell` that does not call `renderDefault` has no status bar: the record form's Save and Publish bar then stays in the page.
+
+`plugins` are fragments of `components`, applied in order: each one's `renderDefault` is the plugin before it, the first
+plugin's is the built-in component, and the application's own `components` are outermost. A plugin is
+`{ components: { ... } }`, so one can be written once and shared.
+
+`mcp: { csp: { connectDomains, resourceDomains, frameDomains, baseUriDomains } }` is accepted and typed, and nothing reads it
+yet: it will name what Admin's MCP App may load once that App is built from your entry.
+
+Authorization is unchanged by any of this. A component that shows or hides something grants or denies nothing; the server
+checks every route, View and Procedure.
+
+### Components that also render in an MCP host
+
+A slot marked both renders in Admin's browser page and in an MCP host (`surface` is `"browser"` or `"mcp-app"`). A component
+for one of these slots must:
+
+1. read and write data only through the hooks, not `fetch`, and keep no login state in `document.cookie` or `localStorage`;
+2. link with `<AdminLink href>` or open URLs with `useOpenLink()` (from `@aotter/mantle-admin/app` and `/hooks`),
+   never `window.open` or `target="_blank"`, which a host's sandbox blocks. In a host `<AdminLink>` opens an http(s) URL
+   through `ui/open-link` and shows any other href, such as an `/admin/...` path, as plain text, as it has no origin there;
+3. assume no width: a host sets it;
+4. render something on both surfaces when it branches on `surface` or `useAdminSurface()`.
+
+`useOpenLink()` resolves `false` for anything but an http(s) URL, and when a host cannot or refuses to open it.
+
+### Hot reload while you work on `src/admin.tsx`
+
+By default `wrangler dev` rebuilds Admin with `mantle bundle` when its sources change; reload the page. For hot module
+replacement, add a Vite config yourself; nothing in a template enables it:
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import { adminVitePlugin } from "@aotter/mantle-admin/build";
+export default defineConfig({ plugins: [adminVitePlugin({ entry: "src/admin.tsx" })] });
+```
+
+Run `vite` beside `wrangler dev` and open `http://localhost:5173/admin/`. The plugin proxies `/admin/api` and `/api/auth` to
+`http://localhost:8787` (`target` changes it; `authBasePath` names the auth path when the service's is not `/api/auth`). The proxy keeps
+the dev server's `Host`, so the browser's `Origin` and the service's own origin agree and session writes pass the same-origin check.
+The service may still need to trust `http://localhost:5173` as an auth origin for sign-in.
 
 ## Generated reads and writes
 
@@ -130,7 +267,9 @@ Pages keep native NULL ordering, id ties, microsecond timestamp keys and an
 opaque cursor bound to caller, input, filters and ordering. Malformed/foreign
 cursors and unknown selectors fail before acquiring the route's DB handle;
 the app's authentication may already have used its own database. Admin manifest
-Views retain their complete proved key tuple, not a two-key approximation.
+Views retain their complete proved key tuple, not a two-key approximation. A View without a key is accepted only as a proved
+singleton, such as an aggregate without `GROUP BY` (`SELECT COUNT(*) AS count FROM requests WHERE status = 'submitted'`): it
+returns its one row on one page and has no cursor.
 
 Generated full/partial input checks validate creates, edits, operations and
 filters. Plain titled string `oneOf` choices use the same enum checks; general
@@ -161,7 +300,7 @@ from `@aotter/mantle/media`; other custom ContractErrors must carry an explicit
 status, otherwise the boundary returns a redacted 500. Do not leak native
 error messages, tokens or credentials to clients.
 
-## Statistics and extensions
+## Statistics
 
 `GET /admin/api/collections/{name}/statistics?range=7d` supports primary or
 standalone collections; folded children/translations are not primary routes.
@@ -174,13 +313,11 @@ most 20 days and 480 buckets, with safe microsecond arithmetic. Temporal enum
 subtypes return original metadata keys; equivalent offset spellings count once
 under the first key, and separate microseconds remain distinct.
 
-Site/media/identity, extensions, WebMCP, design preview and MCP Apps are selected
-through the public Admin modules, not added to the SDK kernel. Extension
-contribution declarations go to `--admin-extensions`; executable handlers and
-sources stay in app-owned server configuration. Raw extension handlers receive
-the original Request without pre-reading, cloning or rebuilding it. Custom
-`bodyLimit` checks Content-Length before DB access; the app must bound reads of
-unknown-length raw streams. Built-in JSON routes use the shared bounded reader
+Site/media/identity, WebMCP, design preview and MCP Apps are selected
+through the public Admin modules, not added to the SDK kernel. A route with
+`rawBody` receives the original Request without pre-reading, cloning or
+rebuilding it; its custom `bodyLimit` checks Content-Length before DB access,
+and the app must bound reads of unknown-length raw streams. Built-in JSON routes use the shared bounded reader
 (default 1,000,000 bytes) after caller/origin checks and before DB acquisition.
 The API advertises capabilities for actually mounted routes, including statistics.
 
@@ -190,7 +327,7 @@ Use a disposable database for native tests, then exercise actual OTP sign-in,
 the Admin console and member frontend. Check invalid input, another tenant's
 rows, expired rows, publishing transitions, related/translated entries, paging,
 statistics, CSV, operations/ref effects, stale OCC and persisted state after a
-restart. Recheck extensions, previews, all supported UI languages and the
+restart. Recheck custom components, previews, all supported UI languages and the
 complete developer workspace. A generated file, typecheck or HTTP 200 alone
 does not verify these flows.
 
@@ -200,21 +337,6 @@ SDK package bytes and query/write/cold timing are separate checks. Extra selecte
 Admin indexes add write/storage maintenance; an indexed SELECT plan does not
 prove unchanged write latency. Report remaining gates honestly; this guide does not promise measured performance.
 
-## Extension declarations
-
-Pass full declarations to `--admin-extensions`. Generation emits
-`extensionMetadata` in `admin-descriptors.ts` and compiled settings checks plus
-`extensionBindings` in `admin-extensions.ts`. Bind the same runtime definitions
-(including handlers) with `extensionBindings(adminExtensions)`, and merge the
-returned `extensions` and `routes` into `admin()` options. Declaration drift is
-refused before any handler runs. The older descriptor `extensionBindings` export
-contains manifest UI references only; it is not the runtime binding function.
-
-Native Admin does not serve `source` modules or modify shell import maps. Serve
-an extension's `module` at a same-origin absolute path and install its `integrity`
-in the host shell import map. Selecting `source` fails generation with that
-instruction. This differs from historical 0.2's automatic source-module route.
-
 Entry lists and editor reads/writes return translation badges and related
 sections in one authorized HTTP response. `/bootstrap?collection=...` can include
 the first requested list page. CSV exports use `/entries/export` and
@@ -222,6 +344,29 @@ the first requested list page. CSV exports use `/entries/export` and
 A failure after headers aborts the stream, so a download can fail after partial
 bytes have arrived. Existing databases need an app-owned migration for the
 Admin-selected `created_at` statistics indexes emitted in initial `schema.sql`.
+
+## Migrating from Admin extensions
+
+The extension mechanism is gone: Admin is an application-built React library, and the application's own code replaces
+what an extension contributed. Alpha applications that used it change as follows.
+
+| Removed | Use instead |
+| --- | --- |
+| `--admin-extensions <module>`, `adminExtensions`, `src/admin.ts`, generated `admin-extensions.ts` | Drop the flag from `generate` and `check` scripts and delete the module. `generate` now rejects the option and removes the generated `admin-extensions.ts` (it is SDK-owned). |
+| `navGroups` in that module | `defineAdmin(admin, { nav: { groups } })` in `src/admin.tsx`, an object keyed by group id instead of an array: `{ id: "approvals", title, order }` becomes `approvals: { title, order }`. `tsc` refuses a group the manifest uses and `groups` omits. See [Sidebar](#sidebar). |
+| `defineAdminExtension`, `@aotter/mantle-admin/extension` | React components in `defineAdmin`: `components` for the regions below, `pages` for whole pages; see [Customising Admin](#customising-admin) and [Sidebar](#sidebar). |
+| Field widget `widget: <extension>/<contribution>` and `options` | `"input:<schema>.<field>"` in `components`. `widget: textarea` stays. |
+| `list.cells` on a Schema or View | `"cell:<schema>.<field>"` or `"cell:view:<view>.<column>"` in `components`. |
+| `uiSchema.panels`, `record.sidebar/v1` and `home/v1` panels | `"record.aside:<schema>"` and the `Home` component. |
+| `record/v1`, `list.selection/v1` and `list.toolbar/v1` actions | `"record.actions:<schema>"` and `"list.actions:<schema>"`; call a Procedure with `useOperation`. |
+| Handlers `api`, `settings` and `actions.run`, and the `/admin/api/x/<extension>/*` routes | Server work is a Procedure (writes), a View (reads) or an application route. Authorization stays on the server: a Procedure or View carries its own `requires`. |
+| `extensionBindings`, `extensionOptions`, `@aotter/mantle-admin/server/extensions`, the `extensions` and `navGroups` options of `admin()` and the `extensions` field of `/admin/api/site` | Delete them. |
+| The import map and `shared/*.js` shims in the built Admin | None: the application's bundle holds the one React there is. Drop any CSP hash for the import map. |
+| Extension pages (`/admin/x/<extension>/<page>`) | `defineAdmin({ pages: [{ path, title, element, nav }] })` at `/admin/p/<path>`; `nav: { group, order? }` replaces the page's `nav`, in a built-in group or one the manifest uses (an extension's own `navGroups` entry that no Schema or View uses cannot hold a page). A page has no `role`: every member sees it, so gate inside the element with `useMe()`; the `requires` of the View or Procedure it calls still decides what works. |
+| Extension settings pages (declared form, `settings` handlers) | A page in `pages` whose element reads and saves through a View and a Procedure that hold the settings, or an application route. |
+
+A manifest that still names a removed key fails `mantle generate` with `SCHEMA_UI_INVALID` or `VIEW_UI_INVALID` at the
+key's path. The `UI_EXTENSION_*` diagnostics no longer exist.
 
 ## Collection list template today
 
@@ -240,7 +385,7 @@ tabs. The parent is the reference named by `Schema.spec.uiSchema.nav.parentField
 `x-mantle-ref` field, by `id` or by a unique field), else the only required `id` reference, else
 the first required unique-field reference. A Schema with two or more required `id` references to
 existing Schemas (translations excluded) and no `parentField`, with or without `standalone`, is refused by `mantle generate` with `SCHEMA_UI_INVALID`; the diagnostic lists the
-candidates and the `nav: { parentField: <field> }` line that keeps the first one. `parentField` is
+candidates and the `nav: { parentField: <field> }` line that keeps the first one that is not a parent cycle. This applies to every build, with or without Admin, so a join table with two required `id` references needs it too. `parentField` is
 refused on a translation child and when its parent chain leads back to the Schema. Choosing the
 parent changes Admin navigation only: storage and authorization are unchanged.
 
@@ -257,18 +402,52 @@ staff work, in the same manifest change that adds a Schema or View. Placement is
 REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, and an empty group is not shown.
 
 - `Schema.spec.uiSchema.nav` and admin `View.spec.uiSchema.nav` take `group` (a group id), `order` (an integer;
-  ascending; entries without one follow in that default order, collections before Views before extension pages) and
+  ascending; entries without one follow in that default order, collections before Views) and
   `hidden: true` (out of the sidebar, still at its URL).
-- Built-in groups need no declaration: `content`, `operations`, `reports`, `more`. Project groups are declared once
-  as `navGroups` in the `--admin-extensions` module, with a title (text or `{ locale: text }`) and an `order` among
-  the built-in groups' content 10, operations 20 and reports 30 (default 50); More always stays last.
-- Extension pages use the same ids: `pages[].nav: { group, order? }` (`more` and `settings` keep their places); a page without `nav` keeps its route and stays out of the sidebar.
+- Built-in groups need no declaration: `content`, `operations`, `reports`, `more`. A project declares every other
+  group once, in `src/admin.tsx`: `defineAdmin(admin, { nav: { groups } })`, each with a title (text or
+  `{ locale: text }`) and an `order` among the built-in groups' content 10, operations 20 and reports 30 (default 50);
+  More always stays last. Declaring a built-in id is a type error (and ignored at runtime). `generated/admin-client.ts` exports `ManifestNavGroup`, every group the manifest uses, and types
+  `nav.groups` so that `tsc` refuses an entry that leaves one out (`mantle generate` no longer checks it). Without an
+  `src/admin.tsx` (the built-in entry) nothing refuses it, so an undeclared group still shows its items, titled by its id.
+- `nav.items` adds entries beside the ones `uiSchema.nav` produces: `{ group, title, icon?, order?, to }`, where `title` is
+  text or `{ locale: text }`, `icon` is any React icon component, and `to` is `{ collection, filter? }` (the list, preset
+  to the value of one field) or `{ view, input? }` (an admin View with its input). Names, the filter field and value and the
+  View input are typed from the generated manifest, so a misspelling or a wrong preset fails `tsc`. Several items may lead to
+  one resource with different presets. An item whose collection or View the caller cannot see is not shown; showing or
+  hiding one changes no permission, because the target's own route still decides.
+- <a id="sidebar-badges"></a>`badge: { view, field }` on an item shows a count after its title: `field` of the one row an aggregate admin View
+  returns, typically one with `uiSchema.nav.hidden: true` so it stays out of Reports. The View is typed from the generated manifest
+  and runs for the current caller through its own `requires`, scope and TTL, with no system fallback. Admin reads every badge of the
+  sidebar in one `GET /view-batch` (the first 20 distinct Views; `defineAdmin` logs the rest and they show nothing). Zero shows a muted
+  `0`, loading a placeholder and an unreadable count `!`. A refused or missing View shows nothing, so a badge never reveals a queue
+  the caller cannot read, and no state blocks the link. Counts are cached for 30 seconds, read again when the window regains
+  focus, and refreshed after a mutation through Admin's shared query cache (`useOperation` or any Admin write); there is no polling.
+  The cache is keyed by the signed-in user. A replacement `Sidebar` reads the same counts with `useBadges`. Badges are browser only.
+- `pages` adds a page of the application's own inside Admin's shell: `{ path, title, element, icon?, nav? }`. `path` is one
+  segment of lowercase letters, digits and hyphens, and the page is at `/admin/p/<path>`. `nav: { group, order? }` places it in
+  the sidebar with the other entries of that group (the same group ids as `nav.items`: a built-in group, or one that a manifest
+  `uiSchema.nav.group` uses; `tsc` refuses any other); without `nav` it keeps its route and stays out of the sidebar. A page has
+  no `role`: every Admin member sees it, so hide a part of it with `useMe()` and rely on the `requires` of what it calls. A page's `element` reads through the [data hooks](#typed-data-hooks) and writes through
+  Procedures; showing a page grants nothing, because each View or Procedure it calls authorizes on the server.
 
-```ts
-// src/admin.ts, passed as --admin-extensions src/admin.ts (the app shell already does)
-import type { AdminExtension, AdminNavGroup } from "@aotter/mantle-admin/server/extensions";
-export const navGroups: AdminNavGroup[] = [{ id: "approvals", title: { en: "Approvals", "zh-TW": "簽核" }, order: 5 }];
-export const adminExtensions: AdminExtension[] = [];
+`src/admin.tsx` is JSX: the app-shell template sets `jsx: react-jsx` and depends on `react` and `@types/react`; add `lucide-react` (or another icon package) yourself if you use icons.
+
+```tsx
+// src/admin.tsx
+import { Inbox } from "lucide-react";
+import { defineAdmin } from "@aotter/mantle-admin/app";
+import { admin } from "../generated/admin-client.js";
+
+export default defineAdmin(admin, {
+  nav: {
+    groups: { approvals: { title: { en: "Approvals", "zh-TW": "簽核" }, order: 5 } },
+    items: [
+      { group: "approvals", title: "Waiting for me", icon: Inbox, to: { view: "pending-requests" } },
+      { group: "approvals", title: "Rejected", to: { collection: "requests", filter: { status: "rejected" } } },
+    ],
+  },
+});
 ```
 
 ```yaml
@@ -276,7 +455,7 @@ export const adminExtensions: AdminExtension[] = [];
 uiSchema: { nav: { group: approvals, order: 1 } }
 ```
 
-`mantle generate` refuses an undeclared group, a duplicate or built-in `navGroups` id, a non-integer `order`, and
+`mantle generate` refuses a non-integer `order` and
 placement on a Schema without a sidebar entry of its own: a translation, or a folded child that is not
 [`standalone`](#collection-navigation-and-operation-placement).
 The purchasing example puts its approval queue and requests in an Approvals group.

@@ -18,10 +18,10 @@ async function load(path: string) {
   }
 }
 const targets: readonly Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
-const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>]... (one per Better Auth instance) [--admin-extensions <module>] [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>] [--assets <static assets directory>]\n       mantle bundle <entry> <outdir> [--assets <static assets directory>]\n       mantle describe <target> <manifest>... [--diff <old.json>]";
+const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>]... (one per Better Auth instance) [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>] [--assets <static assets directory>]\n       mantle bundle <entry> <outdir> [--assets <static assets directory>]\n       mantle describe <target> <manifest>... [--diff <old.json>]";
 try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-    diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, "admin-extensions": { type: "string" }, auth: { type: "string", multiple: true }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" }, assets: { type: "string" },
+    diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, auth: { type: "string", multiple: true }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" }, assets: { type: "string" },
   } });
   const command = positionals[0] === "bundle" || positionals[0] === "generate" || positionals[0] === "describe" ? positionals.shift()! : "generate";
   if (command === "describe") {
@@ -39,7 +39,7 @@ try {
     } else console.log(JSON.stringify(report, null, 2));
   } else if (command === "bundle") {
     const [entry, outdir] = positionals;
-    if (!entry || !outdir || positionals.length !== 2 || values.admin || values.site || values.auth || values["admin-extensions"] || values.wrangler || values.check) throw new Error(usage);
+    if (!entry || !outdir || positionals.length !== 2 || values.admin || values.site || values.auth || values.wrangler || values.check) throw new Error(usage);
     await (await import("./bundle.js")).bundleApp(entry, outdir, values.assets);
   } else {
     const [target, destination, ...paths] = positionals;
@@ -55,17 +55,12 @@ try {
     }));
     const site = values.site ? (await load(values.site)).siteDefaults : undefined;
     if (values.site && !site) throw new Error(`${values.site} must export siteDefaults.`);
-    const extensionModule = values["admin-extensions"] ? await load(values["admin-extensions"]) : undefined;
-    // The Admin presentation module: extensions and/or the project's sidebar groups.
-    const adminExtensions = extensionModule?.adminExtensions ?? extensionModule?.default ?? (extensionModule?.navGroups ? [] : undefined);
-    const navGroups = extensionModule?.navGroups;
-    if (values["admin-extensions"] && !Array.isArray(adminExtensions)) throw new Error(`${values["admin-extensions"]} must export an adminExtensions array (named or default) or navGroups.`);
     const { generateFromSources } = await (auth.length ? import("./generateAuth.js") : import("./generate.js"));
-    const result = await generateFromSources({ target: target as Target, sources: { sources }, admin:values.admin, auth, site, adminExtensions, navGroups });
+    const result = await generateFromSources({ target: target as Target, sources: { sources }, admin:values.admin, auth, site });
     if (!result.ok) throw new Error(JSON.stringify(result.diagnostics, null, 2));
     for (const warning of result.warnings ?? []) console.warn(`warning: ${warning}`);
-    const read = [...paths, ...(values.auth ?? []), ...[values.site, values["admin-extensions"]].filter((path): path is string => !!path)];
-    const changed = await writeArtifacts(destination, { ...result.files, [INPUTS_FILE]: inputsFingerprint(destination, read) }, values.check);
+    const read = [...paths, ...(values.auth ?? []), ...(values.site ? [values.site] : [])];
+    const changed = await writeArtifacts(destination, { ...result.files, [INPUTS_FILE]: inputsFingerprint(destination, read, target) }, values.check);
     if (target.startsWith("cloudflare-")) {
       const wrangler = values.wrangler ?? ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].find(existsSync) ?? "wrangler.jsonc";
       const assets = values.admin ? values.assets ?? join(values.outdir!, "client") : undefined;

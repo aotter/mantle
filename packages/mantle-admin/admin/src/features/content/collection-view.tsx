@@ -1,5 +1,4 @@
 import * as React from "react";
-import { ExtensionActions, ExtensionCell } from "../extensions/extension-contributions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
@@ -73,12 +72,15 @@ import {
   RowOperationsMenu,
 } from "./row-operations";
 import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
+import { DataCell } from "../../ui/data-cell";
+import { Empty, Slot } from "../../app/slots";
 import { optionLabel } from "../../lib/enum-options";
 import { renderTitleText } from "../../lib/entry-title";
 import { LocaleBadge, LocaleStatusBadges } from "./locale-badge";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 import { entryEditPath, entryLandingPath, hasFoldedChildCollections } from "../../lib/collection-nav";
 import { IdValue, isIdField } from "../../ui/id-value";
+import { invalidateAfterWrite } from "../../lib/after-write";
 
 type SortDirection = "asc" | "desc";
 
@@ -251,8 +253,8 @@ function CollectionList({
     : t(language, "collection.table.title");
   const refreshEntries = React.useCallback(() => {
     clearSelection();
-    void queryClient.invalidateQueries({ queryKey: ["entries", collectionName] });
-  }, [collectionName, queryClient, clearSelection]);
+    invalidateAfterWrite(queryClient);
+  }, [queryClient, clearSelection]);
 
   const titleMutation = useMutation({
     mutationFn: ({ id, title, version }: { id: string; title: string; version: number | string }) =>
@@ -329,7 +331,7 @@ function CollectionList({
         canonical={canonical}
         onSuccess={refreshEntries}
       />
-      <ExtensionActions target="list.toolbar/v1" schema={collectionName} onDone={refreshEntries} />
+      <Slot name={`list.actions:${collectionName}`} Default={Empty} props={{ collection: collectionName, selection: [] }} />
     </div>
   );
   const header = layout === "page" ? (
@@ -604,8 +606,7 @@ function BulkActionBar({
         {t(language, "collection.bulk.selectedCount", { count: String(selectedIds.length) })}
       </span>
       <div className="ml-auto flex items-center gap-2">
-        <ExtensionActions target="list.selection/v1" size="sm" schema={collection?.name ?? ""}
-          selection={{ schema: collection?.name ?? "", ids: selectedIds }} onDone={() => { onClear(); onDone(); }} />
+        <Slot name={`list.actions:${collection?.name ?? ""}`} Default={Empty} props={{ collection: collection?.name ?? "", selection: selectedIds }} />
         {canPublish ? (
           <>
             <Button
@@ -1134,12 +1135,7 @@ function EntryRowDisplay({
           const value = row.data_preview?.[name];
           return (
             <TableCell key={name} className="text-muted-foreground">
-              <ExtensionCell schema={collection?.name ?? ""} field={name} value={value} property={schema as Record<string, unknown> | undefined}
-                cells={(collection?.uiSchema?.["list"] as { cells?: unknown } | undefined)?.cells}>
-                {isIdField(name, schema) && typeof value === "string"
-                  ? <IdValue value={value} language={language} />
-                  : renderDataValue(schema, value, language, canonical)}
-              </ExtensionCell>
+              <DataCell names={[`cell:${collection?.name ?? ""}.${name}`]} field={name} value={value} row={row.data_preview ?? {}} property={schema} />
             </TableCell>
           );
         })

@@ -1,5 +1,24 @@
-import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps";
+import type { McpUiDisplayMode, McpUiHostCapabilities, McpUiHostContext, McpUiUpdateModelContextRequest } from "@modelcontextprotocol/ext-apps";
 import type { CallTool, ToolResult } from "./bridge.js";
+
+/** What the host lets the App do beyond rendering; each request is sent only when the host advertised it. */
+export interface HostApi {
+  readonly capabilities: McpUiHostCapabilities;
+  /** Server tool calls through the host; absent when the host offers no `serverTools`, so the App is read-only. */
+  readonly call?: CallTool;
+  /** `ui/open-link` for an http(s) URL; false when the host cannot open links or refuses. */
+  openLink(url: string): Promise<boolean>;
+  /** `ui/message`: a user message in the conversation. The App never sends one by itself. */
+  sendMessage(text: string): Promise<boolean>;
+  /** `ui/update-model-context`: what the model should know at its next turn, without starting one. */
+  updateModelContext(params: McpUiUpdateModelContextRequest["params"]): Promise<boolean>;
+  /** `ui/request-display-mode`: the mode the host granted, or null when it offers none other. */
+  requestDisplayMode(mode: McpUiDisplayMode): Promise<McpUiDisplayMode | null>;
+}
+
+/** The display modes the App can lay itself out for. */
+export const APP_DISPLAY_MODES: readonly McpUiDisplayMode[] = ["inline", "fullscreen"];
+const MODES: readonly unknown[] = ["inline", "fullscreen", "pip"];
 
 // MCP Apps 2026-01-26: only the messages this App consumes. The official
 // AppBridge remains the interoperability oracle in the browser host test.
@@ -25,6 +44,30 @@ function json(value: unknown): boolean {
   return true;
 }
 
+/** An absolute http(s) URL: the only links the App asks a host to open. */
+export function web(url: string): boolean {
+  try { return /^https?:$/.test(new URL(url).protocol); } catch { return false; }
+}
+/** `McpUiStyleVariableKey`: the colors, fonts, radii, borders and shadows a host may set. */
+const HOST_STYLE_VARIABLE = /^--(color-(background|text|border|ring)-[a-z]+|font-(sans|mono|weight-[a-z]+|(text|heading)-[a-z0-9]+-(size|line-height))|border-radius-[a-z]+|border-width-regular|shadow-[a-z]+)$/;
+const size = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+// Presentational fields the App cannot use are dropped, not fatal: a newer
+// spec's display mode or a zone this browser lacks must not block the handshake.
+function presentational(value: Record<string, unknown>): Record<string, unknown> {
+  const { timeZone, displayMode, availableDisplayModes: modes, containerDimensions: box, safeAreaInsets: insets, ...rest } = value;
+  return {
+    ...rest,
+    // an unknown zone falls back in the formatter
+    ...(typeof timeZone === "string" ? { timeZone } : {}),
+    ...(MODES.includes(displayMode) ? { displayMode } : {}),
+    ...(Array.isArray(modes) ? { availableDisplayModes: modes.filter(mode => MODES.includes(mode)) } : {}),
+    ...(record(box) && ["height", "maxHeight", "width", "maxWidth"].every(key => box[key] === undefined || size(box[key])) ? { containerDimensions: box } : {}),
+    ...(record(insets) && ["top", "right", "bottom", "left"].every(key => size(insets[key])) ? { safeAreaInsets: insets } : {}),
+  };
+}
+
+// The rest of what the App applies to its CSS or formatters is checked here first.
 function context(value: unknown): value is McpUiHostContext {
   if (!record(value)) return false;
   if (value.locale !== undefined && typeof value.locale !== "string") return false;
@@ -48,17 +91,17 @@ function result(value: unknown): value is ToolResult {
 }
 
 export function connectHost(handlers: {
-  ready(call: CallTool, context: McpUiHostContext): void;
+  ready(host: HostApi, context: McpUiHostContext): void;
   input(args: Record<string, unknown>): void;
   result(result: ToolResult): void;
   cancelled(): void;
   context(context: McpUiHostContext): void;
   error(error: Error): void;
-}, win: Window = window): () => void {
+}, win: Window = window, version = "0.0.0"): () => void {
   const parent = win.parent;
   const nonce = crypto.randomUUID();
   let serial = 0, origin: string | undefined, ready = false, closed = false;
-  let observer: ResizeObserver | undefined;
+  let observer: ResizeObserver | undefined, modes: readonly unknown[] = [];
   const pending = new Map<string, { resolve(value: unknown): void; reject(error: unknown): void; clean(): void; progress(): void }>();
   const send = (message: Record<string, unknown>) => parent.postMessage({ jsonrpc: "2.0", ...message }, origin && origin !== "null" ? origin : "*");
   const notify = (method: string, params?: unknown) => send({ method, ...(params === undefined ? {} : { params }) });
@@ -101,7 +144,7 @@ export function connectHost(handlers: {
         if (!ready) {
           const value = message.result;
           if (!record(value) || (typeof value.protocolVersion !== "string" || !SUPPORTED_PROTOCOL_VERSIONS.includes(value.protocolVersion)) || !record(value.hostCapabilities)
-            || !record(value.hostInfo) || typeof value.hostInfo.name !== "string" || typeof value.hostInfo.version !== "string" || !context(value.hostContext)) {
+            || !record(value.hostInfo) || typeof value.hostInfo.name !== "string" || typeof value.hostInfo.version !== "string" || !record(value.hostContext) || !context(value.hostContext = presentational(value.hostContext))) {
             entry.clean(); entry.reject(new Error("Invalid host handshake")); return;
           }
           origin = event.origin;
@@ -134,14 +177,39 @@ export function connectHost(handlers: {
       case "ui/notifications/tool-cancelled":
         if (params.reason === undefined || typeof params.reason === "string") handlers.cancelled(); break;
       case "ui/notifications/host-context-changed":
-        if (context(params)) handlers.context(params); break;
+        { const update = presentational(params); if (context(update)) { if (update.availableDisplayModes) modes = update.availableDisplayModes; handlers.context(update); } } break;
     }
   };
   win.addEventListener("message", receive);
-  void request("ui/initialize", { appInfo: { name: "mantle", version: "1.0.0" }, appCapabilities: {}, protocolVersion: VERSION }).then(answer => {
+  void request("ui/initialize", { appInfo: { name: "mantle", version }, appCapabilities: { availableDisplayModes: APP_DISPLAY_MODES }, protocolVersion: VERSION }).then(answer => {
     if (closed) return;
     ready = true;
-    handlers.ready(call, (answer as { hostContext: McpUiHostContext }).hostContext);
+    const { hostContext, hostCapabilities: capabilities } = answer as { hostContext: McpUiHostContext; hostCapabilities: McpUiHostCapabilities };
+    modes = hostContext.availableDisplayModes ?? [];
+    // A host's refusal, error or silence reads as "not done"; none of these requests changes server data.
+    const ask = async (method: string, params: unknown) => {
+      try { const answer = await request(method, params); return record(answer) && answer.isError !== true ? answer : null; } catch { return null; }
+    };
+    handlers.ready({
+      capabilities,
+      ...(capabilities.serverTools ? { call } : {}),
+      openLink: async url => !!capabilities.openLinks && web(url) && !!await ask("ui/open-link", { url }),
+      sendMessage: async text => !!capabilities.message?.text && !!await ask("ui/message", { role: "user", content: [{ type: "text", text }] }),
+      // only the kinds of content the host says it accepts; nothing when it accepts none of them
+      updateModelContext: async ({ content, structuredContent }) => {
+        const accepts = capabilities.updateModelContext;
+        const sent = {
+          ...(content && accepts?.text && content.every(block => block.type === "text") ? { content } : {}),
+          ...(structuredContent && accepts?.structuredContent ? { structuredContent } : {}),
+        };
+        return Object.keys(sent).length > 0 && json(sent) && !!await ask("ui/update-model-context", sent);
+      },
+      requestDisplayMode: async mode => {
+        if (!modes.includes(mode)) return null;
+        const granted = (await ask("ui/request-display-mode", { mode }))?.mode;
+        return MODES.includes(granted) ? granted as McpUiDisplayMode : null;
+      },
+    }, hostContext);
     notify("ui/notifications/initialized");
     let width = 0, height = 0, scheduled = false;
     const resize = () => {
@@ -171,8 +239,19 @@ export function connectHost(handlers: {
 export function applyHostContext(value: McpUiHostContext, doc: Document = document): void {
   const root = doc.documentElement;
   if (value.locale) root.lang = value.locale;
-  if (value.theme) { root.dataset.theme = value.theme; root.style.colorScheme = value.theme; }
-  for (const [key, item] of Object.entries(value.styles?.variables ?? {})) if (typeof item === "string") root.style.setProperty(key, item);
+  // `.dark` too, so an application's `.dark {}` overrides apply in a host as in the browser
+  if (value.theme) { root.dataset.theme = value.theme; root.style.colorScheme = value.theme; root.classList.toggle("dark", value.theme === "dark"); }
+  // only the spec's style variables: a host cannot reach the App's own tokens (its primary color)
+  for (const [key, item] of Object.entries(value.styles?.variables ?? {})) if (typeof item === "string" && HOST_STYLE_VARIABLE.test(key)) root.style.setProperty(key, item);
+  const insets = value.safeAreaInsets, box = value.containerDimensions as Partial<Record<"height" | "maxHeight" | "width" | "maxWidth", number>> | undefined;
+  if (insets) root.style.padding = `${insets.top}px ${insets.right}px ${insets.bottom}px ${insets.left}px`;
+  if (box) {
+    for (const key of ["height", "width", "maxWidth"] as const) root.style[key] = box[key] === undefined ? "" : `${box[key]}px`;
+    // a bounded frame scrolls its content; the max-height also holds the measured size within a fixed height
+    const bound = Math.min(box.height ?? Infinity, box.maxHeight ?? Infinity);
+    root.style.maxHeight = bound === Infinity ? "" : `${bound}px`;
+    root.style.overflow = bound === Infinity ? "" : "auto";
+  }
   const fonts = value.styles?.css?.fonts;
   if (fonts !== undefined) {
     const style = doc.getElementById("mantle-host-fonts") ?? doc.head.appendChild(Object.assign(doc.createElement("style"), { id: "mantle-host-fonts" }));

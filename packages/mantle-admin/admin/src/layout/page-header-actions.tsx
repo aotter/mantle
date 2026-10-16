@@ -6,5 +6,6 @@ export const PageHeaderActionsHostContext = React.createContext<HTMLElement | nu
 
 export function PageHeaderActions({ children }: { children: React.ReactNode }): React.ReactElement {
   const host = React.useContext(PageHeaderActionsHostContext);
-  return host ? createPortal(children, host) : <></>;
+  // without a host (a replacement `Shell`) the controls stay in the page
+  return host ? createPortal(children, host) : <>{children}</>;
 }

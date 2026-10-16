@@ -2,6 +2,7 @@
 import { authorized, authorizeTarget } from "./authorization.js";
 import { forwarded, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceError, wire, type Caller, type RequestContext } from "./contracts.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
+import { MAX_PAGE_SIZE } from "./paging.js";
 import type { Tools, Options } from "./mcp.js";
 import { RESOURCE_MIME_TYPE, linkSurface, type McpAppResource } from "./mcp-apps.js";
 type LocalizedText = string | Readonly<Record<string, string>>;
@@ -14,6 +15,14 @@ function observe<T>(listener: ((event: T) => void | Promise<void>) | undefined, 
   if (listener) try { void Promise.resolve(listener(event)).catch(() => {}); } catch {}
 }
 const paging = (schema: { properties?: object }) => ({ ...schema, properties: { ...schema.properties, limit: { type: "integer", minimum: 1, maximum: 500 }, cursor: { type: "string" } } });
+/**
+ * An MCP page holds at most 100 rows, so a wide View's result (its rows twice: text and
+ * `structuredContent`) stays well under the ~150k characters at which hosts are reported to
+ * truncate. The listed schema, which the tool version hashes, keeps 1..500: a larger limit
+ * returns 100 rows with the next cursor, as a View's own LIMIT caps a page.
+ */
+const MCP_PAGE_SIZE = 100;
+const pageLimit = (raw: Record<string, unknown>) => { const limit = raw?.limit; return Number.isSafeInteger(limit) && (limit as number) > MCP_PAGE_SIZE && (limit as number) <= MAX_PAGE_SIZE ? { ...raw, limit: MCP_PAGE_SIZE } : raw; };
 /** The scopes a challenge asks for: the credential's, plus what the request needs. */
 const union = (scopes: readonly string[], extra: readonly string[]) => [...new Set([...scopes, ...extra])].join(" ");
 
@@ -135,7 +144,8 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
           tool.check?.(caller);
           await authorizeTarget(options.authorize, tool.target ?? { kind: tool.page ? "view" : "procedure", name: tool.name }, caller);
         }
-        if ((Array.isArray(parsedBody) ? parsedBody : [parsedBody]).some(message => message?.method === "tools/list")) {
+        // an App's HTML is rendered for the same tools the caller's tools/list shows
+        if ((Array.isArray(parsedBody) ? parsedBody : [parsedBody]).some(message => message?.method === "tools/list" || message?.method === "resources/read")) {
           const visible = [];
           for (const tool of selected) {
             if (caller.kind === "anonymous" && tool.closed || !options.gateway && caller.kind === "user" && caller.credential === "oauth" && tool.scopes?.some(scope => !caller.scopes.includes(scope))) continue;
@@ -154,7 +164,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       const server = new McpServer(serverInfo, options.instructions ? { instructions: options.instructions } : {});
       server.server.registerCapabilities({ tools: { listChanged: false } });
       if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
-      const appMeta = links ? registerApps(server, links, parsedBody) : undefined;
+      const appMeta = links ? registerApps(server, links, parsedBody, new Set(selected.map(tool => tool.name))) : undefined;
       // A host's stale copy names a tool this catalogue lacks: say so, with the catalogue version, instead of the SDK's bare "not found".
       // Wrapped where the SDK stores it, so transport and request validation still answer first.
       const registered = new Set<string>(), set = server.server.setRequestHandler.bind(server.server) as (method: string, handler: unknown) => void;
@@ -176,7 +186,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         try {
           if (host) tool.check?.(caller);
           if (tool.run && (!host || !tool.readOnly)) checkOrigin(request, caller);
-          const data = await callTool(tool, raw as Record<string, unknown>, () => options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
+          const data = await callTool(tool, tool.page ? pageLimit(raw as Record<string, unknown>) : raw as Record<string, unknown>, () => options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
           if (host) access?.finish();
           return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text: JSON.stringify(data) }, ...about(false)], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {
@@ -230,17 +240,17 @@ function clientUiSupport(message: unknown): "supported" | "unsupported" | "unkno
 }
 
 function appMeta(r: McpAppResource): { ui: Record<string, unknown> } | undefined {
-  const ui = { ...(r.csp ? { csp: r.csp } : {}), ...(r.permissions ? { permissions: r.permissions } : {}), ...(r.prefersBorder !== undefined ? { prefersBorder: r.prefersBorder } : {}) };
+  const ui = { ...(r.csp ? { csp: r.csp } : {}), ...(r.permissions ? { permissions: r.permissions } : {}), ...(r.domain !== undefined ? { domain: r.domain } : {}), ...(r.prefersBorder !== undefined ? { prefersBorder: r.prefersBorder } : {}) };
   return Object.keys(ui).length > 0 ? { ui } : undefined;
 }
 
 /** Registration uses the official SDK; HTML loaders run only on resources/read. */
-function registerApps(server: import("@modelcontextprotocol/server").McpServer, links: ReturnType<typeof linkSurface>["links"], message: unknown) {
+function registerApps(server: import("@modelcontextprotocol/server").McpServer, links: ReturnType<typeof linkSurface>["links"], message: unknown, tools: ReadonlySet<string>) {
   const enabled = clientUiSupport(message) !== "unsupported";
   if (enabled) for (const resource of links.resources) {
     const meta = appMeta(resource);
     server.registerResource(resource.name, resource.uri, { mimeType: RESOURCE_MIME_TYPE, title: resource.title, description: resource.description, ...(meta ? { _meta: meta } : {}) }, async () => {
-      try { return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: typeof resource.html === "string" ? resource.html : await resource.html(), ...(meta ? { _meta: meta } : {}) }] }; }
+      try { return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: typeof resource.html === "string" ? resource.html : await resource.html({ tools }), ...(meta ? { _meta: meta } : {}) }] }; }
       catch { console.error("[mantle mcp] resource rendering failed"); throw new Error("Internal error."); }
     });
   }

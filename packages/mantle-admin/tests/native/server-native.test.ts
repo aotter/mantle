@@ -22,7 +22,7 @@ for(const target of ["bun-postgres","cloudflare-postgres"] as const){
    const tapped={unsafe(text:string,values:unknown[]){if(/^(SELECT|WITH)\b/.test(text))reads++;return db.unsafe(text,values);},begin:db.begin.bind(db)};
    const handle=tapped;
    const {adminBindings}=await import(join(dir,"admin-bindings.ts"));
-   expect(await verifyAdminBindings(adminBindings({handlers}),handle,()=>reads)).toEqual({ok:true,checks:14,extensionLocks:true});
+   expect(await verifyAdminBindings(adminBindings({handlers}),handle,()=>reads)).toEqual({ok:true,checks:14});
    let attempts=0;
    const lostReply={unsafe:async(text:string,values:unknown[])=>{const rows=await tapped.unsafe(text,values);if(text.startsWith("INSERT INTO")){attempts++;throw Error("Lost reply after native autocommit");}return rows;},begin:tapped.begin};
    const bindings=adminBindings({handlers}),fetch=createAdmin(bindings.metadata,bindings.views,bindings.operations,{db:()=>lostReply,caller:()=>admin,routes:entries(bindings.schemas,bindings.adapter)});

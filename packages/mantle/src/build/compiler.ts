@@ -2,7 +2,7 @@
 export { compilePlan, viewOutputs } from "./spec/infrastructure/sql/compilePlan.js";
 export { userScopeTerm } from './spec/domain/service/SqlRowPolicy.js';
 export { DiagnosticError } from "./spec/kernel/diagnostic.js";
-export { BUILT_IN_NAV_GROUPS, navGroupProblems, navPlacementProblems, type AdminNavGroup } from "./spec/domain/model/AdminNav.js";
+export { BUILT_IN_NAV_GROUPS, navPlacementProblems } from "./spec/domain/model/AdminNav.js";
 export { enumOptions, parseNumeric, NATIVE_NOT_NULL, NATIVE_COLUMNS, notNullColumns, protectedColumns, rowPolicy, writePolicy, mcpTools, mcpToolNameSegment, toolTitle, viewAnnotations, procedureAnnotations, resolveLocalizedText, assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired, INPUT_RULE_KEYWORDS, lookupLocalRef, rootRefChain } from "./spec/domain/index.js";
 export { canonical, fnv } from "./spec/domain/service/PlanFingerprint.js";
 export type { ManifestSourceSet } from "./spec/domain/service/ManifestParser.js";
@@ -21,8 +21,6 @@ export { initialStorageSql as postgresSchema } from "./postgres/storage.js";
 export { collectionOf, isPrimaryCollection, adminIndexColumns } from "./admin/collections.js";
 export { developerConsole } from "./admin/developerConsole.js";
 export { rowPreconditions } from "./admin/procedureFlow.js";
-export { checkPlanUiExtensions, planUiExtensionRefs, formSchemaProblem } from "./admin/extensions.js";
-export type { AdminExtension } from "./admin/extensions.js";
 export { appCatalog, entrySchema } from "./mcp/catalog.js";
 export type { AppRowAction } from "./mcp/catalog.js";
 export { compileProgram } from "./core/sql/compile.js";

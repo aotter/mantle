@@ -12,7 +12,7 @@ export async function writeAdminFixture(directory:string,files:Readonly<Record<s
  const helper=resolve(import.meta.dir,"../../src/server/native.ts");
  for(const [file,source]of Object.entries(files)){
   await mkdir(dirname(join(directory,file)),{recursive:true});
-  const code=source.replaceAll("'@aotter/mantle-admin/server/extensions'",JSON.stringify(resolve(import.meta.dir,"../../src/server/extensions.ts"))).replaceAll('"@aotter/mantle-admin/server/native"',JSON.stringify(helper));
+  const code=source.replaceAll('"@aotter/mantle-admin/server/native"',JSON.stringify(helper));
   await writeFile(join(directory,file),code);
  }
 }

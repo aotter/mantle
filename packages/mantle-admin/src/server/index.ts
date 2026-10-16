@@ -86,7 +86,6 @@ export interface Options<Env, Database> extends GatewayOptions {
         public?: string | null;
         admin?: string | null;
     };
-    extensions?: readonly unknown[];
     routes?: readonly Route<Env, Database>[];
 }
 export interface Descriptor {
@@ -104,8 +103,6 @@ export interface Metadata {
     readonly operations: readonly Descriptor[];
     readonly webmcp: unknown;
     readonly developerConsole?: unknown;
-    /** Project sidebar groups (`navGroups`); Schemas, admin Views and pages place items in them with `nav.group`. */
-    readonly navGroups?: readonly import("./extension-types.js").AdminNavGroup[];
 }
 export interface View<Database> {
     readonly name: string;
@@ -153,20 +150,25 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     const webmcp = metadata.webmcp as { tools?: readonly Record<string, unknown>[] };
     const catalogue = { ...webmcp, tools: webmcp.tools?.map(tool => { const {target: _target, ...display} = tool; return { ...display, ...(tool.title ? { title: localized(tool.title) } : {}), description: localized(tool.description) ?? localized(tool.title) ?? tool.name }; }) };
     const me = async ({ caller, request, env }: Context<Env, Database>) => { const user = (options.getUser ? await options.getUser(caller.subject, request, env) : undefined) ?? userOf(caller); return { userId: caller.subject, role: caller.role, admin: isAdmin(caller), login: user?.githubLogin || user?.name || user?.email || null, image: user?.image ?? null }; };
-    const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendAdminInvitation, mcpEndpoints: options.mcpEndpoints, extensions: options.extensions }); return { ...info, navGroups: metadata.navGroups ?? [], capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics") } }; };
+    const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendAdminInvitation, mcpEndpoints: options.mcpEndpoints }); return { ...info, capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics") } }; };
     const checkTarget = async (target: Target, caller: Caller) => (await import("@aotter/mantle/authorization")).authorizeTarget(options.authorize!, target, caller);
     const visibleMetadata = async (c: Context<Env, Database>) => {
         if (!options.authorize) return { ...metadata, views: sees(metadata.views, views, c.caller), operations: sees(metadata.operations, operations, c.caller), webmcp: catalogue };
         return (await import("./authorization.js")).visibleMetadata(metadata, catalogue, views, operations, options.developerViews ?? views, options.authorize, c.caller);
     };
+    const batchNames = (url: URL): string[] => {
+        const names = [...new Set((url.searchParams.get("names") ?? "").split(",").filter(Boolean))];
+        if (!names.length || names.length > 20)  /* same cap as MAX_BADGE_VIEWS in admin/src/app/transport.ts */ throw new ContractError("INPUT_VALIDATION_FAILED", "Name 1 to 20 Views in `names`, separated by commas.", "admin");
+        return names;
+    };
     const runRoute = (route: Route<Env, Database>, c: Context<Env, Database>) => options.authorize && route.target
         ? checkTarget(route.target(c), c.caller).then(() => route.run(c)) : route.run(c);
-    const viewPage = async (c: Context<Env, Database>, preview = false) => {
-        const view = (preview ? options.developerViews ?? views : views).find(v => v.name === c.params.name && (options.authorize || v.allows(c.caller)));
+    const viewPage = async (c: Context<Env, Database>, preview = false, name = c.params.name, search = c.url.searchParams) => {
+        const view = (preview ? options.developerViews ?? views : views).find(v => v.name === name && (options.authorize || v.allows(c.caller)));
         if (view && options.authorize) deny(c.caller, view.allows(c.caller), "views/" + view.name);
         if (!view) { if (preview) return { unavailable: true }; throw missing(); }
         if (options.authorize) await checkTarget({ kind: "view", name: view.name }, c.caller);
-        const { input: raw, ...paging } = view.query(c.url.searchParams), input = { ...raw };
+        const { input: raw, ...paging } = view.query(search), input = { ...raw };
         convert(input, view.convert);
         const page = await view.page(c.db, c.caller, input as never, paging);
         return view.row ? { ...page, rows: page.rows.map(view.row) } : page;
@@ -203,6 +205,20 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 }, columns);
             } },
         { method: "GET", path: "/views/{name}", prepare: async c => { const view = views.find(v => v.name === c.params.name); if (!view) throw missing(); deny(c.caller, view.allows(c.caller), "views/" + view.name); view.check?.(c.caller); if (options.authorize) await checkTarget({kind:"view",name:view.name}, c.caller); const input = {...view.query(c.url.searchParams).input}; convert(input, view.convert); }, run: c => viewPage(c) },
+        // Nav badges: up to 20 Views in one read, each as the caller through the single route's checks. A refused or missing View
+        // is the same `{ unavailable: true }`; a View that cannot answer with no input is `{ error: true }`, and neither fails the batch.
+        { method: "GET", path: "/view-batch", prepare: c => { batchNames(c.url); }, run: async c => {
+            const out: [string, unknown][] = [];
+            for (const name of batchNames(c.url)) {
+                try {
+                    out.push([name, await viewPage(c, false, name, new URLSearchParams({ limit: "1" }))]);
+                } catch (error) {
+                    if (!(error instanceof ContractError)) throw error;
+                    out.push([name, ["AUTH_DENIED", "UNAUTHENTICATED", "NOT_FOUND"].includes(error.code) ? { unavailable: true } : { error: true }]);
+                }
+            }
+            return { views: Object.fromEntries(out) };
+        } },
         ...(metadata.developerConsole === undefined ? [] : [{ method: "GET" as const, path: "/developer/views/{name}", run: (c: Context<Env, Database>) => viewPage(c, true) }]),
         { method: "POST", path: "/operations/{name}", prepare: async c => {
             const operation = operations.find(p => p.name === c.params.name); if (!operation) throw missing();

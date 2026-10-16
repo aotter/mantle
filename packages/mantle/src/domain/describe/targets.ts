@@ -107,7 +107,7 @@ const pathTemplate = (path: string) => path.replace(/\{([^}]+)\}/g, ":$1");
 /** Built-in Admin API templates, relative to the configured Admin API base. */
 export const adminRoutes = [
   "GET /me", "GET /site", "GET /collections", "GET /views-manifest", "GET /operations", "GET /webmcp", "POST /webmcp/:tool", "GET /bootstrap",
-  "GET /views/:name/export", "GET /views/:name", "GET /developer/views/:name", "POST /operations/:name", "GET /developer-console",
+  "GET /views/:name/export", "GET /views/:name", "GET /view-batch", "GET /developer/views/:name", "POST /operations/:name", "GET /developer-console",
   "GET /collections/:name/statistics", "GET /entries", "GET /entries/export", "GET /entries/:id", "POST /entries", "PATCH /entries/:id",
   "POST /entries/:id/publish", "POST /entries/:id/unpublish", "POST /entries/:id/archive", "DELETE /entries/:id",
   "GET /site-settings", "PATCH /site-settings", "POST /media/uploads", "POST /media/uploads/:groupId/commit", "GET /media", "GET /media/:id", "PATCH /media/:id", "DELETE /media/:id",
@@ -177,10 +177,10 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
     generated.push(d);
   }
   for (const route of adminRoutes) {
-    const deps = route.includes("/views/:") ? declarations.filter(d => d.kind === "view" && (route.includes("/developer/") || plan.views[d.id.slice(5)]?.surface === "admin"))
+    const deps = route.includes("/views/:") || route === "GET /view-batch" ? declarations.filter(d => d.kind === "view" && (route.includes("/developer/") || plan.views[d.id.slice(5)]?.surface === "admin"))
       : route.includes("/operations/:") ? declarations.filter(d => adminOperations.has(d.id)) : route === "POST /webmcp/:tool" ? declarations.filter(d => mcpTools(plan, "admin").some(t => `${t.kind}:${t.source}` === d.id)).concat(generated) : [];
     const generic = route.includes("/entries") || route.includes("/statistics") || route === "GET /bootstrap";
-    addRoute(`admin:${route}`, deps, deps.length ? { ...objectInput, anyOf: deps.map(d => ({ type: "object", properties: { [route.includes("/webmcp/") ? "tool" : "name"]: { type: "string", const: route.includes("/webmcp/") ? d.name : d.id.slice(d.kind === "view" ? 5 : 10) } } })) } : objectInput);
+    addRoute(`admin:${route}`, deps, deps.length && route !== "GET /view-batch" ? { ...objectInput, anyOf: deps.map(d => ({ type: "object", properties: { [route.includes("/webmcp/") ? "tool" : "name"]: { type: "string", const: route.includes("/webmcp/") ? d.name : d.id.slice(d.kind === "view" ? 5 : 10) } } })) } : objectInput);
     const d = out.at(-1)!;
     if (generic) {
       const operation = route === "POST /entries" ? "create" : route === "DELETE /entries/:id" ? "delete" : route.startsWith("GET ") ? undefined : route.endsWith("/publish") ? "publish" : "update";

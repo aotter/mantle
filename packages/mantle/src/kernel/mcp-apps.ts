@@ -2,16 +2,24 @@ import { ContractError } from "./contracts.js";
 /** MCP Apps (ADR-0029 D7): UI resources served beside the tools that render in them. */
 export const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 
+/** What `resources/read` passes an HTML loader. */
+export interface McpAppRender {
+  /** The tools this caller's `tools/list` shows on the endpoint, so the HTML names none it cannot see. */
+  readonly tools: ReadonlySet<string>;
+}
+
 /** One `ui://` resource. The HTML is a reusable asset and never carries caller data: that travels in tool results. */
 export interface McpAppResource {
   readonly uri: string;
   readonly name: string;
   readonly title?: string;
   readonly description?: string;
-  readonly html: string | (() => string | Promise<string>);
+  readonly html: string | ((render: McpAppRender) => string | Promise<string>);
   readonly csp?: { readonly connectDomains?: readonly string[]; readonly resourceDomains?: readonly string[]; readonly frameDomains?: readonly string[]; readonly baseUriDomains?: readonly string[] };
   readonly permissions?: { readonly camera?: Record<string, never>; readonly microphone?: Record<string, never>; readonly geolocation?: Record<string, never>; readonly clipboardWrite?: Record<string, never> };
   readonly prefersBorder?: boolean;
+  /** `_meta.ui.domain`: the dedicated sandbox origin a host should serve this App from, in the form that host documents. */
+  readonly domain?: string;
   /** Tool names whose results this resource renders. */
   readonly renders?: readonly string[];
   /** Views only this App may call (`visibility: ["app"]`); a client without MCP Apps does not see them. A Procedure cannot be hidden from the model. */

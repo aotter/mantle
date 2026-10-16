@@ -3,10 +3,13 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster, TooltipProvider } from "@aotter/mantle-ui/kit";
 import { ConfirmProvider } from "../ui/confirm-dialog";
 import { AdminApp } from "./admin-app";
+import { AdminHooksProvider } from "./hooks-context";
+import { ProjectNavProvider } from "./project-nav";
 import { loadLanguage, STRINGS } from "./i18n";
 import { PreferencesProvider, readInitialLanguage, usePreferences, type AdminLanguage } from "./preferences";
 import { queryClient } from "./query-client";
 import { AdminRouterProvider } from "./router";
+import { browserTransport } from "./transport";
 import type { AdminDefinition } from "./define-admin";
 
 /**
@@ -15,6 +18,7 @@ import type { AdminDefinition } from "./define-admin";
  */
 export function AdminRoot(props: { admin: AdminDefinition; preview?: boolean }): React.ReactElement {
   const [initialLanguage] = React.useState(readInitialLanguage);
+  const projectNav = React.useMemo(() => ({ ...props.admin.nav, pages: props.admin.pages }), [props.admin]);
   // Nothing paints until the stored or browser language has loaded; a failed load falls back to English.
   return (
     <React.Suspense fallback={null}>
@@ -22,12 +26,16 @@ export function AdminRoot(props: { admin: AdminDefinition; preview?: boolean }):
         <QueryClientProvider client={queryClient}>
           <PreferencesProvider initialLanguage={initialLanguage}>
             <AdminRouterProvider>
-              <TooltipProvider>
-                <ConfirmProvider>
-                  <AdminApp preview={props.preview ?? false} />
-                  <AdminToaster />
-                </ConfirmProvider>
-              </TooltipProvider>
+              <AdminHooksProvider meta={props.admin.meta} transport={browserTransport} layers={props.admin.layers}>
+                <TooltipProvider>
+                  <ConfirmProvider>
+                    <ProjectNavProvider nav={projectNav}>
+                      <AdminApp preview={props.preview ?? false} />
+                      <AdminToaster />
+                    </ProjectNavProvider>
+                  </ConfirmProvider>
+                </TooltipProvider>
+              </AdminHooksProvider>
             </AdminRouterProvider>
           </PreferencesProvider>
         </QueryClientProvider>

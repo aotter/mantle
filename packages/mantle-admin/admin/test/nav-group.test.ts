@@ -1,7 +1,8 @@
-import type { AdminExtensionInfo, ViewManifestInfo, Collection } from "../src/lib/types";
+import type { ViewManifestInfo, Collection } from "../src/lib/types";
 import { describe, expect, it } from "vitest";
 import { isGroupActive, isLinkActive, isSubLinkActive } from "../src/layout/nav-group";
 import { buildDeveloperNavGroups, buildNavGroups } from "../src/layout/authenticated-layout";
+import type { ProjectNav } from "../src/app/project-nav";
 import type { NavCollapsible, NavLink } from "../src/layout/types";
 import { initialsFor } from "../src/lib/initials";
 import { foldedChildCollections, hasFoldedChildCollections, isFoldedFieldChild, entryEditPath, entryLandingPath } from "../src/lib/collection-nav";
@@ -124,36 +125,6 @@ describe("member navigation", () => {
   });
 });
 
-describe("extension pages and settings in the sidebar", () => {
-  const extension = (contributes: Partial<AdminExtensionInfo["contributes"]>): AdminExtensionInfo => ({
-    id: "admin-access", title: { en: "Admin access", "zh-TW": "Admin 權限" }, module: "/x/access.js",
-    contributes: { pages: [], settings: [], actions: [], panels: [], fields: [], ...contributes },
-  });
-
-  it("lists settings first, then pages that ask for a place in order, localized, under More", () => {
-    const groups = buildNavGroups([], [], "zh-TW", null, true, false, undefined, [extension({
-      pages: [
-        { id: "audit", title: "Audit", role: "admin", nav: { group: "more", order: 2 } },
-        { id: "grants", title: { en: "Grants", "zh-TW": "授權" }, role: "admin", nav: { group: "more", order: 1 } },
-        { id: "hidden", title: "Hidden", role: "admin" },
-      ],
-      settings: [{ id: "policy", title: { en: "Policy", "zh-TW": "政策" }, role: "admin", schema: { type: "object", properties: {} } }],
-    })]);
-    const more = groups[groups.length - 1]!;
-    expect(more.items.flatMap((item) => "url" in item && item.url?.startsWith("/admin/x/") ? [[item.title, item.url]] : [])).toEqual([
-      ["政策", "/admin/x/admin-access/policy"],
-      ["授權", "/admin/x/admin-access/grants"],
-      ["Audit", "/admin/x/admin-access/audit"],
-    ]);
-  });
-
-  it("adds nothing when the server lists no extensions (or is older and sends none)", () => {
-    const before = buildNavGroups([], [], "en", null, true);
-    expect(buildNavGroups([], [], "en", null, true, false, undefined, [])).toEqual(before);
-    expect(buildNavGroups([], [], "en", null, true, false, undefined, [extension({ panels: [{ id: "p", title: "P", role: "admin", target: "home/v1" }] })])).toEqual(before);
-  });
-});
-
 describe("initialsFor", () => {
   it.each([
     ["local-admin", "LA"],
@@ -249,7 +220,7 @@ describe("collection nav helpers", () => {
   });
 });
 
-describe("sidebar placement (uiSchema.nav and navGroups)", () => {
+describe("sidebar placement (uiSchema.nav and defineAdmin nav)", () => {
   const collection = (name: string, lifecycle: "operational" | "publishing", nav?: object) => ({ name, title: name, description: null, lifecycle, parent: null, localized: false, hasTranslations: false, exportFields: [], uiSchema: nav ? { nav } : null }) as never;
   const view = (name: string, nav?: object) => ({ name, title: name, description: null, input: null, list: { columns: [], searchFields: [], filterFields: [] }, columns: {}, ...(nav ? { nav } : {}) }) as never;
   const shape = (groups: ReturnType<typeof buildNavGroups>) => groups.map((g) => [g.title ?? "", g.items.map((i) => i.title)]);
@@ -264,43 +235,81 @@ describe("sidebar placement (uiSchema.nav and navGroups)", () => {
       [collection("types", "operational", { group: "catalog", order: 1 }), collection("categories", "operational", { group: "catalog", order: 2 }), collection("quotes", "operational", { group: "sales" }), collection("audit", "operational", { hidden: true }), collection("customers", "operational")],
       [view("pipeline", { group: "sales", order: 1 }), view("totals")],
       "en", null, false, false, undefined,
-      [{ extension: "x" }].map(() => ({ id: "pages", contributes: { pages: [{ id: "browser", title: "Catalog browser", role: "admin", nav: { group: "catalog", order: 3 } }] } })) as never,
-      [{ id: "sales", title: { en: "Sales", "zh-TW": "業務" }, order: 5 }, { id: "catalog", title: "Catalog" }],
+      { groups: { sales: { title: { en: "Sales", "zh-TW": "業務" }, order: 5 }, catalog: { title: "Catalog" } }, items: [] },
     );
     expect(shape(groups).slice(1)).toEqual([
       ["Sales", ["pipeline", "quotes"]],
       ["Records", ["customers"]],
       ["Reports", ["totals"]],
-      ["Catalog", ["types", "categories", "Catalog browser"]],
+      ["Catalog", ["types", "categories"]],
     ]);
     expect(JSON.stringify(groups)).not.toContain("/admin/c/audit");
   });
 
-  const pages = (...list: object[]) => [{ id: "pages", contributes: { pages: list } }] as never;
-
-  it("lists an unordered page after the ordered collections of its group", () => {
-    const groups = buildNavGroups(
-      [collection("types", "operational", { group: "catalog", order: 1 }), collection("categories", "operational", { group: "catalog", order: 2 })],
-      [], "en", null, false, false, undefined,
-      pages({ id: "browser", title: "Catalog browser", role: "admin", nav: { group: "catalog" } }),
-      [{ id: "catalog", title: "Catalog" }],
-    );
-    expect(shape(groups).slice(1)).toEqual([["Catalog", ["types", "categories", "Catalog browser"]]]);
-  });
-
   it("shows no empty Content heading once a project moves every collection out of it", () => {
-    const groups = buildNavGroups([collection("posts", "publishing", { group: "editorial" })], [], "en", null, false, false, undefined, undefined, [{ id: "editorial", title: "Editorial" }]);
+    const groups = buildNavGroups([collection("posts", "publishing", { group: "editorial" })], [], "en", null, false, false, undefined, { groups: { editorial: { title: "Editorial" } }, items: [] });
     expect(shape(groups).slice(1)).toEqual([["Editorial", ["posts"]]]);
     expect(shape(buildNavGroups([], [], "en", null, false)).slice(1)).toEqual([["Content", []]]);
     expect(shape(buildNavGroups([collection("archive", "operational", { group: "more" })], [], "en", null, false)).slice(1)).toEqual([["More", ["archive"]]]);
   });
 
-  it("orders pages and collections together in More", () => {
-    const groups = buildNavGroups(
-      [collection("archive", "operational", { group: "more", order: 1 })],
-      [], "en", null, false, false, undefined,
-      pages({ id: "tools", title: "Tools", role: "admin", nav: { group: "more", order: 100 } }),
-    );
-    expect(shape(groups).slice(-1)).toEqual([["More", ["archive", "Tools"]]]);
+  describe("defineAdmin nav", () => {
+    const project = (nav: Partial<ProjectNav> = {}): ProjectNav => ({ groups: {}, items: [], ...nav });
+    const build = (nav: ProjectNav, collections = [collection("requests", "operational"), collection("posts", "publishing")], views = [view("pending")]) =>
+      buildNavGroups(collections, views, "en", null, false, false, undefined, nav);
+    const links = (groups: ReturnType<typeof buildNavGroups>, title: string) => groups.find((g) => g.title === title)?.items as NavLink[] | undefined;
+
+    it("declares groups, localised and ordered among the built-in ones", () => {
+      const nav = project({ groups: { approvals: { title: { en: "Approvals", "zh-TW": "簽核" }, order: 5 }, desk: { title: "New desk" } }, items: [{ group: "approvals", title: "Waiting", to: { view: "pending" } }, { group: "desk", title: "Requests", to: { collection: "requests" } }] });
+      expect(shape(build(nav)).slice(1)).toEqual([["Approvals", ["Waiting"]], ["Content", ["posts"]], ["Records", ["requests"]], ["Reports", ["pending"]], ["New desk", ["Requests"]]]);
+    });
+
+    it("places an application page in its group by order, beside the items; a page without nav stays out of the sidebar", () => {
+      const nav = project({ groups: { approvals: { title: "Approvals" } }, items: [{ group: "approvals", title: "Waiting", order: 1, to: { view: "pending" } }],
+        pages: [{ path: "budget", title: { en: "Budget" }, element: null, nav: { group: "approvals", order: 2 } }, { path: "hidden", title: "Hidden", element: null }] });
+      const groups = build(nav);
+      expect(links(groups, "Approvals")!.map((l) => [l.title, l.url])).toEqual([["Waiting", "/admin/views/pending"], ["Budget", "/admin/p/budget"]]);
+      expect(JSON.stringify(groups)).not.toContain("/admin/p/hidden");
+    });
+
+    it("leads items to a collection preset to one field's value, or to a View with its input", () => {
+      const nav = project({ items: [
+        { group: "content", title: "Rejected", to: { collection: "requests", filter: { status: "rejected" } } },
+        { group: "content", title: "All requests", to: { collection: "requests" } },
+        { group: "reports", title: "Mine", order: 1, to: { view: "pending", input: { owner: "me", limit: 5, flag: true, skip: undefined, nested: { a: 1 } } } },
+      ] });
+      const groups = build(nav);
+      expect(links(groups, "Content")!.filter((l) => l.title !== "posts").map((l) => [l.title, l.url])).toEqual([["Rejected", "/admin/c/requests?filter_field=status&filter_value=rejected"], ["All requests", "/admin/c/requests"]]);
+      expect(links(groups, "Reports")!.map((l) => [l.title, l.url])).toEqual([["Mine", "/admin/views/pending?owner=me&limit=5&flag=true"], ["pending", "/admin/views/pending"]]);
+    });
+
+    it("carries an item's badge to its link, for a collection and for a View, and gives none to an item without one", () => {
+      const badge = { view: "pending", field: "count" };
+      const groups = build(project({ items: [
+        { group: "content", title: "Waiting", to: { collection: "requests" }, badge },
+        { group: "reports", title: "Queue", to: { view: "pending" }, badge },
+        { group: "reports", title: "Plain", to: { view: "pending" } },
+      ] }));
+      expect(links(groups, "Content")!.find((l) => l.title === "Waiting")!.badge).toEqual(badge);
+      expect(links(groups, "Reports")!.find((l) => l.title === "Queue")!.badge).toEqual(badge);
+      expect(links(groups, "Reports")!.find((l) => l.title === "Plain")).not.toHaveProperty("badge");
+    });
+
+    it("shows no item whose collection or View the caller cannot see, and adds no permission", () => {
+      const nav = project({ items: [{ group: "content", title: "Secret", to: { collection: "secrets" } }, { group: "reports", title: "Hidden view", to: { view: "private" } }] });
+      expect(JSON.stringify(build(nav))).not.toMatch(/Secret|Hidden view|secrets|private/);
+      // visible only because the server listed it: an item for a visible resource appears with the same url as the default entry
+      expect(links(build(project({ items: [{ group: "content", title: "Req", to: { collection: "requests" } }] })), "Content")!.map((l) => l.title)).toContain("Req");
+    });
+
+    it("ignores a declaration of Admin's own group ids, so More is not listed twice", () => {
+      const groups = build(project({ groups: { more: { title: "Extras" }, reports: { title: "Mine", order: 1 } } }), [], [view("pending")]);
+      expect(shape(groups).slice(1)).toEqual([["Reports", ["pending"]]]);
+    });
+
+    it("titles a group nobody declared by its id instead of dropping its items", () => {
+      const groups = build(project(), [collection("requests", "operational", { group: "approvals" })], []);
+      expect(shape(groups).slice(1)).toEqual([["Approvals", ["requests"]]]);
+    });
   });
 });

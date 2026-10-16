@@ -1,11 +1,20 @@
 import { expect, it } from "vitest";
 import { chromium } from "playwright";
 import { createServer } from "vite";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const catalog = {
-  views: { pending: { columns: { item: { type: "string" } }, list: { columns: ["item"] }, actions: ["review_requisition"] } },
+  views: { pending: { columns: { item: { type: "string" }, date: { type: "string", format: "date-time", title: "When" }, link: { type: "string", format: "uri", title: "Link" } }, list: { columns: ["item", "date", "link"] }, actions: ["review_requisition"] } },
   actions: { review_requisition: { capability: "review_requisition", title: "Review", inputSchema: { type: "object", properties: { id: { type: "string" }, expectedVersion: { type: "number" }, date: { type: "string", format: "date-time", title: "Date" } } }, bind: [{ input: "id", field: "id" }], version: "expectedVersion", mutates: true } },
+};
+
+const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, "../package.json"), "utf8")) as { version: string };
+const serveApp = async (page: import("playwright").Page) => {
+  const { mantleAppHtml } = await import("../dist/mcp-app/index.js");
+  await page.route("**/src/mcp-app/interaction.html", async route => {
+    await route.fulfill({ contentType: "text/html", body: mantleAppHtml.replace('<div id="root">', `<script type="application/json" id="mantle-catalog">${JSON.stringify(catalog)}</script><div id="root">`) });
+  });
 };
 
 it("interoperates with the official ext-apps AppBridge: context, results, native dates and server tools", async () => {
@@ -14,10 +23,7 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
   const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
   try {
     const page = await browser.newPage(); page.setDefaultTimeout(10_000);
-    const { mantleAppHtml } = await import("../dist/mcp-app/index.js");
-    await page.route("**/src/mcp-app/interaction.html", async route => {
-      await route.fulfill({ contentType: "text/html", body: mantleAppHtml.replace('<div id="root">', `<script type="application/json" id="mantle-catalog">${JSON.stringify(catalog)}</script><div id="root">`) });
-    });
+    await serveApp(page);
     await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
     await page.waitForFunction(() => (window as any).host?.ready);
     const app = page.frameLocator("iframe");
@@ -25,9 +31,24 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     await page.evaluate(async () => {
       const { bridge } = (window as any).host;
       await bridge.sendToolInput({ arguments: { limit: 5 } });
-      await bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops", date: "2026-10-01T15:20:00.000Z" }] }, _meta: { "net.aotter.mantle/tool": "pending" } });
+      await bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops", date: "2026-10-01T15:20:00.000Z", link: "https://example.com/r1" }] }, _meta: { "net.aotter.mantle/tool": "pending" } });
     });
     await app.getByText("Laptops").waitFor();
+    expect(await page.evaluate(() => ({ info: (window as any).host.bridge.getAppVersion(), capabilities: (window as any).host.bridge.getAppCapabilities() })))
+      .toEqual({ info: { name: "mantle", version }, capabilities: { availableDisplayModes: ["inline", "fullscreen"] } });
+    // the host's time zone and language, not the iframe's
+    expect(await app.locator("time").innerText()).toMatch(/^2026\/10\/1\s晚上11:20$/);
+    // the sandbox blocks navigation: the link opens through the host
+    await app.getByRole("link", { name: "https://example.com/r1" }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).host.links)).toEqual(["https://example.com/r1"]);
+    const look = await app.getByRole("button", { name: "Review: r1" }).evaluate(node => {
+      const style = getComputedStyle(node), root = getComputedStyle(document.documentElement);
+      return { radius: style.borderTopLeftRadius, weight: style.fontWeight, dark: document.documentElement.classList.contains("dark"), inset: root.paddingBottom };
+    });
+    expect(look).toEqual({ radius: "3px", weight: "550", dark: true, inset: "24px" });
+    await app.getByRole("button", { name: "全螢幕" }).click();
+    await app.getByRole("button", { name: "結束全螢幕" }).waitFor();
+    expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen"]);
     await app.getByRole("button", { name: "Review: r1" }).click();
     await app.getByRole("button", { name: "Date", exact: true }).click();
     const date = app.locator('input[type="date"]'); await date.waitFor();
@@ -36,10 +57,18 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     await app.locator('input[type="time"]').fill("12:34");
     // Closing the popover leaves the selected day in the shared form draft.
     await date.press("Escape");
+    // the primary color is the App's own brand color, not the host's inverse background
+    expect(await app.getByRole("button", { name: "執行", exact: true }).evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(250, 250, 250)");
     await app.getByRole("button", { name: "執行", exact: true }).click();
     await page.waitForFunction(() => (window as any).host.calls.length >= 2);
     const state = await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors, sizes: (window as any).host.sizes }));
     expect(state.errors).toEqual([]);
+    // the model learns of the change at its next turn; the App never speaks for the user
+    await expect.poll(() => page.evaluate(() => (window as any).host.contexts)).toEqual([{
+      content: [{ type: "text", text: "review_requisition succeeded on row r1." }],
+      structuredContent: { tool: "review_requisition", id: "r1", outcome: "succeeded" },
+    }]);
+    expect(await page.evaluate(() => (window as any).host.messages)).toEqual([]);
     expect(state.calls[0]).toMatchObject({ name: "review_requisition", arguments: { id: "r1", expectedVersion: 3 } });
     expect(state.calls[0].arguments.date).toBe(await page.evaluate(() => new Date(2026, 9, 15, 12, 34).toISOString()));
     expect(state.calls[1]).toMatchObject({ name: "pending", arguments: { limit: 5 } });
@@ -47,9 +76,35 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     expect(state.sizes.length).toBeGreaterThan(0);
     const root = await app.locator("html").evaluate(node => ({ lang: node.lang, theme: node.dataset.theme, color: node.style.getPropertyValue("--color-text-primary") }));
     expect(root).toEqual({ lang: "zh-TW", theme: "dark", color: "rgb(1, 2, 3)" });
+    // a bounded container: the App scrolls and reports a height within the bound
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { maxHeight: 200 } }));
+    await expect.poll(() => page.evaluate(() => (window as any).host.sizes.at(-1).height)).toBeLessThanOrEqual(200);
+    // a fixed height bounds the reported size too
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { height: 120 } }));
+    await expect.poll(() => page.evaluate(() => (window as any).host.sizes.at(-1).height)).toBe(120);
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "en", theme: "light" }));
     await expect.poll(() => app.locator("html").getAttribute("lang")).toBe("en");
     await expect.poll(() => app.locator("html").getAttribute("data-theme")).toBe("light");
+  } finally { await browser.close(); await server.close(); }
+}, 45_000);
+
+it("is read-only in a host without server tools: rows and plain links, no action and no tool call", async () => {
+  const server = await createServer({ configFile: resolve(import.meta.dirname, "../vite.mcp-app.config.ts"), root: resolve(import.meta.dirname, ".."), server: { host: "127.0.0.1", port: 0 } });
+  await server.listen();
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  try {
+    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?read-only`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    await page.evaluate(async () => {
+      await (window as any).host.bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops", link: "https://example.com/r1" }] }, _meta: { "net.aotter.mantle/tool": "pending" } });
+    });
+    await app.getByText("Laptops").waitFor();
+    expect(await app.getByRole("button", { name: "Review: r1" }).count()).toBe(0);
+    expect(await app.getByRole("link").count()).toBe(0);
+    expect(await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors }))).toEqual({ calls: [], errors: [] });
   } finally { await browser.close(); await server.close(); }
 }, 45_000);
 

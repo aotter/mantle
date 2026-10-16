@@ -7,7 +7,7 @@ import ts from "typescript";
 
 const src = resolve(import.meta.dirname, "../admin/src/app");
 const out = resolve(import.meta.dirname, "../dist/admin-app");
-const modules = ["index.ts", "define-admin.ts", "mantle-admin.tsx"];
+const modules = ["index.ts", "define-admin.ts", "mantle-admin.tsx", "hooks.ts", "slots.tsx", "slot-props.ts"];
 const failures = [];
 for (const file of modules) {
   const { outputText, diagnostics } = ts.transpileDeclaration(readFileSync(resolve(src, file), "utf8"), {

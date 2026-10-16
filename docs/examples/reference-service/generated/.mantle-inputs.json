@@ -1,5 +1,6 @@
 {
   "mantle": "0.2.0-alpha.7",
+  "target": "cloudflare-d1",
   "inputs": {
     "../manifests/catalog.yaml": "8cde2a9dadef39f64219baf0d37d17620d1f4452c9250d2a62910abf4ef57b20",
     "../manifests/orders.yaml": "199ba2cc08a597ae45b1bb9aee768a672a00afaca38ee3fd31d1dc024045071c",

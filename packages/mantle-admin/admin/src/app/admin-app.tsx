@@ -22,6 +22,8 @@ import {
 } from "../features/auth/auth-views";
 import { HomeView } from "../features/console/home-view";
 import { CollectionView } from "../features/content/collection-view";
+import { Slot } from "./slots";
+import type { CollectionListProps, RecordViewProps } from "./slot-props";
 import { hasFoldedChildCollections } from "../lib/collection-nav";
 import { NotFoundView } from "../features/system/not-found-view";
 
@@ -30,7 +32,7 @@ const ParentEntryWorkbench = React.lazy(() => import("../features/content/parent
 const MediaLibraryView = React.lazy(() => import("../features/media/media-library-view").then(module => ({ default: module.MediaLibraryView })));
 const OperationsView = React.lazy(() => import("../features/ops/operations-view").then(module => ({ default: module.OperationsView })));
 const ViewPage = React.lazy(() => import("../features/ops/view-page").then(module => ({ default: module.ViewPage })));
-const ExtensionPage = React.lazy(() => import("../features/system/extension-page").then(module => ({ default: module.ExtensionPage })));
+import { ProjectPage } from "../features/system/project-page";
 const PreferencesView = React.lazy(() => import("../features/system/preferences-view").then(module => ({ default: module.PreferencesView })));
 const SettingsView = React.lazy(() => import("../features/system/settings-view").then(module => ({ default: module.SettingsView })));
 const AdminView = React.lazy(() => import("../features/system/admin-view").then(module => ({ default: module.AdminView })));
@@ -129,7 +131,7 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   if (collectionMatch) {
     return (
       <AuthenticatedLayout>
-        <CollectionView collectionName={decodeURIComponent(collectionMatch[1]!)} />
+        <Slot name="CollectionList" Default={CollectionPage} props={{ collection: decodeURIComponent(collectionMatch[1]!) }} />
       </AuthenticatedLayout>
     );
   }
@@ -138,10 +140,7 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   if (entryEditMatch) {
     return (
       <AuthenticatedLayout>
-        <EntryEditView
-          collectionName={decodeURIComponent(entryEditMatch[1]!)}
-          entryId={decodeURIComponent(entryEditMatch[2]!)}
-        />
+        <Slot name="RecordView" Default={RecordPage} props={{ collection: decodeURIComponent(entryEditMatch[1]!), entryId: decodeURIComponent(entryEditMatch[2]!) }} />
       </AuthenticatedLayout>
     );
   }
@@ -160,7 +159,7 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   if (path === "/admin" || path === "/admin/") {
     return (
       <AuthenticatedLayout>
-        <HomeView />
+        <HomePage />
       </AuthenticatedLayout>
     );
   }
@@ -219,11 +218,11 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
     return <React.Suspense fallback={<GateLoading />}><DeveloperWorkspace path={path} /></React.Suspense>;
   }
 
-  const extensionMatch = path.match(/^\/admin\/x\/([^/]+)\/([^/]+)\/?$/);
-  if (extensionMatch) {
+  const pageMatch = path.match(/^\/admin\/p\/([a-z0-9-]+)\/?$/);
+  if (pageMatch) {
     return (
       <AuthenticatedLayout>
-        <ExtensionPage extension={decodeURIComponent(extensionMatch[1]!)} contribution={decodeURIComponent(extensionMatch[2]!)} />
+        <ProjectPage path={pageMatch[1]!} />
       </AuthenticatedLayout>
     );
   }
@@ -262,5 +261,22 @@ function EntryLanding({
   if (hasFoldedChildCollections(collectionsQuery.data ?? [], collectionName)) {
     return <ParentEntryWorkbench collectionName={collectionName} entryId={entryId} />;
   }
-  return <EntryEditView collectionName={collectionName} entryId={entryId} />;
+  return <Slot name="RecordView" Default={RecordPage} props={{ collection: collectionName, entryId }} />;
+}
+
+function CollectionPage({ collection }: CollectionListProps): React.ReactElement {
+  return <CollectionView collectionName={collection} />;
+}
+
+function RecordPage({ collection, entryId }: RecordViewProps): React.ReactElement {
+  return <EntryEditView collectionName={collection} entryId={entryId} />;
+}
+
+function HomePage(): React.ReactElement {
+  const collections = useQuery<Collection[]>({
+    queryKey: ["collections"],
+    queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
+  });
+  const site = useQuery<SiteInfo>({ queryKey: ["site"], queryFn: () => api.get<SiteInfo>("/site") });
+  return <Slot name="Home" Default={HomeView} props={{ collections: collections.data ?? [], site: site.data }} />;
 }

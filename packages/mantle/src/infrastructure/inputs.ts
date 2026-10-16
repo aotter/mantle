@@ -9,10 +9,16 @@ const MANTLE_VERSION = (JSON.parse(readFileSync(new URL("../../package.json", im
 // Line endings are normalized so a CRLF checkout (core.autocrlf) matches the LF fingerprint.
 const digest = (path: string) => existsSync(path) ? createHash("sha256").update(readFileSync(path, "utf8").replaceAll("\r\n", "\n")).digest("hex") : null;
 
-/** The manifests and option modules (`--auth`, `--site`, `--admin-extensions`) one generate run read, by path relative to its output. */
-export function inputsFingerprint(destination: string, paths: readonly string[]): string {
+/** The target and the manifests and option modules (`--auth`, `--site`) one generate run read, by path relative to its output. */
+export function inputsFingerprint(destination: string, paths: readonly string[], target: string): string {
   const inputs = Object.fromEntries(paths.map(path => [relative(resolve(destination), resolve(path)).replaceAll("\\", "/"), digest(path)]));
-  return JSON.stringify({ mantle: MANTLE_VERSION, inputs }, null, 2) + "\n";
+  return JSON.stringify({ mantle: MANTLE_VERSION, target, inputs }, null, 2) + "\n";
+}
+
+/** The generate target recorded beside `generatedModule` (undefined without a fingerprint, or one written before targets were recorded). */
+export function generatedTarget(generatedModule: string): string | undefined {
+  const file = resolve(dirname(generatedModule), INPUTS_FILE);
+  return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { target?: string }).target : undefined;
 }
 
 /** Why the generated output that holds `generatedModule` no longer matches its inputs (empty when it does, or when it has no fingerprint). */

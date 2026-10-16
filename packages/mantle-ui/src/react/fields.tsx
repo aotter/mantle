@@ -60,6 +60,8 @@ export interface FieldSlot {
   /** The string widget the field asks for: `input`, `textarea`, `markdown` or `html`. */
   readonly widget: StringWidget;
   readonly setValue: (next: unknown) => void;
+  /** The control the field has without `renderField`, optionally for another value and setter, so a host can wrap it. */
+  readonly renderDefault: (next?: { readonly value: unknown; readonly setValue: (next: unknown) => void }) => React.ReactNode;
 }
 
 /** A host's control for a field, or undefined to keep the default one. */
@@ -133,16 +135,10 @@ function SchemaField(props: SchemaFieldsProps & {
   // the label names the control, its description describes it, and a required field says so
   const control = { id, "aria-describedby": description ? descriptionId : undefined, "aria-required": required && !readOnly ? true : undefined } as const;
   const nested = (childSchema: FieldSchema, childPath: readonly string[]) => <SchemaFields {...props} schema={childSchema} path={childPath} />;
-  const custom = readOnly ? undefined : props.renderField?.({ name, schema, path, value, label, widget: stringFieldWidget(schema, props.widget), setValue });
 
-  return (
-    <div className="space-y-2">
-      <label id={labelId} htmlFor={id} className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-        {label}
-        {required && !readOnly ? <span className="text-destructive">*</span> : null}
-      </label>
-      {description ? <p id={descriptionId} className="text-xs leading-5 text-muted-foreground">{description}</p> : null}
-      {custom !== undefined ? custom : readOnly ? (
+  /** The field's own control for `value`. A host's `renderField` asks for it through `renderDefault`, with its own value and setter. */
+  const renderControl = (value: unknown, setValue: (next: unknown) => void): React.ReactNode => (
+readOnly ? (
         <p
           {...control}
           role="textbox"
@@ -205,7 +201,19 @@ function SchemaField(props: SchemaFieldsProps & {
           setArray={(next) => setValue(next)} nested={nested} />
       ) : (
         <StringFieldControl control={control} schema={schema} widget={props.widget} value={value} label={label} labels={labels} onChange={setValue} />
-      )}
+      )
+  );
+
+  const custom = readOnly ? undefined : props.renderField?.({ name, schema, path, value, label, widget: stringFieldWidget(schema, props.widget), setValue, renderDefault: (next) => renderControl(next ? next.value : value, next ? next.setValue : setValue) });
+
+  return (
+    <div className="space-y-2">
+      <label id={labelId} htmlFor={id} className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+        {label}
+        {required && !readOnly ? <span className="text-destructive">*</span> : null}
+      </label>
+      {description ? <p id={descriptionId} className="text-xs leading-5 text-muted-foreground">{description}</p> : null}
+      {custom !== undefined ? custom : renderControl(value, setValue)}
     </div>
   );
 }

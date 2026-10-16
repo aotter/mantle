@@ -59,7 +59,7 @@ describe("sign-in", () => {
     }).catch(() => undefined);
     vi.stubGlobal("window", { location: { pathname: "/admin", search: "" } });
     const html = renderToStaticMarkup(createElement(QueryClientProvider, { client },
-      createElement(PreferencesProvider, { initialLanguage: readInitialLanguage() },
+      createElement(PreferencesProvider, { initialLanguage: "en" },
         createElement(AdminRouterProvider, null, createElement(AdminApp))),
     ));
     expect(html).toContain("User: MrCorn");

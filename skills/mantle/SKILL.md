@@ -89,7 +89,7 @@ Procedure fragments and generated checks. Ref operations retain typed `ctx.store
 at request time. Verify member/frontend and admin/Admin OTP, tenant/privacy/TTL,
 publishing, paging, statistics, exact OCC, ref effects and the actual console;
 never retry unknown 503 writes automatically. Read the installed Admin README
-for extensions, raw-body limits, CSP/assets, 22 languages and the developer workspace.
+for raw-body limits, CSP/assets, 22 languages and the developer workspace.
 Use only versions actually published, or the explicitly linked workspace packages.
 
 For generated native applications, optional site settings/media are selected

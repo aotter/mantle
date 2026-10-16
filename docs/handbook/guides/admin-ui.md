@@ -8,4 +8,4 @@ Admin Views provide custom read lists; their SELECT outputs, column lineage and 
 
 Generic publishing edits apply to drafts; publishing transitions retain their atomic guards and OCC. Read-only collections refuse generic edits while declared Procedures can still run. Ref operations receive the caller/transaction-bound Store.
 
-Use [extensions](admin-extensions.md) for app-owned pages, actions, panels or field renderers. Keep exact conflict/uncertain-outcome handling in the shared UI controller.
+Use [`defineAdmin` components](native-admin.md#customising-admin) for app-owned cells, inputs, record asides and actions; server work is a Procedure, a View or an application route. Keep exact conflict/uncertain-outcome handling in the shared UI controller.

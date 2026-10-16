@@ -5,6 +5,7 @@ import {
   BookOpenText,
   Database,
   Folder,
+  FileText,
   Globe,
   Home,
   Images,
@@ -14,7 +15,6 @@ import {
   ContactRound,
   Users,
   Workflow,
-  Puzzle,
 } from "lucide-react";
 
 import { SidebarInset, SidebarProvider } from "@aotter/mantle-ui/kit";
@@ -46,6 +46,10 @@ import { SkipToMain } from "./skip-to-main";
 import { statusLabel } from "../features/content/status";
 import { t } from "../app/i18n";
 import { FormActionBarHostContext } from "../ui/page";
+import { Slot } from "../app/slots";
+import { useProjectNav, type ProjectNav } from "../app/project-nav";
+import type { ShellProps } from "../app/slot-props";
+import { ShellContext, type ShellContextValue } from "./shell-context";
 import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
 
 interface AuthenticatedLayoutProps {
@@ -53,14 +57,14 @@ interface AuthenticatedLayoutProps {
   workspace?: "content" | "developer";
 }
 
+/**
+ * The frame of every page. The content workspace goes through the `Shell` slot; the developer workspace (`/admin/dev`)
+ * is Admin's own tool and stays fixed.
+ */
 export function AuthenticatedLayout({
   children,
   workspace = "content",
 }: AuthenticatedLayoutProps): React.ReactElement {
-  const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
-  const [pageHeaderActionsHost, setPageHeaderActionsHost] = React.useState<HTMLDivElement | null>(null);
-  const { pathname, search } = useAdminLocation();
-  const fullBleed = workspace === "developer" && pathname.startsWith("/admin/dev");
   const { language } = usePreferences();
 
   const me = useQuery<AdminUser>({
@@ -115,6 +119,7 @@ export function AuthenticatedLayout({
   );
 
   const canonical = site.data?.canonicalLocale ?? null;
+  const projectNav = useProjectNav();
   const groups = React.useMemo<ReadonlyArray<NavGroupData>>(
     () => workspace === "developer"
       ? buildDeveloperNavGroups(language)
@@ -127,11 +132,31 @@ export function AuthenticatedLayout({
           (operationsQuery.data ?? []).some((operation) =>
             (operation.interactions ?? []).length === 0 && !operation.uiSchema?.["collectionAction"]),
           site.data?.capabilities,
-          site.data?.extensions,
-          site.data?.navGroups,
+          projectNav,
         ),
-    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.admin, workspace, site.data?.capabilities, site.data?.extensions, site.data?.navGroups],
+    [projectNav, collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.admin, workspace, site.data?.capabilities],
   );
+  return workspace === "developer"
+    ? <ShellFrame workspace="developer" nav={groups} brand={resolvedBrand}>{children}</ShellFrame>
+    : <Slot name="Shell" Default={ShellFrame} props={{ children, nav: groups, brand: resolvedBrand }} />;
+}
+
+/** Admin's own shell: sidebar, header, the routed `children` and the status bar. */
+function ShellFrame({ children, nav, brand, workspace = "content" }: ShellProps & { workspace?: "content" | "developer" }): React.ReactElement {
+  const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
+  const [pageHeaderActionsHost, setPageHeaderActionsHost] = React.useState<HTMLDivElement | null>(null);
+  const { pathname } = useAdminLocation();
+  const fullBleed = workspace === "developer" && pathname.startsWith("/admin/dev");
+  const { language } = usePreferences();
+  const me = useQuery<AdminUser>({ queryKey: ["me"], queryFn: () => api.get<AdminUser>("/me"), retry: false });
+  const site = useQuery<SiteInfo>({ queryKey: ["site"], queryFn: () => api.get<SiteInfo>("/site") });
+  const collectionsQuery = useQuery<Collection[]>({
+    queryKey: ["collections"],
+    queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
+    enabled: workspace === "content",
+  });
+  const viewsQuery = useQuery<ViewManifestInfo[]>({ ...viewsManifestQueryOptions(), enabled: workspace === "content" });
+  const canonical = site.data?.canonicalLocale ?? null;
   const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
   const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
   const resource = collectionName
@@ -140,35 +165,26 @@ export function AuthenticatedLayout({
   const pageTitle = resource
     ? resolveLocalizedText(resource.title, language, canonical) ?? fieldLabel(resource.name)
     : undefined;
+  const shell = React.useMemo<ShellContextValue>(() => ({
+    brand,
+    publicUrl: site.data?.publicUrl,
+    actionsHostRef: setPageHeaderActionsHost,
+    user: { login: me.data?.login ?? null, image: me.data?.image ?? null, role: me.data?.role ?? null },
+    workspaceLink: workspace === "developer"
+      ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: LayoutDashboard }
+      : me.data?.admin === true
+      ? { href: "/admin/dev", label: t(language, "developer.workspaceTitle"), icon: Wrench }
+      : undefined,
+  }), [brand, site.data?.publicUrl, me.data?.login, me.data?.image, me.data?.role, me.data?.admin, workspace, language]);
   return (
+    <ShellContext.Provider value={shell}>
     <FormActionBarHostContext.Provider value={formActionBarHost}>
     <PageHeaderActionsHostContext.Provider value={pageHeaderActionsHost}>
       <SidebarProvider className="h-svh min-h-0 overflow-hidden">
         <SkipToMain />
-        <AppSidebar
-          brand={resolvedBrand}
-          groups={groups}
-          pathname={pathname === "/admin/dev" ? "/admin/dev/overview/flow" : pathname /* the workspace entry is the overview flow */}
-          search={search}
-          user={{
-            login: me.data?.login ?? null,
-            image: me.data?.image ?? null,
-            role: me.data?.role ?? null,
-          }}
-        />
+        {workspace === "developer" ? <AppSidebar brand={brand} groups={nav} /> : <Slot name="Sidebar" Default={AppSidebar} props={{ brand, groups: nav }} />}
         <SidebarInset className="min-h-0 overflow-hidden">
-          <Header
-            actionsHostRef={setPageHeaderActionsHost}
-            className="absolute inset-x-0 top-0 z-30"
-            site={resolvedBrand}
-            publicUrl={site.data?.publicUrl}
-            pageTitle={pageTitle}
-            workspaceLink={workspace === "developer"
-              ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: LayoutDashboard }
-              : me.data?.admin === true
-              ? { href: "/admin/dev", label: t(language, "developer.workspaceTitle"), icon: Wrench }
-              : undefined}
-          />
+          {workspace === "developer" ? <Header title={pageTitle} /> : <Slot name="Header" Default={Header} props={{ title: pageTitle }} />}
           <Main className={fullBleed
             ? "min-h-0 max-w-none overflow-hidden px-0 py-0 pt-14 pb-10 sm:px-0"
             : `min-h-0 overflow-y-auto overscroll-contain pt-20 ${workspace === "developer" ? "pb-14" : "pb-20"}`}>
@@ -201,6 +217,7 @@ export function AuthenticatedLayout({
       </SidebarProvider>
     </PageHeaderActionsHostContext.Provider>
     </FormActionBarHostContext.Provider>
+    </ShellContext.Provider>
   );
 }
 
@@ -210,6 +227,8 @@ function preferredAdminIcon(icons: readonly SiteIcon[] | undefined): string | un
     ?? icons?.[0]?.src;
 }
 
+const BUILT_IN_GROUPS: ReadonlySet<string> = new Set(["content", "operations", "reports", "more"]);
+
 export function buildNavGroups(
   collections: ReadonlyArray<Collection>,
   views: ReadonlyArray<ViewManifestInfo>,
@@ -218,10 +237,9 @@ export function buildNavGroups(
   admin: boolean,
   hasGlobalOperations = false,
   capabilities?: SiteInfo["capabilities"],
-  extensions?: SiteInfo["extensions"],
-  navGroups?: SiteInfo["navGroups"],
+  project?: ProjectNav,
 ): ReadonlyArray<NavGroupData> {
-  // Sidebar placement (`uiSchema.nav` and navGroups): presentation only, so the server's visibility filtering stands.
+  // Sidebar placement (`uiSchema.nav` and `defineAdmin`'s `nav`): presentation only, so the server's visibility filtering stands.
   // Without any placement this yields Admin's default groups: content, operations, reports, more.
   type Placed = { order: number | undefined; item: NavItem };
   const buckets = new Map<string, Placed[]>();
@@ -239,13 +257,19 @@ export function buildNavGroups(
       url: `/admin/views/${encodeURIComponent(v.name)}`,
     });
   }
-  // extension pages that ask for a place; settings pages sit with Admin's own settings in More
-  for (const extension of extensions ?? []) for (const page of extension.contributes?.pages ?? []) {
-    if (page.nav && page.nav.group !== "settings") place(page.nav.group, page.nav.order, {
-      title: resolveLocalizedText(page.title, language, canonical) ?? page.id,
-      url: `/admin/x/${encodeURIComponent(extension.id)}/${encodeURIComponent(page.id)}`,
-      icon: Puzzle,
+  // the application's own pages (`defineAdmin` `pages`) that ask for a place; the others keep their route
+  for (const page of project?.pages ?? []) {
+    if (page.nav) place(page.nav.group, page.nav.order, {
+      title: resolveLocalizedText(page.title, language, canonical) ?? page.path,
+      url: `/admin/p/${page.path}`,
+      icon: page.icon ?? FileText,
     });
+  }
+  // the application's own items (`defineAdmin` `nav.items`): only those whose collection or View this caller can see, which
+  // are the ones the server listed; a link shows nothing the target's own route would not
+  for (const item of project?.items ?? []) {
+    const link = projectNavLink(item, collections, views, language, canonical);
+    if (link) place(item.group, item.order, link);
   }
   // within a group: ordered entries first by order, then the rest in Admin's order (a stable sort)
   const itemsOf = (group: string) => (buckets.get(group) ?? []).sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity)).map((p) => p.item);
@@ -254,8 +278,16 @@ export function buildNavGroups(
     { id: "content", title: t(language, "nav.content"), order: 10 },
     { id: "operations", title: t(language, "nav.operations"), order: 20 },
     { id: "reports", title: t(language, "nav.reports"), order: 30 },
-    ...(navGroups ?? []).map((g) => ({ id: g.id, title: resolveLocalizedText(g.title, language, canonical) ?? g.id, order: g.order ?? 50 })),
-  ].sort((a, b) => a.order - b.order);
+  ];
+  // the project's groups (`defineAdmin` `nav.groups`)
+  for (const [id, g] of Object.entries(project?.groups ?? {})) {
+    if (BUILT_IN_GROUPS.has(id)) continue; // Admin's own groups are not redeclared (`tsc` refuses it; a zero-config entry has none)
+    const next = { id, title: resolveLocalizedText(g.title, language, canonical) ?? id, order: g.order ?? 50 };
+    titled.push(next);
+  }
+  // a group nobody declared (a zero-config entry has no `tsc` to refuse it) still shows its items, titled by its id
+  for (const id of buckets.keys()) if (id !== "more" && !titled.some((t) => t.id === id)) titled.push({ id, title: fieldLabel(id), order: 50 });
+  titled.sort((a, b) => a.order - b.order);
   const homeGroup: NavGroupData = {
     items: [
       {
@@ -289,19 +321,6 @@ export function buildNavGroups(
             { title: t(language, "nav.admin"), url: "/admin/admin", icon: Users },
           ]
         : []),
-      // extension settings and settings pages (ADR-lite 1376) next to Admin's own settings, already filtered to this
-      // admin member's role by the server; a stable sort keeps declaration order within one order
-      ...(extensions ?? []).flatMap((extension) => [
-        ...(extension.contributes?.pages ?? []).filter((p) => p.nav?.group === "settings").map((p) => ({ ...p, order: p.nav!.order ?? 0 })),
-        ...(extension.contributes?.settings ?? []).map((s) => ({ ...s, order: 0 })),
-      ].map((c) => ({
-        order: c.order,
-        title: resolveLocalizedText(c.title, language, canonical) ?? c.id,
-        url: `/admin/x/${encodeURIComponent(extension.id)}/${encodeURIComponent(c.id)}`,
-        icon: SettingsIcon,
-      })))
-        .sort((a, b) => a.order - b.order)
-        .map(({ order: _order, ...item }) => item),
       ...itemsOf("more"),
     ],
   };
@@ -311,6 +330,24 @@ export function buildNavGroups(
     ...placedGroups,
     ...(moreGroup.items.length > 0 ? [moreGroup] : []),
   ];
+}
+
+/** The sidebar link of an application item, or null when the caller cannot see its collection or View (the server lists only those it may read). */
+function projectNavLink(item: ProjectNav["items"][number], collections: ReadonlyArray<Collection>, views: ReadonlyArray<ViewManifestInfo>, language: AdminLanguage, canonical: string | null): NavLink | null {
+  const scalars = (values: object | undefined) => Object.entries(values ?? {}).flatMap(([k, v]) => typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? [[k, String(v)] as [string, string]] : []);
+  const title = (name: string) => resolveLocalizedText(item.title, language, canonical) ?? fieldLabel(name);
+  if ("collection" in item.to) {
+    const { collection: name, filter } = item.to;
+    const found = collections.find((c) => c.name === name);
+    if (!found) return null;
+    const [field] = scalars(filter);
+    const query = field ? `?filter_field=${encodeURIComponent(field[0])}&filter_value=${encodeURIComponent(field[1])}` : "";
+    return { title: title(name), icon: item.icon ?? Folder, url: `/admin/c/${encodeURIComponent(name)}${query}`, ...(item.badge ? { badge: item.badge } : {}) };
+  }
+  const { view: name, input } = item.to;
+  if (!views.some((v) => v.name === name)) return null;
+  const query = new URLSearchParams(scalars(input)).toString();
+  return { title: title(name), icon: item.icon ?? BarChart3, url: `/admin/views/${encodeURIComponent(name)}${query ? `?${query}` : ""}`, ...(item.badge ? { badge: item.badge } : {}) };
 }
 
 export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<NavGroupData> {

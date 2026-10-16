@@ -62,9 +62,7 @@ export function FormActionBar({
   children: React.ReactNode;
 }): React.ReactElement {
   const host = React.useContext(FormActionBarHostContext);
-  if (!host) return <></>;
-
-  return createPortal(
+  const bar = (
     <div
       data-slot="form-action-bar"
       className="flex w-full flex-wrap items-center justify-between gap-3"
@@ -73,9 +71,10 @@ export function FormActionBar({
         {status}
       </div>
       <div className="ms-auto flex shrink-0 items-center gap-2">{children}</div>
-    </div>,
-    host,
+    </div>
   );
+  // a replacement `Shell` has no status bar to host it: the bar stays in the page, so Save is never lost
+  return host ? createPortal(bar, host) : bar;
 }
 
 export function EmptyState({

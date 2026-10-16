@@ -25,7 +25,7 @@ spec:
   title: Purchase requests
   lifecycle: operational
   indexes: [[authorId, createdAt, id], [requestStatus, createdAt, id]]
-  # Sidebar: in the Approvals group (src/admin.ts), after the queue of requests waiting for a decision.
+  # Sidebar: in the Approvals group (src/admin.tsx), after the queue of requests waiting for a decision.
   uiSchema: { list: { primaryField: title, columns: [department, amount, requestStatus], filterField: requestStatus }, nav: { group: approvals, order: 2 } }
   schema:
     type: object

@@ -59,7 +59,7 @@ try {
   const script = /<script type="module" crossorigin src="([^"]+)"/.exec(html)?.[1];
   const style = /<link rel="stylesheet" crossorigin href="([^"]+)"/.exec(html)?.[1];
   if (!script || !style) throw new Error(`no entry script or stylesheet in the shell:\n${html.slice(0, 500)}`);
-  for (const path of [script, style, "preview.html", "host-bridge.js", "theme.js", "shared/kit.js"]) await expect200(path);
+  for (const path of [script, style, "preview.html", "host-bridge.js", "theme.js"]) await expect200(path);
   console.log("ok - built with npm ci --ignore-scripts; Worker and Admin served without node_modules");
 } catch (error) {
   console.error(logs.slice(-4000));

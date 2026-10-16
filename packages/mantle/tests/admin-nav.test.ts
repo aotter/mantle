@@ -2,29 +2,37 @@ import { test, expect } from "bun:test";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 const schema = (name: string, nav?: object) => JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind: "Schema", metadata: { name }, spec: { title: name, lifecycle: "operational", ...(nav ? { uiSchema: { nav } } : {}), schema: { type: "object", readOnly: true, required: ["label"], properties: { label: { type: "string" } } } } });
 const view = (name: string, nav?: object) => JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind: "View", metadata: { name }, spec: { surface: "admin", sql: "SELECT id, label FROM quotes ORDER BY id", ...(nav ? { uiSchema: { nav } } : {}) } });
-const run = (docs: string[], navGroups?: unknown, adminExtensions: unknown[] = []) =>
-  generateFromSources({ target: "bun-sqlite", admin: true, sources: { sources: [{ sourceId: "a.yaml", text: docs.join("\n---\n") }] }, navGroups: navGroups as never, adminExtensions: adminExtensions as never });
+const run = (docs: string[]) =>
+  generateFromSources({ target: "bun-sqlite", admin: true, sources: { sources: [{ sourceId: "a.yaml", text: docs.join("\n---\n") }] } });
 const codes = (r: Awaited<ReturnType<typeof run>>) => r.ok ? [] : r.diagnostics.map(d => `${d.code} ${d.path}`);
 
-test("uiSchema.nav places Schemas and admin Views in built-in or declared groups; Admin metadata carries them", async () => {
-  const ok = await run([schema("quotes", { group: "sales", order: 2 }), schema("audit", { hidden: true }), schema("customers", { group: "operations", order: 1 }), view("pipeline", { group: "sales", order: 1 })], [{ id: "sales", title: { en: "Sales", "zh-TW": "業務" }, order: 5 }]);
+test("uiSchema.nav places Schemas and admin Views in built-in or project groups; Admin metadata carries the placement, not the groups", async () => {
+  const ok = await run([schema("quotes", { group: "sales", order: 2 }), schema("audit", { hidden: true }), schema("customers", { group: "operations", order: 1 }), view("pipeline", { group: "sales", order: 1 })]);
   if (!ok.ok) throw Error(JSON.stringify(ok.diagnostics));
   const metadata = ok.files["admin-descriptors.ts"]!;
-  expect(metadata).toContain('export const navGroups = [{"id":"sales"');
   expect(metadata).toContain('"nav":{"group":"sales","order":1}');
-  expect(metadata).toMatch(/export const bootstrap = \{[^}]*navGroups/);
+  // project groups are declared in defineAdmin (typed by admin-client.ts), no longer by a generate-time module
+  expect(metadata).not.toContain("navGroups");
 });
 
-test("generate refuses unknown groups, bad placement values and bad navGroups", async () => {
-  expect(codes(await run([schema("quotes", { group: "sales" })]))).toEqual(["SCHEMA_UI_INVALID schemas/quotes/uiSchema/nav/group"]);
-  expect(codes(await run([schema("quotes"), view("pipeline", { group: "sales" })]))).toEqual(["SCHEMA_UI_INVALID views/pipeline/uiSchema/nav/group"]);
+test("a group defineAdmin does not declare is checked by tsc, not by generate: admin-client.ts types the groups defineAdmin must declare", async () => {
+  const client = async (docs: string[]) => {
+    const r = await run(docs);
+    if (!r.ok) throw Error(JSON.stringify(r.diagnostics));
+    return r.files["admin-client.ts"]!;
+  };
+  const undeclared = await client([schema("quotes", { group: "sales" }), view("pipeline", { group: "approvals" }), schema("audit", { group: "operations" })]);
+  expect(undeclared).toContain('export type ManifestNavGroup = "approvals" | "operations" | "sales";');
+  expect(undeclared).toContain('readonly navGroups: "approvals" | "sales";');
+  expect(undeclared).not.toContain("requiredNavGroups");
+  const none = await client([schema("quotes", { group: "reports" })]);
+  expect(none).toContain('export type ManifestNavGroup = "reports";');
+  expect(none).toContain("readonly navGroups: never;");
+});
+
+test("generate refuses bad placement values", async () => {
   for (const nav of [{ order: 1.5 }, { hidden: "yes" }, { group: "Sales" }, { colour: "red" }]) expect((await run([schema("quotes", nav)])).ok).toBe(false);
   expect((await run([schema("quotes"), view("pipeline", { order: "1" })])).ok).toBe(false);
-  expect(codes(await run([schema("quotes")], [{ id: "sales", title: "Sales" }, { id: "sales", title: "Again" }, { id: "content", title: "Mine" }, { id: "x", title: "" }]))).toEqual([
-    "SCHEMA_UI_INVALID admin/navGroups/1/id", "SCHEMA_UI_INVALID admin/navGroups/2/id", "SCHEMA_UI_INVALID admin/navGroups/3/title"]);
-  const page = (group: string) => [{ id: "tools", contributes: { pages: [{ id: "browser", title: "Browser", role: "admin", nav: { group } }] } }];
-  expect(codes(await run([schema("quotes")], [], page("sales")))).toEqual(["UI_EXTENSION_INVALID admin/extensions/tools/pages/browser/nav/group"]);
-  for (const group of ["more", "settings", "reports"]) expect((await run([schema("quotes")], [], page(group))).ok).toBe(true);
 });
 
 const doc = (name: string, spec: object) => JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind: "Schema", metadata: { name }, spec });
@@ -51,21 +59,6 @@ test("a child folded by a unique-field reference is not told to use standalone, 
   expect((await run([quotes, byCode({ standalone: true })])).ok).toBe(false);
 });
 
-test("generate reports a non-object navGroups entry instead of throwing", async () => {
-  expect(codes(await run([schema("quotes")], [null, 1]))).toEqual(["SCHEMA_UI_INVALID admin/navGroups/0", "SCHEMA_UI_INVALID admin/navGroups/1"]);
-});
-
-test("generate refuses a non-integer extension page order", async () => {
-  for (const group of ["more", "settings"]) expect(codes(await run([schema("quotes")], [], [{ id: "tools", contributes: { pages: [{ id: "browser", title: "Browser", role: "admin", nav: { group, order: 1.5 } }] } }])))
-    .toEqual(["UI_EXTENSION_INVALID admin/extensions/tools/pages/browser/nav/order"]);
-});
-
-test("generate refuses an extension page nav that is not an object with a string group", async () => {
-  const page = (nav: unknown) => [{ id: "tools", contributes: { pages: [{ id: "browser", title: "Browser", role: "admin", nav }] } }];
-  for (const nav of [{}, { order: 1 }, "more", null, [], { group: 1 }]) expect(codes(await run([schema("quotes")], [], page(nav)))).toEqual(["UI_EXTENSION_INVALID admin/extensions/tools/pages/browser/nav"]);
-  expect((await run([schema("quotes")], [], page(undefined))).ok).toBe(true);
-});
-
 // #1667: two required id references are ambiguous; nav.parentField chooses the fold parent on its own
 const twoRefs = (nav?: object, extra: object = {}) => doc("lines", { title: "Lines", lifecycle: "operational", ...(nav ? { uiSchema: { nav } } : {}), schema: { type: "object", required: ["quoteId", "customerId", ...Object.keys(extra)], properties: { quoteId: { type: "string", "x-mantle-ref": "quotes" }, customerId: { type: "string", "x-mantle-ref": "customers" }, ...extra } } });
 const parentOf = (r: Awaited<ReturnType<typeof run>>) => {
@@ -84,6 +77,16 @@ test("generate refuses a Schema with two required id references and no nav.paren
   const standalone = await run([schema("quotes"), schema("customers"), twoRefs({ standalone: true })]);
   expect(codes(standalone)).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
   expect(standalone.ok ? "" : standalone.diagnostics[0]!.message).toContain("nav: { parentField: quoteId }");
+});
+
+test("the ambiguity diagnostic only suggests a line that passes the cycle check", async () => {
+  const folders = (nav?: object) => doc("folders", { title: "Folders", lifecycle: "operational", ...(nav ? { uiSchema: { nav } } : {}), schema: { type: "object", required: ["parentId", "driveId"], properties: { parentId: { type: "string", "x-mantle-ref": "folders" }, driveId: { type: "string", "x-mantle-ref": "drives" } } } });
+  const r = await run([schema("drives"), folders()]);
+  const message = r.ok ? "" : r.diagnostics[0]!.message;
+  expect(codes(r)).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+  expect(message).toContain("nav: { parentField: driveId }");
+  expect(message).not.toContain("parentField: parentId }");
+  expect((await run([schema("drives"), folders({ parentField: "driveId" })])).ok).toBe(true);
 });
 
 test("nav.parentField without standalone chooses the fold parent; the Schema stays folded", async () => {

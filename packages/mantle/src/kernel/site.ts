@@ -23,10 +23,10 @@ export function createSite(db: MediaDatabase, d: Pick<Dialect,"param"|"escapeLik
   }, media(storage) { admin(); return mediaLibrary(db,d,storage,policies); } };
 }
 
-/** 0.2 /admin/api/site projection; the app supplies its selected capabilities and extensions. */
-export function siteInfo(config: SiteConfig, options: {origin:string;media?:boolean;invitationEmail?:boolean;mcpEndpoints?:{public?:string|null;admin?:string|null};extensions?:readonly unknown[];siteSettings?:boolean}) {
+/** 0.2 /admin/api/site projection; the app supplies its selected capabilities. */
+export function siteInfo(config: SiteConfig, options: {origin:string;media?:boolean;invitationEmail?:boolean;mcpEndpoints?:{public?:string|null;admin?:string|null};siteSettings?:boolean}) {
   const {origin,...stored}=config;
   const publicUrl=URL.canParse(origin) ? origin : options.origin;
   const at=(path:string|null|undefined)=>path ? new URL(path,publicUrl).href : null;
-  return {...stored,publicUrl,mcpEndpoints:{public:at(options.mcpEndpoints?.public),admin:at(options.mcpEndpoints?.admin)},capabilities:{siteSettings:options.siteSettings??true,media:!!options.media,invitationEmail:!!options.invitationEmail,statistics:false},extensions:options.extensions??[]};
+  return {...stored,publicUrl,mcpEndpoints:{public:at(options.mcpEndpoints?.public),admin:at(options.mcpEndpoints?.admin)},capabilities:{siteSettings:options.siteSettings??true,media:!!options.media,invitationEmail:!!options.invitationEmail,statistics:false}};
 }

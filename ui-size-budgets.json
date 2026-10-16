@@ -1,8 +1,8 @@
 {
-  "mantle-ui:packed": 69761,
-  "mantle-ui:unpacked": 315186,
-  "mantle-admin:packed": 996447,
-  "mantle-admin:unpacked": 3511386,
+  "mantle-ui:packed": 70050,
+  "mantle-ui:unpacked": 316354,
+  "mantle-admin:packed": 397425,
+  "mantle-admin:unpacked": 1387407,
   "admin:entry-gzip": 247910,
-  "admin:mcp-html": 434838
+  "admin:mcp-html": 440620
 }

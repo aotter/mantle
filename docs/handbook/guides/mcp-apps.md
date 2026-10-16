@@ -22,7 +22,18 @@ HTML is reusable static content; caller-specific data comes from tool results.
 Build the front end with the official `@modelcontextprotocol/ext-apps` client.
 `renders` links tools to `_meta.ui.resourceUri`; `appOnly` adds
 `visibility: ["app"]`. Both name tools actually exposed on that endpoint.
-Resources may supply CSP, permissions and `prefersBorder`.
+Resources may supply CSP, permissions, `prefersBorder` and `domain`; each is
+passed through as the resource's `_meta.ui`. `domain` is the dedicated sandbox
+origin for hosts that serve each App from its own origin; use the form that
+host documents.
+
+An HTML loader receives `{ tools }`, the same tool names this caller's
+`tools/list` returns on the endpoint (with `authorize` configured, only those
+it allows), so the HTML it renders names no tool the caller cannot see. Zero-argument loaders keep
+working. `adminMcpApps` uses it: the catalogue it embeds holds only the Views
+and row actions in `tools`. A host that caches the resource across callers
+may hold an older catalogue; a View it does not describe still shows its rows,
+with no action to open.
 
 For static tool tables, construction checks contributors. Request-bound tool tables check on the first matching request and recheck changed tool names. Duplicate
 resource URIs or names, conflicting tool ownership, and absent or foreign-endpoint
@@ -42,3 +53,48 @@ Clients advertise `io.modelcontextprotocol/ui` and MIME type
 requests, in `params._meta["io.modelcontextprotocol/clientCapabilities"]`.
 An explicit capability declaration without UI support receives no UI resources, UI tool metadata or App-only tools. A stateless request with no capability declaration is treated as unknown and retains App support. Other tools retain their existing validation,
 authorization, caller, origin and database behavior.
+
+## The Admin App in a host
+
+The Admin App speaks MCP Apps `2026-01-26` to the host and asks only for what
+the host advertises in `hostCapabilities`:
+
+- Without `serverTools` it is read-only: rows show, no row action opens and no
+  list refresh is attempted.
+- `format: "uri"` values with an `http(s)` URL open through `ui/open-link`
+  when the host offers `openLinks`, and are plain text otherwise. The sandbox
+  blocks navigation, so the App never uses `window.open` or `target="_blank"`.
+- After a row action succeeds, `ui/update-model-context` tells the model the
+  tool, the row id and the outcome, for its next turn. The App never sends
+  `ui/message`, which would speak for the user.
+- It declares `availableDisplayModes: ["inline", "fullscreen"]` and offers a
+  full-screen toggle (`ui/request-display-mode`) when the host lists
+  `fullscreen` in its context.
+- `appInfo.version` is the `@aotter/mantle-admin` version.
+
+Host context is validated before it is applied. A presentational field the
+App cannot use (an unknown display mode, insets missing a side, a negative
+size) is dropped and the rest of the context still applies; display modes the
+App does not know are filtered out of `availableDisplayModes`. `locale` and
+`timeZone` format dates (an unknown zone falls back to the browser's);
+`safeAreaInsets` become root padding; `containerDimensions` bound the root: a
+fixed or maximum height scrolls, and the reported size stays within it.
+`theme: "dark"` sets both `data-theme` and the `.dark` class. Only the spec's
+style variables are applied. Neutral colors (background, text, border, ring,
+danger), `--font-sans`, `--font-mono`, font weights, text sizes and radii
+follow the host; the primary color stays the App's own.
+
+A View result carries its rows twice, as the JSON text block and as
+`structuredContent`. Hosts truncate long tool results (about 150k characters
+is reported for some), and a truncated text block is no longer JSON. So an MCP
+View page holds at most 100 rows: `limit` still accepts 1 to 500, and a
+`limit` from 101 to 500 returns 100 rows with the next cursor, as a View's own
+SQL `LIMIT` caps a page. The default is 50 rows. REST and native paging keep their 500-row limit.
+
+Checks against real hosts need an account and a public HTTPS endpoint, so
+they are manual: add the endpoint as a custom connector in each host, call a
+View tool with an App, and check light and dark themes, a narrow window,
+full screen, a row action, and a link. Check too that the host advertises
+`hostCapabilities.serverTools`; without it the App is read-only. The automated interoperability test
+uses the official `AppBridge` (`pnpm --filter @aotter/mantle-admin test:browser`).
+

@@ -59,10 +59,10 @@ authorizes.
    in order as a `renderDefault` chain. Slot names and props are versioned
    with the package.
 4. **Data.** Hooks (`useView`, `useEntries`, `useEntry`, `useOperation`,
-   `useCollectionTotal`, `useMe`) call only caller-authorized `/admin/api`
-   routes in the browser (decision 8 covers MCP hosts), each of which checks
-   the caller, and share Admin's query cache. Generated types bind names,
-   inputs and rows. Refusals read as unavailable.
+   `useCollectionTotal`, `useMe`, `useBadges`) call only caller-authorized
+   `/admin/api` routes in the browser (decision 8 covers MCP hosts), each of
+   which checks the caller, and share Admin's query cache. Generated types bind
+   names, inputs and rows. Refusals read as unavailable.
 5. **The manifest keeps data semantics;** only component references
    (`<extension>/<contribution>` widgets, `list.cells`, `panels`) are
    removed.

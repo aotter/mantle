@@ -8,7 +8,7 @@ const browser = ["admin/test/preview-boundary.test.ts", "admin/test/atom-graph-b
 const withBrowser = process.env.MANTLE_BROWSER_TESTS === "1";
 
 export default defineConfig({
-  // the Admin SPA's own `@/` alias (admin/vite.config.ts); nothing outside admin/ uses it
+  // the Admin SPA's own `@/` alias (vite.app.config.ts); nothing outside admin/ uses it
   resolve: { alias: { "@": resolve(import.meta.dirname, "admin/src") } },
   define: { __MANTLE_VERSION__: JSON.stringify("test") },
   test: {

@@ -2,8 +2,7 @@ import { sdkFixtureCaller as fixtureCaller } from "../../../mantle/tests/apps/fi
 import {test, expect} from "bun:test";
 import { admin as adminFunction, type Route, type Metadata} from "../../src/server/index.js";
 import {entries, type EntrySchema} from "../../src/server/entries.js";
-import {extensionOptions} from "../../src/server/extensions.js";
-import type {Caller} from "@aotter/mantle/contracts";
+import {ContractError, type Caller} from "@aotter/mantle/contracts";
 import type {NativeCollection,NativeProcedureAdapter} from "../../src/server/native.js";
 const mode={projection:"id, version, title",from:"FROM fixture",policy:"",binds:[],fields:{title:{column:"title",insert:"@value",update:"title=@value"}},create:{prefix:"create(",between:")(",suffix:")",columns:[],values:[],binds:[],returning:""},patch:{prefix:"patch ",sets:[],where:"",returning:"",binds:[{k:"input" as const,name:"id"},{k:"version" as const}]},remove:{sql:"remove",binds:[{k:"input" as const,name:"id"},{k:"version" as const}],row:true}};
 const compiled:NativeCollection={path:"admin/entries",marker:"@value",id:"id",cursorAliases:[{name:"_cursor0",sql:"_cursor0"},{name:"_cursor1",sql:"_cursor1"}],fields:{id:{expression:"id",value:"@value",wire:"id",kind:"text",nullable:false}},orderFields:["id"],caller:mode,trusted:mode,statistics:{time:"created_at",subtype:"NULL",rowsAlias:{name:"_statistics",sql:"_statistics"}}};
@@ -35,23 +34,10 @@ test("empty Schema declarations emit no entry routes and bootstrap does no row q
   expect(entries([],unused)).toEqual([]);
   const f=fixture();const result=await(await f.ask("/bootstrap"))?.json();expect(result.collections).toEqual([]);expect(result.webmcp).toEqual({tools:[],routes:{}});expect(result).not.toHaveProperty("entries");expect((await f.ask("/entries"))?.status).toBe(404);
 });
-test("raw extension APIs preserve Request identity, raw bytes and custom response/cache",async()=>{
-  let seen:Request|undefined;
-  const declaration={apiVersion:1 as const,id:"audit",title:"Audit",contributes:{}};
-  const ext={...declaration,bodyLimit:2000000,handlers:{api:async(request:Request,ctx:any)=>{seen=request;return new Response(await request.text(),{status:202,statusText:"Extension",headers:{"cache-control":"private,max-age=10","x-path":ctx.path}});}}};
-  const facets=extensionOptions([{id:"audit",declaration:JSON.stringify(declaration),public:declaration,source:false,settings:[],actions:[]}],{},[ext]);
-  const f=fixture(facets.routes);
-  const request=new Request("https://app.test/admin/api/x/audit/api/deep/more",{method:"PATCH",body:"not json",headers:{origin:"https://app.test"}});
-  const response=await f.fetch(request,{});expect(seen).toBe(request);expect(await response?.text()).toBe("not json");expect(response?.headers.get("x-path")).toBe("deep/more");expect(response?.statusText).toBe("Extension");expect(response?.headers.get("cache-control")).toBe("private,max-age=10");expect(f.resolves()).toBe(1);
-  const before=f.providers();expect((await f.ask("/x/audit/api/","PATCH","raw",{"content-length":"2000001"}))?.status).toBe(400);expect(f.providers()).toBe(before);
-});
-test("raw extension APIs keep the database lazy until the handler touches it",async()=>{
-  const declaration={apiVersion:1 as const,id:"lazy",title:"Lazy",contributes:{}};
-  const ext={...declaration,handlers:{api:async(request:Request,ctx:any)=>new Response(new URL(request.url).searchParams.has("db")?String(ctx.db&&ctx.extension):ctx.extension+":"+ctx.path)}};
-  const facets=extensionOptions([{id:"lazy",declaration:JSON.stringify(declaration),public:declaration,source:false,settings:[],actions:[]}],{},[ext]);
-  const f=fixture(facets.routes);
-  expect(await (await f.ask("/x/lazy/api/a/b"))?.text()).toBe("lazy:a/b");expect(f.providers()).toBe(0);
-  expect(await (await f.ask("/x/lazy/api/a?db=1"))?.text()).toBe("lazy");expect(f.providers()).toBe(1);
+test("site info carries no extension or navGroups fields",async()=>{
+  const f=fixture();
+  const site=await(await f.ask("/site"))?.json();
+  expect(site).toMatchObject({capabilities:expect.any(Object)});for(const removed of ["extensions","navGroups"])expect(site).not.toHaveProperty(removed);
 });
 test("generated Procedure callbacks retain native OCC locks, reject system fields and reuse RETURNING row",async()=>{
   const row={id:"a",version:"9007199254740993",created_at:"2026-01-01T00:00:00Z",updated_at:"2026-01-01T00:00:00Z",title:"old"};let reads=0,writes=0,lock:unknown;
@@ -73,24 +59,6 @@ test("creation statistics validates primary collection and presets before storag
   for(const path of ["/collections/missing/statistics","/collections/children/statistics"]){expect((await f.ask(path))?.status).toBe(404);}expect(f.providers()).toBe(0);expect(args).toHaveLength(0);
   for(const [range,duration,bucketMs]of[["1h",3600000,300000],["24h",86400000,3600000],["7d",604800000,21600000],["20d",1728000000,86400000]]as const){const response=await f.ask(`/collections/posts/statistics?range=${range}`),data=await response!.json();expect(data.to-data.from).toBe(duration);expect(data.bucketMs).toBe(bucketMs);expect(data.total).toBe(9);expect(data.buckets).toEqual([{bucket:0,subtype:null,count:2}]);expect(response?.headers.get("cache-control")).toBe("private, no-store");}
   expect(f.providers()).toBe(4);expect(args).toHaveLength(4);expect((await(await f.ask("/site"))?.json()).capabilities.statistics).toBe(true);
-});
-
-
-test("extension record action versions remain safe optional numbers before providers",async()=>{
-  let dispatches=0;
-  const declaration={apiVersion:1 as const,id:"versions",title:"Versions",contributes:{}};
-  const facets=extensionOptions([{id:"versions",declaration:JSON.stringify(declaration),public:declaration,source:false,settings:[],actions:[{id:"echo",target:"record/v1",schema:["notes"]}]}],{},[{...declaration,handlers:{actions:{echo:{run:(_caller,input,ctx)=>{dispatches++;void ctx.db;return input.record;}}}}}]);
-  const f=fixture(facets.routes);
-  for(const version of [Number.MAX_SAFE_INTEGER+1,"9007199254740993","1",1.5]){
-    const response=await f.ask("/x/versions/actions/echo","POST",JSON.stringify({record:{schema:"notes",id:"one",version}}));
-    expect(response?.status).toBe(400);expect(f.providers()).toBe(0);expect(dispatches).toBe(0);
-  }
-  for(const version of [undefined,0,-1,1,2,Number.MAX_SAFE_INTEGER]){
-    const record={schema:"notes",id:"one",...(version===undefined?{}:{version})};
-    const response=await f.ask("/x/versions/actions/echo","POST",JSON.stringify({record}));
-    expect(response?.status).toBe(200);expect((await response!.json()).result).toEqual(record);
-  }
-  expect(f.providers()).toBe(6);expect(dispatches).toBe(6);
 });
 
 test("developer View preview preserves caller and permission gates without acquiring DB for unavailable Views",async()=>{
@@ -194,4 +162,29 @@ test("entry editor and translation badges do not query denied related collection
   expect(editor.parentEntryId).toBeNull();expect(editor.related).toEqual([]);expect(reads).toBe(1);
   const list=await(await fetch(new Request("https://app.test/admin/api/entries?collection=posts"),{}))!.json();
   expect(list.items[0].translation_locales).toEqual([]);expect(reads).toBe(2);
+});
+
+test("view-batch runs each View as the caller; a refused, missing or authorize-denied View is the same unavailable and cannot fail the batch",async()=>{
+  const seen:string[]=[];
+  const view=(name:string,allows:(c:Caller)=>boolean,rows:Record<string,unknown>[]=[{count:3}]):any=>({name,allows,query:(p:URLSearchParams)=>({input:{},limit:Number(p.get("limit"))}),page:async(_db:unknown,c:Caller,_i:unknown,paging:{limit?:number})=>{seen.push(`${name}:${"subject" in c?c.subject:""}:${paging.limit}`);return {rows};},row:(r:Record<string,unknown>)=>({...r,count:Number(r.count)})});
+  const needsInput:any={...view("needs-input",()=>true),query:()=>{throw new ContractError("INPUT_VALIDATION_FAILED","Needs input.","views/needs-input");}};
+  // a refused View whose user binding would throw must still read as unavailable, never as an error
+  const refusedBound:any={...view("refused-bound",()=>false),check:()=>{throw new ContractError("HOST_CONTRACT","The target needs user field 'dept'.","",{status:412});}};
+  const views=[view("pending-count",()=>true,[{count:"3"}]),view("admins-only",()=>false),refusedBound,view("blocked",()=>true),needsInput];
+  const authorize:any=async(target:{name:string})=>target.name!=="blocked";
+  const build=(extra={})=>{let providers=0;const f=adminFunction(metadata,views,[],{db:()=>{providers++;return {};},caller:()=>admin,...extra});return {providers:()=>providers,ask:(names:string)=>f(new Request("https://app.test/admin/api/view-batch"+names,{headers:{origin:"https://app.test"}}),{})};};
+  const f=build(),res=await f.ask("?names=pending-count,admins-only,nope,needs-input,pending-count");
+  expect(res!.status).toBe(200);expect(res!.headers.get("cache-control")).toBe("private, no-store");
+  const body=await res!.json();
+  expect(body).toEqual({views:{"pending-count":{rows:[{count:3}]},"admins-only":{unavailable:true},nope:{unavailable:true},"needs-input":{error:true}}});
+  // one read per named View, one row each, as the caller
+  expect(seen).toEqual(["pending-count:a:1"]);
+  expect(JSON.stringify(body.views["admins-only"])).toBe(JSON.stringify(body.views.nope));
+  expect((await (await build().ask("?names=refused-bound,nope"))!.json()).views).toEqual({"refused-bound":{unavailable:true},nope:{unavailable:true}});
+  const denied=await build({authorize}).ask("?names=blocked,pending-count");
+  expect(await denied!.json()).toEqual({views:{blocked:{unavailable:true},"pending-count":{rows:[{count:3}]}}});
+  const many=build();
+  for(const names of ["","?names=","?names="+Array.from({length:21},(_,i)=>"v"+i).join(",")])expect((await many.ask(names))!.status).toBe(400);
+  expect(many.providers()).toBe(0);
+  expect((await many.ask("?names="+Array.from({length:20},(_,i)=>"v"+i).join(",")))!.status).toBe(200);
 });

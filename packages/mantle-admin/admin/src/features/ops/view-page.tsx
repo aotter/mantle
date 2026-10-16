@@ -1,5 +1,4 @@
 import * as React from "react";
-import { ExtensionCell } from "../extensions/extension-contributions";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Search } from "lucide-react";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
@@ -23,9 +22,9 @@ import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Badge } from "@aotter/mantle-ui/kit";
 import { SchemaFields } from "../content/entry-edit-view";
-import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
+import { withNativeSchema } from "../../lib/render-data-value";
+import { DataCell } from "../../ui/data-cell";
 import { enumOptions, optionLabel } from "../../lib/enum-options";
-import { IdValue, isIdField } from "../../ui/id-value";
 import { cn } from "../../lib/utils";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 import {
@@ -239,14 +238,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
                   const value = row[col];
                   return (
                     <TableCell key={col} className="text-muted-foreground">
-                      {/* an output that reads a Schema field matches a widget's `when` as that field */}
-                      <ExtensionCell schema={view?.columns?.[col]?.schema ?? ""} field={view?.columns?.[col]?.field ?? col} value={value}
-                        property={schema as Record<string, unknown> | undefined}
-                        cells={view?.list.cells?.[col] === undefined ? undefined : { [view?.columns?.[col]?.field ?? col]: view.list.cells[col] }}>
-                        {isIdField(col, schema) && typeof value === "string"
-                          ? <IdValue value={value} language={language} />
-                          : renderDataValue(schema, value, language, canonical)}
-                      </ExtensionCell>
+                      <DataCell names={[...(view?.columns?.[col] ? [`cell:${view.columns[col].schema}.${view.columns[col].field}`] : []), `cell:view:${name}.${col}`]} field={col} value={value} row={row} property={schema} />
                     </TableCell>
                   );
                 })}

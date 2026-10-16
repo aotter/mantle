@@ -1,12 +1,10 @@
 import { MutationCache, QueryClient } from "@tanstack/react-query";
 import { ApiError } from "../lib/api";
+import { invalidateAfterWrite } from "../lib/after-write";
 
 export const queryClient = new QueryClient({
   mutationCache: new MutationCache({
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["collection-statistics"] });
-      void queryClient.invalidateQueries({ queryKey: ["entries"] });
-    },
+    onSuccess: (): void => invalidateAfterWrite(queryClient),
   }),
   defaultOptions: {
     queries: {
@@ -31,3 +29,6 @@ for (const key of ["me", "site", "admin-webmcp"]) {
 }
 
 queryClient.setQueryDefaults(["entries"], { staleTime: 300_000 });
+
+// nav badges: fresh for 30 s, read again when the window regains focus, never polled
+queryClient.setQueryDefaults(["badges"], { staleTime: 30_000, refetchOnWindowFocus: true });

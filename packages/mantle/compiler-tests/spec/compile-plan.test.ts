@@ -158,14 +158,12 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
     expect(!bad.ok && bad.diagnostics.map((d) => [d.code, d.value])).toEqual([["VIEW_UI_INVALID", "body"], ["VIEW_UI_INVALID", "ownerId"]]);
   });
 
-  it("refuses a uiSchema.list.cells key the View's SELECT does not output (ADR-lite 1376)", async () => {
+  it("refuses uiSchema.list.cells: components are defineAdmin's, not the manifest's", async () => {
     const withCells = (cells: string) => SCHEMA + view("SELECT id, body AS text FROM notes ORDER BY id").replace("surface: admin,", `surface: admin, uiSchema: { list: { cells: { ${cells} } } },`);
-    expect((await compile(withCells("text: kit/preview"))).ok).toBe(true);
-    const bad = await compile(withCells("body: kit/preview"));
-    expect(!bad.ok && bad.diagnostics.map((d) => [d.code, d.value])).toEqual([["VIEW_UI_INVALID", "body"]]);
-    const shape = await compile(withCells("text: preview"));
-    expect(!shape.ok && shape.diagnostics[0]?.code).toBe("VIEW_UI_INVALID");
+    const bad = await compile(withCells("text: kit/preview"));
+    expect(!bad.ok && bad.diagnostics.map((d) => [d.code, d.path.endsWith("/spec/uiSchema/list/cells")])).toEqual([["VIEW_UI_INVALID", true]]);
   });
+
 });
 
 describe("a field with more than one JSON Schema type", () => {

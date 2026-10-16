@@ -2,7 +2,7 @@
 
 The SDK ships kernel, CLI, generator and private compiler together. Request modules do not import compiler code. Import only selected generated operations and bindings; direct operations can omit Store/Admin/auth entirely.
 
-Workers use `mantle bundle` to emit split ESM. Keep Better Auth behind `authLoader(() => import(...))`; the startup graph guard rejects eager auth imports. The official MCP SDK and selected Admin operations load on matching requests. Generated module imports perform no SQL or kernel initialization; Store metadata initializes on first use without SQL.
+Workers use `mantle bundle` to emit split ESM. Keep Better Auth behind `authLoader(() => import(...))`; the startup graph guard rejects eager auth imports, and Admin's browser code (`@aotter/mantle-admin/app`, `/hooks`, and so `generated/admin-client.ts`): import those only from `admin.tsx`, which `mantle bundle` builds into the assets directory. The official MCP SDK and selected Admin operations load on matching requests. Generated module imports perform no SQL or kernel initialization; Store metadata initializes on first use without SQL.
 
 Contributor checks use tracked fixtures to compare runtime/startup graphs against `size-budgets.json` and inspect the published allowlist in `check:package`. Package packed/unpacked bytes are reported separately from request startup and query costs. Do not infer latency from bundle bytes.
 

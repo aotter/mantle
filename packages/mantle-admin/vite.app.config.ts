@@ -21,7 +21,7 @@ export default defineConfig({
     emptyOutDir: true,
     copyPublicDir: false,
     lib: {
-      entry: { index: resolve(admin, "app/index.ts"), mount: resolve(admin, "app/mount.tsx"), "default-entry": resolve(admin, "default-entry.tsx") },
+      entry: { index: resolve(admin, "app/index.ts"), hooks: resolve(admin, "app/hooks.ts"), mount: resolve(admin, "app/mount.tsx"), "default-entry": resolve(admin, "default-entry.tsx") },
       formats: ["es"],
       fileName: (_format, name) => `${name}.js`,
     },
@@ -31,7 +31,7 @@ export default defineConfig({
 
 /**
  * The page template under `dist/admin-build`, which ships: shadcn's Tailwind stylesheet is inlined so the shadcn CLI
- * is not a dependency. `vite.shared.config.ts` and `vite.preview.config.ts` add their files to its `public/`.
+ * is not a dependency. `vite.preview.config.ts` adds its files to its `public/`.
  */
 function pageTemplate(): Plugin {
   return {
