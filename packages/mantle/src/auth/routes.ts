@@ -1,5 +1,6 @@
 /** Optional app-mounted auth routes; consent and raw admin routes resolve fresh authority. Better Auth owns tokens. */
-import { checkOrigin, draining, surfaceFailure, ContractError, type Caller } from "../kernel/contracts.js";
+import { checkOrigin, surfaceFailure, ContractError, type Caller } from "../kernel/contracts.js";
+import { draining } from "../kernel/drain.js";
 import { guardAuthAdminRequest } from "./admin.js";
 import { resolveCaller, type AuthInstance, type AuthLoader } from "./caller.js";
 import type { oauthConsents, OAuthConsentRequest, OAuthConsentInfo } from "./oauth.js";

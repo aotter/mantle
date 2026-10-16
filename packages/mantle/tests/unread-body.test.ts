@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
-import { ContractError, drainBody } from "../src/kernel/contracts.js";
+import { ContractError } from "../src/kernel/contracts.js";
+import { draining } from "../src/kernel/drain.js";
 import { nativeRest, type Route } from "../src/kernel/rest.js";
 import { mcp } from "../src/kernel/mcp.js";
 
@@ -28,13 +29,25 @@ test("a refused MCP request leaves no unread body", async () => {
   expect(denied.bodyUsed).toBe(true);
 });
 
-test("the drain is bounded and skips what the app already consumed", async () => {
+const answer = (request: Request) => draining(async (_request: Request) => new Response(null, { status: 401 }))(request);
+
+test("the drain is bounded in bytes and skips what the app already consumed", async () => {
   let pulled = 0;
   const stream = new ReadableStream<Uint8Array>({ pull(controller) { pulled++; controller.enqueue(new Uint8Array(600 * 1024)); } });
-  await drainBody(new Request("https://app.test/x", { method: "POST", body: stream, duplex: "half" } as RequestInit));
+  await answer(new Request("https://app.test/x", { method: "POST", body: stream, duplex: "half" } as RequestInit));
   expect(pulled).toBeLessThan(5);
   const used = post("/x");
   await used.text();
-  await drainBody(used);
-  await drainBody(new Request("https://app.test/x"));
+  expect((await answer(used)).status).toBe(401);
+  expect((await answer(new Request("https://app.test/x"))).status).toBe(401);
+});
+
+test("a stalled upload cannot withhold the answer, and a throwing handler still drains", async () => {
+  const stalled = new Request("https://app.test/x", { method: "POST", body: new ReadableStream<Uint8Array>({ pull: () => new Promise(() => {}) }), duplex: "half" } as RequestInit);
+  const started = Date.now();
+  expect((await answer(stalled)).status).toBe(401);
+  expect(Date.now() - started).toBeLessThan(3000);
+  const thrown = post("/x");
+  await expect(draining(async (_request: Request) => { throw new Error("boom"); })(thrown)).rejects.toThrow("boom");
+  expect(thrown.bodyUsed).toBe(true);
 });

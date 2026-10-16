@@ -1,6 +1,7 @@
 /** Route matching and caller enforcement load on the first request. */
-import { forwarded, draining, ContractError, checkOrigin, surfaceCaller, type Caller, type RequestContext } from "./contracts.js";
+import { forwarded, ContractError, checkOrigin, surfaceCaller, type Caller, type RequestContext } from "./contracts.js";
 import { decode, invalid } from "./surface.js";
+import { draining } from "./drain.js";
 import type { Options, Route } from "./rest.js";
 const isApi = (path: string): boolean => path === "/api" || path.startsWith("/api/");
 const fail: (message: string) => never = message => invalid(message, "rest");
