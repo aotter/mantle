@@ -346,12 +346,64 @@ loads the App under the spec's default CSP and fails on any network request, is
 the backstop at run time. `document.cookie` in Mantle's own library code (the kit's
 sidebar remembers its state in one) does not fail the build; in yours it does.
 
-`window.open` and `target="_blank"` in your own code only warn. The whole Admin
-entry graph is checked, not only the slots a host renders: the file holds every
-module your entry imports, so browser-only code (a `Shell`, a `Home`, a page)
-must avoid direct `/admin/api` fetches and cookies too. Read data through the
-hooks, which use the browser's route in the browser and the host's tools in a host. The build prints the
-App's size.
+`window.open` and `target="_blank"` in your own code only warn. The whole selected
+MCP entry graph is checked, not only the slots a host renders. By default it is
+the Admin entry, so browser-only code (a `Shell`, a `Home`, a page) imported there
+must avoid direct `/admin/api` fetches and cookies too. Shared components read
+through the hooks, which use the browser route in the browser and host tools in
+a host. For integrations that need browser APIs, select a separate entry below.
+The build prints the App's size.
+
+### Isolate browser-only integrations
+
+`pages[].mcp` opts a page into rendering; it does not remove other imports from
+the build. To isolate browser-only integrations, add `admin.mcp.tsx` beside the
+Worker entry and `admin.tsx`. `mantle bundle` discovers this optional file and
+uses it for `mcp-app.html`; the browser SPA and preview keep `admin.tsx`. With the
+build API, pass `buildAdmin({ entry: "src/admin.tsx", mcpEntry: "src/admin.mcp.tsx", outDir: "dist/client/admin" })`.
+Without the optional file/option, the shared-entry behavior is unchanged.
+
+Keep a single host-safe config and components module, composed through the same
+`defineAdmin` contract in both roots. For example, with an admin View `queue`:
+
+```tsx
+// src/admin-shared.tsx
+import type { AdminConfig } from "@aotter/mantle-admin/app";
+import type { AppAdminTypes } from "../generated/admin-client.js";
+import { QueuePage } from "./queue-page.js"; // native hooks, host-safe components
+import "./shared.css";
+export const shared = {
+  pages: [{ path: "queue", title: "Queue", element: <QueuePage />, mcp: { renders: "queue" } }],
+} satisfies AdminConfig<AppAdminTypes>;
+```
+
+```tsx
+// src/admin.tsx: only the browser root imports this integration
+import { defineAdmin } from "@aotter/mantle-admin/app";
+import { admin } from "../generated/admin-client.js";
+import { shared } from "./admin-shared.js";
+import { BrowserReport } from "./browser-report.js";
+export default defineAdmin(admin, {
+  ...shared,
+  pages: [...shared.pages, { path: "browser-report", title: "Browser report", element: <BrowserReport /> }],
+});
+```
+
+```tsx
+// src/admin.mcp.tsx: no import of admin.tsx or browser-report.js
+import { defineAdmin } from "@aotter/mantle-admin/app";
+import { admin } from "../generated/admin-client.js";
+import { shared } from "./admin-shared.js";
+export default defineAdmin(admin, shared);
+```
+
+Only code excluded from the MCP graph may use browser-only integrations. The
+selected MCP entry is still read in Node to obtain its definition: do not access
+`window` or `document` at module initialization there. An explicit entry that
+fails to load fails the build; it does not fall back to the browser entry.
+The MCP guard, declared CSP, catalogue, resource ownership and built-HTML cache
+identity apply to the selected graph exactly as before. Entry selection changes
+no server permissions and adds no provider or transport.
 
 ### Run the compatibility test
 
