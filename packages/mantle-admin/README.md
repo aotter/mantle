@@ -36,7 +36,7 @@ application installs `react` and `react-dom` at one identical exact version, and
 mismatch; the
 build needs no install scripts (`npm ci --ignore-scripts` works). A `package-lock.json` made on one OS can lack the native build binaries (rolldown, `@tailwindcss/oxide`, lightningcss) that npm installs per platform from `optionalDependencies`, so a lockfile made on macOS can fail the build on a Linux host; create the lockfile on the build platform or use pnpm.
 The build writes the shell, the preview
-document, `host-bridge.js` and hashed assets. The built directory never reads `node_modules`, but producing it does:
+document, `host-bridge.js` and hashed assets. Serving the built directory needs no `node_modules`; producing it does, and
 `wrangler dev` and `wrangler deploy` run the generated `build.command` (`mantle bundle`), so deploy before a pipeline removes `node_modules`.
 
 Serve that directory through an app-owned asset binding or reader at `/admin/`;

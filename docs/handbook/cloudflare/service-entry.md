@@ -76,7 +76,7 @@ export default {
           for (const cookie of headers.getSetCookie()) result.headers.append('set-cookie', cookie);
           return result;
         }
-        // Serves the built Admin shell for /admin and its client routes; null for any other path.
+        // Serves the built Admin shell for /admin and its client routes; undefined for any other path.
         const shell = await adminShell(request, path => env.ASSETS.fetch(new Request(new URL('/admin/' + path, request.url), request)));
         if (shell) return shell;
         // Your public frontend/web.ts routes can use an anonymous Caller without
@@ -98,7 +98,9 @@ current request's context; `authHardening` configures the background handler.
 Select `--admin` to emit `admin-bindings.ts`. Admin's API is a separate
 `@aotter/mantle-admin` package; the SDK never imports it. The API handles only
 `/admin/api`. `adminShell` (in the block above) serves the built shell for `/admin` and
-client routes, including `/admin/sign-in`, and preserves missing asset 404s; the app owns its CSP and cache headers.
+client routes, including `/admin/sign-in`; it sets `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `no-store` and `nosniff`
+on the shell, answers a missing file under `/admin` with a 404 `Response`, and returns `undefined` for other paths and
+non-GET requests. The app owns the rest of the CSP and the asset cache headers.
 Collection statistics use the generated shared `statisticsView`:
 its collection parameter selects only a generated table and visibility policy.
 

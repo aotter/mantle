@@ -17,12 +17,14 @@ installed, it is `node_modules/@aotter/mantle/docs/examples/app-shell/src/auth.t
 
 - Imports: `betterAuth` from `better-auth/minimal`; `admin`, `emailOTP` (and `jwt` for MCP) from `better-auth/plugins`;
   `createAccessControl` from `better-auth/plugins/access`; `defaultStatements` from `better-auth/plugins/admin/access`;
-  `d1Adapter` from `@aotter/mantle/auth/adapter`; the hardening and bootstrap helpers below.
+  `d1Adapter` from `@aotter/mantle/auth/adapter`; the hardening and bootstrap helpers below. For MCP it also imports `jwt`,
+  `mcp` from `@better-auth/mcp`, `cimd` from `@better-auth/cimd` and `oauthGrantExtension`/`oauthGrantRevocation` from
+  `@aotter/mantle/auth/oauth`; the file marks that block as deletable.
 - `authOptions(env)` returns plain options and is the module's export for `--auth src/auth.ts`. Generation calls it with an
   empty `env`, so it must not throw: fall back to placeholders for `secret` and origin there.
 - The bootstrap admin: `d1BootstrapAdmin(env.DB, { match: "email", value: env.ADMIN_EMAIL }, () => ({ options: { plugins } }))`
-  is the value of both `databaseHooks.user.create.after` and `databaseHooks.user.update.after` (see Identity helpers).
-- `createAuth(env)` is the same module's second export: it checks the secrets are set and returns
+  is assigned to `databaseHooks.user.create.after` and `.update.after` ([Identity helpers](#identity-helpers)).
+- `createAuth(env)` is the same module's second export: it checks its three variables are set and returns
   `betterAuth(authOptions(env))`. The Worker's `authLoader(() => import("./auth.js").then(m => m.createAuth(env)))`
   ([service composition](service-entry.md)) is what calls it.
 

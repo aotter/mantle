@@ -9,6 +9,10 @@ import { adminMcpApps } from '@aotter/mantle-admin/mcp';
 import { mcp } from './generated/mcp.js';
 import { mcpAppCatalogues } from './generated/admin-descriptors.js';
 
+declare const db: (env: Env) => D1Database; // as in service composition
+declare const caller: Parameters<typeof mcp>[0]['caller'];
+declare function loadAppHtml(): string;
+
 const app: McpApps = { resources: [{
   uri: 'ui://my-app/records', name: 'my-app-records',
   html: () => loadAppHtml(), renders: ['records'],
@@ -40,7 +44,7 @@ the resource across callers may hold an older catalogue; a View it does not
 describe still shows its rows, with no action to open.
 
 `adminMcpApps({ catalogue })` takes `mcpAppCatalogues.admin`, which `mantle generate --admin` writes to
-`generated/admin-descriptors.ts` (the `catalogue` option is that value as is). It needs no `html`: its default loader reads the file
+`generated/admin-descriptors.ts` (pass it as is). It needs no `html`: its default loader reads the file
 `mantle bundle` built, `/admin/mcp-app.html`, through `env.ASSETS.fetch` on a
 Worker, and from `dist/client/admin/mcp-app.html` on Bun (`file` names another
 path). The Worker's assets binding must be named `ASSETS` (otherwise pass `html`);
@@ -113,7 +117,7 @@ they are manual: add the endpoint as a custom connector in each host, call a
 View tool with an App, and check light and dark themes, a narrow window,
 full screen, a row action, and a link. Check too that the host advertises
 `hostCapabilities.serverTools`; without it the App is read-only. The automated interoperability test
-uses the official `AppBridge`; your app runs it as `node --test generated/admin-mcp-app.check.mjs` (see [Run the compatibility test](#run-the-compatibility-test)).
+uses the official `AppBridge`; your app runs its generated version ([Run the compatibility test](#run-the-compatibility-test)).
 
 
 ## Customising Admin for MCP hosts
