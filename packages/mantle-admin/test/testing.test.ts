@@ -20,7 +20,7 @@ const catalogue = {
 };
 
 /** An application whose `cell:view:pending.item` override is the body of `Cell`, beside a page for the `queue` View; returns the built file. */
-async function build(name: string, cell: string, options = ""): Promise<string> {
+async function build(name: string, cell: string, options = "", queue = 'function Queue() { const { rows } = useView("queue", {}); return <ul>{rows.map(row => <li key={String(row["id"])}>{String(row["id"])}</li>)}</ul>; }'): Promise<string> {
   const src = join(temp, name, "src");
   mkdirSync(src, { recursive: true });
   writeFileSync(join(src, "admin.tsx"), [
@@ -28,7 +28,7 @@ async function build(name: string, cell: string, options = ""): Promise<string> 
     `import { useView } from ${JSON.stringify(resolve(pkg, "dist/admin-app/hooks.js"))};`,
     'import { useEffect } from "react";',
     `function Cell({ value }: { value: unknown }) { ${cell} return <b>{String(value)}</b>; }`,
-    'function Queue() { const { rows } = useView("queue", {}); return <ul>{rows.map(row => <li key={String(row["id"])}>{String(row["id"])}</li>)}</ul>; }',
+    queue,
     'export default defineAdmin({}, { components: { "cell:view:pending.item": Cell }, pages: [{ path: "queue", title: "Queue", element: <Queue />, mcp: { renders: "queue" } }]' + options + ' });',
   ].join("\n"));
   const out = join(temp, name, "dist/client/admin");
@@ -72,6 +72,13 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
     const message = await attempt(await build("wildcard", cell, ', mcp: { csp: { resourceDomains: ["https://*.cdn.example.test"] } }'));
     expect(message).toContain("https://other.example.test/y.png");
     expect(message).not.toContain("a.cdn.example.test/x.png");
+  }, 180_000);
+
+  it("fails a page that suspends forever, and one that renders nothing: the full-screen toggle is not content", async () => {
+    const never = await attempt(await build("suspends", "", "", 'import { use } from "react"; const forever = new Promise<never>(() => undefined); function Queue() { use(forever); return <p>never</p>; }'));
+    expect(never).toContain("the App did not render the page");
+    const nothing = await attempt(await build("nothing", "", "", "function Queue() { void useView; return null; }"));
+    expect(nothing).toContain("the App did not render the page (the page is empty or missing)");
   }, 180_000);
 
   it("fails an App that never renders the View, saying so", async () => {

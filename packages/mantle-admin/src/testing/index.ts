@@ -86,14 +86,15 @@ export async function checkMcpApp({ catalogue, html: file = "dist/client/admin/m
   const csp = declaredMeta<McpCsp>(html, "mantle-mcp-csp") ?? {};
   // each View an override renders and each View a page is for; without a manifest (the application customised nothing, or the
   // file is from an older build) every View of the catalogue
-  const scenarios = new Map<string, string>();
+  // `rows`: the App's rows table must show; `page`: the application's page, which takes the View over
+  const scenarios = new Map<string, { label: string; shows: "rows" | "page" }>();
   for (const slot of manifest?.slots ?? []) {
     const match = /^cell:view:(.+)\.[^.]+$/.exec(slot);
-    if (match) scenarios.set(toolName(match[1]!), slot);
+    if (match) scenarios.set(toolName(match[1]!), { label: slot, shows: "rows" });
   }
-  for (const view of manifest?.pages ?? []) scenarios.set(toolName(view), `page for ${view}`);
-  if (!manifest) for (const tool of Object.keys(catalogue.views)) scenarios.set(tool, `View ${tool}`);
-  if (scenarios.size === 0) scenarios.set(Object.keys(catalogue.views)[0] ?? "view", "the App");
+  for (const view of manifest?.pages ?? []) scenarios.set(toolName(view), { label: `page for ${view}`, shows: "page" });
+  if (!manifest) for (const tool of Object.keys(catalogue.views)) scenarios.set(tool, { label: `View ${tool}`, shows: "rows" });
+  if (scenarios.size === 0) scenarios.set(Object.keys(catalogue.views)[0] ?? "view", { label: "the App", shows: "rows" });
   const rows: { [tool: string]: ReturnType<typeof rowsOf> } = Object.fromEntries(Object.entries(catalogue.views).map(([tool, view]) => [tool, rowsOf(view.columns)]));
   for (const tool of scenarios.keys()) rows[tool] ??= rowsOf(undefined);
 
@@ -106,7 +107,7 @@ export async function checkMcpApp({ catalogue, html: file = "dist/client/admin/m
   });
   const problems: string[] = [];
   try {
-    for (const [tool, label] of scenarios) for (const theme of ["light", "dark"] as const) {
+    for (const [tool, { label, shows }] of scenarios) for (const theme of ["light", "dark"] as const) {
       const where = `${label}, ${theme} host`;
       const context = await browser.newContext();
       const page = await context.newPage();
@@ -114,7 +115,6 @@ export async function checkMcpApp({ catalogue, html: file = "dist/client/admin/m
       const note = (problem: string) => { problems.push(`${where}: ${problem}`); last = Date.now(); };
       // the host page and the App come from two origins, as in a real host: the App cannot reach its parent
       await context.route("**/*", async (route: Route) => {
-        last = Date.now();
         const request = route.request(), url = request.url(), { origin, pathname } = new URL(url);
         if (origin === "https://host.test" && pathname === "/host.html") return route.fulfill({ contentType: "text/html", body: '<!doctype html><title>host</title><body><script src="/host.js"></script></body>' });
         if (origin === "https://host.test" && pathname === "/host.js") return route.fulfill({ contentType: "text/javascript", body: hostScript });
@@ -131,14 +131,20 @@ export async function checkMcpApp({ catalogue, html: file = "dist/client/admin/m
       await page.goto("https://host.test/host.html");
       const state = () => page.evaluate(() => (window as unknown as { host?: { state: { done: boolean; height: number }; errors: string[] } }).host ?? null);
       const frame = (): ReturnType<Page["frames"]>[number] | undefined => page.frames().find(each => each.url().startsWith("https://app.test/"));
-      // the result is delivered and the App shows something other than its waiting text
-      let shown = { text: "", dark: false };
+      // the result is delivered and the App shows the content: its rows table, or the application's page (not the full-screen toggle),
+      // and its waiting text is gone
+      let shown = { rows: false, page: false, waiting: true, dark: false };
       const started = Date.now();
       for (;;) {
-        const host = await state(), seen = await frame()?.evaluate(() => ({ text: document.getElementById("root")?.innerText ?? "", dark: document.documentElement.classList.contains("dark") })).catch(() => undefined);
+        const host = await state(), seen = await frame()?.evaluate(() => ({
+          rows: document.querySelector('[data-slot="app-rows"]') !== null,
+          page: (document.querySelector('[data-slot="app-page"]')?.children.length ?? 0) > 0,
+          waiting: /Waiting for results/.test(document.body.innerText),
+          dark: document.documentElement.classList.contains("dark"),
+        })).catch(() => undefined);
         if (seen) shown = seen;
-        if (host?.state.done && shown.text.trim() && !/^Waiting for results/.test(shown.text.trim())) break;
-        if (Date.now() - started > 10_000) { note(`the App did not render the View (it shows ${JSON.stringify(shown.text.trim().slice(0, 60))})`); break; }
+        if (host?.state.done && !shown.waiting && shown[shows]) break;
+        if (Date.now() - started > 10_000) { note(`the App did not render the ${shows === "page" ? "page" : "View's rows"} (${shown.waiting ? "it still shows its waiting text" : shows === "page" ? "the page is empty or missing" : "no rows table"})`); break; }
         await page.waitForTimeout(100);
       }
       if (theme === "dark" && !shown.dark) note("the App did not take the host's dark theme (no .dark on its root)");

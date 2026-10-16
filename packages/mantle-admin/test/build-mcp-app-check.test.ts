@@ -47,7 +47,7 @@ describe("the checks on the built MCP App", () => {
       const plain = app("unreadable", "export const Cell = () => <b>x</b>;");
       writeFileSync(plain.entry, `import { defineAdmin } from ${JSON.stringify(resolve(pkg, "dist/admin-app/index.js"))};\nconst where = window.location.href;\nexport default defineAdmin({}, { nav: { items: [] } });`);
       expect(await attempt(plain)).toBeUndefined();
-      expect(warn.mock.calls.map(call => String(call[0])).join("\n")).toMatch(/could not be run in Node to read mcp\.csp/);
+      expect(warn.mock.calls.map(call => String(call[0])).join("\n")).toMatch(/could not be run in Node to read its definition/);
       for (const [name, options] of [["csp", ', mcp: { csp: { resourceDomains: ["https://cdn.example.test"] } }'], ["components", ""]] as const) {
         const declares = app("unreadable-" + name, "export const Cell = () => <b>x</b>;", options);
         writeFileSync(declares.entry, "const where = window.location.href;\n" + readFileSync(declares.entry, "utf8"));

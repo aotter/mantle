@@ -164,7 +164,7 @@ export function MantleApp(props: {
     );
   }
   // the page reads its own data through the hooks, so a View's rows are not shown beside it
-  if (tool && props.pages && Object.prototype.hasOwnProperty.call(props.pages, tool)) return <>{props.pages[tool]}</>;
+  if (tool && props.pages && Object.prototype.hasOwnProperty.call(props.pages, tool)) return <div data-slot="app-page">{props.pages[tool]}</div>;
   const notice = stale ? <p role="status" className="text-destructive px-3 pt-3 text-sm">{labels.refreshFailed}</p> : null;
   if (rows.length === 0) return <>{notice}<p className="text-muted-foreground p-4 text-sm">{labels.nothing}</p></>;
   const columns = columnsOf(view, rows);

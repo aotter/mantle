@@ -101,14 +101,15 @@ async function buildMcpApp(entry: string | undefined, outDir: string): Promise<v
   const core = await adminCore(entry, true);
   const mount = resolve(dist, "admin-app/mcp-mount.js");
   const { csp, sources: slots, manifest, idle, problem } = await readDefinition(core);
+  const fix = "The entry is imported in Node to read its definition; code that touches window or document at import must move into components or effects.";
   if (problem) {
-    console.warn(`warning: Admin MCP App: ${entry ?? "the built-in entry"} ${problem}`);
+    console.warn(`warning: Admin MCP App: ${entry ?? "the built-in entry"} ${problem}. ${fix}`);
     // what the entry declares must not vanish because it could not be read: the CSP, the components and pages the compatibility test
     // is to run, the plugins that add components
     const declares = entry ? /\b(csp|components|plugins|pages|mcp)\s*:/.exec(readFileSync(entry, "utf8"))?.[1] : undefined;
-    if (entry && declares) throw new Error(`The Admin MCP App cannot be built: ${entry} declares ${declares}, but ${problem}\nSee ${GUIDE}.`);
+    if (entry && declares) throw new Error(`The Admin MCP App cannot be built: ${entry} declares ${declares}, but ${problem}. The build fails rather than drop it. ${fix}\nSee ${GUIDE}.`);
   }
-  for (const slot of idle) console.warn(`warning: Admin MCP App: ${slot} is not shown by the App yet: it renders cell:view: slots and pages[].mcp, so this override runs in the browser Admin only.`);
+  if (idle.length) console.warn(`warning: Admin MCP App: ${idle.join(", ")} ${idle.length === 1 ? "is" : "are"} not shown by the App yet (it renders cell:view: slots and pages[].mcp), so ${idle.length === 1 ? "this override runs" : "these overrides run"} in the browser Admin only.`);
   const invalid = cspProblems(csp);
   if (invalid.length) throw new Error(`The Admin MCP App cannot be built:\n${invalid.map(line => `  - ${line}`).join("\n")}\nSee ${GUIDE}.`);
   const sources: Source[] = [...slots];
@@ -184,7 +185,7 @@ async function readDefinition(core: Awaited<ReturnType<typeof adminCore>>): Prom
     const idle = slots.filter(slot => slot === "RecordView" || /^(?:cell:(?!view:)|input:|record\.aside:|record\.actions:)/.test(slot));
     return { ...(admin.mcp?.csp ? { csp: admin.mcp.csp } : {}), sources, manifest, idle };
   } catch (error) {
-    return { sources: [], idle: [], problem: `it could not be run in Node to read mcp.csp, so none is assumed: ${error instanceof Error ? error.message : String(error)}` };
+    return { sources: [], idle: [], problem: `it could not be run in Node to read its definition (mcp.csp, the slots and pages to test): ${error instanceof Error ? error.message : String(error)}` };
   }
 }
 
