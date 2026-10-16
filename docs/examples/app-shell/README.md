@@ -51,3 +51,36 @@ Search for `AGENT:` to find what an app must fill in.
 - `ADMIN_EMAIL`'s first verified sign-in becomes `admin` while no admin exists. The sign-in response may still show
   the previous role; `/admin/api/me` shows the current one.
 - Admin HTTP routes are listed in `docs/handbook/guides/native-admin.md`.
+
+### MCP acceptance
+
+Generation declares tools; the app owns whether and where a remote endpoint is mounted.
+In your `smoke.mjs`, reuse the generated static tool names rather than maintaining a second list:
+
+```js
+import assert from "node:assert/strict";
+import { assertMcpDiscovery, smoke } from "./smoke-kit.mjs";
+import { developerConsole } from "./generated/admin-descriptors.ts";
+
+await smoke(async ({ origin, owner, signIn, mcp }) => {
+  const cookie = await signIn(owner);
+  const tools = developerConsole.interfaces.callable.filter(tool => tool.surface === "admin");
+  await assertMcpDiscovery(`${origin}/mcp/admin`, { tools, headers: { cookie, origin } });
+  // Denial is a separate assertion, not successful discovery.
+  assert.equal((await mcp("/mcp/admin")).status, 401);
+});
+```
+
+Node 22.22+ can read this pure static
+TypeScript descriptor directly; no generated request handlers are executed to derive expected names.
+A TypeScript smoke scenario can instead import `tools` from generated `mcp.ts`.
+Explicitly select the permitted subset if the app narrows authorization, and include any app-composed tools.
+The assertion initializes MCP, forwards supplied identity/session headers, reads all tools/list pages,
+and compares exact names without calling business tools. JSON/SSE protocol failures, missing routes,
+unexpected/missing tools and repeated/excessive pagination fail; it never obtains credentials or mounts routes.
+
+This local cookie test does not prove OAuth Bearer or an external client's connection. Test those separately
+with supplied credentials and record their results. For each declared interface, the existing handoff/README/test
+report must say verified (command, identity and result), intentionally not exposed, or deferred/unverified with a
+reason. WebMCP-only applications remain valid; an interrupted preview must retain the remote acceptance item
+as deferred rather than silently claiming completion.

@@ -107,7 +107,7 @@ without asking the user to enumerate OTP, media, Admin or SEO. Defaults are
 acceptance requirements, not evidence that a missing renderer is implemented.
 Do not report a complete website with blocked required checks.
 
-Run the [local HTTP acceptance](references/local-testing.md) for handlers and websites; compilation does not execute their behavior.
+Run the [local HTTP acceptance](references/local-testing.md) for handlers and selected interfaces; compilation does not execute their behavior. Account for every declared interface as verified, intentionally not exposed, or deferred/unverified with a reason in the existing application handoff. An early preview may defer remote MCP; preserve that pending work. WebMCP, cookie-session discovery and OAuth Bearer/client integration are separate checks.
 
 ## Self-hosted deployment
 

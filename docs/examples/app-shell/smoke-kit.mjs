@@ -10,6 +10,60 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+/** Read-only remote acceptance. Pass generated tools filtered for this surface and the supplied test identity. */
+export async function assertMcpDiscovery(endpoint, { tools, headers = {} }) {
+  const expected = tools.map(tool => tool.name).sort();
+  assert.equal(new Set(expected).size, expected.length, "expected tools contain duplicate names");
+  const requestHeaders = new Headers(headers);
+  requestHeaders.set("content-type", "application/json");
+  requestHeaders.set("accept", "application/json, text/event-stream");
+  let id = 0;
+  const rpc = async (method, params, notification = false) => {
+    const message = { jsonrpc: "2.0", ...(notification ? {} : { id: ++id }), method, ...(params === undefined ? {} : { params }) };
+    const response = await fetch(endpoint, { method: "POST", headers: requestHeaders, redirect: "error", signal: AbortSignal.timeout(10_000), body: JSON.stringify(message) });
+    assert.equal(response.status, notification ? 202 : 200, `MCP ${method}: HTTP ${response.status}`);
+    if (notification) { await response.body?.cancel(); return; }
+    const text = await response.text(), type = response.headers.get("content-type") ?? "";
+    let replies;
+    if (type.includes("text/event-stream")) {
+      replies = text.replace(/\r\n/g, "\n").split("\n\n").map(event => event.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n")).filter(Boolean).map(data => JSON.parse(data));
+    } else {
+      assert.ok(type.includes("application/json"), `MCP ${method}: expected JSON or SSE`);
+      replies = [JSON.parse(text)];
+    }
+    const matches = replies.filter(reply => reply?.id === message.id);
+    assert.equal(matches.length, 1, `MCP ${method}: expected one response with the request id`);
+    const reply = matches[0];
+    assert.equal(reply.jsonrpc, "2.0", `MCP ${method}: invalid JSON-RPC version`);
+    assert.ok(!Object.hasOwn(reply, "error"), `MCP ${method}: returned a JSON-RPC error`);
+    assert.ok(reply.result && typeof reply.result === "object" && !Array.isArray(reply.result), `MCP ${method}: missing result object`);
+    const session = response.headers.get("mcp-session-id");
+    if (session) requestHeaders.set("mcp-session-id", session);
+    return reply.result;
+  };
+  const initialized = await rpc("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "mantle-smoke", version: "1" } });
+  assert.equal(initialized.protocolVersion, "2025-11-25", "MCP initialize: unsupported protocol version");
+  assert.ok(initialized.capabilities?.tools && typeof initialized.capabilities.tools === "object" && !Array.isArray(initialized.capabilities.tools), "MCP initialize: no tools capability");
+  assert.ok(typeof initialized.serverInfo?.name === "string" && typeof initialized.serverInfo?.version === "string", "MCP initialize: invalid serverInfo");
+  requestHeaders.set("mcp-protocol-version", initialized.protocolVersion);
+  await rpc("notifications/initialized", undefined, true);
+  const names = [], cursors = new Set();
+  let cursor;
+  do {
+    assert.ok(cursors.size < 100, "MCP tools/list: exceeded 100 pages");
+    const page = await rpc("tools/list", cursor === undefined ? {} : { cursor });
+    assert.ok(Array.isArray(page.tools) && page.tools.every(tool => tool && typeof tool.name === "string" && tool.name.length > 0 && tool.inputSchema && typeof tool.inputSchema === "object" && !Array.isArray(tool.inputSchema) && tool.inputSchema.type === "object"), "MCP tools/list: invalid tools");
+    names.push(...page.tools.map(tool => tool.name));
+    cursor = page.nextCursor;
+    if (cursor !== undefined) {
+      assert.ok(typeof cursor === "string" && cursor.length > 0 && !cursors.has(cursor), "MCP tools/list: invalid or repeated cursor");
+      cursors.add(cursor);
+    }
+  } while (cursor !== undefined);
+  assert.deepEqual(names.sort(), expected, "MCP tools/list: discovered tools differ from the expected permitted tools");
+  return names;
+}
+
 const database = "mantle-app"; // wrangler.jsonc d1_databases[0].database_name
 const env = { ...process.env, WRANGLER_SEND_METRICS: "false" };
 
