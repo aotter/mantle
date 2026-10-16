@@ -1,15 +1,14 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { t } from "../../app/i18n";
 import { usePreferences } from "../../app/preferences";
 import { api } from "../../lib/api";
 import { entryLandingPath } from "../../lib/collection-nav";
 import { renderTitleText } from "../../lib/entry-title";
-import { entriesQueryArgsFromSearch, entriesQueryOptions, entriesQuerySearchParams } from "../../lib/queries";
+import { entriesQueryArgsFromSearch, entriesQueryOptions } from "../../lib/queries";
 import { renderDataValue } from "../../lib/render-data-value";
-import { useCursorPagination } from "../../lib/use-cursor-pagination";
-import type { Collection, DeveloperSchemaModel, DeveloperViewModel, ListEntriesResult } from "../../lib/types";
+import type { Collection, DeveloperSchemaModel, DeveloperViewModel } from "../../lib/types";
 import { EmptyState, ErrorBox, LoadMore } from "../../ui/page";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
@@ -40,18 +39,12 @@ export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): R
     queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
   });
   const collection = previewCollection(collections.data ?? [], model.name);
-  const queryArgs = entriesQueryArgsFromSearch(model.name, "");
-  const entries = useQuery({ ...entriesQueryOptions(queryArgs), enabled: !!collection, staleTime: 0 });
-  const pagination = useCursorPagination(entries.data, {
-    resetKey: model.name,
-    resetOnPageChange: true,
-    loadPage: (cursor) => api.get<ListEntriesResult>(`/entries?${entriesQuerySearchParams({ ...queryArgs, cursor })}`),
-  });
+  const entries = useInfiniteQuery({ ...entriesQueryOptions(entriesQueryArgsFromSearch(model.name, "")), enabled: !!collection, staleTime: 0 });
   if (collections.isLoading) return <Skeleton className="m-5 h-24 w-auto" />;
   if (collections.isError) return <div className="p-5"><ErrorBox error={collections.error} /></div>;
   if (!collection) return <p className="p-5 text-sm text-muted-foreground">{t(language, "model.liveDataUnavailable")}</p>;
 
-  const rows = pagination.items;
+  const rows = entries.data?.pages.flatMap((page) => page.items) ?? [];
   const fields = [...new Set(rows.flatMap((row) => Object.keys(row.data_preview ?? {})))];
   const base = `/admin/c/${encodeURIComponent(model.name)}`;
   return (
@@ -60,7 +53,7 @@ export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): R
         {entries.dataUpdatedAt ? <ObservedAt time={entries.dataUpdatedAt} /> : null}
         <a className="ms-auto text-sm font-medium text-primary underline-offset-4 hover:underline" href={base}>{t(language, "model.openFullPage")}</a>
       </div>
-      {entries.isError ? <ErrorBox error={entries.error} /> : null}
+      {entries.isError && !entries.data ? <ErrorBox error={entries.error} /> : null}
       {entries.isLoading ? <Skeleton className="h-28 w-full" /> : null}
       {entries.data && rows.length === 0 ? <EmptyState title={t(language, "collection.empty.title")} description={t(language, "collection.empty.all", { collection: model.name })} /> : null}
       {rows.length > 0 ? (
@@ -89,7 +82,7 @@ export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): R
           </Table>
         </div>
       ) : null}
-      <LoadMore pagination={pagination} language={language} />
+      <LoadMore query={entries} count={rows.length} language={language} />
     </div>
   );
 }

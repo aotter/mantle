@@ -110,6 +110,7 @@ it("loads the next page of a View through the host and appends its rows", async 
     expect(await app.getByText("Laptops").count()).toBe(1);
     expect(await page.evaluate(() => (window as any).host.calls)).toMatchObject([{ name: "pending", arguments: { limit: 1, cursor: "c2" } }]);
     expect(await app.getByRole("button", { name: "載入更多" }).count()).toBe(0);
+    expect(await app.locator("body").evaluate(() => document.activeElement === document.body)).toBe(false);
   } finally { await browser.close(); await server.close(); }
 }, 45_000);
 

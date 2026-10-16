@@ -1,11 +1,11 @@
 import * as React from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Search } from "lucide-react";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api, downloadAdminFile } from "../../lib/api";
-import { viewsManifestQueryOptions } from "../../lib/queries";
+import { pagedQueryOptions, viewsManifestQueryOptions } from "../../lib/queries";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, JsonSchema, SiteInfo, ViewManifestInfo } from "../../lib/types";
@@ -25,7 +25,6 @@ import { SchemaFields } from "../content/entry-edit-view";
 import { withNativeSchema } from "../../lib/render-data-value";
 import { DataCell } from "../../ui/data-cell";
 import { enumOptions, optionLabel } from "../../lib/enum-options";
-import { useCursorPagination } from "../../lib/use-cursor-pagination";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 
 const VIEW_PAGE_SIZE = 50;
@@ -96,20 +95,12 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   }, [view?.name, view?.input, location.search]);
   const canQuery = hasRequiredViewParams(view?.input, urlParams);
 
-  const fetchPage = (cursor?: string) => fetchView(name, { ...Object.fromEntries(urlParams), cursor, limit: VIEW_PAGE_SIZE });
-  const query = useQuery<ViewQueryResult>({
-    queryKey: ["view", name, location.search],
-    queryFn: () => fetchPage(),
+  const query = useInfiniteQuery({
+    ...pagedQueryOptions(["view", name, location.search], async (cursor) => {
+      const page = await fetchView(name, { ...Object.fromEntries(urlParams), cursor, limit: VIEW_PAGE_SIZE });
+      return { rows: page.rows, next_cursor: page.nextCursor ?? null };
+    }),
     enabled: !!view && canQuery,
-  });
-  const firstPage = React.useMemo(() => query.data && { items: query.data.rows, next_cursor: query.data.nextCursor ?? null }, [query.data]);
-  const pagination = useCursorPagination(firstPage, {
-    resetKey: location.search,
-    resetOnPageChange: true,
-    loadPage: async (cursor) => {
-      const page = await fetchPage(cursor);
-      return { items: page.rows, next_cursor: page.nextCursor ?? null };
-    },
   });
 
   if (viewsQuery.isLoading || collectionsQuery.isLoading) {
@@ -124,7 +115,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
     );
   }
 
-  const rows = pagination.items;
+  const rows = query.data?.pages.flatMap((page) => page.rows) ?? [];
   const columns = viewColumns(view, rows);
   const viewTitle = resolveLocalizedText(view.title, language, canonical) ?? fieldLabel(view.name);
   const exportHref = viewExportHref(name, urlParams);
@@ -210,7 +201,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
         />
       ) : null}
 
-      {query.isError ? <ErrorBox error={query.error} /> : null}
+      {query.isError && !query.data ? <ErrorBox error={query.error} /> : null}
       {query.isLoading ? <Skeleton className="h-48 w-full" /> : null}
 
       {query.data && rows.length === 0 ? (
@@ -245,7 +236,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           </TableBody>
         </Table>
       ) : null}
-      <LoadMore pagination={pagination} language={language} />
+      <LoadMore query={query} count={rows.length} language={language} />
     </div>
   );
 }

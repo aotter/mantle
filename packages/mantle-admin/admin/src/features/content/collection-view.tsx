@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
@@ -20,8 +20,6 @@ import { api, downloadAdminFile } from "../../lib/api";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import {
-  entriesQuerySearchParams,
-  type EntriesQueryArgs,
   entriesQueryOptions,
   entryApiPath,
   entryEditorQueryOptions,
@@ -34,6 +32,7 @@ import type {
   EntryEditorPayload,
   EntryRow,
   ListEntriesResult,
+  RefTitles,
   SiteInfo,
   AdminOperation,
 } from "../../lib/types";
@@ -54,7 +53,6 @@ import {
 } from "@aotter/mantle-ui/kit";
 import { useConfirm } from "../../ui/confirm-dialog";
 import { CollapsibleDescription, EmptyState, ErrorBox, LoadMore, PageHeader } from "../../ui/page";
-import { useCursorPagination } from "../../lib/use-cursor-pagination";
 import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
@@ -153,28 +151,25 @@ function CollectionList({
     () => collectionOperationsFor(operationsQuery.data, collectionName),
     [operationsQuery.data, collectionName],
   );
-  const queryArgs: EntriesQueryArgs = {
-    collectionName,
-    status,
-    searchTerm,
-    filterField,
-    filterValue,
-    scopeField: resolvedScopeField,
-    scopeValue: resolvedScopeValue,
-    sortField,
-    sortDirection,
-    cursorDirection: "forward",
-  };
-  const entries = useQuery<ListEntriesResult>({
-    ...entriesQueryOptions(queryArgs),
+  const entries = useInfiniteQuery({
+    ...entriesQueryOptions({
+      collectionName,
+      status,
+      searchTerm,
+      filterField,
+      filterValue,
+      scopeField: resolvedScopeField,
+      scopeValue: resolvedScopeValue,
+      sortField,
+      sortDirection,
+    }),
     enabled: !parentFilter || Boolean(resolvedScopeField) || Boolean(scope),
   });
-  const pagination = useCursorPagination<EntryRow>(entries.data, {
-    resetKey: location.search,
-    resetOnPageChange: true,
-    loadPage: (cursor) => api.get<ListEntriesResult>(`/entries?${entriesQuerySearchParams({ ...queryArgs, cursor })}`),
-  });
-  const displayedEntries = entries.data && { ...entries.data, items: pagination.items };
+  // every page loaded, with the referenced titles of each (a page's titles are only those its rows reference)
+  const displayedEntries = entries.data && {
+    items: entries.data.pages.flatMap((page) => page.items),
+    ref_titles: mergeRefTitles(entries.data.pages.map((page) => page.ref_titles)),
+  };
   const isLoadingEntries = entries.isFetching && !displayedEntries;
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -543,7 +538,7 @@ function CollectionList({
               ))}
             </TableBody>
           </Table>
-          <LoadMore pagination={pagination} language={language} />
+          <LoadMore query={entries} count={displayedEntries.items.length} language={language} />
         </RefTitlesProvider>
       )}
     </div>
@@ -754,6 +749,13 @@ function SortableTableHead({
   );
 }
 
+/** The referenced titles of every page loaded, field by field. */
+export function mergeRefTitles(pages: ReadonlyArray<RefTitles | undefined>): RefTitles {
+  const all: Record<string, RefTitles[string]> = {};
+  for (const titles of pages) for (const [field, byValue] of Object.entries(titles ?? {})) all[field] = { ...all[field], ...byValue };
+  return all;
+}
+
 function ParentScopeFilter({
   collection,
   selectedId,
@@ -950,7 +952,7 @@ function EntryRowDisplay({
     void queryClient.fetchQuery(entryEditorQueryOptions(row.collection, row.id))
       .then((payload) => {
         const childQuery = entryLandingChildQueryOptions(payload);
-        if (childQuery) return queryClient.prefetchQuery(childQuery);
+        if (childQuery) return queryClient.prefetchInfiniteQuery(childQuery);
       })
       .catch(() => undefined);
   }, [queryClient, row.collection, row.id]);

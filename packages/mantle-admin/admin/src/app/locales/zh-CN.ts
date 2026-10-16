@@ -414,6 +414,7 @@ export default {
     "media.pickDescription": "挑一张现有图片重复使用，或上传新图片。",
     "media.use": "使用这张图片",
     "common.loadMore": "加载更多",
+    "common.rowsLoaded": "已加载 {count} 条",
     "media.uploadFailed": "{total} 张图片中有 {count} 张上传失败。",
     "media.capabilityMissing": "无法准备 {mime} 上传。",
     "media.variantUploadFailed": "{mime} 上传失败，请重试。",

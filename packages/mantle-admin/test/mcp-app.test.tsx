@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { MantleApp, appValue } from "../src/mcp-app/app.js";
+import { MantleApp, appValue, pagesReducer, type Pages } from "../src/mcp-app/app.js";
 import type { HostApi } from "../src/app/postmessage.js";
 import { adminMcpApps } from "../src/server/mcp.js";
 import { defineAdmin } from "../admin/src/app/define-admin.js";
@@ -124,6 +124,26 @@ describe("MantleApp", () => {
     expect(render({ result: paged, locale: "zh-TW" })).toContain(">載入更多</button>");
     expect(render()).not.toContain("Load more");
     expect(render({ result: paged, host: host({}) })).not.toContain("Load more");
+  });
+
+  it("appends a loaded page to the rows, and drops a page that arrives after a new or refreshed result replaced the list", () => {
+    const page = (ids: string[], nextCursor?: string): ToolResult => ({ structuredContent: { rows: ids.map((id) => ({ id })), ...(nextCursor ? { nextCursor } : {}) } });
+    const first = pagesReducer({ rows: null, cursor: undefined, more: "idle", generation: 0 }, { type: "reset", result: page(["a"], "c2") });
+    expect(first).toMatchObject({ rows: [{ id: "a" }], cursor: "c2", more: "idle" });
+    const loading = pagesReducer(first, { type: "loading" });
+    expect(loading.more).toBe("loading");
+    const appended = pagesReducer(loading, { type: "loaded", generation: loading.generation, result: page(["b"]) });
+    expect(appended).toMatchObject({ rows: [{ id: "a" }, { id: "b" }], cursor: undefined, more: "idle" });
+    // a new result (or a refresh) while the page was in flight: the old page is for a list that is gone
+    const replaced = pagesReducer(loading, { type: "reset", result: page(["x"], "d2") });
+    expect(pagesReducer(replaced, { type: "loaded", generation: loading.generation, result: page(["b"]) })).toBe(replaced);
+    expect(pagesReducer(replaced, { type: "failed", generation: loading.generation })).toBe(replaced);
+    expect(replaced).toMatchObject({ rows: [{ id: "x" }], cursor: "d2", more: "idle" });
+    // a refresh clears the "could not load more" notice
+    const failed: Pages = pagesReducer(loading, { type: "failed", generation: loading.generation });
+    expect(failed.more).toBe("failed");
+    expect(pagesReducer(failed, { type: "reset", result: page(["a"]) }).more).toBe("idle");
+    expect(pagesReducer(loading, { type: "loaded", generation: loading.generation, result: { isError: true } }).more).toBe("failed");
   });
 
   it("is read-only when the host offers no server tools: the rows, but no action to open", () => {

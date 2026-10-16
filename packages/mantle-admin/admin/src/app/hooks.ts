@@ -183,14 +183,15 @@ const statusOf = (query: { isPending: boolean; isError: boolean }, reply: Reply<
   query.isError ? "error" : query.isPending ? "loading" : reply?.status === "unavailable" ? "unavailable" : "ready";
 
 /** The accumulating state of an infinite query over a transport's `Reply` pages. */
-function accumulated<Page extends { readonly nextCursor?: string }, Item>(query: UseInfiniteQueryResult<InfiniteData<Reply<Page>>>, pick: (page: Page) => readonly Item[]) {
+function useAccumulated<Page extends { readonly nextCursor?: string }, Item>(query: UseInfiniteQueryResult<InfiniteData<Reply<Page>>>, pick: (page: Page) => readonly Item[]) {
   const first = query.data?.pages[0];
   const list = React.useMemo(() => (query.data?.pages ?? []).flatMap(reply => reply.status === "ok" ? pick(reply.data) : []), [query.data]);
   return {
     list,
     status: statusOf(query, first),
     hasMore: query.hasNextPage,
-    loadMore: () => { if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage(); },
+    // a refetch in flight (after a write) is not cancelled for the next page
+    loadMore: () => { if (query.hasNextPage && !query.isFetching) void query.fetchNextPage({ cancelRefetch: false }); },
     loadingMore: query.isFetchingNextPage,
   };
 }
@@ -206,7 +207,7 @@ const implementation = {
       queryFn: ({ pageParam }) => transport.view(name, input as Row, { limit: options.limit, cursor: pageParam }, rowNames),
       getNextPageParam: nextPage,
     });
-    const { list, ...state } = accumulated(query, page => page.rows);
+    const { list, ...state } = useAccumulated(query, page => page.rows);
     return { rows: list, ...state };
   },
   useEntries(collection: string, options: EntriesOptions<object> = {}): EntriesState<object> {
@@ -217,7 +218,7 @@ const implementation = {
       queryFn: ({ pageParam }) => transport.entries(collection, { ...options, cursor: pageParam }),
       getNextPageParam: nextPage,
     });
-    const { list, ...state } = accumulated(query, page => page.items);
+    const { list, ...state } = useAccumulated(query, page => page.items);
     return { items: list, ...state };
   },
   useEntry(collection: string, id: string): EntryState<object> {

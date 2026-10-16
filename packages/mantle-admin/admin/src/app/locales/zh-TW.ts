@@ -519,6 +519,7 @@ export default {
     "media.pickDescription": "挑一張現有圖片重複使用，或上傳新圖片。",
     "media.use": "使用這張圖片",
     "common.loadMore": "載入更多",
+    "common.rowsLoaded": "已載入 {count} 筆",
     "media.uploadFailed": "{total} 張圖片中有 {count} 張上傳失敗。",
     "media.capabilityMissing": "無法準備 {mime} 上傳。",
     "media.variantUploadFailed": "{mime} 上傳失敗，請再試一次。",

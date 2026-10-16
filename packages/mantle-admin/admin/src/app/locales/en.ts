@@ -534,6 +534,7 @@ export default {
     "media.pickDescription": "Pick an existing image to reuse, or upload a new one.",
     "media.use": "Use this image",
     "common.loadMore": "Load more",
+    "common.rowsLoaded": "{count} more loaded",
     "media.uploadFailed": "{count} of {total} uploads failed.",
     "media.capabilityMissing": "The upload could not be prepared for {mime}.",
     "media.variantUploadFailed": "The {mime} upload failed. Try again.",

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, ExternalLink, Images, Search, Trash2, Upload, type LucideIcon } from "lucide-react";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { t } from "../../app/i18n";
@@ -18,7 +18,7 @@ import { Skeleton } from "@aotter/mantle-ui/kit";
 import { useConfirm } from "../../ui/confirm-dialog";
 import { EmptyState, ErrorBox, LoadMore, PageHeader } from "../../ui/page";
 import { uploadMediaAsset } from "./media-upload";
-import { useCursorPagination } from "../../lib/use-cursor-pagination";
+import { pagedQueryOptions } from "../../lib/queries";
 import { formatTimestampMs } from "../content/field-render";
 
 const MEDIA_SETUP_GUIDE_URL =
@@ -75,28 +75,13 @@ export function MediaBrowser({
   showSearch?: boolean;
 }): React.ReactElement {
   const queryClient = useQueryClient();
-  const listKey = ["media", searchTerm] as const;
-
-  const page1 = useQuery<MediaLibraryListResult>({
-    queryKey: listKey,
-    queryFn: () => {
-      const qs = new URLSearchParams({ limit: "60" });
-      if (searchTerm) qs.set("search", searchTerm);
-      return api.get<MediaLibraryListResult>(`/media?${qs.toString()}`);
-    },
-  });
-
-  const loadMediaPage = React.useCallback(async (cursor: string) => {
-    const qs = new URLSearchParams({ limit: "60", cursor });
+  const page1 = useInfiniteQuery(pagedQueryOptions(["media", searchTerm], (cursor) => {
+    const qs = new URLSearchParams({ limit: "60" });
     if (searchTerm) qs.set("search", searchTerm);
+    if (cursor) qs.set("cursor", cursor);
     return api.get<MediaLibraryListResult>(`/media?${qs.toString()}`);
-  }, [searchTerm]);
-  const pagination = useCursorPagination<MediaLibraryItem>(page1.data, {
-    resetKey: searchTerm,
-    resetOnPageChange: false,
-    loadPage: loadMediaPage,
-  });
-  const items = pagination.items;
+  }));
+  const items = page1.data?.pages.flatMap((page) => page.items) ?? [];
   const mediaNotConfigured = isMediaNotConfigured(page1.error);
 
   const [uploading, setUploading] = React.useState(false);
@@ -194,7 +179,7 @@ export function MediaBrowser({
         </div>
 
         {uploadError ? <p className="mb-3 text-xs text-destructive">{uploadError}</p> : null}
-        {page1.isError ? <ErrorBox error={page1.error} /> : null}
+        {page1.isError && !page1.data ? <ErrorBox error={page1.error} /> : null}
 
         {page1.isLoading ? (
           <MediaSkeleton />
@@ -222,7 +207,7 @@ export function MediaBrowser({
           </div>
         )}
 
-        <LoadMore pagination={pagination} language={language} />
+        <LoadMore query={page1} count={items.length} language={language} />
         </div>
     </>
   );

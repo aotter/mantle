@@ -1,12 +1,12 @@
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ContactRound, Search } from "lucide-react";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import type { MemberListResult, AdminRole } from "../../lib/types";
-import { useCursorPagination } from "../../lib/use-cursor-pagination";
+import { pagedQueryOptions } from "../../lib/queries";
 import { formatTimestampMs } from "../content/field-render";
 import { Badge } from "@aotter/mantle-ui/kit";
 import { Button } from "@aotter/mantle-ui/kit";
@@ -31,14 +31,13 @@ export function MembersView(): React.ReactElement {
   const { search: locationSearch } = useAdminLocation();
   const params = new URLSearchParams(locationSearch);
   const search = params.get("search")?.trim() ?? "";
-  const membersPage = (cursor?: string) => {
+  const members = useInfiniteQuery(pagedQueryOptions(["members", search], (cursor) => {
     const query = new URLSearchParams({ limit: String(MEMBER_PAGE_SIZE) });
     if (search) query.set("search", search);
     if (cursor) query.set("cursor", cursor);
     return api.get<MemberListResult>(`/members?${query.toString()}`);
-  };
-  const members = useQuery<MemberListResult>({ queryKey: ["members", search], queryFn: () => membersPage() });
-  const pagination = useCursorPagination(members.data, { resetKey: search, resetOnPageChange: true, loadPage: membersPage });
+  }));
+  const items = members.data?.pages.flatMap((page) => page.items) ?? [];
   const promote = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: AdminRole }) =>
       api.patch(`/admin/${encodeURIComponent(userId)}/role`, { role }),
@@ -57,15 +56,15 @@ export function MembersView(): React.ReactElement {
       <MemberSearch search={search} />
       {promote.isError ? <ErrorBox error={promote.error} /> : null}
       {members.isLoading ? <Skeleton className="h-64 w-full" /> : null}
-      {members.isError ? <ErrorBox error={members.error} /> : null}
-      {members.data && pagination.items.length === 0 ? (
+      {members.isError && !members.data ? <ErrorBox error={members.error} /> : null}
+      {members.data && items.length === 0 ? (
         <EmptyState
           icon={ContactRound}
           title={t(language, search ? "members.emptySearch.title" : "members.empty.title")}
           description={t(language, search ? "members.emptySearch.body" : "members.empty.body")}
         />
       ) : null}
-      {members.data && pagination.items.length > 0 ? (
+      {members.data && items.length > 0 ? (
         <>
           <SectionCard className="overflow-x-auto p-0">
             <Table>
@@ -81,7 +80,7 @@ export function MembersView(): React.ReactElement {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pagination.items.map((member) => (
+                {items.map((member) => (
                   <TableRow key={member.id}>
                     <TableCell><IdValue value={member.id} language={language} /></TableCell>
                     <TableCell className="font-medium">{member.name}</TableCell>
@@ -99,7 +98,7 @@ export function MembersView(): React.ReactElement {
                       <Button
                         variant="outline"
                         disabled={promote.isPending}
-                        onClick={() => promote.mutate({ userId: member.id, role: members.data?.adminRoles?.[0] ?? "admin" })}
+                        onClick={() => promote.mutate({ userId: member.id, role: members.data?.pages[0]?.adminRoles?.[0] ?? "admin" })}
                         aria-label={`${t(language, "members.promote")}: ${member.name}`}
                       >
                         {t(language, "members.promote")}
@@ -110,7 +109,7 @@ export function MembersView(): React.ReactElement {
               </TableBody>
             </Table>
           </SectionCard>
-          <LoadMore pagination={pagination} language={language} />
+          <LoadMore query={members} count={items.length} language={language} />
         </>
       ) : null}
     </div>

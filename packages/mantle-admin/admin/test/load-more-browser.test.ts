@@ -60,6 +60,8 @@ it("appends the next page of a View and of the members list, and offers no Previ
       await page.getByText(first).waitFor();
       await page.getByText(second).waitFor();
       expect(await page.getByRole("button", { name: "Load more" }).count()).toBe(0);
+      // keyboard focus stays on the list rather than falling back to the page
+      expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
       expect(await page.getByText(/previous|next/i).count()).toBe(0);
       const sent = (await page.evaluate(() => (window as any).requests as string[])).filter(request => request.startsWith(api));
       expect(sent.map(request => new URL(request, origin).searchParams.get("cursor"))).toEqual([null, "c2"]);

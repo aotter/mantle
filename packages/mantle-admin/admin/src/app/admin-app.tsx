@@ -98,7 +98,7 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
       if (!useBootstrap) return api.get<AdminUser>("/me");
       const args = entriesQueryArgsFromSearch(decodeURIComponent(collectionMatch![1]!), search);
       const data = await api.get<BootstrapPayload>(`/bootstrap?${entriesQuerySearchParams(args)}`);
-      if (data.entries) queryClient.setQueryData(entriesQueryOptions(args).queryKey, data.entries);
+      if (data.entries) queryClient.setQueryData(entriesQueryOptions(args).queryKey, { pages: [data.entries], pageParams: [undefined] });
       queryClient.setQueryData(["collections"], data.collections);
       queryClient.setQueryData(["site"], data.site);
       queryClient.setQueryData(["operations"], data.operations);

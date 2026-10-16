@@ -165,5 +165,5 @@ describe("@aotter/mantle-admin/app", () => {
     const program = ts.createProgram([consumer], options, host);
     const diagnostics = ts.getPreEmitDiagnostics(program).map(d => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
     expect(diagnostics).toEqual([]);
-  }, 30_000);
+  });
 });

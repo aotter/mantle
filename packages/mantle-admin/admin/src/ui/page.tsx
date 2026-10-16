@@ -116,22 +116,45 @@ export function ErrorBox({ error }: { error: unknown }): React.ReactElement | nu
   );
 }
 
-/** The "Load more" control of a cursor-paged list (`useCursorPagination`): a failed page keeps the rows already loaded. */
-export function LoadMore({ pagination, language }: {
-  pagination: { nextCursor: string | null; isLoadingMore: boolean; loadMoreError: unknown; loadMore: () => Promise<void> };
-  language: AdminLanguage;
-}): React.ReactElement | null {
+/** The structural part of an infinite query that `LoadMore` reads. */
+interface PagedList {
+  hasNextPage: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  error: unknown;
+  fetchNextPage: (options?: { cancelRefetch?: boolean }) => unknown;
+}
+
+/**
+ * The "Load more" control of a paged list (`pagedQueryOptions`), `count` rows loaded so far. A failed page keeps the rows already
+ * loaded; the rows added are announced; when the button goes away after the last page, focus moves here instead of to the page.
+ */
+export function LoadMore({ query, count, language }: { query: PagedList; count: number; language: AdminLanguage }): React.ReactElement {
+  const box = React.useRef<HTMLDivElement>(null);
+  const focused = React.useRef(false);
+  const shown = React.useRef(count);
+  const [added, setAdded] = React.useState(0);
+  React.useEffect(() => {
+    setAdded(Math.max(0, count - shown.current));
+    shown.current = count;
+  }, [count]);
+  React.useEffect(() => {
+    if (query.hasNextPage || !focused.current) return;
+    focused.current = false;
+    box.current?.focus();
+  }, [query.hasNextPage]);
   return (
-    <>
-      {pagination.loadMoreError ? <ErrorBox error={pagination.loadMoreError} /> : null}
-      {pagination.nextCursor ? (
+    <div ref={box} tabIndex={-1} aria-busy={query.isFetching} className="outline-none">
+      {query.isError && count > 0 ? <ErrorBox error={query.error} /> : null}
+      <span role="status" className="sr-only">{added > 0 ? t(language, "common.rowsLoaded", { count: String(added) }) : ""}</span>
+      {query.hasNextPage ? (
         <div className="mt-4">
-          <Button type="button" variant="secondary" onClick={() => void pagination.loadMore()} disabled={pagination.isLoadingMore}>
+          <Button type="button" variant="secondary" disabled={query.isFetching} onFocus={() => { focused.current = true; }} onClick={() => void query.fetchNextPage({ cancelRefetch: false })}>
             {t(language, "common.loadMore")}
           </Button>
         </div>
       ) : null}
-    </>
+    </div>
   );
 }
 
