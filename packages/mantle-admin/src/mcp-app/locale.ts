@@ -14,6 +14,8 @@ export interface AppLabels {
   readonly viewFailed: string;
   readonly viewCancelled: string;
   readonly refreshFailed: string;
+  readonly loadMore: string;
+  readonly loadMoreFailed: string;
   readonly fullscreen: string;
   readonly exitFullscreen: string;
 }
@@ -57,6 +59,8 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "These results could not be shown.",
     viewCancelled: "The request was cancelled.",
     refreshFailed: "The list could not be refreshed. It may be out of date.",
+    loadMore: "Load more",
+    loadMoreFailed: "More results could not be loaded.",
     fullscreen: "Full screen",
     exitFullscreen: "Exit full screen",
   },
@@ -98,6 +102,8 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "無法顯示這些結果。",
     viewCancelled: "請求已取消。",
     refreshFailed: "無法重新整理清單，內容可能不是最新的。",
+    loadMore: "載入更多",
+    loadMoreFailed: "無法載入更多結果。",
     fullscreen: "全螢幕",
     exitFullscreen: "結束全螢幕",
   },
@@ -139,6 +145,8 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     viewFailed: "无法显示这些结果。",
     viewCancelled: "请求已取消。",
     refreshFailed: "无法刷新列表，内容可能不是最新的。",
+    loadMore: "加载更多",
+    loadMoreFailed: "无法加载更多结果。",
     fullscreen: "全屏",
     exitFullscreen: "退出全屏",
   },

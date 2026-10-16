@@ -20,7 +20,8 @@ import { api, downloadAdminFile } from "../../lib/api";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import {
-  cursorPageHref,
+  entriesQuerySearchParams,
+  type EntriesQueryArgs,
   entriesQueryOptions,
   entryApiPath,
   entryEditorQueryOptions,
@@ -42,13 +43,6 @@ import { Button } from "@aotter/mantle-ui/kit";
 import { Checkbox } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
 import { Popover, PopoverContent, PopoverTrigger } from "@aotter/mantle-ui/kit";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import {
   Table,
@@ -59,7 +53,8 @@ import {
   TableRow,
 } from "@aotter/mantle-ui/kit";
 import { useConfirm } from "../../ui/confirm-dialog";
-import { CollapsibleDescription, EmptyState, ErrorBox, PageHeader } from "../../ui/page";
+import { CollapsibleDescription, EmptyState, ErrorBox, LoadMore, PageHeader } from "../../ui/page";
+import { useCursorPagination } from "../../lib/use-cursor-pagination";
 import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
@@ -126,9 +121,6 @@ function CollectionList({
   const parentQuery = params.get("parent") ?? undefined;
   const sortField = params.get("sort") || "updatedAt";
   const sortDirection: SortDirection = params.get("direction") === "asc" ? "asc" : "desc";
-  const cursors = params.getAll("cursor");
-  const cursor = cursors.slice(-1)[0] || undefined;
-  const cursorDirection = "forward";
 
   const collectionsQuery = useQuery<Collection[]>({
     queryKey: ["collections"],
@@ -161,23 +153,28 @@ function CollectionList({
     () => collectionOperationsFor(operationsQuery.data, collectionName),
     [operationsQuery.data, collectionName],
   );
+  const queryArgs: EntriesQueryArgs = {
+    collectionName,
+    status,
+    searchTerm,
+    filterField,
+    filterValue,
+    scopeField: resolvedScopeField,
+    scopeValue: resolvedScopeValue,
+    sortField,
+    sortDirection,
+    cursorDirection: "forward",
+  };
   const entries = useQuery<ListEntriesResult>({
-    ...entriesQueryOptions({
-      collectionName,
-      status,
-      searchTerm,
-      filterField,
-      filterValue,
-      scopeField: resolvedScopeField,
-      scopeValue: resolvedScopeValue,
-      sortField,
-      sortDirection,
-      cursor,
-      cursorDirection,
-    }),
+    ...entriesQueryOptions(queryArgs),
     enabled: !parentFilter || Boolean(resolvedScopeField) || Boolean(scope),
   });
-  const displayedEntries = entries.data;
+  const pagination = useCursorPagination<EntryRow>(entries.data, {
+    resetKey: location.search,
+    resetOnPageChange: true,
+    loadPage: (cursor) => api.get<ListEntriesResult>(`/entries?${entriesQuerySearchParams({ ...queryArgs, cursor })}`),
+  });
+  const displayedEntries = entries.data && { ...entries.data, items: pagination.items };
   const isLoadingEntries = entries.isFetching && !displayedEntries;
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -207,8 +204,6 @@ function CollectionList({
   };
   const listHref = (state: Parameters<typeof collectionHref>[1] = {}) =>
     collectionHref(listPath, { ...listState, ...state });
-  const pageQuery = new URLSearchParams(listHref().split("?")[1]);
-  for (const cursor of cursors) pageQuery.append("cursor", cursor);
   const listQueryFilter = collectionFilter ? {
     name: collectionFilter.field,
     label: propertyLabel(
@@ -369,7 +364,7 @@ function CollectionList({
               selectedId={parentFilter}
               language={language}
               canonical={canonical}
-              onSelect={(id) => navigate(listHref({ parent: id, cursor: undefined }))}
+              onSelect={(id) => navigate(listHref({ parent: id }))}
             />
           ) : undefined}
           actions={headerActions}
@@ -548,11 +543,7 @@ function CollectionList({
               ))}
             </TableBody>
           </Table>
-          <CollectionPagination
-            language={language}
-            previousHref={cursorPageHref(listPath, pageQuery)}
-            nextHref={displayedEntries.next_cursor ? cursorPageHref(listPath, pageQuery, displayedEntries.next_cursor) : undefined}
-          />
+          <LoadMore pagination={pagination} language={language} />
         </RefTitlesProvider>
       )}
     </div>
@@ -698,7 +689,6 @@ function collectionHref(
     filterValue?: string;
     sortField?: string;
     sortDirection?: SortDirection;
-    cursor?: string;
     parent?: string;
     extraParams?: Record<string, string>;
   } = {},
@@ -718,7 +708,6 @@ function collectionHref(
   if (state.sortDirection && state.sortDirection !== "desc") {
     params.set("direction", state.sortDirection);
   }
-  if (state.cursor) params.set("cursor", state.cursor);
   const suffix = params.toString();
   return `${path}${suffix ? `?${suffix}` : ""}`;
 }
@@ -732,7 +721,6 @@ function sortHref(
 ): string {
   return collectionHref(path, {
     ...state,
-    cursor: undefined,
     sortField: field,
     sortDirection: activeField === field
       ? (direction === "asc" ? "desc" : "asc")
@@ -763,44 +751,6 @@ function SortableTableHead({
         <Icon className={cn("size-3.5", activeField === field ? "opacity-100" : "opacity-35")} aria-hidden />
       </a>
     </TableHead>
-  );
-}
-
-function CollectionPagination({
-  previousHref,
-  nextHref,
-  language,
-}: {
-  previousHref?: string;
-  nextHref?: string;
-  language: AdminLanguage;
-}): React.ReactElement | null {
-  if (!previousHref && !nextHref) return null;
-  return (
-    <Pagination className="mt-4 justify-end" aria-label={t(language, "collection.pagination")}>
-      <PaginationContent>
-        <PaginationItem>
-          <PaginationPrevious
-            href={previousHref}
-            text={t(language, "collection.previousPage")}
-            aria-label={t(language, "collection.previousPage")}
-            aria-disabled={!previousHref || undefined}
-            tabIndex={previousHref ? undefined : -1}
-            className={cn(!previousHref && "pointer-events-none opacity-50")}
-          />
-        </PaginationItem>
-        <PaginationItem>
-          <PaginationNext
-            href={nextHref}
-            text={t(language, "collection.nextPage")}
-            aria-label={t(language, "collection.nextPage")}
-            aria-disabled={!nextHref || undefined}
-            tabIndex={nextHref ? undefined : -1}
-            className={cn(!nextHref && "pointer-events-none opacity-50")}
-          />
-        </PaginationItem>
-      </PaginationContent>
-    </Pagination>
   );
 }
 

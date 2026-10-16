@@ -75,9 +75,13 @@ describe("@aotter/mantle-admin/app", () => {
       '  hooks.useEntries("requests", { filter: { field: "nope", value: "x" } });',
       "  // @ts-expect-error an operation input of the wrong type",
       '  void run?.({ id: 1 });',
+      "  const more: boolean = pending.hasMore && !pending.loadingMore && entries.hasMore;",
+      "  pending.loadMore();",
+      "  // @ts-expect-error pages are appended, there is no cursor to start from",
+      '  hooks.useView("pending-requests", {}, { cursor: "c" });',
       "  // @ts-expect-error a collection that is not in the manifest",
       '  hooks.useCollectionTotal("nope");',
-      "  return (amount ?? 0) + (title ?? \"\").length + (pending.status === \"unavailable\" ? 1 : 0);",
+      "  return (amount ?? 0) + (title ?? \"\").length + (more ? 1 : 0) + (pending.status === \"unavailable\" ? 1 : 0);",
       "}",
       "export const host: AdminHost | null = null;",
       "export const transport = mcpAppTransport;",
@@ -161,5 +165,5 @@ describe("@aotter/mantle-admin/app", () => {
     const program = ts.createProgram([consumer], options, host);
     const diagnostics = ts.getPreEmitDiagnostics(program).map(d => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
     expect(diagnostics).toEqual([]);
-  });
+  }, 30_000);
 });

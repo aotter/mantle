@@ -6,7 +6,7 @@ import { ApiError, refusalOf } from "../lib/api";
 import { cn } from "../lib/utils";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Card } from "@aotter/mantle-ui/kit";
-import { usePreferences } from "../app/preferences";
+import { usePreferences, type AdminLanguage } from "../app/preferences";
 import { t } from "../app/i18n";
 
 export const FormActionBarHostContext = React.createContext<HTMLElement | null>(null);
@@ -113,6 +113,25 @@ export function ErrorBox({ error }: { error: unknown }): React.ReactElement | nu
     <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
       {t(language, "common.failedToLoad")}: {message}
     </div>
+  );
+}
+
+/** The "Load more" control of a cursor-paged list (`useCursorPagination`): a failed page keeps the rows already loaded. */
+export function LoadMore({ pagination, language }: {
+  pagination: { nextCursor: string | null; isLoadingMore: boolean; loadMoreError: unknown; loadMore: () => Promise<void> };
+  language: AdminLanguage;
+}): React.ReactElement | null {
+  return (
+    <>
+      {pagination.loadMoreError ? <ErrorBox error={pagination.loadMoreError} /> : null}
+      {pagination.nextCursor ? (
+        <div className="mt-4">
+          <Button type="button" variant="secondary" onClick={() => void pagination.loadMore()} disabled={pagination.isLoadingMore}>
+            {t(language, "common.loadMore")}
+          </Button>
+        </div>
+      ) : null}
+    </>
   );
 }
 

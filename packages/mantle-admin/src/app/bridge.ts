@@ -72,6 +72,12 @@ export function rowsOf(result: ToolResult): Row[] | null {
   return isRecord(output) && Array.isArray(output["rows"]) ? output["rows"].filter(isRecord) : null;
 }
 
+/** The cursor of the next page of a View result; undefined on the last page. */
+export function nextCursorOf(result: ToolResult): string | undefined {
+  const output = outputOf(result);
+  return isRecord(output) && typeof output["nextCursor"] === "string" ? output["nextCursor"] : undefined;
+}
+
 /** The diagnostics an `isError` result carries, from either content form. */
 export function diagnosticsOf(result: ToolResult): InteractionDiagnostic[] {
   const output = outputOf(result);

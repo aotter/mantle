@@ -30,6 +30,7 @@ bridge.oncalltool = async (params, extra) => {
     await extra.mcpReq.notify({ method: "notifications/progress", params: { progressToken: params._meta!.progressToken!, progress: 1 } });
     return new Promise((_, reject) => extra.mcpReq.signal.addEventListener("abort", () => { aborts.push(params.name); reject(new Error("Cancelled")); }, { once: true }));
   }
+  if (params.name === "pending" && params.arguments?.cursor === "c2") return { content: [], structuredContent: { rows: [{ id: "r2", version: 1, item: "Desks" }] }, _meta: { "net.aotter.mantle/tool": "pending" } };
   if (params.name === "review_requisition") return { content: [], structuredContent: { id: "r1" } };
   return { content: [], structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops", date: "2026-10-01T15:20:00.000Z", link: "https://example.com/r1" }] }, _meta: { "net.aotter.mantle/tool": "pending" } };
 };

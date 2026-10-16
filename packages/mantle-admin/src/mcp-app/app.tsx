@@ -10,6 +10,7 @@ import {
   hiddenInputs,
   idempotencyInputs,
   invokeTool,
+  nextCursorOf,
   rowsOf,
   toolOf,
   type AppCatalog,
@@ -98,21 +99,42 @@ export function MantleApp(props: {
   // a View the catalog does not describe still shows its rows, with nothing to open
   const view = tool && Object.prototype.hasOwnProperty.call(props.catalog.views, tool) ? props.catalog.views[tool]! : BARE_VIEW;
   const [rows, setRows] = useState<Row[] | null>(() => (props.result ? rowsOf(props.result) : null));
+  const [cursor, setCursor] = useState(() => (props.result ? nextCursorOf(props.result) : undefined));
+  const [more, setMore] = useState<"idle" | "loading" | "failed">("idle");
   const [stale, setStale] = useState(false);
   const [open, setOpen] = useState<{ row: Row; action: AppRowAction } | null>(null);
   useEffect(() => {
     setRows(props.result ? rowsOf(props.result) : null);
+    setCursor(props.result ? nextCursorOf(props.result) : undefined);
+    setMore("idle");
     setStale(false);
   }, [props.result]);
 
   const refresh = async () => {
     if (!tool || !call) return;
     try {
-      const fresh = rowsOf(await call(tool, { ...props.input }));
-      if (fresh) setRows(fresh);
+      const result = await call(tool, { ...props.input });
+      const fresh = rowsOf(result);
+      if (fresh) { setRows(fresh); setCursor(nextCursorOf(result)); }
       setStale(!fresh);
     } catch {
       setStale(true);
+    }
+  };
+
+  // the same View tool and input through the host, at the cursor of the page shown last; the rows already shown stay
+  const loadMore = async () => {
+    if (!tool || !call || !cursor) return;
+    setMore("loading");
+    try {
+      const result = await call(tool, { ...props.input, cursor });
+      const next = rowsOf(result);
+      if (!next) return setMore("failed");
+      setRows((current) => [...(current ?? []), ...next]);
+      setCursor(nextCursorOf(result));
+      setMore("idle");
+    } catch {
+      setMore("failed");
     }
   };
 
@@ -188,6 +210,12 @@ export function MantleApp(props: {
           );
         })}
       </ul>
+      {call && cursor ? (
+        <div className="grid justify-items-start gap-2 px-3 pb-3">
+          {more === "failed" ? <p role="status" className="text-destructive text-sm">{labels.loadMoreFailed}</p> : null}
+          <button type="button" className="rounded-md border px-3 py-1 text-sm font-medium" disabled={more === "loading"} onClick={() => { void loadMore(); }}>{labels.loadMore}</button>
+        </div>
+      ) : null}
     </CellEnv.Provider>
   );
 }

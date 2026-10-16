@@ -5,7 +5,7 @@ import type { HostApi } from "../src/app/postmessage.js";
 import { adminMcpApps } from "../src/server/mcp.js";
 import { defineAdmin } from "../admin/src/app/define-admin.js";
 import { SurfaceProvider } from "../admin/src/app/slots.js";
-import { actionsFor, APP_TOOL_META_KEY, hiddenInputs, invokeTool, outputOf, readCatalog, rowsOf, toolOf, type AppCatalog, type ToolResult } from "../src/app/bridge.js";
+import { actionsFor, APP_TOOL_META_KEY, hiddenInputs, invokeTool, outputOf, readCatalog, nextCursorOf, rowsOf, toolOf, type AppCatalog, type ToolResult } from "../src/app/bridge.js";
 
 const action = {
   capability: "review_requisition",
@@ -114,6 +114,16 @@ describe("MantleApp", () => {
     expect(bare).toContain("Laptops");
     expect(bare).toContain("123456");
     expect(bare).not.toContain("Review requisition");
+  });
+
+  it("offers Load more for a page with a next cursor, and only where the host has server tools", () => {
+    const paged: ToolResult = { ...viewResult, structuredContent: { ...viewResult.structuredContent, nextCursor: "c2" } };
+    expect(nextCursorOf(paged)).toBe("c2");
+    expect(nextCursorOf(viewResult)).toBeUndefined();
+    expect(render({ result: paged })).toContain(">Load more</button>");
+    expect(render({ result: paged, locale: "zh-TW" })).toContain(">載入更多</button>");
+    expect(render()).not.toContain("Load more");
+    expect(render({ result: paged, host: host({}) })).not.toContain("Load more");
   });
 
   it("is read-only when the host offers no server tools: the rows, but no action to open", () => {

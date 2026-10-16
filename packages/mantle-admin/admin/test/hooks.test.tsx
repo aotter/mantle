@@ -175,14 +175,108 @@ describe("data hooks", () => {
 
   it("read loading, ready and unavailable from the transport's reply", () => {
     const client = new QueryClient();
-    const read = () => (mount(client, transportOf(), () => [useView("pending", {}), useEntry("requests", "1")]).seen as [{ rows: unknown[]; nextCursor?: string; status: string }, { entry: unknown; status: string }]);
+    const read = () => (mount(client, transportOf(), () => [useView("pending", {}), useEntry("requests", "1")]).seen as [{ rows: unknown[]; status: string; hasMore: boolean }, { entry: unknown; status: string }]);
     const [loading] = read();
-    expect(loading).toEqual({ rows: [], nextCursor: undefined, status: "loading" });
-    for (const query of client.getQueryCache().getAll()) client.setQueryData(query.queryKey, query.queryKey[0] === "view" ? { status: "ok", data: { rows: [{ id: "r1" }], nextCursor: "next" } } : { status: "unavailable" });
+    expect(loading).toMatchObject({ rows: [], status: "loading", hasMore: false, loadingMore: false });
+    for (const query of client.getQueryCache().getAll()) client.setQueryData(query.queryKey, query.queryKey[0] === "view" ? { pages: [{ status: "ok", data: { rows: [{ id: "r1" }], nextCursor: "next" } }], pageParams: [undefined] } : { status: "unavailable" });
     const [view, entry] = read();
-    expect(view).toEqual({ rows: [{ id: "r1" }], nextCursor: "next", status: "ready" });
+    expect(view).toMatchObject({ rows: [{ id: "r1" }], status: "ready", hasMore: true });
     expect(entry).toEqual({ entry: undefined, status: "unavailable" });
     client.clear();
+  });
+
+  describe("load more", () => {
+    // nothing is stale and nothing retries or refetches on mount, so a static render reads the cache as it is rather than as it would fetch
+    const fresh = () => new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false, retryOnMount: false } } });
+    type Paged = { rows?: unknown[]; items?: unknown[]; status: string; hasMore: boolean; loadingMore: boolean; loadMore: () => void };
+    /** A pending fetch is awaited on the cache; the hooks render statically, so each read is a fresh render of the same hook. */
+    const reader = (client: QueryClient, transport: AdminTransport, use: () => unknown) => {
+      const read = () => mount(client, transport, use).seen as Paged;
+      return {
+        read,
+        /** Renders once to register the query, then fetches its first page. */
+        async first(root: string) { read(); await client.getQueryCache().findAll({ queryKey: [root] })[0]!.fetch(); return read(); },
+        async until(check: (state: Paged) => boolean) { await vi.waitFor(() => expect(check(read())).toBe(true)); return read(); },
+      };
+    };
+    const viewPages = (call: (cursor: string | undefined) => void) => (cursor: string | undefined) => {
+      call(cursor);
+      return cursor === undefined ? { rows: [{ id: "a" }, { id: "b" }], nextCursor: "c2" } : cursor === "c2" ? { rows: [{ id: "c" }], nextCursor: "c3" } : { rows: [{ id: "d" }] };
+    };
+
+    it("appends each next page to the rows loaded so far, in order, until the last (browser)", async () => {
+      const client = fresh(), seen = vi.fn();
+      const pages = viewPages(seen);
+      const view = vi.fn(async (_name: string, _input: object, page: { cursor?: string | undefined }) => ({ status: "ok", data: pages(page.cursor) }) as const);
+      const r = reader(client, transportOf({ view }), () => useView("pending", { q: 1 }));
+      const one = await r.first("view");
+      expect(one).toMatchObject({ rows: [{ id: "a" }, { id: "b" }], hasMore: true, loadingMore: false, status: "ready" });
+      one.loadMore();
+      const two = await r.until(state => state.rows!.length === 3);
+      expect(two.rows).toEqual([{ id: "a" }, { id: "b" }, { id: "c" }]);
+      expect(two.hasMore).toBe(true);
+      two.loadMore();
+      const three = await r.until(state => state.rows!.length === 4);
+      expect(three.rows).toEqual([{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }]);
+      expect(three.hasMore).toBe(false);
+      // loadMore at the end asks for nothing
+      three.loadMore();
+      expect(seen.mock.calls).toEqual([[undefined], ["c2"], ["c3"]]);
+      expect(view.mock.calls[1]![1]).toEqual({ q: 1 });
+      client.clear();
+    });
+
+    it("appends through the host's tool call in an MCP App, with the same input and the cursor", async () => {
+      const client = fresh();
+      const call = vi.fn(async (_tool: string, args: Record<string, unknown>) => result(args["cursor"] === undefined ? { rows: [{ id: "a" }], nextCursor: "c2" } : { rows: [{ id: "b" }] }));
+      const r = reader(client, mcpAppTransport({ call, host: host() }), () => useView("pending", { q: 1 }, { limit: 1 }));
+      const one = await r.first("view");
+      expect(one).toMatchObject({ rows: [{ id: "a" }], hasMore: true });
+      one.loadMore();
+      const two = await r.until(state => state.rows!.length === 2);
+      expect(two).toMatchObject({ rows: [{ id: "a" }, { id: "b" }], hasMore: false });
+      expect(call.mock.calls).toEqual([["pending", { q: 1, limit: 1 }], ["pending", { q: 1, limit: 1, cursor: "c2" }]]);
+      client.clear();
+    });
+
+    it("starts again from the first page when the input changes", async () => {
+      const client = fresh();
+      const view = vi.fn(async (_name: string, input: object, page: { cursor?: string | undefined }) => ({ status: "ok", data: page.cursor ? { rows: [{ id: `${(input as { q: number }).q}-2` }] } : { rows: [{ id: `${(input as { q: number }).q}-1` }], nextCursor: "c2" } }) as const);
+      const transport = transportOf({ view });
+      const first = reader(client, transport, () => useView("pending", { q: 1 }));
+      (await first.first("view")).loadMore();
+      expect((await first.until(state => state.rows!.length === 2)).rows).toEqual([{ id: "1-1" }, { id: "1-2" }]);
+      const second = reader(client, transport, () => useView("pending", { q: 2 }));
+      expect(second.read()).toMatchObject({ rows: [], status: "loading" });
+      await client.getQueryCache().findAll({ queryKey: ["view", "pending", "hook", "browser", { q: 2 }] })[0]!.fetch();
+      expect(second.read()).toMatchObject({ rows: [{ id: "2-1" }], hasMore: true });
+      expect(view.mock.calls[view.mock.calls.length - 1]![2]).toEqual({ limit: undefined, cursor: undefined });
+      client.clear();
+    });
+
+    it("keeps the rows loaded and reads error when a next page fails", async () => {
+      const client = fresh();
+      const view = vi.fn(async (_name: string, _input: object, page: { cursor?: string | undefined }) => {
+        if (page.cursor) throw new Error("offline");
+        return { status: "ok", data: { rows: [{ id: "a" }], nextCursor: "c2" } } as const;
+      });
+      const r = reader(client, transportOf({ view }), () => useView("pending", {}));
+      (await r.first("view")).loadMore();
+      expect(await r.until(state => state.status === "error")).toMatchObject({ rows: [{ id: "a" }], hasMore: true });
+      client.clear();
+    });
+
+    it("appends entries the same way, and has none to load in an MCP App", async () => {
+      const client = fresh();
+      const entries = vi.fn(async (_collection: string, options: { cursor?: string | undefined }) => ({ status: "ok", data: options.cursor ? { items: [{ id: "2" }] } : { items: [{ id: "1" }], nextCursor: "c2" } }) as never);
+      const r = reader(client, transportOf({ entries }), () => useEntries("requests", { search: "pay", limit: 1 }));
+      (await r.first("entries")).loadMore();
+      expect((await r.until(state => state.items!.length === 2))).toMatchObject({ items: [{ id: "1" }, { id: "2" }], hasMore: false });
+      expect(entries.mock.calls.map(([, options]) => options)).toEqual([{ search: "pay", limit: 1, cursor: undefined }, { search: "pay", limit: 1, cursor: "c2" }]);
+      const app = reader(fresh(), mcpAppTransport({ call: async () => result({}), host: host() }), () => useEntries("requests"));
+      expect(await app.first("entries")).toMatchObject({ items: [], status: "unavailable", hasMore: false });
+      client.clear();
+    });
   });
 
   it("pass the View's row names and no caller to the transport, and refresh what Admin shows when an operation succeeds", async () => {

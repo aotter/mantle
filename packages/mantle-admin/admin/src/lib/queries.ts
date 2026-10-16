@@ -34,7 +34,6 @@ export function entriesQueryArgsFromSearch(
     filterValue: params.get("filter_value") ?? undefined,
     sortField: params.get("sort") || "updatedAt",
     sortDirection: params.get("direction") === "asc" ? "asc" : "desc",
-    cursor: params.getAll("cursor").slice(-1)[0] || undefined,
     cursorDirection: "forward",
   };
 }
@@ -58,19 +57,6 @@ export function entriesQuerySearchParams(args: EntriesQueryArgs): URLSearchParam
   }
   if (args.cursor) qs.set("cursor", args.cursor);
   return qs;
-}
-
-/** Forward-only native paging; Previous revisits the preceding opaque cursor. */
-export function cursorPageHref(path: string, query: URLSearchParams, nextCursor?: string): string | undefined {
-  const cursors = query.getAll("cursor");
-  if (!nextCursor && !cursors.length) return;
-  const next = new URLSearchParams(query);
-  next.delete("cursor");
-  next.delete("cursor_direction");
-  // ponytail: URL stacks grow with page depth; use session history if browser URL limits become material.
-  for (const cursor of nextCursor ? [...cursors, nextCursor] : cursors.slice(0, -1)) next.append("cursor", cursor);
-  const suffix = next.toString();
-  return path + (suffix ? "?" + suffix : "");
 }
 
 export function entriesQueryOptions(args: EntriesQueryArgs) {

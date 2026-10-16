@@ -6,10 +6,11 @@ import { usePreferences } from "../../app/preferences";
 import { api } from "../../lib/api";
 import { entryLandingPath } from "../../lib/collection-nav";
 import { renderTitleText } from "../../lib/entry-title";
-import { entriesQueryArgsFromSearch, entriesQueryOptions } from "../../lib/queries";
+import { entriesQueryArgsFromSearch, entriesQueryOptions, entriesQuerySearchParams } from "../../lib/queries";
 import { renderDataValue } from "../../lib/render-data-value";
-import type { Collection, DeveloperSchemaModel, DeveloperViewModel } from "../../lib/types";
-import { EmptyState, ErrorBox } from "../../ui/page";
+import { useCursorPagination } from "../../lib/use-cursor-pagination";
+import type { Collection, DeveloperSchemaModel, DeveloperViewModel, ListEntriesResult } from "../../lib/types";
+import { EmptyState, ErrorBox, LoadMore } from "../../ui/page";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@aotter/mantle-ui/kit";
@@ -34,27 +35,23 @@ function ObservedAt({ time }: { time: number }): React.ReactElement {
 
 export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): React.ReactElement {
   const { language } = usePreferences();
-  const [cursors, setCursors] = React.useState<string[]>([]);
-  React.useEffect(() => setCursors([]), [model.name]);
   const collections = useQuery<Collection[]>({
     queryKey: ["collections"],
     queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
   });
   const collection = previewCollection(collections.data ?? [], model.name);
-  const entries = useQuery({
-    ...entriesQueryOptions({
-      ...entriesQueryArgsFromSearch(model.name, ""),
-      cursor: cursors.slice(-1)[0],
-      cursorDirection: "forward",
-    }),
-    enabled: !!collection,
-    staleTime: 0,
+  const queryArgs = entriesQueryArgsFromSearch(model.name, "");
+  const entries = useQuery({ ...entriesQueryOptions(queryArgs), enabled: !!collection, staleTime: 0 });
+  const pagination = useCursorPagination(entries.data, {
+    resetKey: model.name,
+    resetOnPageChange: true,
+    loadPage: (cursor) => api.get<ListEntriesResult>(`/entries?${entriesQuerySearchParams({ ...queryArgs, cursor })}`),
   });
   if (collections.isLoading) return <Skeleton className="m-5 h-24 w-auto" />;
   if (collections.isError) return <div className="p-5"><ErrorBox error={collections.error} /></div>;
   if (!collection) return <p className="p-5 text-sm text-muted-foreground">{t(language, "model.liveDataUnavailable")}</p>;
 
-  const rows = entries.data?.items ?? [];
+  const rows = pagination.items;
   const fields = [...new Set(rows.flatMap((row) => Object.keys(row.data_preview ?? {})))];
   const base = `/admin/c/${encodeURIComponent(model.name)}`;
   return (
@@ -92,12 +89,7 @@ export function SchemaDataPreview({ model }: { model: DeveloperSchemaModel }): R
           </Table>
         </div>
       ) : null}
-      {entries.data && (cursors.length || entries.data.next_cursor) ? (
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" disabled={!cursors.length} onClick={() => setCursors(current => current.slice(0, -1))}>{t(language, "collection.previousPage")}</Button>
-          <Button type="button" variant="outline" disabled={!entries.data.next_cursor} onClick={() => setCursors(current => [...current, entries.data!.next_cursor!])}>{t(language, "collection.nextPage")}</Button>
-        </div>
-      ) : null}
+      <LoadMore pagination={pagination} language={language} />
     </div>
   );
 }

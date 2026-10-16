@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 // Real-browser tests launch Chrome and a Vite server each; they are load-sensitive, so they run on demand
 // (`pnpm test:browser`, before releases) rather than in every PR run (#1465, 2026-10-13).
 // The two sandbox boundaries (design preview, MCP App host bridge) and the system wiring fit (#1666).
-const browser = ["admin/test/preview-boundary.test.ts", "admin/test/atom-graph-browser.test.ts", "test/mcp-app-browser.test.ts"];
+const browser = ["admin/test/preview-boundary.test.ts", "admin/test/atom-graph-browser.test.ts", "admin/test/load-more-browser.test.ts", "test/mcp-app-browser.test.ts"];
 const withBrowser = process.env.MANTLE_BROWSER_TESTS === "1";
 
 export default defineConfig({

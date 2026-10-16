@@ -117,10 +117,15 @@ data through the hooks:
 import { useOperation, useView } from "../generated/admin-client.js";
 
 function Queue() {
-  const { rows, status } = useView("pending-requests", {});   // names, input and rows are checked by tsc
+  const { rows, status, hasMore, loadMore, loadingMore } = useView("pending-requests", {});   // names, input and rows are checked by tsc
   const approve = useOperation("approve");
   if (status === "unavailable") return null;
-  return rows.map(row => <button key={String(row.id)} onClick={() => approve.run?.({ id: String(row.id) })}>{row.title}</button>);
+  return (
+    <>
+      {rows.map(row => <button key={String(row.id)} onClick={() => approve.run?.({ id: String(row.id) })}>{row.title}</button>)}
+      {hasMore ? <button disabled={loadingMore} onClick={loadMore}>Load more</button> : null}
+    </>
+  );
 }
 ```
 
@@ -131,13 +136,19 @@ refused View or collection from a missing one. Showing or hiding a component gra
 
 | Hook | Route | Surface |
 | --- | --- | --- |
-| `useView(name, input, { limit?, cursor? })` -> `{ rows, nextCursor, status }` | `GET /views/{name}` | browser and MCP App |
+| `useView(name, input, { limit? })` -> `{ rows, status, hasMore, loadMore, loadingMore }` | `GET /views/{name}` | browser and MCP App |
 | `useOperation(name)` -> `{ run, pending }`; success refreshes Views, entries, entry editors and totals | `POST /operations/{name}` | browser and MCP App |
-| `useEntries(collection, { filter?, search?, limit?, cursor? })` | `GET /entries` (one `filter_field`/`filter_value`) | browser only |
+| `useEntries(collection, { filter?, search?, limit? })` -> `{ items, status, hasMore, loadMore, loadingMore }` | `GET /entries` (one `filter_field`/`filter_value`) | browser only |
 | `useEntry(collection, id)` | `GET /entries/{id}` | browser only |
 | `useCollectionTotal(collection)` | `GET /collections/{name}/statistics`, its `total` | browser only |
 | `useMe()` | `GET /me` | browser only |
 | `useBadges(refs)` -> one `{ count, status }` per `{ view, field }`, in order; [freshness below](#sidebar-badges) | `GET /view-batch` | browser only |
+
+`useView` and `useEntries` accumulate: `rows` (`items`) holds every page loaded so far, in order, and `loadMore()` fetches the next
+page and appends it while `hasMore` is true. There are no page numbers and no "previous page"; changing the input (or the
+options) starts again from the first page. A failed `loadMore()` leaves `status` at `error` with the rows already loaded kept, and
+calling `loadMore()` again retries. Admin's own lists work the same way, under a "Load more" button, and so does the MCP App, which
+shows the button only when the host has `serverTools` (it calls the View's tool again with the same input and the `cursor`).
 
 In an MCP host, `useView` and `useOperation` call the View's or operation's admin MCP tool (its name lowercased, kebab to snake) through the host (`tools/call`),
 under the caller's MCP authorization; the browser-only hooks read `unavailable` there, so declare the data an App needs as an

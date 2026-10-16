@@ -16,7 +16,7 @@ import { Button } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { useConfirm } from "../../ui/confirm-dialog";
-import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
+import { EmptyState, ErrorBox, LoadMore, PageHeader } from "../../ui/page";
 import { uploadMediaAsset } from "./media-upload";
 import { useCursorPagination } from "../../lib/use-cursor-pagination";
 import { formatTimestampMs } from "../content/field-render";
@@ -222,19 +222,7 @@ export function MediaBrowser({
           </div>
         )}
 
-        {pagination.loadMoreError ? <ErrorBox error={pagination.loadMoreError} /> : null}
-        {pagination.nextCursor ? (
-          <div className="mt-4">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void pagination.loadMore()}
-              disabled={pagination.isLoadingMore}
-            >
-              {pagination.isLoadingMore ? t(language, "media.saving") : t(language, "media.loadMore")}
-            </Button>
-          </div>
-        ) : null}
+        <LoadMore pagination={pagination} language={language} />
         </div>
     </>
   );
