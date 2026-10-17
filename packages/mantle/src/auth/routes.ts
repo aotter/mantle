@@ -37,8 +37,15 @@ export function authRoutes(loader: AuthLoader<AuthInstance & { handler(request: 
       const auth = await loader.get();
       if (basePathOf(auth.options) !== base) throw new Error("authRoutes basePath differs from betterAuth options.");
       try {
-        await guardAuthAdminRequest(request, () => resolve(request), base);
-        const registration = request.method === "POST" && pathname === `${base}/oauth2/register` ? await loopbackClientsAreNative(request) : request;
+        const bounded = request.body ? new Request(request, { body: await readBody(request) }) : request;
+        const caller = await guardAuthAdminRequest(bounded, () => resolve(bounded), base);
+        const cache = !!auth.options.secondaryStorage || !!auth.options.session?.cookieCache?.enabled;
+        if (caller?.kind === "user" && cache) {
+          const snapshot = (await auth.api.getSession({ headers: bounded.headers, returnHeaders: true })).response;
+          if (snapshot && (snapshot.user.id !== caller.subject || (snapshot.user.role ?? null) !== caller.role))
+            throw new ContractError("AUTH_DENIED", "Cached session authority is stale.", "auth:admin");
+        }
+        const registration = bounded.method === "POST" && pathname === `${base}/oauth2/register` ? await loopbackClientsAreNative(bounded) : bounded;
         return await normalizeAuthResponseCookies(await auth.handler(registration));
       } catch (error) { return surfaceFailure(error, undefined, `auth ${route}`); }
     }

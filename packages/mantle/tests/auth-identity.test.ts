@@ -30,12 +30,12 @@ afterAll(() => {
 async function app(pg?: SQL, store?: {
     cache: SessionCache;
     prefix: string;
-}, adminRoles: readonly string[] = ["admin"], config: { db?: Database; prefix?: string; defaultRole?: string } = {}) {
+}, adminRoles: readonly string[] = ["admin"], config: { db?: Database; prefix?: string; defaultRole?: string; adminUserIds?: string[] } = {}) {
     const sqlite = config.db ?? new Database(":memory:");
     if (!config.db) resources.push(sqlite);
     sqlite.run("PRAGMA foreign_keys=ON");
     let sent = "";
-    const adminPlugin = adminFunction({ defaultRole: config.defaultRole, adminRoles: [...adminRoles], ac, roles: { admin: ac.newRole({ user: [], session: [] }), editor: ac.newRole({ user: [], session: [] }), ...Object.fromEntries(adminRoles.map(role => [role, ac.newRole(defaultStatements)])), user: ac.newRole({ user: [], session: [] }), guest: ac.newRole({ user: [], session: [] }), vip: ac.newRole({ user: [], session: [] }), approver: ac.newRole({ user: [], session: [] }), operator: ac.newRole(defaultStatements), support: ac.newRole({ user: ["list"], session: [] }), denied: ac.newRole({ user: [], session: [] }) } });
+    const adminPlugin = adminFunction({ defaultRole: config.defaultRole, adminRoles: [...adminRoles], adminUserIds: config.adminUserIds, ac, roles: { admin: ac.newRole({ user: [], session: [] }), editor: ac.newRole({ user: [], session: [] }), ...Object.fromEntries(adminRoles.map(role => [role, ac.newRole(defaultStatements)])), user: ac.newRole({ user: [], session: [] }), guest: ac.newRole({ user: [], session: [] }), vip: ac.newRole({ user: [], session: [] }), approver: ac.newRole({ user: [], session: [] }), operator: ac.newRole(defaultStatements), support: ac.newRole({ user: ["list"], session: [] }), denied: ac.newRole({ user: [], session: [] }) } });
     const d1 = d1Shim(sqlite), options = { secret, baseURL: "http://localhost/api/auth", session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true }, database: pg ? postgresAdapter(pg) : d1Adapter(d1),
         ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], baseURL: "http://localhost" }),
         user: { ...(config.prefix ? { modelName: `${config.prefix}_people`, fields: { createdAt: "joined_at", emailVerified: "verified" } } : {}), additionalFields: (config.prefix ? {} : { githubLogin: { type: "string" as const, required: false } }) as NonNullable<BetterAuthOptions["user"]>["additionalFields"] },
@@ -209,6 +209,15 @@ async function lastAdmin(a: Awaited<ReturnType<typeof app>>) {
 }
 test("the last admin member can be neither demoted nor deleted, and concurrent demotions leave one (SQLite)", async () => {
     await lastAdmin(await app());
+});
+test("an adminUserIds-only last administrator cannot be deleted (SQLite)", async () => {
+    const a = await app(undefined, undefined, ["admin"], { adminUserIds: ["allowlisted"] });
+    await a.ctx.internalAdapter.createUser({ id: "allowlisted", email: "allowlisted@example.test", name: "Allowlisted", emailVerified: true, role: "user", githubLogin: null }, { method: "admin" });
+    await a.ctx.internalAdapter.updateUser("s", { role: "user" });
+    await a.ctx.internalAdapter.updateUser("allowlisted", { role: "guest" });
+    await expect(a.ctx.internalAdapter.updateUser("allowlisted", { banned: true })).rejects.toMatchObject({ body: { code: "CONFLICT" } });
+    await expect(a.ctx.adapter.delete({ model: "user", where: [{ field: "id", value: "allowlisted" }] })).rejects.toMatchObject({ body: { code: "CONFLICT" } });
+    expect(await a.ctx.internalAdapter.findUserById("allowlisted")).not.toBeNull();
 });
 test.skipIf(!pgUrl)("the last admin member can be neither demoted nor deleted, and concurrent demotions leave one (PostgreSQL)", async () => {
     const schema = `last_admin_${crypto.randomUUID().replaceAll("-", "")}`, db = new SQL(pgUrl!);

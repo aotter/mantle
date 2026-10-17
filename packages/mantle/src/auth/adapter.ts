@@ -85,19 +85,22 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
     const { adminRoles: roles, adminUserIds } = options ? adminOptionsOf({ options }) : { adminRoles: [] as string[], adminUserIds: [] as readonly string[] };
     const holdsAdmin = (role: unknown) => typeof role === "string" && role.split(",").some(role => roles.includes(role));
     const field = (name: string) => getFieldName({ model: "user", field: name });
-    const protects = (modelKey: string, values?: Row) => modelKey === "user" && roles.length > 0 &&
+    const protects = (modelKey: string, values?: Row) => modelKey === "user" && (roles.length > 0 || adminUserIds.length > 0) &&
       (!values || values[field("banned")] === true || values[field("banned")] === 1 || Object.hasOwn(values, field("role")) && !holdsAdmin(values[field("role")]));
-    const membership = (s: Statement, alias: string) => '(' + roles.map(role => `${d === sqlite ? "instr" : "strpos"}(',' || COALESCE(${alias}.${ident(field("role"))}, '') || ',', ${s.bind(',' + role + ',')}) > 0`).join(' OR ') + ')';
-    const lastAdminGuard = (s: Statement, model: string) => {
+    const membership = (s: Statement, alias: string) => '(' + [...roles.map(role => `${d === sqlite ? "instr" : "strpos"}(',' || COALESCE(${alias}.${ident(field("role"))}, '') || ',', ${s.bind(',' + role + ',')}) > 0`), d === sqlite ? "0" : "FALSE"].join(' OR ') + ')';
+    const allowlisted = (s: Statement, alias: string) => `(${[...adminUserIds.map(id => `${alias}.${idOf("user")} = ${s.bind(id)}`), d === sqlite ? "0" : "FALSE"].join(" OR ")})`;
+    const administrator = (s: Statement, alias: string) => `(${membership(s, alias)} OR ${allowlisted(s, alias)})`;
+    const lastAdminGuard = (s: Statement, model: string, keepsAllowlisted = false) => {
       const table = ident(model), other = '"_mantle_other_admin"', no = d === sqlite ? '0' : 'FALSE';
-      return `(NOT ${membership(s, table)} OR EXISTS (SELECT 1 FROM ${table} ${other} WHERE (${membership(s, other)}${adminUserIds.map(id => ` OR ${other}.${idOf("user")} = ${s.bind(id)}`).join("")}) AND ${other}.${idOf("user")} <> ${table}.${idOf("user")} AND COALESCE(${other}.${ident(field("banned"))}, ${no}) = ${no}))`;
+      return `(${keepsAllowlisted ? `${allowlisted(s, table)} OR ` : ""}NOT ${administrator(s, table)} OR EXISTS (SELECT 1 FROM ${table} ${other} WHERE ${administrator(s, other)} AND ${other}.${idOf("user")} <> ${table}.${idOf("user")} AND COALESCE(${other}.${ident(field("banned"))}, ${no}) = ${no}))`;
     };
     const mutation = async (model: string, modelKey: string, where: CleanedWhere[], values?: Row) => {
       const protect = protects(modelKey, values);
+      const keepsAllowlisted = !!values && values[field("banned")] !== true && values[field("banned")] !== 1;
       if (protect && (where.length !== 1 || where[0]!.field !== field("id") || where[0]!.operator && where[0]!.operator !== "eq"))
         throw new APIError("FORBIDDEN", { code: "AUTH_DENIED", message: "Destructive admin identity writes require one user id." });
-      const result = await run(s => `${values ? `UPDATE ${ident(model)} SET ${assign(s, values)}` : `DELETE FROM ${ident(model)}`}${s.where(modelKey, where, protect ? lastAdminGuard(s, model) : undefined)} RETURNING *`, protect);
-      if (protect && !result.changes && (await run(s => `SELECT ${idOf(modelKey)} FROM ${ident(model)}${s.where(modelKey, where, `NOT ${lastAdminGuard(s, model)}`)} LIMIT 1`)).rows.length)
+      const result = await run(s => `${values ? `UPDATE ${ident(model)} SET ${assign(s, values)}` : `DELETE FROM ${ident(model)}`}${s.where(modelKey, where, protect ? lastAdminGuard(s, model, keepsAllowlisted) : undefined)} RETURNING *`, protect);
+      if (protect && !result.changes && (await run(s => `SELECT ${idOf(modelKey)} FROM ${ident(model)}${s.where(modelKey, where, `NOT ${lastAdminGuard(s, model, keepsAllowlisted)}`)} LIMIT 1`)).rows.length)
         throw new APIError("CONFLICT", { code: "CONFLICT", message: "This is the last admin; promote another admin before removing or banning this one." });
       return result;
     };

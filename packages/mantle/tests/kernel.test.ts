@@ -6,7 +6,16 @@ test("ISO inputs refuse what Date.parse would roll over or cannot represent", ()
   expect(isoTimestamptz("2026-10-11T08:00:00.000001+08:00")).toBe("2026-10-11T00:00:00.000001Z");
   for (const bad of ["2026-10-11T24:00:00Z", "2026-10-11T00:00:00", "2026-02-30T00:00:00Z"]) expect(() => encodeTimestamptz(bad)).toThrow("not a");
   expect(() => encodeTimestamptz(new Date("garbage"))).toThrow("Invalid Date");
+  expect(() => encodeTimestamptz(new Date("5000-01-01T00:00:00.001Z"))).toThrow("not a valid timestamp");
   expect(() => encodeDate("2026-02-30")).toThrow("not a valid date");
+});
+
+test("D1 batch transport failures preserve the uncertain write outcome", async () => {
+  const { procedure } = await import("../src/kernel/driver/d1.js");
+  const cause = new Error("response lost after commit");
+  const statement = { bind() { return this; }, all: async () => ({ results: [], meta: { changes: 1 } }) };
+  const db = { prepare: () => statement, batch: async () => { throw cause; } };
+  await expect(procedure(db, [{ sql: "UPDATE records SET value = ?", binds: [1] }], "save")).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN", path: "save", cause });
 });
 
 test("isoDate returns a real calendar day as it was given, and refuses anything else", () => {

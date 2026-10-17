@@ -182,8 +182,8 @@ test("web indexes bound row scans and real cursor queries",async()=>{
     db.transaction(()=>{for(let i=0;i<50504;i++)insert.run(String(i).padStart(5,"0"),"post"+i,"Title "+i,"# body");})();
     let queries=0;const handle={query(sql:string){queries++;return db.query(sql);},exec:db.exec.bind(db),transaction:db.transaction.bind(db)};
     const {web}=await import(join(dir,"web.ts"));const site=web({db:handle,caller:{kind:"anonymous"},origin:"https://site.test",title:"Blog",description:"x",pages:{"/posts/{slug}":{view:"post-by-slug",list:"posts",markdown:"body"}}});
-    const sitemap=await site.fetch(new Request("https://site.test/sitemap.xml"));expect(sitemap.status).toBe(200);expect((await sitemap.text()).match(/<url>/g)).toHaveLength(50000);expect(queries).toBe(100);
-    queries=0;const llms=await site.fetch(new Request("https://site.test/llms.txt"));expect((await llms.text()).match(/^- /gm)).toHaveLength(5000);expect(queries).toBe(10);
+    const sitemap=await site.fetch(new Request("https://site.test/sitemap.xml"));expect(sitemap.status).toBe(503);expect(await sitemap.json()).toMatchObject({error:{code:"WEB_INDEX_TOO_LARGE"}});expect(queries).toBe(100);
+    queries=0;const llms=await site.fetch(new Request("https://site.test/llms.txt"));expect(llms.status).toBe(503);expect(await llms.json()).toMatchObject({error:{code:"WEB_INDEX_TOO_LARGE"}});expect(queries).toBe(10);
     // An unbounded View with an explicit one-row paging option exercises the query-count ceiling,
     // independently of authored SQL LIMIT (which bounds the entire result set).
     const {web:nativeWeb}=await import("../src/kernel/web.js");
@@ -193,10 +193,10 @@ test("web indexes bound row scans and real cursor queries",async()=>{
       ["posts",{query:()=>({input:{}}),page:(db,caller,input,paging)=>postsPage(db,caller,input,{...paging,limit:1})}],
       ["post-by-slug",{query:params=>({input:{slug:params.get("slug")}}),page:postPage}],
     ]);
-    queries=0;expect((await (await one.fetch(new Request("https://site.test/sitemap.xml")))!.text()).match(/<url>/g)).toHaveLength(100);expect(queries).toBe(100);
-    queries=0;expect((await (await one.fetch(new Request("https://site.test/llms.txt")))!.text()).match(/^- /gm)).toHaveLength(10);expect(queries).toBe(10);
-    db.query("UPDATE posts SET slug='.' WHERE id='00000'").run();db.query("UPDATE posts SET slug='..' WHERE id='00001'").run();queries=0;const skip=await (await site.fetch(new Request("https://site.test/llms.txt"))).text();expect(skip).not.toContain("https://site.test/posts/.)");expect(skip).not.toContain("https://site.test/posts/..)");expect(skip.match(/^- /gm)).toHaveLength(4998);expect(queries).toBe(10);
-    db.query("UPDATE posts SET title=? WHERE id='00002'").run("x".repeat(1024*1024));queries=0;const bounded=await (await site.fetch(new Request("https://site.test/llms.txt"))).text();expect(new TextEncoder().encode(bounded).length).toBeLessThanOrEqual(1024*1024);expect(queries).toBe(1);
+    queries=0;expect((await one.fetch(new Request("https://site.test/sitemap.xml")))!.status).toBe(503);expect(queries).toBe(100);
+    queries=0;expect((await one.fetch(new Request("https://site.test/llms.txt")))!.status).toBe(503);expect(queries).toBe(10);
+    db.query("DELETE FROM posts WHERE id > '00002'").run();db.query("UPDATE posts SET slug='.' WHERE id='00000'").run();db.query("UPDATE posts SET slug='..' WHERE id='00001'").run();queries=0;const skip=await (await site.fetch(new Request("https://site.test/llms.txt"))).text();expect(skip).not.toContain("https://site.test/posts/.)");expect(skip).not.toContain("https://site.test/posts/..)");expect(skip.match(/^- /gm)).toHaveLength(1);expect(queries).toBe(1);
+    db.query("UPDATE posts SET title=? WHERE id='00002'").run("x".repeat(1024*1024));queries=0;const bounded=await site.fetch(new Request("https://site.test/llms.txt"));expect(bounded.status).toBe(503);expect(await bounded.json()).toMatchObject({error:{code:"WEB_INDEX_TOO_LARGE"}});expect(queries).toBe(1);
   }finally{db.close();await rm(dir,{recursive:true,force:true});}
 },30000);
 

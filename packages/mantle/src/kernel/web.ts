@@ -89,14 +89,14 @@ export function web<Database, E>(options: WebOptions<Database, E>, table: readon
           const sitemap = path === "/sitemap.xml", cap = sitemap ? 50000 : 5000, limit = sitemap ? 50 * 1024 * 1024 : 1024 * 1024;
           const start = sitemap ? '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' : "# " + label(options.title) + "\n\n> " + label(options.description) + "\n\n## Pages\n\n", end = sitemap ? "</urlset>" : "\n";
           const links: string[] = []; let visited = 0, requests = 0, bytes = size(start + end); if (bytes > limit) throw new TypeError("Web index header exceeds its byte limit.");
-          pagesLoop: for (const entry of pages) {
+          const overflow = (message: string): never => { throw new ContractError("WEB_INDEX_TOO_LARGE", message, "web:index", { status: 503 }); };
+          for (const entry of pages) {
             if (!entry.page.list) continue;
             let cursor: string | undefined;
             do {
-              if (requests >= (sitemap ? 100 : 10)) break pagesLoop; requests++;
+              if (requests >= (sitemap ? 100 : 10)) overflow("Web index requires too many View page requests."); requests++;
               const page = await query(entry.page.list, ctx.db, ctx.caller, new URLSearchParams(), cursor);
-              for (const row of page.rows) { if (visited++ >= cap) break pagesLoop; const url = validUrl(entry.path, row, entry.page.view); if (!url) continue; const line = sitemap ? "<url><loc>" + escape(url) + "</loc></url>" : "- [" + label(row.title ?? url) + "](" + url + "): " + label(row.description ?? "") + "\n"; const length = size(line); if (bytes + length > limit) break pagesLoop; bytes += length; links.push(line); }
-              if (visited >= cap) break pagesLoop;
+              for (const row of page.rows) { if (visited++ >= cap) overflow("Web index has too many rows."); const url = validUrl(entry.path, row, entry.page.view); if (!url) continue; const line = sitemap ? "<url><loc>" + escape(url) + "</loc></url>" : "- [" + label(row.title ?? url) + "](" + url + "): " + label(row.description ?? "") + "\n"; const length = size(line); if (bytes + length > limit) overflow("Web index exceeds its byte limit."); bytes += length; links.push(line); }
               cursor = page.nextCursor;
             } while (cursor);
           }

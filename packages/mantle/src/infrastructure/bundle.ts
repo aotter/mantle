@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build, type Metafile } from "esbuild";
 import { INPUTS_FILE, authTableSql, extraRoles, generatedTarget, staleInputs } from "./inputs.js";
@@ -40,15 +40,26 @@ export function guardStartup(metafile: Metafile, entry: string): void {
   }
 }
 
+/** The physical spelling of a path, including a nonexistent tail below its nearest existing ancestor. */
+const physical = (input: string): string => {
+  let found = resolve(input); const tail: string[] = [];
+  while (!existsSync(found)) {
+    const parent = dirname(found);
+    if (parent === found) return found;
+    tail.unshift(basename(found)); found = parent;
+  }
+  return resolve(realpathSync(found), ...tail);
+};
+
 /** Whether `inner` is `outer` or inside it. */
 const within = (outer: string, inner: string) => {
-  const path = relative(resolve(outer), resolve(inner));
+  const path = relative(physical(outer), physical(inner));
   return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 };
 
 /** A directory a build empties must not be the working directory or hold the source entry. */
 function assertCleanable(label: string, dir: string, entry: string): void {
-  if (resolve(dir) === process.cwd()) throw new Error(`${label} must not be the working directory: it is cleaned before building.`);
+  if (physical(dir) === physical(process.cwd())) throw new Error(`${label} must not be the working directory: it is cleaned before building.`);
   if (within(dir, entry)) throw new Error(`${label} must not contain the source entry: it is cleaned before building.`);
 }
 

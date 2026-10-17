@@ -312,6 +312,17 @@ spec: {surface: admin, sql: 'SELECT 1 AS answer'}
 
 
 describe("OAuth grant revocation and consent routes", () => {
+  test("a refresh claim rechecks the exact source row after concurrent revocation", async () => {
+    const models: string[] = [];
+    const accessToken = oauthGrantExtension.claims!.accessToken!;
+    const ctx = {
+      body: { refresh_token: "source-token" },
+      error: (_status: string, body: object) => Object.assign(new Error("invalid grant"), body),
+      context: { adapter: { findOne: async ({ model }: { model: string }) => { models.push(model); return { userId: "u", clientId: "c", revoked: new Date() }; } } },
+    };
+    await expect(accessToken({ ctx, opts: {}, user: { id: "u" }, client: { clientId: "c" }, scopes: ["offline_access"], grantType: "refresh_token" } as never)).rejects.toMatchObject({ error: "invalid_grant" });
+    expect(models).toEqual(["oauthRefreshToken"]);
+  });
   test("revoke rejects issued JWT and does not resurrect it on reconsent", async () => {
     const app = await makeApp();
     const { cookie, userId } = await app.signIn();
@@ -578,7 +589,7 @@ describe("OAuth grant revocation and consent routes", () => {
     await expect(resolveCaller(new Request(url, { headers: { authorization: `DPoP ${accessToken}`, dpop: await proof(url, "GET", accessToken) } }), app.loader, { audience: AUDIENCE })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
   });
   test("consent boundary rejects oversized streaming bodies, invalid decisions and invalid signed query", async () => {
-    const app = await makeApp(); const { cookie } = await app.signIn();
+    const app = await makeApp({ localOnly: true }); const { cookie } = await app.signIn();
     const origin = new URL(app.baseURL).origin;
     const routes = authRoutes(app.loader as never, { methods: [] });
     expect((await routes(new Request(`${origin}/oauth/consent/data`, { headers: { cookie } })))!.status).toBe(400);
@@ -586,6 +597,8 @@ describe("OAuth grant revocation and consent routes", () => {
     const stream = new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(1_048_577)); controller.close(); } });
     const response = await routes(new Request(`${origin}/oauth/consents/revoke`, { method: "POST", headers: { cookie, origin }, body: stream, duplex: "half" } as RequestInit));
     expect(response!.status).toBe(400); expect(response!.headers.get("cache-control")).toContain("no-store");
+    const raw = new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(1_048_577)); controller.close(); } });
+    expect((await routes(new Request(`${app.baseURL}/email-otp/send-verification-otp`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: raw, duplex: "half" } as RequestInit)))!.status).toBe(400);
     expect(() => authRoutes(app.loader as never, { methods: [], connectedAppsPage: "/\\evil.test" })).toThrow("same-origin");
   });
   test("a refused consent POST leaves no unread body", async () => {
@@ -616,6 +629,19 @@ describe("OAuth grant revocation and consent routes", () => {
     app.sqlite.run("DELETE FROM session WHERE userId = ?", [signed.userId]);
     expect((await call())!.status).toBe(401);
     expect((await call("/%61dmin/list-users"))!.status).toBe(401);
+  });
+  test("raw SDK admin routes reject cached role drift within the admin layer", async () => {
+    let handled = 0;
+    const fresh = fixtureCaller({ kind: "user", subject: "u", role: "support", admin: true, scopes: [], credential: "session", credentialId: "s", clientId: null });
+    const auth = {
+      options: { secondaryStorage: {}, plugins: [{ id: "admin", options: { adminRoles: ["owner", "support"] } }] },
+      $context: Promise.resolve({}),
+      api: { getSession: async () => ({ headers: null, response: { session: { id: "s" }, user: { id: "u", role: "owner" } } }) },
+      handler: async () => { handled++; return new Response("handled"); },
+    };
+    const routes = authRoutes({ cookiePrefix: "better-auth", get: async () => auth } as never, { methods: [], resolver: () => fresh });
+    const response = await routes(new Request("https://service.test/api/auth/admin/list-users", { headers: { origin: "https://service.test" } }));
+    expect(response!.status).toBe(403); expect(handled).toBe(0);
   });
   test("an expired primary session cannot refresh from a still-valid KV snapshot", async () => {
     const app = await makeApp({ sessionCache: true, customAdmin: true });
