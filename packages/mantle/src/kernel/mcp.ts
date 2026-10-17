@@ -2,7 +2,10 @@
 import type { Caller, Target, Authorize, Gateway, RequestContext, GatewayOptions } from "./contracts.js";
 import type { Conversions } from "./surface.js";
 import { linkApps, linkSurface, resourcesOf, type McpAppsSource } from "./mcp-apps.js";
-export { callTool, callToolLazy } from "./mcp-call.js";
+// ponytail: a lazy forwarder keeps the public export without pulling paging and call code into every Worker's startup graph.
+type Call = typeof import("./mcp-call.js");
+export const callTool: Call["callTool"] = async (...args) => (await import("./mcp-call.js")).callTool(...args);
+export const callToolLazy: Call["callToolLazy"] = async (...args) => (await import("./mcp-call.js")).callToolLazy(...args);
 export type { McpApps, McpAppsSource, McpAppResource, McpAppRender, McpAppPage, McpAppCsp } from "./mcp-apps.js";
 
 /** Options of a generated `mcp(...)`; it adds required `handlers` when the app declares ref Procedures. */
