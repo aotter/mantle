@@ -20,7 +20,15 @@ exact packed tarballs (`scripts/check-worker-consumer.mjs`).
   Scheduling belongs to the app, rather than a manifest schedule Trigger.
 - `smoke.mjs`: explicitly applies deployment DDL to a fresh local D1, starts
   Wrangler, and exercises OTP, both user roles, REST, both MCP surfaces, Admin
-  assets/editor save, search, scope, stock rollback, locks, activity and cron.
+  assets/editor save, search, scope, stock rollback, locks, activity and cron;
+  real PKCE consent, offline refresh after sign-out, rotation retry and revocation.
+
+The MCP provider permits `mcp` and `offline_access`; a renewable client must
+explicitly request both and obtain the user's consent. A client requesting only
+`mcp` receives no refresh token. Existing scope-limited connections need refreshed
+client metadata and one reauthorization with the added scope; changing the
+server's allowed scopes does not broaden stored consent. See the installed
+OAuth guide for grant lifetimes and migration.
 
 Outside the SDK workspace, use Node 22.22+ and pnpm 9+; pin all three packages to
 one exact version. Then:
