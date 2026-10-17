@@ -85,6 +85,14 @@ validation, owner scope and OCC enforce them. Do not provide generic delete
 permissions just to clean up tests. `smoke.mjs` creates a disposable local D1,
 uses real MCP requests and removes the entire local fixture in `finally`.
 
+## Independently accept the workflow
+
+Follow the [fresh end-user-agent repair/retest loop](../../handbook/guides/agent-workflow-acceptance.md).
+Give the buyer its business goal and authorized isolated transport, without the
+worked tool sequence above. Repair discovered gaps, then repeat the same goal
+with another fresh agent. Preserve failed attempts and distinguish this result
+from `smoke.mjs`, host rendering and the author's stock/privacy regressions.
+
 ## Read data first; render an App deliberately
 
 `sales_by_item` is a bounded data tool. It does not open an iframe, so an agent

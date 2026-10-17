@@ -13,3 +13,12 @@ Better Auth limits each email-OTP path to 3 requests/minute per IP; `authHardeni
 - For selected remote MCP, use the installed `docs/examples/app-shell/smoke-kit.mjs` `assertMcpDiscovery(endpoint, { tools, headers })` in the application's smoke scenario. Derive `tools` from the generated `mcp.ts` exports, or the pure static `developerConsole.interfaces.callable` in generated `admin-descriptors.ts`; filter to the selected surface and explicitly select the expected permitted subset when application authorization narrows it. Include app-composed tools when present. Do not count `describe.targets` or reconstruct authorization rules in the harness. Assert initialized discovery and all `tools/list` pages; a 404, HTML 200, protocol error or missing expected tools must fail. Keep anonymous/member denial assertions separate. Discovery never needs a business-write `tools/call`.
 - Supply test credentials from the application's normal authorized sign-in/test setup (the smoke kit's console OTP sign-in is valid). The discovery assertion only receives credentials: it must not acquire credentials itself, scrape other sessions or manufacture authority. Report local cookie-session discovery, OAuth Bearer/client integration and browser WebMCP as separate evidence. Cookie or WebMCP success does not prove remote OAuth/ChatGPT wiring; missing credentials leave that case unverified, not passed. Do not enable remote routes or OAuth merely to make acceptance pass.
 - Record commands and passed/failed/blocked cases for the exact commit. Fix failures before source admission; rerun relevant checks after changing source. Packing does not run these checks and an agent's checklist is not server build attestation.
+
+For a new or changed MCP business workflow, follow the installed SDK
+`docs/handbook/guides/agent-workflow-acceptance.md`: let a fresh end-user agent
+discover and execute the business goal, repair gaps, then repeat the same goal
+with another fresh agent. Preserve initial failures, setup assistance and
+blocked checks. Scripted smoke, host/UI rendering and independent workflow
+acceptance are separate evidence. If that guide is absent in an older installed
+version, keep its version-matched contract and record this acceptance as pending;
+do not substitute the SDK checkout or silently upgrade.
