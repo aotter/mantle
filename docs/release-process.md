@@ -131,6 +131,9 @@ dist-tag DELETE only added failure and re-run state, and Actions
    runnable examples, workflow skills and plugin skill): no workspace
    dependencies, secrets or local state. ADRs and the reference-service source
    stay in the repository; packaged links to them must use a versioned URL.
+   Run the maintainer release skill's
+   [startup and request-cost checkpoint](../.agents/skills/mantle-release/SKILL.md#startup-and-request-cost-checkpoint)
+   when its auth/kernel/generator trigger applies and before every alpha or beta.
 5. Freeze the PR head for self review; CI must pass before merge. Merge into
    `develop` with a merge commit for every version. For an alpha, dispatch
    release.yml from that merge with `version` (without v). For beta, RC and
