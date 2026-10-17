@@ -56,7 +56,7 @@ export async function fetchService(request: Request, env: Env, context: Executio
       }
       response = await serveAdmin(request, env);
     } else if (/^\/mcp(?:\/admin)?\/*$/.test(url.pathname)) {
-      // --- MCP (optional): delete this branch with the MCP plugins in auth.ts if the app has no MCP.
+      // --- MCP / OAuth (deliberate exception): remove with the auth plugins only for intentional asymmetric exposure.
       serveMcpHandler ??= serveMcp(tools, { ...options, apps: { admin: adminMcpApps({ catalogue: mcpAppCatalogues.admin }) } });
       response = await serveMcpHandler(request, env);
     } else {

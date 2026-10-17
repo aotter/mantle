@@ -88,6 +88,7 @@ Resolve conflicts by merging manifests/options and regenerating. Add the printed
 `.gitattributes` line and run the same generate command with `--check` in CI.
 Compose the app-owned `fetch` using `docs/handbook/cloudflare/service-entry.md`: auth/consent, Admin,
 MCP, REST behind one request-local origin-checked resolver; keep heavy auth dynamic.
+Pair every HTTP Trigger with an MCP Trigger by default; see `docs/handbook/reference/trigger.md` for the generate warning and deliberate asymmetry exception.
 
 For selected native Admin, follow the version-matched
 `docs/handbook/guides/native-admin.md`: select `--admin` (or `admin: true`),

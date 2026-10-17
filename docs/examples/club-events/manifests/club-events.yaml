@@ -165,6 +165,13 @@ spec:
   source: { kind: http, method: POST, path: /api/registrations/cancel }
   target: { procedure: cancel-registration }
 ---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: cancel-registration-mcp }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: cancel-registration }
+---
 # Officers add records through declared Procedures: operational collections have no generic create in Admin.
 # collectionAction puts the Procedure's button and input form in that collection's list header; the admin MCP
 # Trigger is what makes it an Admin operation (and lets the officers' AI do the same).

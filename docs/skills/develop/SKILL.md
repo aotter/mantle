@@ -21,6 +21,7 @@ bundle `dist/` untracked. The app owns its verified Caller, handlers and native
 resources; Better Auth’s admin plugin `adminRoles` defines the admin layer (default `["admin"]`); `ctx.admin` takes no role list ([authorization](../../handbook/cloudflare/authentication.md)).
 
 Use the native Store/query/surface entries and app-owned fetch from the service composition guide.
+Pair every HTTP Trigger with an MCP Trigger by default; see [Trigger](../../handbook/reference/trigger.md) for the generate warning and deliberate asymmetry exception.
 Keep optional modules out of unused entry imports and auth dynamically loaded.
 Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.

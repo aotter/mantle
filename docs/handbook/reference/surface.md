@@ -25,6 +25,8 @@ challenges, JSON-RPC, web rendering, keyset paging) lives in the package's
 `rest`, `mcp`, `web`, `paging` and `validation` kernel modules, so a runtime fix
 ships as a package update instead of a regeneration.
 
+Procedure surface selection follows the [HTTP/MCP pairing default and deliberate asymmetry exception](trigger.md); no surface is implied.
+
 The generated `validation/views/<name>.ts` and
 `validation/procedures/<name>.ts` export `validate(unknown)`. View validators
 also export `query(URLSearchParams)` returning `{ input, limit?, cursor? }`.
@@ -219,7 +221,9 @@ must also mount Better Auth's `/.well-known/oauth-protected-resource/mcp`
 metadata route. Auth challenges point to that route. Presented bearer credentials
 need the `mcp` scope; cookie sessions use the same-origin mutation checks.
 
-Generation emits `mcp.ts` only for a non-internal View or MCP Trigger. These
+Generation emits `mcp.ts` only for a non-internal View or MCP Trigger. Omitting
+MCP remains a deliberate asymmetric choice; an HTTP-only Procedure still generates
+successfully with the warning described in [Trigger](trigger.md). These
 surfaces typecheck without the optional `@modelcontextprotocol/server` peer;
 install the exact version declared in the installed SDK's `peerDependencies`.
 The peer loads by dynamic import on the first matching `/mcp` request; if

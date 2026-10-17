@@ -88,8 +88,9 @@ export default {
 };
 ```
 
-Remove imports and array entries for omitted surfaces. `mcp.ts` exists only when
-the manifest has an MCP surface, and requires the documented optional MCP peer.
+Keep the MCP and REST entries together for the normal symmetric path. For a deliberate
+asymmetric exception, remove the omitted surface's imports and array entry; `mcp.ts`
+exists only when the manifest has an MCP surface and requires the documented optional MCP peer.
 Pass the same handlers to each selected surface that exposes ref Procedures.
 Bind site/media/identity capabilities through the selected Admin/MCP
 options; do not expose native auth administrative routes without `authRoutes` or
