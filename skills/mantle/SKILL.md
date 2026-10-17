@@ -1,6 +1,6 @@
 ---
 name: mantle
-description: Create or continue a Mantle application, test it locally and deploy to a user-owned host using the installed SDK docs.
+description: Create, continue, test or deploy a Mantle application using installed @aotter/mantle docs, including manifests, SQL Views and Procedures, MCP tools, app-built Admin, mantle generate and Mantle upgrades.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/mantle/SKILL.md
@@ -20,6 +20,14 @@ checkout, or any online copy.
 ## Find the project and its version
 
 Work in the user's application, outside the SDK checkout. Read package.json, the lockfile, installed SDK README and node_modules/@aotter/mantle/docs/. Those files define the exact version's contract. Preserve existing identity, handles, routes and resources.
+
+## Choose the installed package skill
+
+- Read `node_modules/@aotter/mantle/docs/skills/develop/SKILL.md` to change an existing project's manifests, SQL, handlers, service entry or surfaces.
+- Read `node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md` to add Mantle to an application with existing code, users or data.
+- Read `node_modules/@aotter/mantle/docs/skills/update/SKILL.md` to upgrade Mantle, including from 0.1.x.
+- Read `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` only for an authorized production deployment.
+- Read `node_modules/@aotter/mantle/docs/skills/media-gc/SKILL.md` only to audit or remove stale uncommitted media uploads.
 
 For a new project, install an exact published SDK version with matching selected Admin/UI packages. Node must be 22.22 or newer. Add TypeScript and target types; Workers also need Wrangler. `node_modules/@aotter/mantle/docs/examples/app-shell/package.json` lists the Wrangler, TypeScript and type-package versions this release is tested with. Optional auth/MCP peers use the installed SDK's package.json versions. Read the installed handbook's start/project-and-cli.md before choosing a target.
 
@@ -52,16 +60,16 @@ cookieCache `{enabled:true,maxAge:60,refreshCache:false,version:"read-60-v1"}` a
 no KV. Bump version when enabling/changing the policy; writes, Admin, consent,
 unknown/ref/media calls stay fresh. Read the installed auth docs before MCP caching.
 
-Use the workflow **generate → typecheck → implement listed handlers**. For example:
+Use the workflow **generate → implement listed handlers → check**. In an app
+copied from the installed app shell, its scripts are the canonical commands:
 
 ```sh
-pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml
-pnpm exec tsc --noEmit
-pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml --check
+pnpm generate
+pnpm check
 ```
- Implement every printed `Handlers` key
+Implement every printed `Handlers` key
 and pass the implementations at `store(db, caller, { handlers })` (and selected
-surface options). Run `tsc --noEmit` again before local acceptance.
+surface options).
 Generated Store metadata initializes on its first use, once per module. Bind
 `store(db, caller, options?)` for the current request; never reuse one caller's
 bound Store for another caller.
@@ -88,10 +96,9 @@ Compose the app-owned `fetch` using `docs/handbook/cloudflare/service-entry.md`:
 MCP, REST behind one request-local origin-checked resolver; keep heavy auth dynamic.
 
 For selected native Admin, follow the version-matched
-`docs/handbook/guides/native-admin.md`: select `--admin` (or `admin: true`),
-mount `entries(bindings.schemas, bindings.adapter)` and serve the Admin assets
-separately. The three-package preview is one Core SDK, the Admin product and the
-shared UI kit.
+`docs/handbook/guides/native-admin.md`: select `--admin` (or `admin: true`), then
+build and serve the application-owned Admin with `mantle bundle` as that guide
+describes.
 Admin reads share generated whitelisted native View templates, writes use native
 Procedure fragments and generated checks. Ref operations retain typed `ctx.store`
 at request time. Verify member/frontend and admin/Admin OTP, tenant/privacy/TTL,
@@ -140,4 +147,6 @@ you ran with their results, and anything left for the user.
 
 ## Data paths
 
-Writes use Store `insert` / `update` / `delete`, atomic `batch` / supported `transaction`, or declared Procedures. Raw SQL writes bypass row rules. Use internal Views for joins, aggregates, OR and reusable reads; Store `findById` / `find` / `first` are for id lookups and simple AND filters. Ref handlers receive `ctx.store` with the same Caller and transaction.
+Follow the installed `docs/handbook/guides/typed-queries.md` for Store,
+Procedure and View data paths; the service composition guide owns request-local
+Caller binding.

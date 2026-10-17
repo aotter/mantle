@@ -7,8 +7,8 @@ selected host's frontend kit before choosing APIs. Native applications use
 their installed `docs/handbook/guides/native-admin.md` and the
 [web contract](web.md).
 
-- For self-hosted applications, mount the selected Admin API and serve the
-  separate Admin package's assets with its shell/CSP contract. The application
+- For self-hosted applications, build Admin with `mantle bundle` and serve it as
+  the installed `docs/handbook/guides/native-admin.md` describes. The application
   owns auth, OTP delivery and verified Caller wiring; use a console/test sender
   locally and configure production email for deployment. If a host already
   supplies identity/Admin, reuse its explicit contract and reserved routes.
