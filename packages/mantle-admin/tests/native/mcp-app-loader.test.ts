@@ -69,6 +69,11 @@ test("html still overrides the default: a string, a zero-argument loader or one 
   expect(() => adminMcpApps({ catalogue, html: () => "<head></head>" })).toThrow("build-specific uri");
 });
 
+test("duplicate retained resource URIs fail when the contributor is constructed", () => {
+  const snapshot = { uri: "ui://mantle-admin/admin/old", html: '<head><script type="application/json" id="mantle-catalog">{"views":{},"actions":{}}</script></head>' };
+  expect(() => adminMcpApps({ catalogue, html: "<head></head>new", previous: [snapshot, snapshot] })).toThrow("registered twice");
+});
+
 test("the default URI versions raw build bytes, static catalogue and material resource metadata", async () => {
   const source = adminMcpApps({ catalogue });
   let reads = 0;

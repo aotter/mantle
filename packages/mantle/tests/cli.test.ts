@@ -174,12 +174,17 @@ test("generate --admin wires fresh assets, preserves explicit routing, and repai
     await writeFile(join(dir, "wrangler.jsonc"), JSON.stringify({ name: "custom", assets: { binding: "MY_FILES", run_worker_first: false, html_handling: "auto-trailing-slash" } }));
     generate(dir, "--admin");
     expect(parse(await readFile(join(dir, "wrangler.jsonc"), "utf8")).assets).toEqual({ directory: "dist/client", binding: "MY_FILES", run_worker_first: false, html_handling: "auto-trailing-slash" });
+    await writeFile(join(dir, "wrangler.jsonc"), JSON.stringify({ name: "static-first", assets: { directory: "public", binding: "ASSETS" } }));
+    generate(dir, "--admin", "--assets", "public");
+    expect(parse(await readFile(join(dir, "wrangler.jsonc"), "utf8")).assets).toEqual({ directory: "public", binding: "ASSETS" });
     await writeFile(join(dir, "wrangler.jsonc"), '{ "name": "api" }');
     generate(dir);
     expect(parse(await readFile(join(dir, "wrangler.jsonc"), "utf8")).assets).toBeUndefined();
     await rm(join(dir, "wrangler.jsonc"));
     await writeFile(join(dir, "wrangler.toml"), 'name = "app"\n');
     expect(generate(dir, "--admin")).toContain('[assets]\ndirectory = "dist/client"\nbinding = "ASSETS"\nrun_worker_first = true\nhtml_handling = "none"');
+    expect(await readFile(resolve(base, "../../docs/handbook/cloudflare/service-entry.md"), "utf8")).toContain("Existing blocks keep their binding and routing");
+    expect(await readFile(resolve(base, "../../docs/handbook/start/project-and-cli.md"), "utf8")).toContain("existing blocks keep their binding/routing");
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
 

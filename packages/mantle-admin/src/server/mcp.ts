@@ -77,6 +77,7 @@ export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
         // right after the opening <head>: the module script that follows may hold the text "</head>" in a string
         return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, start => start + script) : script + html;
     };
+    const previousUris = new Set<string>();
     const previous = (options.previous ?? []).map((snapshot, index): McpAppResource => {
         const script = /<script type="application\/json" id="mantle-catalog">([\s\S]*?)<\/script>/;
         const found = script.exec(snapshot.html);
@@ -85,6 +86,9 @@ export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
         const object = (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value);
         if (!/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(snapshot.uri) || !catalogue || !object(catalogue.views) || !object(catalogue.actions))
             throw new ContractError("INPUT_VALIDATION_FAILED", "A retained Admin App needs its original ui://mantle-admin/… URI and embedded catalogue from resources/read.", "mcp/apps");
+        if (previousUris.has(snapshot.uri))
+            throw new ContractError("MCP_APP_CONFLICT", `MCP App resource URI '${snapshot.uri}' is registered twice.`, "mcp/apps");
+        previousUris.add(snapshot.uri);
         const base = snapshot.html.replace(script, ""), archivedCatalogue = catalogue;
         return { uri: snapshot.uri, name: `mantle-admin-previous-${index}`, title: snapshot.title ?? "Admin",
             ...(snapshot.domain !== undefined ? { domain: snapshot.domain } : {}),

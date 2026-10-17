@@ -119,25 +119,9 @@ floor, add scopes to a valid token, issue tokens or modify an already-signed
 authorization request. An existing valid `mcp`-only token can still call a tool
 that only requires `mcp`. The application must independently permit
 `offline_access` in its provider and the user must explicitly consent.
-ChatGPT web can use this challenge to request both scopes on a fresh, default
-URL connection, without typing Base scopes. Verify the actual requested scopes,
-refresh-token issuance and post-expiry rotation in the intended host.
-
-Merely advertising `offline_access` in authorization-server `scopes_supported`
-does not establish that a client requests it. For a host that ignores the
-challenge hint, its initial connection configuration may still need explicit
-scopes: in ChatGPT's **Advanced OAuth settings**, keep `mcp` selected and add
-`offline_access` to **Base scopes** before linking. Base scopes are requested
-even when tools declare their own scopes; defaults can be superseded by
-tool-level scopes. Check the actual consent page. Do not put `offline_access`
-in the resource's required scope floor or silently add it after consent.
-
-For clients that install portable plugins, the optional
-`docs/examples/app-shell/plugin/` metadata demonstrates OpenAI's official
-`mcp.json` `extensions.com.openai.auth.baseScopes` field. This supplies the
-connection setting in the package instead of requiring manual scope entry.
-It is not authorization-server metadata and does not force a URL-only custom
-connector to adopt it; verify support in the actual target host.
+Verify the actual requested scopes, refresh-token issuance and post-expiry
+rotation in the intended client. Do not put `offline_access` in the resource's
+required scope floor or silently add it after consent.
 
 For an existing connection granted only `mcp`, deploy the allowed-scope change,
 refresh the client's discovery/registration metadata, then reconnect or reauthorize

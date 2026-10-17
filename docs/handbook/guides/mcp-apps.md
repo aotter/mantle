@@ -133,12 +133,20 @@ import { mcpAppCatalogues } from '../generated/admin-descriptors.ts';
 export const appDefinition = { catalogue: mcpAppCatalogues.admin };
 ```
 
-The service imports that definition and a committed `mcp-app-previous.json` at the project root
-(initially `[]`), and passes `adminMcpApps({ ...appDefinition, previous })` to its
-endpoint. Keep custom `renders`, catalogue extensions, `domain` and `title` in the
-shared definition too. Node 22.18+ can read these generated `.ts` modules; a
-TypeScript app using `.ts` import paths enables `allowImportingTsExtensions`
-with `noEmit`. JSON imports use `with { type: 'json' }`.
+Keep a committed `mcp-app-previous.json` at the project root (initially `[]`). Load
+it only inside the service's MCP branch, before constructing the handler, so other
+routes do not parse archived full-page HTML at startup:
+
+```ts
+const { default: previous } = await import('../mcp-app-previous.json', { with: { type: 'json' } });
+serveMcpHandler ??= serveMcp(tools, { ...options, apps: {
+  admin: adminMcpApps({ ...appDefinition, previous }),
+} });
+```
+
+Keep custom `renders`, catalogue extensions, `domain` and `title` in the shared
+definition too. Node 22.18+ can read these generated `.ts` modules; a TypeScript
+app using `.ts` import paths enables `allowImportingTsExtensions` with `noEmit`.
 Keep snapshots outside the directory containing `admin.tsx`: Tailwind scans that
 directory, and compiled HTML/JavaScript inside a snapshot can be mistaken for
 utility class names and change subsequent CSS builds.
@@ -244,71 +252,6 @@ View tool with an App, and check light and dark themes, a narrow window,
 full screen, a row action, and a link. Check too that the host advertises
 `hostCapabilities.serverTools`; without it the App is read-only. The automated interoperability test
 uses the official `AppBridge`; your app runs its generated version ([Run the compatibility test](#run-the-compatibility-test)).
-
-### Verify a deployed App in ChatGPT
-
-When intentionally introducing changed tool contracts during development, refresh the connector's tools
-in ChatGPT settings and reload the conversation before testing. Reconnecting an
-OAuth account renews credentials; it does not establish that the host adopted
-the new tool catalogue. Discover the current render tool and its
-`_meta.ui.resourceUri`, then invoke it in a new turn. An older card retains its
-original URI, which the current deployment may no longer serve.
-
-For a compatible upgrade, retain that original resource as described above and
-test the old conversation **before** any tool refresh or reconnect. Test a clean
-first connection separately. Normal initial OAuth consent is expected; renewal
-or clearing host state to make an upgrade pass is not a successful upgrade test.
-
-For an authenticated App, follow [renewable OAuth setup](oauth.md) when creating
-the first ChatGPT connection, including the explicit `offline_access`
-authorization scope hint. Verify these independently:
-
-1. Sign in and approve the actual requested scopes, then visibly render the App
-   in a new ChatGPT conversation. Confirm the resource server resolved an OAuth
-   caller; a browser cookie or anonymous read is not OAuth evidence.
-2. In a disposable fixture, configure a short access-token lifetime before the
-   first authorization. Let it expire naturally and invoke the tool again in the
-   same conversation. Record the host's successful `refresh_token` exchange,
-   refresh-token rotation and subsequent authenticated tool/resource requests.
-   Record only safe metadata, never credentials or token bodies. An unchanged
-   iframe or a successful request before expiry does not prove renewal.
-3. Deploy a changed UI build with the old page retained. After expiry, reload
-   the old conversation, visibly check its original card, and invoke the tool
-   again. Require both successful renewal and fresh authorized data, without
-   reconnecting, refreshing host tools or clearing caches. Distinguish an old
-   card served from host cache from an observed authenticated old-URI read.
-
-If testing background access after website sign-out, sign out only the fixture's
-website session; keep the ChatGPT connection and consent intact. Revocation is a
-separate refusal test and is not expected to renew automatically. Short-lived
-fixture results establish exercised expiry/rotation behavior, not a multi-day
-soak or arbitrary third-party identity-provider compatibility.
-
-Diagnose the first failing stage before changing the App:
-
-- `connector_auth_required` from the host's widget request: renew the existing
-  linked account through its normal OAuth flow.
-- `HTML asset not found`: compare the card's URI with the current authenticated
-  `tools/list` and `resources/read`; refresh stale host metadata, or repair a
-  missing/mismatched resource. A successful static asset GET alone is insufficient.
-- Widget request succeeds, but the sandbox document fails to load: inspect that
-  document's network result. The App bridge cannot initialize before its HTML runs.
-  Browser automation can itself pause document responses and abort the host's
-  sandbox navigation. If the automation reports a paused document response, repeat
-  the same card in native Chrome with that tab's automation debugger disconnected.
-  Compare the same deployment and resource URI before blaming the SDK. Reattaching
-  automation to an already loaded iframe does not test its initial navigation.
-- HTML runs, but initialization fails: inspect the official client's connection
-  error and test the same resource HTML with the official `AppBridge` host.
-
-Accept host rendering only after the iframe visibly displays the returned data.
-Record the tested URI and distinguish a successful tool result, local official-host
-replay and actual ChatGPT rendering. The assistant saying it displayed a card is
-not evidence that the iframe rendered. Verify with the host's CSP enforcement
-enabled and preserve authentication throughout; label any CSP-disabled diagnostic
-run separately. Exercise a read-only UI tool call, such as loading the next page,
-to check the live bridge as well as the initial result.
-
 
 ## Customising Admin for MCP hosts
 

@@ -71,11 +71,11 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
   if (assets !== undefined) {
     const wireAssets = (path: (string | number)[], current: any) => {
       edit([...path, "directory"], local(assets));
-      // Defaults for the built Admin loader; explicit custom loaders/routing stay app-owned.
-      if (current?.binding === undefined) edit([...path, "binding"], "ASSETS");
-      if (current?.run_worker_first === undefined) edit([...path, "run_worker_first"], true);
+      const ownsDefaults = current === undefined || current?.binding === undefined;
+      if (ownsDefaults && current?.binding === undefined) edit([...path, "binding"], "ASSETS");
+      if (ownsDefaults && current?.run_worker_first === undefined) edit([...path, "run_worker_first"], true);
       // The shell fetches index.html itself; asset canonicalization would redirect it back to /admin/ forever.
-      if (current?.html_handling === undefined) edit([...path, "html_handling"], "none");
+      if (current?.html_handling === undefined && (current?.run_worker_first === true || (ownsDefaults && current?.run_worker_first === undefined))) edit([...path, "html_handling"], "none");
     };
     wireAssets(["assets"], config.assets);
     for (const [name, environment] of Object.entries(config.env ?? {}) as [string, any][]) {
