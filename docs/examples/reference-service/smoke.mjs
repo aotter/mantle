@@ -360,7 +360,6 @@ try {
 
   // A working initial MCP call does not prove this connection can renew. Exercise
   // the example's real provider, signed consent, PKCE and rotation on this local D1.
-  assert.ok(readFileSync(new URL("./src/auth.ts", import.meta.url), "utf8").includes('clientRegistrationDefaultScopes: ["mcp", "offline_access"]'));
   const issuer = `${origin}/api/auth`;
   const discovery = (await call("GET", "/.well-known/oauth-authorization-server/api/auth")).body;
   assert.equal(discovery.issuer, issuer);
@@ -394,12 +393,11 @@ try {
     const redirect = location ?? envelope?.url ?? envelope?.redirect_uri;
     assert.equal(typeof redirect, "string");
     let target = new URL(redirect, origin);
-    if (!target.searchParams.has("code")) {
-      assert.equal(target.origin, origin, target.searchParams.get("error_description") ?? target.href);
-      const consent = await oauth("/oauth2/consent", { accept: true, oauth_query: target.search.slice(1) });
-      assert.equal(consent.status, 200);
-      target = new URL(consent.body.url ?? consent.body.redirect_uri, origin);
-    }
+    assert.equal(target.searchParams.has("code"), false, "A new dynamic client must obtain explicit user consent");
+    assert.equal(target.origin, origin, target.searchParams.get("error_description") ?? target.href);
+    const consent = await oauth("/oauth2/consent", { accept: true, oauth_query: target.search.slice(1) });
+    assert.equal(consent.status, 200);
+    target = new URL(consent.body.url ?? consent.body.redirect_uri, origin);
     assert.equal(target.origin, "http://127.0.0.1:19876");
     assert.equal(target.searchParams.get("state"), state);
     assert.ok(target.searchParams.has("code"));
