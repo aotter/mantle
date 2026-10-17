@@ -5,3 +5,7 @@ node_modules/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Rebuilt from manifests with the selected SDK; never part of the reference source.
+generated/
+dist/

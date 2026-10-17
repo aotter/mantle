@@ -49,10 +49,16 @@ convergence. Configure a real email sender before deployment. `ADMIN_EMAIL`
 receives the OSS `admin` role only after email verification; ordinary members
 receive 403 from Admin.
 
-Commit every generated TypeScript/SQL file and Wrangler edit; regenerate instead
-of hand-editing them, and keep `dist/` untracked. The release gate replaces the
-registry pins with exact tarballs; it does not use workspace links or an old Core
-fallback. Follow the installed SDK README and native contract, not historical
+This reference is source-only: commit manifests, focused implementations,
+configuration and executable checks. Keep `generated/` and `dist/` untracked;
+regenerate them with the selected SDK rather than hand-editing outputs.
+`pnpm check` generates first, checks the generated output, then typechecks and
+runs the real local service smoke. Run `pnpm generate` before direct typecheck,
+build or browser-test commands in a fresh checkout. Initial database DDL also
+comes from that generated output; reviewed production migrations remain authored
+source. The release gate archives only committed source and installs exact
+Core/Admin/UI tarballs, so it cannot reuse a checked-in generated baseline or
+workspace links. Follow the installed SDK README and native contract, not historical
 plan-based `createMantle` instructions. Bare integers retain their driver's native
 contract; the selected surfaces own wire conversions.
 
