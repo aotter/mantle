@@ -23,12 +23,8 @@ exact packed tarballs (`scripts/check-worker-consumer.mjs`).
   assets/editor save, search, scope, stock rollback, locks, activity and cron;
   real PKCE consent, offline refresh after sign-out, rotation retry and revocation.
 
-The MCP provider permits `mcp` and `offline_access`; a renewable client must
-explicitly request both and obtain the user's consent. A client requesting only
-`mcp` receives no refresh token. Existing scope-limited connections need refreshed
-client metadata and one reauthorization with the added scope; changing the
-server's allowed scopes does not broaden stored consent. See the installed
-OAuth guide for grant lifetimes and migration.
+See the [OAuth guide](../../handbook/guides/oauth.md) for MCP client scopes,
+renewal, grant lifetimes and reconnection.
 
 Outside the SDK workspace, use Node 22.22+ and pnpm 9+; pin all three packages to
 one exact version. Then:
