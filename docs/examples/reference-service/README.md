@@ -106,3 +106,10 @@ bounded results and authorization, plus business flows with owner isolation,
 invalid relations, stale versions, explicit repeat-call behavior and readback.
 This is an application/reference design choice using the existing SDK hooks
 (ADR-0029), not a new manifest grammar or runtime rendering guarantee.
+
+After changing a server's tools or descriptions, an existing host connection
+may still hold an older catalog snapshot. Use the host's normal metadata
+refresh/review flow and confirm that it lists the new renderer before testing
+it. A fresh protocol `tools/list` passing does not establish that an existing
+ChatGPT/iOS connection adopted the updated catalog; record that separately in
+manual host acceptance.
