@@ -37,8 +37,9 @@ export function authRoutes(loader: AuthLoader<AuthInstance & { handler(request: 
       const auth = await loader.get();
       if (basePathOf(auth.options) !== base) throw new Error("authRoutes basePath differs from betterAuth options.");
       try {
-        await guardAuthAdminRequest(request, () => resolve(request), base);
-        const registration = request.method === "POST" && pathname === `${base}/oauth2/register` ? await loopbackClientsAreNative(request) : request;
+        const bounded = request.body ? new Request(request, { body: await readBody(request) }) : request;
+        await guardAuthAdminRequest(bounded, () => resolve(bounded), base);
+        const registration = bounded.method === "POST" && pathname === `${base}/oauth2/register` ? await loopbackClientsAreNative(bounded) : bounded;
         return await normalizeAuthResponseCookies(await auth.handler(registration));
       } catch (error) { return surfaceFailure(error, undefined, `auth ${route}`); }
     }

@@ -60,6 +60,19 @@ test("request-bound tool tables revalidate changed names and never dispatch the 
  const rejected=await api(request("public_other"),{changed:true,value:"never"});expect(rejected!.status).toBe(500);expect(await rejected!.json()).toMatchObject({error:{code:"INTERNAL_ERROR"}});expect(checks).toBe(1);/* the catalogue is read once; the changed names are what get revalidated */expect(invoked).toBe(2);
 });
 
+test("request-bound tool tables revalidate a same-named View changing into a Procedure", async () => {
+  let write = false, invoked = 0;
+  const api = mcp<{ write: boolean }, null>((_request, env) => [env.write
+    ? { name: "same", surface: "public", description: "write", inputSchema: { type: "object" }, validate: raw => raw as Record<string, unknown>, path: "same", run: async () => { invoked++; return {}; } }
+    : { name: "same", surface: "public", description: "read", inputSchema: { type: "object" }, validate: raw => raw as Record<string, unknown>, path: "same", page: async () => ({ rows: [] }) }] as Tool<null>[],
+  { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [{ ...resource("ui://app/same"), appOnly: ["same"] }] } } });
+  const request = (method: string) => new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: method === "tools/call" ? { name: "same", arguments: {}, _meta: meta } : { _meta: meta } }) });
+  expect((await api(request("tools/list"), { write }))!.status).toBe(200);
+  write = true;
+  expect((await api(request("tools/call"), { write }))!.status).toBe(500);
+  expect(invoked).toBe(0);
+});
+
 test("clients that declare no MCP Apps support see no App resources or App-only tools", async () => {
   const api = handle({ public: { resources: [{ ...resource("ui://my-app/rows", ["public_rows"]), appOnly: ["public_details"] }] } });
   for (const ui of [false]) {

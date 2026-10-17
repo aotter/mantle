@@ -6,7 +6,7 @@ import { modeOf, checkFresh } from "./caller-identity.js";
  * Runtime refuses unsafe limits, system/scope writes, undefined values. It applies row rules, not requires.
  */
 import { binds as evaluate, encode, type Bound, type Recipe } from "./binds.js";
-import { ContractError, isAdmin, type Caller, type Row } from "./contracts.js";
+import { ContractError, type Caller, type Row } from "./contracts.js";
 import type { Dialect } from "./dialect/common.js";
 import { condition } from "./where.js";
 

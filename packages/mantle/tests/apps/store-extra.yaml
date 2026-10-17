@@ -30,6 +30,7 @@ metadata: {name: catalog_items}
 spec:
   title: Shared catalog
   lifecycle: operational
+  checks: ["price >= 0", "position IS NULL AND name <> 'forbidden'"]
   indexes: [[name]]
   schema:
     type: object
@@ -38,6 +39,7 @@ spec:
       sku: {type: string}
       name: {type: string}
       price: {type: number}
+      position: {type: integer}
       place: {type: object, format: geo}
 ---
 apiVersion: cms.mantle.aotter.net/v2

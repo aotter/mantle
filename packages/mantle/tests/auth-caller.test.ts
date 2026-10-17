@@ -578,7 +578,7 @@ describe("OAuth grant revocation and consent routes", () => {
     await expect(resolveCaller(new Request(url, { headers: { authorization: `DPoP ${accessToken}`, dpop: await proof(url, "GET", accessToken) } }), app.loader, { audience: AUDIENCE })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
   });
   test("consent boundary rejects oversized streaming bodies, invalid decisions and invalid signed query", async () => {
-    const app = await makeApp(); const { cookie } = await app.signIn();
+    const app = await makeApp({ localOnly: true }); const { cookie } = await app.signIn();
     const origin = new URL(app.baseURL).origin;
     const routes = authRoutes(app.loader as never, { methods: [] });
     expect((await routes(new Request(`${origin}/oauth/consent/data`, { headers: { cookie } })))!.status).toBe(400);
@@ -586,6 +586,11 @@ describe("OAuth grant revocation and consent routes", () => {
     const stream = new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(1_048_577)); controller.close(); } });
     const response = await routes(new Request(`${origin}/oauth/consents/revoke`, { method: "POST", headers: { cookie, origin }, body: stream, duplex: "half" } as RequestInit));
     expect(response!.status).toBe(400); expect(response!.headers.get("cache-control")).toContain("no-store");
+    // Valid JSON that is only too large: Better Auth would accept it, so only the cap can refuse it.
+    const json = new TextEncoder().encode(JSON.stringify({ email: "a@example.test", type: "sign-in", pad: "x".repeat(1_100_000) }));
+    const raw = new ReadableStream({ start(controller) { controller.enqueue(json); controller.close(); } });
+    const capped = await routes(new Request(`${app.baseURL}/email-otp/send-verification-otp`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: raw, duplex: "half" } as RequestInit));
+    expect(capped!.status).toBe(400); expect(await capped!.text()).toContain("Request body exceeds 1 MiB.");
     expect(() => authRoutes(app.loader as never, { methods: [], connectedAppsPage: "/\\evil.test" })).toThrow("same-origin");
   });
   test("a refused consent POST leaves no unread body", async () => {

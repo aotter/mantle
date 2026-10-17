@@ -23,7 +23,6 @@ export function site(db: Database, caller: Caller) { return createSite({read:(sq
 `,"site-seed.sql": seed + "\n", "site-schema.sql":`CREATE TABLE site_config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE media_assets (id TEXT PRIMARY KEY, created_at ${pg?"BIGINT":"INTEGER"} NOT NULL, owner_id TEXT, alt TEXT, caption TEXT, variants TEXT NOT NULL, metadata TEXT);
 CREATE INDEX media_assets_by_created_id ON media_assets (created_at DESC, id DESC);
-CREATE INDEX media_assets_by_owner_created ON media_assets (owner_id, created_at DESC);
 CREATE TABLE pending_media_uploads (id TEXT PRIMARY KEY, record TEXT NOT NULL, expires_at ${pg?"BIGINT":"INTEGER"} NOT NULL);
 CREATE INDEX pending_media_uploads_expires_at ON pending_media_uploads (expires_at);
 ${seed}
