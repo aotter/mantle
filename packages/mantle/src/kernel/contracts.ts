@@ -111,9 +111,9 @@ export function deny(caller: Caller, allowed: boolean, path: string): void {
 export const conflict = (path: string, unique: boolean, cause?: unknown): ContractError =>
   new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : "Expected one affected row.", path, { cause });
 /** A Schema `checks` violation (Mantle's SQLite check trigger, or PostgreSQL SQLSTATE 23514) is a CONFLICT naming the check. */
-export const checkConflict = (path: string, error: unknown, violated?: boolean): ContractError | undefined => {
-  const message = String((error as Error)?.message ?? ""), marker = /MANTLE_CHECK ([^:]+): ([^\n'"]+)/.exec(message);
-  if (!(violated ?? marker)) return undefined;
+export const checkConflict = (path: string, error: unknown): ContractError | undefined => {
+  const message = (error as Error)?.message ?? "", marker = /MANTLE_CHECK ([^:\n]+): (.+)/.exec(message);
+  if (!/MANTLE_CHECK /.test(message)) return undefined;
   return new ContractError("CONFLICT", `A check of the Schema failed: ${marker?.[0] ?? message}`, path, { cause: error, fields: { kind: "check", schema: marker?.[1], check: marker?.[2]?.replace(/: SQLITE_CONSTRAINT.*$/, "") } });
 };
 
