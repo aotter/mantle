@@ -133,12 +133,15 @@ import { mcpAppCatalogues } from '../generated/admin-descriptors.ts';
 export const appDefinition = { catalogue: mcpAppCatalogues.admin };
 ```
 
-The service imports that definition and a committed `src/mcp-app-previous.json`
+The service imports that definition and a committed `mcp-app-previous.json` at the project root
 (initially `[]`), and passes `adminMcpApps({ ...appDefinition, previous })` to its
 endpoint. Keep custom `renders`, catalogue extensions, `domain` and `title` in the
 shared definition too. Node 22.18+ can read these generated `.ts` modules; a
 TypeScript app using `.ts` import paths enables `allowImportingTsExtensions`
 with `noEmit`. JSON imports use `with { type: 'json' }`.
+Keep snapshots outside the directory containing `admin.tsx`: Tailwind scans that
+directory, and compiled HTML/JavaScript inside a snapshot can be mistaken for
+utility class names and change subsequent CSS builds.
 
 After a successful deployment, archive the **exact asset just deployed** with
 this application-owned `scripts/archive-mcp-app.mjs`, then commit the snapshot
@@ -149,7 +152,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { adminMcpApps } from '@aotter/mantle-admin/mcp';
 import { appDefinition } from '../src/mcp-app-definition.ts';
 
-const path = 'src/mcp-app-previous.json';
+const path = 'mcp-app-previous.json';
 const previous = JSON.parse(readFileSync(path, 'utf8'));
 const context = { env: {}, request: new Request('https://archive.invalid/mcp') };
 const source = adminMcpApps({ ...appDefinition,
