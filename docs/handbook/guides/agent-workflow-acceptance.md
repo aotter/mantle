@@ -9,15 +9,20 @@ fresh context is not enough if the author still chooses a workflow that mirrors
 the implementation. Every acceptance round gives the evaluator responsibility
 for choosing realistic tasks and judging the result, not just following a
 prescribed sequence.
+If independent acceptance is not run, report `UNVERIFIED`; if a fresh evaluator
+or authorized test transport is unavailable, report `BLOCKED`; neither outcome
+is done.
 
 Use the surface the intended user actually uses: a real browser session for
-Admin and application pages, an HTTP client with the intended client's
-credentials for REST, an MCP client for tools, and the real MCP App
-host/AppBridge flow for Apps. This is an application-authoring practice, not an
-SDK runtime service or a new test runner. Use the project's existing local
-setup, normal authorized sign-in and isolated fixtures. Keep credentials inside
-setup; give the evaluator only its authorized surface. Do not enable extra
-routes, roles or generic writes to make the exercise pass.
+Admin and application pages; for REST, an HTTP client plus the public API
+reference and base URL a real client developer receives; an MCP client for
+tools; and the real MCP App host/AppBridge flow for Apps. This is an
+application-authoring practice, not an SDK runtime service or a new test runner.
+Use the project's existing local setup, normal authorized sign-in and isolated
+fixtures. Setup hands over the role's established browser session or client
+token; the evaluator never acquires or widens credentials. Give it only its
+authorized surface. Do not enable extra routes, roles or generic writes to make
+the exercise pass.
 
 ## Audit MCP tool design before implementation
 
@@ -82,7 +87,7 @@ evaluator must discover the workflow from public tool descriptions and results.
 1. **Freeze scope and revision, not the evaluator's itinerary.** Supply the
    original user brief, business role, explicit requirements and exclusions,
    exact application/SDK revision, authorized transport, permitted fake-data
-   actions, per-round tool/time/write budgets, a user-set total round cap of at
+   actions, per-round interaction/time/write budgets, a user-set total round cap of at
    least three (default four) and a fixture cleanup owner. Seed fixtures with
    realistic volume and variety: other owners' records, several states and more
    than one page of results, so evaluators' own goals reach discovery, paging
@@ -160,7 +165,7 @@ scope. Do not replace it with a sequence tailored to existing tools:
 > You are a [business role] working in [business context]. The user requested:
 > [original brief, explicit requirements and exclusions]. You are authorized
 > to test with fictional data through [user-facing surface and entry point]
-> within [allowed actions and tool/time/write budgets]; [owner] will clean up
+> within [allowed actions and interaction/time/write budgets]; [owner] will clean up
 > the fixtures.
 > Independently define realistic acceptance goals and observable success
 > criteria before testing. Use or discover the supplied interface and assess
@@ -168,7 +173,7 @@ scope. Do not replace it with a sequence tailored to existing tools:
 > successful interactions. Report per-goal PASS/FAIL/BLOCKED with readback
 > evidence, design shortcomings, interaction costs and minimal improvements.
 > Distinguish failures within the requested scope from newly inferred product
-> needs; do not invent unsupported tools or change the product. Do not inspect
+> needs; do not invent unsupported interfaces or change the product. Do not inspect
 > source, internal docs or a database, blindly retry uncertain writes, or act
 > outside the supplied authority. Finding no defects is acceptable; report
 > what you actually covered and what remains unverified.
@@ -194,7 +199,7 @@ Use ordinary Markdown; no new receipt schema or framework is required:
   regression commands/results.
 - Streak and reset history; coverage of each explicit requirement
   (evaluator-observed, author regression only, or UNVERIFIED); the final
-  CONVERGED / NOT CONVERGED / BLOCKED verdict and rounds used. Retain every
+  CONVERGED / NOT CONVERGED / BLOCKED / UNVERIFIED verdict and rounds used. Retain every
   failed report.
 - Fixture cleanup result and every remaining limitation.
 

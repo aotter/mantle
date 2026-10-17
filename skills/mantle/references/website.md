@@ -38,8 +38,10 @@ Follow the [local HTTP acceptance](local-testing.md) before reporting local
 readiness: inspect HTML without JavaScript, check metadata/sitemap and anonymous
 draft/permission refusal, and exercise OTP and editing with isolated synthetic
 accounts. Local readiness does not require publication, a hosted tenant or a
-candidate preview. Report production email, public origin and real object-store
-upload/commit checks separately when local capabilities cannot exercise them.
+candidate preview. Scripted local acceptance does not replace the installed
+independent acceptance guide, which is required before reporting the pages done.
+Report production email, public origin and real object-store upload/commit checks
+separately when local capabilities cannot exercise them.
 
 For an explicitly requested deployment, use the selected host's native workflow
 and any preview it provides. Verify disabled preview capabilities on an already

@@ -38,9 +38,11 @@ Before reporting any user-facing work as done, follow the installed
 run independent acceptance with a fresh agent on the surface its user uses.
 This is not limited to MCP; if it was not run, say so explicitly and report the
 work as UNVERIFIED rather than done. For MCP workflows, also run the guide's
-design audit before implementing tools. If an older installed version lacks
-this guide, record the missing guidance and preserve that version's contract;
-do not silently upgrade or substitute checkout/online docs.
+design audit before implementing tools. This workflow practice applies to every
+installed SDK version: if its guide is older or MCP-scoped, apply its fresh-agent
+round loop to the user-facing surface actually built. If an older installed
+version lacks this guide, record the missing guidance and preserve that version's
+contract; do not silently upgrade or substitute checkout/online docs.
 
 For existing older applications, use their installed docs until the user requests an upgrade. For partial adoption read node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md.
 
@@ -144,7 +146,8 @@ To add Mantle to an application that has its own code, users and data, read
 `node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md` first.
 
 Report the project path, the exact Mantle version, what you changed, the checks
-you ran with their results, and anything left for the user.
+you ran with their results, the independent acceptance verdict (CONVERGED / NOT
+CONVERGED / BLOCKED / UNVERIFIED), and anything left for the user.
 
 ## Data paths
 
