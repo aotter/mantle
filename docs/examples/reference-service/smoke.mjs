@@ -217,6 +217,77 @@ try {
   await execute("DROP TRIGGER reference_fail_activity");
   step("Admin affected rows record the actual caller; failed after effects preserve committed stock/order and never retry the business write");
 
+  // End-user workflow through MCP only: discover, locate, create, read, transition, reconcile.
+  const publicDefinitions = (await mcp("/mcp", buyer)).body.result.tools;
+  for (const name of ["search_items", "get_order", "place_order", "cancel_order"]) {
+    assert.ok(publicDefinitions.some(tool => tool.name === name), name);
+  }
+  const found = (await mcp("/mcp", buyer, "search_items", { q: "TEA-1", limit: 5 })).body.result;
+  const selectedItem = found.structuredContent.rows.find(row => row.id === itemId);
+  assert.ok(selectedItem);
+  const selectedStock = async () => (await call("GET", "/api/views/catalog")).body.rows.find(row => row.id === selectedItem.id).stock;
+  const startingStock = await selectedStock();
+  const ownedBefore = (await mcp("/mcp", buyer, "my_orders", {})).body.result.structuredContent.rows.length;
+  const invalidRelation = (await mcp("/mcp", buyer, "place_order", { itemId: "missing-item", qty: 1 })).body.result;
+  assert.equal(invalidRelation.isError, true);
+  assert.match(JSON.stringify(invalidRelation.content), /CONFLICT/);
+  assert.equal((await mcp("/mcp", buyer, "my_orders", {})).body.result.structuredContent.rows.length, ownedBefore);
+  assert.equal(await selectedStock(), startingStock);
+  const createdIds = [];
+  // This API deliberately has no idempotency key: identical successful requests create distinct orders.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const result = (await mcp("/mcp", buyer, "place_order", { itemId: selectedItem.id, qty: 1 })).body.result;
+    assert.equal(result.isError, undefined, JSON.stringify(result));
+    createdIds.push(result.structuredContent.results[0][0].id);
+  }
+  assert.equal(new Set(createdIds).size, 2);
+  assert.equal(await selectedStock(), startingStock - 2);
+  for (const orderId of createdIds) {
+    const detail = (await mcp("/mcp", buyer, "get_order", { orderId })).body.result.structuredContent.rows;
+    assert.equal(detail.length, 1);
+    assert.equal(detail[0].itemId, selectedItem.id);
+    assert.equal(detail[0].orderStatus, "placed");
+    assert.ok(Number.isSafeInteger(detail[0].version));
+    assert.deepEqual((await mcp("/mcp", admin, "get_order", { orderId })).body.result.structuredContent.rows, []);
+    const stale = (await mcp("/mcp", buyer, "cancel_order", { orderId, expectedVersion: detail[0].version - 1 })).body.result;
+    assert.equal(stale.isError, true);
+    assert.match(JSON.stringify(stale.content), /CONFLICT/);
+    assert.deepEqual((await mcp("/mcp", buyer, "get_order", { orderId })).body.result.structuredContent.rows, detail);
+    const cancelled = (await mcp("/mcp", buyer, "cancel_order", { orderId, expectedVersion: detail[0].version })).body.result;
+    assert.equal(cancelled.isError, undefined, JSON.stringify(cancelled));
+    const final = (await mcp("/mcp", buyer, "get_order", { orderId })).body.result.structuredContent.rows[0];
+    assert.equal(final.orderStatus, "cancelled");
+    assert.ok(final.version > detail[0].version);
+    const repeated = (await mcp("/mcp", buyer, "cancel_order", { orderId, expectedVersion: detail[0].version })).body.result;
+    assert.equal(repeated.isError, true);
+    assert.match(JSON.stringify(repeated.content), /CONFLICT/);
+  }
+  assert.equal(await selectedStock(), startingStock);
+  step("MCP business workflow: search/backend IDs/detail/owner scope, invalid relation no write, stale conflict, atomic cancellation, explicit non-idempotent create and reconciliation");
+
+  const adminDefinitions = (await mcp("/mcp/admin", admin)).body.result.tools;
+  const renderDefinition = adminDefinitions.find(tool => tool.name === "render_sales_report");
+  assert.ok(renderDefinition?._meta?.ui?.resourceUri?.startsWith("ui://"));
+  for (const name of ["sales_by_item", "recent_activity", "restock"]) {
+    assert.equal(adminDefinitions.find(tool => tool.name === name)?._meta?.ui, undefined, name);
+  }
+  const dataReport = (await mcp("/mcp/admin", admin, "sales_by_item", { limit: 1 })).body.result;
+  const renderedReport = (await mcp("/mcp/admin", admin, "render_sales_report", { limit: 1 })).body.result;
+  assert.deepEqual(renderedReport.structuredContent, dataReport.structuredContent);
+  assert.equal(renderedReport.structuredContent.rows.length, 1);
+  assert.ok(renderedReport.structuredContent.nextCursor);
+  assert.ok(renderedReport.content.length > 0); // fallback remains readable when the host cannot display the App
+  assert.equal((await mcp("/mcp/admin", buyer, "render_sales_report", {})).status, 403);
+  assert.ok(!publicDefinitions.some(tool => tool.name === "render_sales_report"));
+  const resourceResponse = await fetch(`${origin}/mcp/admin`, { method: "POST", headers: { ...json, accept: "application/json, text/event-stream", cookie: admin },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "resources/read", params: { uri: renderDefinition._meta.ui.resourceUri } }) });
+  assert.equal(resourceResponse.status, 200);
+  const resourceText = await resourceResponse.text();
+  const resourceLine = resourceText.split("\n").find(line => line.startsWith("data:"));
+  const resource = JSON.parse(resourceLine ? resourceLine.slice(5) : resourceText).result.contents[0];
+  assert.match(resource.text, /render_sales_report/);
+  step("MCP presentation: data tools do not open Apps; one explicit bounded renderer preserves results, text fallback and admin authorization; real resource read succeeds");
+
   // A working initial MCP call does not prove this connection can renew. Exercise
   // the example's real provider, signed consent, PKCE and rotation on this local D1.
   const issuer = `${origin}/api/auth`;

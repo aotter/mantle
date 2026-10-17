@@ -61,6 +61,7 @@ kind: View
 metadata: { name: catalog }
 spec:
   surface: public
+  description: Browse the bounded catalog; use search_items to locate an item by name or SKU before placing an order. priceCents is in minor currency units.
   sql: SELECT id, sku, name, priceCents AS "priceCents", stock FROM items ORDER BY name, id
 ---
 apiVersion: cms.mantle.aotter.net/v2
@@ -90,6 +91,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: my-orders }
 spec:
+  description: List only your orders and observed versions. Use get_order for one order and cancel_order with that observed version to cancel it.
   surface: public
   requires: { auth: { all: [ctx.user] } }
   sql: |
@@ -125,3 +127,23 @@ spec:
   surface: admin
   requires: { auth: { all: [ctx.admin] } }
   sql: SELECT kind, subject, detail FROM activity ORDER BY created_at DESC, id DESC LIMIT 50
+---
+# A bounded detail read uses the same owner scope as the list, never a staff bypass.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: get-order }
+spec:
+  surface: public
+  description: Read one of your orders by backend orderId, including item relation, state and current version. Empty rows means absent or inaccessible. Use this after place_order and before a deliberate cancel_order; never silently refresh a stale version and retry a write.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [orderId]
+    properties:
+      orderId: { type: string, minLength: 1 }
+  sql: |
+    SELECT o.id, o.itemId AS "itemId", i.sku, i.name AS item, o.qty,
+      o.orderStatus AS "orderStatus", o.placedAt AS "placedAt", o.version
+    FROM orders o JOIN items i ON i.id = o.itemId
+    WHERE o.id = input.orderId
+    ORDER BY o.id

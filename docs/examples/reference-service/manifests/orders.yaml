@@ -5,7 +5,7 @@ kind: Procedure
 metadata: { name: place-order }
 spec:
   title: Place an order
-  description: Order one item for the signed-in caller; the stock check fails the whole order when stock runs out.
+  description: Place one order using a backend itemId from search_items or catalog. Returns results[0] with order ID, itemId, quantity, state and observed version; verify with get_order. Order and stock change atomically. Not idempotent; after an uncertain response reconcile via my_orders instead of blindly retrying.
   requires: { auth: { all: [ctx.user] } }
   input:
     type: object
@@ -13,7 +13,11 @@ spec:
     properties:
       itemId: { type: string }
       qty: { type: integer, minimum: 1 }
-  output: { type: object }
+  output:
+    type: object
+    required: [results]
+    properties:
+      results: { type: array, items: { type: array, items: { type: object } } }
   handler: { ref: placeOrder }
 ---
 # Internal native program; its ref wrapper owns the post-commit activity effect.
@@ -33,7 +37,7 @@ spec:
     sql: |
       INSERT INTO orders (itemId, qty, orderStatus, placedAt)
       SELECT id, input.qty, 'placed', now() FROM items WHERE id = input.itemId
-      RETURNING id, qty, orderStatus;
+      RETURNING id, itemId AS "itemId", qty, orderStatus AS "orderStatus", version;
       UPDATE items SET stock = stock - input.qty WHERE id = input.itemId
 ---
 # Optimistic concurrency: the caller sends the version it saw.
@@ -42,6 +46,7 @@ kind: Procedure
 metadata: { name: cancel-order }
 spec:
   title: Cancel an order
+  description: Cancel your placed order and restore stock atomically. Supply expectedVersion from the snapshot you reviewed in get_order. A stale version or already cancelled order is CONFLICT; do not refresh and retry automatically. Not an idempotency-key API.
   requires: { auth: { all: [ctx.user] } }
   input:
     type: object
@@ -102,3 +107,10 @@ metadata: { name: restock-mcp }
 spec:
   source: { kind: mcp, surface: admin }
   target: { procedure: restock }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: cancel-order-mcp }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: cancel-order }

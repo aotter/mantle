@@ -7,6 +7,8 @@ const page0: typeof import("./paged/wire/views/catalog.js").default = async (...
 import { query as query0 } from "./validation/views/catalog.js";
 const page1: typeof import("./paged/wire/views/my-orders.js").default = async (...args) => (await import("./paged/wire/views/my-orders.js")).default(...args);
 import { query as query1 } from "./validation/views/my-orders.js";
+const page2: typeof import("./paged/wire/views/get-order.js").default = async (...args) => (await import("./paged/wire/views/get-order.js")).default(...args);
+import { query as query2 } from "./validation/views/get-order.js";
 import { validate as validate0 } from "./validation/procedures/place-order.js";
 import { validate as validate1 } from "./validation/procedures/cancel-order.js";
 import { wireRows } from "@aotter/mantle/contracts";
@@ -14,6 +16,7 @@ export function rest<Env>(options: Options<Env, Database> & { handlers: Handlers
   return serve<Env, Database, Handlers>([
     { method: "GET", pattern: new RegExp("^/api/views/catalog/?$"), target: {"kind":"view","name":"catalog"}, query: query0, page: (db, caller, input, paging) => page0(db, caller, input, paging).then(page => ({ ...page, rows: wireRows(page.rows, [["priceCents","int"],["stock","int"]]) })) },
     { method: "GET", pattern: new RegExp("^/api/views/my-orders/?$"), target: {"kind":"view","name":"my-orders"}, check: (caller) => {  deny(caller, isUser(caller), "views/my-orders/requires/auth/all/0");}, query: query1, page: (db, caller, input, paging) => page1(db, caller, input, paging).then(page => ({ ...page, rows: wireRows(page.rows, [["qty","int"],["version","int"]]) })) },
+    { method: "GET", pattern: new RegExp("^/api/views/get-order/?$"), target: {"kind":"view","name":"get-order"}, check: (caller) => {  deny(caller, isUser(caller), "views/get-order/requires/auth/all/0");}, query: query2, page: (db, caller, input, paging) => page2(db, caller, input, paging).then(page => ({ ...page, rows: wireRows(page.rows, [["qty","int"],["version","int"]]) })), convert: [["orderId",""]] },
     { method: "POST", pattern: new RegExp("^/api/orders/?$"), id: "rest:POST /api/orders", target: {"kind":"procedure","name":"place-order"}, check: (caller) => {  deny(caller, isUser(caller), "procedures/place-order/requires/auth/all/0");}, validate: validate0, run: (db, caller, input, handlers) => store(db, caller, { handlers }).procedures["place-order"](input) },
     { method: "POST", pattern: new RegExp("^/api/orders/cancel/?$"), id: "rest:POST /api/orders/cancel", target: {"kind":"procedure","name":"cancel-order"}, check: (caller) => {  deny(caller, isUser(caller), "procedures/cancel-order/requires/auth/all/0");}, validate: validate1, run: (db, caller, input, handlers) => store(db, caller, { handlers }).procedures["cancel-order"](input) },
   ], {...options, accessTargets: () => import("./access-targets.js").then(m => m.targets)});

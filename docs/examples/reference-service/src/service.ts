@@ -19,18 +19,23 @@ import type { Handlers } from "../generated/generated.js";
 
 let auth: ReturnType<typeof authLoader<ReturnType<typeof import("./auth.js").createAuth>>> | undefined;
 const salesDescriptor = { name: "sales-by-item", title: null, description: null, input: null, list: { columns: [], searchFields: [], filterFields: [], cells: {} }, columns: { name: { schema: "items", field: "name" } } };
-const salesBrowserTool = { name: "sales_by_item", description: "Sales grouped by item.", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true } };
+const salesBrowserTool = { name: "sales_by_item", description: "Read sales grouped by item in bounded pages. Data only; use render_sales_report once after analysis if the user wants an interactive report.", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true } };
 const addSalesTool = (catalogue: { readonly tools: readonly { readonly name: string }[]; readonly routes: Readonly<Record<string, unknown>> }) => ({ tools: [...catalogue.tools, salesBrowserTool], routes: { ...catalogue.routes, sales_by_item: { path: "/admin/views/sales-by-item" } } });
 const extraTools: readonly Tool<Handle, Handlers>[] = [
-  { name: "search_items", surface: "public", description: "Search items in native relevance order.", inputSchema: { type: "object", properties: { q: { type: "string", minLength: 1 } }, required: ["q"], additionalProperties: false }, annotations: { readOnlyHint: true }, path: "views/search-items", validate: raw => {
+  { name: "search_items", surface: "public", description: "Find items by name or SKU in bounded relevance order. Use returned backend id for place_order; do not guess IDs. Data only; no App is opened.", inputSchema: { type: "object", properties: { q: { type: "string", minLength: 1 } }, required: ["q"], additionalProperties: false }, annotations: { readOnlyHint: true }, path: "views/search-items", validate: raw => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some(k => k !== "q") || typeof (raw as { q?: unknown }).q !== "string") throw new ContractError("INPUT_VALIDATION_FAILED", "Expected q.");
     return raw as Record<string, unknown>;
   }, page: searchPage },
-  { name: "sales_by_item", surface: "admin", description: "Sales grouped by item.", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true }, closed: true, path: "views/sales-by-item", validate: raw => {
+  { name: "sales_by_item", surface: "admin", description: "Read sales grouped by item in bounded pages. Data only; use render_sales_report once after analysis if the user wants an interactive report.", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true }, closed: true, path: "views/sales-by-item", validate: raw => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).length) throw new ContractError("INPUT_VALIDATION_FAILED", "Expected empty input.");
     return {};
   }, page: salesPage },
 ];
+// Rendering is an explicit final read, not a side effect of every data tool.
+const renderSalesTool: Tool<Handle, Handlers> = {
+  ...extraTools[1]!, name: "render_sales_report",
+  description: "Open one read-only sales report App when the user requests interactive inspection, after data analysis. Re-reads current authorized sales; does not write or confirm a transaction. Prefer one render per response. Plain structured results remain usable without App support; host layout is not guaranteed.",
+};
 const authorities = new WeakMap<Request, () => Promise<Caller>>();
 const options = { db: (env: Env) => env.DB, caller: (request: Request) => authorities.get(request)!(), handlers };
 let serveAdmin: ReturnType<typeof admin<Env, Handle, Handlers>> | undefined;
@@ -63,7 +68,7 @@ export async function fetchService(request: Request, env: Env, context: Executio
       response = await serveAdmin(request, env);
     } else if (/^\/mcp(?:\/admin)?\/*$/.test(url.pathname)) {
       if (!serveMcpHandler) {
-        serveMcpHandler = serveMcp([...tools, ...extraTools], { ...options, apps: { admin: adminMcpApps({catalogue:{ ...mcpAppCatalogues.admin, views: { ...mcpAppCatalogues.admin.views, sales_by_item: { columns: { name: { type: "string" } }, list: { columns: [] }, actions: [] } } }}) } });
+        serveMcpHandler = serveMcp([...tools, ...extraTools, renderSalesTool], { ...options, instructions: "Use data tools for business decisions. Render only on an explicit interactive reporting request; otherwise answer from structured results. Tool calls are independent transactions. Reconcile uncertain writes before retrying.", apps: { admin: adminMcpApps({renders:["render_sales_report"],catalogue:{ ...mcpAppCatalogues.admin, views: { ...mcpAppCatalogues.admin.views, render_sales_report: { columns: { name: { type: "string" }, orders: { type: "integer" }, units: { type: "integer" } }, list: { columns: ["name", "orders", "units"] }, actions: [] } } }}) } });
       }
       response = await serveMcpHandler(request, env);
     } else {

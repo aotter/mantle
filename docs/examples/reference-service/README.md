@@ -55,3 +55,54 @@ registry pins with exact tarballs; it does not use workspace links or an old Cor
 fallback. Follow the installed SDK README and native contract, not historical
 plan-based `createMantle` instructions. Bare integers retain their driver's native
 contract; the selected surfaces own wire conversions.
+
+## Design tools around a business outcome
+
+An end-user agent should be able to complete “find tea, place an order, inspect
+it, then cancel it” using only `tools/list` and tool results. In this example:
+
+1. `search_items({ q, limit })` locates a backend item ID without scanning the
+   entire catalog. Follow `nextCursor` only when more results are needed.
+2. `place_order({ itemId, qty })` returns the created order in `results[0]`,
+   including its ID, item relation, state and observed version.
+3. `get_order({ orderId })` reads one owned order, its related item and version.
+   Empty `rows` means absent or inaccessible, including another buyer's order.
+4. `cancel_order({ orderId, expectedVersion })` changes a placed order and
+   restores stock in one database batch. Read the detail again to verify the
+   final state. The version must be the snapshot the user reviewed.
+
+A stale version is a conflict, not permission to silently refresh and retry.
+Cancellation already performed is also a conflict. `place_order` has no
+idempotency-key contract: two successful identical calls create two orders.
+After a timeout or interrupted write, reconcile using `my_orders`/`get_order`
+before deciding what to do. No multi-call transaction exists. Each order/stock
+write is atomic; an invalid item produces `CONFLICT` without an order, and an
+insufficient stock check rolls the complete order back. Optional activity is
+post-commit and best effort; its failure never retries a committed purchase.
+
+Descriptions explain these decisions to the model. They are guidance; server
+validation, owner scope and OCC enforce them. Do not provide generic delete
+permissions just to clean up tests. `smoke.mjs` creates a disposable local D1,
+uses real MCP requests and removes the entire local fixture in `finally`.
+
+## Read data first; render an App deliberately
+
+`sales_by_item` is a bounded data tool. It does not open an iframe, so an agent
+can query pages and reason without producing a new App for each query.
+`render_sales_report` is a separate, read-only final query for a user who wants
+interactive inspection. It accepts the same paging arguments, invokes the same
+reader, and alone owns the Admin App resource through explicit `renders`.
+The renderer reads current authorized data; it is not a frozen snapshot or a
+write confirmation. App interactions can keep using the ordinary data tools.
+
+Both tools preserve structured data and text results for hosts without Apps.
+Neither tool descriptions nor structured results force a particular ChatGPT
+generative UI layout. An AppBridge replay passing does not prove that the iOS
+ChatGPT app renders successfully. Run a real host acceptance test separately,
+record client/version and observed behavior, and retain text results as fallback.
+
+The smoke covers data/render metadata separation, resource loading, equivalent
+bounded results and authorization, plus business flows with owner isolation,
+invalid relations, stale versions, explicit repeat-call behavior and readback.
+This is an application/reference design choice using the existing SDK hooks
+(ADR-0029), not a new manifest grammar or runtime rendering guarantee.
