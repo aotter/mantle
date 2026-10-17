@@ -201,6 +201,8 @@ authorization, caller, origin and database behavior.
 
 ## The Admin App in a host
 
+> **Verification status:** automated AppBridge coverage exists, but the compatibility claims in this section have not yet been verified manually in real ChatGPT or Claude hosts.
+
 The Admin App speaks MCP Apps `2026-01-26` to the host and asks only for what
 the host advertises in `hostCapabilities`:
 

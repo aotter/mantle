@@ -28,6 +28,11 @@ function frontMatter(text) {
 const directories = (path) => existsSync(path)
   ? readdirSync(path, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
   : [];
+const markdownFiles = (path) => readdirSync(path, { withFileTypes: true }).flatMap((entry) => {
+  const file = join(path, entry.name);
+  return entry.isDirectory() ? markdownFiles(file) : entry.isFile() && entry.name.endsWith(".md") ? [file] : [];
+});
+const repoPath = (path) => relative(repoRoot, path).split(sep).join("/");
 
 // skill -> { file, projection it must declare, the directory its links must stay inside }
 const skills = new Map();
@@ -62,12 +67,32 @@ for (const [name, { where, projection, root }] of skills) {
   if (front("projection") !== projection) fail(where, `metadata.projection must be \`${projection}\``);
   declared.set(name, { projection: front("projection"), reason: front("projectionReason") });
 
-  for (const [, target] of text.matchAll(/\]\(([^)]+)\)/g)) {
-    if (/^(https?:|mailto:|#)/.test(target)) continue;
-    const path = resolve(dirname(file), target.split("#")[0]);
-    if (!existsSync(path)) fail(where, `dead link: ${target}`);
-    // a link that leaves what ships resolves here and is missing wherever the skill is read
-    else if (relative(root, path).startsWith(`..${sep}`) || relative(root, path) === "..") fail(where, `link leaves the shipped files: ${target}`);
+  const skillDirectory = dirname(file);
+  const edges = new Map();
+  for (const markdown of markdownFiles(skillDirectory)) {
+    const markdownWhere = repoPath(markdown);
+    const targets = [];
+    for (const [, target] of readFileSync(markdown, "utf8").matchAll(/\]\(([^)]+)\)/g)) {
+      if (/^(https?:|mailto:|#)/.test(target)) continue;
+      const path = resolve(dirname(markdown), target.split("#")[0]);
+      if (!existsSync(path)) fail(markdownWhere, `dead link: ${target}`);
+      // a link that leaves what ships resolves here and is missing wherever the skill is read
+      else if (relative(root, path).startsWith(`..${sep}`) || relative(root, path) === "..") fail(markdownWhere, `link leaves the shipped files: ${target}`);
+      else if (path.endsWith(".md") && !relative(skillDirectory, path).startsWith(`..${sep}`)) targets.push(path);
+    }
+    edges.set(markdown, targets);
+  }
+  const reachable = new Set([file]);
+  for (const pending = [file]; pending.length > 0;) {
+    for (const target of edges.get(pending.pop()) ?? []) {
+      if (!reachable.has(target)) {
+        reachable.add(target);
+        pending.push(target);
+      }
+    }
+  }
+  for (const markdown of edges.keys()) {
+    if (!reachable.has(markdown)) fail(repoPath(markdown), `not referenced from ${where}`);
   }
 }
 

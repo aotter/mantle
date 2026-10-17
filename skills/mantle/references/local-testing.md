@@ -14,12 +14,7 @@ Better Auth limits each email-OTP path to 3 requests/minute per IP; `authHardeni
 - Supply test credentials from the application's normal authorized sign-in/test setup (the smoke kit's console OTP sign-in is valid). The discovery assertion only receives credentials: it must not acquire credentials itself, scrape other sessions or manufacture authority. Report local cookie-session discovery, OAuth Bearer/client integration and browser WebMCP as separate evidence. Cookie or WebMCP success does not prove remote OAuth/ChatGPT wiring; missing credentials leave that case unverified, not passed. Do not enable remote routes or OAuth merely to make acceptance pass.
 - Record commands and passed/failed/blocked cases for the exact commit. Fix failures before source admission; rerun relevant checks after changing source. Packing does not run these checks and an agent's checklist is not server build attestation.
 
-For a new or changed MCP business workflow, follow the installed SDK
-`docs/handbook/guides/agent-workflow-acceptance.md`: audit the goal-to-capability
-design before implementation, then let a fresh end-user agent
-discover and execute the business goal, repair gaps, then repeat the same goal
-with another fresh agent. Preserve initial failures, setup assistance and
-blocked checks. Scripted smoke, host/UI rendering and independent workflow
-acceptance are separate evidence. If that guide is absent in an older installed
-version, keep its version-matched contract and record this acceptance as pending;
-do not substitute the SDK checkout or silently upgrade.
+Independent acceptance for every user-facing workflow follows the installed
+`docs/handbook/guides/agent-workflow-acceptance.md`. Scripted smoke is separate
+evidence; browser or host rendering is the acceptance surface for UI and MCP App
+deliverables.

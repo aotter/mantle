@@ -13,13 +13,8 @@ metadata:
 
 ## Workflow
 
-Read the installed SDK README and version-matched handbook before editing.
-
-Follow the installed [native generation and service workflow](../../handbook/cloudflare/service-entry.md)
-with its [native contract](../../handbook/guides/native-execution.md) and [supported declarations](../../handbook/reference/features.md). Commit
-all generated output, run the same generation command with `--check`, and keep
-bundle `dist/` untracked. The app owns its verified Caller, handlers and native
-resources; Better Auth’s admin plugin `adminRoles` defines the admin layer (default `["admin"]`); `ctx.admin` takes no role list ([authorization](../../handbook/cloudflare/authentication.md)).
+Read the installed SDK README, then follow the version-matched [project and CLI
+workflow](../../handbook/start/project-and-cli.md) before editing.
 
 Deploy/create resources only within the user's authorization; reuse configured
 host resources. Apply reviewed and rehearsed migrations before routing traffic;
@@ -41,8 +36,9 @@ Bun uses native Database/SQL, an app server and scheduler. Verify admin sign-in
 (role admin), denied access, public reads, a persisted write, MCP and selected UI.
 Report artifact/resources/checks and keep rollback artifacts.
 
-Use the installed [Native Admin](../../handbook/guides/native-admin.md) asset
-contract and `entries(bindings.schemas, bindings.adapter)`. Admin SPA assets
-belong to `@aotter/mantle-admin`, while UI supplies the shared kit. Verify both
-member and admin OTP/UI flows. Deployment of an authorized application does
-not authorize SDK publication; a workspace preview remains a preview.
+For ChatGPT Sites, follow [Mantle on ChatGPT Sites](../../handbook/cloudflare/chatgpt-sites.md).
+
+The app builds Admin with `mantle bundle`; serve it as [Native
+Admin](../../handbook/guides/native-admin.md) describes. Verify both member and
+admin OTP/UI flows. Deployment of an authorized application does not authorize
+SDK publication; a workspace preview remains a preview.
