@@ -1,6 +1,6 @@
 # Mantle on ChatGPT Sites
 
-> **Verification status:** this guide has not yet been exercised end to end on a real ChatGPT Site.
+> **Verification status:** this guide is experimental and has not yet been exercised end to end on a real ChatGPT Site.
 
 Treat the Site as an existing TypeScript host. Import selected generated Views/Procedures, pass the host's native handle and verified Caller, and compose only the surfaces it supports. Use [partial integration](../../skills/integrate/SKILL.md); Mantle supplies no Sites-specific identity or deployment adapter.
 
