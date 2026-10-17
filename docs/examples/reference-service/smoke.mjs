@@ -360,25 +360,28 @@ try {
 
   // A working initial MCP call does not prove this connection can renew. Exercise
   // the example's real provider, signed consent, PKCE and rotation on this local D1.
+  assert.ok(readFileSync(new URL("./src/auth.ts", import.meta.url), "utf8").includes('clientRegistrationDefaultScopes: ["mcp", "offline_access"]'));
   const issuer = `${origin}/api/auth`;
   const discovery = (await call("GET", "/.well-known/oauth-authorization-server/api/auth")).body;
   assert.equal(discovery.issuer, issuer);
   assert.ok(discovery.scopes_supported.includes("mcp") && discovery.scopes_supported.includes("offline_access"));
   assert.deepEqual(resourceMetadata.body.scopes_supported, ["mcp"]);
-  const oauth = async (path, body, form = false) => {
+  const oauth = async (path, body, form = false, authenticated = true) => {
     const response = await fetch(`${issuer}${path}`, {
-      method: "POST", headers: { origin, cookie: admin, "content-type": form ? "application/x-www-form-urlencoded" : "application/json" },
+      method: "POST", headers: { origin, ...(authenticated ? { cookie: admin } : {}), "content-type": form ? "application/x-www-form-urlencoded" : "application/json" },
       body: form ? new URLSearchParams(body) : JSON.stringify(body),
     });
     const text = await response.text();
     return { status: response.status, body: text ? JSON.parse(text) : null };
   };
-  const authorize = async scope => {
-    const client = await oauth("/oauth2/create-client", {
+  const authorize = async registrationScope => {
+    const client = await oauth("/oauth2/register", {
       client_name: "Reference local renewal check", application_type: "native", token_endpoint_auth_method: "none",
-      redirect_uris: ["http://127.0.0.1:19876/callback"], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], scope,
-    });
+      redirect_uris: ["http://127.0.0.1:19876/callback"], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"],
+      ...(registrationScope ? { scope: registrationScope } : {}),
+    }, false, false);
     assert.equal(client.status, 201);
+    const scope = registrationScope ?? client.body.scope;
     const verifier = randomBytes(32).toString("base64url"), state = randomBytes(16).toString("hex");
     const query = new URLSearchParams({
       client_id: client.body.client_id, redirect_uri: "http://127.0.0.1:19876/callback", response_type: "code", scope, state,
@@ -392,7 +395,7 @@ try {
     assert.equal(typeof redirect, "string");
     let target = new URL(redirect, origin);
     if (!target.searchParams.has("code")) {
-      assert.equal(target.origin, origin);
+      assert.equal(target.origin, origin, target.searchParams.get("error_description") ?? target.href);
       const consent = await oauth("/oauth2/consent", { accept: true, oauth_query: target.search.slice(1) });
       assert.equal(consent.status, 200);
       target = new URL(consent.body.url ?? consent.body.redirect_uri, origin);
@@ -406,12 +409,13 @@ try {
     }, true);
     assert.equal(issued.status, 200);
     assert.equal(issued.body.expires_in, 3600);
-    return { clientId: client.body.client_id, token: issued.body };
+    return { clientId: client.body.client_id, clientScopes: client.body.scope, token: issued.body };
   };
   const sessionOnly = await authorize("mcp");
   assert.equal(sessionOnly.token.scope, "mcp");
   assert.equal(sessionOnly.token.refresh_token, undefined); // allowing offline access must not grant it implicitly
-  const offline = await authorize("mcp offline_access");
+  const offline = await authorize();
+  assert.equal(offline.clientScopes, "mcp offline_access");
   assert.deepEqual(offline.token.scope.split(" ").sort(), ["mcp", "offline_access"]);
   assert.ok(offline.token.refresh_token);
   assert.deepEqual(await execute('SELECT COUNT(*) AS count, MIN(ROUND(julianday(expiresAt) - julianday(createdAt))) AS days FROM oauthRefreshToken WHERE revoked IS NULL'), [{ count: 1, days: 30 }]);
@@ -442,7 +446,7 @@ try {
   assert.equal(revoked.status, 400);
   assert.equal(revoked.body.error, "invalid_grant");
   assert.equal((await bearerTools(renewed.body.access_token)).status, 401);
-  step("explicit offline consent renews after sign-out, retries rotation and ends on revocation; mcp-only grants never acquire refresh access");
+  step("default client scopes renew after sign-out, retry rotation and end on revocation; mcp-only grants never acquire refresh access");
 
   const version = JSON.parse(readFileSync("node_modules/@aotter/mantle/package.json", "utf8")).version;
   console.log(`Mantle ${version}: reference service passed`);
