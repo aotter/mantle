@@ -102,6 +102,11 @@ export default defineAdmin({}, { nav: {
     await sheet.getByRole("link", { name: "Rejected orders", exact: true }).click();
     await mobile.waitForURL(`${origin}/admin/c/orders?filter_field=state&filter_value=rejected`);
     await sheet.waitFor({ state: "hidden" });
+    // Activating the already-current item changes no route, so only the link itself can close the sheet.
+    await mobile.getByRole("button", { name: "Toggle sidebar" }).click();
+    await sheet.waitFor();
+    await sheet.getByRole("link", { name: "Rejected orders", exact: true }).click();
+    await sheet.waitFor({ state: "hidden" });
     await mobile.close();
   } finally {
     await browser.close();
