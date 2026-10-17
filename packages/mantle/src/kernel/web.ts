@@ -24,9 +24,6 @@ export interface View<Database> {
   readonly booleans?: readonly string[];
 }
 
-const escape = (v: unknown) => String(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-const label = (v: unknown) => String(v).replace(/[\r\n]/g, " ").replace(/[\\[\]]/g, "\\$&");
-const size = (s: string) => new TextEncoder().encode(s).length;
 const NO_STORE = { "cache-control": "no-store" };
 const notFound = () => new Response(null, { status: 404, headers: NO_STORE });
 
@@ -86,21 +83,9 @@ export function web<Database, E>(options: WebOptions<Database, E>, table: readon
         if (!index && !markdown) return;
         const ctx = await context(request, env as E, execution); caller = ctx.caller;
         if (index) {
-          const sitemap = path === "/sitemap.xml", cap = sitemap ? 50000 : 5000, limit = sitemap ? 50 * 1024 * 1024 : 1024 * 1024;
-          const start = sitemap ? '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' : "# " + label(options.title) + "\n\n> " + label(options.description) + "\n\n## Pages\n\n", end = sitemap ? "</urlset>" : "\n";
-          const links: string[] = []; let visited = 0, requests = 0, bytes = size(start + end); if (bytes > limit) throw new TypeError("Web index header exceeds its byte limit.");
-          pagesLoop: for (const entry of pages) {
-            if (!entry.page.list) continue;
-            let cursor: string | undefined;
-            do {
-              if (requests >= (sitemap ? 100 : 10)) break pagesLoop; requests++;
-              const page = await query(entry.page.list, ctx.db, ctx.caller, new URLSearchParams(), cursor);
-              for (const row of page.rows) { if (visited++ >= cap) break pagesLoop; const url = validUrl(entry.path, row, entry.page.view); if (!url) continue; const line = sitemap ? "<url><loc>" + escape(url) + "</loc></url>" : "- [" + label(row.title ?? url) + "](" + url + "): " + label(row.description ?? "") + "\n"; const length = size(line); if (bytes + length > limit) break pagesLoop; bytes += length; links.push(line); }
-              if (visited >= cap) break pagesLoop;
-              cursor = page.nextCursor;
-            } while (cursor);
-          }
-          return response(request, start + links.join("") + end, sitemap ? "application/xml" : "text/plain", ctx.caller);
+          const sitemap = path === "/sitemap.xml";
+          const body = await (await import("./web-index.js")).webIndex(sitemap, options, pages, (list, cursor) => query(list, ctx.db, ctx.caller, new URLSearchParams(), cursor), validUrl);
+          return response(request, body, sitemap ? "application/xml" : "text/plain", ctx.caller);
         }
         const exact = match(path); if (exact) try { if (await read(exact, ctx)) return; } catch (error) { if (wire(error).status !== 400) throw error; }
         const row = await read(entry!, ctx); if (!row) return notFound();

@@ -34,7 +34,7 @@ export function authOptions(env: Env) {
       if (!/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) throw new Error("Configure a production email sender.");
       console.log(`${email}: one-time code is ${otp}`);
     } }),
-    // --- MCP / OAuth (optional): delete these plugins, `disabledPaths` and the MCP block in service.ts if the app has no MCP.
+    // --- MCP / OAuth (deliberate exception): remove only when the app intentionally chooses asymmetric exposure.
     jwt({ disableSettingJwtHeader: true }),
     // Ends a user's OAuth grants (offline ones too) on password reset, admin ban or session revocation.
     oauthGrantRevocation(),

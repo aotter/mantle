@@ -39,8 +39,9 @@ on one version.
 | `src/auth.ts` | Better Auth options. Two roles only: `admin` (the admin layer) and `user`. Replace the console OTP sender before deploying. |
 | `smoke.mjs` | Your acceptance steps on `smoke-kit.mjs` (fresh local D1, OTP sign-in per user, REST/MCP/Admin calls). |
 
-`src/service.ts` and `src/index.ts` rarely change. Delete the blocks marked `MCP / OAuth (optional)` in `auth.ts`
-and `service.ts` if the app has no MCP.
+`src/service.ts` and `src/index.ts` rarely change. The default shell mounts REST and MCP together. If the app deliberately
+chooses asymmetric exposure, delete the blocks marked `MCP / OAuth (deliberate exception)` in `auth.ts` and `service.ts`;
+HTTP-only Procedures will keep generating with a warning.
 
 Search for `AGENT:` to find what an app must fill in.
 
@@ -51,6 +52,9 @@ Search for `AGENT:` to find what an app must fill in.
 - `ADMIN_EMAIL`'s first verified sign-in becomes `admin` while no admin exists. The sign-in response may still show
   the previous role; `/admin/api/me` shows the current one.
 - Admin HTTP routes are listed in `docs/handbook/guides/native-admin.md`.
+
+Scripted smoke is not independent acceptance; before reporting a user-facing
+deliverable done, follow the [independent acceptance guide](../../handbook/guides/agent-workflow-acceptance.md).
 
 ### MCP acceptance
 

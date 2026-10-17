@@ -20,9 +20,8 @@ Each media purpose in `siteDefaults.media.purposes` lists mime **slots** and a b
 `required` entries use `<input accept>` grammar (full mime, comma list, or a subtype shorthand such as `webp`);
 `maxBytes` must cover every mime the slots allow, keyed by the full mime type.
 
-OSS applications own their R2 binding, public bucket URL and S3 credentials.
-Mantle Cloud supplies that wiring by default; the OSS package has no Cloud API
-or credential management. Import `r2MediaStorage` from `@aotter/mantle/media/r2`:
+Applications own their R2 binding, public bucket URL and S3 credentials; the SDK
+package does not manage them. Import `r2MediaStorage` from `@aotter/mantle/media/r2`:
 
 ```ts
 const storage = r2MediaStorage({

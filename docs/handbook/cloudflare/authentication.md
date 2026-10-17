@@ -12,6 +12,8 @@ Mantle supplies the database adapter, schema generation and caller resolution:
 
 ## `auth.ts`
 
+> **Verification status:** the GitHub social-provider and magic-link recipes have not yet been exercised end to end against real deployed provider flows.
+
 Copy `src/auth.ts` from the [app shell](../../examples/app-shell/README.md), which CI runs from the packed packages;
 installed, it is `node_modules/@aotter/mantle/docs/examples/app-shell/src/auth.ts`. Its essentials:
 
@@ -78,6 +80,7 @@ after success; invitations still work when email is absent.
 `databaseHooks.user.create.after` (and user.update.after for a later email verification). Only the first matching signup wins (case-insensitive); email matching requires emailVerified=true (required for bootstrap).
 D1 uses one conditional UPDATE; PostgreSQL uses a transaction advisory lock before UPDATE, avoiding concurrent winners.
 A blocked promotion logs a warning. A GitHub rule requires a configured trusted GitHub provider/profile mapper.
+The promotion runs after Better Auth creates the user, so the first sign-in response (and a cached session payload) can still show the previous role, while authorization re-reads the role on every request and `/admin/api/me` and later sessions show the admin role.
 Helpers run no boot queries or DDL.
 
 ## Worker entry

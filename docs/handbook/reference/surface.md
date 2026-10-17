@@ -13,7 +13,7 @@
   snake-cased View names on each declared surface, and snake-cased Procedure
   names per MCP Trigger. Its SDK loads only through a request-time dynamic import.
 - HTTP/MCP Triggers declare exposure only. `mantle generate` refuses schedule
-  and lifecycle Triggers; Cloud scheduling is a separate capability.
+  and lifecycle Triggers; host scheduling is a separate capability.
 - Native Admin retains selected 0.2 paths and the console contracts; see
   [Native Admin](../guides/native-admin.md) for app-mounted
   `adminBindings()` and `entries(bindings.schemas, bindings.adapter)`.
@@ -24,6 +24,8 @@ checks and types. Request handling (matching, body and query decoding, dispatch,
 challenges, JSON-RPC, web rendering, keyset paging) lives in the package's
 `rest`, `mcp`, `web`, `paging` and `validation` kernel modules, so a runtime fix
 ships as a package update instead of a regeneration.
+
+Procedure surface selection follows the [HTTP/MCP pairing default and deliberate asymmetry exception](trigger.md); no surface is implied.
 
 The generated `validation/views/<name>.ts` and
 `validation/procedures/<name>.ts` export `validate(unknown)`. View validators
@@ -219,7 +221,9 @@ must also mount Better Auth's `/.well-known/oauth-protected-resource/mcp`
 metadata route. Auth challenges point to that route. Presented bearer credentials
 need the `mcp` scope; cookie sessions use the same-origin mutation checks.
 
-Generation emits `mcp.ts` only for a non-internal View or MCP Trigger. These
+Generation emits `mcp.ts` only for a non-internal View or MCP Trigger. Omitting
+MCP remains a deliberate asymmetric choice; an HTTP-only Procedure still generates
+successfully with the warning described in [Trigger](trigger.md). These
 surfaces typecheck without the optional `@modelcontextprotocol/server` peer;
 install the exact version declared in the installed SDK's `peerDependencies`.
 The peer loads by dynamic import on the first matching `/mcp` request; if
