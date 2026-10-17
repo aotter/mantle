@@ -114,3 +114,74 @@ metadata: { name: cancel-order-mcp }
 spec:
   source: { kind: mcp, surface: public }
   target: { procedure: cancel-order }
+---
+# A single-row write needs no authored SQL; the caller-bound Store returns its committed row.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: create-item }
+spec:
+  title: Create a catalog item
+  description: Admin-only create with zero stock. Optional priceCents is in minor currency units; omitted or null means unknown price. Returns a safe item snapshot with actual backend id and version. Not idempotent; duplicate SKU is CONFLICT. Use restock for inventory changes.
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [sku, name]
+    properties:
+      sku: { type: string, minLength: 1 }
+      name: { type: string, minLength: 1 }
+      priceCents: { type: [integer, 'null'], minimum: 0, maximum: 9007199254740991 }
+  output:
+    type: object
+    additionalProperties: false
+    required: [id, version, sku, name, priceCents, stock]
+    properties:
+      id: { type: string }
+      version: { type: integer }
+      sku: { type: string }
+      name: { type: string }
+      priceCents: { type: [integer, 'null'] }
+      stock: { type: integer }
+  handler: { ref: createItem }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: rename-item }
+spec:
+  title: Rename a catalog item
+  description: Admin-only partial update of name using the reviewed expectedVersion. Returns actual committed item id/version and safe fields. Stock, price and SKU are preserved; they are not replacement inputs. Null name is invalid. Stale/concurrent writes are CONFLICT; no automatic refresh/retry.
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion, name]
+    properties:
+      id: { type: string, minLength: 1 }
+      expectedVersion: { type: integer, minimum: 1 }
+      name: { type: string, minLength: 1 }
+  output:
+    type: object
+    additionalProperties: false
+    required: [id, version, sku, name, priceCents, stock]
+    properties:
+      id: { type: string }
+      version: { type: integer }
+      sku: { type: string }
+      name: { type: string }
+      priceCents: { type: [integer, 'null'] }
+      stock: { type: integer }
+  handler: { ref: renameItem }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: create-item-mcp }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: create-item }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: rename-item-mcp }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: rename-item }

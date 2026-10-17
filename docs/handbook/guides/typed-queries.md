@@ -90,3 +90,35 @@ Interactive `transaction(async tx => …)` exists on bun:sqlite and PostgreSQL, 
 Ref handlers receive `{ caller, db, store }` bound to the same Caller and transaction. Implement the generated `Handlers` interface and pass it to `store(db, caller, { handlers })`. Direct Procedure modules expose SQL Procedures; ref Procedures are reached through the bound Store or selected surfaces.
 
 See [native execution](native-execution.md) for values and write outcomes and [migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations) before changing a Schema.
+
+## Prefer Store-backed ref Procedures for simple writes
+
+For a single-entity create or partial update, prefer a declared `ref` Procedure
+whose handler awaits its caller-bound `ctx.store.collection(...).insert(...)`
+or `.update(id, allowedPatch, { lock: expectedVersion })`. Keep the Procedure's
+`requires` and generated validation at its invocation boundary: Store enforces
+row policy, but does not substitute for operation authorization. Do not invoke
+a handler directly from a route and accidentally bypass those checks.
+
+Insert/update returns the actual committed native row. Return an explicit
+allowlist of useful business fields, its backend `id` and returned `version`;
+do not spread the entire row, echo the submitted version, calculate a new
+version instead of reading the result, or add a generic receipt adapter. These
+ref results are app-owned: declare their output schema and make any required
+native-to-wire conversion explicit at the boundary.
+
+Patch only permitted fields. Omitted fields remain unchanged; define whether
+explicit null clears a nullable field or is invalid. Do not expand a partial
+request into a full replacement with defaults for unseen fields. A stale lock
+is a conflict; preserve intent and reconcile/review rather than silently
+refreshing the lock and retrying.
+
+Use SQL Procedures when conditions or related effects must commit together:
+for example, creating an order while decrementing stock under a CHECK, a state
+transition guarded by an atomic WHERE, or an additive restock upsert. A
+pre-read in TypeScript followed by an unguarded write is not equivalent.
+Store `batch` is atomic for known writes; a D1 batch step cannot consume a prior
+step's returned ID. D1 has no interactive transaction callback, so retain the
+supported SQL program or another existing native atomic boundary for that case.
+The [MCP design audit](agent-workflow-acceptance.md) applies these choices before
+implementation and separates them from independent end-user acceptance.

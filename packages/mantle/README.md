@@ -46,6 +46,15 @@ state column names, value types and the writable columns, and the Store enforces
 **not** a View's or Procedure's `requires`: authorize before calling it. Design, limits and what the runtime still refuses are in
 [Store guide](./docs/handbook/guides/typed-queries.md).
 
+For simple creates and partial updates, prefer a declared Store-backed ref
+Procedure: await the caller-bound insert/update, return an allowlist with the
+actual returned `id`/`version`, and preserve omitted fields. Keep Procedure
+`requires` and boundary validation; Store row policy is not operation
+permission. Retain SQL Procedures for atomic conditional/multi-entity writes
+such as stock/order changes and additive upserts. D1 batches cannot consume a
+prior step's result and have no interactive transaction callback. See the
+[write design guidance](./docs/handbook/guides/typed-queries.md#prefer-store-backed-ref-procedures-for-simple-writes).
+
 Importing generated modules does not initialize the Store. The first `store()`
 call prepares its metadata factory once; every call binds its own database,
 Caller and handlers. Unused Stores still tree-shake out of direct operations.

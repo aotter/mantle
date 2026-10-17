@@ -301,6 +301,62 @@ try {
   assert.match(resource.text, /render_sales_report/);
   step("MCP presentation: data tools do not open Apps; one explicit bounded renderer preserves results, text fallback and admin authorization; real resource read succeeds");
 
+  // Simple single-row writes use caller-bound Store-backed ref Procedures.
+  assert.ok(!publicDefinitions.some(tool => ["create_item", "rename_item"].includes(tool.name)));
+  for (const name of ["create_item", "rename_item"]) {
+    assert.ok(adminDefinitions.some(tool => tool.name === name));
+    assert.equal((await mcp("/mcp/admin", undefined, name, {})).status, 401);
+    assert.equal((await mcp("/mcp/admin", buyer, name, {})).status, 403);
+  }
+  const itemInput = { sku: "STORE-ONLY-1", name: "Store item", priceCents: 1250 };
+  const creation = (await mcp("/mcp/admin", admin, "create_item", itemInput)).body.result;
+  assert.equal(creation.isError, undefined, JSON.stringify(creation));
+  const item = creation.structuredContent;
+  assert.deepEqual(Object.keys(item).sort(), ["id", "version", "sku", "name", "priceCents", "stock"].sort());
+  assert.equal(typeof item.id, "string");
+  assert.ok(item.id.length > 0 && Number.isSafeInteger(item.version));
+  assert.deepEqual({ sku: item.sku, name: item.name, priceCents: item.priceCents, stock: item.stock }, { ...itemInput, stock: 0 });
+  const readItem = async () => (await call("GET", `/admin/api/entries/${item.id}?collection=items`, { cookie: admin })).body.entry;
+  assert.equal((await readItem()).version, item.version);
+  const duplicateItem = (await mcp("/mcp/admin", admin, "create_item", itemInput)).body.result;
+  assert.equal(duplicateItem.isError, true);
+  assert.match(JSON.stringify(duplicateItem.content), /CONFLICT/);
+  assert.equal((await call("GET", "/api/views/catalog")).body.rows.filter(row => row.sku === itemInput.sku).length, 1);
+  const restockedItem = (await mcp("/mcp/admin", admin, "restock", { sku: item.sku, name: item.name, qty: 7 })).body.result;
+  assert.equal(restockedItem.isError, undefined, JSON.stringify(restockedItem));
+  const observed = await readItem();
+  assert.equal(observed.data.stock, 7);
+  const renamed = (await mcp("/mcp/admin", admin, "rename_item", { id: item.id, expectedVersion: observed.version, name: "Renamed Store item" })).body.result;
+  assert.equal(renamed.isError, undefined, JSON.stringify(renamed));
+  assert.deepEqual(renamed.structuredContent, { ...item, name: "Renamed Store item", stock: 7, version: observed.version + 1 });
+  assert.deepEqual((await readItem()).data, { sku: item.sku, name: "Renamed Store item", priceCents: 1250, stock: 7 });
+  assert.equal((await readItem()).version, renamed.structuredContent.version);
+  for (const input of [
+    { id: item.id, expectedVersion: observed.version, name: "Stale rename" },
+    { id: item.id, expectedVersion: renamed.structuredContent.version, name: null },
+    { id: item.id, expectedVersion: renamed.structuredContent.version, name: "Forbidden stock change", stock: 99 },
+  ]) {
+    assert.equal((await mcp("/mcp/admin", admin, "rename_item", input)).body.result.isError, true);
+    assert.equal((await readItem()).version, renamed.structuredContent.version);
+    assert.equal((await readItem()).data.name, "Renamed Store item");
+  }
+  const raced = await Promise.all(["Concurrent A", "Concurrent B"].map(name => mcp("/mcp/admin", admin, "rename_item", { id: item.id, expectedVersion: renamed.structuredContent.version, name })));
+  const raceResults = raced.map(response => response.body.result);
+  const winners = raceResults.filter(result => !result.isError), losers = raceResults.filter(result => result.isError);
+  assert.equal(winners.length, 1);
+  assert.equal(losers.length, 1);
+  assert.match(JSON.stringify(losers[0].content), /CONFLICT/);
+  const finalItem = await readItem();
+  assert.equal(finalItem.version, winners[0].structuredContent.version);
+  assert.deepEqual(finalItem.data, { sku: item.sku, name: winners[0].structuredContent.name, priceCents: 1250, stock: 7 });
+  for (const [sku, price] of [["STORE-OMITTED", undefined], ["STORE-NULL", null]]) {
+    const output = (await mcp("/mcp/admin", admin, "create_item", { sku, name: sku, ...(price === undefined ? {} : { priceCents: price }) })).body.result;
+    assert.equal(output.isError, undefined, JSON.stringify(output));
+    assert.equal(output.structuredContent.priceCents, null);
+    assert.equal(output.structuredContent.stock, 0);
+  }
+  step("Store-backed ref MCP: create safe committed snapshot; partial rename preserves price/stock/SKU, actual versions chain, stale/concurrent refusal, null/extra-field validation and admin authority");
+
   // A working initial MCP call does not prove this connection can renew. Exercise
   // the example's real provider, signed consent, PKCE and rotation on this local D1.
   const issuer = `${origin}/api/auth`;

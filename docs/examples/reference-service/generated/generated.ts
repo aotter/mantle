@@ -11,7 +11,9 @@ export type HandlerStore = Pick<ReturnType<typeof makeStore>, "collection" | "vi
 export interface HandlerContext { readonly caller: Caller; readonly db: Database; readonly store: HandlerStore; }
 export interface Handlers {
   readonly ["cancel-order"]: (ctx: HandlerContext, input: Procedure0Input) => Promise<Procedure0Output>;
-  readonly ["place-order"]: (ctx: HandlerContext, input: Procedure1Input) => Promise<Procedure1Output>;
+  readonly ["create-item"]: (ctx: HandlerContext, input: Procedure1Input) => Promise<Procedure1Output>;
+  readonly ["place-order"]: (ctx: HandlerContext, input: Procedure2Input) => Promise<Procedure2Output>;
+  readonly ["rename-item"]: (ctx: HandlerContext, input: Procedure4Input) => Promise<Procedure4Output>;
 }
 export type Procedure0Input = { readonly "orderId": string; readonly "expectedVersion": number; readonly [key: string]: unknown; };
 export type Procedure0Output = {  readonly [key: string]: unknown; };
@@ -23,14 +25,34 @@ async function procedure0(db: Database, caller: Caller, raw: Procedure0Input, co
   if (!handler) throw new ContractError("HANDLER_NOT_REGISTERED", "Procedure handler is not registered.", "procedures/cancel-order");
   return handler({ caller, db, store: context.store }, raw);
 }
-export type Procedure1Input = { readonly "itemId": string; readonly "qty": number; readonly [key: string]: unknown; };
-export type Procedure1Output = { readonly "results": ReadonlyArray<ReadonlyArray<{  readonly [key: string]: unknown; }>>; readonly [key: string]: unknown; };
+export type Procedure1Input = { readonly "sku": string; readonly "name": string; readonly "priceCents"?: number | null;  };
+export type Procedure1Output = { readonly "id": string; readonly "version": number; readonly "sku": string; readonly "name": string; readonly "priceCents": number | null; readonly "stock": number;  };
 async function procedure1(db: Database, caller: Caller, raw: Procedure1Input, context: { handlers: Handlers; store: HandlerContext["store"] }): Promise<Procedure1Output> {
+  if ("authenticatedAs" in caller && caller.authenticatedAs === "snapshot") (await import("@aotter/mantle/host-caller")).checkFresh(caller, false, "procedures/create-item");
+  deny(caller, isAdmin(caller), "procedures/create-item/requires/auth/all/0");
+  const handlers = context?.handlers;
+  const handler = handlers && Object.hasOwn(handlers, "create-item") ? handlers["create-item"] : undefined;
+  if (!handler) throw new ContractError("HANDLER_NOT_REGISTERED", "Procedure handler is not registered.", "procedures/create-item");
+  return handler({ caller, db, store: context.store }, raw);
+}
+export type Procedure2Input = { readonly "itemId": string; readonly "qty": number; readonly [key: string]: unknown; };
+export type Procedure2Output = { readonly "results": ReadonlyArray<ReadonlyArray<{  readonly [key: string]: unknown; }>>; readonly [key: string]: unknown; };
+async function procedure2(db: Database, caller: Caller, raw: Procedure2Input, context: { handlers: Handlers; store: HandlerContext["store"] }): Promise<Procedure2Output> {
   if ("authenticatedAs" in caller && caller.authenticatedAs === "snapshot") (await import("@aotter/mantle/host-caller")).checkFresh(caller, false, "procedures/place-order");
   deny(caller, isUser(caller), "procedures/place-order/requires/auth/all/0");
   const handlers = context?.handlers;
   const handler = handlers && Object.hasOwn(handlers, "place-order") ? handlers["place-order"] : undefined;
   if (!handler) throw new ContractError("HANDLER_NOT_REGISTERED", "Procedure handler is not registered.", "procedures/place-order");
+  return handler({ caller, db, store: context.store }, raw);
+}
+export type Procedure4Input = { readonly "id": string; readonly "expectedVersion": number; readonly "name": string;  };
+export type Procedure4Output = { readonly "id": string; readonly "version": number; readonly "sku": string; readonly "name": string; readonly "priceCents": number | null; readonly "stock": number;  };
+async function procedure4(db: Database, caller: Caller, raw: Procedure4Input, context: { handlers: Handlers; store: HandlerContext["store"] }): Promise<Procedure4Output> {
+  if ("authenticatedAs" in caller && caller.authenticatedAs === "snapshot") (await import("@aotter/mantle/host-caller")).checkFresh(caller, false, "procedures/rename-item");
+  deny(caller, isAdmin(caller), "procedures/rename-item/requires/auth/all/0");
+  const handlers = context?.handlers;
+  const handler = handlers && Object.hasOwn(handlers, "rename-item") ? handlers["rename-item"] : undefined;
+  if (!handler) throw new ContractError("HANDLER_NOT_REGISTERED", "Procedure handler is not registered.", "procedures/rename-item");
   return handler({ caller, db, store: context.store }, raw);
 }
 export type View0Input = {   };
@@ -92,27 +114,27 @@ async function view5(db: Database, caller: Caller, raw: View5Input): Promise<Vie
   return DRIVER.read(db, m.sql, binds(D, m.binds, caller, raw));
 }
 export { view5 as view_search$2ditems };
-export type Procedure2Input = { readonly "itemId": string; readonly "qty": number; readonly [key:string]: unknown; };
-const procedure2Caller = [{ sql: "INSERT INTO orders (itemid, qty, orderstatus, placedat, owner, created_at, updated_at, author_id, id) SELECT _v.*, ?4, ?2, ?2, ?4, lower(hex(randomblob(16))) FROM ( SELECT id, CAST(?1 AS integer), 'placed', ?2 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS items WHERE id = CAST(?3 AS text) ) AS _v WHERE (1 = 1) RETURNING id, itemid AS \"itemId\", qty, orderstatus AS \"orderStatus\", version", binds: [{"k":"input","name":"qty"},{"k":"now"},{"k":"input","name":"itemId"},{"k":"uid"}] }, { sql: "UPDATE items SET stock = stock - CAST(?1 AS integer), version = version + 1, updated_at = ?3 WHERE id = CAST(?2 AS text)", binds: [{"k":"input","name":"qty"},{"k":"input","name":"itemId"},{"k":"now"}], row: true }] as const;
-async function procedure2(db: Database, caller: Caller, raw: Procedure2Input): Promise<Output> {
+export type Procedure3Input = { readonly "itemId": string; readonly "qty": number; readonly [key:string]: unknown; };
+const procedure3Caller = [{ sql: "INSERT INTO orders (itemid, qty, orderstatus, placedat, owner, created_at, updated_at, author_id, id) SELECT _v.*, ?4, ?2, ?2, ?4, lower(hex(randomblob(16))) FROM ( SELECT id, CAST(?1 AS integer), 'placed', ?2 FROM ( SELECT id, version, created_at, updated_at, author_id, sku, name, pricecents, stock, rowid AS _rid FROM items ) AS items WHERE id = CAST(?3 AS text) ) AS _v WHERE (1 = 1) RETURNING id, itemid AS \"itemId\", qty, orderstatus AS \"orderStatus\", version", binds: [{"k":"input","name":"qty"},{"k":"now"},{"k":"input","name":"itemId"},{"k":"uid"}] }, { sql: "UPDATE items SET stock = stock - CAST(?1 AS integer), version = version + 1, updated_at = ?3 WHERE id = CAST(?2 AS text)", binds: [{"k":"input","name":"qty"},{"k":"input","name":"itemId"},{"k":"now"}], row: true }] as const;
+async function procedure3(db: Database, caller: Caller, raw: Procedure3Input): Promise<Output> {
   if ("authenticatedAs" in caller && caller.authenticatedAs === "snapshot") (await import("@aotter/mantle/host-caller")).checkFresh(caller, false, "procedures/place-order-write");
   deny(caller, isUser(caller), "procedures/place-order-write/requires/auth/all/0");
-  return { results: await DRIVER.procedure(db, bound(D, procedure2Caller, caller, raw), "procedures/place-order-write") };
+  return { results: await DRIVER.procedure(db, bound(D, procedure3Caller, caller, raw), "procedures/place-order-write") };
 }
-export { procedure2 as procedure_place$2dorder$2dwrite };
-export type Procedure3Input = { readonly "sku": string; readonly "name": string; readonly "qty": number; readonly [key:string]: unknown; };
-const procedure3Caller = [{ sql: "INSERT INTO items (sku, name, stock, created_at, updated_at, author_id, id) SELECT _v.*, ?4, ?4, ?5, lower(hex(randomblob(16))) FROM ( VALUES (CAST(?1 AS text), CAST(?2 AS text), CAST(?3 AS integer)) ) AS _v WHERE (1 = 1) ON CONFLICT (sku) DO UPDATE SET stock = items.stock + excluded.stock, version = version + 1, updated_at = ?4 RETURNING id, sku, stock", binds: [{"k":"input","name":"sku"},{"k":"input","name":"name"},{"k":"input","name":"qty"},{"k":"now"},{"k":"uid"}] }] as const;
-async function procedure3(db: Database, caller: Caller, raw: Procedure3Input): Promise<Output> {
+export { procedure3 as procedure_place$2dorder$2dwrite };
+export type Procedure5Input = { readonly "sku": string; readonly "name": string; readonly "qty": number; readonly [key:string]: unknown; };
+const procedure5Caller = [{ sql: "INSERT INTO items (sku, name, stock, created_at, updated_at, author_id, id) SELECT _v.*, ?4, ?4, ?5, lower(hex(randomblob(16))) FROM ( VALUES (CAST(?1 AS text), CAST(?2 AS text), CAST(?3 AS integer)) ) AS _v WHERE (1 = 1) ON CONFLICT (sku) DO UPDATE SET stock = items.stock + excluded.stock, version = version + 1, updated_at = ?4 RETURNING id, sku, stock", binds: [{"k":"input","name":"sku"},{"k":"input","name":"name"},{"k":"input","name":"qty"},{"k":"now"},{"k":"uid"}] }] as const;
+async function procedure5(db: Database, caller: Caller, raw: Procedure5Input): Promise<Output> {
   if ("authenticatedAs" in caller && caller.authenticatedAs === "snapshot") (await import("@aotter/mantle/host-caller")).checkFresh(caller, false, "procedures/restock");
   deny(caller, isAdmin(caller), "procedures/restock/requires/auth/all/0");
-  return { results: await DRIVER.procedure(db, bound(D, procedure3Caller, caller, raw), "procedures/restock") };
+  return { results: await DRIVER.procedure(db, bound(D, procedure5Caller, caller, raw), "procedures/restock") };
 }
-export { procedure3 as procedure_restock };
+export { procedure5 as procedure_restock };
 export const views = { ["catalog"]: view0, ["get-order"]: view1, ["my-orders"]: view2, ["recent-activity"]: view3, ["sales-by-item"]: view4, ["search-items"]: view5 };
-export const procedures = { ["place-order-write"]: procedure2, ["restock"]: procedure3 };
+export const procedures = { ["place-order-write"]: procedure3, ["restock"]: procedure5 };
 export type Tables = { activity: { row: { id: string; version: number; created_at: string; updated_at: string; author_id: string | null; kind: string; subject: string; detail: string | null; }; fields: { id: string; version: number; created_at: string | Date; updated_at: string | Date; author_id: string; kind: string; subject: string; detail: string; }; set: { kind: string; subject: string; detail: string | null; }; required: "kind" | "subject"; order: "id" | "created_at" }; items: { row: { id: string; version: number; created_at: string; updated_at: string; author_id: string | null; sku: string; name: string; pricecents: number | null; stock: number; }; fields: { id: string; version: number; created_at: string | Date; updated_at: string | Date; author_id: string; sku: string; name: string; pricecents: number; stock: number; }; set: { sku: string; name: string; pricecents: number | null; stock: number; }; required: "sku" | "name" | "stock"; order: "id" | "sku" | "name" }; orders: { row: { id: string; version: number; created_at: string; updated_at: string; author_id: string | null; itemid: string; qty: number; orderstatus: string; placedat: string | null; }; fields: { id: string; version: number; created_at: string | Date; updated_at: string | Date; author_id: string; itemid: string; qty: number; orderstatus: string; placedat: string | Date; }; set: { itemid: string; qty: number; orderstatus: string; placedat: string | Date | null; }; required: "itemid" | "qty" | "orderstatus"; order: "id" | "created_at" } };
 const RULES = {"caller":[["$scope","eq",{"k":"uid"}],["$ttl","ttl",{"k":"cutoff","seconds":0}],["status","admin",{"k":"admin"},"published"]],"trusted":[["$ttl","ttl",{"k":"cutoff","seconds":0}]],"fills":[["$scope",{"k":"uid"}],["created_at",{"k":"now"}],["updated_at",{"k":"now"}],["author_id",{"k":"uid"}],["id","newId"]],"sets":[["version","bump"],["updated_at",{"k":"now"}]],"lock":["version","eq",{"k":"version"}],"newId":"lower(hex(randomblob(16)))"} as const;
-const storeProcedures = { ["place-order-write"]: procedure2, ["restock"]: procedure3, ["cancel-order"]: procedure0, ["place-order"]: procedure1 };
+const storeProcedures = { ["place-order-write"]: procedure3, ["restock"]: procedure5, ["cancel-order"]: procedure0, ["create-item"]: procedure1, ["place-order"]: procedure2, ["rename-item"]: procedure4 };
 const initStore = () => createStore<Database, Tables, typeof DRIVER, { views: typeof views; procedures: typeof storeProcedures }, { handlers: Handlers }>(DIALECT.dialect, DRIVER, RULES, { "activity": {}, "items": {"search":["name","sku"]}, "orders": {"s":"owner","ts":["placedat"]} }, { views, procedures: storeProcedures });
 let makeStore: ReturnType<typeof initStore>;
 export function store<const H extends Handlers>(db: Database, caller: Caller, options: { handlers: H & Record<Exclude<keyof H, keyof Handlers>, never> }): ReturnType<typeof makeStore> { return (makeStore ??= initStore())(db, caller, options); }

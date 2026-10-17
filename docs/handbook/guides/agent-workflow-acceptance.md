@@ -50,6 +50,16 @@ calling the original goal complete. Reuse the installed version's Views,
 Procedures, Store and surface contracts; a missing business tool is not by
 itself an SDK runtime defect.
 
+For simple creates/partial updates, prefer a declared Store-backed `ref`
+Procedure: await the caller-bound Store write, return a safe allowlist with its
+actual returned ID/version, and keep `requires` plus generated input validation
+at invocation. Store row policy alone is not Procedure authorization. Define
+omitted versus null patch semantics; never fill unseen fields with defaults.
+Keep SQL Procedures for atomic stock changes, conditional state transitions and
+related writes. A TypeScript pre-read does not replace an atomic WHERE/CHECK;
+D1 supports batch, not an interactive transaction or consuming an earlier batch
+result. See the [Store write guide](typed-queries.md#prefer-store-backed-ref-procedures-for-simple-writes).
+
 Then implement the minimum contract and run generated/type, authorization,
 atomicity and other relevant regressions. Follow the fresh-agent loop below
 before claiming independent business acceptance. Keep the author's capability

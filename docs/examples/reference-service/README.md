@@ -121,3 +121,25 @@ refresh/review flow and confirm that it lists the new renderer before testing
 it. A fresh protocol `tools/list` passing does not establish that an existing
 ChatGPT/iOS connection adopted the updated catalog; record that separately in
 manual host acceptance.
+
+
+## Use Store for simple writes; retain atomic SQL for business conditions
+
+Admin MCP `create_item` inserts one catalog item with stock fixed at zero;
+`priceCents` is minor currency units and omitted/null means unknown.
+`rename_item` only patches its required non-null name, preserving SKU, price
+and stock. Both are declared admin-only ref Procedures backed by caller-bound
+Store writes. They return an explicit safe snapshot with the backend ID and
+actual returned version; generated validation and Procedure `requires` remain
+in force. No row spread, version echo or generic receipt wrapper is involved.
+
+The smoke verifies receipts against stored state, duplicate-SKU refusal,
+nonzero-stock/price preservation, null/extra-field refusal, stale versions and
+two concurrent renames using one reviewed version (one succeeds, one conflicts).
+It also checks member/anonymous denial. Initial DDL is unchanged.
+
+Order placement and stock decrement, cancellation, and additive restock retain
+their existing native atomic boundaries. A TypeScript pre-read/write pair must
+not replace the SQL stock CHECK/conditional write. D1 cannot run an interactive
+transaction callback or feed a prior batch result into a later step. See the
+[Store guide](../../handbook/guides/typed-queries.md#prefer-store-backed-ref-procedures-for-simple-writes).
