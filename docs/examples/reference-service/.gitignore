@@ -9,3 +9,4 @@ node_modules/
 # Rebuilt from manifests with the selected SDK; never part of the reference source.
 generated/
 dist/
+worker-configuration.d.ts

@@ -36,6 +36,7 @@ one exact version. Then:
 ```sh
 pnpm install
 pnpm generate                   # lists required Handlers keys
+pnpm types                      # regenerates Wrangler environment types
 pnpm exec tsc --noEmit           # implement listed handlers, then typecheck again
 pnpm check                      # generation/check, typecheck, real local D1 smoke
 cp .dev.vars.example .dev.vars  # set ADMIN_EMAIL and a random BETTER_AUTH_SECRET
@@ -50,10 +51,10 @@ receives the OSS `admin` role only after email verification; ordinary members
 receive 403 from Admin.
 
 This reference is source-only: commit manifests, focused implementations,
-configuration and executable checks. Keep `generated/` and `dist/` untracked;
+configuration and executable checks. Keep `generated/`, `worker-configuration.d.ts` and `dist/` untracked;
 regenerate them with the selected SDK rather than hand-editing outputs.
-`pnpm check` generates first, checks the generated output, then typechecks and
-runs the real local service smoke. Run `pnpm generate` before direct typecheck,
+`pnpm check` regenerates SDK output and Wrangler types, checks them, then typechecks and
+runs the real local service smoke. Run `pnpm generate` and `pnpm types` before direct typecheck,
 build or browser-test commands in a fresh checkout. Initial database DDL also
 comes from that generated output; reviewed production migrations remain authored
 source. The release gate archives only committed source and installs exact
