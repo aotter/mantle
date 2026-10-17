@@ -117,6 +117,7 @@ kind: Procedure
 metadata: { name: submit-request }
 spec:
   title: Submit a purchase request
+  description: Submit a purchase request against an existing department budget.
   requires: { auth: { all: [ctx.user] } }
   input:
     type: object
@@ -140,6 +141,7 @@ kind: Procedure
 metadata: { name: change-amount }
 spec:
   title: Change the amount of my request
+  description: Change the amount of the signed-in member's submitted purchase request.
   requires: { auth: { all: [ctx.user] } }
   restrict: { requests: "author_id = auth.uid()" }
   input:
@@ -291,9 +293,23 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
+metadata: { name: submit-request-mcp }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: submit-request }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
 metadata: { name: change-amount-http }
 spec:
   source: { kind: http, method: POST, path: '/api/requests/{id}/amount' }
+  target: { procedure: change-amount }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: change-amount-mcp }
+spec:
+  source: { kind: mcp, surface: public }
   target: { procedure: change-amount }
 ---
 # Admin MCP tools: an AI agent connected to /mcp/admin can approve or reject.

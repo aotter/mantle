@@ -35,7 +35,7 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
     if (check) throw new Error("--check requires a JSON or JSONC Wrangler config; TOML generation only prints manual edits.");
     console.log(`Leave ${configPath} unchanged. Add these Wrangler TOML keys (include nodejs_compat and global_fetch_strictly_public in every compatibility_flags override):\n` +
       `main = ${JSON.stringify(keys.main)}\nno_bundle = true\nfind_additional_modules = true\nbase_dir = ${JSON.stringify(worker)}\ncompatibility_flags = ${JSON.stringify(requiredFlags)}\n\n` +
-      (assets === undefined ? "" : `[assets]\ndirectory = ${JSON.stringify(local(assets))}\n\n`) +
+      (assets === undefined ? "" : `[assets]\ndirectory = ${JSON.stringify(local(assets))}\nbinding = "ASSETS"\nrun_worker_first = true\nhtml_handling = "none"\n\n`) +
       `[[rules]]\ntype = "ESModule"\nglobs = ["**/*.js"]\nfallthrough = true\n\n[build]\ncommand = ${JSON.stringify(keys.build.command)}\nwatch_dir = ${JSON.stringify(keys.build.watch_dir)}`);
     return false;
   }
@@ -68,8 +68,20 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
   }
   for (const [key, value] of Object.entries(top)) edit([key], value);
   for (const [key, value] of Object.entries(buildKeys)) edit(["build", key], value);
-  // Only the directory: the binding, run_worker_first and html_handling stay the application's.
-  if (assets !== undefined) edit(["assets", "directory"], local(assets));
+  if (assets !== undefined) {
+    const wireAssets = (path: (string | number)[], current: any) => {
+      edit([...path, "directory"], local(assets));
+      const ownsDefaults = current === undefined || current?.binding === undefined;
+      if (ownsDefaults && current?.binding === undefined) edit([...path, "binding"], "ASSETS");
+      if (ownsDefaults && current?.run_worker_first === undefined) edit([...path, "run_worker_first"], true);
+      // The shell fetches index.html itself; asset canonicalization would redirect it back to /admin/ forever.
+      if (current?.html_handling === undefined && (current?.run_worker_first === true || (ownsDefaults && current?.run_worker_first === undefined))) edit([...path, "html_handling"], "none");
+    };
+    wireAssets(["assets"], config.assets);
+    for (const [name, environment] of Object.entries(config.env ?? {}) as [string, any][]) {
+      if (environment?.assets !== undefined) wireAssets(["env", name, "assets"], environment.assets);
+    }
+  }
   if (!(config.rules ?? []).some((r: unknown) => isDeepStrictEqual(r, rule))) edit(config.rules === undefined ? ["rules"] : ["rules", -1], config.rules === undefined ? [rule] : rule);
   const changed = !exists || text !== original;
   if (changed && !check) writeFileSync(configPath, text);

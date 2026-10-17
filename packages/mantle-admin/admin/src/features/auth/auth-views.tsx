@@ -221,6 +221,7 @@ export function OAuthConsentView(): React.ReactElement {
     );
   }
 
+  const destination = new URL(consent.data.redirectUri);
   return (
     <AuthCard action={<ThemeToggle />} wide>
       <CardHeader>
@@ -231,6 +232,21 @@ export function OAuthConsentView(): React.ReactElement {
         <CardDescription>{t(language, "oauth.consent.body", { client: consent.data.clientName })}</CardDescription>
       </CardHeader>
       <CardContent>
+        <dl className="mb-6 space-y-3 text-sm">
+          <div>
+            <dt className="text-muted-foreground">{t(language, "oauth.consent.redirect")}</dt>
+            <dd className="break-all font-medium">{destination.origin === "null" ? destination.protocol : destination.origin}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">{t(language, "oauth.consent.scopes")}</dt>
+            <dd>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {consent.data.scopes.map(scope => <li key={scope} className="rounded-md border bg-muted px-2 py-1 font-mono text-xs">{scope}</li>)}
+              </ul>
+            </dd>
+          </div>
+        </dl>
+        {consent.data.scopes.includes("offline_access") && <p className="mb-6 text-sm text-muted-foreground">{t(language, "oauth.consent.offline")}</p>}
         <form
           method="post"
           action="/oauth/consent"

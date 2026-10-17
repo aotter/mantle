@@ -88,10 +88,11 @@ export default {
 };
 ```
 
-Remove imports and array entries for omitted surfaces. `mcp.ts` exists only when
-the manifest has an MCP surface, and requires the documented optional MCP peer.
-An application that does not mount MCP need not import generated `mcp.ts`; because
-the module is then outside the entry import graph, it contributes nothing to the bundle.
+Keep the MCP and REST entries together for the normal symmetric path. For a deliberate
+asymmetric exception, remove the omitted surface's imports and array entry. `mcp.ts`
+exists only when the manifest has an MCP surface and requires the documented optional
+MCP peer. An application that deliberately does not mount MCP need not import generated
+`mcp.ts`; outside the entry import graph, it contributes nothing to the bundle.
 Pass the same handlers to each selected surface that exposes ref Procedures.
 Bind site/media/identity capabilities through the selected Admin/MCP
 options; do not expose native auth administrative routes without `authRoutes` or
@@ -108,12 +109,19 @@ its collection parameter selects only a generated table and visibility policy.
 
 ## Workers assets and secrets
 
+`mantle generate --admin --wrangler wrangler.jsonc` sets the selected assets
+directory. A new assets block defaults to `binding: "ASSETS"`, `run_worker_first: true`
+and `html_handling: "none"`. Existing blocks keep their binding and routing; when
+`run_worker_first` is already true, a missing `html_handling` defaults to `none`.
+A different binding needs a custom Admin HTML loader. Deploy the built assets and
+Worker together.
+
 `mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --admin`
 updates the split-build Wrangler keys (`main` and `base_dir` under `dist/worker`),
 ensures `nodejs_compat` and defaults to `global_fetch_strictly_public` ([public fetch routing](deploy-and-operate.md#public-fetch-routing))
 and, with `--admin`, `assets.directory`: `mantle bundle` builds Admin into
-`dist/client/admin`, served at `/admin`. Configure the rest explicitly; JSONC
-comments and unrelated settings survive regeneration:
+`dist/client/admin`, served at `/admin`. Configure existing assets blocks explicitly;
+JSONC comments and unrelated settings survive regeneration:
 
 ```jsonc
 {

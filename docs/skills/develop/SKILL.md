@@ -17,6 +17,8 @@ workflow](../../handbook/start/project-and-cli.md) before editing.
 
 Use the native Store/query/surface entries and app-owned fetch from the [service
 composition guide](../../handbook/cloudflare/service-entry.md).
+Pair every HTTP Trigger with an MCP Trigger by default; see [Trigger](../../handbook/reference/trigger.md)
+for the generate warning and deliberate asymmetry exception.
 Keep optional modules out of unused entry imports and auth dynamically loaded.
 Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.
@@ -38,6 +40,19 @@ statistics, safe/exact OCC and no automatic retry after unknown 503 outcomes.
 
 For application-owned MCP App entries and host checks, follow the [MCP Apps
 guide](../../handbook/guides/mcp-apps.md).
+
+Build a custom frontend with `App` from `@modelcontextprotocol/ext-apps`: register
+`ontoolinput`/`ontoolresult` before `connect()`, and use `callServerTool` for
+host-proxied calls. Keep protocol negotiation and message routing in the official
+client; importing its types while writing a second `postMessage` bridge is
+insufficient.
+
+For Admin UI upgrades, follow the installed handbook's
+[retained-page recipe](../../handbook/guides/mcp-apps.md#keep-old-conversations-working-after-an-upgrade).
+Keep deployed snapshots in source/artifact storage and pass `previous` to
+`adminMcpApps`; verify old conversations after a changed UI build without host
+tool refresh, reconnection or cache clearing. Keep tool contracts compatible
+through the declared retention window.
 
 
 Place admin MCP Procedures in Admin deliberately: `spec.uiSchema.collectionAction:

@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "Kembali ke",
+    "oauth.consent.scopes": "Akses yang diminta",
+    "oauth.consent.offline": "Izinkan akses latar belakang, termasuk setelah keluar dari situs ini. Anda dapat mencabutnya di Aplikasi terhubung.",
+
     "common.reloadPage": "Muat ulang halaman",
     "common.reloadPageHint": "Muat ulang halaman ini untuk mencoba lagi. Perubahan yang belum disimpan mungkin hilang.",
     "ops.details": "Detail",

@@ -25,6 +25,13 @@ as in [Workers assets and secrets](../../handbook/cloudflare/service-entry.md#wo
 Keep the Workers [public-fetch flags](../../handbook/cloudflare/deploy-and-operate.md#public-fetch-routing),
 including environment overrides; verify deployed MCP with a real OAuth bearer
 (`initialize` and `tools/list`), not only a browser session cookie.
+For MCP Apps, also follow [deployed host acceptance](../../handbook/guides/mcp-apps.md#verify-a-deployed-app-in-chatgpt):
+compare the current resource URI and visibly verify a newly invoked render tool.
+Archive deployed Admin pages using the guide's `previous` recipe and carry them
+through clean builds. Test the same old conversation after changing the UI build,
+without reconnecting, refreshing host tools or clearing caches. A deliberate tool
+contract change has its own migration/host rediscovery step. OAuth renewal, `tools/call` success and a
+local official-host replay do not establish that the deployed App rendered.
 Bun uses native Database/SQL, an app server and scheduler. Verify admin sign-in
 (role admin), denied access, public reads, a persisted write, MCP and selected UI.
 Report artifact/resources/checks and keep rollback artifacts.

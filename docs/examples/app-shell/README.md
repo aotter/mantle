@@ -39,8 +39,9 @@ on one version.
 | `src/auth.ts` | Better Auth options. Two roles only: `admin` (the admin layer) and `user`. Replace the console OTP sender before deploying. |
 | `smoke.mjs` | Your acceptance steps on `smoke-kit.mjs` (fresh local D1, OTP sign-in per user, REST/MCP/Admin calls). |
 
-`src/service.ts` and `src/index.ts` rarely change. Delete the blocks marked `MCP / OAuth (optional)` in `auth.ts`
-and `service.ts` if the app has no MCP.
+`src/service.ts` and `src/index.ts` rarely change. The default shell mounts REST and MCP together. If the app deliberately
+chooses asymmetric exposure, delete the blocks marked `MCP / OAuth (deliberate exception)` in `auth.ts` and `service.ts`;
+HTTP-only Procedures will keep generating with a warning.
 
 Search for `AGENT:` to find what an app must fill in.
 

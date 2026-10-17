@@ -123,6 +123,14 @@ workspace remains part of the product.
 
 ## MCP App
 
+For compatible deployments, `adminMcpApps({ catalogue, previous })` retains
+application-owned `AdminMcpSnapshot` pages at their original URIs, with the current
+caller's catalogue filtering and no current renderer ownership. Commit snapshots
+or keep them in durable artifact storage before the next clean build. Follow the
+installed Core handbook's MCP Apps retained-page/deployed-host recipe; old executable
+HTML and CSP must remain versioned together. Host reconnect/cache clearing is not
+an upgrade acceptance step.
+
 For browser-only integrations, an optional `src/admin.mcp.tsx` selects a separate host-safe entry graph; `mantle bundle` discovers it beside `admin.tsx` (beside the Worker entry). With the build API, pass `buildAdmin({ entry, mcpEntry, outDir })`. Both entries use the existing `defineAdmin` API and can import one shared config/components/CSS module; the MCP entry must not import the browser entry or browser-only integrations. Without it, authoring and the whole-entry guard are unchanged. See [separate entry example](../../docs/handbook/guides/mcp-apps.md#isolate-browser-only-integrations).
 
 `buildAdmin` (so `mantle bundle`) also builds the App from the same Admin entry by default, into the

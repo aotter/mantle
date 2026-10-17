@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "完成后返回",
+    "oauth.consent.scopes": "请求的权限",
+    "oauth.consent.offline": "允许后台持续访问，包括退出本网站后。你可以随时在已连接的应用中撤销授权。",
+
     "common.reloadPage": "重新加载页面",
     "common.reloadPageHint": "请重新加载此页面后重试。未保存的更改可能会丢失。",
     "ops.details": "详细信息",

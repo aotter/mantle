@@ -69,7 +69,7 @@ export async function fetchService(request: Request, env: Env, context: Executio
       response = await serveAdmin(request, env);
     } else if (/^\/mcp(?:\/admin)?\/*$/.test(url.pathname)) {
       if (!serveMcpHandler) {
-        serveMcpHandler = serveMcp([...tools, ...extraTools, renderSalesTool], { ...options, instructions: "Use data tools for business decisions. Render only on an explicit interactive reporting request; otherwise answer from structured results. Tool calls are independent transactions. Reconcile uncertain writes before retrying.", apps: { admin: adminMcpApps({renders:["render_sales_report"],catalogue:{ ...mcpAppCatalogues.admin, views: { ...mcpAppCatalogues.admin.views, ...salesReportCatalogue.views } }}) } });
+        serveMcpHandler = serveMcp([...tools, ...extraTools, renderSalesTool], { ...options, authorizationScopes: ["offline_access"], instructions: "Use data tools for business decisions. Render only on an explicit interactive reporting request; otherwise answer from structured results. Tool calls are independent transactions. Reconcile uncertain writes before retrying.", apps: { admin: adminMcpApps({renders:["render_sales_report"],catalogue:{ ...mcpAppCatalogues.admin, views: { ...mcpAppCatalogues.admin.views, ...salesReportCatalogue.views } }}) } });
       }
       response = await serveMcpHandler(request, env);
     } else {
