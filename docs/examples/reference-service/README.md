@@ -63,8 +63,8 @@ it, then cancel it” using only `tools/list` and tool results. In this example:
 
 1. `search_items({ q, limit })` locates a backend item ID without scanning the
    entire catalog. Follow `nextCursor` only when more results are needed.
-2. `place_order({ itemId, qty })` returns the created order in `results[0]`,
-   including its ID, item relation, state and observed version.
+2. `place_order({ itemId, qty })` returns the created order in the first row of the
+   first statement, `results[0][0]`, including its ID, item relation, state and observed version.
 3. `get_order({ orderId })` reads one owned order, its related item and version.
    Empty `rows` means absent or inaccessible, including another buyer's order.
 4. `cancel_order({ orderId, expectedVersion })` changes a placed order and

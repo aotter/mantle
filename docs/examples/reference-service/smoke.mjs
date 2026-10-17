@@ -238,10 +238,23 @@ try {
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = (await mcp("/mcp", buyer, "place_order", { itemId: selectedItem.id, qty: 1 })).body.result;
     assert.equal(result.isError, undefined, JSON.stringify(result));
-    createdIds.push(result.structuredContent.results[0][0].id);
+    const createdOrder = result.structuredContent.results[0][0];
+    assert.equal(typeof createdOrder.id, "string");
+    assert.ok(createdOrder.id.length > 0);
+    assert.equal(createdOrder.itemId, selectedItem.id);
+    assert.equal(createdOrder.qty, 1);
+    assert.equal(createdOrder.orderStatus, "placed");
+    assert.ok(Number.isSafeInteger(createdOrder.version));
+    createdIds.push(createdOrder.id);
   }
   assert.equal(new Set(createdIds).size, 2);
   assert.equal(await selectedStock(), startingStock - 2);
+  const oversell = (await mcp("/mcp", buyer, "place_order", { itemId: selectedItem.id, qty: startingStock + 1 })).body.result;
+  assert.equal(oversell.isError, true);
+  assert.match(JSON.stringify(oversell.content), /CONFLICT/);
+  assert.equal(await selectedStock(), startingStock - 2);
+  assert.equal((await mcp("/mcp", buyer, "my_orders", {})).body.result.structuredContent.rows.length, ownedBefore + 2);
+  // The failed third call does not roll back either earlier successful call; deliberate cancellation below compensates them.
   for (const orderId of createdIds) {
     const detail = (await mcp("/mcp", buyer, "get_order", { orderId })).body.result.structuredContent.rows;
     assert.equal(detail.length, 1);

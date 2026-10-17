@@ -5,7 +5,7 @@ kind: Procedure
 metadata: { name: place-order }
 spec:
   title: Place an order
-  description: Place one order using a backend itemId from search_items or catalog. Returns results[0] with order ID, itemId, quantity, state and observed version; verify with get_order. Order and stock change atomically. Not idempotent; after an uncertain response reconcile via my_orders instead of blindly retrying.
+  description: Place one order using a backend itemId from search_items or catalog. Returns the first row of the first statement, results[0][0], with id, itemId, qty, orderStatus and observed version; verify with get_order. Order and stock change atomically. Not idempotent; after an uncertain response reconcile via my_orders instead of blindly retrying.
   requires: { auth: { all: [ctx.user] } }
   input:
     type: object
