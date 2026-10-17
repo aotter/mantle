@@ -1,4 +1,8 @@
 import { expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 
 const doc = (kind: string, name: string, spec: object) => JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind, metadata: { name }, spec });
@@ -38,3 +42,22 @@ test("public Views keep their generated REST route and MCP tool without a warnin
   expect(result.files["rest.ts"]).toContain("/api/views/status");
   expect(result.files["mcp.ts"]).toContain('target: {"kind":"view","name":"status"}');
 });
+
+test("CLI warns on stderr, succeeds, and never implies an MCP surface", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "mantle-http-only-"));
+  try {
+    const source = join(dir, "app.yaml");
+    const http = [procedure("submit"), trigger("submit-http", "submit", { kind: "http", method: "POST", path: "/api/submit" })];
+    await writeFile(source, http.join("\n---\n"));
+    const args = [join(import.meta.dir, "../dist/infrastructure/cli.js"), "generate", "bun-sqlite", "generated", source];
+    const asymmetric = spawnSync("node", args, { cwd: dir, encoding: "utf8" });
+    expect(asymmetric.status).toBe(0);
+    expect(asymmetric.stderr.match(/no mcp Trigger/g)).toHaveLength(1);
+    const result = await generateFromSources({ target: "bun-sqlite", sources: { sources: [{ sourceId: source, text: http.join("\n---\n") }] } });
+    expect(result.ok && result.files["mcp.ts"]).toBeUndefined();
+    await writeFile(source, [...http, trigger("submit-mcp", "submit", { kind: "mcp", surface: "public" })].join("\n---\n"));
+    const symmetric = spawnSync("node", args, { cwd: dir, encoding: "utf8" });
+    expect(symmetric.status).toBe(0);
+    expect(symmetric.stderr).toBe("");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
