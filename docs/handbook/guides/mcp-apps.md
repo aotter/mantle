@@ -175,6 +175,40 @@ full screen, a row action, and a link. Check too that the host advertises
 `hostCapabilities.serverTools`; without it the App is read-only. The automated interoperability test
 uses the official `AppBridge`; your app runs its generated version ([Run the compatibility test](#run-the-compatibility-test)).
 
+### Verify a deployed App in ChatGPT
+
+After deploying changed tools or a new UI build, refresh the connector's tools
+in ChatGPT settings and reload the conversation before testing. Reconnecting an
+OAuth account renews credentials; it does not establish that the host adopted
+the new tool catalogue. Discover the current render tool and its
+`_meta.ui.resourceUri`, then invoke it in a new turn. An older card retains its
+original URI, which the current deployment may no longer serve.
+
+Diagnose the first failing stage before changing the App:
+
+- `connector_auth_required` from the host's widget request: renew the existing
+  linked account through its normal OAuth flow.
+- `HTML asset not found`: compare the card's URI with the current authenticated
+  `tools/list` and `resources/read`; refresh stale host metadata, or repair a
+  missing/mismatched resource. A successful static asset GET alone is insufficient.
+- Widget request succeeds, but the sandbox document fails to load: inspect that
+  document's network result. The App bridge cannot initialize before its HTML runs.
+  Browser automation can itself pause document responses and abort the host's
+  sandbox navigation. If the automation reports a paused document response, repeat
+  the same card in native Chrome with that tab's automation debugger disconnected.
+  Compare the same deployment and resource URI before blaming the SDK. Reattaching
+  automation to an already loaded iframe does not test its initial navigation.
+- HTML runs, but initialization fails: inspect the official client's connection
+  error and test the same resource HTML with the official `AppBridge` host.
+
+Accept host rendering only after the iframe visibly displays the returned data.
+Record the tested URI and distinguish a successful tool result, local official-host
+replay and actual ChatGPT rendering. The assistant saying it displayed a card is
+not evidence that the iframe rendered. Verify with the host's CSP enforcement
+enabled and preserve authentication throughout; label any CSP-disabled diagnostic
+run separately. Exercise a read-only UI tool call, such as loading the next page,
+to check the live bridge as well as the initial result.
+
 
 ## Customising Admin for MCP hosts
 

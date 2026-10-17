@@ -30,6 +30,10 @@ capabilities at all is treated as supported.
 Use `renders` for a declared tool; `appOnly` optionally hides it from non-UI
 clients. Import HTML lazily; it carries no secrets or caller data. Tool results
 use the caller's SQL policy, and an App cannot authorize a hidden admin tool.
+Build a custom frontend with `App` from `@modelcontextprotocol/ext-apps`: register
+`ontoolinput`/`ontoolresult` before `connect()`, and use `callServerTool` for host-proxied
+calls. Keep protocol negotiation and message routing in the official client;
+importing its types while writing a second `postMessage` bridge is insufficient.
 Generic interaction components and controllers remain in `@aotter/mantle-ui`;
 Admin-specific controllers/catalogues belong to `@aotter/mantle-admin`.
 
