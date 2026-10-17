@@ -184,10 +184,24 @@ The default is one instance with `admin` and `user` roles. An app that keeps two
 staff and customers) can run one Better Auth instance per population in the same Worker; every Mantle primitive
 takes the instance it works on:
 
-- Give each instance its own `basePath`, `advanced.cookiePrefix`, `secret` and table names (`user.modelName`,
-  `session.modelName`, ... and plugin `schema` options). Keep each instance's options in its own module and pass
-  one `--auth` per module to `mantle generate`; the tables are merged into one migration, and two instances that
-  define the same table differently are refused. The native adapter follows each instance's mapping.
+- Give each instance its own `basePath`, `advanced.cookiePrefix`, `secret` and core table names (`user.modelName`,
+  `session.modelName`, `account.modelName`, `verification.modelName`). Keep each instance's options in its own
+  module and pass one `--auth` per module to `mantle generate`; the tables are merged into one migration, and two
+  instances that define the same table differently are refused. The native adapter follows each instance's mapping.
+- Better Auth plugin factories share their schema object, so differing plugin field/model mappings across instances
+  in one Worker override each other. Use one of two supported ways:
+  1. Separate the instances by core table names only and leave every plugin mapping at its default.
+  2. When plugin tables must differ (`jwt`'s `jwks`, `@better-auth/oauth-provider`'s `oauth*` tables), map them
+     explicitly in every instance, the default one included, and give each instance its own copy of the plugin's
+     schema right after constructing it:
+     `const keys = jwt({ schema: { jwks: { modelName: "staff_jwks" } } }); const plugin = { ...keys, schema: structuredClone(keys.schema) };`
+
+  `mantle generate` refuses anything else when two or more `--auth` instances use the same plugin (`jwt`, `admin`,
+  `oauth-provider`, `two-factor`, `phone-number`, `anonymous`, `siwe`, `device-authorization`) and a mapping exists
+  while an instance keeps the shared schema object, or two instances resolve a mapping to the same name (generate
+  cannot tell an identical mapping from an inherited one, so mapped names must differ between instances). Build
+  every instance's plugins in the same order in the Worker as in `--auth`; an instance built earlier than a mapped
+  one can still inherit its mapping, which generate cannot see.
 - One `authLoader(load, cookiePrefix)` per instance; call `resolveCaller(request, loader)` with the instance the
   route belongs to, and mount `authRoutes(loader, ...)` per instance (it guards that instance's `/admin/*`). The
   loader takes `cookiePrefix` separately on purpose: it checks the cookie before loading Better Auth, so anonymous
