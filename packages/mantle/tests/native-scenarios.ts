@@ -75,6 +75,9 @@ export async function verifyBareApplication(
   assert.deepEqual(sqlite ? JSON.parse(String(row.payload)) : row.payload, [1,2,{native:true}]); checks++;
   // Single-statement writes autocommit: a unique-index clash is a known rollback and reads as CONFLICT, with the native error as its cause.
   await assert.rejects(() => call("procedure", "create-purchase", owner, input), (error: any) => error?.code === "CONFLICT" && /UNIQUE|23505|duplicate/i.test(String(error.cause?.message) + (typeof error.cause?.errno === "string" ? error.cause.errno : error.cause?.code))); checks++;
+  await assert.rejects(() => call("procedure", "create-catalog-item", owner, {sku:"BARE-CHECK",name:"invalid",price:-1}), (error: any) => error?.code === "CONFLICT" && error.message.startsWith("A check of the Schema failed") && assert.deepEqual(error.fields, {kind:"check",schema:"catalog_items",check:sqlite ? "price >= 0" : "_mantle_chk_catalog_items_0"}) === undefined); checks++;
+  await assert.rejects(() => call("procedure", "create-catalog-item", owner, {sku:"BARE-CHECK-QUOTED",name:"forbidden",price:1}), (error: any) => error?.code === "CONFLICT" && assert.deepEqual(error.fields, {kind:"check",schema:"catalog_items",check:sqlite ? `"position" IS NULL AND name <> 'forbidden'` : "_mantle_chk_catalog_items_1"}) === undefined); checks++;
+  assert.deepEqual(await native('SELECT id FROM catalog_items WHERE sku = ?', ["BARE-CHECK"]), []); checks++;
   const update = {id:row.id,expectedVersion:Number(row.version),title:"Bare atomic edit",amount:3.25};
   await assert.rejects(() => call("procedure","update-purchase-double",owner,update));
   assert.deepEqual(await native('SELECT id, title, amount, version, approved, payload FROM purchase_requests WHERE id = ?', [row.id]), [row], "bare OCC failure rolls back earlier statement"); checks++;
