@@ -118,7 +118,9 @@ it("recovers a failed lazy editor chunk only on explicit reload and rechecks aut
     expect(failedChunks).toHaveLength(1); expect(htmlLoads).toBe(1); expect(entryReads).toBe(0); expect(writes).toEqual([]);
     missingChunk = false;
     await failure.getByRole("button", { name: "重新載入頁面", exact: true }).click();
-    await expect.poll(() => page.getByRole("textbox", { name: "Title", exact: true }).inputValue()).toBe("Recovered record");
+    const title = page.getByRole("textbox", { name: "Title", exact: true });
+    await title.waitFor();
+    expect(await title.inputValue()).toBe("Recovered record");
     expect(htmlLoads).toBe(2); expect(await page.getByRole("alert").count()).toBe(0);
     const reads = entryReads;
     signedIn = false; await page.reload();
