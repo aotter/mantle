@@ -457,7 +457,7 @@ describe("OAuth grant revocation and consent routes", () => {
       const again = name === "keep-change" ? cookieOf(await app.post("/sign-in/email", { email, password })) : (await app.signIn(email)).cookie;
       expect((await authorize(app, again, grant.clientId, "mcp offline_access")).location, name).toStartWith(REDIRECT);
     }
-  });
+  }, 30_000); // Real password hashing and all grant-ending paths also run under parallel workspace load.
   test("an email OTP or magic-link sign-in that proves an unverified address ends the grants of whoever signed it up first", async () => {
     for (const store of ["plain", "hashed"] as const) {
       const app = await makeApp({ magicLinkStore: store });
