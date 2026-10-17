@@ -107,7 +107,7 @@ its collection parameter selects only a generated table and visibility policy.
 ## Workers assets and secrets
 
 `mantle generate --admin --wrangler wrangler.jsonc` sets the selected assets
-directory and, when absent, `binding: "ASSETS"` and `run_worker_first: true`.
+directory and, when absent, `binding: "ASSETS"`, `run_worker_first: true` and `html_handling: "none"`.
 Existing environment assets blocks receive the same directory and missing defaults.
 Explicit binding/routing choices are preserved; a different binding needs a custom
 Admin HTML loader. Deploy the built assets and Worker together.

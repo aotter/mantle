@@ -35,7 +35,7 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
     if (check) throw new Error("--check requires a JSON or JSONC Wrangler config; TOML generation only prints manual edits.");
     console.log(`Leave ${configPath} unchanged. Add these Wrangler TOML keys (include nodejs_compat and global_fetch_strictly_public in every compatibility_flags override):\n` +
       `main = ${JSON.stringify(keys.main)}\nno_bundle = true\nfind_additional_modules = true\nbase_dir = ${JSON.stringify(worker)}\ncompatibility_flags = ${JSON.stringify(requiredFlags)}\n\n` +
-      (assets === undefined ? "" : `[assets]\ndirectory = ${JSON.stringify(local(assets))}\nbinding = "ASSETS"\nrun_worker_first = true\n\n`) +
+      (assets === undefined ? "" : `[assets]\ndirectory = ${JSON.stringify(local(assets))}\nbinding = "ASSETS"\nrun_worker_first = true\nhtml_handling = "none"\n\n`) +
       `[[rules]]\ntype = "ESModule"\nglobs = ["**/*.js"]\nfallthrough = true\n\n[build]\ncommand = ${JSON.stringify(keys.build.command)}\nwatch_dir = ${JSON.stringify(keys.build.watch_dir)}`);
     return false;
   }
@@ -74,6 +74,8 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
       // Defaults for the built Admin loader; explicit custom loaders/routing stay app-owned.
       if (current?.binding === undefined) edit([...path, "binding"], "ASSETS");
       if (current?.run_worker_first === undefined) edit([...path, "run_worker_first"], true);
+      // The shell fetches index.html itself; asset canonicalization would redirect it back to /admin/ forever.
+      if (current?.html_handling === undefined) edit([...path, "html_handling"], "none");
     };
     wireAssets(["assets"], config.assets);
     for (const [name, environment] of Object.entries(config.env ?? {}) as [string, any][]) {

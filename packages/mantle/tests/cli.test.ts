@@ -159,7 +159,7 @@ test("generate --admin wires fresh assets, preserves explicit routing, and repai
     await writeFile(join(dir, "wrangler.jsonc"), '{ "name": "app", "assets": { "directory": "node_modules/old", "binding": "ASSETS", "run_worker_first": true } }');
     generate(dir, "--admin");
     const config = parse(await readFile(join(dir, "wrangler.jsonc"), "utf8"));
-    expect(config.assets).toEqual({ directory: "dist/client", binding: "ASSETS", run_worker_first: true });
+    expect(config.assets).toEqual({ directory: "dist/client", binding: "ASSETS", run_worker_first: true, html_handling: "none" });
     expect(config.build.command).toBe("mantle bundle src/worker.ts dist");
     generate(dir, "--admin", "--assets", "public");
     const custom = parse(await readFile(join(dir, "wrangler.jsonc"), "utf8"));
@@ -168,18 +168,18 @@ test("generate --admin wires fresh assets, preserves explicit routing, and repai
     await writeFile(join(dir, "wrangler.jsonc"), JSON.stringify({ name: "fresh", env: { production: { assets: { directory: "stale" } } } }));
     generate(dir, "--admin");
     const fresh = parse(await readFile(join(dir, "wrangler.jsonc"), "utf8"));
-    expect(fresh.assets).toEqual({ directory: "dist/client", binding: "ASSETS", run_worker_first: true });
+    expect(fresh.assets).toEqual({ directory: "dist/client", binding: "ASSETS", run_worker_first: true, html_handling: "none" });
     expect(fresh.env.production.assets).toEqual(fresh.assets);
     generate(dir, "--admin", "--check");
-    await writeFile(join(dir, "wrangler.jsonc"), JSON.stringify({ name: "custom", assets: { binding: "MY_FILES", run_worker_first: false, html_handling: "none" } }));
+    await writeFile(join(dir, "wrangler.jsonc"), JSON.stringify({ name: "custom", assets: { binding: "MY_FILES", run_worker_first: false, html_handling: "auto-trailing-slash" } }));
     generate(dir, "--admin");
-    expect(parse(await readFile(join(dir, "wrangler.jsonc"), "utf8")).assets).toEqual({ directory: "dist/client", binding: "MY_FILES", run_worker_first: false, html_handling: "none" });
+    expect(parse(await readFile(join(dir, "wrangler.jsonc"), "utf8")).assets).toEqual({ directory: "dist/client", binding: "MY_FILES", run_worker_first: false, html_handling: "auto-trailing-slash" });
     await writeFile(join(dir, "wrangler.jsonc"), '{ "name": "api" }');
     generate(dir);
     expect(parse(await readFile(join(dir, "wrangler.jsonc"), "utf8")).assets).toBeUndefined();
     await rm(join(dir, "wrangler.jsonc"));
     await writeFile(join(dir, "wrangler.toml"), 'name = "app"\n');
-    expect(generate(dir, "--admin")).toContain('[assets]\ndirectory = "dist/client"\nbinding = "ASSETS"\nrun_worker_first = true');
+    expect(generate(dir, "--admin")).toContain('[assets]\ndirectory = "dist/client"\nbinding = "ASSETS"\nrun_worker_first = true\nhtml_handling = "none"');
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
 

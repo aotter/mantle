@@ -58,6 +58,15 @@ unchanged. A POST registration whose redirect URIs are all HTTP localhost,
 127.0.0.1 or [::1] becomes `application_type: "native"` when omitted; explicit
 types and mixed/external callbacks stay under the SDK's validation.
 
+With the optional Admin UI selected, use `consentPage:
+"/admin/oauth/consent"`, as in `docs/examples/app-shell/src/auth.ts`, and keep
+`adminShell` mounted in the service entry. That page uses mantle-ui's `AuthCard`,
+cards and sign-in buttons; it loads the verified request from
+`/oauth/consent/data` and posts the original signed payload to `/oauth/consent`.
+The UI displays the client, callback origin, requested scopes and background
+access explanation. Keep Core's script-free `/oauth/consent` HTML as the
+adapter-neutral fallback, not as the reference application's styled page.
+
 `/oauth/consent` and `/oauth/consents` serve escaped, script-free English or zh-TW
 HTML. Their `/data` routes serve the 0.2 UI JSON shapes. Consent approval and
 `POST /oauth/consents/revoke` require a live cookie session and same-origin
@@ -92,16 +101,43 @@ grant type alone is insufficient. `offline_access` belongs in authorization-serv
 metadata, not in the protected resource's required scope floor; resource metadata
 continues to advertise `mcp`.
 
-For a new ChatGPT custom MCP connection, open **Advanced OAuth settings** after
-entering the server URL and let discovery finish. Keep `mcp` selected and add
-`offline_access` to **Base scopes** before creating and linking the connection.
-Base scopes are requested even when tools declare their own scopes; selecting
-only a default scope can be superseded by tool-level scopes. Check that the
-consent page actually lists both scopes. Merely advertising `offline_access` in
-authorization-server metadata does not make ChatGPT request it: a default
-connection can request only `mcp`, render successfully, and receive no refresh
-token. Do not put `offline_access` in the resource's required scope floor or add
-it silently to an authorization request after the user has consented.
+For renewable connections, the app-shell's MCP handler also supplies an explicit
+OAuth linking hint:
+
+```ts
+const handleMcp = mcp({
+  db: (env: Env) => env.DB,
+  caller: resolveRequestCaller,
+  authorizationScopes: ["offline_access"],
+});
+```
+
+`authorizationScopes` adds scopes to the standard `WWW-Authenticate` challenge
+when the caller is unauthenticated. With the default `requiredScopes`, that
+challenge requests `mcp offline_access`. It does **not** change the API scope
+floor, add scopes to a valid token, issue tokens or modify an already-signed
+authorization request. An existing valid `mcp`-only token can still call a tool
+that only requires `mcp`. The application must independently permit
+`offline_access` in its provider and the user must explicitly consent.
+ChatGPT web can use this challenge to request both scopes on a fresh, default
+URL connection, without typing Base scopes. Verify the actual requested scopes,
+refresh-token issuance and post-expiry rotation in the intended host.
+
+Merely advertising `offline_access` in authorization-server `scopes_supported`
+does not establish that a client requests it. For a host that ignores the
+challenge hint, its initial connection configuration may still need explicit
+scopes: in ChatGPT's **Advanced OAuth settings**, keep `mcp` selected and add
+`offline_access` to **Base scopes** before linking. Base scopes are requested
+even when tools declare their own scopes; defaults can be superseded by
+tool-level scopes. Check the actual consent page. Do not put `offline_access`
+in the resource's required scope floor or silently add it after consent.
+
+For clients that install portable plugins, the optional
+`docs/examples/app-shell/plugin/` metadata demonstrates OpenAI's official
+`mcp.json` `extensions.com.openai.auth.baseScopes` field. This supplies the
+connection setting in the package instead of requiring manual scope entry.
+It is not authorization-server metadata and does not force a URL-only custom
+connector to adopt it; verify support in the actual target host.
 
 For an existing connection granted only `mcp`, deploy the allowed-scope change,
 refresh the client's discovery/registration metadata, then reconnect or reauthorize

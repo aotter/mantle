@@ -17,6 +17,8 @@ export interface Options<Env, Database> extends GatewayOptions {
   instructions?: string;
   serverInfo?: { name?: string; title?: string; version?: string; icons?: { src: string; mimeType?: string; sizes?: string[]; theme?: "light" | "dark" }[] };
   requiredScopes?: readonly string[];
+  /** Additional scopes requested by an unauthenticated OAuth challenge (for example offline_access), not an API scope floor. */
+  authorizationScopes?: readonly string[];
   resourceMetadata?: string;
   /** Browser origins MCP answers besides loopback, compared by hostname: `https://console.example` or the official SDK's bare `console.example`. The site's own origin is not implied. */
   allowedOrigins?: readonly string[];

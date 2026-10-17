@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "Quay lại",
+    "oauth.consent.scopes": "Quyền truy cập được yêu cầu",
+    "oauth.consent.offline": "Cho phép truy cập nền, kể cả sau khi đăng xuất khỏi trang web này. Bạn có thể thu hồi quyền trong Ứng dụng đã kết nối.",
+
     "common.reloadPage": "Tải lại trang",
     "common.reloadPageHint": "Tải lại trang này để thử lại. Các thay đổi chưa lưu có thể bị mất.",
     "ops.details": "Chi tiết",

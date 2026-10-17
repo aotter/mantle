@@ -258,8 +258,8 @@ first connection separately. Normal initial OAuth consent is expected; renewal
 or clearing host state to make an upgrade pass is not a successful upgrade test.
 
 For an authenticated App, follow [renewable OAuth setup](oauth.md) when creating
-the first ChatGPT connection, including the explicit `offline_access` base
-scope. Verify these independently:
+the first ChatGPT connection, including the explicit `offline_access`
+authorization scope hint. Verify these independently:
 
 1. Sign in and approve the actual requested scopes, then visibly render the App
    in a new ChatGPT conversation. Confirm the resource server resolved an OAuth

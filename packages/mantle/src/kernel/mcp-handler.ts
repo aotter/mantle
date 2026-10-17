@@ -75,7 +75,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         observe(options.onObservation, { kind: "request-refused", at: Date.now(), surface, status: result.status });
         observe(options.onRefusal, { at: Date.now(), status: result.status, reason: "credential" });
       }
-      if (result.status === 401) scope ??= requiredScopes.join(" ");
+      if (result.status === 401) scope = union(scope === undefined ? requiredScopes : scope.split(" "), options.authorizationScopes ?? []);
       return (await import("./host-caller.js")).hostFailure(error, resolved, `mcp ${path}`, bare ? undefined : 'Bearer ' + (scope ? (result.status === 403 ? 'error="insufficient_scope", ' : '') + 'scope="' + scope + '", ' : '') + 'resource_metadata="' + (options.resourceMetadata ?? url.origin + '/.well-known/oauth-protected-resource/mcp') + '"');
     };
     let caller: Caller;

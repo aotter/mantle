@@ -103,13 +103,16 @@ describe("sign-in", () => {
   it("renders the consent page at Admin's own path, for oauthProvider.consentPage, and at Core's", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } });
     const search = "?client_id=c1&sig=s";
-    client.setQueryData(["oauth-consent", search], { clientName: "Cursor", redirectUri: "https://www.cursor.com/cb", scopes: ["mcp"], oauthQuery: "client_id=c1&sig=s" });
+    client.setQueryData(["oauth-consent", search], { clientName: "Cursor", redirectUri: "https://www.cursor.com/cb?code=not-for-display", scopes: ["mcp", "offline_access"], oauthQuery: "client_id=c1&sig=s" });
     for (const pathname of ["/admin/oauth/consent", "/oauth/consent"]) {
       vi.stubGlobal("window", { location: { pathname, search } });
       const html = renderToStaticMarkup(createElement(QueryClientProvider, { client },
         createElement(PreferencesProvider, { initialLanguage: readInitialLanguage() }, createElement(AdminRouterProvider, null, createElement(AdminApp)))));
       expect(html, pathname).toContain("Cursor");
       expect(html, pathname).toContain('action="/oauth/consent"');
+      expect(html, pathname).toContain("https://www.cursor.com");
+      expect(html, pathname).toContain(">offline_access</li>");
+      expect(html, pathname).not.toContain("not-for-display");
     }
     client.clear();
   });
