@@ -236,7 +236,7 @@ try {
       client_name: "Reference local renewal check", application_type: "native", token_endpoint_auth_method: "none",
       redirect_uris: ["http://127.0.0.1:19876/callback"], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], scope,
     });
-    assert.equal(client.status, 200);
+    assert.equal(client.status, 201);
     const verifier = randomBytes(32).toString("base64url"), state = randomBytes(16).toString("hex");
     const query = new URLSearchParams({
       client_id: client.body.client_id, redirect_uri: "http://127.0.0.1:19876/callback", response_type: "code", scope, state,
