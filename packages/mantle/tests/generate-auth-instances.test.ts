@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { test, expect, afterAll } from "bun:test";
 import { admin, phoneNumber } from "better-auth/plugins";
 import { jwt } from "better-auth/plugins/jwt";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -23,6 +23,12 @@ test("an OAuth provider without oauthGrantRevocation() is refused at generate", 
   expect((await generateFromSources({ target: "bun-sqlite", sources, auth: { plugins: [revocation, provider] } })).ok).toBe(true);
 });
 
+// The mappings below are written into Better Auth's shared plugin schemas; put the defaults back for the other test files in this process.
+afterAll(() => {
+  jwt({ schema: { jwks: { modelName: "jwks" } } });
+  admin({ schema: { user: { fields: { role: "role" } } } });
+  phoneNumber({ sendOTP() {}, schema: { user: { fields: { phoneNumber: "phoneNumber" } } } });
+});
 const instance = (prefix: string, plugins: unknown[]) => ({ ...tables(prefix), plugins }) as never;
 const own = <P extends { schema?: unknown }>(plugin: P): P => ({ ...plugin, schema: structuredClone(plugin.schema) });
 
