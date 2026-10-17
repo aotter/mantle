@@ -6,6 +6,7 @@ import type { McpApps, McpAppsSource, McpAppPage, McpAppRender, McpAppResource }
 export interface AdminMcpSnapshot extends McpAppPage {
     readonly uri: string;
     readonly domain?: string;
+    readonly title?: string;
 }
 export interface AdminMcpOptions {
     readonly catalogue: {
@@ -85,7 +86,7 @@ export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
         if (!/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(snapshot.uri) || !catalogue || !object(catalogue.views) || !object(catalogue.actions))
             throw new ContractError("INPUT_VALIDATION_FAILED", "A retained Admin App needs its original ui://mantle-admin/… URI and embedded catalogue from resources/read.", "mcp/apps");
         const base = snapshot.html.replace(script, ""), archivedCatalogue = catalogue;
-        return { uri: snapshot.uri, name: `mantle-admin-previous-${index}`, title: options.title ?? "Admin",
+        return { uri: snapshot.uri, name: `mantle-admin-previous-${index}`, title: snapshot.title ?? "Admin",
             ...(snapshot.domain !== undefined ? { domain: snapshot.domain } : {}),
             html: async render => ({ html: embed(base, render, archivedCatalogue), ...(snapshot.csp ? { csp: snapshot.csp } : {}) }) };
     });

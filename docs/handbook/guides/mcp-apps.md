@@ -112,7 +112,7 @@ request-dependent output. A raw `html` string may use the automatic identity.
 A new URI does not invalidate a host's saved tool definitions or old conversation
 cards. Keep previously deployed pages with `adminMcpApps({ catalogue, previous })`.
 `previous` is an array of `AdminMcpSnapshot` from `@aotter/mantle-admin/mcp`:
-`{ uri, html, csp?, domain? }`. Each `html` includes the original `mantle-catalog`
+`{ uri, html, csp?, domain?, title? }`. Each `html` includes the original `mantle-catalog`
 script (the page returned by `resources/read`, not the raw bundle). The SDK serves
 its original HTML and metadata at its original URI, filters its catalogue against
 the current caller's tools on every read, and gives only the current build renderer
@@ -160,7 +160,7 @@ const tools = new Set([...Object.keys(appDefinition.catalogue.views),
 const loaded = typeof resource.html === 'string' ? resource.html
   : await resource.html({ ...context, tools });
 const page = typeof loaded === 'string' ? { html: loaded } : loaded;
-const snapshot = { uri: resource.uri, ...page,
+const snapshot = { uri: resource.uri, title: resource.title, ...page,
   ...(resource.domain === undefined ? {} : { domain: resource.domain }) };
 // This application's policy: retain the last two deployed pages for future builds.
 writeFileSync(path, JSON.stringify([...previous.filter(p => p.uri !== snapshot.uri), snapshot].slice(-2)) + '\n');

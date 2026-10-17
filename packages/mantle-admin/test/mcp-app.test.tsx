@@ -186,7 +186,7 @@ describe("adminMcpApps", () => {
     };
     const old = (await resolve(adminMcpApps({ catalogue: catalog, html: "<head></head><h1>Build A</h1>", domain: "old.apps.example" }))).resources[0]!;
     const snapshot = { uri: old.uri, ...await read(old, ["pending", "review_requisition"]), csp: { resourceDomains: ["https://old.assets.example"] }, domain: old.domain };
-    const upgraded = await resolve(adminMcpApps({ catalogue: catalog, html: "<head></head><h1>Build B</h1>", previous: [snapshot] }));
+    const upgraded = await resolve(adminMcpApps({ catalogue: catalog, html: "<head></head><h1>Build B</h1>", title: "New title", previous: [{ ...snapshot, title: "Original title" }] }));
     expect(upgraded.resources).toHaveLength(2);
     const [current, retained] = upgraded.resources;
     expect(current!.uri).not.toBe(old.uri);
@@ -194,6 +194,7 @@ describe("adminMcpApps", () => {
     expect(retained!.renders).toBeUndefined();
     expect(retained!.appOnly).toBeUndefined();
     expect(retained!.domain).toBe("old.apps.example");
+    expect(retained!.title).toBe("Original title");
     const restricted = await read(retained!, []);
     expect(restricted.csp).toEqual(snapshot.csp);
     expect(restricted.html).toContain("Build A");
