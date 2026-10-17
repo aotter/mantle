@@ -75,15 +75,13 @@ Rank-ordered exposed Views still need supported keyset ordering; use an internal
 View for arbitrary rank ordering. Applying changed search DDL remains the app's
 migration responsibility; no request runs DDL or rebuilds indexes.
 
-## Design MCP services around the user's goal
+## Independently accept user-facing work
 
-For a new service, run the version-matched [MCP design audit and business
-acceptance flow](./docs/handbook/guides/agent-workflow-acceptance.md) before
-implementing tools. Map the goal to bounded discovery, complete detail/relation
-readback, committed write results, version/state rules and recovery under the
-intended caller. After implementation, use the same guide's fresh end-user
-agent → repair → independent retest loop. Static design review, scripted checks
-and real host/UI acceptance are separate evidence.
+Before reporting any user-facing deliverable as done, follow the version-matched
+[independent acceptance guide](./docs/handbook/guides/agent-workflow-acceptance.md)
+with a fresh agent on the surface its user uses. For MCP work, also run the
+guide's design audit before implementing tools; scripted checks remain separate
+evidence.
 
 ## Publishing
 

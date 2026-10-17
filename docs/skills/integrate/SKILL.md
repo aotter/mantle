@@ -12,13 +12,8 @@ metadata:
 
 ## Workflow
 
-Read the installed SDK README and version-matched handbook before editing.
-
-Follow the installed [native generation and service workflow](../../handbook/cloudflare/service-entry.md)
-with its [native contract](../../handbook/guides/native-execution.md) and [supported declarations](../../handbook/reference/features.md). Commit
-all generated output, run the same generation command with `--check`, and keep
-bundle `dist/` untracked. The app owns its verified Caller, handlers and native
-resources; Better Auth’s admin plugin `adminRoles` defines the admin layer (default `["admin"]`); `ctx.admin` takes no role list ([authorization](../../handbook/cloudflare/authentication.md)).
+Read the installed SDK README, then follow the version-matched [project and CLI
+workflow](../../handbook/start/project-and-cli.md) before editing.
 
 Keep the application router, database/pool, identity and frontend. Replace
 Core consumers explicitly and compose only selected generated entries. Resolve
@@ -30,8 +25,8 @@ the configured OAuth resource row (see [OAuth](../../handbook/guides/oauth.md)).
 Verify cutover with actual app tests.
 
 Preserve the app router, verified identity and native resources. For selected
-Admin use the [native guide](../../handbook/guides/native-admin.md): three matching
-packages, generated checks and `entries(bindings.schemas, bindings.adapter)`.
+Admin, follow the [native guide](../../handbook/guides/native-admin.md) for its
+application-built bundle and service composition.
 Do not import old `/spec`, `/core` or runtime surface APIs. Review data/role
 migrations explicitly; full cross-target int64 parity and automated transfer
 are not this release's upgrade contract.
