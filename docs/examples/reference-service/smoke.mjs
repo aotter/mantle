@@ -217,6 +217,146 @@ try {
   await execute("DROP TRIGGER reference_fail_activity");
   step("Admin affected rows record the actual caller; failed after effects preserve committed stock/order and never retry the business write");
 
+  // End-user workflow through MCP only: discover, locate, create, read, transition, reconcile.
+  const publicDefinitions = (await mcp("/mcp", buyer)).body.result.tools;
+  for (const name of ["search_items", "get_order", "place_order", "cancel_order"]) {
+    assert.ok(publicDefinitions.some(tool => tool.name === name), name);
+  }
+  const found = (await mcp("/mcp", buyer, "search_items", { q: "TEA-1", limit: 5 })).body.result;
+  const selectedItem = found.structuredContent.rows.find(row => row.id === itemId);
+  assert.ok(selectedItem);
+  const selectedStock = async () => (await call("GET", "/api/views/catalog")).body.rows.find(row => row.id === selectedItem.id).stock;
+  const startingStock = await selectedStock();
+  const ownedBefore = (await mcp("/mcp", buyer, "my_orders", {})).body.result.structuredContent.rows.length;
+  const invalidRelation = (await mcp("/mcp", buyer, "place_order", { itemId: "missing-item", qty: 1 })).body.result;
+  assert.equal(invalidRelation.isError, true);
+  assert.match(JSON.stringify(invalidRelation.content), /CONFLICT/);
+  assert.equal((await mcp("/mcp", buyer, "my_orders", {})).body.result.structuredContent.rows.length, ownedBefore);
+  assert.equal(await selectedStock(), startingStock);
+  const createdIds = [];
+  // This API deliberately has no idempotency key: identical successful requests create distinct orders.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const result = (await mcp("/mcp", buyer, "place_order", { itemId: selectedItem.id, qty: 1 })).body.result;
+    assert.equal(result.isError, undefined, JSON.stringify(result));
+    const createdOrder = result.structuredContent.results[0][0];
+    assert.equal(typeof createdOrder.id, "string");
+    assert.ok(createdOrder.id.length > 0);
+    assert.equal(createdOrder.itemId, selectedItem.id);
+    assert.equal(createdOrder.qty, 1);
+    assert.equal(createdOrder.orderStatus, "placed");
+    assert.ok(Number.isSafeInteger(createdOrder.version));
+    createdIds.push(createdOrder.id);
+  }
+  assert.equal(new Set(createdIds).size, 2);
+  assert.equal(await selectedStock(), startingStock - 2);
+  const oversell = (await mcp("/mcp", buyer, "place_order", { itemId: selectedItem.id, qty: startingStock + 1 })).body.result;
+  assert.equal(oversell.isError, true);
+  assert.match(JSON.stringify(oversell.content), /CONFLICT/);
+  assert.equal(await selectedStock(), startingStock - 2);
+  assert.equal((await mcp("/mcp", buyer, "my_orders", {})).body.result.structuredContent.rows.length, ownedBefore + 2);
+  // The failed third call does not roll back either earlier successful call; deliberate cancellation below compensates them.
+  for (const orderId of createdIds) {
+    const detail = (await mcp("/mcp", buyer, "get_order", { orderId })).body.result.structuredContent.rows;
+    assert.equal(detail.length, 1);
+    assert.equal(detail[0].itemId, selectedItem.id);
+    assert.equal(detail[0].orderStatus, "placed");
+    assert.ok(Number.isSafeInteger(detail[0].version));
+    assert.deepEqual((await mcp("/mcp", admin, "get_order", { orderId })).body.result.structuredContent.rows, []);
+    const stale = (await mcp("/mcp", buyer, "cancel_order", { orderId, expectedVersion: detail[0].version - 1 })).body.result;
+    assert.equal(stale.isError, true);
+    assert.match(JSON.stringify(stale.content), /CONFLICT/);
+    assert.deepEqual((await mcp("/mcp", buyer, "get_order", { orderId })).body.result.structuredContent.rows, detail);
+    const cancelled = (await mcp("/mcp", buyer, "cancel_order", { orderId, expectedVersion: detail[0].version })).body.result;
+    assert.equal(cancelled.isError, undefined, JSON.stringify(cancelled));
+    const final = (await mcp("/mcp", buyer, "get_order", { orderId })).body.result.structuredContent.rows[0];
+    assert.equal(final.orderStatus, "cancelled");
+    assert.ok(final.version > detail[0].version);
+    const repeated = (await mcp("/mcp", buyer, "cancel_order", { orderId, expectedVersion: detail[0].version })).body.result;
+    assert.equal(repeated.isError, true);
+    assert.match(JSON.stringify(repeated.content), /CONFLICT/);
+  }
+  assert.equal(await selectedStock(), startingStock);
+  step("MCP business workflow: search/backend IDs/detail/owner scope, invalid relation no write, stale conflict, atomic cancellation, explicit non-idempotent create and reconciliation");
+
+  const adminDefinitions = (await mcp("/mcp/admin", admin)).body.result.tools;
+  const renderDefinition = adminDefinitions.find(tool => tool.name === "render_sales_report");
+  assert.ok(renderDefinition?._meta?.ui?.resourceUri?.startsWith("ui://"));
+  for (const name of ["sales_by_item", "recent_activity", "restock"]) {
+    assert.equal(adminDefinitions.find(tool => tool.name === name)?._meta?.ui, undefined, name);
+  }
+  const dataReport = (await mcp("/mcp/admin", admin, "sales_by_item", { limit: 1 })).body.result;
+  const renderedReport = (await mcp("/mcp/admin", admin, "render_sales_report", { limit: 1 })).body.result;
+  assert.deepEqual(renderedReport.structuredContent, dataReport.structuredContent);
+  assert.equal(renderedReport.structuredContent.rows.length, 1);
+  assert.ok(renderedReport.structuredContent.nextCursor);
+  assert.ok(renderedReport.content.length > 0); // fallback remains readable when the host cannot display the App
+  assert.equal((await mcp("/mcp/admin", buyer, "render_sales_report", {})).status, 403);
+  assert.ok(!publicDefinitions.some(tool => tool.name === "render_sales_report"));
+  const resourceResponse = await fetch(`${origin}/mcp/admin`, { method: "POST", headers: { ...json, accept: "application/json, text/event-stream", cookie: admin },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "resources/read", params: { uri: renderDefinition._meta.ui.resourceUri } }) });
+  assert.equal(resourceResponse.status, 200);
+  const resourceText = await resourceResponse.text();
+  const resourceLine = resourceText.split("\n").find(line => line.startsWith("data:"));
+  const resource = JSON.parse(resourceLine ? resourceLine.slice(5) : resourceText).result.contents[0];
+  assert.match(resource.text, /render_sales_report/);
+  step("MCP presentation: data tools do not open Apps; one explicit bounded renderer preserves results, text fallback and admin authorization; real resource read succeeds");
+
+  // Simple single-row writes use caller-bound Store-backed ref Procedures.
+  assert.ok(!publicDefinitions.some(tool => ["create_item", "rename_item"].includes(tool.name)));
+  for (const name of ["create_item", "rename_item"]) {
+    assert.ok(adminDefinitions.some(tool => tool.name === name));
+    assert.equal((await mcp("/mcp/admin", undefined, name, {})).status, 401);
+    assert.equal((await mcp("/mcp/admin", buyer, name, {})).status, 403);
+  }
+  const itemInput = { sku: "STORE-ONLY-1", name: "Store item", priceCents: 1250 };
+  const creation = (await mcp("/mcp/admin", admin, "create_item", itemInput)).body.result;
+  assert.equal(creation.isError, undefined, JSON.stringify(creation));
+  const item = creation.structuredContent;
+  assert.deepEqual(Object.keys(item).sort(), ["id", "version", "sku", "name", "priceCents", "stock"].sort());
+  assert.equal(typeof item.id, "string");
+  assert.ok(item.id.length > 0 && Number.isSafeInteger(item.version));
+  assert.deepEqual({ sku: item.sku, name: item.name, priceCents: item.priceCents, stock: item.stock }, { ...itemInput, stock: 0 });
+  const readItem = async () => (await call("GET", `/admin/api/entries/${item.id}?collection=items`, { cookie: admin })).body.entry;
+  assert.equal((await readItem()).version, item.version);
+  const duplicateItem = (await mcp("/mcp/admin", admin, "create_item", itemInput)).body.result;
+  assert.equal(duplicateItem.isError, true);
+  assert.match(JSON.stringify(duplicateItem.content), /CONFLICT/);
+  assert.equal((await call("GET", "/api/views/catalog")).body.rows.filter(row => row.sku === itemInput.sku).length, 1);
+  const restockedItem = (await mcp("/mcp/admin", admin, "restock", { sku: item.sku, name: item.name, qty: 7 })).body.result;
+  assert.equal(restockedItem.isError, undefined, JSON.stringify(restockedItem));
+  const observed = await readItem();
+  assert.equal(observed.data.stock, 7);
+  const renamed = (await mcp("/mcp/admin", admin, "rename_item", { id: item.id, expectedVersion: observed.version, name: "Renamed Store item" })).body.result;
+  assert.equal(renamed.isError, undefined, JSON.stringify(renamed));
+  assert.deepEqual(renamed.structuredContent, { ...item, name: "Renamed Store item", stock: 7, version: observed.version + 1 });
+  assert.deepEqual((await readItem()).data, { sku: item.sku, name: "Renamed Store item", priceCents: 1250, stock: 7 });
+  assert.equal((await readItem()).version, renamed.structuredContent.version);
+  for (const input of [
+    { id: item.id, expectedVersion: observed.version, name: "Stale rename" },
+    { id: item.id, expectedVersion: renamed.structuredContent.version, name: null },
+    { id: item.id, expectedVersion: renamed.structuredContent.version, name: "Forbidden stock change", stock: 99 },
+  ]) {
+    assert.equal((await mcp("/mcp/admin", admin, "rename_item", input)).body.result.isError, true);
+    assert.equal((await readItem()).version, renamed.structuredContent.version);
+    assert.equal((await readItem()).data.name, "Renamed Store item");
+  }
+  const raced = await Promise.all(["Concurrent A", "Concurrent B"].map(name => mcp("/mcp/admin", admin, "rename_item", { id: item.id, expectedVersion: renamed.structuredContent.version, name })));
+  const raceResults = raced.map(response => response.body.result);
+  const winners = raceResults.filter(result => !result.isError), losers = raceResults.filter(result => result.isError);
+  assert.equal(winners.length, 1);
+  assert.equal(losers.length, 1);
+  assert.match(JSON.stringify(losers[0].content), /CONFLICT/);
+  const finalItem = await readItem();
+  assert.equal(finalItem.version, winners[0].structuredContent.version);
+  assert.deepEqual(finalItem.data, { sku: item.sku, name: winners[0].structuredContent.name, priceCents: 1250, stock: 7 });
+  for (const [sku, price] of [["STORE-OMITTED", undefined], ["STORE-NULL", null]]) {
+    const output = (await mcp("/mcp/admin", admin, "create_item", { sku, name: sku, ...(price === undefined ? {} : { priceCents: price }) })).body.result;
+    assert.equal(output.isError, undefined, JSON.stringify(output));
+    assert.equal(output.structuredContent.priceCents, null);
+    assert.equal(output.structuredContent.stock, 0);
+  }
+  step("Store-backed ref MCP: create safe committed snapshot; partial rename preserves price/stock/SKU, actual versions chain, stale/concurrent refusal, null/extra-field validation and admin authority");
+
   // A working initial MCP call does not prove this connection can renew. Exercise
   // the example's real provider, signed consent, PKCE and rotation on this local D1.
   const issuer = `${origin}/api/auth`;

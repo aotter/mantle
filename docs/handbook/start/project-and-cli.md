@@ -12,6 +12,16 @@ description: Generation targets, CLI options and ownership of native application
 | `wrangler.jsonc` | App configuration; generator maintains selected split-build keys |
 | `dist/` | Disposable bundle output (`dist/worker`, `dist/client`); do not commit |
 
+## Before implementing a new MCP service
+
+Use the installed version's [MCP design audit and business acceptance
+flow](../guides/agent-workflow-acceptance.md) before choosing tool names or
+writing manifests/handlers. Start with the user's goal and role; map each
+required step to discovery, IDs/detail/relations, committed write evidence,
+state/version rules and recovery. Keep authority, amounts and data/rendering
+boundaries explicit. After implementation and relevant regressions, run the
+fresh end-user-agent repair and independent retest loop from that same guide.
+
 ## Commands
 
 ```sh

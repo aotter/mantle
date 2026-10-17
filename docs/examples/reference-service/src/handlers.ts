@@ -11,6 +11,14 @@ export async function recordOrders(db: Parameters<typeof store>[0], caller: Call
   } catch { console.error("[reference] order activity failed after commit"); }
 }
 export const handlers: Handlers = {
+  "create-item": async ({ store: data }, input) => {
+    const row = await data.collection("items").insert({ sku: input.sku, name: input.name, pricecents: input.priceCents ?? null, stock: 0 });
+    return { id: row.id, version: row.version, sku: row.sku, name: row.name, priceCents: row.pricecents, stock: row.stock };
+  },
+  "rename-item": async ({ store: data }, { id, expectedVersion, name }) => {
+    const row = await data.collection("items").update(id, { name }, { lock: expectedVersion });
+    return { id: row.id, version: row.version, sku: row.sku, name: row.name, priceCents: row.pricecents, stock: row.stock };
+  },
   "place-order": async ({ db, caller, store: data }, input) => {
     // The declared stock check refuses an oversell as a CONFLICT naming the check.
     const output = await data.procedures["place-order-write"](input);

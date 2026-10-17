@@ -24,6 +24,11 @@ Use the native Store/query/surface entries and app-owned fetch from the service 
 Keep optional modules out of unused entry imports and auth dynamically loaded.
 Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.
+For a new or changed MCP business workflow, follow the
+[MCP design audit and business acceptance flow](../../handbook/guides/agent-workflow-acceptance.md):
+audit goal-to-capability coverage before implementing tools, then run its fresh
+end-user-agent repair/retest loop before claiming independent workflow acceptance. Keep the initial failed round
+and host/UI acceptance separate.
 
 For native Admin, read the [current guide](../../handbook/guides/native-admin.md).
 Select `--admin` / `admin: true`; mount `entries(bindings.schemas, bindings.adapter)`
@@ -58,3 +63,10 @@ Destructive changes and type changes need explicit data migration. Mantle drops 
 ## Data paths
 
 Writes use Store `insert` / `update` / `delete`, `batch`, `transaction`, or declared Procedures. Never use raw SQL writes: they bypass scope, TTL, publishing and system-column rules. For reads beyond an id lookup or simple AND filter (joins, aggregates, OR, reuse), declare an internal View so the SQL is reviewable and typed. Store `findById`, `find` and `first` remain suitable for handler lookups and embedding in an existing app. Ref handlers receive `ctx.store` bound to the same Caller and transaction.
+
+For simple creates/partial updates, prefer Store-backed ref Procedures; keep
+Procedure `requires`/generated input checks, use only allowed patch fields and
+return safe business fields with the actual returned ID/version. Preserve
+omitted fields and document null semantics. Retain SQL for atomic conditional
+or related writes; D1 batches cannot consume an earlier result. Follow the
+[Store write guidance](../../handbook/guides/typed-queries.md#prefer-store-backed-ref-procedures-for-simple-writes).
