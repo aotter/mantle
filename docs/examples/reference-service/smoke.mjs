@@ -1,6 +1,7 @@
 // Runs the service under `wrangler dev` on a fresh local D1 and drives it the way people and agents would: console email-OTP
 // sign-in, REST, both MCP surfaces, Admin's API and a cron. Each step asserts what the manifests promise.
 import assert from "node:assert/strict";
+import { createHash, randomBytes } from "node:crypto";
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -215,6 +216,92 @@ try {
   assert.equal((await call("GET", "/api/views/my-orders", { cookie: admin })).body.rows.length, 2);
   await execute("DROP TRIGGER reference_fail_activity");
   step("Admin affected rows record the actual caller; failed after effects preserve committed stock/order and never retry the business write");
+
+  // A working initial MCP call does not prove this connection can renew. Exercise
+  // the example's real provider, signed consent, PKCE and rotation on this local D1.
+  const issuer = `${origin}/api/auth`;
+  const discovery = (await call("GET", "/.well-known/oauth-authorization-server/api/auth")).body;
+  assert.equal(discovery.issuer, issuer);
+  assert.ok(discovery.scopes_supported.includes("mcp") && discovery.scopes_supported.includes("offline_access"));
+  assert.deepEqual(resourceMetadata.body.scopes_supported, ["mcp"]);
+  const oauth = async (path, body, form = false) => {
+    const response = await fetch(`${issuer}${path}`, {
+      method: "POST", headers: { origin, cookie: admin, "content-type": form ? "application/x-www-form-urlencoded" : "application/json" },
+      body: form ? new URLSearchParams(body) : JSON.stringify(body),
+    });
+    const text = await response.text();
+    return { status: response.status, body: text ? JSON.parse(text) : null };
+  };
+  const authorize = async scope => {
+    const client = await oauth("/oauth2/create-client", {
+      client_name: "Reference local renewal check", application_type: "native", token_endpoint_auth_method: "none",
+      redirect_uris: ["http://127.0.0.1:19876/callback"], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], scope,
+    });
+    assert.equal(client.status, 201);
+    const verifier = randomBytes(32).toString("base64url"), state = randomBytes(16).toString("hex");
+    const query = new URLSearchParams({
+      client_id: client.body.client_id, redirect_uri: "http://127.0.0.1:19876/callback", response_type: "code", scope, state,
+      code_challenge: createHash("sha256").update(verifier).digest("base64url"), code_challenge_method: "S256", resource: `${origin}/mcp`,
+    });
+    const response = await fetch(`${issuer}/oauth2/authorize?${query}`, { headers: { origin, cookie: admin }, redirect: "manual" });
+    assert.ok(response.status === 200 || response.status === 302);
+    const location = response.headers.get("location");
+    const envelope = location ? null : await response.json();
+    const redirect = location ?? envelope?.url ?? envelope?.redirect_uri;
+    assert.equal(typeof redirect, "string");
+    let target = new URL(redirect, origin);
+    if (!target.searchParams.has("code")) {
+      assert.equal(target.origin, origin);
+      const consent = await oauth("/oauth2/consent", { accept: true, oauth_query: target.search.slice(1) });
+      assert.equal(consent.status, 200);
+      target = new URL(consent.body.url ?? consent.body.redirect_uri, origin);
+    }
+    assert.equal(target.origin, "http://127.0.0.1:19876");
+    assert.equal(target.searchParams.get("state"), state);
+    assert.ok(target.searchParams.has("code"));
+    const issued = await oauth("/oauth2/token", {
+      grant_type: "authorization_code", client_id: client.body.client_id, redirect_uri: "http://127.0.0.1:19876/callback",
+      code: target.searchParams.get("code"), code_verifier: verifier, resource: `${origin}/mcp`,
+    }, true);
+    assert.equal(issued.status, 200);
+    assert.equal(issued.body.expires_in, 3600);
+    return { clientId: client.body.client_id, token: issued.body };
+  };
+  const sessionOnly = await authorize("mcp");
+  assert.equal(sessionOnly.token.scope, "mcp");
+  assert.equal(sessionOnly.token.refresh_token, undefined); // allowing offline access must not grant it implicitly
+  const offline = await authorize("mcp offline_access");
+  assert.deepEqual(offline.token.scope.split(" ").sort(), ["mcp", "offline_access"]);
+  assert.ok(offline.token.refresh_token);
+  assert.deepEqual(await execute('SELECT COUNT(*) AS count, MIN(ROUND(julianday(expiresAt) - julianday(createdAt))) AS days FROM oauthRefreshToken WHERE revoked IS NULL'), [{ count: 1, days: 30 }]);
+  assert.equal((await call("POST", "/api/auth/sign-out", { cookie: admin, body: {} })).status, 200);
+  assert.equal((await call("GET", "/admin/api/me", { cookie: admin })).status, 401);
+  const refresh = { grant_type: "refresh_token", client_id: offline.clientId, refresh_token: offline.token.refresh_token, resource: `${origin}/mcp` };
+  const renewed = await oauth("/oauth2/token", refresh, true);
+  assert.equal(renewed.status, 200);
+  assert.ok(renewed.body.refresh_token && renewed.body.refresh_token !== offline.token.refresh_token);
+  const retried = await oauth("/oauth2/token", refresh, true);
+  assert.equal(retried.status, 200);
+  // Never print tokens, including in an assertion diff.
+  assert.ok(retried.body.refresh_token === renewed.body.refresh_token && retried.body.access_token === renewed.body.access_token);
+  const bearerTools = async token => {
+    const response = await fetch(`${origin}/mcp/admin`, {
+      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+    });
+    const text = await response.text(), event = text.split("\n").find(line => line.startsWith("data:"));
+    return { status: response.status, body: JSON.parse(event ? event.slice(5) : text) };
+  };
+  const renewedTools = await bearerTools(renewed.body.access_token);
+  assert.equal(renewedTools.status, 200);
+  assert.ok(renewedTools.body.result.tools.some(tool => tool.name === "restock"));
+  assert.equal((await bearerTools(sessionOnly.token.access_token)).status, 401);
+  assert.equal((await oauth("/oauth2/revoke", { client_id: offline.clientId, token: renewed.body.refresh_token, token_type_hint: "refresh_token" }, true)).status, 200);
+  const revoked = await oauth("/oauth2/token", { ...refresh, refresh_token: renewed.body.refresh_token }, true);
+  assert.equal(revoked.status, 400);
+  assert.equal(revoked.body.error, "invalid_grant");
+  assert.equal((await bearerTools(renewed.body.access_token)).status, 401);
+  step("explicit offline consent renews after sign-out, retries rotation and ends on revocation; mcp-only grants never acquire refresh access");
 
   const version = JSON.parse(readFileSync("node_modules/@aotter/mantle/package.json", "utf8")).version;
   console.log(`Mantle ${version}: reference service passed`);

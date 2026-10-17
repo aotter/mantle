@@ -84,6 +84,24 @@ Grant lifetime follows Better Auth. Better Auth issues a refresh token only when
 the grant includes `offline_access`; a client registered for `authorization_code`
 may use `refresh_token` too, so registering only `authorization_code` does not
 prevent long-lived grants.
+For renewable MCP connections, the examples permit `scopes: ["mcp", "offline_access"]`.
+An explicit `scopes` list replaces the provider's defaults; `["mcp"]` alone
+disables refresh-token issuance. The client must also request `mcp offline_access`
+and the user must consent to background access. Declaring the `refresh_token`
+grant type alone is insufficient. `offline_access` belongs in authorization-server
+metadata, not in the protected resource's required scope floor; resource metadata
+continues to advertise `mcp`.
+
+For an existing connection granted only `mcp`, deploy the allowed-scope change,
+refresh the client's discovery/registration metadata, then reconnect or reauthorize
+once with `offline_access` and obtain updated consent. Allowing a scope does not
+add it to a stored consent. Do not edit consent rows, prolong access-token TTLs or
+disable grant checks to avoid that step. Verify a refresh token was issued and
+that the client can rotate it and resume MCP after access expiry; a successful
+initial `tools/list` does not prove renewable authorization. The reference service's
+local smoke exercises issuance, refresh after website sign-out, rotation retry
+and revocation using real OAuth endpoints and a disposable D1.
+
 Without `offline_access` the grant is bound to the browser session: its tokens
 stop working when that session expires or the user signs out. A refresh that
 narrows the scope to drop `offline_access` after the session ends returns

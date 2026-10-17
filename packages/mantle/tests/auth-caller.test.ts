@@ -4,7 +4,7 @@ import { fixtureCaller } from "./apps/fixtures.js";
  * oauthProvider, on the native d1Adapter over a bun:sqlite D1 shim. The auth handler is also served over a local HTTP
  * port, because Better Auth's resource client verifies access tokens against the instance's JWKS URL (baseURL + /jwks).
  */
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { authenticatedAs } from "../src/testing/index.js";
@@ -457,7 +457,7 @@ describe("OAuth grant revocation and consent routes", () => {
       const again = name === "keep-change" ? cookieOf(await app.post("/sign-in/email", { email, password })) : (await app.signIn(email)).cookie;
       expect((await authorize(app, again, grant.clientId, "mcp offline_access")).location, name).toStartWith(REDIRECT);
     }
-  });
+  }, 30_000); // Real password hashing and all grant-ending paths also run under parallel workspace load.
   test("an email OTP or magic-link sign-in that proves an unverified address ends the grants of whoever signed it up first", async () => {
     for (const store of ["plain", "hashed"] as const) {
       const app = await makeApp({ magicLinkStore: store });
@@ -719,6 +719,7 @@ describe("verified user field sources", () => {
       { apiVersion: 'cms.mantle.aotter.net/v2', kind: 'View', metadata: { name: 'orders' }, spec: { surface: 'internal', sql: 'SELECT id, region FROM orders ORDER BY id' } },
     ];
     const files = await generateOrThrow('bun-sqlite', [{ sourceId: 'fields.yaml', text: manifests.map(m => JSON.stringify(m)).join('\n---\n') }]);
+    await mkdir(resolve(import.meta.dir, 'apps/.generated'), { recursive: true });
     const dir = await mkdtemp(resolve(import.meta.dir, 'apps/.generated/auth-fields-'));
     try {
       await writeGenerated(dir, files);

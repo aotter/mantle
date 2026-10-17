@@ -35,11 +35,20 @@ async function app(pg?: SQL, store?: {
     if (!config.db) resources.push(sqlite);
     sqlite.run("PRAGMA foreign_keys=ON");
     let sent = "";
+    const adminPlugin = adminFunction({ defaultRole: config.defaultRole, adminRoles: [...adminRoles], ac, roles: { admin: ac.newRole({ user: [], session: [] }), editor: ac.newRole({ user: [], session: [] }), ...Object.fromEntries(adminRoles.map(role => [role, ac.newRole(defaultStatements)])), user: ac.newRole({ user: [], session: [] }), guest: ac.newRole({ user: [], session: [] }), vip: ac.newRole({ user: [], session: [] }), approver: ac.newRole({ user: [], session: [] }), operator: ac.newRole(defaultStatements), support: ac.newRole({ user: ["list"], session: [] }), denied: ac.newRole({ user: [], session: [] }) } });
     const d1 = d1Shim(sqlite), options = { secret, baseURL: "http://localhost/api/auth", session: { storeSessionInDatabase: true }, verification: { storeInDatabase: true }, database: pg ? postgresAdapter(pg) : d1Adapter(d1),
         ...authHardening({ ipAddressHeaders: ["cf-connecting-ip"], baseURL: "http://localhost" }),
         user: { ...(config.prefix ? { modelName: `${config.prefix}_people`, fields: { createdAt: "joined_at", emailVerified: "verified" } } : {}), additionalFields: (config.prefix ? {} : { githubLogin: { type: "string" as const, required: false } }) as NonNullable<BetterAuthOptions["user"]>["additionalFields"] },
         ...(config.prefix ? { session: { storeSessionInDatabase: true, modelName: `${config.prefix}_sessions` }, account: { modelName: `${config.prefix}_accounts` }, verification: { storeInDatabase: true, modelName: `${config.prefix}_proofs` } } : {}),
-        plugins: [adminFunction({ defaultRole: config.defaultRole, schema: config.prefix ? { user: { fields: { role: "roles" } } } : undefined, adminRoles: [...adminRoles], ac, roles: { admin: ac.newRole({ user: [], session: [] }), editor: ac.newRole({ user: [], session: [] }), ...Object.fromEntries(adminRoles.map(role => [role, ac.newRole(defaultStatements)])), user: ac.newRole({ user: [], session: [] }), guest: ac.newRole({ user: [], session: [] }), vip: ac.newRole({ user: [], session: [] }), approver: ac.newRole({ user: [], session: [] }), operator: ac.newRole(defaultStatements), support: ac.newRole({ user: ["list"], session: [] }), denied: ac.newRole({ user: [], session: [] }) } }), emailOTP({ storeOTP: { hash: otp => hashEmailOtp(secret, otp) }, sendVerificationOTP: async ({ otp }) => { sent = otp; } })] };
+        plugins: [adminPlugin, emailOTP({ storeOTP: { hash: otp => hashEmailOtp(secret, otp) }, sendVerificationOTP: async ({ otp }) => { sent = otp; } })] };
+    if (config.prefix) {
+        // Better Auth 1.7.7's admin({schema}) mutates its shared schema. Give
+        // this fixture its own public plugin schema instead of changing later instances.
+        const role = { ...adminPlugin.schema.user.fields.role, fieldName: "roles" };
+        adminPlugin.schema = { ...adminPlugin.schema, user: { ...adminPlugin.schema.user, fields: {
+            ...adminPlugin.schema.user.fields, role,
+        } } };
+    }
     const ddl = authSchemaSql(options, pg ? "postgres" : "sqlite");
     if (pg)
         for (const sql of ddl)
@@ -365,6 +374,12 @@ test("role grants, demotions and bootstrap preserve other roles and use the plug
 test("two mapped Better Auth instances share a database without crossing identities or requiring githubLogin", async () => {
     const a = await app(undefined, undefined, ["admin"], { prefix: "first" });
     const b = await app(undefined, undefined, ["admin"], { prefix: "second", db: a.sqlite });
+    const plain = await app();
+    const defaultColumns = plain.sqlite.query('PRAGMA table_info("user")').all() as { name: string }[];
+    expect(defaultColumns.map(column => column.name)).toContain("role");
+    expect(defaultColumns.map(column => column.name)).not.toContain("roles");
+    expect(await plain.ctx.internalAdapter.findUserById("s")).toMatchObject({ role: "admin" });
+
     for (const instance of [a, b]) await instance.ctx.internalAdapter.createUser({ id: "member", email: "member@example.test", name: "Member", emailVerified: true, role: "approver" }, { method: "admin" });
     expect((await a.directory.listMembers()).items).toMatchObject([{ id: "member", role: "approver", githubLogin: null }]);
     await a.directory.setUserRole("member", "admin");
