@@ -12,7 +12,6 @@ export const likeEscape = " ESCAPE '\\'";
  */
 export interface Dialect {
   readonly userRefs?: import('../binds.js').Values['userRefs'];
-  readonly user?: import('../binds.js').Values['user'];
   readonly anyOf?: (column: string, placeholder: string, type: 'string' | 'number') => string;
   readonly scopeInsert?: (scopes: readonly { readonly column: string; readonly field: string; readonly type: 'string' | 'number' }[], caller: import('../contracts.js').Caller, set: object) => object;
   /** The `n`th (1-based) numbered placeholder. */

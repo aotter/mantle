@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = process.cwd();
+if (packageRoot !== resolve(repoRoot, "packages/mantle")) throw new Error("sync-package-docs must run from packages/mantle");
 const target = resolve(packageRoot, "docs");
 const SHIPPED = ["upgrade-0.1-to-0.2.md", "handbook", "examples/README.md", "examples/generated-web", "examples/app-shell", "examples/recipes", "examples/club-events", "examples/purchasing", "skills"];
 // Runnable docs may have been installed or run locally; never publish that state.
