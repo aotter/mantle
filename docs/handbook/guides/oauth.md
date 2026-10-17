@@ -92,6 +92,17 @@ grant type alone is insufficient. `offline_access` belongs in authorization-serv
 metadata, not in the protected resource's required scope floor; resource metadata
 continues to advertise `mcp`.
 
+For a new ChatGPT custom MCP connection, open **Advanced OAuth settings** after
+entering the server URL and let discovery finish. Keep `mcp` selected and add
+`offline_access` to **Base scopes** before creating and linking the connection.
+Base scopes are requested even when tools declare their own scopes; selecting
+only a default scope can be superseded by tool-level scopes. Check that the
+consent page actually lists both scopes. Merely advertising `offline_access` in
+authorization-server metadata does not make ChatGPT request it: a default
+connection can request only `mcp`, render successfully, and receive no refresh
+token. Do not put `offline_access` in the resource's required scope floor or add
+it silently to an authorization request after the user has consented.
+
 For an existing connection granted only `mcp`, deploy the allowed-scope change,
 refresh the client's discovery/registration metadata, then reconnect or reauthorize
 once with `offline_access` and obtain updated consent. Allowing a scope does not

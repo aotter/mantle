@@ -257,6 +257,31 @@ test the old conversation **before** any tool refresh or reconnect. Test a clean
 first connection separately. Normal initial OAuth consent is expected; renewal
 or clearing host state to make an upgrade pass is not a successful upgrade test.
 
+For an authenticated App, follow [renewable OAuth setup](oauth.md) when creating
+the first ChatGPT connection, including the explicit `offline_access` base
+scope. Verify these independently:
+
+1. Sign in and approve the actual requested scopes, then visibly render the App
+   in a new ChatGPT conversation. Confirm the resource server resolved an OAuth
+   caller; a browser cookie or anonymous read is not OAuth evidence.
+2. In a disposable fixture, configure a short access-token lifetime before the
+   first authorization. Let it expire naturally and invoke the tool again in the
+   same conversation. Record the host's successful `refresh_token` exchange,
+   refresh-token rotation and subsequent authenticated tool/resource requests.
+   Record only safe metadata, never credentials or token bodies. An unchanged
+   iframe or a successful request before expiry does not prove renewal.
+3. Deploy a changed UI build with the old page retained. After expiry, reload
+   the old conversation, visibly check its original card, and invoke the tool
+   again. Require both successful renewal and fresh authorized data, without
+   reconnecting, refreshing host tools or clearing caches. Distinguish an old
+   card served from host cache from an observed authenticated old-URI read.
+
+If testing background access after website sign-out, sign out only the fixture's
+website session; keep the ChatGPT connection and consent intact. Revocation is a
+separate refusal test and is not expected to renew automatically. Short-lived
+fixture results establish exercised expiry/rotation behavior, not a multi-day
+soak or arbitrary third-party identity-provider compatibility.
+
 Diagnose the first failing stage before changing the App:
 
 - `connector_auth_required` from the host's widget request: renew the existing
