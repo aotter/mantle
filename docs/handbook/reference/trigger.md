@@ -24,11 +24,20 @@ metadata: { name: close-ticket-http }
 spec:
   source: { kind: http, method: POST, path: '/api/tickets/{id}/close' }
   target: { procedure: close-ticket }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: close-ticket-mcp }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: close-ticket }
 ```
 
 The target names a declared Procedure. `http` sources use POST/PUT/PATCH/DELETE and an `/api/` path. Path parameters bind to corresponding declared input fields and override JSON-body values. The generated REST module retains the Procedure's authorization and validates boundary input.
 
 An MCP source is `{ kind: mcp, surface: public }` or admin. The selected MCP module exposes the Procedure as a snake-case tool with its description, [tool hints](procedure.md#mcp-tool-hints) and requires checks.
+
+By default, pair every HTTP Trigger with an MCP Trigger so the same operation is reachable by the user's AI. `mantle generate` warns when a Procedure has HTTP exposure but no MCP exposure, suggesting `surface: admin` for an admin-only Procedure and `public` otherwise. Triggers still decide every Procedure surface: intentional asymmetric exposure is allowed and generation succeeds.
 
 Lifecycle and schedule sources are rejected at generation with `GENERATE_UNSUPPORTED`, including disabled schedules. Use an app-owned handler or scheduler. For signed webhooks, verify the original raw Request in the app and call a generated Procedure with validated input; do not route it through a JSON boundary before signature verification.
 

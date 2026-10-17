@@ -17,6 +17,8 @@ workflow](../../handbook/start/project-and-cli.md) before editing.
 
 Use the native Store/query/surface entries and app-owned fetch from the [service
 composition guide](../../handbook/cloudflare/service-entry.md).
+Pair every HTTP Trigger with an MCP Trigger by default; see [Trigger](../../handbook/reference/trigger.md)
+for the generate warning and deliberate asymmetry exception.
 Keep optional modules out of unused entry imports and auth dynamically loaded.
 Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.

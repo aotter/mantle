@@ -83,6 +83,15 @@ function outputNameWarnings(plan: RuntimePlan): string[] {
   return [...new Set(warnings)];
 }
 
+function missingMcpWarnings(plan: RuntimePlan): string[] {
+  const mcp = new Set(Object.values(plan.triggers).flatMap(trigger => trigger.source.kind === "mcp" ? [trigger.procedure] : []));
+  const http = new Set(Object.values(plan.triggers).flatMap(trigger => trigger.source.kind === "http" ? [trigger.procedure] : []));
+  return [...http].filter(name => !mcp.has(name)).map(name => {
+    const surface = plan.procedures[name]?.requires?.auth?.all.includes("ctx.admin") ? "admin" : "public";
+    return `Procedure '${name}' has an http Trigger but no mcp Trigger, so the user's AI cannot reach this operation. Add a Trigger with spec.source: { kind: mcp, surface: ${surface} } and spec.target: { procedure: ${name} }.`;
+  });
+}
+
 export interface GenerateRequest { readonly target: Target; readonly admin?: boolean; readonly sources: ManifestSourceSet; /** Select the optional generated site/media capability and deployment tables. */ readonly site?: import("../build/compiler.js").SiteDefaults; }
 
 export async function generateFromSources(request: GenerateRequest, schema?: () => readonly string[]): Promise<GenerateResult> {
@@ -151,5 +160,5 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
   const gatewayFiles = generatedFiles({ "access-targets.ts": `import type { AccessTarget } from "@aotter/mantle/contracts";\nexport const targets: Readonly<Record<string, AccessTarget>> = ${JSON.stringify(accessTargets)};\n` });
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.admin ? adminIndexes(compiled.plan.schemas, !postgres) : []), ...(schema?.() ?? [])];
   const { "site-schema.sql": siteSql = "", ...files } = result.files;
-  return { ...result, warnings: [...outputNameWarnings(compiled.plan), ...(request.admin ? adminCreateWarnings(compiled.plan) : []), ...(compiled.plan.access?.warnings ?? [])], files: { ...files, ...gatewayFiles, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
+  return { ...result, warnings: [...missingMcpWarnings(compiled.plan), ...outputNameWarnings(compiled.plan), ...(request.admin ? adminCreateWarnings(compiled.plan) : []), ...(compiled.plan.access?.warnings ?? [])], files: { ...files, ...gatewayFiles, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
 }
