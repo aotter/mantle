@@ -53,7 +53,8 @@ itself an SDK runtime defect.
 For simple creates/partial updates, prefer a declared Store-backed `ref`
 Procedure: await the caller-bound Store write, return a safe allowlist with its
 actual returned ID/version, and keep `requires` plus generated input validation
-at invocation. Store row policy alone is not Procedure authorization. Define
+at invocation. A transaction-bound write result remains provisional until the
+outer transaction commits; publish success only after that boundary completes. Store row policy alone is not Procedure authorization. Define
 omitted versus null patch semantics; never fill unseen fields with defaults.
 Keep SQL Procedures for atomic stock changes, conditional state transitions and
 related writes. A TypeScript pre-read does not replace an atomic WHERE/CHECK;

@@ -100,7 +100,10 @@ or `.update(id, allowedPatch, { lock: expectedVersion })`. Keep the Procedure's
 row policy, but does not substitute for operation authorization. Do not invoke
 a handler directly from a route and accidentally bypass those checks.
 
-Insert/update returns the actual committed native row. Return an explicit
+Insert/update returns the actual written native row. Inside a transaction,
+that result is provisional until the outer transaction commits; later failure
+can still roll it back. Report committed success or emit external effects only
+after that transaction succeeds. Return an explicit
 allowlist of useful business fields, its backend `id` and returned `version`;
 do not spread the entire row, echo the submitted version, calculate a new
 version instead of reading the result, or add a generic receipt adapter. These
