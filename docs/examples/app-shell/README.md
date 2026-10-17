@@ -53,6 +53,9 @@ Search for `AGENT:` to find what an app must fill in.
   the previous role; `/admin/api/me` shows the current one.
 - Admin HTTP routes are listed in `docs/handbook/guides/native-admin.md`.
 
+Scripted smoke is not independent acceptance; before reporting a user-facing
+deliverable done, follow the [independent acceptance guide](../../handbook/guides/agent-workflow-acceptance.md).
+
 ### MCP acceptance
 
 Generation declares tools; the app owns whether and where a remote endpoint is mounted.

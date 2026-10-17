@@ -7,8 +7,8 @@ selected host's frontend kit before choosing APIs. Native applications use
 their installed `docs/handbook/guides/native-admin.md` and the
 [web contract](web.md).
 
-- For self-hosted applications, mount the selected Admin API and serve the
-  separate Admin package's assets with its shell/CSP contract. The application
+- For self-hosted applications, build Admin with `mantle bundle` and serve it as
+  the installed `docs/handbook/guides/native-admin.md` describes. The application
   owns auth, OTP delivery and verified Caller wiring; use a console/test sender
   locally and configure production email for deployment. If a host already
   supplies identity/Admin, reuse its explicit contract and reserved routes.
@@ -38,8 +38,10 @@ Follow the [local HTTP acceptance](local-testing.md) before reporting local
 readiness: inspect HTML without JavaScript, check metadata/sitemap and anonymous
 draft/permission refusal, and exercise OTP and editing with isolated synthetic
 accounts. Local readiness does not require publication, a hosted tenant or a
-candidate preview. Report production email, public origin and real object-store
-upload/commit checks separately when local capabilities cannot exercise them.
+candidate preview. Scripted local acceptance does not replace the installed
+independent acceptance guide, which is required before reporting the pages done.
+Report production email, public origin and real object-store upload/commit checks
+separately when local capabilities cannot exercise them.
 
 For an explicitly requested deployment, use the selected host's native workflow
 and any preview it provides. Verify disabled preview capabilities on an already

@@ -1,6 +1,6 @@
 ---
 name: mantle
-description: Create or continue a Mantle application, test it locally and deploy to a user-owned host using the installed SDK docs.
+description: Create, continue, test or deploy a Mantle application using installed @aotter/mantle docs, including manifests, SQL Views and Procedures, MCP tools, app-built Admin, mantle generate and Mantle upgrades.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/mantle/SKILL.md
@@ -21,19 +21,28 @@ checkout, or any online copy.
 
 Work in the user's application, outside the SDK checkout. Read package.json, the lockfile, installed SDK README and node_modules/@aotter/mantle/docs/. Those files define the exact version's contract. Preserve existing identity, handles, routes and resources.
 
+## Choose the installed package skill
+
+- Read `node_modules/@aotter/mantle/docs/skills/develop/SKILL.md` to change an existing project's manifests, SQL, handlers, service entry or surfaces.
+- Read `node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md` to add Mantle to an application with existing code, users or data.
+- Read `node_modules/@aotter/mantle/docs/skills/update/SKILL.md` to upgrade Mantle, including from 0.1.x.
+- Read `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` only for an authorized production deployment.
+- Read `node_modules/@aotter/mantle/docs/skills/media-gc/SKILL.md` only to audit or remove stale uncommitted media uploads.
+
 For a new project, install an exact published SDK version with matching selected Admin/UI packages. Node must be 22.22 or newer. Add TypeScript and target types; Workers also need Wrangler. `node_modules/@aotter/mantle/docs/examples/app-shell/package.json` lists the Wrangler, TypeScript and type-package versions this release is tested with. Optional auth/MCP peers use the installed SDK's package.json versions. Read the installed handbook's start/project-and-cli.md before choosing a target.
 
 For a new Cloudflare app, copy `node_modules/@aotter/mantle/docs/examples/app-shell/` first, then the closest example from `docs/examples/README.md` on top of it, and edit from there: manifests, `src/handlers.ts`, `src/routes.ts`, `src/schedule.ts`, `smoke.mjs`. Search for `AGENT:` to find what the app must fill in; the example pages are unstyled on purpose, so styling them is part of that work. Before reporting done, resolve each `AGENT:` or name the ones you left. Keep the two roles `admin` and `user` unless the user asks for more.
 
-Before implementing a new or changed MCP workflow, read the installed
-`node_modules/@aotter/mantle/docs/handbook/guides/agent-workflow-acceptance.md`.
-Audit the user's goal against proposed discovery, detail/relations, write
-results, state/version rules, recovery and authority before authoring tools;
-after implementation, follow its fresh end-user-agent repair/retest loop.
-Keep design review, scripted tests and real host/UI acceptance distinct. If an
-older installed version lacks this guide, record the missing workflow guidance
-and preserve that version's contract; do not silently upgrade or substitute
-checkout/online docs.
+Before reporting any user-facing work as done, follow the installed
+`node_modules/@aotter/mantle/docs/handbook/guides/agent-workflow-acceptance.md`:
+run independent acceptance with a fresh agent on the surface its user uses.
+This is not limited to MCP; if it was not run, say so explicitly and report the
+work as UNVERIFIED rather than done. For MCP workflows, also run the guide's
+design audit before implementing tools. This workflow practice applies to every
+installed SDK version: if its guide is older or MCP-scoped, apply its fresh-agent
+round loop to the user-facing surface actually built. If an older installed
+version lacks this guide, record the missing guidance and preserve that version's
+contract; do not silently upgrade or substitute checkout/online docs.
 
 For existing older applications, use their installed docs until the user requests an upgrade. For partial adoption read node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md.
 
@@ -54,16 +63,16 @@ cookieCache `{enabled:true,maxAge:60,refreshCache:false,version:"read-60-v1"}` a
 no KV. Bump version when enabling/changing the policy; writes, Admin, consent,
 unknown/ref/media calls stay fresh. Read the installed auth docs before MCP caching.
 
-Use the workflow **generate → typecheck → implement listed handlers**. For example:
+Use the workflow **generate → implement listed handlers → check**. In an app
+copied from the installed app shell, its scripts are the canonical commands:
 
 ```sh
-pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml
-pnpm exec tsc --noEmit
-pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml --check
+pnpm generate
+pnpm check
 ```
- Implement every printed `Handlers` key
+Implement every printed `Handlers` key
 and pass the implementations at `store(db, caller, { handlers })` (and selected
-surface options). Run `tsc --noEmit` again before local acceptance.
+surface options).
 Generated Store metadata initializes on its first use, once per module. Bind
 `store(db, caller, options?)` for the current request; never reuse one caller's
 bound Store for another caller.
@@ -91,10 +100,9 @@ MCP, REST behind one request-local origin-checked resolver; keep heavy auth dyna
 Pair every HTTP Trigger with an MCP Trigger by default; see `docs/handbook/reference/trigger.md` for the generate warning and deliberate asymmetry exception.
 
 For selected native Admin, follow the version-matched
-`docs/handbook/guides/native-admin.md`: select `--admin` (or `admin: true`),
-mount `entries(bindings.schemas, bindings.adapter)` and serve the Admin assets
-separately. The three-package preview is one Core SDK, the Admin product and the
-shared UI kit.
+`docs/handbook/guides/native-admin.md`: select `--admin` (or `admin: true`), then
+build and serve the application-owned Admin with `mantle bundle` as that guide
+describes.
 Admin reads share generated whitelisted native View templates, writes use native
 Procedure fragments and generated checks. Ref operations retain typed `ctx.store`
 at request time. Verify member/frontend and admin/Admin OTP, tenant/privacy/TTL,
@@ -139,8 +147,11 @@ To add Mantle to an application that has its own code, users and data, read
 `node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md` first.
 
 Report the project path, the exact Mantle version, what you changed, the checks
-you ran with their results, and anything left for the user.
+you ran with their results, the independent acceptance verdict (CONVERGED / NOT
+CONVERGED / BLOCKED / UNVERIFIED), and anything left for the user.
 
 ## Data paths
 
-Writes use Store `insert` / `update` / `delete`, atomic `batch` / supported `transaction`, or declared Procedures. Raw SQL writes bypass row rules. Use internal Views for joins, aggregates, OR and reusable reads; Store `findById` / `find` / `first` are for id lookups and simple AND filters. Ref handlers receive `ctx.store` with the same Caller and transaction.
+Follow the installed `docs/handbook/guides/typed-queries.md` for Store,
+Procedure and View data paths; the service composition guide owns request-local
+Caller binding.

@@ -344,6 +344,10 @@ The API advertises capabilities for actually mounted routes, including statistic
 
 ## Acceptance
 
+Before reporting Admin pages or customisations as done, follow the [independent
+acceptance guide](agent-workflow-acceptance.md) with a fresh evaluator in the
+real Admin browser session.
+
 Use a disposable database for native tests, then exercise actual OTP sign-in,
 the Admin console and member frontend. Check invalid input, another tenant's
 rows, expired rows, publishing transitions, related/translated entries, paging,

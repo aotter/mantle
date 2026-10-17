@@ -94,11 +94,13 @@ uses real MCP requests and removes the entire local fixture in `finally`.
 
 ## Independently accept the workflow
 
-Follow the [fresh end-user-agent repair/retest loop](../../handbook/guides/agent-workflow-acceptance.md).
-Give the buyer its business goal and authorized isolated transport, without the
-worked tool sequence above. Repair discovered gaps, then repeat the same goal
-with another fresh agent. Preserve failed attempts and distinguish this result
-from `smoke.mjs`, host rendering and the author's stock/privacy regressions.
+Follow the [independent acceptance rounds](../../handbook/guides/agent-workflow-acceptance.md).
+This example's user-facing surface is its MCP client. Give each buyer agent this
+brief and the authorized transport, never the worked sequence above: "a buyer
+shopping a small tea catalogue within a stated budget, who may need to cancel
+an order". Keep this result separate from `smoke.mjs`, App rendering and the
+author's stock/privacy regressions; other user-facing surfaces use the same
+guide with their own client.
 
 ## Read data first; render an App deliberately
 
