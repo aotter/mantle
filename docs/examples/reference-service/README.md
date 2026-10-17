@@ -94,11 +94,13 @@ uses real MCP requests and removes the entire local fixture in `finally`.
 
 ## Independently accept the workflow
 
-Follow the [fresh end-user-agent repair/retest loop](../../handbook/guides/agent-workflow-acceptance.md).
-Give the buyer its business goal and authorized isolated transport, without the
-worked tool sequence above. Repair discovered gaps, then repeat the same goal
-with another fresh agent. Preserve failed attempts and distinguish this result
-from `smoke.mjs`, host rendering and the author's stock/privacy regressions.
+Follow the [independent UAT convergence loop](../../handbook/guides/agent-workflow-acceptance.md).
+Give every new buyer agent the original brief, role, authority and budgets,
+without the worked sequence above or earlier findings. Let it choose its own
+goals and critique the design in every round. Repair between rounds; keep known
+failure replays as regression checks rather than independent design evaluation.
+Preserve failed attempts and distinguish this result from `smoke.mjs`, host
+rendering and the author's stock/privacy regressions.
 
 ## Read data first; render an App deliberately
 

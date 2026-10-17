@@ -81,9 +81,11 @@ For a new service, run the version-matched [MCP design audit and business
 acceptance flow](./docs/handbook/guides/agent-workflow-acceptance.md) before
 implementing tools. Map the goal to bounded discovery, complete detail/relation
 readback, committed write results, version/state rules and recovery under the
-intended caller. After implementation, use the same guide's fresh end-user
-agent → repair → independent retest loop. Static design review, scripted checks
-and real host/UI acceptance are separate evidence.
+intended caller. After implementation, run the guide's independent UAT rounds
+until the findings converge. Every new end-user agent chooses its own goals
+from the original brief and role, without an author-prescribed workflow or
+previous findings. Known-failure regression checks, independent design
+evaluation and real host/UI acceptance are separate evidence.
 
 ## Publishing
 

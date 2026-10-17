@@ -16,10 +16,12 @@ Better Auth limits each email-OTP path to 3 requests/minute per IP; `authHardeni
 
 For a new or changed MCP business workflow, follow the installed SDK
 `docs/handbook/guides/agent-workflow-acceptance.md`: audit the goal-to-capability
-design before implementation, then let a fresh end-user agent
-discover and execute the business goal, repair gaps, then repeat the same goal
-with another fresh agent. Preserve initial failures, setup assistance and
-blocked checks. Scripted smoke, host/UI rendering and independent workflow
+design before implementation, then use a new end-user agent in every UAT round.
+Give it the original brief, role, authority and budgets; let it choose goals
+and critique the design without previous findings or an author-chosen route.
+Repair between rounds and judge convergence as the guide describes. Keep known
+failure replays as regression checks. Preserve failures, setup assistance and
+blocked checks. Scripted smoke, host/UI rendering and independent design
 acceptance are separate evidence. If that guide is absent in an older installed
 version, keep its version-matched contract and record this acceptance as pending;
 do not substitute the SDK checkout or silently upgrade.

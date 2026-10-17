@@ -19,8 +19,11 @@ flow](../guides/agent-workflow-acceptance.md) before choosing tool names or
 writing manifests/handlers. Start with the user's goal and role; map each
 required step to discovery, IDs/detail/relations, committed write evidence,
 state/version rules and recovery. Keep authority, amounts and data/rendering
-boundaries explicit. After implementation and relevant regressions, run the
-fresh end-user-agent repair and independent retest loop from that same guide.
+boundaries explicit. After implementation and relevant regressions, run that
+guide's independent UAT loop: every fresh end-user agent chooses its own goals
+from the original brief and role, with no previous findings or prescribed route.
+Repair between rounds and check convergence; replaying the same known scenario
+does not replace independent design evaluation.
 
 ## Commands
 

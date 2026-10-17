@@ -26,9 +26,12 @@ Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.
 For a new or changed MCP business workflow, follow the
 [MCP design audit and business acceptance flow](../../handbook/guides/agent-workflow-acceptance.md):
-audit goal-to-capability coverage before implementing tools, then run its fresh
-end-user-agent repair/retest loop before claiming independent workflow acceptance. Keep the initial failed round
-and host/UI acceptance separate.
+audit the original user brief before implementing tools, then run independent
+UAT rounds until the guide's convergence criteria are met. Every round uses a
+new end-user agent that chooses goals from the role and original brief, without
+the author's workflow, earlier findings or repair hints. Keep regression replays,
+independent design evaluation and host/UI acceptance separate; preserve failures
+and report an exhausted budget or unresolved blocker as not converged.
 
 For native Admin, read the [current guide](../../handbook/guides/native-admin.md).
 Select `--admin` / `admin: true`; mount `entries(bindings.schemas, bindings.adapter)`

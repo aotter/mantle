@@ -27,9 +27,12 @@ For a new Cloudflare app, copy `node_modules/@aotter/mantle/docs/examples/app-sh
 
 Before implementing a new or changed MCP workflow, read the installed
 `node_modules/@aotter/mantle/docs/handbook/guides/agent-workflow-acceptance.md`.
-Audit the user's goal against proposed discovery, detail/relations, write
-results, state/version rules, recovery and authority before authoring tools;
-after implementation, follow its fresh end-user-agent repair/retest loop.
+Audit the original user brief before authoring tools. After implementation,
+run independent end-user UAT rounds: every new agent receives the role, original
+brief, authority and budgets, chooses its own goals, and critiques the tool
+design. Do not prescribe an implementation-shaped workflow or pass previous
+findings to the next evaluator. Repair between rounds and follow the guide's
+convergence criteria; replaying a known scenario is a separate regression check.
 Keep design review, scripted tests and real host/UI acceptance distinct. If an
 older installed version lacks this guide, record the missing workflow guidance
 and preserve that version's contract; do not silently upgrade or substitute
