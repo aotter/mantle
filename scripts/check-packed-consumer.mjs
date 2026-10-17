@@ -48,7 +48,7 @@ if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
   }
   const archived = archiveProject(join(root, "docs/examples/reference-service"));
   const entries = execFileSync("tar", ["-tf", "-"], { input: archived.bytes, encoding: "utf8" }).split("\n");
-  if (!entries.includes("package.json") || entries.some((entry) => /^(?:node_modules|generated|dist)\//.test(entry) || entry === "worker-configuration.d.ts")) {
+  if (!entries.includes("package.json") || entries.some((entry) => entry.includes("node_modules/") || /^(?:generated|dist)\//.test(entry) || entry === "worker-configuration.d.ts")) {
     throw new Error("packed-consumer reference archive must contain authored source without dependencies or generated/build output");
   }
   const probe = join(tmpdir(), "packed-consumer-peer-rules.json");
