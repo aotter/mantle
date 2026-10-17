@@ -77,15 +77,10 @@ migration responsibility; no request runs DDL or rebuilds indexes.
 
 ## Design MCP services around the user's goal
 
-For a new service, run the version-matched [MCP design audit and business
-acceptance flow](./docs/handbook/guides/agent-workflow-acceptance.md) before
-implementing tools. Map the goal to bounded discovery, complete detail/relation
-readback, committed write results, version/state rules and recovery under the
-intended caller. After implementation, run the guide's independent UAT rounds
-until the findings converge. Every new end-user agent chooses its own goals
-from the original brief and role, without an author-prescribed workflow or
-previous findings. Known-failure regression checks, independent design
-evaluation and real host/UI acceptance are separate evidence.
+For a new or changed MCP workflow, follow the version-matched [MCP design audit
+and independent acceptance guide](./docs/handbook/guides/agent-workflow-acceptance.md)
+before implementing tools and before claiming acceptance. Static design review,
+scripted checks and real host/UI acceptance are separate evidence.
 
 ## Publishing
 

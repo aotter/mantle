@@ -24,14 +24,10 @@ Use the native Store/query/surface entries and app-owned fetch from the service 
 Keep optional modules out of unused entry imports and auth dynamically loaded.
 Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.
-For a new or changed MCP business workflow, follow the
-[MCP design audit and business acceptance flow](../../handbook/guides/agent-workflow-acceptance.md):
-audit the original user brief before implementing tools, then run independent
-UAT rounds until the guide's convergence criteria are met. Every round uses a
-new end-user agent that chooses goals from the role and original brief, without
-the author's workflow, earlier findings or repair hints. Keep regression replays,
-independent design evaluation and host/UI acceptance separate; preserve failures
-and report an exhausted budget or unresolved blocker as not converged.
+For a new or changed MCP business workflow, follow the [MCP design audit and
+independent acceptance guide](../../handbook/guides/agent-workflow-acceptance.md)
+before implementing tools and before claiming acceptance; host/UI acceptance is
+separate evidence.
 
 For native Admin, read the [current guide](../../handbook/guides/native-admin.md).
 Select `--admin` / `admin: true`; mount `entries(bindings.schemas, bindings.adapter)`

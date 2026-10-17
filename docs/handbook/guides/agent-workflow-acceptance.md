@@ -36,7 +36,7 @@ following rubric against that map:
 | --- | --- |
 | Can the agent locate the right record? | Bounded search/filter inputs, stable IDs, deterministic cursor paging and sensible limits. It must not scan every list or guess an ID from a display label. |
 | Can it choose an eligible relation? | Finding an ID is not proof of business eligibility: verify the role, state and ownership required by the relationship. Return enough labels to distinguish same-name choices before writing. |
-| Can it correct an ordinary mistake? | State how to amend, clear or replace optional fields and relations, and how duplicate records are detected or reconciled. Test omitted, null and empty inputs against that contract; existence and type checks alone do not establish business validity. |
+| Can it correct an ordinary mistake? | State how to amend, clear or replace optional fields and relations, and how duplicate records are detected or reconciled. Test omitted, null and empty inputs against that contract; existence and type checks alone do not establish business validity. Express conditional-required inputs with the supported [input rules](../reference/surface.md) before writing handler checks. |
 | Can it read a complete business result? | ID-based detail/readback under the intended caller, including every relation the goal creates or changes. A parent list is not proof of its child/contact/state details. Distinguish absent/inaccessible from incomplete evidence. |
 | Can it verify a create or update? | Return the backend entity ID, actual committed version where applicable, and a safe result summary or a documented authorized readback. State the exact result nesting. Echoed input or the submitted `expectedVersion` is not proof of committed state. Specify PATCH versus full replacement and omitted/null-field semantics so an update cannot erase unseen fields. |
 | What does a version protect? | Name its entity/snapshot scope; a parent version does not imply child rows or aggregates are unchanged. Use the reviewed observed version for OCC, define conflict behavior and preserve the user's proposed changes without silently rebinding/retrying. |
@@ -69,19 +69,23 @@ D1 supports batch, not an interactive transaction or consuming an earlier batch
 result. See the [Store write guide](typed-queries.md#prefer-store-backed-ref-procedures-for-simple-writes).
 
 Then implement the minimum contract and run generated/type, authorization,
-atomicity and other relevant regressions. Follow the fresh-agent loop below
+atomicity and other relevant regressions. Follow the independent acceptance rounds below
 before claiming independent business acceptance. Keep the author's capability
 map and worked call sequence out of the fresh agent's prompt: that agent must
 be able to discover the workflow from public tool descriptions and results.
 
-## Run independent rounds until the findings converge
+## Run independent acceptance rounds until they converge
 
 1. **Freeze scope and revision, not the evaluator's itinerary.** Supply the
    original user brief, business role, explicit requirements and exclusions,
    exact application/SDK revision, authorized transport, permitted fake-data
-   actions, tool/time/write budgets and a fixture cleanup owner. Explicitly
-   authorize synthetic writes only where the user has authorized testing.
-   Production writes and external side effects need their own authorization.
+   actions, per-round tool/time/write budgets, a user-set total round cap of at
+   least three (default four) and a fixture cleanup owner. Seed fixtures with
+   realistic volume and variety: other owners' records, several states and more
+   than one page of results, so evaluators' own goals reach discovery, paging
+   and authority. Explicitly authorize synthetic writes only where the user has
+   authorized testing. Production writes and external side effects need their
+   own authorization.
 2. **Use a new end-user subagent in every round.** Start without inherited
    implementation history. Withhold source, SQL, internal docs, capability maps,
    precomputed IDs, tool names, call order and previous reports or fixes. Ask
@@ -90,10 +94,16 @@ be able to discover the workflow from public tool descriptions and results.
    supports its work. Ask whether it can make the decisions needed for its
    goals, not merely issue successful calls. Do not prescribe the author's
    happy path or require a minimum number of defects. Zero findings is a valid
-   observation.
+   observation. Run the evaluator outside the project directory, without Mantle
+   skills or project instruction files, with only the MCP transport configured,
+   and record that isolation in the evidence. For a multi-role workflow, run one
+   fresh agent per role in the same round on shared live data in the brief's
+   natural order; the later role finds earlier records through the service, and
+   the first agent may take a resumed turn to observe the outcome. Each agent
+   still chooses its own goals.
 3. **Keep evidence and scope judgments.** Require PASS/FAIL/BLOCKED per chosen
    goal, actual readbacks, rejected writes, recovery, interaction costs and
-   design findings with impact, evidence and the smallest suggested repair.
+   design findings with materiality, evidence and the smallest suggested repair.
    Separate a violated explicit requirement, a demonstrated defect and a newly
    inferred product need. Missing capability is a finding, not permission to
    invent tools or automatically expand the product. HTTP 200 and a creation
@@ -112,17 +122,25 @@ be able to discover the workflow from public tool descriptions and results.
    this evaluator choose its own goals again; do not pass the ledger or steer
    it toward the previous repair. Replaying a known failure remains an author's
    regression check and does not replace independent design evaluation.
-6. **Judge convergence across rounds.** For an open-ended convergence request,
-   require two consecutive unassisted fresh rounds on the same revision with
-   no new material in-scope findings, no unresolved observed high-impact
-   defects and evidence for all explicit requirements. Reset that streak after
-   a material repair. Check cumulative scenario coverage: repeated success on
-   one narrow path cannot establish broader readiness. Keep optional wishes,
-   low-impact suggestions and external BLOCKED gates visible; no finding count
-   proves absence of defects. If the agreed resource budget or an external
-   blocker stops the loop, report NOT CONVERGED or BLOCKED with the remaining
-   work, not acceptance. Setup cleans isolated fixtures in `finally` after
-   every round, including failed/aborted rounds.
+6. **Judge convergence across rounds.** Converge only after two consecutive
+   unassisted fresh rounds on the same revision with no new material in-scope
+   finding and no unresolved material defect. A finding is material when it
+   violates an explicit requirement, makes an evaluator's goal FAIL or BLOCKED,
+   or exposes an authority, data-integrity or uncertain-write defect; record
+   why any finding was judged non-material. Every repair creates a new revision
+   and resets the streak, so hold non-material repairs until after the verdict.
+   Each explicit requirement observable from the evaluator's role needs
+   evaluator-observed evidence; requirements outside that role's view (another
+   caller's isolation or hidden state) are verified by author regressions and
+   reported under that label. A role-observable requirement no evaluator reached
+   is UNVERIFIED and blocks CONVERGED. If fresh evaluators never reach a required
+   path, vary the fixtures, not the brief or the steps, or report that path as
+   UNVERIFIED. Repeated success on one narrow path cannot establish broader
+   readiness. Keep optional wishes, non-material suggestions and external
+   BLOCKED gates visible; no finding count proves absence of defects. When the
+   round cap or an external blocker stops the loop, report NOT CONVERGED or
+   BLOCKED with the remaining work, not acceptance. Setup cleans isolated
+   fixtures in `finally` after every round, including failed/aborted rounds.
 
 If a fresh agent or authorized test transport is unavailable, record independent
 acceptance as BLOCKED and report the scripted checks separately. Do not invent
@@ -148,21 +166,28 @@ scope. Do not replace it with a sequence tailored to existing tools:
 > outside the supplied authority. Finding no defects is acceptable; report
 > what you actually covered and what remains unverified.
 
-The author separately verifies stock restoration, another buyer's isolation,
-stale-version refusal and unknown-outcome handling through authorized test
-fixtures. Do not grant a buyer admin access just to prove hidden stock values.
-Keep author regressions distinct from what the fresh agent actually observed.
+The author separately verifies isolation between callers, stale-version
+refusal, unknown-outcome handling and effects hidden from the evaluator's role
+through authorized test fixtures. Do not grant the evaluator extra authority
+just to observe hidden state. Keep author regressions distinct from what the
+fresh agent actually observed.
 
 ## Record evidence in the existing issue or handoff
 
 Use ordinary Markdown; no new receipt schema or framework is required:
 
-- Goal/criteria, role, exact revision/SDK version, environment and budgets.
-- Setup assistance and what the agent could access; identify distinct rounds.
-- Each step's PASS/FAIL/BLOCKED, actual readback and call references; tool/page
-  counts and negative/recovery attempts, with their differing scope stated.
-- Findings, severity/owner, minimal repair and regression commands/results.
-- New revision and the fresh retest; retain the initial failed report.
+- Original brief, explicit requirements and exclusions, role, environment,
+  per-round budgets and round cap.
+- Setup assistance and what each agent could access; identify distinct rounds.
+- Per round: revision, the evaluator's own goals and criteria, per-goal
+  PASS/FAIL/BLOCKED, actual readbacks and call references, tool/page counts
+  and negative/recovery attempts, with their differing scope stated.
+- Findings ledger with materiality, owner, disposition, minimal repair and
+  regression commands/results.
+- Streak and reset history; coverage of each explicit requirement
+  (evaluator-observed, author regression only, or UNVERIFIED); the final
+  CONVERGED / NOT CONVERGED / BLOCKED verdict and rounds used. Retain every
+  failed report.
 - Fixture cleanup result and every remaining limitation.
 
 Keep credentials, raw auth logs, full resource HTML and private operational

@@ -25,14 +25,9 @@ For a new project, install an exact published SDK version with matching selected
 
 For a new Cloudflare app, copy `node_modules/@aotter/mantle/docs/examples/app-shell/` first, then the closest example from `docs/examples/README.md` on top of it, and edit from there: manifests, `src/handlers.ts`, `src/routes.ts`, `src/schedule.ts`, `smoke.mjs`. Search for `AGENT:` to find what the app must fill in; the example pages are unstyled on purpose, so styling them is part of that work. Before reporting done, resolve each `AGENT:` or name the ones you left. Keep the two roles `admin` and `user` unless the user asks for more.
 
-Before implementing a new or changed MCP workflow, read the installed
+Before implementing a new or changed MCP workflow, and again before claiming
+workflow acceptance, read and follow the installed
 `node_modules/@aotter/mantle/docs/handbook/guides/agent-workflow-acceptance.md`.
-Audit the original user brief before authoring tools. After implementation,
-run independent end-user UAT rounds: every new agent receives the role, original
-brief, authority and budgets, chooses its own goals, and critiques the tool
-design. Do not prescribe an implementation-shaped workflow or pass previous
-findings to the next evaluator. Repair between rounds and follow the guide's
-convergence criteria; replaying a known scenario is a separate regression check.
 Keep design review, scripted tests and real host/UI acceptance distinct. If an
 older installed version lacks this guide, record the missing workflow guidance
 and preserve that version's contract; do not silently upgrade or substitute
