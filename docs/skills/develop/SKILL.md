@@ -15,7 +15,8 @@ metadata:
 Read the installed SDK README, then follow the version-matched [project and CLI
 workflow](../../handbook/start/project-and-cli.md) before editing.
 
-Use the native Store/query/surface entries and app-owned fetch from the service composition guide.
+Use the native Store/query/surface entries and app-owned fetch from the [service
+composition guide](../../handbook/cloudflare/service-entry.md).
 Keep optional modules out of unused entry imports and auth dynamically loaded.
 Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.

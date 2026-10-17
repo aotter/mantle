@@ -20,8 +20,8 @@ For 0.1.x, follow [Upgrade 0.1 to 0.2](../../upgrade-0.1-to-0.2.md): give the
 against a 0.1.x database. Between 0.2 versions, apply reviewed migrations
 rehearsed on a copy.
 
-Pin exact target SDK/peer versions and read its release notes and Admin asset
-installation instructions. Core-to-native replaces app imports/wiring; it is not
+Pin exact target SDK/peer versions and read its release notes and Admin build
+instructions. Core-to-native replaces app imports/wiring; it is not
 a package-only update. For 0.2-to-0.2 updates, preserve users, sessions, content
 and application code; review emitted SQL/policy diffs and rehearse explicit
 data-preserving schema/auth/role migrations on a copy. Initial schema.sql never
