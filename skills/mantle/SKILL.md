@@ -25,6 +25,16 @@ For a new project, install an exact published SDK version with matching selected
 
 For a new Cloudflare app, copy `node_modules/@aotter/mantle/docs/examples/app-shell/` first, then the closest example from `docs/examples/README.md` on top of it, and edit from there: manifests, `src/handlers.ts`, `src/routes.ts`, `src/schedule.ts`, `smoke.mjs`. Search for `AGENT:` to find what the app must fill in; the example pages are unstyled on purpose, so styling them is part of that work. Before reporting done, resolve each `AGENT:` or name the ones you left. Keep the two roles `admin` and `user` unless the user asks for more.
 
+Before implementing a new or changed MCP workflow, read the installed
+`node_modules/@aotter/mantle/docs/handbook/guides/agent-workflow-acceptance.md`.
+Audit the user's goal against proposed discovery, detail/relations, write
+results, state/version rules, recovery and authority before authoring tools;
+after implementation, follow its fresh end-user-agent repair/retest loop.
+Keep design review, scripted tests and real host/UI acceptance distinct. If an
+older installed version lacks this guide, record the missing workflow guidance
+and preserve that version's contract; do not silently upgrade or substitute
+checkout/online docs.
+
 For existing older applications, use their installed docs until the user requests an upgrade. For partial adoption read node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md.
 
 ## Generated native applications

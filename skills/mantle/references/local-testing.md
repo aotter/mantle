@@ -15,7 +15,8 @@ Better Auth limits each email-OTP path to 3 requests/minute per IP; `authHardeni
 - Record commands and passed/failed/blocked cases for the exact commit. Fix failures before source admission; rerun relevant checks after changing source. Packing does not run these checks and an agent's checklist is not server build attestation.
 
 For a new or changed MCP business workflow, follow the installed SDK
-`docs/handbook/guides/agent-workflow-acceptance.md`: let a fresh end-user agent
+`docs/handbook/guides/agent-workflow-acceptance.md`: audit the goal-to-capability
+design before implementation, then let a fresh end-user agent
 discover and execute the business goal, repair gaps, then repeat the same goal
 with another fresh agent. Preserve initial failures, setup assistance and
 blocked checks. Scripted smoke, host/UI rendering and independent workflow

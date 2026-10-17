@@ -1,16 +1,60 @@
-# Accept an MCP business workflow with a fresh end-user agent
+# Design and accept an MCP business workflow
 
-Before claiming that an agent can complete a business workflow, exercise the
-public tool contract from that user's position. Generation, discovery and a
+Before implementing a new MCP service or changing a workflow, audit how its
+public capabilities let the intended user reach the business goal. After
+implementation, exercise that contract from the user's position. Generation, discovery and a
 scripted smoke test remain necessary; they do not establish that a new agent
 can discover and use the workflow without the author's recipe.
 
-Use this loop when accepting a new or changed MCP business workflow. It is an
+Use the design audit and acceptance loop for a new or changed MCP workflow. It is an
 application-authoring practice, not an SDK runtime service or a new test runner.
 Use the project's existing local smoke setup, normal authorized sign-in and
 isolated fixtures. Keep credentials inside setup; give the agent only its
 authorized transport. Do not enable extra routes, roles or generic writes to
 make the exercise pass.
+
+## Audit the design before implementation
+
+Start with a user's goal, role and observable completion criteria, not a list
+of CRUD endpoints. For example: “find an available item within budget, order
+it, verify what was purchased, then cancel it and verify the outcome.” Identify
+every entity, relation, state, version and amount the user must observe. Select
+only capabilities needed for this goal; do not expand the service into generic
+CRUD or grant extra authority for the audit.
+
+In the application's existing design note or issue, map each goal step to its
+proposed public capability: discovery inputs, returned IDs and evidence, allowed
+caller, write/transaction boundary and recovery. Mark missing capabilities or
+unresolved contracts as gaps before writing manifests or handlers. Review the
+following rubric against that map:
+
+| Design question | Required contract or explicit gap |
+| --- | --- |
+| Can the agent locate the right record? | Bounded search/filter inputs, stable IDs, deterministic cursor paging and sensible limits. It must not scan every list or guess an ID from a display label. |
+| Can it read a complete business result? | ID-based detail/readback under the intended caller, including every relation the goal creates or changes. A parent list is not proof of its child/contact/state details. Distinguish absent/inaccessible from incomplete evidence. |
+| Can it verify a create or update? | Return the backend entity ID, actual committed version where applicable, and a safe result summary or a documented authorized readback. State the exact result nesting. Echoed input or the submitted `expectedVersion` is not proof of committed state. Specify PATCH versus full replacement and omitted/null-field semantics so an update cannot erase unseen fields. |
+| What does a version protect? | Name its entity/snapshot scope; a parent version does not imply child rows or aggregates are unchanged. Use the reviewed observed version for OCC, define conflict behavior and preserve the user's proposed changes without silently rebinding/retrying. |
+| Can it complete a business transition? | Name permitted source/destination states, preconditions, related effects and final readback. Prefer an outcome-oriented operation when arbitrary field updates would leave the workflow unfinished. |
+| What commits together? | Define the native Procedure/Store atomic boundary. Separate tool calls are independent; describe partial success and deliberate compensation. Do not imply that an agent can roll back earlier calls or that compensation is always possible. |
+| Can it interpret refusal and failure? | Document success and structured diagnostic/error envelopes, including MCP `isError`; HTTP 200 or a wrapper's transport success is insufficient. Inspect raw MCP diagnostics separately from host-visible wrapper errors; a wrapper label alone does not locate a runtime defect or require global error normalization. Missing relations, stale versions and denied callers need meaningful refusals without leaking another caller's records or native internals. |
+| What happens after a duplicate or uncertain write? | State whether idempotency exists, its key/scope/lifetime when supported, or that repeated successful calls may repeat effects. Provide an authorized reconciliation route for timeout/unknown outcomes; never automatically retry an uncertain write. |
+| Can it explain amounts correctly? | Declare currency, stored/wire units, exact-value representation, rounding and whether null means unknown. Label every ratio's numerator and denominator: cost/budget, sales/budget and gross/sales are different measures. |
+| Does data remain usable without an App? | Keep ordinary reads data-only; attach a renderer deliberately for interactive inspection, with structured/text fallback. Rendering must not write or imply approval. Host catalog refresh, OAuth and real client/UI behavior have separate acceptance; descriptions cannot force generative UI layout. |
+| Does every step respect the user's authority? | Verify least privilege, tenant/owner scope, allowed fields, relation access and negative cases on the server. Tool visibility, annotations, descriptions and UI confirmation never grant permission. Use authorized disposable fixtures and a cleanup owner without widening production writes/deletes. |
+
+A design passes this audit only when each required goal step has a supported
+capability and verifiable output/recovery; preserve unresolved gaps and owners.
+The audit is a design review, not execution evidence. If a required capability
+is intentionally excluded, narrow the claimed goal explicitly rather than
+calling the original goal complete. Reuse the installed version's Views,
+Procedures, Store and surface contracts; a missing business tool is not by
+itself an SDK runtime defect.
+
+Then implement the minimum contract and run generated/type, authorization,
+atomicity and other relevant regressions. Follow the fresh-agent loop below
+before claiming independent business acceptance. Keep the author's capability
+map and worked call sequence out of the fresh agent's prompt: that agent must
+be able to discover the workflow from public tool descriptions and results.
 
 ## Run, repair and repeat
 
