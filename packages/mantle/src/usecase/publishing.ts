@@ -28,7 +28,7 @@ export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declaration
         // Same visibility as Store and Admin writes, translation parent included (a child under an out-of-set parent is missing);
         // the status term is replaced by the transition's own `status IN (...)`.
         for (const term of rowPolicy(schema, trusted ? "trusted" : "caller", plan.schemas)) if (term[1] !== "admin")
-          conditions.push(renderTerm(d, term, "", recipe => (recipes.push(recipe), d.param(recipes.length))));
+          conditions.push(renderTerm(d, term, term[1] === "parent" ? d.ident(s.name) + "." : "", recipe => (recipes.push(recipe), d.param(recipes.length))));
         if (verb === "publish") for (const field of s.schema.required ?? []) {
           const column = Object.keys(s.fields).find(c => (s.names?.[c] ?? c) === field);
           if (column) conditions.push(`${d.ident(column)} IS NOT NULL`);
