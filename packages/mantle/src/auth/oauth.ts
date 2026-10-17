@@ -10,10 +10,6 @@ const pair = (field: string, value: string) => ({ field, value });
 const array = (value: unknown): string[] | null => {
   try { const parsed = typeof value === "string" ? JSON.parse(value) : value; return Array.isArray(parsed) && parsed.every(x => typeof x === "string") ? parsed : null; } catch { return null; }
 };
-const defaultTokenHash = async (value: string): Promise<string> => {
-  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-};
 
 /**
  * Fail closed for unbound tokens; reconsent cannot resurrect an issued JWT. As in Better Auth, an `offline_access` grant outlives
@@ -47,22 +43,7 @@ export async function assertActiveUserGrant(auth: AuthInstance, claims: Record<s
 
 /** Add first to oauthProvider/mcp extensions; Better Auth retains ownership of referenceId. */
 export const oauthGrantExtension: NonNullable<Parameters<typeof oauthProvider>[0]["extensions"]>[number] = {
-  claims: { accessToken: async ({ ctx, opts, user, client, referenceId, grantType, scopes, sessionId }) => {
-    // Better Auth reads the source row before this callback and rotates it afterwards. Re-read that exact row here so a
-    // concurrent revocation cannot make an in-flight old lineage bind itself to a newly created consent.
-    if (grantType === "refresh_token") {
-      const presented = (ctx.body as { refresh_token?: unknown } | undefined)?.refresh_token;
-      const prefix = opts.prefix?.refreshToken;
-      if (typeof presented !== "string") throw ctx.error("BAD_REQUEST", { error: "invalid_grant", error_description: "The refresh grant is no longer active." });
-      if (prefix && !presented.startsWith(prefix)) throw ctx.error("BAD_REQUEST", { error: "invalid_grant", error_description: "The refresh grant is no longer active." });
-      let token = presented;
-      if (prefix) token = token.slice(prefix.length);
-      const decoded = opts.formatRefreshToken?.decrypt ? await opts.formatRefreshToken.decrypt(token) : { token };
-      const stored = opts.storeTokens && opts.storeTokens !== "hashed" ? await opts.storeTokens.hash(decoded.token, "refresh_token") : await defaultTokenHash(decoded.token);
-      const source = await ctx.context.adapter.findOne<{ userId: string; clientId: string; referenceId?: string | null; revoked?: Date | string | null }>({ model: "oauthRefreshToken", where: [pair("token", stored)] });
-      if (!source || source.revoked || source.userId !== user?.id || source.clientId !== client.clientId || (source.referenceId ?? undefined) !== referenceId)
-        throw ctx.error("BAD_REQUEST", { error: "invalid_grant", error_description: "The refresh grant is no longer active." });
-    }
+  claims: { accessToken: async ({ ctx, user, client, referenceId, grantType, scopes, sessionId }) => {
     // Narrowing away offline_access on refresh would mint a session-bound token for a session that has already ended.
     if (grantType === "refresh_token" && !scopes.includes("offline_access")) {
       const session = sessionId ? await ctx.context.adapter.findOne<{ expiresAt: Date | string }>({ model: "session", where: [pair("id", sessionId)] }) : null;

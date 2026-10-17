@@ -41,6 +41,10 @@ catalog:
   '@types/node': ^26
   vitest: ^5.0.1
 
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true
 onlyBuiltDependencies:
   - esbuild
   - sharp

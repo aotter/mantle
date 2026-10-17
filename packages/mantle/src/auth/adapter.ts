@@ -96,7 +96,7 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
     };
     const mutation = async (model: string, modelKey: string, where: CleanedWhere[], values?: Row) => {
       const protect = protects(modelKey, values);
-      const keepsAllowlisted = !!values && values[field("banned")] !== true && values[field("banned")] !== 1;
+      const keepsAllowlisted = protect && !!values && values[field("banned")] !== true && values[field("banned")] !== 1;
       if (protect && (where.length !== 1 || where[0]!.field !== field("id") || where[0]!.operator && where[0]!.operator !== "eq"))
         throw new APIError("FORBIDDEN", { code: "AUTH_DENIED", message: "Destructive admin identity writes require one user id." });
       const result = await run(s => `${values ? `UPDATE ${ident(model)} SET ${assign(s, values)}` : `DELETE FROM ${ident(model)}`}${s.where(modelKey, where, protect ? lastAdminGuard(s, model, keepsAllowlisted) : undefined)} RETURNING *`, protect);

@@ -7,9 +7,8 @@ import { ContractError } from "./contracts.js";
 
 export function encodeTimestamptz(v: string | Date): number {
   if (v instanceof Date) {
-    if (Number.isNaN(v.getTime())) throw new ContractError("SQL_TYPE", "Invalid Date is not a timestamp");
     const micros = v.getTime() * 1000;
-    if (!Number.isSafeInteger(micros)) throw new ContractError("SQL_TYPE", `'${v.toISOString()}' is not a valid timestamp`);
+    if (!Number.isSafeInteger(micros)) throw new ContractError("SQL_TYPE", "Invalid Date is not a timestamp");
     return micros;
   }
   // hours 00-23: Date.parse would roll T24:00 over to the next day

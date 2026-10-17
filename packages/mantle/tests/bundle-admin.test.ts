@@ -136,6 +136,7 @@ test("mantle bundle refuses an outdir or assets directory that is the working di
     await symlink(real, join(real, "alias"));
     await expect(bundleApp(entry, real)).rejects.toThrow("Bundle outdir must not be the working directory");
     await expect(bundleApp(entry, join(real, "src"))).rejects.toThrow("Bundle outdir must not contain the source entry");
+    await expect(bundleApp(entry, join(real, "alias"))).rejects.toThrow("Bundle outdir must not be the working directory");
     await expect(bundleApp(entry, join(real, "alias/src"))).rejects.toThrow("Bundle outdir must not contain the source entry");
     await expect(bundleApp(entry, join(real, "dist"), join(real, "src"))).rejects.toThrow("The assets directory must not contain the source entry");
     await expect(bundleApp(entry, join(real, "dist"), real)).rejects.toThrow("The assets directory must not be the working directory");
