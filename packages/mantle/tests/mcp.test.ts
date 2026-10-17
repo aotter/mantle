@@ -334,3 +334,18 @@ spec: {source: {kind: mcp, surface: public}, target: {procedure: log-item}}
   expect((await call('tools/call',{name:'log_item',arguments:{title:'A'}})).result.isError).toBeUndefined();
  } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });
+
+test("An anonymous closed surface challenges from initialize; an open tool or a signed-in caller does not",async()=>{
+ const {mcp}=await import('../src/kernel/mcp.js');const {user}=await import('./apps/fixtures.js');
+ const tool=(name:string,closed?:boolean)=>({name,surface:'public',description:name,...(closed?{closed:true}:{}),inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>({})});
+ const post=(handle:any,method:string,params:any={})=>handle(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});
+ const init={protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'t',version:'1'}};
+ const allClosed=(caller:any)=>mcp([tool('a',true),tool('b',true)],{db:()=>({}),caller:()=>caller,authorize:()=>true});
+ const challenged=await post(allClosed({kind:'anonymous'}),'initialize',init);
+ expect(challenged!.status).toBe(401);expect(challenged!.headers.get('www-authenticate')).toMatch(/^Bearer .*scope="mcp"/);
+ expect((await post(allClosed(user('person')),'initialize',init))!.status).toBe(200);
+ const mixed=mcp([tool('open'),tool('closed',true)],{db:()=>({}),caller:()=>({kind:'anonymous'}),authorize:()=>true});
+ expect((await post(mixed,'initialize',init))!.status).toBe(200);
+ const listed=await post(mixed,'tools/list');expect(listed!.status).toBe(200);
+ expect(((await listed!.text()).match(/"name":"(\w+)"/g)??[]).join()).toBe('"name":"open"');
+});
