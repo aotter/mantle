@@ -7,3 +7,7 @@ Workers use `mantle bundle` to emit split ESM. Keep Better Auth behind `authLoad
 Contributor checks use tracked fixtures to compare runtime/startup graphs against `size-budgets.json` and inspect the published allowlist in `check:package`. Package packed/unpacked bytes are reported separately from request startup and query costs. Do not infer latency from bundle bytes.
 
 Cloudflare startup_time_ms needs an actual upload/deployment; offline dry runs do not measure it. Measure on the selected host and report first use and warm work separately. Applications own deployment authorization and resources.
+
+Maintainers use the release skill's
+[startup and request-cost checkpoint](../../../.agents/skills/mantle-release/SKILL.md#startup-and-request-cost-checkpoint)
+for the packed reference Worker, local startup profiles and D1 round-trip counts.

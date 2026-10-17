@@ -90,6 +90,8 @@ export default {
 
 Remove imports and array entries for omitted surfaces. `mcp.ts` exists only when
 the manifest has an MCP surface, and requires the documented optional MCP peer.
+An application that does not mount MCP need not import generated `mcp.ts`; because
+the module is then outside the entry import graph, it contributes nothing to the bundle.
 Pass the same handlers to each selected surface that exposes ref Procedures.
 Bind site/media/identity capabilities through the selected Admin/MCP
 options; do not expose native auth administrative routes without `authRoutes` or

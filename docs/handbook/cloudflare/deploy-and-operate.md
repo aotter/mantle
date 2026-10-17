@@ -40,6 +40,29 @@ For D1, create a migration with `pnpm exec wrangler d1 migrations create <databa
 
 For PostgreSQL, use the app's migration tool and deployment credentials. Plan lock waits and long index builds there; request credentials need no DDL privileges. Configure session settings on the role/database as described in [native execution](../guides/native-execution.md#postgresql-settings). Hyperdrive query caching must be disabled for authority and mutation visibility.
 
+## Latency placement and D1 read replication
+
+Measure these options against the application's real traffic; neither is a
+default latency guarantee. [Smart Placement](https://developers.cloudflare.com/workers/configuration/placement/)
+can move fetch execution closer to observed back-end services:
+
+```jsonc
+"placement": { "mode": "smart" }
+```
+
+For globally distributed, read-heavy D1 traffic, enable
+[read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/)
+on the database and pass one request-scoped `env.DB.withSession(...)` handle to
+the selected generated Views, Procedures and Store. Those D1 entry points accept
+`D1DatabaseSession`. Without the Sessions API, queries continue to use the primary.
+
+Use `first-unconstrained` only when a replica snapshot is acceptable,
+`first-primary` when the flow must start from the latest primary state, or carry
+a bookmark between logical sessions for sequential consistency. Reuse the same
+session within that logical flow; all writes still go to the primary. Keep fresh
+authentication/authorization checks and mutation/read-after-write paths on their
+required current-authority path rather than weakening them for replica latency.
+
 ## Operate
 
 Enable Workers Logs and traces in production. The top-level `observability.enabled` alone does not enable traces:
