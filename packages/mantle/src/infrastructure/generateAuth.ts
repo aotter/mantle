@@ -1,6 +1,7 @@
 /** Selected Auth generation; the compiler and request DTO remain shared with the bare entry. */
 import type { BetterAuthOptions } from "better-auth/types";
 import { generateFromSources as generate, type GenerateRequest } from "./generate.js";
+import { admin, anonymous, jwt, phoneNumber, siwe, twoFactor } from "better-auth/plugins";
 import { authSchemaSql } from "./authSchema.js";
 /** One or more Better Auth instances (each with its own table names); their DDL is merged. */
 export function generateFromSources(request: GenerateRequest & { readonly auth?: BetterAuthOptions | readonly BetterAuthOptions[] }) {
@@ -23,8 +24,13 @@ function authSql(instances: readonly BetterAuthOptions[], dialect: "postgres" | 
   return statements;
 }
 type PluginSchema = Record<string, { modelName?: string; fields?: Record<string, unknown> }>;
-// Plugins whose factory hands back one module-level schema object (mergeSchema writes `schema` options into it).
-const sharedSchemaPlugins = new Set(["jwt", "admin", "anonymous", "phone-number", "siwe", "two-factor", "username", "device-authorization", "oauth-provider"]);
+// Plugins whose factory hands back one module-level schema object (mergeSchema writes `schema` options into it); no options leaves it untouched.
+const sharedSchema: Record<string, () => unknown> = {
+  jwt: () => jwt().schema, admin: () => admin().schema, anonymous: () => anonymous().schema,
+  "phone-number": () => phoneNumber({} as never).schema, siwe: () => siwe({} as never).schema, "two-factor": () => twoFactor().schema,
+};
+// Plugins that share field objects (device-authorization) or copy per call (oauth-provider, listed on request) are only checked for equal resolved names.
+const checkedPlugins = new Set([...Object.keys(sharedSchema), "device-authorization", "oauth-provider"]);
 /** Names a plugin's tables and fields resolve to, keyed `table` / `table.field`; only mappings that differ from the key are listed. */
 function mapped(schema: PluginSchema): Map<string, string> {
   const names = new Map<string, string>();
@@ -42,15 +48,18 @@ function refuseSharedPluginMappings(instances: readonly BetterAuthOptions[]) {
   const byPlugin = new Map<string, { index: number; schema: PluginSchema }[]>();
   instances.forEach((options, index) => (options.plugins ?? []).forEach(plugin => {
     const schema = (plugin as { schema?: PluginSchema }).schema;
-    if (schema && sharedSchemaPlugins.has(plugin.id)) byPlugin.set(plugin.id, [...(byPlugin.get(plugin.id) ?? []), { index, schema }]);
+    if (schema && checkedPlugins.has(plugin.id)) byPlugin.set(plugin.id, [...(byPlugin.get(plugin.id) ?? []), { index, schema }]);
   }));
   for (const [id, uses] of byPlugin) {
-    const fail = (reason: string, a: number, b: number): never => { throw new Error(`Better Auth plugin ${id} is used by instances ${a} and ${b} (--auth order, from 0) and ${reason}. Plugin factories share their schema object, so differing plugin field/model mappings across instances in one Worker override each other: pass an explicit \`schema\` mapping to ${id}() in every instance and give each instance its own copy right after constructing it, \`{ ...plugin, schema: structuredClone(plugin.schema) }\`, or keep ${id} at its defaults and separate the instances by core table names.`); };
     const names = uses.map(use => mapped(use.schema));
+    if (uses.length < 2 || !names.some(own => own.size)) continue;
+    const fail = (reason: string, which: number[]): never => { throw new Error(`Better Auth plugin ${id} is used by instances ${which.join(", ")} (--auth order, from 0) and ${reason}. Plugin factories share their schema object, so differing plugin field/model mappings across instances in one Worker override each other: pass an explicit \`schema\` mapping to the ${id} plugin in every instance, with names that differ between instances, and give each instance its own copy right after constructing it, \`{ ...plugin, schema: structuredClone(plugin.schema) }\`; or keep the ${id} plugin at its defaults and separate the instances by core table names.`); };
+    const shared = sharedSchema[id]?.();
+    const holders = uses.filter(use => use.schema === shared).map(use => use.index);
+    if (holders.length) fail("a non-default mapping exists while an instance holds the plugin's shared schema object (no own copy)", holders);
     for (const [i, a] of uses.entries()) for (const [j, b] of uses.entries()) {
       if (j <= i) continue;
-      if (a.schema === b.schema && names[i]!.size) fail("they hold the same schema object, which carries a non-default mapping", a.index, b.index);
-      for (const [key, name] of names[i]!) if (names[j]!.get(key) === name) fail(`both resolve ${key} to "${name}" (one instance inherited the other's mapping)`, a.index, b.index);
+      for (const [key, name] of names[i]!) if (names[j]!.get(key) === name) fail(`both resolve ${key} to "${name}"; non-default plugin names must differ between instances, because generate cannot tell an identical mapping from an inherited one`, [a.index, b.index]);
     }
   }
 }

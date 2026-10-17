@@ -1,5 +1,5 @@
 import { test, expect, afterAll } from "bun:test";
-import { admin, phoneNumber } from "better-auth/plugins";
+import { admin, phoneNumber, username } from "better-auth/plugins";
 import { jwt } from "better-auth/plugins/jwt";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { generateFromSources } from "../src/infrastructure/generateAuth.js";
@@ -26,7 +26,7 @@ test("an OAuth provider without oauthGrantRevocation() is refused at generate", 
 // The mappings below are written into Better Auth's shared plugin schemas; put the defaults back for the other test files in this process.
 afterAll(() => {
   jwt({ schema: { jwks: { modelName: "jwks" } } });
-  admin({ schema: { user: { fields: { role: "role" } } } });
+  admin({ schema: { user: { fields: { role: "role", banReason: "banReason" } } } });
   phoneNumber({ sendOTP() {}, schema: { user: { fields: { phoneNumber: "phoneNumber" } } } });
 });
 const instance = (prefix: string, plugins: unknown[]) => ({ ...tables(prefix), plugins }) as never;
@@ -53,4 +53,20 @@ test("an instance that inherited another instance's mapping is refused", async (
   const mappedFirst = own(phoneNumber({ sendOTP() {}, schema: { user: { fields: { phoneNumber: "a_phone" } } } }));
   const inherited = own(phoneNumber({ sendOTP() {} }));
   await expect(generateFromSources({ target: "bun-postgres", sources, auth: [instance("a", [mappedFirst]), instance("b", [inherited])] })).rejects.toThrow('user.phoneNumber to "a_phone"');
+});
+
+test("plugins that build their schema per call may map the same name in each instance", async () => {
+  const build = (prefix: string) => instance(prefix, [username({ schema: { user: { fields: { username: "user_name" } } } })]);
+  expect((await generateFromSources({ target: "bun-postgres", sources, auth: [build("a"), build("b")] })).ok).toBe(true);
+});
+
+test("an identical explicit mapping in two instances is refused, since it cannot be told from an inherited one", async () => {
+  const build = (prefix: string) => instance(prefix, [own(admin({ schema: { user: { fields: { banReason: "ban_reason" } } } }))]);
+  await expect(generateFromSources({ target: "bun-postgres", sources, auth: [build("a"), build("b")] })).rejects.toThrow("cannot tell an identical mapping from an inherited one");
+});
+
+test("an instance without its own copy next to a mapped copy is refused", async () => {
+  const copied = own(admin({ schema: { user: { fields: { role: "b_role" } } } }));
+  const shared = admin({ schema: { user: { fields: { role: "a_role" } } } });
+  await expect(generateFromSources({ target: "bun-postgres", sources, auth: [instance("a", [shared]), instance("b", [copied])] })).rejects.toThrow("no own copy");
 });
