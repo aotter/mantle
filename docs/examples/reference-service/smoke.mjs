@@ -229,7 +229,8 @@ try {
       method: "POST", headers: { origin, cookie: admin, "content-type": form ? "application/x-www-form-urlencoded" : "application/json" },
       body: form ? new URLSearchParams(body) : JSON.stringify(body),
     });
-    return { status: response.status, body: await response.json() };
+    const text = await response.text();
+    return { status: response.status, body: text ? JSON.parse(text) : null };
   };
   const authorize = async scope => {
     const client = await oauth("/oauth2/create-client", {
@@ -243,8 +244,12 @@ try {
       code_challenge: createHash("sha256").update(verifier).digest("base64url"), code_challenge_method: "S256", resource: `${origin}/mcp`,
     });
     const response = await fetch(`${issuer}/oauth2/authorize?${query}`, { headers: { origin, cookie: admin }, redirect: "manual" });
-    assert.equal(response.status, 302);
-    let target = new URL(response.headers.get("location"), origin);
+    assert.ok(response.status === 200 || response.status === 302);
+    const location = response.headers.get("location");
+    const envelope = location ? null : await response.json();
+    const redirect = location ?? envelope?.url ?? envelope?.redirect_uri;
+    assert.equal(typeof redirect, "string");
+    let target = new URL(redirect, origin);
     if (!target.searchParams.has("code")) {
       assert.equal(target.origin, origin);
       const consent = await oauth("/oauth2/consent", { accept: true, oauth_query: target.search.slice(1) });
@@ -268,6 +273,7 @@ try {
   const offline = await authorize("mcp offline_access");
   assert.deepEqual(offline.token.scope.split(" ").sort(), ["mcp", "offline_access"]);
   assert.ok(offline.token.refresh_token);
+  assert.deepEqual(await execute('SELECT COUNT(*) AS count, MIN(ROUND(julianday(expiresAt) - julianday(createdAt))) AS days FROM oauthRefreshToken WHERE revoked IS NULL'), [{ count: 1, days: 30 }]);
   assert.equal((await call("POST", "/api/auth/sign-out", { cookie: admin, body: {} })).status, 200);
   assert.equal((await call("GET", "/admin/api/me", { cookie: admin })).status, 401);
   const refresh = { grant_type: "refresh_token", client_id: offline.clientId, refresh_token: offline.token.refresh_token, resource: `${origin}/mcp` };
