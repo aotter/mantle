@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "Volver a",
+    "oauth.consent.scopes": "Acceso solicitado",
+    "oauth.consent.offline": "Permitir acceso en segundo plano, incluso tras cerrar sesión en este sitio. Puedes revocarlo en Aplicaciones conectadas.",
+
     "common.reloadPage": "Recargar página",
     "common.reloadPageHint": "Recarga esta página para volver a intentarlo. Los cambios sin guardar pueden perderse.",
     "ops.details": "Detalles",

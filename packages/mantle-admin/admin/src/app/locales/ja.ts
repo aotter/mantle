@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "完了後の移動先",
+    "oauth.consent.scopes": "要求されるアクセス権",
+    "oauth.consent.offline": "このサイトからログアウトした後もバックグラウンドアクセスを許可します。接続済みアプリからいつでも取り消せます。",
+
     "common.reloadPage": "ページを再読み込み",
     "common.reloadPageHint": "このページを再読み込みして再試行してください。未保存の変更は失われる可能性があります。",
     "ops.details": "詳細",

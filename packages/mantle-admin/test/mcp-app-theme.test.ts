@@ -5,6 +5,7 @@ import { expect, test } from "vitest";
 
 const css = readFileSync(resolve(import.meta.dirname, "../admin/mcp-styles.css"), "utf8");
 const doc = readFileSync(resolve(import.meta.dirname, "../../../docs/handbook/guides/mcp-apps.md"), "utf8");
+const oauth = readFileSync(resolve(import.meta.dirname, "../../../docs/handbook/guides/oauth.md"), "utf8");
 const names = (text: string) => [...text.matchAll(/`(--[\w-]+)`/g)].map(m => m[1]!);
 const lines = (map: [string, string][]) => map.map(([host, token]) => `${host} -> ${token}`).sort();
 const theme = /@theme inline \{([\s\S]*?)\n\}/.exec(css)![1]!;
@@ -20,6 +21,17 @@ test("the documented host variable mapping is the one mcp-styles.css makes", () 
   }
   expect(lines(documented)).toEqual(lines(hosted));
   expect(hosted.length).toBeGreaterThan(20);
+});
+
+test("the retained-page recipe loads archived HTML only inside the MCP branch", () => {
+  const recipe = doc.split("### Keep old conversations working after an upgrade\n")[1]!.split("\n## ")[0]!;
+  expect(recipe).toContain("await import('../mcp-app-previous.json', { with: { type: 'json' } })");
+  expect(recipe).not.toMatch(/^import .*mcp-app-previous\.json/gm);
+});
+
+test("public guides omit client-specific setup and automation troubleshooting", () => {
+  expect(doc).not.toContain("automation debugger");
+  expect(oauth).not.toContain("Advanced OAuth settings");
 });
 
 test("brand colours read the application's tokens, never a host variable", () => {

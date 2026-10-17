@@ -89,6 +89,17 @@ partitioning replaces registration-order overrides. Visibility metadata never
 grants tool execution permission. The existing default caller-independent discovery
 contract remains; `authorize` enables caller-filtered discovery and resource catalogues.
 
+**Compatible upgrade retention (#1730).** Applications may retain previously deployed
+Admin resource snapshots in their source/artifact storage and pass them as `previous`
+to `adminMcpApps`. Each keeps its original URI, executable HTML, catalogue and CSP/domain;
+only the embedded catalogue is filtered again against the current caller's tools.
+Retained resources claim no current renderer or app-only tool. Current links still name
+the new build. Retention is explicit and survives clean builds; it is not an isolate
+cache, a redirect to current HTML, or authority to execute a removed tool. Applications
+own the retention window and compatibility of existing tool names/inputs/results.
+Breaking tool contracts need an application migration; Core cannot force a host to
+rediscover its saved tool definitions or renew a revoked OAuth grant.
+
 Both protocol eras are served: `2026-07-28` and `2025-*` in stateless mode
 (`createMcpHandler(..., { legacy: "stateless" })`).
 
@@ -349,3 +360,15 @@ Work follows epic #1110 as stacked PRs:
 5. #1115, #1116 — grammar-revise; then #1120 interaction descriptors.
 6. #1121 — MCP Apps registration; #1122, #1123, #1124 — `@aotter/mantle-ui`;
    #1125 — preview; #1119 — host matrix.
+
+### OAuth linking hints and the reference consent UI (2026-10-17)
+
+An application may declare additional `authorizationScopes` for Core's standard
+unauthenticated `WWW-Authenticate` challenge. This is a client authorization
+request hint, separate from `requiredScopes` and tool guards; it never upgrades
+an issued credential or modifies provider consent. Background access remains
+explicit and application-owned. The Admin-selected reference uses its mantle-ui
+consent page and Core's signed consent data/POST contract. The script-free Core
+HTML remains the adapter-neutral fallback. Admin asset generation defaults
+`html_handling` to `none` when omitted so a Worker-fetched shell is not
+canonicalized back into a redirect loop; explicit application settings survive.

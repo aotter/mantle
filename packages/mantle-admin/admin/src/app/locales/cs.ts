@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "Návrat na",
+    "oauth.consent.scopes": "Požadovaný přístup",
+    "oauth.consent.offline": "Povolit přístup na pozadí i po odhlášení z tohoto webu. Přístup můžete odvolat v části Připojené aplikace.",
+
     "common.reloadPage": "Znovu načíst stránku",
     "common.reloadPageHint": "Zkuste stránku znovu načíst. Neuložené změny mohou být ztraceny.",
     "ops.details": "Podrobnosti",

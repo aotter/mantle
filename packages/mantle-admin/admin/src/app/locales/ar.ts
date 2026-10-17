@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "العودة إلى",
+    "oauth.consent.scopes": "الوصول المطلوب",
+    "oauth.consent.offline": "السماح بالوصول في الخلفية حتى بعد تسجيل الخروج من هذا الموقع. يمكنك إلغاء الوصول من التطبيقات المتصلة.",
+
     "common.reloadPage": "إعادة تحميل الصفحة",
     "common.reloadPageHint": "أعد تحميل هذه الصفحة للمحاولة مجددًا. قد تُفقد التغييرات غير المحفوظة.",
     "ops.details": "التفاصيل",
