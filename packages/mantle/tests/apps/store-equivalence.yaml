@@ -43,7 +43,7 @@ metadata: {name: eq-catalog-all}
 spec:
   surface: internal
   sql: >-
-    SELECT r.id AS "id", r.version AS "version", r.created_at AS "created_at", r.updated_at AS "updated_at", r.author_id AS "author_id", r.sku AS "sku", r.name AS "name", r.price AS "price"
+    SELECT r.id AS "id", r.version AS "version", r.created_at AS "created_at", r.updated_at AS "updated_at", r.author_id AS "author_id", r.sku AS "sku", r.name AS "name", r.price AS "price", r.position AS "position"
     FROM catalog_items r ORDER BY r.id
 ---
 apiVersion: cms.mantle.aotter.net/v2
@@ -52,5 +52,5 @@ metadata: {name: eq-catalog-filtered}
 spec:
   surface: internal
   sql: >-
-    SELECT r.id AS "id", r.version AS "version", r.created_at AS "created_at", r.updated_at AS "updated_at", r.author_id AS "author_id", r.sku AS "sku", r.name AS "name", r.price AS "price"
+    SELECT r.id AS "id", r.version AS "version", r.created_at AS "created_at", r.updated_at AS "updated_at", r.author_id AS "author_id", r.sku AS "sku", r.name AS "name", r.price AS "price", r.position AS "position"
     FROM catalog_items r WHERE r.price >= 2 AND r.name <> 'pen' ORDER BY r.id
