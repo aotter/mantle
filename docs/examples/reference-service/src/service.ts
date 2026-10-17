@@ -16,6 +16,7 @@ import { mcpAppCatalogues } from "../generated/admin-descriptors.js";
 import { handlers, recordOrders } from "./handlers.js";
 import { salesPage, searchPage, pageOptions } from "./pages.js";
 import type { Handlers } from "../generated/generated.js";
+import { salesReportCatalogue } from "./mcp-report.js";
 
 let auth: ReturnType<typeof authLoader<ReturnType<typeof import("./auth.js").createAuth>>> | undefined;
 const salesDescriptor = { name: "sales-by-item", title: null, description: null, input: null, list: { columns: [], searchFields: [], filterFields: [], cells: {} }, columns: { name: { schema: "items", field: "name" } } };
@@ -68,7 +69,7 @@ export async function fetchService(request: Request, env: Env, context: Executio
       response = await serveAdmin(request, env);
     } else if (/^\/mcp(?:\/admin)?\/*$/.test(url.pathname)) {
       if (!serveMcpHandler) {
-        serveMcpHandler = serveMcp([...tools, ...extraTools, renderSalesTool], { ...options, instructions: "Use data tools for business decisions. Render only on an explicit interactive reporting request; otherwise answer from structured results. Tool calls are independent transactions. Reconcile uncertain writes before retrying.", apps: { admin: adminMcpApps({renders:["render_sales_report"],catalogue:{ ...mcpAppCatalogues.admin, views: { ...mcpAppCatalogues.admin.views, render_sales_report: { columns: { name: { type: "string" }, orders: { type: "integer" }, units: { type: "integer" } }, list: { columns: ["name", "orders", "units"] }, actions: [] } } }}) } });
+        serveMcpHandler = serveMcp([...tools, ...extraTools, renderSalesTool], { ...options, instructions: "Use data tools for business decisions. Render only on an explicit interactive reporting request; otherwise answer from structured results. Tool calls are independent transactions. Reconcile uncertain writes before retrying.", apps: { admin: adminMcpApps({renders:["render_sales_report"],catalogue:{ ...mcpAppCatalogues.admin, views: { ...mcpAppCatalogues.admin.views, ...salesReportCatalogue.views } }}) } });
       }
       response = await serveMcpHandler(request, env);
     } else {
