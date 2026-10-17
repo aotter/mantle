@@ -20,10 +20,12 @@ composition guide](../../handbook/cloudflare/service-entry.md).
 Keep optional modules out of unused entry imports and auth dynamically loaded.
 Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.
-For a new or changed MCP business workflow, follow the [MCP design audit and
-independent acceptance guide](../../handbook/guides/agent-workflow-acceptance.md)
-before implementing tools and before claiming acceptance; host/UI acceptance is
-separate evidence.
+Before reporting any user-facing work as done, follow the [independent
+acceptance guide](../../handbook/guides/agent-workflow-acceptance.md): run it
+with a fresh agent on the surface its user uses. This is not limited to MCP; if
+it was not run, say so explicitly and report the work as UNVERIFIED rather than
+done. For MCP workflows, also run the guide's design audit before implementing
+tools.
 
 For native Admin, read the [current guide](../../handbook/guides/native-admin.md):
 the app builds Admin with `mantle bundle`. To customise pages, slots, hooks or
