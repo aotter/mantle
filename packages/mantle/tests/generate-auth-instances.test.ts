@@ -1,5 +1,7 @@
 import { test, expect } from "bun:test";
-import { admin } from "better-auth/plugins";
+import { admin, phoneNumber } from "better-auth/plugins";
+import { jwt } from "better-auth/plugins/jwt";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { generateFromSources } from "../src/infrastructure/generateAuth.js";
 import { oauthGrantRevocation } from "../src/auth/oauth.js";
 const sources = { sources: [{ sourceId: "notes.json", text: JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind: "Schema", metadata: { name: "notes" }, spec: { title: "Notes", lifecycle: "operational", schema: { type: "object", required: ["label"], properties: { label: { type: "string" } } } } }) }] };
@@ -19,4 +21,30 @@ test("an OAuth provider without oauthGrantRevocation() is refused at generate", 
   const provider = { id: "oauth-provider" } as never, revocation = oauthGrantRevocation() as never;
   await expect(generateFromSources({ target: "bun-sqlite", sources, auth: { plugins: [provider] } })).rejects.toThrow("without oauthGrantRevocation()");
   expect((await generateFromSources({ target: "bun-sqlite", sources, auth: { plugins: [revocation, provider] } })).ok).toBe(true);
+});
+
+const instance = (prefix: string, plugins: unknown[]) => ({ ...tables(prefix), plugins }) as never;
+const own = <P extends { schema?: unknown }>(plugin: P): P => ({ ...plugin, schema: structuredClone(plugin.schema) });
+
+test("instances with default plugins and distinct core table names are accepted", async () => {
+  const result = await generateFromSources({ target: "bun-postgres", sources, auth: [instance("a", [admin(), jwt()]), instance("b", [admin(), jwt()])] });
+  expect(result.ok).toBe(true);
+});
+
+test("explicit plugin mappings in every instance, each with its own schema copy, are accepted", async () => {
+  const build = (prefix: string, model: string) => instance(prefix, [own(jwt({ schema: { jwks: { modelName: model } } })), own(oauthProvider({ loginPage: "/login", consentPage: "/consent", schema: Object.fromEntries(["oauthClient", "oauthResource", "oauthClientResource", "oauthRefreshToken", "oauthAccessToken", "oauthConsent", "oauthClientAssertion"].map(table => [table, { modelName: `${prefix}_${table}` }])) })), oauthGrantRevocation()]);
+  const result = await generateFromSources({ target: "bun-postgres", sources, auth: [build("a", "jwks"), build("b", "b_jwks")] });
+  if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+  expect(sql(result.files)).toContain('"b_jwks"');
+});
+
+test("a mapped plugin next to the default one is refused", async () => {
+  await expect(generateFromSources({ target: "bun-postgres", sources, auth: [instance("a", [admin({ schema: { user: { fields: { role: "staff_role" } } } })]), instance("b", [admin()])] })).rejects.toThrow("share their schema object");
+  await expect(generateFromSources({ target: "bun-postgres", sources, auth: [instance("a", [jwt()]), instance("b", [jwt({ schema: { jwks: { modelName: "b_jwks" } } })])] })).rejects.toThrow("plugin jwt");
+});
+
+test("an instance that inherited another instance's mapping is refused", async () => {
+  const mappedFirst = own(phoneNumber({ sendOTP() {}, schema: { user: { fields: { phoneNumber: "a_phone" } } } }));
+  const inherited = own(phoneNumber({ sendOTP() {} }));
+  await expect(generateFromSources({ target: "bun-postgres", sources, auth: [instance("a", [mappedFirst]), instance("b", [inherited])] })).rejects.toThrow('user.phoneNumber to "a_phone"');
 });
