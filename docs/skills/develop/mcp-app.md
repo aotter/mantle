@@ -41,3 +41,9 @@ Verify tools/list metadata, resources/read, actual tool calls and a host-rendere
 member App. Test anonymous/member isolation and resource conflicts. Never retry
 unknown writes blindly; retain OCC and re-read state after an uncertain outcome.
 Commit generated output and run generation with `--check` before deployment.
+For Admin UI upgrades, follow the installed handbook's
+[retained-page recipe](../../handbook/guides/mcp-apps.md#keep-old-conversations-working-after-an-upgrade).
+Keep deployed snapshots in source/artifact storage and pass `previous` to
+`adminMcpApps`; verify old conversations after a changed UI build without host
+tool refresh, reconnection or cache clearing. Keep tool contracts compatible
+through the declared retention window.

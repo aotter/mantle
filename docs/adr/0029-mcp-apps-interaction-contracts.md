@@ -89,6 +89,17 @@ partitioning replaces registration-order overrides. Visibility metadata never
 grants tool execution permission. The existing default caller-independent discovery
 contract remains; `authorize` enables caller-filtered discovery and resource catalogues.
 
+**Compatible upgrade retention (#1730).** Applications may retain previously deployed
+Admin resource snapshots in their source/artifact storage and pass them as `previous`
+to `adminMcpApps`. Each keeps its original URI, executable HTML, catalogue and CSP/domain;
+only the embedded catalogue is filtered again against the current caller's tools.
+Retained resources claim no current renderer or app-only tool. Current links still name
+the new build. Retention is explicit and survives clean builds; it is not an isolate
+cache, a redirect to current HTML, or authority to execute a removed tool. Applications
+own the retention window and compatibility of existing tool names/inputs/results.
+Breaking tool contracts need an application migration; Core cannot force a host to
+rediscover its saved tool definitions or renew a revoked OAuth grant.
+
 Both protocol eras are served: `2026-07-28` and `2025-*` in stateless mode
 (`createMcpHandler(..., { legacy: "stateless" })`).
 

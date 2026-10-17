@@ -177,6 +177,60 @@ describe("MantleApp", () => {
 });
 
 describe("adminMcpApps", () => {
+  it("retains old HTML and CSP after a UI upgrade, without claiming current tools or sharing a caller's catalogue", async () => {
+    const context = { env: {}, request: new Request("https://app.test/mcp") };
+    const resolve = async (source: ReturnType<typeof adminMcpApps>) => typeof source === "function" ? source(context) : source;
+    const read = async (resource: Awaited<ReturnType<typeof resolve>>["resources"][number], tools: string[]) => {
+      const page = typeof resource.html === "string" ? resource.html : await resource.html({ ...context, tools: new Set(tools) });
+      return typeof page === "string" ? { html: page } : page;
+    };
+    const old = (await resolve(adminMcpApps({ catalogue: catalog, html: "<head></head><h1>Build A</h1>", domain: "old.apps.example" }))).resources[0]!;
+    const snapshot = { uri: old.uri, ...await read(old, ["pending", "review_requisition"]), csp: { resourceDomains: ["https://old.assets.example"] }, domain: old.domain };
+    const upgraded = await resolve(adminMcpApps({ catalogue: catalog, html: "<head></head><h1>Build B</h1>", previous: [snapshot] }));
+    expect(upgraded.resources).toHaveLength(2);
+    const [current, retained] = upgraded.resources;
+    expect(current!.uri).not.toBe(old.uri);
+    expect(retained!.uri).toBe(old.uri);
+    expect(retained!.renders).toBeUndefined();
+    expect(retained!.appOnly).toBeUndefined();
+    expect(retained!.domain).toBe("old.apps.example");
+    const restricted = await read(retained!, []);
+    expect(restricted.csp).toEqual(snapshot.csp);
+    expect(restricted.html).toContain("Build A");
+    expect(restricted.html).not.toContain("Build B");
+    expect(restricted.html).not.toContain("review_requisition");
+    expect(restricted.html).not.toContain('"pending"');
+    expect((restricted.html.match(/id="mantle-catalog"/g) ?? [])).toHaveLength(1);
+    expect((await read(retained!, ["pending"])).html).toContain('"pending"');
+    expect((await read(retained!, ["pending"])).html).not.toContain("review_requisition");
+    expect((await read(retained!, ["pending", "review_requisition"])).html).toBe(snapshot.html);
+
+    // The real MCP handler advertises B but still reads A; it does not alias A to B.
+    const { mcp } = await import("@aotter/mantle/mcp");
+    const api = mcp([{ name: "pending", surface: "public", path: "pending", description: "Rows", inputSchema: { type: "object" }, validate: () => ({}), page: async () => ({ rows: [] }) }], {
+      db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: upgraded },
+    });
+    const request = async (method: string, params = {}) => {
+      const response = await api(new Request("https://app.test/mcp/", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }), {});
+      const text = await response!.text();
+      return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result;
+    };
+    const listed = await request("tools/list");
+    expect(listed.tools[0]._meta.ui.resourceUri).toBe(current!.uri);
+    const oldRead = await request("resources/read", { uri: old.uri });
+    expect(oldRead.contents[0].text).toContain("Build A");
+    expect(oldRead.contents[0].text).not.toContain("review_requisition");
+    expect(oldRead.contents[0]._meta.ui.csp).toEqual(snapshot.csp);
+    // A no-op redeploy does not register the same immutable URI twice.
+    expect((await resolve(adminMcpApps({ catalogue: catalog, html: "<head></head><h1>Build A</h1>", domain: "old.apps.example", previous: [snapshot] }))).resources).toHaveLength(1);
+  });
+
+  it("refuses malformed retained pages rather than serving the latest page under their old URI", () => {
+    for (const snapshot of [{ uri: "ui://foreign/app", html: "<head></head>" }, { uri: "ui://mantle-admin/old", html: '<script type="application/json" id="mantle-catalog">{bad}</script>' }]) {
+      expect(() => adminMcpApps({ catalogue: catalog, html: "<head></head>", previous: [snapshot] })).toThrow("retained Admin App");
+    }
+  });
+
   it("injects the catalogue right after the opening <head>, even when a script in it holds the text </head>", async () => {
     const html = '<!doctype html><html><head><script type="module">const srcDoc = "<html><head></head></html>";</script></head><body></body></html>';
     const source = adminMcpApps({ catalogue: catalog, html });

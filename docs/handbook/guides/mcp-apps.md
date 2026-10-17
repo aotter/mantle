@@ -107,6 +107,71 @@ An explicit `uri` keeps application-owned identity. A custom `html` function mus
 supply a build-specific `uri`: Core cannot infer its build or safely memoize its
 request-dependent output. A raw `html` string may use the automatic identity.
 
+### Keep old conversations working after an upgrade
+
+A new URI does not invalidate a host's saved tool definitions or old conversation
+cards. Keep previously deployed pages with `adminMcpApps({ catalogue, previous })`.
+`previous` is an array of `AdminMcpSnapshot` from `@aotter/mantle-admin/mcp`:
+`{ uri, html, csp?, domain? }`. Each `html` includes the original `mantle-catalog`
+script (the page returned by `resources/read`, not the raw bundle). The SDK serves
+its original HTML and metadata at its original URI, filters its catalogue against
+the current caller's tools on every read, and gives only the current build renderer
+ownership. A removed/denied tool gains no authority through an old page.
+
+Store these snapshots in the application's source or durable artifact storage;
+an isolate cache or untracked `dist/` is insufficient for a clean CI deployment.
+Keep an explicit retention window. Old pages outside that window and incompatible
+tool renames/input/output changes need an application migration. Never answer an
+old digest with the latest HTML. Host metadata refresh is a development/recovery
+operation, not a normal compatible-upgrade requirement.
+
+For the default built loader, share the exact declaration in
+`src/mcp-app-definition.ts` (no `html` or `previous`):
+
+```ts
+import { mcpAppCatalogues } from '../generated/admin-descriptors.ts';
+export const appDefinition = { catalogue: mcpAppCatalogues.admin };
+```
+
+The service imports that definition and a committed `src/mcp-app-previous.json`
+(initially `[]`), and passes `adminMcpApps({ ...appDefinition, previous })` to its
+endpoint. Keep custom `renders`, catalogue extensions, `domain` and `title` in the
+shared definition too. Node 22.18+ can read these generated `.ts` modules; a
+TypeScript app using `.ts` import paths enables `allowImportingTsExtensions`
+with `noEmit`. JSON imports use `with { type: 'json' }`.
+
+After a successful deployment, archive the **exact asset just deployed** with
+this application-owned `scripts/archive-mcp-app.mjs`, then commit the snapshot
+for the next build. Run it in the deployment script, not as a manual cache fix:
+
+```js
+import { readFileSync, writeFileSync } from 'node:fs';
+import { adminMcpApps } from '@aotter/mantle-admin/mcp';
+import { appDefinition } from '../src/mcp-app-definition.ts';
+
+const path = 'src/mcp-app-previous.json';
+const previous = JSON.parse(readFileSync(path, 'utf8'));
+const context = { env: {}, request: new Request('https://archive.invalid/mcp') };
+const source = adminMcpApps({ ...appDefinition,
+  html: readFileSync('dist/client/admin/mcp-app.html', 'utf8') });
+const { resources: [resource] } = typeof source === 'function' ? await source(context) : source;
+const tools = new Set([...Object.keys(appDefinition.catalogue.views),
+  ...Object.keys(appDefinition.catalogue.actions)]);
+const loaded = typeof resource.html === 'string' ? resource.html
+  : await resource.html({ ...context, tools });
+const page = typeof loaded === 'string' ? { html: loaded } : loaded;
+const snapshot = { uri: resource.uri, ...page,
+  ...(resource.domain === undefined ? {} : { domain: resource.domain }) };
+// This application's policy: retain the last two deployed pages for future builds.
+writeFileSync(path, JSON.stringify([...previous.filter(p => p.uri !== snapshot.uri), snapshot].slice(-2)) + '\n');
+```
+
+This archives static UI/catalogue metadata, never rows, cookies or OAuth tokens.
+Custom loaders must archive their actual immutable resource, including CSP/domain,
+instead of using this default-asset recipe. Compare the archived URI with deployed
+`tools/list`/`resources/read`; a mismatching declaration or stale local build is
+not deployment evidence.
+
 Core accepts static contributors or async `(context: { env, request }) => McpApps`
 sources, including mixed arrays. Static declarations are checked at construction;
 async sources resolve after the endpoint's origin and caller gates, then their
@@ -177,12 +242,17 @@ uses the official `AppBridge`; your app runs its generated version ([Run the com
 
 ### Verify a deployed App in ChatGPT
 
-After deploying changed tools or a new UI build, refresh the connector's tools
+When intentionally introducing changed tool contracts during development, refresh the connector's tools
 in ChatGPT settings and reload the conversation before testing. Reconnecting an
 OAuth account renews credentials; it does not establish that the host adopted
 the new tool catalogue. Discover the current render tool and its
 `_meta.ui.resourceUri`, then invoke it in a new turn. An older card retains its
 original URI, which the current deployment may no longer serve.
+
+For a compatible upgrade, retain that original resource as described above and
+test the old conversation **before** any tool refresh or reconnect. Test a clean
+first connection separately. Normal initial OAuth consent is expected; renewal
+or clearing host state to make an upgrade pass is not a successful upgrade test.
 
 Diagnose the first failing stage before changing the App:
 

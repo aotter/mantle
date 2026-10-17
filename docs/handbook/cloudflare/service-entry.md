@@ -106,6 +106,12 @@ its collection parameter selects only a generated table and visibility policy.
 
 ## Workers assets and secrets
 
+`mantle generate --admin --wrangler wrangler.jsonc` sets the selected assets
+directory and, when absent, `binding: "ASSETS"` and `run_worker_first: true`.
+Existing environment assets blocks receive the same directory and missing defaults.
+Explicit binding/routing choices are preserved; a different binding needs a custom
+Admin HTML loader. Deploy the built assets and Worker together.
+
 `mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --admin`
 updates the split-build Wrangler keys (`main` and `base_dir` under `dist/worker`),
 ensures `nodejs_compat` and defaults to `global_fetch_strictly_public` ([public fetch routing](deploy-and-operate.md#public-fetch-routing))

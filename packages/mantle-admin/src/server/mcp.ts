@@ -2,6 +2,11 @@
 import { ContractError } from "@aotter/mantle/contracts";
 import { declaredMeta } from "../app/declared-meta.js";
 import type { McpApps, McpAppsSource, McpAppPage, McpAppRender, McpAppResource } from "@aotter/mantle/mcp";
+/** An archived resources/read page, including its embedded catalogue; application-owned, never caller rows or credentials. */
+export interface AdminMcpSnapshot extends McpAppPage {
+    readonly uri: string;
+    readonly domain?: string;
+}
 export interface AdminMcpOptions {
     readonly catalogue: {
         readonly views: Readonly<Record<string, unknown>>;
@@ -22,6 +27,8 @@ export interface AdminMcpOptions {
     readonly appOnly?: readonly string[];
     /** Passed through as `_meta.ui.domain`, for a host that serves each App from its own origin. */
     readonly domain?: string;
+    /** Previously deployed immutable pages. Keep these in source/artifact storage across clean builds; they claim no current renderer. */
+    readonly previous?: readonly AdminMcpSnapshot[];
 }
 /** The catalogue as one caller sees it: only Views and actions its tools/list shows, so the HTML names no other tool. */
 function visibleCatalogue({ views, actions }: AdminMcpOptions["catalogue"], tools: ReadonlySet<string>): AdminMcpOptions["catalogue"] {
@@ -64,15 +71,28 @@ export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
     const renders = options.renders ?? Object.keys(options.catalogue.views);
     for (const view of renders) if (!Object.hasOwn(options.catalogue.views, view))
         throw new ContractError("MCP_APP_CONFLICT", `Admin App renderer names unknown View '${view}'.`, "mcp/apps");
-    const embed = (html: string, render: McpAppRender) => {
-        const script = '<script type="application/json" id="mantle-catalog">' + JSON.stringify(visibleCatalogue(options.catalogue, render.tools)).replace(/</g, "\\u003c") + "</script>";
+    const embed = (html: string, render: McpAppRender, catalogue = options.catalogue) => {
+        const script = '<script type="application/json" id="mantle-catalog">' + JSON.stringify(visibleCatalogue(catalogue, render.tools)).replace(/</g, "\\u003c") + "</script>";
         // right after the opening <head>: the module script that follows may hold the text "</head>" in a string
         return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, start => start + script) : script + html;
     };
+    const previous = (options.previous ?? []).map((snapshot, index): McpAppResource => {
+        const script = /<script type="application\/json" id="mantle-catalog">([\s\S]*?)<\/script>/;
+        const found = script.exec(snapshot.html);
+        let catalogue: AdminMcpOptions["catalogue"] | undefined;
+        try { catalogue = found ? JSON.parse(found[1]!) : undefined; } catch {}
+        const object = (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value);
+        if (!/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(snapshot.uri) || !catalogue || !object(catalogue.views) || !object(catalogue.actions))
+            throw new ContractError("INPUT_VALIDATION_FAILED", "A retained Admin App needs its original ui://mantle-admin/… URI and embedded catalogue from resources/read.", "mcp/apps");
+        const base = snapshot.html.replace(script, ""), archivedCatalogue = catalogue;
+        return { uri: snapshot.uri, name: `mantle-admin-previous-${index}`, title: options.title ?? "Admin",
+            ...(snapshot.domain !== undefined ? { domain: snapshot.domain } : {}),
+            html: async render => ({ html: embed(base, render, archivedCatalogue), ...(snapshot.csp ? { csp: snapshot.csp } : {}) }) };
+    });
     const contribute = (uri: string, html: McpAppResource["html"]): McpApps => ({ resources: [{ uri, name: "mantle-admin-admin", title: options.title ?? "Admin", html: async (render: McpAppRender) => {
         const loaded = typeof html === "string" ? html : await html(render), page = typeof loaded === "string" ? { html: loaded } : loaded;
         return { ...page, html: embed(page.html, render) };
-    }, renders, ...(options.appOnly ? { appOnly: options.appOnly } : {}), ...(options.domain !== undefined ? { domain: options.domain } : {}) }] });
+    }, renders, ...(options.appOnly ? { appOnly: options.appOnly } : {}), ...(options.domain !== undefined ? { domain: options.domain } : {}) }, ...previous.filter(resource => resource.uri !== uri)] });
     const html = options.html ?? builtApp(options.file ?? "dist/client/admin/mcp-app.html");
     if (options.uri !== undefined) return contribute(options.uri, html);
     if (typeof options.html === "function")
