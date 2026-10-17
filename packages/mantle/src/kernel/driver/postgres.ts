@@ -15,6 +15,7 @@ export async function run(db: Unsafe, sql: string, binds: unknown[]): Promise<{ 
 
 /** SQLSTATE of a server error: `errno` on Bun.SQL, `code` on postgres.js. */
 const sqlstate = (error: unknown): unknown => { const e = error as { errno?: unknown; code?: unknown } | null; return typeof e?.errno === "string" ? e.errno : e?.code; };
+const check = (path: string, error: unknown): ContractError => { const e = error as any; return Object.assign(checkConflict(path, error, true)!, { fields: { kind: "check", schema: e.table ?? e.table_name, check: e.constraint ?? e.constraint_name } }); };
 /** A structured server ErrorResponse proves rollback; missing evidence is uncertain. */
 export function definitive(error: unknown): boolean {
   if (error instanceof ContractError) return error.code === "CONFLICT";
@@ -40,7 +41,7 @@ export async function procedure(db: Postgres, steps: readonly Bound[], path: str
   const execute = async (handle: Unsafe) => {
     const results: Row[][] = [];
     for (const s of steps) {
-      const { rows, changes } = await run(handle, s.sql, s.binds).catch(error => { throw sqlstate(error) === "23505" ? conflict(path, true, error) : checkConflict(path, error, sqlstate(error) === "23514") ?? error; });
+      const { rows, changes } = await run(handle, s.sql, s.binds).catch(error => { throw sqlstate(error) === "23505" ? conflict(path, true, error) : sqlstate(error) === "23514" ? check(path, error) : error; });
       if (s.row && changes !== 1) throw conflict(path, false);
       results.push(rows);
     }

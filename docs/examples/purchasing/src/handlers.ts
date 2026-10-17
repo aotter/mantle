@@ -14,7 +14,7 @@ export const handlers: Handlers = {
     } catch (error) {
       // The declared budget check is a business refusal, not a server error. Nothing was written.
       // The approval's only Schema check is the budget one.
-      if (error instanceof ContractError && error.code === "CONFLICT" && error.message.startsWith("A check of the Schema failed"))
+      if (error instanceof ContractError && error.code === "CONFLICT" && error.fields?.kind === "check" && error.fields.schema === "budgets")
         throw new ContractError("CONFLICT", "The department budget cannot cover this request.", "procedures/approve-request");
       throw error;
     }

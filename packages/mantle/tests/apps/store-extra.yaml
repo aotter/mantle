@@ -30,6 +30,7 @@ metadata: {name: catalog_items}
 spec:
   title: Shared catalog
   lifecycle: operational
+  checks: ["price >= 0"]
   indexes: [[name]]
   schema:
     type: object
