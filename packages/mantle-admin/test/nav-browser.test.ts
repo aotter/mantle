@@ -92,6 +92,8 @@ export default defineAdmin({}, { nav: {
     expect(await page.locator('[data-slot="collapsible"]').filter({ has: requests }).getByRole("link", { name: "All", exact: true }).evaluate(node => node === document.activeElement)).toBe(true);
     await page.keyboard.press("Enter");
     await page.waitForURL(`${origin}/admin/c/requests`);
+    expect(await page.locator('[data-slot="collapsible"]').filter({ has: requests }).getByRole("link", { name: "All", exact: true }).getAttribute("data-active")).toBe("true");
+    expect(await page.locator('[data-slot="collapsible"]').filter({ has: requests }).getByRole("link", { name: /^rejected$/i }).getAttribute("data-active")).toBe("false");
 
     const mobile = await browser.newPage({ viewport: { width: 375, height: 812 } });
     mobile.setDefaultTimeout(15_000);
@@ -106,6 +108,13 @@ export default defineAdmin({}, { nav: {
     await mobile.getByRole("button", { name: "Toggle sidebar" }).click();
     await sheet.waitFor();
     await sheet.getByRole("link", { name: "Rejected orders", exact: true }).click();
+    await sheet.waitFor({ state: "hidden" });
+    await mobile.goto(`${origin}/admin/c/requests?filter_field=state&filter_value=rejected`);
+    await mobile.getByRole("button", { name: "Toggle sidebar" }).click();
+    await sheet.waitFor();
+    const mobileRequests = sheet.getByRole("button", { name: "Requests", exact: true });
+    expect(await mobileRequests.getAttribute("aria-expanded")).toBe("true");
+    await sheet.getByRole("link", { name: /^rejected$/i }).click();
     await sheet.waitFor({ state: "hidden" });
     await mobile.close();
   } finally {
