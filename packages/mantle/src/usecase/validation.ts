@@ -123,6 +123,12 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
       const guard = (type:string, test = `(${condition(type)})`) => only === type || type === "number" && only === "integer" ? "" : test + " && ";
       if (schema.enum) { if (!finite(schema.enum)) refuse(base, "Input enum numbers must be finite; JSON has no Infinity or NaN."); equality = true; check(`!${literal(schema.enum)}.some(option=>equal(value,option))`,"Value is not in enum."); }
       if (schema.const !== undefined) { if (!finite(schema.const)) refuse(base, "Input const numbers must be finite; JSON has no Infinity or NaN."); equality = true; check(`!equal(value,${literal(schema.const)})`,"Value violates const."); }
+      for (const key of ["minLength", "maxLength", "minItems", "maxItems"] as const) if (schema[key] !== undefined && (!Number.isSafeInteger(schema[key]) || schema[key]! < 0))
+        refuse(base, `${key} must be a non-negative safe integer.`);
+      for (const key of ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"] as const) if (schema[key] !== undefined && (typeof schema[key] !== "number" || !Number.isFinite(schema[key])))
+        refuse(base, `${key} must be a finite number.`);
+      if (schema.multipleOf !== undefined && (typeof schema.multipleOf !== "number" || !Number.isFinite(schema.multipleOf) || schema.multipleOf <= 0))
+        refuse(base, "multipleOf must be a positive finite number.");
       for (const [type,measure,keywords] of bounds) for (const [key,operator] of Object.entries(keywords)) if (schema[key] !== undefined) check(`${guard(type)}${measure} ${operator} ${schema[key]}`, `Value violates ${key}.`);
       if (schema.multipleOf !== undefined) check(`${guard("number",'typeof value === "number"')}!(Math.abs(value / ${schema.multipleOf} - Math.round(value / ${schema.multipleOf})) < 1e-9)`,"Number violates multipleOf.");
       if (schema.pattern !== undefined) {

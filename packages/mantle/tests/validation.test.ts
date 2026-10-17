@@ -51,6 +51,15 @@ test("unsupported validation declarations fail generation explicitly", () => {
   }
 });
 
+test("numeric validation keywords must be finite numbers, never generated source", () => {
+  for (const input of [
+    { type: "string", minLength: "0); throw Error('executed') //" },
+    { type: "array", maxItems: -1 },
+    { type: "number", minimum: Infinity },
+    { type: "number", multipleOf: 0 },
+  ]) expect(() => emitValidation(plan(input as unknown as JsonSchema))).toThrow(/must be/);
+});
+
 test("string bounds count Unicode code points", async () => {
   const { validate } = await checked({type:"object",properties:{value:{type:"string",minLength:1,maxLength:1}}});
   expect(validate({value:"😀"})).toEqual({value:"😀"});

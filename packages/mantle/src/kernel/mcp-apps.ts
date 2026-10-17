@@ -75,6 +75,6 @@ export function linkApps(apps: McpApps | readonly McpApps[], tools?: ReadonlySet
 
 /** One endpoint's Apps bound to its tool table; `previous` is reused while the table's names are unchanged. */
 export function linkSurface(apps: McpApps | readonly McpApps[], selected: readonly { name: string; page?: unknown }[], previous?: { key: string; links: ReturnType<typeof linkApps> }) {
-  const key = JSON.stringify(selected.map(tool => tool.name).sort());
+  const key = JSON.stringify(selected.map(tool => [tool.name, !!tool.page] as const).sort(([a], [b]) => a.localeCompare(b)));
   return previous?.key === key ? previous : { key, links: linkApps(apps, new Set(selected.map(tool => tool.name)), new Set(selected.filter(tool => tool.page).map(tool => tool.name))) };
 }
