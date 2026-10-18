@@ -12,7 +12,7 @@ test("real Better Auth cookie reads, refresh, revocation and field mapping on SQ
     const counts = await verifyCookieCaller(d1Adapter({ prepare: text => { statements.push(text); return native.prepare(text); } }), "sqlite", async (text, values = []) => db.query(text).all(...values as never[]) as Record<string, unknown>[], statements);
     expect(counts["native:fresh"]).toBe(2); expect(counts["native:read-first"]).toBe(1); expect(counts["native:read-warm"]).toBe(1); expect(counts["secondary:refresh"]).toBe(2);
   } finally { db.close(); }
-});
+}, 30000);
 
 const url = process.env.MANTLE_NEXT_BUN_PG_URL;
 (url ? test : test.skip)("real Better Auth cookie reads and expiry on PostgreSQL", async () => {

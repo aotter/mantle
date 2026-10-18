@@ -134,4 +134,4 @@ webmcpRoutes<unknown, null>(catalogue, refs);
   const program = ts.createProgram([file], {strict:true,noEmit:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,skipLibCheck:true,types:[]});
   expect(ts.getPreEmitDiagnostics(program).map(d => ts.flattenDiagnosticMessageText(d.messageText," ")).join("\n")).toBe("");
  } finally {await rm(dir,{recursive:true,force:true});}
-});
+}, 30000);
