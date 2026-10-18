@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, MoreHorizontal } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
@@ -8,8 +8,7 @@ import { api } from "../../lib/api";
 import { entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
 import { entryEditPath, hasFoldedChildCollections, isFoldedFieldChild } from "../../lib/collection-nav";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import type { Collection, EntryEditorPayload, JsonSchema, SiteInfo, AdminOperation } from "../../lib/types";
-import { Button } from "@aotter/mantle-ui/kit";
+import type { AdminUser, Collection, EntryEditorPayload, JsonSchema, SiteInfo, AdminOperation } from "../../lib/types";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { Tabs, TabsList, TabsTrigger } from "@aotter/mantle-ui/kit";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
@@ -17,8 +16,8 @@ import { propertyLabel } from "../../lib/field-label";
 import { renderDataValue } from "../../lib/render-data-value";
 import { RefLink, RefTitlesProvider, useRefTarget } from "../../ui/ref-value";
 import { CollectionView } from "./collection-view";
-import { entryTitle } from "./entry-edit-view";
-import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
+import { canEditEntry, entryTitle } from "./entry-edit-view";
+import { boundOperationsFor, RecordOperations } from "./row-operations";
 
 export function ParentEntryWorkbench({
   collectionName,
@@ -34,6 +33,11 @@ export function ParentEntryWorkbench({
   const site = useQuery<SiteInfo>({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
+  });
+  const me = useQuery<AdminUser>({
+    queryKey: ["me"],
+    queryFn: () => api.get<AdminUser>("/me"),
+    retry: false,
   });
   const operationsQuery = useQuery<AdminOperation[]>(operationsQueryOptions());
   const boundOperations = React.useMemo(
@@ -76,19 +80,17 @@ export function ParentEntryWorkbench({
         }
         title={title}
         actions={
-          <RowOperationsMenu
+          <RecordOperations
             row={payload.entry}
             collection={payload.collection}
             operations={boundOperations}
-            editHref={entryEditPath(collectionName, entryId)}
+            entryLink={{
+              href: entryEditPath(collectionName, entryId),
+              canEdit: canOpenForEdit(payload, me.data?.admin),
+            }}
             language={language}
             canonical={canonical}
             onSuccess={() => void query.refetch()}
-            trigger={
-              <Button type="button" variant="secondary" size="icon-sm" aria-label={t(language, "rowActions.menuLabel")}>
-                <MoreHorizontal className="size-4" aria-hidden />
-              </Button>
-            }
           />
         }
       />
@@ -104,11 +106,6 @@ export function ParentEntryWorkbench({
               </div>
             ))}
           </dl></RefTitlesProvider>
-          <div>
-            <Button asChild variant="outline" size="sm">
-              <a href={entryEditPath(collectionName, entryId)}>{t(language, "entryWorkbench.editEntry")}</a>
-            </Button>
-          </div>
         </SectionCard>
       ) : null}
 
@@ -150,6 +147,21 @@ export function ParentEntryWorkbench({
       )}
     </div>
   );
+}
+
+/**
+ * Whether the parent's editor link reads Edit or View: the editor's own rule
+ * (an admin, a writable Schema, a supported version). An operational record
+ * still says Edit, since its editor offers the admin the unlock, as the list does.
+ */
+export function canOpenForEdit(payload: Pick<EntryEditorPayload, "collection" | "entry">, admin: boolean | undefined): boolean {
+  const unsupportedVersion = typeof payload.entry.version !== "number" || !Number.isSafeInteger(payload.entry.version);
+  return canEditEntry({
+    admin,
+    isReadOnly: payload.collection.schema.readOnly === true || unsupportedVersion,
+    isOperational: payload.collection.lifecycle !== "publishing",
+    operationalEditUnlocked: true,
+  });
 }
 
 export function shouldOpenParentWorkbench(

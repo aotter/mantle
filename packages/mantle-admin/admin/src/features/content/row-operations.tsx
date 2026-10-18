@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MoreHorizontal, PencilLine, Plus, Workflow } from "lucide-react";
+import { Eye, MoreHorizontal, PencilLine, Plus, Workflow } from "lucide-react";
 import {
   createInteractionController,
   type EntrySnapshot,
@@ -84,76 +84,149 @@ export function OperationResult({ output, language }: { output: unknown; languag
   </details>;
 }
 
-/** Row operation menu shared by lists and entry pages. */
+/** A record page shows this many operations as buttons before the rest move to a menu. */
+export const INLINE_RECORD_OPERATIONS = 3;
+
+/**
+ * Splits a record's operations for its page header: a few stay visible as
+ * labeled buttons; past the limit the first ones stay and the rest share a
+ * "More actions" menu, so the menu never holds a single item.
+ */
+export function splitRecordOperations<T>(available: readonly T[], limit = INLINE_RECORD_OPERATIONS): { inline: T[]; overflow: T[] } {
+  if (available.length <= limit) return { inline: [...available], overflow: [] };
+  const visible = Math.max(0, limit - 1);
+  return { inline: available.slice(0, visible), overflow: available.slice(visible) };
+}
+
+function operationTitle(operation: AdminOperation, language: AdminLanguage, canonical: string | null): string {
+  return resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
+}
+
+/** Compact operation menu for list rows: an icon trigger named "Actions for …". */
 export function RowOperationsMenu({
   row,
   collection,
   operations,
-  editHref,
+  itemName,
   language,
   canonical,
   onSuccess,
-  trigger,
 }: {
   row: OperableRow;
   collection?: Collection;
   /** Pre-filtered via `boundOperationsFor(allOps, row.collection)`. */
   operations: readonly AdminOperation[];
-  editHref?: string;
+  /** The row's title, so the trigger names the record it acts on. */
+  itemName?: string;
   language: AdminLanguage;
   canonical: string | null;
   onSuccess: () => void;
-  /** Custom trigger element (e.g. a full `Button` in a page header).
-   *  Defaults to the compact "⋯" icon button used in table rows. */
-  trigger?: React.ReactNode;
 }): React.ReactElement | null {
   const [activeOperation, setActiveOperation] = React.useState<AdminOperation | null>(null);
-  if (operations.length === 0 && !editHref) return null;
   const available = operations.filter(op => operationMatchesRow(op, row));
-  if (!available.length && !editHref) return null;
+  if (!available.length) return null;
+  const label = itemName ? t(language, "rowActions.menuLabelFor", { name: itemName }) : t(language, "rowActions.menuLabel");
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          {trigger ?? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              title={t(language, "rowActions.menuLabel")}
-              aria-label={t(language, "rowActions.menuLabel")}
-            >
-              <MoreHorizontal className="size-3.5" aria-hidden />
-            </Button>
-          )}
+          <Button type="button" variant="ghost" size="icon-sm" title={label} aria-label={label}>
+            <MoreHorizontal className="size-3.5" aria-hidden />
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {editHref ? (
-            <DropdownMenuItem asChild>
-              <a href={editHref}>
-                <PencilLine aria-hidden />
-                {t(language, "entryWorkbench.editEntry")}
-              </a>
-            </DropdownMenuItem>
-          ) : null}
-          {available.map(op => <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}><Workflow aria-hidden />{resolveLocalizedText(op.title, language, canonical) ?? fieldLabel(op.name)}</DropdownMenuItem>)}
+          {available.map(op => <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}><Workflow aria-hidden />{operationTitle(op, language, canonical)}</DropdownMenuItem>)}
         </DropdownMenuContent>
       </DropdownMenu>
       {activeOperation ? (
-        <OperationDialog
-          key={activeOperation.name}
-          operation={activeOperation}
-          interaction={(activeOperation.interactions ?? []).find((item) => item.collection === row.collection)}
-          row={row}
-          collection={collection}
-          language={language}
-          canonical={canonical}
-          onClose={() => setActiveOperation(null)}
-          onSuccess={onSuccess}
-        />
+        <RowOperationDialog key={activeOperation.name} operation={activeOperation} row={row} collection={collection} language={language} canonical={canonical} onClose={() => setActiveOperation(null)} onSuccess={onSuccess} />
       ) : null}
     </>
+  );
+}
+
+/**
+ * A record page's own actions: the Edit link (View when the person cannot
+ * edit, as the list labels it) and the operations that apply to the record
+ * as labeled buttons; past `INLINE_RECORD_OPERATIONS` the rest share a menu.
+ * Each operation still opens its review dialog and the server checks it.
+ */
+export function RecordOperations({
+  row,
+  collection,
+  operations,
+  entryLink,
+  language,
+  canonical,
+  onSuccess,
+}: {
+  row: OperableRow;
+  collection?: Collection;
+  /** Pre-filtered via `boundOperationsFor(allOps, row.collection)`. */
+  operations: readonly AdminOperation[];
+  entryLink?: { href: string; canEdit: boolean };
+  language: AdminLanguage;
+  canonical: string | null;
+  onSuccess: () => void;
+}): React.ReactElement | null {
+  const [activeOperation, setActiveOperation] = React.useState<AdminOperation | null>(null);
+  const available = operations.filter(op => operationMatchesRow(op, row));
+  if (!available.length && !entryLink) return null;
+  const { inline, overflow } = splitRecordOperations(available);
+
+  return (
+    <>
+      {entryLink ? (
+        <Button asChild variant="outline">
+          <a href={entryLink.href}>
+            {entryLink.canEdit ? <PencilLine className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
+            {t(language, entryLink.canEdit ? "entryWorkbench.editEntry" : "entryWorkbench.viewEntry")}
+          </a>
+        </Button>
+      ) : null}
+      {inline.map(op => (
+        <Button key={op.name} type="button" variant="secondary" onClick={() => setActiveOperation(op)}>
+          <Workflow className="size-4" aria-hidden />
+          {operationTitle(op, language, canonical)}
+        </Button>
+      ))}
+      {overflow.length ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="secondary">
+              <MoreHorizontal className="size-4" aria-hidden />
+              {t(language, "rowActions.more")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {overflow.map(op => <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}><Workflow aria-hidden />{operationTitle(op, language, canonical)}</DropdownMenuItem>)}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+      {activeOperation ? (
+        <RowOperationDialog key={activeOperation.name} operation={activeOperation} row={row} collection={collection} language={language} canonical={canonical} onClose={() => setActiveOperation(null)} onSuccess={onSuccess} />
+      ) : null}
+    </>
+  );
+}
+
+function RowOperationDialog({ operation, row, ...rest }: {
+  operation: AdminOperation;
+  row: OperableRow;
+  collection?: Collection;
+  language: AdminLanguage;
+  canonical: string | null;
+  onClose: () => void;
+  onSuccess: () => void;
+}): React.ReactElement {
+  return (
+    <OperationDialog
+      operation={operation}
+      interaction={(operation.interactions ?? []).find((item) => item.collection === row.collection)}
+      row={row}
+      {...rest}
+    />
   );
 }
 

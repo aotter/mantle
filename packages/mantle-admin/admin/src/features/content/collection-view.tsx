@@ -1148,6 +1148,7 @@ function EntryRowDisplay({
             row={row}
             collection={collection}
             operations={boundOperations}
+            itemName={itemName}
             language={language}
             canonical={canonical}
             onSuccess={onOperationSuccess}
