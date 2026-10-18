@@ -1,6 +1,6 @@
 import { userReferences } from "../domain/userReferences.js";
 /** Canonical lowered programs become ordinary target-specific TypeScript, never a runtime plan. */
-import { parseNumeric, type JsonSchema, type LoweredStatement } from "../build/compiler.js";
+import { parseNumeric, tableOutputs, type JsonSchema, type LoweredStatement } from "../build/compiler.js";
 import type { GenerateDiagnostic, GenerateInput, GenerateResult } from "../domain/model.js";
 import { boundaryType, nativeType, outputType, wireType } from "../domain/columns.js";
 import { databaseImport, driverFor, entry, exportName, generatedFiles, isSqlite as sqlite, q } from "../domain/entry.js";
@@ -90,15 +90,16 @@ export function generate(input: GenerateInput): GenerateResult {
     if (!c || (mode === "caller" && !trusted)) { refuse(path, "Every reachable visibility mode must have canonical lowered SQL."); continue; }
     const keys = Object.hasOwn(viewKeys, name) ? viewKeys[name] : undefined;
     if (!keys || new Set(keys).size !== keys.length) { refuse(path, "Dynamic or repeated View outputs need an explicit generated row contract. Give each SELECT output a unique explicit alias."); continue; }
-    const output: string[] = [];
+    const output: string[] = [], direct = tableOutputs(view, plan.schemas);
     for (const key of keys) {
-      const type = outputType(plan, name, key);
+      // A table column read unchanged keeps its NOT NULL (and gives a native column such as `id` its type); anything else may be NULL.
+      const type = outputType(plan, name, key) ?? direct[key]?.type;
       // Declared timestamps and dates arrive formatted by the SQL itself (domain/wireScalars).
-      output.push(`readonly ${q(key)}: ${nativeType(type, isSqlite)};`);
+      output.push(`readonly ${q(key)}: ${nativeType(type, isSqlite, direct[key]?.notNull)};`);
     }
     const fieldNames = inputFields(view.input, path + "/input");
     const callerStep = step(c, path, fieldNames), trustedStep = mode === "caller" ? step(trusted!, path, fieldNames) : callerStep;
-    declarations.push(`export type View${index}Input = ${queryInputType(view.input ?? { type: "object", additionalProperties: false }, [c, ...(trusted ? [trusted] : [])])};`, `export type View${index}Row = { ${output.join(" ")} };`, `export type View${index}WireRow = { ${keys.map(key => `readonly ${q(key)}: ${boundaryType(plan, name, key) ? wireType(boundaryType(plan, name, key)) : `View${index}Row[${q(key)}]`};`).join(" ")} };`,
+    declarations.push(`export type View${index}Input = ${queryInputType(view.input ?? { type: "object", additionalProperties: false }, [c, ...(trusted ? [trusted] : [])])};`, `export type View${index}Row = { ${output.join(" ")} };`, `export type View${index}WireRow = { ${keys.map(key => `readonly ${q(key)}: ${boundaryType(plan, name, key) ? wireType(boundaryType(plan, name, key), direct[key]?.notNull) : `View${index}Row[${q(key)}]`};`).join(" ")} };`,
       `const ${fn}Caller = ${callerStep} as const;`, ...(trustedStep !== callerStep ? [`const ${fn}Trusted = ${trustedStep} as const;`] : []),
       `async function ${fn}(db: ${isSqlite ? "Database" : "Unsafe"}, caller: Caller, raw: View${index}Input): Promise<View${index}Row[]> {`, ...auth(view.requires, path), ...(user.used ? ['  USER.modeOf(caller);'] : []),
       `  const m = ${trustedStep !== callerStep ? `${user.used ? 'USER.modeOf(caller) === "trusted"' : 'caller.kind === "system"'} ? ${fn}Trusted : ` : ""}${fn}Caller;`, `  return DRIVER.read(db, ${user.used ? "USER.scoped(m.sql, caller)" : "m.sql"}, binds(D, m.binds, caller, raw));`, "}");

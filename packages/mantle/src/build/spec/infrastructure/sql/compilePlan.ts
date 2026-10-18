@@ -9,7 +9,7 @@ import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type Pla
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
 import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
-import { NATIVE_COLUMNS, viewCacheProblem, checkShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
+import { AGGREGATES, NATIVE_COLUMNS, NATIVE_NOT_NULL, notNullColumns, viewCacheProblem, checkShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 import * as d1 from "../../../d1/compile/index.js";
@@ -101,6 +101,61 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
     if (f && (fn !== "sum" || r.val?.ColumnRef || ["integer", "real"].includes(typeOf(f.schema, f.field)!) || typeOf(f.schema, f.field)!.startsWith("numeric("))) columns[name] = f;
   }
   return { ...(keys ? { keys: [...new Set(keys)], positions: keys } : {}), columns };
+}
+
+/** An aggregate call outside a window and outside a subquery: without GROUP BY, the select then returns one row even over no rows. */
+const aggregates = (v: unknown): boolean => {
+  if (Array.isArray(v)) return v.some(aggregates);
+  if (!v || typeof v !== "object" || "SubLink" in v) return false;
+  const call = (v as SqlNode).FuncCall;
+  const name = call?.funcname?.map((x: SqlNode) => x.String?.sval).join(".").replace(/^pg_catalog\./, "");
+  return (!!call && !call.over && AGGREGATES.has(name)) || Object.values(v).some(aggregates);
+};
+
+/**
+ * The View outputs that are a Schema table's column read unchanged, each with its storage type and whether the table declares it NOT NULL
+ * (`NATIVE_NOT_NULL` and `notNullColumns`, the rule the initial DDL prints). The read must be a bare column of the select's only source or
+ * of a named one, on the inner side of every join, in a select that cannot aggregate over no rows; a FROM subquery (an inlined View
+ * included) passes such a column through. A CTE, set operation, expression or ambiguous name is not here, so its type stays nullable.
+ */
+export function tableOutputs(view: SqlPlan, schemas: Readonly<Record<string, PlanSchema>>): Record<string, { type: string; notNull: boolean }> {
+  const out: Record<string, { type: string; notNull: boolean }> = Object.create(null);
+  const read = (sel: SqlNode | undefined, qual: string | undefined, name: string): { type: string; notNull: boolean } | undefined => {
+    if (!sel || sel.op !== "SETOP_NONE" || sel.withClause) return undefined;
+    const items: { node: SqlNode; nullable: boolean }[] = [];
+    // Mantle SQL joins INNER or LEFT; a LEFT join null-extends its right side
+    const from = (n: SqlNode, nullable: boolean): void => { if (n.JoinExpr) { from(n.JoinExpr.larg, nullable); from(n.JoinExpr.rarg, nullable || n.JoinExpr.jointype !== "JOIN_INNER"); } else items.push({ node: n, nullable }); };
+    for (const f of sel.fromClause ?? []) from(f, false);
+    const alias = (n: SqlNode) => n.RangeVar ? n.RangeVar.alias?.aliasname ?? n.RangeVar.relname : (n.RangeSubselect ?? n.RangeFunction)?.alias?.aliasname;
+    const hit = qual === undefined ? items : items.filter((i) => alias(i.node) === qual);
+    if (hit.length !== 1 || (qual === undefined && items.length !== 1)) return undefined;
+    const { node, nullable } = hit[0]!;
+    let found: { type: string; notNull: boolean } | undefined;
+    if (node.RangeVar?.mantle === "table") {
+      const s = schemas[String(node.RangeVar.relname).toLowerCase()];
+      const type = s && name !== "_rid" ? storageColumns(s).get(name) : undefined;
+      if (type) found = { type: type === "native" ? "timestamptz" : type, notNull: NATIVE_NOT_NULL.has(name) || notNullColumns(s!).has(name) };
+    } else if (node.RangeSubselect && !node.RangeSubselect.lateral && !node.RangeSubselect.alias?.colnames?.length) {
+      const inner = node.RangeSubselect.subquery?.SelectStmt;
+      const outs = (inner?.targetList ?? []).filter((t: SqlNode) => (t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval) === name);
+      found = outs.length === 1 ? bare(inner, outs[0].ResTarget.val) : undefined;
+    }
+    return found && { type: found.type, notNull: found.notNull && !nullable };
+  };
+  const bare = (sel: SqlNode, val: SqlNode | undefined) => {
+    const f = val?.ColumnRef?.fields;
+    if (!f || f.length > 2 || f.some((x: SqlNode) => !x.String)) return undefined;
+    const got = read(sel, f.length === 2 ? f[0].String.sval : undefined, f.at(-1).String.sval);
+    // without GROUP BY, an aggregate makes one row even over no rows, and a bare column beside it is then NULL (SQLite)
+    return got && { type: got.type, notNull: got.notNull && (!!sel.groupClause || !(sel.havingClause || aggregates([sel.targetList, sel.sortClause]))) };
+  };
+  const sel = view.stmts[0]?.SelectStmt;
+  for (const { ResTarget: r } of sel?.targetList ?? []) {
+    const name: string | undefined = r.name ?? r.val?.ColumnRef?.fields?.at(-1)?.String?.sval;
+    const got = name ? bare(sel, r.val) : undefined;
+    if (got) out[name!] = got;
+  }
+  return out;
 }
 
 /** Compile a linked manifest set to the sealed plan. Every refusal is reported, one per SQL source. */
