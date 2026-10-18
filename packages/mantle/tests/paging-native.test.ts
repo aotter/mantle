@@ -26,10 +26,7 @@ test("SQLite safe tuples/groups/singleton joins/internal pages match native SQL 
  try{await db.unsafe(`CREATE SCHEMA ${schema}`);await db.unsafe(`SET search_path TO ${schema}`);await db.unsafe(files["schema.sql"]!);await db.unsafe(pagingSeed(true));await verifyPaging(pages,{unsafe:(sql:string,values:any[])=>{calls++;return db.unsafe(sql,values);}},sql=>db.unsafe(sql),()=>calls,true);}
  finally{await db.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await db.close();await rm(dir,{recursive:true,force:true});}
 },30000);
-test("unsafe fanout and NULL/unknown keys remain refused; native-only internal queries remain bare",async()=>{
- const sources=await loadFixtureSources("paging.yaml");
- const view=(sql:string,surface="public")=>`\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: unsafe}\nspec:\n  surface: ${surface}\n  sql: ${sql}\n`;
- for(const sql of [
+test.each([
   "WITH x AS (SELECT id,session,row_number() OVER (ORDER BY at) AS block FROM positions) SELECT session AS block,count(*) AS total FROM x GROUP BY block ORDER BY block",
   "SELECT session AS block,count(*) AS total FROM positions GROUP BY block ORDER BY block",
   "WITH x AS (SELECT id,at FROM visible), y AS (WITH x AS (SELECT id,at FROM visible ORDER BY at DESC LIMIT 1) SELECT id,at FROM x) SELECT s.id,v.at FROM y s JOIN x v ON true ORDER BY s.id",
@@ -40,10 +37,15 @@ test("unsafe fanout and NULL/unknown keys remain refused; native-only internal q
   "SELECT id, optional FROM positions ORDER BY optional",
   "SELECT id, lower(session) AS key FROM positions ORDER BY lower(session)",
   "SELECT optional,count(*) AS n FROM positions GROUP BY optional ORDER BY optional",
- ]){
- const r=await generateFromSources({target:"bun-sqlite",sources:{sources:[{...sources[0]!,text:sources[0]!.text+view(sql)}]}});expect(r).toMatchObject({ok:false});if(!r.ok)expect(r.diagnostics.some(d=>d.path==="views/unsafe")).toBe(true);
- }
- const files=await generateOrThrow("bun-sqlite",[{...sources[0]!,text:sources[0]!.text+view("SELECT id,optional FROM positions ORDER BY optional","internal")}]);
+ ])('unsafe paging query remains refused: %s', async sql => {
+ const sources=await loadFixtureSources("paging.yaml");
+ const text=sources[0]!.text+`\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: unsafe}\nspec:\n  surface: public\n  sql: ${sql}\n`;
+ const r=await generateFromSources({target:"bun-sqlite",sources:{sources:[{...sources[0]!,text}]}});expect(r).toMatchObject({ok:false});if(!r.ok)expect(r.diagnostics.some(d=>d.path==="views/unsafe")).toBe(true);
+});
+test("native-only internal queries remain bare",async()=>{
+ const sources=await loadFixtureSources("paging.yaml");
+ const text=sources[0]!.text+`\n---\napiVersion: cms.mantle.aotter.net/v2\nkind: View\nmetadata: {name: unsafe}\nspec:\n  surface: internal\n  sql: SELECT id,optional FROM positions ORDER BY optional\n`;
+ const files=await generateOrThrow("bun-sqlite",[{...sources[0]!,text}]);
  expect(files["views/unsafe.ts"]).toBeDefined();expect(files["paged/views/unsafe.ts"]).toBeUndefined();expect(files["rest.ts"]).not.toContain("grouped-time");expect(files["mcp.ts"]).not.toContain("grouped-time");
 });
 test("a scalar subquery does not prove its outer query singleton",async()=>{
