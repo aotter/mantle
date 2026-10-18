@@ -1,6 +1,6 @@
 # View
 
-A View requires `surface: public | admin | internal` and one `sql` SELECT. Optional keys include title, description, input, requires, restrict, uiSchema (admin only), and cache. The app imports its generated typed function and supplies a native handle, verified Caller and driver-ready input.
+A View requires `surface: public | admin | internal` and one `sql` SELECT. Optional keys include title, description, input, requires, restrict, uiSchema (admin only), and cache. The app imports its generated typed function and supplies a native handle, verified Caller and driver-ready input; a JSON input (an array read by `json_each(input.ids)`) takes its authored array or object, which the generated query serializes.
 
 ## SQL
 

@@ -55,7 +55,7 @@ export function generate(input: GenerateInput): GenerateResult {
       const bind = binds.find(b => b.k === "input" && name.toLowerCase() === String(b.name).toLowerCase());
       if (!bind || bind.k !== "input") return `readonly ${q(name)}${schema.required?.includes(name) ? "" : "?"}: ${typeOf(field)};`;
       const type = String(bind.type);
-      const driverType = type === "json" || type === "date" ? "string" : type === "timestamptz" ? "string | Date" : isSqlite
+      const driverType = type === "json" ? typeOf(field) : type === "date" ? "string" : type === "timestamptz" ? "string | Date" : isSqlite
         ? type === "bool" || parseNumeric(type) ? "number" : typeOf(field)
         : parseNumeric(type) ? "number | string" : typeOf(field);
       const nullable = field.nullable === true || Array.isArray(field.type) && field.type.includes("null") || !schema.required?.includes(name);

@@ -34,7 +34,8 @@ block, for every Schema repeats what the database and the generated types alread
    uses Bun.SQL; Workers with Hyperdrive use postgres.js. No node-postgres adapter is kept.
 3. **One evaluator for binds and one for input scalars.** `kernel/binds.ts` evaluates Core's bind recipes (`uid`, `role`,
    `now`, `cutoff`, `const`, `input`, `version`) for generated Views, generated Procedures and the Store; its `encode` is the
-   one date-time/date input conversion (an `input` recipe carries a type only for those two). `kernel/scalars.ts` holds the ISO
+   one date-time/date/JSON input conversion (an `input` recipe carries a type only for those three; a JSON value other
+   than a string is `JSON.stringify`ed, so a Store or direct call passes the authored value, and a string binds as it is). `kernel/scalars.ts` holds the ISO
    date-time/date input encoders.
 4. **Row rules are Core's, emitted once.** `rowPolicy(schema, mode)` and `writePolicy(schema, kind, options)`
    (`@aotter/mantle/spec`) state scope, TTL, published visibility and the write fills, sets and lock as terms with bind

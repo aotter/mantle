@@ -243,4 +243,20 @@ upserts, `EXISTS` guards and nested reads on the same `products`.
 Do not split this into a Store write, then a SQL Procedure, then a compensating
 delete: the rows are visible between the steps and a failure leaves cleanup to
 the handler. A `ref` handler that needs the rows written together calls this
-Procedure through `ctx.store.procedures`.
+Procedure through `ctx.store.procedures`, passing the array itself: the
+generated input type is the authored one, and the generated query serializes
+the array for the driver (a string is bound as it is). Like a direct call, the
+Store does not validate input against the Procedure's schema (REST and MCP do),
+so `maxItems` and the line shape hold only for rows the handler has checked or
+built.
+
+```ts
+import { store } from './generated/generated.js';
+import type { Caller } from '@aotter/mantle/contracts';
+
+// `ctx.store` in a `ref` handler is this Store: `ctx.store.procedures['place-order']({ orderRef, items })`.
+export async function placeOrder(db: Parameters<typeof store>[0], caller: Caller, orderRef: string) {
+  const items = [{ productId: 'pen', qty: 2 }, { productId: 'stapler', qty: 1 }];
+  return store(db, caller).procedures['place-order']({ orderRef, items });
+}
+```

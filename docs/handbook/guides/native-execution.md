@@ -78,7 +78,7 @@ microseconds and days while PostgreSQL receives the canonical text. Computed val
 PostgreSQL through Bun.SQL that is a `Date`, which drops microseconds. Other
 declared scalars are driver-native.
 
-Driver-ready JSON parameters are text on every target (a JavaScript array would otherwise be bound as a PostgreSQL array), so the application serializes them. Bare PG SQL declares each JSON parameter as text
+JSON parameters are text on every target (a JavaScript array would otherwise be bound as a PostgreSQL array): an input field read as JSON takes its authored array or object, which the generated query serializes, and a string is bound as it is. Bare PG SQL declares each JSON parameter as text
 (`CAST(CAST($n AS text) AS jsonb)`), so Bun.SQL sends the text verbatim instead of
 JSON-encoding it again; generation refuses a JSON parameter used any other way. SQLite bool/date/timestamp/numeric parameters use their declared
 storage representations. Bound optional fields become explicit required values,

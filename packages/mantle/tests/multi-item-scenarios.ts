@@ -6,10 +6,10 @@ export const seed = (pg: boolean) => `INSERT INTO products (id, version, created
 
 /** `stockCheck` is how the target names `reserved <= stock`: the expression on SQLite/D1, the constraint on PostgreSQL. */
 export async function verifyMultiItem(app: (request: Request) => Promise<Response | undefined>, query: Query, stockCheck = "reserved <= stock") {
-  const order = (orderRef: string, items: unknown) => app(new Request("http://local/api/orders", { method: "POST", headers: { "content-type": "application/json", "x-role": "user" }, body: JSON.stringify({ orderRef, items }) }));
+  const order = (orderRef: string, items: unknown, path = "/api/orders") => app(new Request("http://local" + path, { method: "POST", headers: { "content-type": "application/json", "x-role": "user" }, body: JSON.stringify({ orderRef, items }) }));
   const state = async () => ({
     reserved: (await query("SELECT id, reserved FROM products ORDER BY id")).map(row => [row.id, Number(row.reserved)]),
-    lines: (await query("SELECT orderref, productid, qty FROM order_lines ORDER BY orderref, productid")).map(row => [row.orderref, row.productid, Number(row.qty)]),
+    lines: (await query("SELECT orderref, productid, qty FROM order_lines ORDER BY orderref, productid, qty")).map(row => [row.orderref, row.productid, Number(row.qty)]),
   });
   equal((await order("o1", [{ productId: "pen", qty: 3 }, { productId: "stapler", qty: 1 }]))?.status, 200, "an order within stock");
   const placed = { reserved: [["pen", 3], ["stapler", 1]], lines: [["o1", "pen", 3], ["o1", "stapler", 1]] };
@@ -30,4 +30,9 @@ export async function verifyMultiItem(app: (request: Request) => Promise<Respons
   equal((await order("o1", [{ productId: "pen", qty: 1 }]))?.status, 409, "a repeated orderRef");
   equal(await state(), placed, "the repeated order left nothing");
   equal((await query("SELECT orderref, linecount, matchedlines FROM orders")).map(row => [row.orderref, Number(row.linecount), Number(row.matchedlines)]), [["o1", 2, 2]], "one order row, every line matched");
+  // A ref handler passes the plain arrays to the Procedure and a View through the Store (#1749).
+  const viaStore = await order("o5", [{ productId: "pen", qty: 2 }, { productId: "pen", qty: 1 }], "/api/orders-ref");
+  equal(viaStore?.status, 200, "an order placed by a handler through the Store");
+  equal(((await viaStore!.json()) as { products: Record<string, unknown>[] }).products.map(row => [row.id, Number(row.reserved)]), [["pen", 6]], "the View read the array input");
+  equal(await state(), { reserved: [["pen", 6], ["stapler", 1]], lines: [...placed.lines, ["o5", "pen", 1], ["o5", "pen", 2]] }, "every line of the handler's order written");
 }

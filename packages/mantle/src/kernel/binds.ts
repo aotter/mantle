@@ -10,7 +10,7 @@ export type Recipe =
   | { readonly k: "uid" | "admin" | "now" | "version" }
   | { readonly k: "cutoff"; readonly seconds: number }
   | { readonly k: "const"; readonly value: unknown }
-  | { readonly k: "input"; readonly name: string; /** Only a date-time or a date is converted, so only those carry a type. */ readonly type?: "timestamptz" | "date" };
+  | { readonly k: "input"; readonly name: string; /** Only a date-time, a date or JSON is converted, so only those carry a type. */ readonly type?: "timestamptz" | "date" | "json" };
 /** One printed statement and how to bind it. `row`: it must affect exactly one row. */
 export interface Step { readonly sql: string; readonly binds: readonly Recipe[]; readonly row?: boolean }
 export type Bound = { readonly sql: string; readonly binds: unknown[]; readonly row?: boolean };
@@ -22,9 +22,13 @@ export type Values = Partial<Pick<Dialect, "now" | "cutoff" | "timestamp" | "dat
   /** Present only in apps with user fields: keeps, per caller, one printed form of each Schema scope term. */
   readonly scopedAll?: <T>(value: T, caller: Caller) => T;
 };
-/** A declared date-time or date as the engine stores it; any other value (and `null`) is bound as it is. */
+/**
+ * A declared date-time or date as the engine stores it, and a JSON value as its text (a string, such as a boundary's
+ * already converted value, is bound as it is); any other value (and `null`) is bound as it is.
+ */
 export const encode = (d: Values, type: string | undefined, v: unknown): unknown =>
-  type === "timestamptz" ? (v == null ? null : d.timestamp!(v as string | Date)) : type === "date" ? (v == null ? null : d.date!(v as string)) : v;
+  type === "timestamptz" ? (v == null ? null : d.timestamp!(v as string | Date)) : type === "date" ? (v == null ? null : d.date!(v as string))
+    : type === "json" && v != null && typeof v !== "string" ? JSON.stringify(v) : v;
 export function binds(d: Values, recipes: readonly Recipe[], caller: Caller, input?: Readonly<Record<string, unknown>>, ms = 0): unknown[] {
   const out: unknown[] = [];
   for (const r of recipes) {
