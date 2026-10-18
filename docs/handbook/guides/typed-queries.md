@@ -138,7 +138,10 @@ leaves nothing behind. Bound the array with `maxItems`.
 
 A statement cannot read an earlier statement's `RETURNING`, so rows that must
 refer to each other share a key from the input: here the caller (or a `ref`
-handler that then calls this Procedure) supplies `orderRef`.
+handler that then calls this Procedure) supplies `orderRef`. A later statement
+does see the rows an earlier one wrote, so it can also store the parent's id
+(`(SELECT o.id FROM orders o WHERE o.orderRef = input.orderRef)`) in a field with
+`x-mantle-ref: orders`, which lets Admin fold the lines under their order.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2

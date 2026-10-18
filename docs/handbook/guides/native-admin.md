@@ -92,7 +92,7 @@ routes. Send JSON with `Content-Type: application/json`.
 | `PATCH /entries/{id}?collection=<schema>` | Body `{ data, expectedVersion }`; sends the observed version, not the next one. Publishing entries must be drafts. |
 | `POST /entries/{id}/publish?collection=<schema>` | Body `{ expectedVersion }`; validates required data before publishing. |
 | `POST /entries/{id}/unpublish?collection=<schema>` | Body `{ expectedVersion }`; returns the entry to draft. |
-| `POST /operations/{name}` | Body is the Procedure's input; runs an Admin operation (a Procedure with `requires: ctx.admin` or a `target`). |
+| `POST /operations/{name}` | Body is the Procedure's input; runs an Admin operation (a Procedure with `requires: ctx.admin` or a `target`). Returns `{ ok: true, output }`, where `output` is what REST and MCP return (`{ results }` for a SQL Procedure). |
 | `GET /views/{name}` | Generated admin View query parameters plus `limit`/`cursor`; returns `{ rows, nextCursor? }`. |
 | `GET /view-batch?names=a,b` | One to 20 comma-separated admin View names, deduplicated; reads the first row of each as the caller, with the single route's checks (`requires`, scope, TTL, `authorize`), and returns `{ views: { <name>: { rows } \| { unavailable: true } \| { error: true } } }`. A refused View and a missing one are the same `{ unavailable: true }`; a View that cannot answer with no input is `{ error: true }`. Neither fails the batch. Empty or more than 20 names is a 400, before the database is acquired. |
 | `GET /me` | Returns `{ userId, role, admin, login, image }` for the signed-in caller. |
