@@ -93,6 +93,11 @@ Grant lifetime follows Better Auth. Better Auth issues a refresh token only when
 the grant includes `offline_access`; a client registered for `authorization_code`
 may use `refresh_token` too, so registering only `authorization_code` does not
 prevent long-lived grants.
+CIMD is the primary client-discovery path; dynamic client registration (DCR)
+remains available for older MCP clients. Both paths require the client to request
+`offline_access` and the user to consent before a renewable grant is issued.
+The DCR registration defaults below apply only to that compatibility path.
+
 For renewable MCP connections, the examples set both `scopes` and
 `clientRegistrationDefaultScopes` to `["mcp", "offline_access"]`, so a dynamically
 registered client that omits `scope` is registered for `mcp offline_access`. The
