@@ -163,6 +163,12 @@ This is the authorized test transport the BLOCKED rule above refers to.
 
 Either way, the evaluator's prompt names the URL or the connected host, never a cookie, token or sign-in step.
 
+If you cannot start a fresh agent yourself (for example, you are a subagent without that tool), prepare everything
+else: the rubric, the fixtures module, `pnpm accept` running, and one filled-in role prompt per role (below) naming
+its URL. Hand the prompts to whoever can start agents (the person or the orchestrating agent), keep the app running,
+and report acceptance as BLOCKED with the prompts attached until their reports come back. Score those reports as
+usual.
+
 ## Give the agent a role
 
 Fill this in per role. It names the role and the doors, never the jobs:

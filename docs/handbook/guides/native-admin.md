@@ -96,6 +96,11 @@ routes. Send JSON with `Content-Type: application/json`.
 | `GET /views/{name}` | Generated admin View query parameters plus `limit`/`cursor`; returns `{ rows, nextCursor? }`. |
 | `GET /view-batch?names=a,b` | One to 20 comma-separated admin View names, deduplicated; reads the first row of each as the caller, with the single route's checks (`requires`, scope, TTL, `authorize`), and returns `{ views: { <name>: { rows } \| { unavailable: true } \| { error: true } } }`. A refused View and a missing one are the same `{ unavailable: true }`; a View that cannot answer with no input is `{ error: true }`. Neither fails the batch. Empty or more than 20 names is a 400, before the database is acquired. |
 | `GET /me` | Returns `{ userId, role, admin, login, image }` for the signed-in caller. |
+| `GET /admin` | Administrators and pending invitations, plus `adminRoles` (mounted with `identity`). |
+| `GET /members?search=&limit=&cursor=&direction=` | Pages members (1–100), searching id, name and email. |
+| `PATCH /admin/{id}/role` | Body `{ role }`: an admin role name grants Admin, `null` removes it. You cannot change your own role. |
+| `POST /admin/invitations` | Body `{ email, role }`; invites an administrator by email. Returns `{ ok, userId, emailSent }`. |
+| `DELETE /admin/invitations/{id}` | Revokes an invitation nobody has signed in to yet (otherwise 409). |
 
 Entry create/read/patch/transitions return
 `{ collection, entry, parentEntryId, parentEntryTitle, related }`; the entry has
@@ -527,9 +532,13 @@ Names such as `approve` never determine placement. An operation without a row
 target or collection action appears on the Operations page, whose sidebar link
 appears whenever such operations exist.
 
+A record's page shows its row operations as labeled buttons in the header (more than three: two buttons and a
+"More actions" menu); list rows keep them in an "Actions for …" menu.
 Generated row metadata includes simple AND-ed equality/IN literal conditions
-from the target-row UPDATE/DELETE WHERE. The menu hides known mismatches; missing
-preview values and unsupported predicates leave actions available. These are
+from the target-row UPDATE/DELETE WHERE, and an operation whose conditions the
+row does not meet is hidden: with `WHERE … AND orderStatus = 'approved'`, "Mark
+fulfilled" appears only once the order is approved. Missing preview values and
+unsupported predicates leave actions available. These are
 presentation hints: the Procedure still enforces its WHERE and authorization.
 Conflicts show a localized refresh message with the technical diagnostic in
 Details. Successful actions show a short summary and changes, with raw output
