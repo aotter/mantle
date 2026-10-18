@@ -133,8 +133,9 @@ every row or none. Pass the rows as one array input and write them in one SQL
 Procedure that reads the array as a row source: `json_each(input.items)` on
 SQLite and D1, `jsonb_array_elements(input.items) AS j(value)` on PostgreSQL.
 The Procedure's statements commit together on every target, so a Schema
-`checks` failure in any line refuses the whole call with `CONFLICT` and leaves
-no reservation and no line behind. Bound the array with `maxItems`.
+`checks` failure in any statement refuses the whole call with `CONFLICT` and
+leaves nothing behind. Bound the array with `maxItems`.
+
 A statement cannot read an earlier statement's `RETURNING`, so rows that must
 refer to each other share a key from the input: here the caller (or a `ref`
 handler that then calls this Procedure) supplies `orderRef`.
@@ -157,6 +158,22 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  lifecycle: operational
+  uniqueIndexes: [[orderRef]]
+  checks: ["matchedLines = lineCount"]
+  schema:
+    type: object
+    required: [orderRef, lineCount, matchedLines]
+    properties:
+      orderRef: { type: string }
+      lineCount: { type: integer, minimum: 1 }
+      matchedLines: { type: integer, minimum: 0 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
 metadata: { name: order_lines }
 spec:
   title: Order lines
@@ -173,7 +190,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: place-order }
 spec:
-  description: Place an order of one or more lines; a line that would oversell refuses the whole order.
+  description: Place an order of one or more lines; an unknown product or a line that would oversell refuses the whole order.
   requires: { auth: { all: [ctx.user] } }
   input:
     type: object
@@ -195,6 +212,9 @@ spec:
   output: { type: object }
   handler:
     sql: |
+      INSERT INTO orders (orderRef, lineCount, matchedLines) VALUES (input.orderRef,
+        (SELECT COUNT(*) FROM json_each(input.items) j),
+        (SELECT COUNT(*) FROM json_each(input.items) j JOIN products p ON p.id = j.value ->> 'productId'));
       UPDATE products SET reserved = reserved + (SELECT SUM(j.value ->> 'qty') FROM json_each(input.items) j WHERE j.value ->> 'productId' = products.id)
         WHERE id IN (SELECT j.value ->> 'productId' FROM json_each(input.items) j);
       INSERT INTO order_lines (orderRef, productId, qty)
@@ -202,15 +222,20 @@ spec:
         RETURNING id, productId AS "productId";
 ```
 
-Repeated lines for one product add up in the `SUM`, so they are checked against
-the same stock. On PostgreSQL `->>` returns text: write
-`CAST(j.value ->> 'qty' AS int8)` there. SQLite and D1 refuse that integer cast
-(`SQL_TYPE`, because SQLite truncates where PostgreSQL rounds), and their `->>`
-already returns the JSON number. Both statements are set operations, so an
-unknown product id is not an error: the join writes no line for it and reserves
-nothing. The result lists the lines written; a caller that sent more lines than
-came back named a product that does not exist, and should show that line to its
-user rather than retry.
+Each refusal is a check or a unique index, so it rolls back all three statements:
+
+- A line that would oversell fails `reserved <= stock`. Repeated lines for one
+  product add up in the `SUM`, so they are checked against the same stock.
+- A line naming an unknown product does not match in the join, so
+  `matchedLines` falls short of `lineCount` and the `orders` check fails. Set
+  operations alone would skip that line and still succeed.
+- A repeated `orderRef` clashes with the unique index, so replaying a request
+  cannot reserve twice.
+
+On PostgreSQL `->>` returns text: write `CAST(j.value ->> 'qty' AS int8)`
+there. SQLite and D1 refuse that integer cast (`SQL_TYPE`, because SQLite
+truncates where PostgreSQL rounds), and their `->>` already returns the JSON
+number.
 
 Do not split this into a Store write, then a SQL Procedure, then a compensating
 delete: the rows are visible between the steps and a failure leaves cleanup to

@@ -20,9 +20,11 @@ export async function verifyMultiItem(app: (request: Request) => Promise<Respons
   // Two lines for the same product add up against the same stock.
   equal((await order("o3", [{ productId: "pen", qty: 4 }, { productId: "pen", qty: 4 }]))?.status, 409, "repeated lines past stock");
   equal(await state(), placed, "repeated lines past stock left nothing");
-  // An unknown product is not an error: the join writes no line for it, and the result shows which lines were written.
-  const partial = await order("o4", [{ productId: "pen", qty: 1 }, { productId: "missing", qty: 1 }]);
-  equal(partial?.status, 200, "an order naming an unknown product");
-  equal(((await partial!.json()) as { results: { productId: string }[][] }).results.at(-1)!.map(row => row.productId), ["pen"], "the result lists only the line written");
-  equal(await state(), { reserved: [["pen", 4], ["stapler", 1]], lines: [...placed.lines, ["o4", "pen", 1]] }, "no line for the unknown product");
+  // An unknown product leaves matchedLines short of lineCount, so the orders check refuses every line.
+  equal((await order("o4", [{ productId: "pen", qty: 1 }, { productId: "missing", qty: 1 }]))?.status, 409, "an order naming an unknown product");
+  equal(await state(), placed, "the unknown product left no reservation and no line");
+  // orderRef is unique: replaying an order is refused instead of reserving twice.
+  equal((await order("o1", [{ productId: "pen", qty: 1 }]))?.status, 409, "a repeated orderRef");
+  equal(await state(), placed, "the repeated order left nothing");
+  equal((await query("SELECT orderref, linecount, matchedlines FROM orders")).map(row => [row.orderref, Number(row.linecount), Number(row.matchedlines)]), [["o1", 2, 2]], "one order row, every line matched");
 }

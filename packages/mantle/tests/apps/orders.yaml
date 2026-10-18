@@ -1,4 +1,4 @@
-# An order with any number of lines in one SQL Procedure: every line reserves stock and is written, or none is.
+# The manifest in docs/handbook/guides/typed-queries.md "Several rows that commit together", plus a REST Trigger for the tests.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: products }
@@ -13,6 +13,23 @@ spec:
       name: { type: string }
       stock: { type: integer, minimum: 0 }
       reserved: { type: integer, minimum: 0 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  lifecycle: operational
+  uniqueIndexes: [[orderRef]]
+  # A line naming an unknown product does not match; the check then refuses the whole order.
+  checks: ["matchedLines = lineCount"]
+  schema:
+    type: object
+    required: [orderRef, lineCount, matchedLines]
+    properties:
+      orderRef: { type: string }
+      lineCount: { type: integer, minimum: 1 }
+      matchedLines: { type: integer, minimum: 0 }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -32,7 +49,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: place-order }
 spec:
-  description: Place an order of one or more lines; any line that would oversell refuses the whole order.
+  description: Place an order of one or more lines; an unknown product or a line that would oversell refuses the whole order.
   requires: { auth: { all: [ctx.user] } }
   input:
     type: object
@@ -54,6 +71,9 @@ spec:
   output: { type: object }
   handler:
     sql: |
+      INSERT INTO orders (orderRef, lineCount, matchedLines) VALUES (input.orderRef,
+        (SELECT COUNT(*) FROM json_each(input.items) j),
+        (SELECT COUNT(*) FROM json_each(input.items) j JOIN products p ON p.id = j.value ->> 'productId'));
       UPDATE products SET reserved = reserved + (SELECT SUM(j.value ->> 'qty') FROM json_each(input.items) j WHERE j.value ->> 'productId' = products.id)
         WHERE id IN (SELECT j.value ->> 'productId' FROM json_each(input.items) j);
       INSERT INTO order_lines (orderRef, productId, qty)
