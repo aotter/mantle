@@ -296,7 +296,9 @@ Generated full/partial input checks validate creates, edits, operations and
 filters. Plain titled string `oneOf` choices use the same enum checks; general
 or constrained alternatives remain refused. Draft creates can be incomplete;
 publish checks required data. Publishing edits apply only to drafts. Read-only
-collections refuse generic edits while their declared Procedures can still run.
+collections refuse generic creates, edits, deletes and transitions with 403 `AUTH_DENIED`
+("This record is read-only; use its operations.") before any read or write, while
+their declared Procedures can still run.
 
 Writes use compiler-printed native Procedure frames, bind recipes and only the
 supplied field fragments. They do not update omitted columns or run a schema

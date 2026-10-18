@@ -8,7 +8,7 @@ Bare queries preserve native errors except required conflict/uncertain-write cla
 | --- | --- | --- |
 | INPUT_VALIDATION_FAILED | 400 | Invalid external input, paging or Store operation |
 | UNAUTHENTICATED | 401 | Caller lacks required authenticated authority |
-| AUTH_DENIED | 403 | Predicate, role or session-origin refusal |
+| AUTH_DENIED | 403 | Predicate, role or session-origin refusal; a generic Admin write to a read-only Schema |
 | NOT_FOUND | 404 | Missing or excluded resource |
 | METHOD_NOT_ALLOWED | 405 | Path exists for another method |
 | CONFLICT | 409 | Unique clash, stale lock or failed row/state guard |
