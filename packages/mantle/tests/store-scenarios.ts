@@ -282,6 +282,11 @@ async function verifyTransactions(env: StoreEnv, ok: () => void) {
   assert.equal((await catalog.findById(keep.id)).name, "after"); assert.equal(await catalog.findById(remove.id), null); ok();
   await assert.rejects(store.batch([write]), /unused Writes/);
   await assert.rejects(Promise.resolve(write), /already been batched/); ok();
+  // .catch and .finally run a Write like await does, once.
+  const stale = catalog.update(keep.id, { name: "stale" }, { lock: -1 });
+  let finished = false;
+  assert.equal(await stale.catch((error: any) => error.code).finally(() => { finished = true; }), "CONFLICT");
+  assert.equal(finished, true); assert.equal((await catalog.findById(keep.id)).name, "after"); ok();
 
   const now = await catalog.findById(keep.id);
   const before = await snapshot();

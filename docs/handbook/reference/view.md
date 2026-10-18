@@ -8,6 +8,8 @@ PostgreSQL syntax is parsed and checked at generation. Reads may reference decla
 
 The SQL each dialect accepts, for Views and Procedures alike, is listed in [the SQL reference](sql.md); [SQL patterns](../guides/sql-patterns.md) shows the common ones. Unsupported SQL fails with a source position; generation is the authority for each target.
 
+`*` and `t.*` expand to the Schema's declared fields only. Select `id`, `version`, `created_at` and `updated_at` by name when a client needs them (a write's `expectedVersion`, a detail link, keyset paging).
+
 OFFSET, arbitrary functions/relations, DDL and transaction control are not a read escape hatch. Use keyset paging. Select latitude/longitude explicitly instead of native geo projections.
 
 ## Restrict

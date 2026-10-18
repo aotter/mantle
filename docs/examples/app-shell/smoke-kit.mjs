@@ -65,7 +65,7 @@ export async function assertMcpDiscovery(endpoint, { tools, headers = {} }) {
   return names;
 }
 
-const database = "mantle-app"; // wrangler.jsonc d1_databases[0].database_name
+const database = "DB"; // the D1 binding (wrangler.jsonc d1_databases[0].binding), so renaming the database changes nothing here
 const env = { ...process.env, WRANGLER_SEND_METRICS: "false" };
 
 export async function smoke(scenario, options) {

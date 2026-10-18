@@ -233,7 +233,7 @@ surface its generated `publish_<schema>`, `unpublish_<schema>` and
 `archive_<schema>` tools use the same snake-case naming rule, are admin-only
 and take `{ id, expectedVersion }` through the shared generated validation.
 
-`/mcp/admin` admits only admins: `isAdmin(caller)` must hold. Better Auth’s admin plugin `adminRoles` defines this layer (default `["admin"]`); the application supplies its verified Caller. MCP bodies are limited
+`/mcp/admin` admits only admins: `isAdmin(caller)` must hold. It lists only admin-surface tools; public Views and Procedures stay on `/mcp`, and generation never copies them across. An admin's AI that changes records also needs admin Views to find them and read back the committed row and its version (search, detail), declared by the app; the [acceptance design audit](../guides/agent-workflow-acceptance.md#audit-mcp-tool-design-before-implementation) checks this. Better Auth’s admin plugin `adminRoles` defines this layer (default `["admin"]`); the application supplies its verified Caller. MCP bodies are limited
 to 1 MiB (1,048,576 bytes). Resource metadata challenges use the origin of
 `request.url`; behind a proxy, the app must pass a Request with its public
 origin so the audience and metadata URL point to the client-visible service.
