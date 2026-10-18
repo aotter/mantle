@@ -18,13 +18,20 @@ async function load(path: string) {
   }
 }
 const targets: readonly Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
-const usage = "Usage: mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>]... (one per Better Auth instance) [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>] [--assets <static assets directory>]\n       mantle bundle <entry> <outdir> [--assets <static assets directory>]\n       mantle describe <target> <manifest>... [--diff <old.json>]";
+const usage = "Usage: mantle help [topic]   (start here: the installed docs, one topic at a time)\n       mantle init [directory] [--dry-run]\n       mantle generate <target> <output-directory> <manifest>... [--check] [--admin] [--site <module>] [--auth <module>]... (one per Better Auth instance) [--wrangler <path>] [--entry <worker entry>] [--outdir <bundle directory>] [--assets <static assets directory>]\n       mantle bundle <entry> <outdir> [--assets <static assets directory>]\n       mantle describe <target> <manifest>... [--diff <old.json>]";
 try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-    diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, auth: { type: "string", multiple: true }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" }, assets: { type: "string" },
+    diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, auth: { type: "string", multiple: true }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" }, assets: { type: "string" }, "dry-run": { type: "boolean" }, help: { type: "boolean", short: "h" },
   } });
-  const command = positionals[0] === "bundle" || positionals[0] === "generate" || positionals[0] === "describe" ? positionals.shift()! : "generate";
-  if (command === "describe") {
+  const command = ["bundle", "generate", "describe", "help", "init"].includes(positionals[0]!) ? positionals.shift()! : values.help || !positionals.length ? "help" : "generate";
+  if (command === "help") {
+    const { help, topicList } = await import("./help.js");
+    if (positionals.length > 1) throw new Error(usage);
+    console.log(positionals[0] === "topics" ? topicList() : help(positionals[0]));
+  } else if (command === "init") {
+    if (positionals.length > 1) throw new Error(usage);
+    console.log((await import("./init.js")).init(positionals[0] ?? ".", values["dry-run"]));
+  } else if (command === "describe") {
     const target = positionals.shift();
     if (!target || !targets.includes(target as Target) || !positionals.length) throw new Error(usage);
     const { compilePlan, sqliteCompiler, postgresCompiler } = await import("../build/compiler.js");
@@ -44,6 +51,8 @@ try {
   } else {
     const [target, destination, ...paths] = positionals;
     if (!target || !targets.includes(target as Target) || !destination || !paths.length) throw new Error(usage);
+    // A shell leaves an unmatched glob as is; say what is missing instead of ENOENT.
+    for (const path of paths) if (/[*?]/.test(path) && !existsSync(path)) throw new Error(`No manifest matches ${path}. Add one (mantle help four-atoms, mantle help manifest), then run generate again.`);
     const sources = await Promise.all(paths.map(async path => ({ sourceId: path, text: await readFile(path, "utf8") })));
     // Read plain options without constructing Better Auth, which can touch the database.
     // One --auth per Better Auth instance; their tables are merged into one migration.
@@ -61,6 +70,8 @@ try {
     for (const warning of result.warnings ?? []) console.warn(`warning: ${warning}`);
     const read = [...paths, ...(values.auth ?? []), ...(values.site ? [values.site] : [])];
     const changed = await writeArtifacts(destination, { ...result.files, [INPUTS_FILE]: inputsFingerprint(destination, read, target) }, values.check);
+    // After writing: the entry's imports of generated modules only resolve once they exist.
+    for (const warning of await (await import("./mounts.js")).unmountedWarnings(values.entry!, destination, result.files)) console.warn(`warning: ${warning}`);
     if (target.startsWith("cloudflare-")) {
       const wrangler = values.wrangler ?? ["wrangler.jsonc", "wrangler.json", "wrangler.toml"].find(existsSync) ?? "wrangler.jsonc";
       const assets = values.admin ? values.assets ?? join(values.outdir!, "client") : undefined;
