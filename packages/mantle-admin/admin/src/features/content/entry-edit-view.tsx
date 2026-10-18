@@ -3,7 +3,7 @@ import { SchemaFields as SharedSchemaFields, type FieldLabels, type FieldSlot } 
 export { stringFieldWidget } from "@aotter/mantle-ui/kit";
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Globe, Images, ImagePlus, LockKeyhole, MoreHorizontal, Plus, RotateCcw, Save, Send } from "lucide-react";
+import { ArrowLeft, ExternalLink, Globe, Images, ImagePlus, LockKeyhole, Plus, RotateCcw, Save, Send } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -45,7 +45,7 @@ import {
   DialogTitle,
 } from "@aotter/mantle-ui/kit";
 import { collectionSummaryKey } from "./collection-view";
-import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
+import { boundOperationsFor, RecordOperations, RowOperationsMenu } from "./row-operations";
 import { contentLocales, LocaleBadge, localeName } from "./locale-badge";
 
 const MarkdownEditor = React.lazy(() => import("../editor/markdown-editor").then((module) => ({ default: module.MarkdownEditor })));
@@ -214,19 +214,13 @@ export function EntryEditView({
             ) : null}
             {!isOperational && <StatusBadge status={payload.entry.status} />}
             <Slot name={`record.actions:${payload.collection.name}`} Default={Empty} props={{ collection: payload.collection.name, entry: payload.entry }} />
-            <RowOperationsMenu
+            <RecordOperations
               row={payload.entry}
               collection={payload.collection}
               operations={boundOperations}
               language={language}
               canonical={canonical}
               onSuccess={() => void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })}
-              trigger={
-                <Button type="button" variant="secondary">
-                  <MoreHorizontal className="size-4" aria-hidden />
-                  {t(language, "rowActions.menuLabel")}
-                </Button>
-              }
             />
           </>
         }
@@ -784,6 +778,7 @@ function RelatedSections({
                       row={entry}
                       collection={section.collection}
                       operations={boundOperations}
+                      itemName={entryTitle(entry.data, t(language, "collection.untitled"), section.collection, entry.id)}
                       language={language}
                       canonical={canonical}
                       onSuccess={onOperationSuccess}
