@@ -41,7 +41,7 @@ describe("acceptance Admin UX", () => {
   it("localizes conflicts and retains their technical diagnostic in Details", () => {
     const html = renderToStaticMarkup(<OperationDiagnostic diagnostic={{code: "CONFLICT", kind: "row", message: "No row matched this change."}} language="en" />);
     expect(html).toContain("The record changed"); expect(html).toContain("No row matched this change."); expect(html).toContain("<details>");
-    const unique = renderToStaticMarkup(<OperationDiagnostic diagnostic={{code: "CONFLICT", message: "A unique constraint of the Schema was violated."}} language="en" />);
+    const unique = renderToStaticMarkup(<OperationDiagnostic diagnostic={{code: "CONFLICT", kind: "unique", message: "A unique constraint of the Schema was violated."}} language="en" />);
     expect(unique).toContain("A record with the same unique value already exists.");
     expect(unique).not.toContain("The record changed");
     expect(renderToStaticMarkup(<OperationDiagnostic diagnostic={{code: "CONFLICT", message: "Publishing failed."}} language="en" />)).toBe("Publishing failed.");
