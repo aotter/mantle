@@ -36,9 +36,11 @@ over MCP. Only members the officers listed in Admin can sign up. Officers see ev
 
 ## Run it
 
+This runs the example by itself, to read and try. For your own app, run `mantle init` and take only the patterns you need into its manifests and `src/` (`mantle help examples`).
+
 ```sh
-cp -R node_modules/@aotter/mantle/docs/examples/app-shell/. my-app/
-cp -R node_modules/@aotter/mantle/docs/examples/club-events/. my-app/
+npx mantle init my-app
+cp -R node_modules/@aotter/mantle/docs/examples/club-events/. my-app/   # run the example as is
 cd my-app && pnpm install && pnpm generate && pnpm types && pnpm check
 cp .dev.vars.example .dev.vars && pnpm db:init && pnpm dev
 pnpm smoke

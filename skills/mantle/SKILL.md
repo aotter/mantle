@@ -17,6 +17,14 @@ authority: `node_modules/@aotter/mantle/README.md` and
 `node_modules/@aotter/mantle/docs/`. Prefer them over this file, the SDK
 checkout, or any online copy.
 
+## Start with `mantle help`
+
+Run `mantle help` first (in a project: `npx mantle help`; before one exists:
+`npx @aotter/mantle@<exact version> help`). It prints the installed version's
+entry page and every topic; `mantle help <topic>` prints one page with the next
+and linked topics as commands. Follow it rather than browsing the SDK checkout
+or an online copy.
+
 ## Find the project and its version
 
 Work in the user's application, outside the SDK checkout. Read package.json, the lockfile, installed SDK README and node_modules/@aotter/mantle/docs/. Those files define the exact version's contract. Preserve existing identity, handles, routes and resources.
@@ -29,20 +37,35 @@ Work in the user's application, outside the SDK checkout. Read package.json, the
 - Read `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` only for an authorized production deployment.
 - Read `node_modules/@aotter/mantle/docs/skills/media-gc/SKILL.md` only to audit or remove stale uncommitted media uploads.
 
-For a new project, install an exact published SDK version with matching selected Admin/UI packages. Node must be 22.22 or newer. Add TypeScript and target types; Workers also need Wrangler. `node_modules/@aotter/mantle/docs/examples/app-shell/package.json` lists the Wrangler, TypeScript and type-package versions this release is tested with. Optional auth/MCP peers use the installed SDK's package.json versions. Read the installed handbook's start/project-and-cli.md before choosing a target.
+## New application
 
-For a new Cloudflare app, copy `node_modules/@aotter/mantle/docs/examples/app-shell/` first, then the closest example from `docs/examples/README.md` on top of it, and edit from there: manifests, `src/handlers.ts`, `src/routes.ts`, `src/schedule.ts`, `smoke.mjs`. Search for `AGENT:` to find what the app must fill in; the example pages are unstyled on purpose, so styling them is part of that work. Before reporting done, resolve each `AGENT:` or name the ones you left. Keep the two roles `admin` and `user` unless the user asks for more.
+Node must be 22.22 or newer. Create it with `npx @aotter/mantle@<exact version> init <directory>`:
+it writes the app shell once (email OTP, `admin` and `user`, Admin, MCP for both
+roles, REST, `/sign-in`) with Mantle packages pinned to that version, then lists
+every `AGENT:` the app must fill in. Then follow the app's `README.md`.
+Use `mantle help examples` to find the pattern for each need (stock, own records,
+approvals, callbacks, public pages, members-only sign-up, email and cron) and
+take it into the app's own manifests and `src/`; do not copy an example
+directory over the app. The example pages are unstyled on purpose, so styling
+them is part of the work. Before reporting done, resolve each `AGENT:` or name
+the ones you left. Keep the two roles `admin` and `user` unless the user asks for more.
+Generation only, inside an app you already have: skip `init` and use
+`mantle generate` (`mantle help project-and-cli`).
 
-Before reporting any user-facing work as done, follow the installed
-`node_modules/@aotter/mantle/docs/handbook/guides/agent-workflow-acceptance.md`:
-run independent acceptance with a fresh agent on the surface its user uses.
-This is not limited to MCP; if it was not run, say so explicitly and report the
-work as UNVERIFIED rather than done. For MCP workflows, also run the guide's
-design audit before implementing tools. This workflow practice applies to every
-installed SDK version: if its guide is older or MCP-scoped, apply its fresh-agent
-round loop to the user-facing surface actually built. If an older installed
-version lacks this guide, record the missing guidance and preserve that version's
-contract; do not silently upgrade or substitute checkout/online docs.
+## Accept before reporting done
+
+Before reporting any new app or feature as done, follow the installed
+`node_modules/@aotter/mantle/docs/handbook/guides/agent-workflow-acceptance.md`
+(`mantle help agent-workflow-acceptance`): write a private rubric, then give a
+fresh agent per role only its role and entry points across every surface it
+uses, at most three rounds. This is not limited to MCP; if it was not run, say
+so explicitly and report the work as UNVERIFIED rather than done. For MCP
+workflows, also run the guide's design audit before implementing tools. This
+workflow practice applies to every installed SDK version: if its guide is older
+or MCP-scoped, apply its fresh-agent round loop to the user-facing surface
+actually built. If an older installed version lacks this guide, record the
+missing guidance and preserve that version's contract; do not silently upgrade
+or substitute checkout/online docs.
 
 For existing older applications, use their installed docs until the user requests an upgrade. For partial adoption read node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md.
 
@@ -147,8 +170,8 @@ To add Mantle to an application that has its own code, users and data, read
 `node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md` first.
 
 Report the project path, the exact Mantle version, what you changed, the checks
-you ran with their results, the independent acceptance verdict (CONVERGED / NOT
-CONVERGED / BLOCKED / UNVERIFIED), and anything left for the user.
+you ran with their results, the independent acceptance verdict (CONVERGED /
+BLOCKED / UNVERIFIED), and anything left for the user.
 
 ## Data paths
 

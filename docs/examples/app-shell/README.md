@@ -2,16 +2,15 @@
 
 The wiring every Mantle Cloudflare app needs, ready to copy: Better Auth (email OTP, admin + user roles),
 one Worker fetch (auth routes → your routes → Admin → MCP → generated REST), the Admin console assets, and a
-local acceptance kit. It has no business manifests: add your own, or copy one of the examples on top of it.
+local acceptance kit. It has no business manifests: add your own, taking patterns from the examples (`mantle help examples`).
 
 ## Start an app
 
 ```sh
-cp -R node_modules/@aotter/mantle/docs/examples/app-shell/. my-app/   # or from this repository
-cp -R node_modules/@aotter/mantle/docs/examples/club-events/. my-app/ # optional: an example on top
+npx @aotter/mantle@<exact version> init my-app   # writes this shell once, Mantle packages pinned to that version
 cd my-app
-# package.json: pin the exact installed Mantle version for @aotter/mantle, -admin and -ui
 pnpm install
+# add manifests/*.yaml (mantle help four-atoms; patterns: mantle help examples)
 pnpm generate          # writes generated/ and lists any `handler: { ref }` to implement in src/handlers.ts
 pnpm types && pnpm check
 cp .dev.vars.example .dev.vars

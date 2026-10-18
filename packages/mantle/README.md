@@ -4,6 +4,10 @@ Generate native SQL for Bun SQLite/PostgreSQL and Cloudflare D1/PostgreSQL.
 The build-time compiler uses the closed v2 grammar and canonical SQL policy.
 Applications import contract primitives and official drivers.
 
+**Start here:** `npx mantle help` prints the installed docs one topic at a time. `mantle init <directory>` writes a
+complete app shell once (email OTP, `admin` + `user`, Admin, MCP, REST); [examples](./docs/examples/README.md) show
+how to combine stock, own-records, approvals, callbacks, public pages and email into it.
+
 Three packages: `@aotter/mantle` is the SDK with bin `mantle`; `@aotter/mantle-ui` is pure UI without an SDK dependency; `@aotter/mantle-admin` is the optional product with the SDK as a peer. Use matching installed versions and their own docs.
 
 Select `--admin` / `admin: true` for [Native Admin](./docs/handbook/guides/native-admin.md).

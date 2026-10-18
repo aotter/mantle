@@ -22,11 +22,12 @@ for the generate warning and deliberate asymmetry exception.
 Keep optional modules out of unused entry imports and auth dynamically loaded.
 Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.
-Before reporting any user-facing work as done, follow the [independent
-acceptance guide](../../handbook/guides/agent-workflow-acceptance.md): run it
-with a fresh agent on the surface its user uses. This is not limited to MCP; if
-it was not run, say so explicitly and report the work as UNVERIFIED rather than
-done. For MCP workflows, also run the guide's design audit before implementing
+Before reporting any new app or feature as done, follow the [independent
+acceptance guide](../../handbook/guides/agent-workflow-acceptance.md): write a
+private rubric, then give one fresh agent per role (`admin`, `user`) only its
+role and entry points, across every surface it uses. This is not limited to
+MCP; if it was not run, say so explicitly and report the work as UNVERIFIED
+rather than done. For MCP workflows, also run the guide's design audit before implementing
 tools.
 
 For native Admin, read the [current guide](../../handbook/guides/native-admin.md):
