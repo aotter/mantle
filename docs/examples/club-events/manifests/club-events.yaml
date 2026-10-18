@@ -86,6 +86,21 @@ spec:
     FROM registrations r JOIN events e ON e.id = r.eventId
     ORDER BY r.created_at DESC, r.id DESC
 ---
+# Officers' roster: each event with its attendees as one JSON array, so one read answers "who is coming".
+# The correlated subquery gives [] for an event nobody registered for (a LEFT JOIN + GROUP BY would give one empty object).
+# SQLite/D1 builds the objects with json_set; on PostgreSQL write jsonb_agg(jsonb_build_object('memberName', r.memberName)).
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: event-roster }
+spec:
+  title: Event roster
+  surface: admin
+  requires: { auth: { all: [ctx.admin] } }
+  sql: |
+    SELECT e.id, e.title, e.startsAt AS "startsAt", e.seats_taken AS "seatsTaken",
+      (SELECT json_group_array(json_set('{}', '$.memberName', r.memberName)) FROM registrations r WHERE r.eventId = e.id) AS attendees
+    FROM events e ORDER BY e.startsAt, e.id
+---
 # The member-facing entry: a ref handler checks the event, then runs register-write.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure

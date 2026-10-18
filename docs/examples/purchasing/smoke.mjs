@@ -171,6 +171,20 @@ try {
     assert.deepEqual(received.map(order => order.reference), [laptop, projector]);
     assert.deepEqual(await statusAndOrder(projector), { status: "ordered", supplierOrderId: "SUP-2" });
     step("daily cron retries the failed supplier order (system caller) and emails every admin about requests pending more than 3 days, and only those");
+
+    const small = await call("POST", "/api/requests", { cookie: bob, body: { title: "Pens", amount: 50, department: "Engineering" } });
+    assert.equal(small.status, 200, JSON.stringify(small.body));
+    const pens = small.body.results[0][0];
+    assert.equal(pens.requestStatus, "approved");
+    const spent = await remaining("Engineering");
+    assert.deepEqual((await ledgerRows()).filter(r => r.requestId === pens.id), [{ requestId: pens.id, amount: 50, remainingAfter: spent }]);
+    await query(`UPDATE budgets SET remaining = 20 WHERE department = 'Design'`);
+    const ledgerBefore = (await ledgerRows()).length, requestsBefore = (await query("SELECT count(*) AS n FROM requests"))[0].n;
+    assert.equal((await call("POST", "/api/requests", { cookie: alice, body: { title: "Tape", amount: 30, department: "Design" } })).status, 409);
+    assert.equal(await remaining("Design"), 20);
+    assert.equal((await ledgerRows()).length, ledgerBefore);
+    assert.equal((await query("SELECT count(*) AS n FROM requests"))[0].n, requestsBefore);
+    step("CASE approves a request of 100 or less at submission: the status, the budget and the ledger row commit together, and one that would overspend is refused with nothing written");
   }, { vars: { EMPLOYEE_DOMAIN: "example.test", SUPPLIER_API_URL: `http://127.0.0.1:${supplier.address().port}/orders`, SUPPLIER_WEBHOOK_SECRET: SECRET } });
 } finally {
   supplier.close();

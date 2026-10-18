@@ -4,7 +4,8 @@ const equal = (actual: unknown, expected: unknown, what: string) => { if (JSON.s
 
 export const seed = (pg: boolean) => `INSERT INTO products (id, version, created_at, updated_at, name, stock, reserved) VALUES ('pen', 1, ${pg ? "now(), now()" : "0, 0"}, 'pen', 10, 0), ('stapler', 1, ${pg ? "now(), now()" : "0, 0"}, 'stapler', 1, 0);`;
 
-export async function verifyMultiItem(app: (request: Request) => Promise<Response | undefined>, query: Query) {
+/** `stockCheck` is how the target names `reserved <= stock`: the expression on SQLite/D1, the constraint on PostgreSQL. */
+export async function verifyMultiItem(app: (request: Request) => Promise<Response | undefined>, query: Query, stockCheck = "reserved <= stock") {
   const order = (orderRef: string, items: unknown) => app(new Request("http://local/api/orders", { method: "POST", headers: { "content-type": "application/json", "x-role": "user" }, body: JSON.stringify({ orderRef, items }) }));
   const state = async () => ({
     reserved: (await query("SELECT id, reserved FROM products ORDER BY id")).map(row => [row.id, Number(row.reserved)]),
@@ -16,6 +17,8 @@ export async function verifyMultiItem(app: (request: Request) => Promise<Respons
   // The pen line fits; the stapler line oversells. Neither may stay.
   const refused = await order("o2", [{ productId: "pen", qty: 2 }, { productId: "stapler", qty: 1 }]);
   equal(refused?.status, 409, "an order with one oversold line");
+  // The same message on every target, with no driver text (D1 appends its own SQLITE_CONSTRAINT detail).
+  equal(((await refused!.json()) as { error: { message: string } }).error.message, `A check of the Schema failed: products: ${stockCheck}`, "the refusal names the check, not the driver");
   equal(await state(), placed, "the refused order left no reservation and no line");
   // Two lines for the same product add up against the same stock.
   equal((await order("o3", [{ productId: "pen", qty: 4 }, { productId: "pen", qty: 4 }]))?.status, 409, "repeated lines past stock");

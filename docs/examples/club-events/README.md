@@ -23,6 +23,9 @@ over MCP. Only members the officers listed in Admin can sign up. Officers see ev
   Schema check; no View or Trigger exposes it). `src/signup.ts` replaces the shell's allow-all `allowSignUp` with a
   Store lookup as a system caller, so any other email gets 403 at sign-in and no account. To invite another officer
   through Admin, list their email in `members` first.
+- **An event with its attendees in one read**: the admin View `event-roster` returns each event with an `attendees`
+  JSON array built by `json_group_array(json_set('{}', ...))` in a correlated subquery, so an event nobody joined has
+  `[]`. PostgreSQL writes it with `jsonb_agg(jsonb_build_object(...))`; see `mantle help sql-patterns`.
 - **Member MCP tool**: the `register-mcp` Trigger (`surface: public`) exposes `register` on `/mcp`, so the member's AI
   registers with the member's own sign-in.
 

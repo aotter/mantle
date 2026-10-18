@@ -105,7 +105,13 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step, logs }) => {
   assert.equal((await call("GET", "/admin/api/entries?collection=registrations", { cookie: bob })).status, 403);
   assert.equal((await call("GET", "/admin/api/me", { cookie: bob })).status, 403);
   assert.ok(all.body.items.every(r => r.data.memberName && r.data.memberName !== r.data.member), JSON.stringify(all.body.items));
-  step("officers see every member's registrations, with names, through Admin's API; a member gets 403 on Admin");
+  const roster = await call("GET", "/admin/api/views/event-roster", { cookie: admin });
+  assert.equal(roster.status, 200, JSON.stringify(roster.body));
+  const attendees = row => (typeof row.attendees === "string" ? JSON.parse(row.attendees) : row.attendees).map(a => a.memberName).sort();
+  for (const row of roster.body.rows) assert.equal(attendees(row).length, row.seatsTaken, JSON.stringify(row));
+  assert.ok(roster.body.rows.some(row => attendees(row).length > 0), JSON.stringify(roster.body.rows));
+  assert.equal((await call("GET", "/admin/api/views/event-roster", { cookie: bob })).status, 403);
+  step("officers see every member's registrations, with names, through Admin's API; and every event with its attendees as one JSON array (event-roster); a member gets 403 on Admin");
 
   const entry = async id => (await call("GET", `/admin/api/entries/${id}?collection=events`, { cookie: admin })).body.entry;
   const before = await seatsOf(hike.id), read = await entry(hike.id);

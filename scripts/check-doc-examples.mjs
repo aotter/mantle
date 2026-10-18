@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 // Native handbook examples use the built SDK, without a registry install.
 const nativeSdk = join(root, "packages/mantle");
-const HANDBOOK = ["start/quickstart-worker.md", "guides/typed-queries.md", "reference/schema.md", "reference/trigger.md", "guides/postgres-adapters.md", "guides/email.md"];
+const HANDBOOK = ["start/quickstart-worker.md", "guides/typed-queries.md", "reference/schema.md", "reference/trigger.md", "guides/postgres-adapters.md", "guides/email.md", "guides/sql-patterns.md"];
 const requested = process.argv.slice(2).map(path => resolve(path));
 const nativePages = requested.length ? requested : HANDBOOK.map(page => join(root, "docs/handbook", page));
 for (const page of nativePages) {
