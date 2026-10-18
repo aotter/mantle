@@ -34,7 +34,8 @@ PostgreSQL. Values already rounded when written
 `views/<name>.ts` exports both driver-native `Row` and `WireRow` (declared wire fields agree across targets);
 `paged/views/<name>.ts` keeps native `Row` rows; REST/MCP use separate
 `paged/wire/views/<name>.ts` SQL and convert at their boundary. SQLite/D1 declared JSON
-and boolean columns become JSON values and booleans, preserving aliases and nulls;
+and boolean columns, and computed outputs that are JSON documents by construction
+(JSON aggregates and builders), become JSON values and booleans, preserving aliases and nulls;
 PostgreSQL already returns those native values.
 Declared real/float outputs remain numbers. Computed outputs without proved lineage,
 SQL Procedures and app-owned ref results retain native values and types.

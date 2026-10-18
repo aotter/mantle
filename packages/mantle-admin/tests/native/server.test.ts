@@ -59,6 +59,18 @@ test("generated Procedure callbacks retain native OCC locks, reject system field
   expect((await f.ask("/entries/a?collection=posts","PATCH",JSON.stringify({expectedVersion:1,data:{title:"new"}})))?.status).toBe(409);expect(writes).toBe(1);
   expect((await f.ask("/entries","POST",JSON.stringify({collection:"posts",data:{version:1}})))?.status).toBe(400);
 });
+test("a read-only Schema refuses generic writes with 403, not a version conflict, before reading or writing",async()=>{
+  const row={id:"a",version:1,title:"old"};let reads=0,writes=0;
+  const schema:EntrySchema={binding:compiled,name:"requests",descriptor:{name:"requests"},publishing:false,readOnly:true,fields:{title:"title"},defaults:{},query:()=>({input:{},order:"id:asc"}),validate:d=>d,values:d=>d,row:r=>r};
+  const adapter:NativeProcedureAdapter<{}>={...unused,read:()=>{reads++;return [row];},procedure:async()=>{writes++;return [[row]];}};
+  const f=fixture(entries([schema],adapter));
+  for(const [path,method,body,noun] of [["/entries/a?collection=requests","PATCH",{expectedVersion:1,data:{title:"new"}},"record"],["/entries/a?collection=requests","DELETE",undefined,"record"],["/entries","POST",{collection:"requests",data:{title:"new"}},"collection"]] as const){
+    const response=await f.ask(path,method,body&&JSON.stringify(body));
+    expect(response?.status).toBe(403);expect((await response?.json()).error).toEqual({code:"AUTH_DENIED",message:`This ${noun} is read-only; use its operations.`,path:"admin/entries"});
+  }
+  expect([reads,writes]).toEqual([0,0]);
+  expect((await f.ask("/entries/a?collection=requests"))?.status).toBe(200);
+});
 
 test("creation statistics validates primary collection and presets before storage and preserves v0.1 bucket DTO",async()=>{
   const args:any[]=[];

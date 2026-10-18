@@ -1,4 +1,4 @@
-/** One oracle for docs/handbook/guides/sql-patterns.md on every target, through the generated REST boundary. Also imported by the local D1 Worker. */
+/** One oracle for docs/handbook/guides/sql-patterns.md on every target, through the generated REST boundary (and MCP for the nested JSON read). Also imported by the local D1 Worker. */
 type App = (request: Request) => Promise<Response | undefined>;
 type Query = (sql: string) => Promise<Record<string, unknown>[]>;
 const equal = (actual: unknown, expected: unknown, what: string) => { if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`${what}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`); };
@@ -55,10 +55,13 @@ export async function verifySqlPatterns(app: App, query: Query, pg: boolean) {
   // One read for a product and its orders; [] when it has none.
   const nested = await send("/api/views/products-with-orders", undefined);
   equal(nested.status, 200, "products-with-orders");
-  // SQLite and D1 return the aggregate as JSON text; PostgreSQL's jsonb arrives as an array.
-  for (const row of nested.body.rows) equal(typeof row.orders, pg ? "object" : "string", "the nested column's wire type");
-  const orders = (row: any) => (pg ? row.orders : JSON.parse(row.orders)) as { id: string; qty: number }[];
-  equal(nested.body.rows.map((row: any) => [row.name, orders(row).map(o => o.qty).sort()]).sort(), [["Desk", [2, 2]], ["Gel pen", [10]], ["Tape", []]], "each product with its orders");
+  // The boundary types a computed JSON document as json: an array on every target, though SQLite and D1 return text.
+  const tool = (await app(new Request("http://local/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "x-role": "admin" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "products_with_orders", arguments: {} } }) })))!;
+  const reply = await tool.text(), mcpRows = JSON.parse(reply.startsWith("event:") ? reply.split("data: ")[1]!.split("\n")[0]! : reply).result?.structuredContent?.rows;
+  for (const rows of [nested.body.rows, mcpRows]) {
+    for (const row of rows ?? [undefined]) equal(Array.isArray(row?.orders), true, "the nested column is an array over REST and MCP");
+    equal(rows.map((row: any) => [row.name, row.orders.map((o: { qty: number }) => o.qty).sort()]).sort(), [["Desk", [2, 2]], ["Gel pen", [10]], ["Tape", []]], "each product with its orders");
+  }
 
   // row_number: the latest order of each product. Backdate the first desk order so the order of creation is unambiguous.
   await query(`UPDATE orders SET created_at = ${pg ? "created_at - interval '1 second'" : "created_at - 1000000"} WHERE id = '${bigId}'`);

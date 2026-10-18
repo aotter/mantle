@@ -103,6 +103,22 @@ export function viewOutputs(view: SqlPlan, schemas: Readonly<Record<string, Plan
   return { ...(keys ? { keys: [...new Set(keys)], positions: keys } : {}), columns };
 }
 
+/** The functions whose result is always a JSON document (SQLite's JSON text, PostgreSQL's json/jsonb), never a scalar. */
+const JSON_FUNCS = new Set(["json_group_array", "json_group_object", "json_set", "json_insert", "json_remove", "jsonb_agg", "jsonb_object_agg", "jsonb_build_object", "jsonb_build_array", "jsonb_strip_nulls", "to_jsonb"]);
+/** A JSON document by construction: a JSON function, `CAST(… AS jsonb)`, a scalar subquery of one, or a COALESCE of those (a literal fallback must itself be JSON). */
+const isJson = (n: SqlNode | undefined): boolean => {
+  if (n?.FuncCall) return JSON_FUNCS.has(n.FuncCall.funcname?.at(-1)?.String?.sval);
+  if (n?.TypeCast) return n.TypeCast.typeName?.names?.at(-1)?.String?.sval === "jsonb";
+  const sub = n?.SubLink?.subLinkType === "EXPR_SUBLINK" ? n.SubLink.subselect?.SelectStmt : undefined;
+  if (sub) return sub.targetList?.length === 1 && isJson(sub.targetList[0].ResTarget?.val);
+  const args: SqlNode[] | undefined = n?.CoalesceExpr?.args;
+  const literal = (a: SqlNode) => { const text = a.A_Const?.sval?.sval; try { return text !== undefined && (JSON.parse(text), true); } catch { return false; } };
+  return !!args?.some(isJson) && args.every((a) => isJson(a) || literal(a));
+};
+/** The named outputs of a View's top-level SELECT that are computed JSON documents, so selected boundaries can type them as `json`. */
+export const jsonOutputs = (view: SqlPlan): ReadonlySet<string> =>
+  new Set((view.stmts[0]?.SelectStmt?.targetList ?? []).flatMap(({ ResTarget: r }: SqlNode) => (r?.name && isJson(r.val) ? [r.name as string] : [])));
+
 /** Compile a linked manifest set to the sealed plan. Every refusal is reported, one per SQL source. */
 export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlDialect = d1): Promise<CompilePlanResult> {
   const schemas: Record<string, PlanSchema> = {};

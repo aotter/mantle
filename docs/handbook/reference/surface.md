@@ -352,7 +352,10 @@ REST and MCP View pages expose declared JSON columns as JSON values and declared
 boolean columns as booleans, including explicitly authored SQL aliases. SQLite
 and D1 conversions are compiled into only the selected boundary pages;
 PostgreSQL already-native JSON/boolean values pass through. SQL NULL stays null and absent
-fields stay absent. Expressions without declared column lineage stay native.
+fields stay absent. A computed output that is a JSON document by construction
+(`json_group_array`, `json_set`, `jsonb_agg`, `jsonb_build_object` and the like, a scalar
+subquery of one, or a `COALESCE` of those) is converted like a declared JSON column, so it
+is a JSON value on every target. Other expressions without declared column lineage stay native.
 Malformed persisted JSON becomes a redacted internal failure. The conversion
 adds no database operations and does not mutate native query rows.
 
