@@ -77,7 +77,22 @@ export function operationMatchesRow(operation: AdminOperation, row: OperableRow)
     !Object.prototype.hasOwnProperty.call(values, field) || allowed.some(value => value === values[field]));
 }
 
-export function OperationResult({ output, language }: { output: unknown; language: AdminLanguage }): React.ReactElement {
+const emptyValue = (value: unknown): boolean =>
+  value == null ||
+  (Array.isArray(value) && value.every(emptyValue)) ||
+  (typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0);
+
+/** Nothing worth showing: no output, `{}`, or a `results` list whose statements returned nothing. */
+export function isEmptyOperationOutput(output: unknown): boolean {
+  if (emptyValue(output)) return true;
+  if (typeof output !== "object" || Array.isArray(output)) return false;
+  const keys = Object.keys(output as object);
+  return keys.length === 1 && keys[0] === "results" && emptyValue((output as { results: unknown }).results);
+}
+
+/** An operation's returned output, folded under Details; a Procedure that returned nothing shows only the success line. */
+export function OperationResult({ output, language }: { output: unknown; language: AdminLanguage }): React.ReactElement | null {
+  if (isEmptyOperationOutput(output)) return null;
   return <details className="mt-2 min-w-0">
     <summary className="cursor-pointer text-sm">{t(language, "ops.details")}</summary>
     <pre className="mt-2 max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 text-xs" tabIndex={0}>{JSON.stringify(output ?? null, null, 2)}</pre>

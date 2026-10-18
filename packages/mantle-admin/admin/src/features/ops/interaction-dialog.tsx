@@ -100,11 +100,12 @@ export function InteractionDialog({ create, operation, hidden, automatic, langua
   // Escape, the close button and the overlay go through the panel's own
   // close, which refuses while a write is in flight.
   const closeRef = React.useRef(onClose);
-  const refreshed = () => {
+  const refreshed = (): Promise<void> => {
     // An operation can write any collection: every list, count and open
     // entry refetches, as after any other Admin mutation.
-    invalidateAfterWrite(queryClient);
+    const reading = invalidateAfterWrite(queryClient);
     onDone();
+    return reading;
   };
   const title = resolveLocalizedText(operation.title, language, canonical) || operation.name;
   const description = resolveLocalizedText(operation.description, language, canonical) || undefined;
@@ -155,7 +156,8 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
   sourceSchema?: JsonSchema;
   previewFields?: readonly string[];
   onClose: () => void;
-  onDone: () => void;
+  /** Refreshes the page; resolves once the shown reads have refetched. */
+  onDone: () => Promise<void>;
   onSucceeded?: () => void;
   renderResult?: (result: unknown) => React.ReactNode;
   closeRef: React.MutableRefObject<() => void>;
@@ -163,6 +165,10 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
   const state = useInteraction(controller);
   const submitted = React.useRef(false);
   const refreshed = React.useRef(false);
+  // The refetch after a landed write: closing waits for it, so an immediate
+  // reopen reviews the row as written, not the list's earlier copy.
+  const rereading = React.useRef<Promise<void> | null>(null);
+  const closing = React.useRef(false);
   React.useEffect(() => { void controller.open(); }, [controller]);
   React.useEffect(() => {
     if (state.phase === "submitting") submitted.current = true;
@@ -170,7 +176,7 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
     if (state.phase === "succeeded" && !refreshed.current) {
       refreshed.current = true;
       onSucceeded?.();
-      onDone();
+      rereading.current = onDone();
     }
     // A refused or conflicting payload gets a fresh idempotency key: the
     // next submit is a different operation, not a retry of this one.
@@ -185,9 +191,14 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
     // A write that may have landed still refreshes the page; a refusal did not write.
     if (submitted.current && !refreshed.current && state.phase === "uncertain") {
       refreshed.current = true;
-      onDone();
+      void onDone();
     }
-    onClose();
+    const reading = rereading.current;
+    if (!reading) return onClose();
+    if (closing.current) return;
+    closing.current = true;
+    // a slow read never traps the dialog: it closes after a few seconds regardless
+    void Promise.race([reading.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, 5_000))]).then(onClose);
   };
   closeRef.current = close;
   const schema = operationFormSchema(operation.input, hidden);
