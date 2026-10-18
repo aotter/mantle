@@ -45,10 +45,10 @@ export function conversion(key: string, type: string | undefined, sqlite: boolea
 }
 
 /** Client-visible declared output type, identical on every target. */
-export function wireType(type: string | undefined): string {
+export function wireType(type: string | undefined, notNull = false): string {
   const value = !type ? "unknown" : ["integer", "int8", "int4"].includes(type) ? "number | string"
     : scalarType(type);
-  return value === "unknown" ? value : `${value} | null`;
+  return value === "unknown" || notNull ? value : `${value} | null`;
 }
 
 const scalarType = (type: string) => type === "bool" ? "boolean" : ["integer", "int4", "int8", "real", "float8"].includes(type) ? "number" : type === "json" ? "unknown" : type === "geo" ? "{lat:number;lng:number}" : "string";

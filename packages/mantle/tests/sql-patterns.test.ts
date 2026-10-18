@@ -29,8 +29,8 @@ test("the nested JSON column is typed json at the boundary on every target: conv
   for (const target of ["bun-sqlite", "cloudflare-d1", "bun-postgres"] as const) {
     const sources = (await loadFixtureSources("sql-patterns.yaml")).map(source => ({ ...source, text: (target === "bun-postgres" ? postgres : (t: string) => t)(restViews(source.text)) }));
     const files = await generateOrThrow(target, sources), sqlite = target !== "bun-postgres";
-    expect(files["generated.ts"]).toContain(`Row = { readonly "id": unknown; readonly "name": string | null; readonly "orders": ${sqlite ? "string | null" : "unknown"}; };`);
-    expect(files["generated.ts"]).toContain('readonly "name": string | null; readonly "orders": unknown; };');
+    expect(files["generated.ts"]).toContain(`Row = { readonly "id": string; readonly "name": string; readonly "orders": ${sqlite ? "string | null" : "unknown"}; };`);
+    expect(files["generated.ts"]).toContain('readonly "name": string; readonly "orders": unknown; };');
     expect(files["rest.ts"]!.includes('["orders","json"]')).toBe(sqlite);
     expect(files["mcp.ts"]!.includes('["orders","json"]')).toBe(sqlite);
   }

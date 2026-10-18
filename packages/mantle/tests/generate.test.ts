@@ -209,7 +209,8 @@ spec:
 test("declared timestamps and dates come back in wire form from the SQL itself", async () => {
   const generated = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"events.yaml",text:scalars}]}});
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
-  expect(generated.files["generated.ts"]).toContain('readonly "at": string | null; readonly "day": string | null; readonly "created_at": string | null;');
+  // required (NOT NULL) columns read unchanged are non-null
+  expect(generated.files["generated.ts"]).toContain('readonly "at": string; readonly "day": string; readonly "created_at": string;');
   const db = new Database(":memory:");
   try {
     db.exec(generated.files["schema.sql"]!);

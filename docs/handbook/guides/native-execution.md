@@ -25,8 +25,8 @@ query. Authored output names should be emitted into SQL where valid, avoiding
 an extra per-row projection merely to repair names already known at generation.
 
 Selected REST/MCP/Admin boundaries use static generated column lineage. Declared
-integers (including aliased system versions) are `number | string | null` on every
-target: safe integers become numbers; unsafe integers remain exact decimal text.
+integers (including aliased system versions) are `number | string` on every
+target, `| null` unless the View proves the column NOT NULL ([nullability](../reference/view.md#results-and-paging)): safe integers become numbers; unsafe integers remain exact decimal text.
 Selected SQL projections cast integers and hidden integer cursor keys to text
 before the driver reads them, preserving stored int64 values on SQLite/D1 and
 PostgreSQL. Values already rounded when written

@@ -117,6 +117,8 @@ export function storageColumns(s: { readonly fields?: Readonly<Record<string, st
   return cols;
 }
 
+/** The aggregate functions either dialect's SQL may call: outside a window and without GROUP BY, one makes a select return one row even over none. */
+export const AGGREGATES: ReadonlySet<string> = new Set(["count", "sum", "min", "max", "avg", "json_group_array", "json_group_object", "string_agg", "jsonb_agg", "jsonb_object_agg"]);
 /** The native columns storage declares NOT NULL (`status` only on a publishing Schema, the only one that has it); `author_id` is nullable. */
 export const NATIVE_NOT_NULL: ReadonlySet<string> = new Set(["id", "version", "created_at", "updated_at", "status"]);
 /** Each native field a manifest names (in an index, say) -> its storage column, which SQL names. */
