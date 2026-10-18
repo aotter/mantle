@@ -233,7 +233,7 @@ surface its generated `publish_<schema>`, `unpublish_<schema>` and
 `archive_<schema>` tools use the same snake-case naming rule, are admin-only
 and take `{ id, expectedVersion }` through the shared generated validation.
 
-`/mcp/admin` admits only admins: `isAdmin(caller)` must hold. Better Auth’s admin plugin `adminRoles` defines this layer (default `["admin"]`); the application supplies its verified Caller. MCP bodies are limited
+`/mcp/admin` admits only admins: `isAdmin(caller)` must hold. It lists only admin-surface tools; public Views and Procedures stay on `/mcp`, and generation never copies them across. An admin's AI that changes records also needs admin Views to find them and read back the committed row and its version (search, detail), declared by the app; the [acceptance design audit](../guides/agent-workflow-acceptance.md#audit-mcp-tool-design-before-implementation) checks this. Better Auth’s admin plugin `adminRoles` defines this layer (default `["admin"]`); the application supplies its verified Caller. MCP bodies are limited
 to 1 MiB (1,048,576 bytes). Resource metadata challenges use the origin of
 `request.url`; behind a proxy, the app must pass a Request with its public
 origin so the audience and metadata URL point to the client-visible service.
@@ -352,7 +352,10 @@ REST and MCP View pages expose declared JSON columns as JSON values and declared
 boolean columns as booleans, including explicitly authored SQL aliases. SQLite
 and D1 conversions are compiled into only the selected boundary pages;
 PostgreSQL already-native JSON/boolean values pass through. SQL NULL stays null and absent
-fields stay absent. Expressions without declared column lineage stay native.
+fields stay absent. A computed output that is a JSON document by construction
+(`json_group_array`, `json_set`, `jsonb_agg`, `jsonb_build_object` and the like, a scalar
+subquery of one, or a `COALESCE` of those) is converted like a declared JSON column, so it
+is a JSON value on every target. Other expressions without declared column lineage stay native.
 Malformed persisted JSON becomes a redacted internal failure. The conversion
 adds no database operations and does not mutate native query rows.
 

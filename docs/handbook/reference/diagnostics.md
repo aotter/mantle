@@ -8,11 +8,16 @@ Bare queries preserve native errors except required conflict/uncertain-write cla
 | --- | --- | --- |
 | INPUT_VALIDATION_FAILED | 400 | Invalid external input, paging or Store operation |
 | UNAUTHENTICATED | 401 | Caller lacks required authenticated authority |
-| AUTH_DENIED | 403 | Predicate, role or session-origin refusal |
+| AUTH_DENIED | 403 | Predicate, role or session-origin refusal; a generic Admin write to a read-only Schema |
 | NOT_FOUND | 404 | Missing or excluded resource |
 | METHOD_NOT_ALLOWED | 405 | Path exists for another method |
 | CONFLICT | 409 | Unique clash, stale lock or failed row/state guard |
 | OUTCOME_UNKNOWN | 503 | Write may have committed; reconcile without automatic retry |
+
+A `CONFLICT` carries `kind`: `"row"` when a row statement changed no row (missing or not visible, a stale version, or a
+state its WHERE no longer allows; one message covers all three, so it never reveals whether the row exists), `"unique"`
+for a unique-index clash and `"check"` for a Schema check (with `schema` and `check`). Match `kind`, not the message.
+To recover from `"row"`, read the record again and decide from its current state: retry with its current version only when the change still applies, and never retry blindly. A Procedure can name a precise reason itself (a ref handler that reads the row first, or a RETURNING the caller checks).
 
 Unknown errors map to redacted `INTERNAL_ERROR` (500). A custom `ContractError` outside the core set must carry an explicit status. Media uses its selected `mediaError` contract. Never expose SQL errors, tokens or credentials.
 

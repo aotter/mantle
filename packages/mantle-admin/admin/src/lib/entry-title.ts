@@ -8,6 +8,16 @@ export function renderTitleText(title: unknown, language: AdminLanguage): string
   return JSON.stringify(title);
 }
 
+/** A listed row's label: the title the list resolved, else its primary list field, else its id. */
+export function listRowTitle(
+  row: { id: string; title?: unknown; data_preview?: Record<string, unknown> },
+  collection: Pick<Collection, "list"> | undefined,
+  language: AdminLanguage,
+): string {
+  const primary = collection?.list?.primaryField;
+  return renderTitleText(row.title ?? (primary ? row.data_preview?.[primary] : undefined) ?? row.id, language);
+}
+
 export function entryTitle(
   data: Record<string, unknown>,
   fallback: string,

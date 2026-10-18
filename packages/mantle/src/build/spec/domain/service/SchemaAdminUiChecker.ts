@@ -92,7 +92,7 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
       "/spec/uiSchema/list",
       list,
       "list presentation fields on an operational Schema",
-      "Schema list primaryField/columns are supported for lifecycle: operational in v0.1.",
+      "Schema list primaryField/columns are supported only for lifecycle: operational Schemas; a publishing Schema's Admin list shows its title field and status.",
     ));
   }
 
@@ -279,7 +279,7 @@ function checkListFilter(
       "/spec/uiSchema/list/filterField",
       field,
       "a filter on an operational Schema",
-      "Schema list filter tabs are supported for lifecycle: operational in v0.1.",
+      "Schema list filter tabs are supported only for lifecycle: operational Schemas.",
     ), filter: null };
   }
   const property = schema.spec.schema.properties?.[field];

@@ -93,7 +93,8 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
     const rename=Object.fromEntries(Object.entries(v.columns??{}).map(([key,col])=>[key,key===col.field?plan.schemas[col.schema]!.names[col.field]??key:key]));
     imports.push(`const viewNames${n}=${q(rename)} as const;`);
     const pageData=input.adminPages?.[name];
-    if(!pageData){refuse(`views/${name}/admin`,"Missing compiler-authorized matching pages.");continue;}
+    // A supplied page map omits only Views its producer already refused (at `views/<name>` or `views/<name>/admin`).
+    if(!pageData){if(!input.adminPages)refuse(`views/${name}/admin`,"Admin list was not generated: no compiler-authorized matching pages were supplied for this View.");continue;}
     const kinds=(v.uiSchema?.list??{})as {filterFields?:string[];searchFields?:string[]};
     const filters=Object.fromEntries((kinds.filterFields??[]).map(field=>{
       const lineage=v.columns?.[field]??v.columns?.[field.toLowerCase()],schema=lineage&&plan.schemas[lineage.schema];

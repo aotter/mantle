@@ -86,3 +86,34 @@ metadata: { name: place-order-http }
 spec:
   source: { kind: http, method: POST, path: /api/orders }
   target: { procedure: place-order }
+---
+# A ref handler places the same order through the Store with plain arrays (#1749).
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: products-by-ids }
+spec:
+  surface: internal
+  input: { type: object, additionalProperties: false, required: [ids], properties: { ids: { type: array, items: { type: string } } } }
+  sql: SELECT id, reserved FROM products WHERE id IN (SELECT j.value FROM json_each(input.ids) j) ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: place-order-ref }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [orderRef, items]
+    properties:
+      orderRef: { type: string }
+      items: { type: array, minItems: 1, items: { type: object, additionalProperties: false, required: [productId, qty], properties: { productId: { type: string }, qty: { type: integer } } } }
+  output: { type: object }
+  handler: { ref: placeOrder }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: place-order-ref-http }
+spec:
+  source: { kind: http, method: POST, path: /api/orders-ref }
+  target: { procedure: place-order-ref }

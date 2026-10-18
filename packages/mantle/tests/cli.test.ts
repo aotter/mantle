@@ -11,7 +11,7 @@ const cli = join(base, "dist/infrastructure/cli.js");
 const manifest = join(base, "tests/apps/purchase.yaml");
 const generate = (cwd: string, ...args: string[]) => execFileSync("node", [cli, "generate", "cloudflare-d1", "generated", manifest, ...args], { cwd, encoding: "utf8" });
 
-test("generate lists every ref Procedure's Handlers key, then prompts typecheck", async () => {
+test("generate lists the Handlers keys ref Procedures need once, and not under --check", async () => {
   const dir = await mkdtemp(join(tmpdir(), "next-cli-handlers-"));
   try {
     const names = ["send-email", "app.notify"];
@@ -19,11 +19,13 @@ test("generate lists every ref Procedure's Handlers key, then prompts typecheck"
     await writeFile(source, names.map(name => JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind: "Procedure", metadata: { name }, spec: { input: { type: "object" }, output: { type: "object" }, handler: { ref: "app.handler" } } })).join("\n---\n"));
     const output = execFileSync("node", [cli, "generate", "bun-sqlite", "generated", source], { cwd: dir, encoding: "utf8" });
     expect(JSON.parse(await readFile(join(dir, "generated/.mantle-inputs.json"), "utf8")).target).toBe("bun-sqlite"); // mantle bundle builds only Admin for it
-    for (const name of names) expect(output).toContain(`Ref Procedure ${JSON.stringify(name)}: implement Handlers[${JSON.stringify(name)}].`);
-    expect(output.trim().endsWith("Next: run tsc --noEmit; pass the handlers at store(db, caller, { handlers }).")).toBe(true);
-    const sqlOnly = generate(dir);
-    expect(sqlOnly).not.toContain("Ref Procedure");
-    expect(sqlOnly).not.toContain("Next: run tsc");
+    const line = output.trim().split("\n").at(-1)!;
+    expect(line.startsWith("Ref Procedures need these Handlers keys (tsc --noEmit checks them; pass them at store(db, caller, { handlers })): ")).toBe(true);
+    for (const name of names) expect(line).toContain(JSON.stringify(name));
+    expect(output).not.toContain("implement");
+    // --check is the CI path: an unchanged tree prints nothing about handlers.
+    expect(execFileSync("node", [cli, "generate", "bun-sqlite", "generated", source, "--check"], { cwd: dir, encoding: "utf8" })).not.toContain("Handlers");
+    expect(generate(dir)).not.toContain("Ref Procedures");
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
 

@@ -1,4 +1,4 @@
-import type { Collection } from "./types";
+import type { Collection, RelatedEntrySection } from "./types";
 
 /** Main Admin Nav / home list: top-level collections plus opt-in standalone children. */
 export function isPrimaryNavCollection(
@@ -39,4 +39,12 @@ export function entryLandingPath(collectionName: string, entryId: string): strin
 
 export function entryEditPath(collectionName: string, entryId: string): string {
   return `${entryLandingPath(collectionName, entryId)}/edit`;
+}
+
+/** The value a folded child's reference field holds for its parent: the parent's value of the referenced field
+ *  (`id`, or the unique field the reference names), as the server read it. Never the parent's id in place of
+ *  another field: null while the parent has no value, so the child list neither lists nor prefills anything. */
+export function foldedChildScopeValue(relationship: Pick<RelatedEntrySection["relationship"], "parentValue">): string | null {
+  const value = relationship.parentValue;
+  return value === null || value === undefined || value === "" ? null : String(value);
 }

@@ -8,8 +8,10 @@ import { verifyOnLocalD1 } from "./apps/local-d1.js";
 import { seed, verifySqlPatterns } from "./sql-patterns-scenarios.js";
 
 const base = resolve(import.meta.dir, ".."), port = process.env.MANTLE_NEXT_SQL_PATTERNS_D1_PORT ?? "8990";
-const composition = `import {userCaller} from '${resolve(base, "src/kernel/user-caller.ts")}';import {rest} from './rest.js';
-export const app=rest({db:(env:{DB:any})=>env.DB,caller:async(request:Request)=>userCaller({id:"u",role:request.headers.get("x-role")},{adminRoles:["admin"],credential:"api-key"}),handlers:{}});`;
+const composition = `import {userCaller} from '${resolve(base, "src/kernel/user-caller.ts")}';import {rest} from './rest.js';import {mcp} from './mcp.js';
+const options={db:(env:{DB:any})=>env.DB,caller:async(request:Request)=>userCaller({id:"u",role:request.headers.get("x-role")},{adminRoles:["admin"],credential:"api-key",scopes:["mcp"]}),handlers:{}};
+const api=rest(options),tools=mcp(options);
+export const app=(request:Request,env:{DB:any})=>(new URL(request.url).pathname.startsWith("/mcp")?tools:api)(request,env);`;
 // The guide's Views are admin-surface; public here so the oracle reads them through REST (requires stays ctx.admin).
 const restViews = (text: string) => text.replaceAll("surface: admin", "surface: public");
 // PostgreSQL's spelling of the nested read: jsonb_agg of zero rows is NULL, so default it to [].
@@ -22,6 +24,17 @@ async function fixture(target: "bun-sqlite" | "bun-postgres" | "cloudflare-d1") 
   await writeFile(join(dir, "app.ts"), composition);
   return { dir, files };
 }
+
+test("the nested JSON column is typed json at the boundary on every target: converted from SQLite text, native on PostgreSQL", async () => {
+  for (const target of ["bun-sqlite", "cloudflare-d1", "bun-postgres"] as const) {
+    const sources = (await loadFixtureSources("sql-patterns.yaml")).map(source => ({ ...source, text: (target === "bun-postgres" ? postgres : (t: string) => t)(restViews(source.text)) }));
+    const files = await generateOrThrow(target, sources), sqlite = target !== "bun-postgres";
+    expect(files["generated.ts"]).toContain(`Row = { readonly "id": string; readonly "name": string; readonly "orders": ${sqlite ? "string | null" : "unknown"}; };`);
+    expect(files["generated.ts"]).toContain('readonly "name": string; readonly "orders": unknown; };');
+    expect(files["rest.ts"]!.includes('["orders","json"]')).toBe(sqlite);
+    expect(files["mcp.ts"]!.includes('["orders","json"]')).toBe(sqlite);
+  }
+});
 
 test("bun:sqlite: the SQL patterns guide behaves as documented", async () => {
   const { dir, files } = await fixture("bun-sqlite");

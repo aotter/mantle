@@ -12,7 +12,7 @@ export function recipesOf(statement: Pick<LoweredStatement,"binds">, fields: rea
     if (b.type === "date" || b.type === "timestamptz") values?.add(b.type === "date" ? "date" : "timestamp");
     const name = fields.find(field => field.toLowerCase() === String(b.name).toLowerCase());
     if (name === undefined) refuse(`Input bind '${b.name}' has no declared field.`);
-    // only a date-time or a date is converted at bind time (`encode` in kernel/binds)
-    return { k: "input", name: name ?? String(b.name), ...(b.type === "timestamptz" || b.type === "date" ? { type: b.type } : {}) };
+    // only a date-time, a date or JSON is converted at bind time (`encode` in kernel/binds)
+    return { k: "input", name: name ?? String(b.name), ...(b.type === "timestamptz" || b.type === "date" || b.type === "json" ? { type: b.type } : {}) };
   });
 }

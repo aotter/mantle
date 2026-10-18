@@ -92,10 +92,15 @@ routes. Send JSON with `Content-Type: application/json`.
 | `PATCH /entries/{id}?collection=<schema>` | Body `{ data, expectedVersion }`; sends the observed version, not the next one. Publishing entries must be drafts. |
 | `POST /entries/{id}/publish?collection=<schema>` | Body `{ expectedVersion }`; validates required data before publishing. |
 | `POST /entries/{id}/unpublish?collection=<schema>` | Body `{ expectedVersion }`; returns the entry to draft. |
-| `POST /operations/{name}` | Body is the Procedure's input; runs an Admin operation (a Procedure with `requires: ctx.admin` or a `target`). |
+| `POST /operations/{name}` | Body is the Procedure's input; runs an Admin operation (a Procedure with `requires: ctx.admin` or a `target`). Returns `{ ok: true, output }`, where `output` is what REST and MCP return (`{ results }` for a SQL Procedure). |
 | `GET /views/{name}` | Generated admin View query parameters plus `limit`/`cursor`; returns `{ rows, nextCursor? }`. |
 | `GET /view-batch?names=a,b` | One to 20 comma-separated admin View names, deduplicated; reads the first row of each as the caller, with the single route's checks (`requires`, scope, TTL, `authorize`), and returns `{ views: { <name>: { rows } \| { unavailable: true } \| { error: true } } }`. A refused View and a missing one are the same `{ unavailable: true }`; a View that cannot answer with no input is `{ error: true }`. Neither fails the batch. Empty or more than 20 names is a 400, before the database is acquired. |
 | `GET /me` | Returns `{ userId, role, admin, login, image }` for the signed-in caller. |
+| `GET /admin` | Administrators and pending invitations, plus `adminRoles` (mounted with `identity`). |
+| `GET /members?search=&limit=&cursor=&direction=` | Pages members (1–100), searching id, name and email. |
+| `PATCH /admin/{id}/role` | Body `{ role }`: an admin role name grants Admin, `null` removes it. You cannot change your own role. |
+| `POST /admin/invitations` | Body `{ email, role }`; invites an administrator by email. Returns `{ ok, userId, emailSent }`. |
+| `DELETE /admin/invitations/{id}` | Revokes an invitation nobody has signed in to yet (otherwise 409). |
 
 Entry create/read/patch/transitions return
 `{ collection, entry, parentEntryId, parentEntryTitle, related }`; the entry has
@@ -296,7 +301,9 @@ Generated full/partial input checks validate creates, edits, operations and
 filters. Plain titled string `oneOf` choices use the same enum checks; general
 or constrained alternatives remain refused. Draft creates can be incomplete;
 publish checks required data. Publishing edits apply only to drafts. Read-only
-collections refuse generic edits while their declared Procedures can still run.
+collections refuse generic creates, edits, deletes and transitions with 403 `AUTH_DENIED`
+("This record is read-only; use its operations.") before any read or write, while
+their declared Procedures can still run.
 
 Writes use compiler-printed native Procedure frames, bind recipes and only the
 supplied field fragments. They do not update omitted columns or run a schema
@@ -371,7 +378,12 @@ field and stored value. The server resolves them for the caller with one page qu
 target. A missing, deleted or unreadable target is absent, so the three look the same: Admin shows the exact ID with copy.
 A resolved title links to the related record. Admin Views and the MCP App have no such step, since their rows come from the
 View itself; a View that wants a title selects it (join the referenced table, within its own `requires`). `/bootstrap?collection=...` can include
-the first requested list page. CSV exports use `/entries/export` and
+the first requested list page.
+In the entry editor and every operation form (including a `collectionAction` create), a string field with
+`x-mantle-ref` to another Admin collection is a searchable picker: it lists the target through the same `/entries` route
+(20 records per search, read as the caller), shows each record's title and stores the referenced value (`id`, or the
+ref's unique field). A target the caller cannot list (403/404) or that is not an Admin collection keeps the plain text
+input. The picker is a convenience; the server still validates the value. CSV exports use `/entries/export` and
 `/views/{name}/export`; native browser downloads stream paged server output.
 A failure after headers aborts the stream, so a download can fail after partial
 bytes have arrived. Existing databases need an app-owned migration for the
@@ -527,9 +539,13 @@ Names such as `approve` never determine placement. An operation without a row
 target or collection action appears on the Operations page, whose sidebar link
 appears whenever such operations exist.
 
+A record's page shows its row operations as labeled buttons in the header (more than three: two buttons and a
+"More actions" menu); list rows keep them in an "Actions for …" menu.
 Generated row metadata includes simple AND-ed equality/IN literal conditions
-from the target-row UPDATE/DELETE WHERE. The menu hides known mismatches; missing
-preview values and unsupported predicates leave actions available. These are
+from the target-row UPDATE/DELETE WHERE, and an operation whose conditions the
+row does not meet is hidden: with `WHERE … AND orderStatus = 'approved'`, "Mark
+fulfilled" appears only once the order is approved. Missing preview values and
+unsupported predicates leave actions available. These are
 presentation hints: the Procedure still enforces its WHERE and authorization.
 Conflicts show a localized refresh message with the technical diagnostic in
 Details. Successful actions show a short summary and changes, with raw output

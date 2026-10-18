@@ -69,7 +69,7 @@ import { DataCell } from "../../ui/data-cell";
 import { RefTitlesProvider } from "../../ui/ref-value";
 import { Empty, Slot } from "../../app/slots";
 import { optionLabel } from "../../lib/enum-options";
-import { renderTitleText } from "../../lib/entry-title";
+import { listRowTitle, renderTitleText } from "../../lib/entry-title";
 import { LocaleBadge, LocaleStatusBadges } from "./locale-badge";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 import { entryEditPath, entryLandingPath, hasFoldedChildCollections } from "../../lib/collection-nav";
@@ -244,7 +244,7 @@ function CollectionList({
     : t(language, "collection.table.title");
   const refreshEntries = React.useCallback(() => {
     clearSelection();
-    invalidateAfterWrite(queryClient);
+    void invalidateAfterWrite(queryClient);
   }, [queryClient, clearSelection]);
 
   const titleMutation = useMutation({
@@ -848,12 +848,7 @@ function ParentScopeFilter({
           {options.data.items.length === 0 ? (
             <li className="px-3 py-2 text-muted-foreground">{t(language, "collection.empty.title")}</li>
           ) : options.data.items.map((row) => {
-            const label = renderTitleText(
-              row.title ?? (parentCollection?.list?.primaryField
-                ? row.data_preview?.[parentCollection.list.primaryField]
-                : row.id),
-              language,
-            );
+            const label = listRowTitle(row, parentCollection, language);
             return (
               <li key={row.id}>
                 <button
@@ -1148,6 +1143,7 @@ function EntryRowDisplay({
             row={row}
             collection={collection}
             operations={boundOperations}
+            itemName={itemName}
             language={language}
             canonical={canonical}
             onSuccess={onOperationSuccess}

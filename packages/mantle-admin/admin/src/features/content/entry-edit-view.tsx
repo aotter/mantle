@@ -3,7 +3,7 @@ import { SchemaFields as SharedSchemaFields, type FieldLabels, type FieldSlot } 
 export { stringFieldWidget } from "@aotter/mantle-ui/kit";
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Globe, Images, ImagePlus, LockKeyhole, MoreHorizontal, Plus, RotateCcw, Save, Send } from "lucide-react";
+import { ArrowLeft, ExternalLink, Globe, Images, ImagePlus, LockKeyhole, Plus, RotateCcw, Save, Send } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -45,8 +45,9 @@ import {
   DialogTitle,
 } from "@aotter/mantle-ui/kit";
 import { collectionSummaryKey } from "./collection-view";
-import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
+import { boundOperationsFor, RecordOperations, RowOperationsMenu } from "./row-operations";
 import { contentLocales, LocaleBadge, localeName } from "./locale-badge";
+import { RefPicker } from "./ref-picker";
 
 const MarkdownEditor = React.lazy(() => import("../editor/markdown-editor").then((module) => ({ default: module.MarkdownEditor })));
 const HtmlEditor = React.lazy(() => import("../editor/html-editor").then((module) => ({ default: module.HtmlEditor })));
@@ -214,19 +215,13 @@ export function EntryEditView({
             ) : null}
             {!isOperational && <StatusBadge status={payload.entry.status} />}
             <Slot name={`record.actions:${payload.collection.name}`} Default={Empty} props={{ collection: payload.collection.name, entry: payload.entry }} />
-            <RowOperationsMenu
+            <RecordOperations
               row={payload.entry}
               collection={payload.collection}
               operations={boundOperations}
               language={language}
               canonical={canonical}
               onSuccess={() => void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })}
-              trigger={
-                <Button type="button" variant="secondary">
-                  <MoreHorizontal className="size-4" aria-hidden />
-                  {t(language, "rowActions.menuLabel")}
-                </Button>
-              }
             />
           </>
         }
@@ -524,6 +519,10 @@ export function SchemaFields({
     if (isMediaAssetRef(fieldSchema)) {
       return <MediaAssetField value={field.value} path={[...field.path]} collectionName={collectionName} mediaPurposes={mediaPurposes} language={language} onChange={field.setValue} />;
     }
+    const ref = mantleRefOf(fieldSchema);
+    if (ref && ref.schema !== "media_assets" && schemaType(fieldSchema) === "string") {
+      return <RefPicker target={ref} value={field.value} onChange={field.setValue} label={field.label} language={language} canonical={canonical} fallback={() => field.renderDefault()} />;
+    }
     const text = stringForInput(field.value);
     if (field.widget === "markdown") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><MarkdownEditor value={text} onChange={field.setValue} /></React.Suspense>;
     if (field.widget === "html") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><HtmlEditor value={text} onChange={field.setValue} /></React.Suspense>;
@@ -784,6 +783,7 @@ function RelatedSections({
                       row={entry}
                       collection={section.collection}
                       operations={boundOperations}
+                      itemName={entryTitle(entry.data, t(language, "collection.untitled"), section.collection, entry.id)}
                       language={language}
                       canonical={canonical}
                       onSuccess={onOperationSuccess}

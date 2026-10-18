@@ -142,14 +142,41 @@ If a fresh agent or authorized test transport is unavailable, record independent
 acceptance as BLOCKED and report the scripted checks separately. Do not invent
 an independent result. Do not deploy or publish merely to obtain acceptance.
 
+## Hand each role to its evaluator
+
+Setup signs each role in; the evaluator receives the role's access, never a credential it could reuse or widen.
+This is the authorized test transport the BLOCKED rule above refers to.
+
+- **Local session URL (the app shell's default).** `pnpm accept` in an app written by `mantle init` starts the app
+  on a fresh local D1, signs the admin in, runs an optional fixtures module, signs the user in and prints one local
+  URL per role. Each URL forwards every request with that role's session and refuses `/api/auth/*`. Give the
+  evaluator only its URL: MCP at `<url>/mcp` (user) or `<url>/mcp/admin` (admin) for any streamable HTTP MCP client,
+  Admin at `<url>/admin` and member pages at `<url>/` in a browser, REST at `<url>/` with no credential. An evaluator
+  without an MCP client uses `node accept.mjs mcp <endpoint> [tool [json]]`, which prints the raw result including
+  `isError`. The app README's "Independent acceptance" section shows the fixtures module.
+- **An external MCP host over OAuth.** To accept the connection a real client uses (Claude, ChatGPT or another host
+  that supports MCP OAuth), deploy or tunnel the app as you would for that host, add `<origin>/mcp` or
+  `<origin>/mcp/admin` to the host in setup, and complete sign-in and consent as the role's fictional identity. The
+  evaluator then works in that already-connected host. Its token stays in the host; the evaluator neither sees nor
+  requests it. Record this as OAuth evidence, separate from the local session URL (see
+  [OAuth](oauth.md)).
+
+Either way, the evaluator's prompt names the URL or the connected host, never a cookie, token or sign-in step.
+
+If you cannot start a fresh agent yourself (for example, you are a subagent without that tool), prepare everything
+else: the rubric, the fixtures module, `pnpm accept` running, and one filled-in role prompt per role (below) naming
+its URL. Hand the prompts to whoever can start agents (the person or the orchestrating agent), keep the app running,
+and report acceptance as BLOCKED with the prompts attached until their reports come back. Score those reports as
+usual.
+
 ## Give the agent a role
 
 Fill this in per role. It names the role and the doors, never the jobs:
 
 > You are [role, for example "a purchasing manager"] at [business context in
-> one sentence]. You use [entry points for this role: Admin URL, site URL, REST
-> base URL and reference, MCP endpoint]; setup has already signed you in as
-> [fictional identity]. Budget: [interactions/time/writes]. You may create and
+> one sentence]. You use [entry points for this role from `pnpm accept`: Admin
+> URL, site URL, REST base URL and reference, MCP endpoint]; setup has already
+> signed you in as [fictional identity]. Budget: [interactions/time/writes]. You may create and
 > change fictional records; [owner] cleans up. Do not read source, internal docs
 > or a database, use anyone else's access, or retry a write whose outcome you
 > do not know.

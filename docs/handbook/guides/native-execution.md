@@ -25,8 +25,8 @@ query. Authored output names should be emitted into SQL where valid, avoiding
 an extra per-row projection merely to repair names already known at generation.
 
 Selected REST/MCP/Admin boundaries use static generated column lineage. Declared
-integers (including aliased system versions) are `number | string | null` on every
-target: safe integers become numbers; unsafe integers remain exact decimal text.
+integers (including aliased system versions) are `number | string` on every
+target, `| null` unless the View proves the column NOT NULL ([nullability](../reference/view.md#results-and-paging)): safe integers become numbers; unsafe integers remain exact decimal text.
 Selected SQL projections cast integers and hidden integer cursor keys to text
 before the driver reads them, preserving stored int64 values on SQLite/D1 and
 PostgreSQL. Values already rounded when written
@@ -34,7 +34,8 @@ PostgreSQL. Values already rounded when written
 `views/<name>.ts` exports both driver-native `Row` and `WireRow` (declared wire fields agree across targets);
 `paged/views/<name>.ts` keeps native `Row` rows; REST/MCP use separate
 `paged/wire/views/<name>.ts` SQL and convert at their boundary. SQLite/D1 declared JSON
-and boolean columns become JSON values and booleans, preserving aliases and nulls;
+and boolean columns, and computed outputs that are JSON documents by construction
+(JSON aggregates and builders), become JSON values and booleans, preserving aliases and nulls;
 PostgreSQL already returns those native values.
 Declared real/float outputs remain numbers. Computed outputs without proved lineage,
 SQL Procedures and app-owned ref results retain native values and types.
@@ -77,7 +78,7 @@ microseconds and days while PostgreSQL receives the canonical text. Computed val
 PostgreSQL through Bun.SQL that is a `Date`, which drops microseconds. Other
 declared scalars are driver-native.
 
-Driver-ready JSON parameters are text on every target (a JavaScript array would otherwise be bound as a PostgreSQL array), so the application serializes them. Bare PG SQL declares each JSON parameter as text
+JSON parameters are text on every target (a JavaScript array would otherwise be bound as a PostgreSQL array): an input field read as JSON takes its authored array or object, which the generated query serializes, and a string is bound as it is. Bare PG SQL declares each JSON parameter as text
 (`CAST(CAST($n AS text) AS jsonb)`), so Bun.SQL sends the text verbatim instead of
 JSON-encoding it again; generation refuses a JSON parameter used any other way. SQLite bool/date/timestamp/numeric parameters use their declared
 storage representations. Bound optional fields become explicit required values,

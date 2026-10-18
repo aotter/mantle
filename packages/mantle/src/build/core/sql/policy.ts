@@ -1,7 +1,7 @@
 // The policy rewriter (ADR-0034 decision 8, ADR-0035 decision 3): validated IR -> physical AST with visibility, scope,
 // system columns and deterministic order injected. A dialect whose policy is "inject" supplies a PolicyLowering for what
 // only it can spell (casts, Mantle's functions, generated ids). The result is still libpg-query's shape.
-import { SqlRefusal as Refused, type SqlNode as N } from '../../spec/domain/index.js';
+import { AGGREGATES, SqlRefusal as Refused, type SqlNode as N } from '../../spec/domain/index.js';
 import type { RelationPosition } from './positions.js';
 import type { StorageSchema as SchemaDef } from '../dialect.js';
 import { classify, protectedColumns, rowPolicy, userScopeTerm, writePolicy, type RowMode as Mode, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
@@ -403,7 +403,6 @@ function expandStar(n: N, info: SelInfo, c: C): N {
   return { ...n, targetList: list };
 }
 
-const AGGREGATES = new Set(['count', 'sum', 'min', 'max', 'avg', 'json_group_array', 'json_group_object', 'string_agg', 'jsonb_agg', 'jsonb_object_agg']);
 const alias$ = (rel: N) => rel.alias?.aliasname ?? rel.relname;
 function returning(rc: N | undefined, s: SchemaDef, c: C, target: string): N | undefined {
   // `*` and `<target>.*` are the target's declared columns, as in a SELECT; any other star is left for PostgreSQL to refuse

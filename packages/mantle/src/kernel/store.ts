@@ -104,8 +104,11 @@ export interface Collection<T extends Table> {
   /** CONFLICT when the version differs or the caller cannot see the row. */
   delete(id: string, options: { readonly lock: number | string }): Write<void>;
 }
-/** Lazy, single-execution write: await directly or submit once to its Store's batch. */
-export interface Write<T> extends PromiseLike<T> {}
+/** Lazy, single-execution write: await it (or `.then`/`.catch`/`.finally`, which run it) or submit it once to its Store's batch. */
+export interface Write<T> extends PromiseLike<T> {
+  catch<R = never>(onrejected?: ((reason: any) => R | PromiseLike<R>) | null): Promise<T | R>;
+  finally(onfinally?: (() => void) | null): Promise<T>;
+}
 export interface TransactionOptions { readonly isolation?: "serializable" | "repeatable read" | "read committed" | "read uncommitted" }
 export interface Store<T extends Record<string, Table>> {
   collection<K extends keyof T & string>(name: K): Collection<T[K]>;
@@ -167,13 +170,14 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     const pending = new WeakMap<Write<unknown>, Pending>();
     const write = (build: Pending["build"], project: Pending["project"], path: string): Write<unknown> => {
       const state: Pending = { build: () => { checkFresh(caller, false, path); return build(); }, project };
-      const value: Write<unknown> = { then: (yes, no) => {
+      const run = (): Promise<unknown> => {
         if (!state.promise) {
           state.promise = state.claimed ? Promise.reject(new Error("Write has already been batched.")) : Promise.resolve().then(async () => project((await drv.procedure(db, [state.build()], path))[0]!));
           state.claimed = true;
         }
-        return state.promise.then(yes, no);
-      } };
+        return state.promise;
+      };
+      const value: Write<unknown> = { then: (yes, no) => run().then(yes, no), catch: no => run().catch(no), finally: done => run().finally(done) };
       pending.set(value, state);
       return value;
     };

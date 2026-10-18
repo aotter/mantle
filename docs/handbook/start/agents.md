@@ -29,6 +29,17 @@ the app entry (`--entry`) never imports, it warns and names the topic that shows
 3. For each need, find the pattern in `mantle help examples` (the **Combining** table) and read that example's
    manifest and source. Examples are references: take the pattern into your own manifests; do not copy an example
    directory into the app.
-4. `pnpm generate`, implement every listed handler, `pnpm check`, then `pnpm smoke`.
+   - Business rules (status transitions, approval thresholds, stock, guards, several rows that commit together)
+     belong in SQL Procedures, not in handler code around separate writes: `mantle help sql-patterns`, and
+     `mantle help sql` for the SQL each dialect accepts.
+   - Visitor pages (anything anonymous and indexable) follow `mantle help public-pages`: server-rendered HTML,
+     canonical and Open Graph tags, JSON-LD and an answer block on detail pages, Markdown alternates, `/sitemap.xml`,
+     `/robots.txt` and `/llms.txt`. A brief that names a site, shop or catalogue for visitors includes all of them.
+4. `pnpm generate`, implement every handler it lists, `pnpm check`, then `pnpm smoke`.
 5. Before reporting the app or a feature done, run [role-only acceptance](../guides/agent-workflow-acceptance.md)
-   (`mantle help agent-workflow-acceptance`). Scripted smoke is not acceptance.
+   (`mantle help agent-workflow-acceptance`). Scripted smoke is not acceptance. `pnpm accept` starts the app and hands
+   each role to a fresh evaluator as a URL that carries that role's session.
+
+The first verified sign-in with `ADMIN_EMAIL` becomes the admin. Further administrators are added in Admin:
+**More → Administrators** invites by email, and **More → Members** grants Admin to an existing member.
+[Authentication](../cloudflare/authentication.md#identity-helpers) documents the same operations as an API.

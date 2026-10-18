@@ -9,6 +9,7 @@ import {wireRows,checkOrigin} from "../src/kernel/contracts.js";
 import {outputConversions} from "../src/domain/columns.js";
 import {compilePlan} from "../src/build/compiler.js";
 import * as postgresCompiler from "../src/build/postgres/compile/index.js";
+import * as sqliteCompiler from "../src/build/d1/compile/index.js";
 
 const source=`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -93,6 +94,20 @@ spec: {surface: internal, sql: 'WITH p AS (SELECT amount,flag,payload FROM value
  expect(outputConversions(direct.plan,"direct-cte","bun-postgres")).toEqual([["amount","int"]]);
  expect(outputConversions(direct.plan,"direct-cte","cloudflare-d1")).toEqual([["amount","int"],["flag","bool"],["payload","json"]]);
  expect(()=>checkOrigin(new Request("https://app.test/api/edit",{method:"POST",headers:{origin:"https://evil.test"}}),fixtureCaller({...caller,credential:"session"}))).toThrow("Cross-origin");
+});
+
+test("a computed output is json only when it is a JSON document by construction",async()=>{
+ const view=(name:string,sql:string)=>`---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: ${name}}
+spec: {surface: public, sql: "${sql}"}
+`;
+ const compiled=await compilePlan({sources:[{sourceId:"json",text:source+view("documents","SELECT json_group_array(amount) AS arr, json_set('{}', '$.n', COUNT(*)) AS obj, (SELECT json_group_array(v.id) FROM values v) AS sub, COALESCE((SELECT json_group_array(v.id) FROM values v), '[]') AS co, COALESCE(json_set('{}', '$.n', 1), 'none') AS fallback FROM values")+view("scalars","SELECT id, json_extract(payload, '$.x') AS extracted, payload ->> 'x' AS field, json_array_length(payload) AS n FROM values ORDER BY id")}]},sqliteCompiler,"operational");
+ if(!compiled.ok)throw Error(JSON.stringify(compiled.diagnostics));
+ expect(outputConversions(compiled.plan,"documents","cloudflare-d1")).toEqual([["arr","json"],["obj","json"],["sub","json"],["co","json"]]);
+ expect(outputConversions(compiled.plan,"documents","bun-postgres")).toEqual([]);
+ expect(outputConversions(compiled.plan,"scalars","cloudflare-d1")).toEqual([]);
 });
 
 async function verify(target:"bun-sqlite"|"bun-postgres",db:any,run:(sql:string)=>Promise<any>|any,bigint=false){

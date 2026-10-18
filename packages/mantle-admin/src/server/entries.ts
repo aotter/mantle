@@ -56,9 +56,10 @@ const dataOf = (raw: Record<string, unknown>) => {
             fail(`data may not set '${key}'.`);
     return data as Row;
 };
-const writable = <Database>(schema: EntrySchema<Database>) => {
+/** A root `readOnly: true` Schema refuses every generic write for every caller: a refusal, not a version conflict to reload. */
+const writable = <Database>(schema: EntrySchema<Database>, create = false) => {
     if (schema.readOnly)
-        throw conflict("This collection is read-only; use its declared Procedures.");
+        throw new ContractError("AUTH_DENIED", `This ${create ? "collection" : "record"} is read-only; use its operations.`, "admin/entries");
 };
 export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: NativeProcedureAdapter<DB>): readonly Route<Env, DB>[] {
     const collections = Object.fromEntries(schemas.map(schema => [schema.name,schema.binding]));
@@ -228,7 +229,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
             }, columns);
         } },
         { method: "GET", path: "/entries/{id}", run: async (ctx) => { const schema = schemaOf(ctx.url.searchParams.get("collection")); return editor(schema, await current(schema, ctx, ctx.params.id!), ctx); } },
-        { method: "POST", path: "/entries", run: async (ctx) => { const raw = await json(ctx), schema = schemaOf(raw.collection); writable(schema); const data = Object.fromEntries(Object.entries(dataOf(raw)).filter(([, v]) => v !== null)), values = { ...schema.defaults, ...data }; schema.native?.(values); const checked = schema.values(schema.validate(values, !schema.publishing)); const row = await nativeEntryProcedure(schema.binding,adapter,ctx.db,ctx.caller,"create",checked); return editor(schema, row, ctx, true); } },
+        { method: "POST", path: "/entries", run: async (ctx) => { const raw = await json(ctx), schema = schemaOf(raw.collection); writable(schema, true); const data = Object.fromEntries(Object.entries(dataOf(raw)).filter(([, v]) => v !== null)), values = { ...schema.defaults, ...data }; schema.native?.(values); const checked = schema.values(schema.validate(values, !schema.publishing)); const row = await nativeEntryProcedure(schema.binding,adapter,ctx.db,ctx.caller,"create",checked); return editor(schema, row, ctx, true); } },
         { method: "PATCH", path: "/entries/{id}", run: async (ctx) => {
                 const schema = schemaOf(ctx.url.searchParams.get("collection"));
                 writable(schema);
@@ -265,7 +266,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
         const schema = schemaOf(route.path.startsWith("/collections/") ? ctx.params.name : route.method === "POST" && route.path === "/entries" ? raw.collection : ctx.url.searchParams.get("collection"));
         binds(adapter.values, schema.binding.caller.binds, ctx.caller);
         if (route.method === "GET") { await readable(schema, ctx); schema.query(ctx.url.searchParams); return; }
-        writable(schema);
+        writable(schema, route.method === "POST" && route.path === "/entries");
         if (route.method === "POST" && route.path === "/entries") {
             const data = {...schema.defaults, ...Object.fromEntries(Object.entries(dataOf(raw)).filter(([,v]) => v !== null))};
             schema.native?.(data); const values = schema.values(schema.validate(data, !schema.publishing));

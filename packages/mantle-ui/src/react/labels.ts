@@ -47,7 +47,7 @@ export const defaultInteractionLabels: InteractionLabels = {
   loading: "Loading the latest version…",
   reading: "Checking for changes…",
   unreadable: "This entry could not be loaded, so nothing can be submitted yet.",
-  changedSinceList: "Someone changed this entry after you opened it. Review the newer version before you continue.",
+  changedSinceList: "This record changed since the list was loaded; review the current version.",
   reviewLatest: "Review newer version",
   contested: "Someone else also changed fields you edited:",
   conflict: "This entry changed before your update was saved. Nothing was saved. Load the latest version and review it again.",

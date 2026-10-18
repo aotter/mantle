@@ -9,9 +9,10 @@ import { seed, verifyMultiItem } from "./multi-item-scenarios.js";
 
 const base = resolve(import.meta.dir, ".."), port = process.env.MANTLE_NEXT_ORDERS_D1_PORT ?? "8991";
 const composition = `import {userCaller} from '${resolve(base, "src/kernel/user-caller.ts")}';import {rest} from './rest.js';
-export const app=rest({db:(env:{DB:any})=>env.DB,caller:async()=>userCaller({id:"u",role:"user"},{adminRoles:["admin"],credential:"api-key"}),handlers:{}});`;
+export const app=rest({db:(env:{DB:any})=>env.DB,caller:async()=>userCaller({id:"u",role:"user"},{adminRoles:["admin"],credential:"api-key"}),
+handlers:{"place-order-ref":async(ctx:any,input:any)=>({...await ctx.store.procedures["place-order"](input),products:await ctx.store.views["products-by-ids"]({ids:input.items.map((i:any)=>i.productId)})})}});`;
 // PostgreSQL's row source over jsonb is jsonb_array_elements; its ->> is text, so lines cast to the column type.
-const postgres = (text: string) => text.replaceAll("json_each(input.items) j", "jsonb_array_elements(input.items) AS j(value)")
+const postgres = (text: string) => text.replaceAll("json_each(input.items) j", "jsonb_array_elements(input.items) AS j(value)").replace("json_each(input.ids) j", "jsonb_array_elements_text(input.ids) AS j(value)")
   .replace("SUM(j.value ->> 'qty')", "SUM(CAST(j.value ->> 'qty' AS int8))").replace(", j.value ->> 'qty' FROM", ", CAST(j.value ->> 'qty' AS int8) FROM");
 
 async function fixture(target: "bun-sqlite" | "bun-postgres" | "cloudflare-d1") {

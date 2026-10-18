@@ -236,7 +236,7 @@ const implementation = {
         return reply.data;
       },
       // the shared cache: what Admin shows and what the application's own components read both refetch
-      onSuccess: () => invalidateAfterWrite(client),
+      onSuccess: () => { void invalidateAfterWrite(client); },
     });
     return { run: transport.writable ? mutation.mutateAsync : undefined, pending: mutation.isPending };
   },

@@ -138,7 +138,10 @@ leaves nothing behind. Bound the array with `maxItems`.
 
 A statement cannot read an earlier statement's `RETURNING`, so rows that must
 refer to each other share a key from the input: here the caller (or a `ref`
-handler that then calls this Procedure) supplies `orderRef`.
+handler that then calls this Procedure) supplies `orderRef`. A later statement
+does see the rows an earlier one wrote, so it can also store the parent's id
+(`(SELECT o.id FROM orders o WHERE o.orderRef = input.orderRef)`) in a field with
+`x-mantle-ref: orders`, which lets Admin fold the lines under their order.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
@@ -243,4 +246,20 @@ upserts, `EXISTS` guards and nested reads on the same `products`.
 Do not split this into a Store write, then a SQL Procedure, then a compensating
 delete: the rows are visible between the steps and a failure leaves cleanup to
 the handler. A `ref` handler that needs the rows written together calls this
-Procedure through `ctx.store.procedures`.
+Procedure through `ctx.store.procedures`, passing the array itself: the
+generated input type is the authored one, and the generated query serializes
+the array for the driver (a string is bound as it is). Like a direct call, the
+Store does not validate input against the Procedure's schema (REST and MCP do),
+so `maxItems` and the line shape hold only for rows the handler has checked or
+built.
+
+```ts
+import { store } from './generated/generated.js';
+import type { Caller } from '@aotter/mantle/contracts';
+
+// `ctx.store` in a `ref` handler is this Store: `ctx.store.procedures['place-order']({ orderRef, items })`.
+export async function placeOrder(db: Parameters<typeof store>[0], caller: Caller, orderRef: string) {
+  const items = [{ productId: 'pen', qty: 2 }, { productId: 'stapler', qty: 1 }];
+  return store(db, caller).procedures['place-order']({ orderRef, items });
+}
+```
