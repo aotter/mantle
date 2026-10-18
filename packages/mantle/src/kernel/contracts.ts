@@ -107,9 +107,11 @@ export type Output = { readonly results: ReadonlyArray<ReadonlyArray<Row>> };
 export function deny(caller: Caller, allowed: boolean, path: string): void {
   if (!allowed) throw new ContractError("subject" in caller ? "AUTH_DENIED" : "UNAUTHENTICATED", "Authorization predicate not satisfied.", path);
 }
-/** CONFLICT for a write the database refused: a unique-index clash, or a row statement that did not change exactly one row. */
+/** A row statement that changed no row cannot tell why without leaking whether the row exists, so it says how to recover. */
+export const ROW_CONFLICT = "No row matched this change: it does not exist or is not visible to you, its version changed, or its state no longer allows it. Read it again and retry with its current version.";
+/** CONFLICT for a write the database refused: a unique-index clash (`fields.kind` "unique"), or a row statement that did not change exactly one row ("row"). */
 export const conflict = (path: string, unique: boolean, cause?: unknown): ContractError =>
-  new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : "Expected one affected row.", path, { cause });
+  new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : ROW_CONFLICT, path, { cause, fields: { kind: unique ? "unique" : "row" } });
 /** A Schema `checks` violation (Mantle's SQLite check trigger, or PostgreSQL SQLSTATE 23514) is a CONFLICT naming the check. */
 export const checkConflict = (path: string, error: unknown): ContractError | undefined => {
   const message = (error as Error)?.message ?? "", marker = /MANTLE_CHECK ([^:\n]+): (.+)/.exec(message);

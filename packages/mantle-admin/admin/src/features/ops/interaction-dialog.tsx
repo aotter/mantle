@@ -54,8 +54,8 @@ export function interactionLabels(language: AdminLanguage): InteractionLabels {
 
 export function OperationDiagnostic({ diagnostic, language, summary = true }: { diagnostic: InteractionDiagnostic; language: AdminLanguage; summary?: boolean }): React.ReactNode {
   const key = diagnostic.code !== "CONFLICT" ? undefined
-    : diagnostic.message === "Expected one affected row." ? "ops.conditionConflict"
-    : diagnostic.message === "A unique constraint of the Schema was violated." ? "ops.uniqueConflict"
+    : diagnostic.kind === "row" ? "ops.conditionConflict"
+    : diagnostic.kind === "unique" ? "ops.uniqueConflict"
     : undefined;
   if (!key) return diagnostic.message;
   return <>{summary ? <p>{t(language, key)}</p> : null}<details><summary>{t(language, "ops.details")}</summary><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(diagnostic, null, 2)}</pre></details></>;
@@ -200,7 +200,7 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
       title={title}
       description={description}
       labels={{ ...interactionLabels(language), conflict: t(language, "ops.conditionConflict"), conflictReopen: t(language, "ops.conditionConflict") }}
-      renderDiagnostic={diagnostic => <OperationDiagnostic diagnostic={diagnostic} language={language} summary={state.phase !== "conflict" || diagnostic.message !== "Expected one affected row."} />}
+      renderDiagnostic={diagnostic => <OperationDiagnostic diagnostic={diagnostic} language={language} summary={state.phase !== "conflict" || diagnostic.kind !== "row"} />}
       fieldLabel={fieldLabel}
       fieldValue={fieldValue}
       onClose={close}

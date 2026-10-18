@@ -1,5 +1,5 @@
 /** A generated publishing transition, admin or system only; `write` claims translation state, released on CONFLICT. */
-import { isAdmin, deny, type Caller, type Output, type Row } from "./contracts.js";
+import { isAdmin, deny, ROW_CONFLICT, type Caller, type Output, type Row } from "./contracts.js";
 import { checkFresh } from "./caller-identity.js";
 import { bound, type Bound, type Step, type Values } from "./binds.js";
 
@@ -9,7 +9,7 @@ export async function transition<DB>(db: DB, caller: Caller, input: Readonly<Rec
   const release = write?.();
   return { results: await execute(db, bound(d, steps, caller, input), path).catch(error => {
     if (release && error?.code === "CONFLICT") release();
-    if (error?.code === "CONFLICT" && error.message === "Expected one affected row.") error.message = failure;
+    if (error?.code === "CONFLICT" && error.message === ROW_CONFLICT) error.message = failure;
     throw error;
   }) };
 }

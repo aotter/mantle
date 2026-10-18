@@ -21,6 +21,8 @@ export interface InteractionDiagnostic {
   readonly code: string;
   readonly message: string;
   readonly path?: string;
+  /** What kind of refusal, when the runtime says (a CONFLICT's "row", "unique" or "check"). */
+  readonly kind?: string;
   readonly failure?: { readonly outcome?: string; readonly retry?: string };
 }
 
