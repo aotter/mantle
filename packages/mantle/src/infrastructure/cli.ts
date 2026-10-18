@@ -83,8 +83,8 @@ try {
     }
     if (values.check && changed.length) throw new Error(`Generated output is stale. Run mantle generate with the same options:\n${changed.join("\n")}`);
     if (!values.check) console.log(`Commit generated output and Wrangler config edits; keep dist/ untracked. Add to .gitattributes: ${JSON.stringify(relative(process.cwd(), resolve(destination)).replaceAll("\\", "/") + "/**")} linguist-generated=true`);
-    for (const name of result.refProcedures) console.log(`Ref Procedure ${JSON.stringify(name)}: implement Handlers[${JSON.stringify(name)}].`);
-    if (result.refProcedures.length) console.log("Next: run tsc --noEmit; pass the handlers at store(db, caller, { handlers }).");
+    // A contract, not a to-do: the CLI does not read the app's handlers; tsc checks them against Handlers.
+    if (!values.check && result.refProcedures.length) console.log(`Ref Procedures need these Handlers keys (tsc --noEmit checks them; pass them at store(db, caller, { handlers })): ${result.refProcedures.map(name => JSON.stringify(name)).join(", ")}`);
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
