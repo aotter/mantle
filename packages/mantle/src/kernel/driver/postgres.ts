@@ -1,7 +1,7 @@
 /** Bun.SQL's PostgreSQL shape (`Postgres`); postgres.js satisfies it as it is. */
 import type { Bound } from "../binds.js";
 import type { TransactionOptions } from "../store.js";
-import { conflict, ContractError, type Postgres, type PostgresResult, type Row, type Unsafe } from "../contracts.js";
+import { conflict, ContractError, schemaCheckFailed, type Postgres, type PostgresResult, type Row, type Unsafe } from "../contracts.js";
 import { context, guard } from "./transaction-context.js";
 
 const transactions = new WeakSet<Postgres>();
@@ -15,7 +15,7 @@ export async function run(db: Unsafe, sql: string, binds: unknown[]): Promise<{ 
 
 /** SQLSTATE of a server error: `errno` on Bun.SQL, `code` on postgres.js. */
 const sqlstate = (error: unknown): unknown => { const e = error as { errno?: unknown; code?: unknown } | null; return typeof e?.errno === "string" ? e.errno : e?.code; };
-const check = (path: string, e: any): ContractError => new ContractError("CONFLICT", `A check of the Schema failed: ${e.message}`, path, { cause: e, fields: { kind: "check", schema: e.table ?? e.table_name, check: e.constraint ?? e.constraint_name } });
+const check = (path: string, e: any): ContractError => schemaCheckFailed(path, e, e.table ?? e.table_name, e.constraint ?? e.constraint_name);
 /** A structured server ErrorResponse proves rollback; missing evidence is uncertain. */
 export function definitive(error: unknown): boolean {
   if (error instanceof ContractError) return error.code === "CONFLICT";

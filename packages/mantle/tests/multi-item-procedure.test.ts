@@ -40,7 +40,7 @@ test("bun:sqlite: a multi-line order commits every line or none", async () => {
     await sql.unsafe(`CREATE SCHEMA ${schema}`); await sql.unsafe(`SET search_path TO ${schema}`);
     await sql.unsafe(files["schema.sql"]!); await sql.unsafe(seed(true));
     const { app } = await import(join(dir, "app.ts"));
-    await verifyMultiItem(request => app(request, { DB: sql }), async text => [...await sql.unsafe(text)]);
+    await verifyMultiItem(request => app(request, { DB: sql }), async text => [...await sql.unsafe(text)], "_mantle_chk_products_0");
   } finally { await rm(dir, { recursive: true, force: true }); await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`).catch(() => {}); await sql.close(); }
 }, 30000);
 

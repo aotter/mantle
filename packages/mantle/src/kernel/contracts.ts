@@ -114,8 +114,12 @@ export const conflict = (path: string, unique: boolean, cause?: unknown): Contra
 export const checkConflict = (path: string, error: unknown): ContractError | undefined => {
   const message = (error as Error)?.message ?? "", marker = /MANTLE_CHECK ([^:\n]+): (.+)/.exec(message);
   if (!/MANTLE_CHECK /.test(message)) return undefined;
-  return new ContractError("CONFLICT", `A check of the Schema failed: ${marker?.[0] ?? message}`, path, { cause: error, fields: { kind: "check", schema: marker?.[1], check: marker?.[2]?.replace(/: SQLITE_CONSTRAINT.*$/, "") } });
+  // D1 appends its own `: SQLITE_CONSTRAINT (extended: …)`; it stays in `cause`, not in what a client reads.
+  return schemaCheckFailed(path, error, marker?.[1], marker?.[2]?.replace(/: SQLITE_CONSTRAINT.*$/, ""));
 };
+/** One message on every target, built from the parsed fields; the driver's own text stays in `cause`. */
+export const schemaCheckFailed = (path: string, cause: unknown, schema: string | undefined, check: string | undefined): ContractError =>
+  new ContractError("CONFLICT", `A check of the Schema failed: ${schema ?? "unknown"}: ${check ?? "unknown"}`, path, { cause, fields: { kind: "check", schema, check } });
 
 /** One result of `unsafe`: the rows (typed by the generated function), plus the affected count. */
 export type PostgresResult = any[] & { readonly count: number | null };
