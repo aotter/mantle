@@ -19,7 +19,7 @@ if (process.argv[2] === "mcp") await client(process.argv[3], process.argv[4], pr
 else await setup();
 
 async function setup() {
-  const { values } = parseArgs({ options: { fixtures: { type: "string" }, user: { type: "string", default: "member@example.test" } } });
+  const { values } = parseArgs({ args: process.argv.slice(2).filter(arg => arg !== "--"), options: { fixtures: { type: "string" }, user: { type: "string", default: "member@example.test" } } });
   const { startApp } = await import("./smoke-kit.mjs");
   const app = await startApp();
   const stop = async () => { await app.stop(); process.exit(0); };

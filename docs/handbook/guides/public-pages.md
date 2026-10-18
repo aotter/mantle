@@ -26,7 +26,9 @@ here instead of repeating it.
 
 - JSON-LD of the matching schema.org type (`Recipe`, `Article`, `Event`, `Product`, ...), built from the same row as
   the visible content: `name`, `description`, `url`, `inLanguage`, `datePublished`, `dateModified`, and `image` when
-  there is one (some rich results require it). Escape `<` in the serialized JSON so stored text cannot close the
+  there is one (some rich results require it). A type that has no date or language properties (`Product`) gets them on
+  a page node instead: an `@graph` with an `ItemPage` (`inLanguage`, dates, `mainEntity`) pointing to the `Product`
+  (`offers` with `price` and `priceCurrency`). Escape `<` in the serialized JSON so stored text cannot close the
   script element. Do not add facts the page does not show.
 - A short answer block for answer engines: one question heading and a one-sentence answer from the row's data.
 - A Markdown alternate at `<url>.md`, linked with `<link rel="alternate" type="text/markdown">`.

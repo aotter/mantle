@@ -112,7 +112,7 @@ export function generate(input: GenerateInput): GenerateResult {
     if (!("sql" in procedure.handler)) continue;
     const modes = lowered.procedures[name];
     if (!modes?.caller || !modes.trusted) { refuse(path, "Both caller and trusted SQL must be lowered."); continue; }
-    if ([...modes.caller, ...modes.trusted].some(s => s.publish || s.schema && plan.schemas[s.schema]?.publishing)) refuse(path, "Publishing writes are generated: use the Store and the `<schema>.publish` / `.unpublish` / `.archive` transitions.");
+    if ([...modes.caller, ...modes.trusted].some(s => s.publish || s.schema && plan.schemas[s.schema]?.publishing)) refuse(path, "A SQL Procedure cannot write a publishing Schema: create and edit its rows from a ref handler through the Store (`ctx.store.collection(...)`), and change status with the generated `<schema>.publish` / `.unpublish` / `.archive` transitions.");
     const fieldNames = inputFields(procedure.input, path + "/input");
     const steps = (statements: readonly LoweredStatement[]) => `[${statements.map(s => step(s, path, fieldNames, s.kind === "row")).join(", ")}] as const`;
     const same = steps(modes.caller) === steps(modes.trusted);

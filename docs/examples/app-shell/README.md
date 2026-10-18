@@ -64,7 +64,7 @@ deliverable done, follow the independent acceptance guide: `mantle help agent-wo
 
 ### Independent acceptance
 
-`pnpm accept` (optionally `-- --fixtures fixtures.mjs --user member@example.test`) starts the app on a fresh local D1,
+`pnpm accept` (optionally `pnpm accept --fixtures fixtures.mjs --user member@example.test`; with npm, `npm run accept -- --fixtures …`) starts the app on a fresh local D1,
 signs the admin in, runs your fixtures module, signs the user in and prints one local URL per role:
 
 ```text
@@ -84,7 +84,7 @@ Each URL forwards to the app with that role's session; the evaluator never sees 
 
 The fixtures module's default export receives `{ call, mcp, signIn, sql, sessions, user }` and runs between the two
 sign-ins, so an invite-only app can admit the user first. Create records through the app's own REST/MCP as real
-users (other members' records, several states, more than one page); `sql` is for what no surface may write.
+users (other members' records, several states, more than one page); `sql` is for what no surface may write, and returns storage column names (lower case unless aliased).
 Ctrl-C stops the app and deletes its data. To accept an external MCP host's OAuth connection instead, see the guide.
 
 ### MCP acceptance
