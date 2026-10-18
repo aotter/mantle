@@ -38,6 +38,10 @@
           "link": "/guides/public-pages"
         },
         {
+          "text": "Local HTTP checks",
+          "link": "/guides/local-testing"
+        },
+        {
           "text": "SQL patterns",
           "link": "/guides/sql-patterns"
         },

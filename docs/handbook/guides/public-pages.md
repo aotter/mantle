@@ -46,8 +46,33 @@ here instead of repeating it.
 - `/llms.txt` ([llmstxt.org](https://llmstxt.org)): a title, a one-line summary and a link to each item's Markdown
   alternate.
 
+## A complete site
+
+When the brief names a site, shop, catalogue or blog for visitors, these are part of the work without the user
+listing them:
+
+- Every item on this page, for every public page type the site has.
+- Accessible, responsive pages with the app's own styling; the examples are unstyled on purpose.
+- Content managed in Admin (draft, publish, edit, unpublish) shows on the site without a rebuild. Images go through
+  Admin's media library (`mantle help media-r2`); store committed asset IDs and never use an ID as an image URL.
+- Members' pages, if any, send anonymous visitors to `/sign-in` (`signInRedirect` in the app shell's `src/sign-in.ts`).
+- Structured data and answer blocks state only what the page shows. Never promise ranking or AI citation.
+
 ## Check before you report done
 
-Request the HTML without running JavaScript and check the items above; publish, edit and unpublish an item and check
-that its page, Markdown, sitemap and `llms.txt` follow. The `mantle` skill's
-`references/local-testing.md` covers running this against `wrangler dev`.
+Request each page without running JavaScript (plain `fetch` in `smoke.mjs`; `mantle help local-testing`) and assert:
+
+1. HTML content type and the visible content; `<title>`, description, canonical on `PUBLIC_ORIGIN`, Open Graph; on
+   detail pages JSON-LD that parses with the visible name, and the answer block.
+2. Each `.md` alternate returns `text/markdown` with the current text.
+3. Walk the list View's complete cursor chain: its rows equal the `llms.txt` entries and the sitemap's detail URLs
+   (below the generated `web()` caps: 5,000 rows for `llms.txt`, 50,000 for the sitemap). `/robots.txt` names the
+   sitemap.
+4. An unknown URL, a malformed path, a draft and a row the visitor may not read are 404, also with an admin session.
+5. Publish, edit and unpublish an item through Admin's API (or the Procedure Admin uses); after each, its page,
+   `.md`, sitemap and `llms.txt` follow.
+6. Stored text with `<`, `&` and `</script>` renders escaped in HTML and inside JSON-LD.
+
+Report a check you could not run (for example a production origin you do not have) as UNVERIFIED with the reason.
+Then run [independent acceptance](agent-workflow-acceptance.md) with a visitor evaluator in a browser on the
+`pnpm accept` URL.

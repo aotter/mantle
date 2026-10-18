@@ -57,6 +57,8 @@ Search for `AGENT:` to find what an app must fill in.
   existing member. `docs/handbook/cloudflare/authentication.md` (Identity helpers) has the same operations as an API.
 - Admin HTTP routes are listed in `docs/handbook/guides/native-admin.md`.
 
+`mantle help local-testing` lists what the smoke covers: every Procedure at its edges, each caller's isolation,
+visitor pages without JavaScript, MCP discovery and Admin's MCP App.
 Scripted smoke is not independent acceptance; before reporting a user-facing
 deliverable done, follow the independent acceptance guide: `mantle help agent-workflow-acceptance`.
 
@@ -66,6 +68,7 @@ deliverable done, follow the independent acceptance guide: `mantle help agent-wo
 signs the admin in, runs your fixtures module, signs the user in and prints one local URL per role:
 
 ```text
+visitor (anonymous): http://127.0.0.1:18741
 admin (owner@example.test): http://127.0.0.1:46467  MCP http://127.0.0.1:46467/mcp/admin  Admin http://127.0.0.1:46467/admin
 user (member@example.test): http://127.0.0.1:42607  MCP http://127.0.0.1:42607/mcp
 ```

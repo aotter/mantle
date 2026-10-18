@@ -19,6 +19,6 @@ function check(path) {
 }
 check('skills');
 assert.match(read('skills/mantle/SKILL.md'), /docs\/skills\/provision\/SKILL\.md/);
-assert.match(read('skills/mantle/SKILL.md'), /references\/local-testing\.md/);
+assert.match(read('skills/mantle/SKILL.md'), /mantle help local-testing/);
 assert.match(read('docs/skills/provision/SKILL.md'), /Cloudflare Workers/);
 console.log('check-oss-plugin: no hosted MCP/transport; local authoring and self-host deployment retained');

@@ -3,7 +3,8 @@
 //     Starts the app on a fresh local D1 (schema.sql, then seed.sql), signs the admin in with email OTP, runs the optional
 //     fixtures module (default export async ({ call, mcp, signIn, sql, sessions, user }) => {...}: realistic records through
 //     the app's own REST/MCP as real users, e.g. other members' orders and more than one page), signs the user in, then
-//     serves one local proxy per role that adds that role's session to every request. Give an evaluator only its proxy URL:
+//     serves one local proxy per role that adds that role's session to every request. Give an evaluator only its role's URL
+//     (a visitor gets the app's own origin):
 //     MCP at <proxy>/mcp (user) or <proxy>/mcp/admin (admin), Admin at <proxy>/admin, pages and REST at <proxy>/.
 //     The proxy refuses /api/auth/* so the evaluator cannot sign out, sign in or mint credentials. Ctrl-C stops everything.
 //   node accept.mjs mcp <endpoint> [tool [json-arguments]]
@@ -29,7 +30,7 @@ async function setup() {
     const sessions = { admin: await app.signIn(app.owner) };
     if (values.fixtures) await (await import(pathToFileURL(resolve(values.fixtures)).href)).default({ ...app, sessions, user: values.user });
     sessions.user = await app.signIn(values.user);
-    const lines = [`App ${app.origin} (setup only; do not give this to an evaluator)`];
+    const lines = [`visitor (anonymous): ${app.origin}`];
     for (const [role, cookie] of Object.entries(sessions)) {
       const url = await proxy(app.origin, cookie);
       lines.push(`${role} (${role === "admin" ? app.owner : values.user}): ${url}  MCP ${url}/mcp${role === "admin" ? "/admin" : ""}${role === "admin" ? `  Admin ${url}/admin` : ""}`);
