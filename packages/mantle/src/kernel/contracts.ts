@@ -108,7 +108,7 @@ export function deny(caller: Caller, allowed: boolean, path: string): void {
   if (!allowed) throw new ContractError("subject" in caller ? "AUTH_DENIED" : "UNAUTHENTICATED", "Authorization predicate not satisfied.", path);
 }
 /** A row statement that changed no row cannot tell why without leaking whether the row exists, so it says how to recover. */
-export const ROW_CONFLICT = "No row matched this change: it does not exist or is not visible to you, its version changed, or its state no longer allows it. Read it again and retry with its current version.";
+export const ROW_CONFLICT = "No row matched this change: it does not exist or is not visible to you, it changed since it was read, or its state no longer allows this change. Read it again before deciding whether to retry.";
 /** CONFLICT for a write the database refused: a unique-index clash (`fields.kind` "unique"), or a row statement that did not change exactly one row ("row"). */
 export const conflict = (path: string, unique: boolean, cause?: unknown): ContractError =>
   new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : ROW_CONFLICT, path, { cause, fields: { kind: unique ? "unique" : "row" } });
