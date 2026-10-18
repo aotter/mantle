@@ -14,8 +14,8 @@
     "smoke": "node smoke.mjs"
   },
   "dependencies": {
-    "@aotter/mantle": "0.2.0-alpha.8",
-    "@aotter/mantle-ui": "0.2.0-alpha.8",
+    "@aotter/mantle": "0.2.0-alpha.9",
+    "@aotter/mantle-ui": "0.2.0-alpha.9",
     "@better-auth/cimd": "1.7.7",
     "@better-auth/core": "1.7.7",
     "@better-auth/mcp": "1.7.7",
@@ -24,7 +24,7 @@
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/server": "2.2.0",
     "better-auth": "1.7.7",
-    "@aotter/mantle-admin": "0.2.0-alpha.8",
+    "@aotter/mantle-admin": "0.2.0-alpha.9",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

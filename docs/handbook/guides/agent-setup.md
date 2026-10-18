@@ -13,21 +13,21 @@ carries.
 The Mantle plugin carries one OSS authoring skill, `mantle`, and local
 acceptance references. It does not configure a hosted-service connection.
 Install from the Git tag matching the exact SDK version you selected (currently
-`v0.2.0-alpha.8`). Alpha releases integrate on `develop`; an unqualified
+`v0.2.0-alpha.9`). Alpha releases integrate on `develop`; an unqualified
 `aotter/mantle` source follows `main` and can install older, incompatible
 instructions. A skill install does not upgrade the application's SDK.
 
 For Codex, pin the marketplace checkout:
 
 ```sh
-codex plugin marketplace add aotter/mantle --ref v0.2.0-alpha.8
+codex plugin marketplace add aotter/mantle --ref v0.2.0-alpha.9
 codex plugin add mantle@mantle
 ```
 
 For Claude Code, first clone the release into a directory you will keep:
 
 ```sh
-git clone --depth 1 --branch v0.2.0-alpha.8 https://github.com/aotter/mantle.git mantle-plugin
+git clone --depth 1 --branch v0.2.0-alpha.9 https://github.com/aotter/mantle.git mantle-plugin
 ```
 
 Then, in Claude Code, use that checkout's absolute path:
@@ -41,7 +41,7 @@ Cursor and GitHub Copilot use their plugin manifests from the same tagged
 checkout. Without a plugin host, install only the consumer skill by name:
 
 ```sh
-npx skills add https://github.com/aotter/mantle/tree/v0.2.0-alpha.8 --skill mantle
+npx skills add https://github.com/aotter/mantle/tree/v0.2.0-alpha.9 --skill mantle
 ```
 
 When upgrading the SDK, update the marketplace ref or local tagged checkout and
