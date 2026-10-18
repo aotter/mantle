@@ -1,6 +1,6 @@
 /** `mantle init`: copy the installed app shell once. The app owns every file afterwards; init never overwrites one. */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { docsRoot, packageRoot } from "./help.js";
 
 // Local state a docs checkout may hold after someone ran the shell in place; sync-package-docs excludes the same names.
@@ -21,10 +21,9 @@ export function init(destination: string, dryRun = false): string {
   const notes: string[] = [];
   for (const file of all) {
     let text = readFileSync(join(shell, file), "utf8");
-    // Pin the shell's Mantle packages to the installed SDK, and name the package after its directory.
+    // Pin the shell's Mantle packages to the installed SDK.
     if (file === "package.json") {
       const pkg = JSON.parse(text);
-      pkg.name = basename(target).toLowerCase().replace(/[^a-z0-9-]+/g, "-") || pkg.name;
       for (const name of Object.keys(pkg.dependencies)) if (name.startsWith("@aotter/mantle")) pkg.dependencies[name] = sdk.version;
       text = JSON.stringify(pkg, null, 2) + "\n";
     }

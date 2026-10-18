@@ -7,9 +7,8 @@ export const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../
 
 /** Packed: <package>/docs. Workspace: the repository's docs/, which prepack copies in. */
 export function docsRoot(): string {
-  const pkg = packageRoot;
-  const root = [resolve(pkg, "docs"), resolve(pkg, "../../docs")].find(path => existsSync(resolve(path, "handbook/navigation.json")));
-  if (!root) throw new Error(`Mantle docs are missing from ${pkg}; reinstall @aotter/mantle.`);
+  const root = [resolve(packageRoot, "docs"), resolve(packageRoot, "../../docs")].find(path => existsSync(resolve(path, "handbook/navigation.json")));
+  if (!root) throw new Error(`Mantle docs are missing from ${packageRoot}; reinstall @aotter/mantle.`);
   return root;
 }
 
@@ -23,8 +22,7 @@ export function topics(root = docsRoot()): Topic[] {
   const unlisted = (readdirSync(resolve(root, "handbook"), { recursive: true }) as string[]).filter(path => path.endsWith(".md")).sort()
     .map(path => resolve(root, "handbook", path)).filter(file => !listed.has(file))
     .map(file => ({ name: relative(resolve(root, "handbook"), file).replaceAll("\\", "/").slice(0, -3), title: readFileSync(file, "utf8").match(/^# (.+)$/m)?.[1] ?? basename(file), file, group: "More pages" }));
-  const dirs = (path: string) => existsSync(path) ? readdirSync(path, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name) : [];
-  const skills = dirs(resolve(root, "skills")).filter(name => existsSync(resolve(root, "skills", name, "SKILL.md")))
+  const skills = (existsSync(resolve(root, "skills")) ? readdirSync(resolve(root, "skills")) : []).filter(name => existsSync(resolve(root, "skills", name, "SKILL.md")))
     .map(name => ({ name: `skills/${name}`, title: `Package skill: ${name}`, file: resolve(root, "skills", name, "SKILL.md"), group: "Package skills" }));
   const examples = resolve(root, "examples");
   const shipped = readdirSync(examples, { withFileTypes: true }).filter(entry => entry.isDirectory() && existsSync(resolve(examples, entry.name, "README.md")));
