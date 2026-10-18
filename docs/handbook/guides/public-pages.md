@@ -58,6 +58,13 @@ listing them:
 - Content managed in Admin (draft, publish, edit, unpublish) shows on the site without a rebuild. Images go through
   Admin's media library (`mantle help media-r2`); store committed asset IDs and never use an ID as an image URL.
 - Members' pages, if any, send anonymous visitors to `/sign-in` (`signInRedirect` in the app shell's `src/sign-in.ts`).
+- Who runs the site: an About/contact page and a footer with the business's name, location and contact, and on the
+  home page `Organization` (or `LocalBusiness`) JSON-LD with the same facts and the logo. Answer engines use these to
+  say whether the site is legitimate. Ask for the facts the brief lacks; never invent an address.
+- A favicon, and `og:image` on the home and list pages too.
+- A detail page leads to the action the brief sells (order, register, book), saying when it needs an account.
+- A cache policy: `Last-Modified` (from the row's `updated_at`) or an `ETag` on pages, `.md`, sitemap and `llms.txt`,
+  so crawlers can revalidate; `no-store` everywhere is safe but makes every crawl a full fetch.
 - Structured data and answer blocks state only what the page shows. Never promise ranking or AI citation.
 
 ## Check before you report done
