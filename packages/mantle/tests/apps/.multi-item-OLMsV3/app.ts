@@ -1,2 +1,0 @@
-import {userCaller} from '/home/user/mantle/packages/mantle/src/kernel/user-caller.ts';import {rest} from './rest.js';
-export const app=rest({db:(env:{DB:any})=>env.DB,caller:async()=>userCaller({id:"u",role:"user"},{adminRoles:["admin"],credential:"api-key"}),handlers:{}});

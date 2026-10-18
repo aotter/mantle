@@ -17,9 +17,8 @@ const postgres = (text: string) => text.replaceAll("json_each(input.items) j", "
   .replace("SUM(j.value ->> 'qty')", "SUM(CAST(j.value ->> 'qty' AS int8))").replace(", j.value ->> 'qty' FROM", ", CAST(j.value ->> 'qty' AS int8) FROM");
 
 async function fixture(target: "bun-sqlite" | "bun-postgres" | "cloudflare-d1") {
-  const dir = await mkdtemp(join(base, "tests/apps/.multi-item-"));
   const sources = (await loadFixtureSources("orders.yaml")).map(source => target === "bun-postgres" ? { ...source, text: postgres(source.text) } : source);
-  const files = await generateOrThrow(target, sources);
+  const files = await generateOrThrow(target, sources), dir = await mkdtemp(join(base, "tests/apps/.multi-item-"));
   await writeGenerated(dir, files);
   await writeFile(join(dir, "app.ts"), composition);
   return { dir, files };
@@ -42,7 +41,7 @@ test("bun:sqlite: a multi-line order commits every line or none", async () => {
     await sql.unsafe(files["schema.sql"]!); await sql.unsafe(seed(true));
     const { app } = await import(join(dir, "app.ts"));
     await verifyMultiItem(request => app(request, { DB: sql }), async text => [...await sql.unsafe(text)]);
-  } finally { await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await sql.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally { await rm(dir, { recursive: true, force: true }); await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`).catch(() => {}); await sql.close(); }
 }, 30000);
 
 (process.env.MANTLE_NEXT_REST_D1 ? test : test.skip)("local D1: a multi-line order commits every line or none", async () => {
