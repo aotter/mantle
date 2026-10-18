@@ -1,0 +1,68 @@
+# An order with any number of lines in one SQL Procedure: every line reserves stock and is written, or none is.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: products }
+spec:
+  title: Products
+  lifecycle: operational
+  checks: ["reserved <= stock"]
+  schema:
+    type: object
+    required: [name, stock, reserved]
+    properties:
+      name: { type: string }
+      stock: { type: integer, minimum: 0 }
+      reserved: { type: integer, minimum: 0 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: order_lines }
+spec:
+  title: Order lines
+  lifecycle: operational
+  schema:
+    type: object
+    required: [orderRef, productId, qty]
+    properties:
+      orderRef: { type: string }
+      productId: { type: string, x-mantle-ref: products }
+      qty: { type: integer, minimum: 1 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: place-order }
+spec:
+  description: Place an order of one or more lines; any line that would oversell refuses the whole order.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [orderRef, items]
+    properties:
+      orderRef: { type: string }
+      items:
+        type: array
+        minItems: 1
+        maxItems: 50
+        items:
+          type: object
+          additionalProperties: false
+          required: [productId, qty]
+          properties:
+            productId: { type: string }
+            qty: { type: integer, minimum: 1 }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE products SET reserved = reserved + (SELECT SUM(j.value ->> 'qty') FROM json_each(input.items) j WHERE j.value ->> 'productId' = products.id)
+        WHERE id IN (SELECT j.value ->> 'productId' FROM json_each(input.items) j);
+      INSERT INTO order_lines (orderRef, productId, qty)
+        SELECT input.orderRef, p.id, j.value ->> 'qty' FROM json_each(input.items) j JOIN products p ON p.id = j.value ->> 'productId'
+        RETURNING id, productId AS "productId";
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: place-order-http }
+spec:
+  source: { kind: http, method: POST, path: /api/orders }
+  target: { procedure: place-order }

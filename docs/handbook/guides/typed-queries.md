@@ -125,3 +125,91 @@ step's returned ID. D1 has no interactive transaction callback, so retain the
 supported SQL program or another existing native atomic boundary for that case.
 The [MCP design audit](agent-workflow-acceptance.md) applies these choices before
 implementation and separates them from independent end-user acceptance.
+
+## Several rows that commit together
+
+An order with any number of lines, a cart checkout or a bulk import must commit
+every row or none. Pass the rows as one array input and write them in one SQL
+Procedure that reads the array as a row source: `json_each(input.items)` on
+SQLite and D1, `jsonb_array_elements(input.items) AS j(value)` on PostgreSQL.
+The Procedure's statements commit together on every target, so a Schema
+`checks` failure in any line refuses the whole call with `CONFLICT` and leaves
+no reservation and no line behind. Bound the array with `maxItems`.
+
+```yaml
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: products }
+spec:
+  title: Products
+  lifecycle: operational
+  checks: ["reserved <= stock"]
+  schema:
+    type: object
+    required: [name, stock, reserved]
+    properties:
+      name: { type: string }
+      stock: { type: integer, minimum: 0 }
+      reserved: { type: integer, minimum: 0 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: order_lines }
+spec:
+  title: Order lines
+  lifecycle: operational
+  schema:
+    type: object
+    required: [orderRef, productId, qty]
+    properties:
+      orderRef: { type: string }
+      productId: { type: string, x-mantle-ref: products }
+      qty: { type: integer, minimum: 1 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: place-order }
+spec:
+  description: Place an order of one or more lines; a line that would oversell refuses the whole order.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [orderRef, items]
+    properties:
+      orderRef: { type: string }
+      items:
+        type: array
+        minItems: 1
+        maxItems: 50
+        items:
+          type: object
+          additionalProperties: false
+          required: [productId, qty]
+          properties:
+            productId: { type: string }
+            qty: { type: integer, minimum: 1 }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE products SET reserved = reserved + (SELECT SUM(j.value ->> 'qty') FROM json_each(input.items) j WHERE j.value ->> 'productId' = products.id)
+        WHERE id IN (SELECT j.value ->> 'productId' FROM json_each(input.items) j);
+      INSERT INTO order_lines (orderRef, productId, qty)
+        SELECT input.orderRef, p.id, j.value ->> 'qty' FROM json_each(input.items) j JOIN products p ON p.id = j.value ->> 'productId'
+        RETURNING id, productId AS "productId";
+```
+
+Repeated lines for one product add up in the `SUM`, so they are checked against
+the same stock. On PostgreSQL `->>` returns text: write
+`CAST(j.value ->> 'qty' AS int8)` there. SQLite and D1 refuse that integer cast
+(`SQL_TYPE`, because SQLite truncates where PostgreSQL rounds), and their `->>`
+already returns the JSON number. Both statements are set operations, so an
+unknown product id is not an error: the join writes no line for it and reserves
+nothing. The result lists the lines written; a caller that sent more lines than
+came back named a product that does not exist, and should show that line to its
+user rather than retry.
+
+Do not split this into a Store write, then a SQL Procedure, then a compensating
+delete: the rows are visible between the steps and a failure leaves cleanup to
+the handler. A `ref` handler that needs the rows written together calls this
+Procedure through `ctx.store.procedures`.

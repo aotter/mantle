@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Each shipped example runs on top of the app shell, from packed packages: generate, typecheck, then its smoke.
+// Each shipped example runs on top of a `mantle init` app, from packed packages: generate, typecheck, then its smoke.
 // --fresh runs only the fresh-copy checks (release gate): each packaged example, copied as a user would, installs
 // without a lockfile and passes its `check` with npm and with pnpm 10.
 import { execFileSync } from "node:child_process";
@@ -14,6 +14,9 @@ const PACKAGED = ["app-shell", "reference-service"];
 const MANAGERS = ["npm", "pnpm@10.28.0"];
 const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 const pins = expectedPins();
+// The consumer installs packed packages into a copy of app-shell; the packed `mantle init` then writes the app a user
+// gets into app/, which reuses that install (init pins the same dependencies).
+const initApp = (example, steps) => `node_modules/.bin/mantle init app >/dev/null && cp -R '${example}'/. app/ && ln -s ../node_modules app/node_modules && cd app && ${steps}`;
 for (const example of PACKAGED) {
   const { dependencies } = JSON.parse(readFileSync(join(examples, example, "package.json"), "utf8"));
   for (const [name, pinned] of Object.entries(dependencies)) {
@@ -38,15 +41,15 @@ if (!fresh) {
     // build, then the Admin MCP App compatibility test (it needs Chrome: MANTLE_TEST_CHROMIUM, or one playwright-core installed)
     const steps = ["pnpm generate", "pnpm types", "pnpm check", "pnpm build", "pnpm test", ...(existsSync(join(source, "smoke.mjs")) ? ["pnpm smoke"] : [])].join(" && ");
     console.log(`check-examples: ${example}`);
-    consumer("app-shell", ["sh", "-c", `cp -R '${source}'/. . && ${steps}`]);
+    consumer("app-shell", ["sh", "-c", initApp(source, steps)]);
   }
 }
 if (!selected.length) {
   for (const pm of MANAGERS) {
     const run = pm === "npm" ? "npm run" : "pnpm";
     // app-shell has no manifests of its own, so its check runs with the first example on top.
-    console.log(`check-examples: fresh app-shell + ${EXAMPLES[0]} with ${pm}`);
-    consumer("app-shell", ["sh", "-c", `cp -R '${join(examples, EXAMPLES[0])}'/. . && ${run} generate && ${run} types && ${run} check && ${run} build && ${run} test`], pm);
+    console.log(`check-examples: fresh mantle init + ${EXAMPLES[0]} with ${pm}`);
+    consumer("app-shell", ["sh", "-c", initApp(join(examples, EXAMPLES[0]), `${run} generate && ${run} types && ${run} check && ${run} build && ${run} test`)], pm);
     console.log(`check-examples: fresh reference-service with ${pm}`);
     consumer("reference-service", ["sh", "-c", `${run} check && ${run} build && ${run} test`], pm);
   }

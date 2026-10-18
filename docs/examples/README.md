@@ -17,6 +17,7 @@ take the pattern into your own manifests and `src/`. Do not copy an example dire
 | You need | Take |
 |---|---|
 | Stock that never oversells (orders, tickets, bookings) | club-events' capacity: a Schema `checks` constraint plus the decrement in the same program |
+| An order, cart or import with several rows that must all commit or none | one SQL Procedure over `json_each(input.items)` (`mantle help typed-queries`, "Several rows that commit together") |
 | Employees or customers who see only their own records | club-events' `restrict: { <schema>: "author_id = auth.uid()" }` |
 | An approval step, or any state machine | purchasing's guarded `UPDATE ... WHERE requestStatus = ...` Procedures |
 | A third-party API that answers later (webhooks, callbacks) | purchasing's `src/routes.ts`: verify the raw request, then call a Procedure |
