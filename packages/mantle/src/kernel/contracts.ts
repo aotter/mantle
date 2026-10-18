@@ -119,7 +119,7 @@ export const checkConflict = (path: string, error: unknown): ContractError | und
 };
 /** One message on every target, built from the parsed fields; the driver's own text stays in `cause`. */
 export const schemaCheckFailed = (path: string, cause: unknown, schema: string | undefined, check: string | undefined): ContractError =>
-  new ContractError("CONFLICT", `A check of the Schema failed: ${schema ?? "unknown"}: ${check ?? "unknown"}`, path, { cause, fields: { kind: "check", schema, check } });
+  new ContractError("CONFLICT", schema && check ? `A check of the Schema failed: ${schema}: ${check}` : "A check of the Schema failed.", path, { cause, fields: { kind: "check", schema, check } });
 
 /** One result of `unsafe`: the rows (typed by the generated function), plus the affected count. */
 export type PostgresResult = any[] & { readonly count: number | null };

@@ -51,7 +51,7 @@ test("bun:sqlite: the SQL patterns guide behaves as documented", async () => {
   try {
     await writeFile(join(dir, "worker.ts"), `${composition}\nimport {verifySqlPatterns} from ${JSON.stringify(resolve(import.meta.dir, "sql-patterns-scenarios.ts"))};
 export default{async fetch(request:Request,env:{DB:any}){if(new URL(request.url).pathname==='/health')return new Response('ready');try{for(const sql of ${JSON.stringify(unstable_splitSqlQuery(files["schema.sql"]! + seed(false)))})await env.DB.prepare(sql).run();
-return Response.json(await verifySqlPatterns(request=>app(request,env),async sql=>(await env.DB.prepare(sql).all()).results,false));}catch(error){return Response.json({error:String(error)},{status:500});}}};`);
+await verifySqlPatterns(request=>app(request,env),async sql=>(await env.DB.prepare(sql).all()).results,false);return Response.json({ok:true});}catch(error){return Response.json({error:String(error)},{status:500});}}};`);
     const config = join(state, "wrangler.json");
     await writeFile(config, JSON.stringify({ name: "mantle-sql-patterns-local", main: join(dir, "worker.ts"), compatibility_date: "2026-09-28", compatibility_flags: ["nodejs_compat"], d1_databases: [{ binding: "DB", database_name: "mantle-sql-patterns-local", database_id: "00000000-0000-0000-0000-000000000002" }] }));
     log = await open(join(state, "wrangler.log"), "w");
@@ -64,7 +64,7 @@ return Response.json(await verifySqlPatterns(request=>app(request,env),async sql
     }
     expect(ready).toBe(true);
     const response = await fetch(`http://127.0.0.1:${port}/verify`, { signal: AbortSignal.timeout(30000) });
-    expect(await response.json()).not.toHaveProperty("error");
+    expect(await response.json()).toEqual({ ok: true });
   } finally {
     if (worker && worker.exitCode === null) { const ended = once(worker, "exit"); try { process.kill(-worker.pid!, "SIGTERM"); } catch {} await ended; }
     await log?.close(); await rm(dir, { recursive: true, force: true }); await rm(state, { recursive: true, force: true });

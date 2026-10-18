@@ -1,5 +1,5 @@
 ---
-description: Six SQL patterns most apps need, each a complete manifest that compiles on every target, with the PostgreSQL spelling and what each refuses.
+description: Seven SQL patterns most apps need, each a complete manifest that compiles on every target, with the PostgreSQL spelling and what each refuses.
 ---
 # SQL patterns
 
@@ -180,16 +180,18 @@ spec:
 
 ## Refuse while something refers to it: NOT EXISTS
 
-A product with orders cannot be discontinued. `NOT EXISTS (…)` is part of the guard, so when an order exists the
+A product cannot be discontinued while an order for it waits for approval, since approving that order would reserve
+stock of a product no longer sold. `NOT EXISTS (…)` is part of the guard, so while such an order exists the
 row-classified UPDATE changes nothing and the call is `CONFLICT`; the product stays on sale. Use `EXISTS` the same way
-for "only if a related row exists".
+for "only if a related row exists". [Purchasing](../../examples/purchasing/README.md) uses `NOT EXISTS` to write the
+ledger row only for the request its program just approved (`submit-request`).
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: discontinue-product }
 spec:
-  description: Stop selling a product; refused while an order for it is open.
+  description: Stop selling a product; refused while an order for it waits for approval.
   requires: { auth: { all: [ctx.admin] } }
   input:
     type: object
@@ -202,7 +204,7 @@ spec:
     sql: |
       UPDATE products SET active = false
         WHERE id = input.id
-          AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.productId = products.id)
+          AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.productId = products.id AND o.orderStatus = 'pending_approval')
         RETURNING id
 ```
 

@@ -10,7 +10,7 @@ export async function verifySqlPatterns(app: App, query: Query, pg: boolean) {
     const response = (await app(new Request(`http://local${path}`, { method: path.startsWith("/api/views/") ? "GET" : "POST", headers: { "content-type": "application/json", "x-role": role }, ...(path.startsWith("/api/views/") ? {} : { body: JSON.stringify(body) }) })))!;
     return { status: response.status, body: await response.json() as any };
   };
-  const product = async (id: string) => { const [row] = await query(`SELECT name, note, stock, reserved, active, version FROM products WHERE id = '${id}'`); return { name: row!.name, note: row!.note, stock: Number(row!.stock), reserved: Number(row!.reserved), active: Boolean(Number(row!.active === true ? 1 : row!.active === false ? 0 : row!.active)), version: Number(row!.version) }; };
+  const product = async (id: string) => { const [row] = await query(`SELECT name, note, stock, reserved, active, version FROM products WHERE id = '${id}'`); return { name: row!.name, note: row!.note, stock: Number(row!.stock), reserved: Number(row!.reserved), active: Boolean(Number(row!.active)), version: Number(row!.version) }; };
   const orderStatus = async (id: string) => (await query(`SELECT orderstatus FROM orders WHERE id = '${id}'`))[0]?.orderstatus;
 
   // CASE: the status is chosen in the INSERT, and only a small order reserves stock in the same program.
@@ -34,9 +34,9 @@ export async function verifySqlPatterns(app: App, query: Query, pg: boolean) {
   // COALESCE: an omitted field keeps its value; NULLIF treats an empty note as omitted.
   const pen = await product("pen");
   equal((await send("/api/products/update", { id: "pen", expectedVersion: pen.version, name: "Gel pen" })).status, 200, "rename only");
-  equal([(await product("pen")).name, (await product("pen")).note], ["Gel pen", "blue"], "the note was kept");
+  equal((({ name, note }) => [name, note])(await product("pen")), ["Gel pen", "blue"], "the note was kept");
   equal((await send("/api/products/update", { id: "pen", expectedVersion: pen.version + 1, note: "" })).status, 200, "an empty note");
-  equal([(await product("pen")).name, (await product("pen")).note], ["Gel pen", "blue"], "an empty note kept both");
+  equal((({ name, note }) => [name, note])(await product("pen")), ["Gel pen", "blue"], "an empty note kept both");
   equal((await send("/api/products/update", { id: "pen", expectedVersion: pen.version, name: "Stale" })).status, 409, "a stale version");
 
   // ON CONFLICT DO UPDATE: the first restock creates the product, the next adds to it.
@@ -44,9 +44,9 @@ export async function verifySqlPatterns(app: App, query: Query, pg: boolean) {
   equal((await send("/api/products/restock", { sku: "TAPE", name: "Tape", qty: 7 })).status, 200, "second restock");
   equal((await query("SELECT stock FROM products WHERE sku = 'TAPE'")).map(row => Number(row.stock)), [12], "one row, stock added up");
 
-  // NOT EXISTS: a product with an order cannot be discontinued; one without can.
-  equal((await send("/api/products/discontinue", { id: "pen" })).status, 409, "pen has orders");
-  equal((await product("pen")).active, true, "pen is still sold");
+  // NOT EXISTS: a product with an order awaiting approval cannot be discontinued; one without can.
+  equal((await send("/api/products/discontinue", { id: "desk" })).status, 409, "desk has an order awaiting approval");
+  equal((await product("desk")).active, true, "desk is still sold");
   const tape = String((await query("SELECT id FROM products WHERE sku = 'TAPE'"))[0]!.id);
   equal((await send("/api/products/discontinue", { id: tape })).status, 200, "tape has no orders");
   equal((await send("/api/orders", { productId: tape, qty: 1, unitPrice: 1 }, "user")).body.results[0], [], "a discontinued product takes no order");

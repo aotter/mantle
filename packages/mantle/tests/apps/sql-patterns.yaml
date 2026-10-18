@@ -129,7 +129,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: discontinue-product }
 spec:
-  description: Stop selling a product; refused while an order for it is open.
+  description: Stop selling a product; refused while an order for it waits for approval.
   requires: { auth: { all: [ctx.admin] } }
   input:
     type: object
@@ -142,7 +142,7 @@ spec:
     sql: |
       UPDATE products SET active = false
         WHERE id = input.id
-          AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.productId = products.id)
+          AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.productId = products.id AND o.orderStatus = 'pending_approval')
         RETURNING id
 ---
 apiVersion: cms.mantle.aotter.net/v2
