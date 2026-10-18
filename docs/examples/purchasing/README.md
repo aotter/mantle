@@ -56,11 +56,13 @@ scheme.
 - Need another approval flow? Copy the pattern: a ref Procedure (admin-only, side effects) that wraps a guarded SQL
   write Procedure (one transaction).
 
-## Copy
+## Run it
+
+This runs the example by itself, to read and try. For your own app, run `mantle init` and take only the patterns you need into its manifests and `src/` (`mantle help examples`).
 
 ```sh
-cp -R node_modules/@aotter/mantle/docs/examples/app-shell/. my-app/
-cp -R node_modules/@aotter/mantle/docs/examples/purchasing/. my-app/
+npx mantle init my-app
+cp -R node_modules/@aotter/mantle/docs/examples/purchasing/. my-app/   # run the example as is
 cd my-app && pnpm install && pnpm generate && pnpm types && pnpm check
 cp .dev.vars.example .dev.vars          # then set SUPPLIER_API_URL and SUPPLIER_WEBHOOK_SECRET
 pnpm db:init && pnpm db:seed && pnpm dev

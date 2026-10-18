@@ -2,22 +2,22 @@
 
 The wiring every Mantle Cloudflare app needs, ready to copy: Better Auth (email OTP, admin + user roles),
 one Worker fetch (auth routes → your routes → Admin → MCP → generated REST), the Admin console assets, and a
-local acceptance kit. It has no business manifests: add your own, or copy one of the examples on top of it.
+local acceptance kit. It has no business manifests: add your own, taking patterns from the examples (`mantle help examples`).
 
 ## Start an app
 
 ```sh
-cp -R node_modules/@aotter/mantle/docs/examples/app-shell/. my-app/   # or from this repository
-cp -R node_modules/@aotter/mantle/docs/examples/club-events/. my-app/ # optional: an example on top
+npx @aotter/mantle@<exact version> init my-app   # writes this shell once, Mantle packages pinned to that version
 cd my-app
-# package.json: pin the exact installed Mantle version for @aotter/mantle, -admin and -ui
 pnpm install
+# add manifests/*.yaml (mantle help four-atoms; patterns: mantle help examples)
 pnpm generate          # writes generated/ and lists any `handler: { ref }` to implement in src/handlers.ts
 pnpm types && pnpm check
 cp .dev.vars.example .dev.vars
-pnpm db:init && pnpm db:seed   # db:seed only when the example has seed.sql
+pnpm db:init                   # add seed.sql and run pnpm db:seed for fixtures
 pnpm dev                       # one-time codes print to this log
-pnpm smoke                     # when the copied example has smoke.mjs
+pnpm smoke                     # your smoke.mjs on smoke-kit.mjs (see Files you edit)
+pnpm test                      # Admin MCP App check: needs Chrome (npx playwright-core install chromium, or MANTLE_TEST_CHROMIUM=<executable>)
 ```
 
 npm works too (`npm install`, `npm run …`). `package.json` pins `@better-auth/core` and `@better-auth/utils` even though
@@ -54,7 +54,7 @@ Search for `AGENT:` to find what an app must fill in.
 - Admin HTTP routes are listed in `docs/handbook/guides/native-admin.md`.
 
 Scripted smoke is not independent acceptance; before reporting a user-facing
-deliverable done, follow the [independent acceptance guide](../../handbook/guides/agent-workflow-acceptance.md).
+deliverable done, follow the independent acceptance guide: `mantle help agent-workflow-acceptance`.
 
 ### MCP acceptance
 

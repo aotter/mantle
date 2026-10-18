@@ -20,6 +20,8 @@ if (!process.argv.includes("--clean")) {
     cpSync(resolve(repoRoot, "docs", path), resolve(target, path), { recursive: true, filter: (p) => !LOCAL.includes(basename(p)) });
   }
   cpSync(resolve(repoRoot,"skills"),resolve(packageRoot,"skills"),{recursive:true,filter:p=>!LOCAL.includes(basename(p))});
+  // npm pack always drops .gitignore; ship the shell's as `gitignore`, and `mantle init` writes it back as .gitignore.
+  cpSync(resolve(repoRoot,"docs/examples/app-shell/.gitignore"),resolve(target,"examples/app-shell/gitignore"));
   const sources = ["scripts/postgres-adapter.ts"];
   for (const source of sources) {
     const destination = resolve(target,"source",source);

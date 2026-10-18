@@ -1,7 +1,8 @@
 # Examples
 
-Start from the **app shell**, then copy the example closest to your app on top of it. Each example shows a few
-capabilities the others do not; combine them for anything else.
+Start an app with `mantle init`, which writes the **app shell** once. The examples are references: each shows a few
+capabilities the others do not. Find each need in **Combining** below, read that example's manifest and source, and
+take the pattern into your own manifests and `src/`. Do not copy an example directory over your app.
 
 | Example | Shows |
 |---|---|
@@ -16,6 +17,7 @@ capabilities the others do not; combine them for anything else.
 | You need | Take |
 |---|---|
 | Stock that never oversells (orders, tickets, bookings) | club-events' capacity: a Schema `checks` constraint plus the decrement in the same program |
+| An order, cart or import with several rows that must all commit or none | one SQL Procedure over `json_each(input.items)` with a counted check that refuses unknown lines (`mantle help typed-queries`, "Several rows that commit together") |
 | Employees or customers who see only their own records | club-events' `restrict: { <schema>: "author_id = auth.uid()" }` |
 | An approval step, or any state machine | purchasing's guarded `UPDATE ... WHERE requestStatus = ...` Procedures |
 | A third-party API that answers later (webhooks, callbacks) | purchasing's `src/routes.ts`: verify the raw request, then call a Procedure |
@@ -23,8 +25,7 @@ capabilities the others do not; combine them for anything else.
 | Invite-only or members-only sign-up | club-events' `members` allowlist + `src/signup.ts` |
 | Notifications and reminders | purchasing's `EmailSender` call and `src/schedule.ts` |
 
-When you copy an example only for one of its patterns, delete what your app does not need. Copying club-events, for
-example, also brings its `members` allowlist and `src/signup.ts` (members-only sign-up); remove both, or restore the
+If you do copy an example's files, delete what your app does not need. Copying club-events, for example, also brings its `members` allowlist and `src/signup.ts` (members-only sign-up); remove both, or restore the
 shell's allow-all `src/signup.ts`, unless sign-up should be invite-only. Purchasing brings its supplier callback
 (`src/routes.ts`, `src/supplier.ts`), email (`src/notify.ts`), cron (`src/schedule.ts` and `triggers.crons`) and its
 `wrangler.jsonc` secrets. `pnpm generate` and `tsc` point at leftovers that reference removed Schemas.

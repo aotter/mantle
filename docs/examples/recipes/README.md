@@ -25,11 +25,13 @@ Search for `AGENT:` for what an app must still provide: layout and styling, cach
 - Need members to see or edit only their own rows? Add club-events' `restrict: { recipes: "author_id = auth.uid()" }` on a View.
 - Need review before publishing, or an AI that approves? Add purchasing's guarded status transitions and admin MCP.
 
-## Copy
+## Run it
+
+This runs the example by itself, to read and try. For your own app, run `mantle init` and take only the patterns you need into its manifests and `src/` (`mantle help examples`).
 
 ```sh
-cp -R node_modules/@aotter/mantle/docs/examples/app-shell/. my-app/
-cp -R node_modules/@aotter/mantle/docs/examples/recipes/. my-app/
+npx mantle init my-app
+cp -R node_modules/@aotter/mantle/docs/examples/recipes/. my-app/   # run the example as is
 cd my-app && pnpm install && pnpm generate && pnpm types && pnpm check
 ```
 

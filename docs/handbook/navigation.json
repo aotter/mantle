@@ -5,6 +5,10 @@
       "text": "Start here",
       "items": [
         {
+          "text": "Build with an agent",
+          "link": "/start/agents"
+        },
+        {
           "text": "Handbook overview",
           "link": "/start/overview"
         },

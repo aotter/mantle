@@ -23,9 +23,15 @@ tool names or writing manifests/handlers.
 ## Commands
 
 ```sh
+mantle help [topic]                  # these docs, one page at a time; start here
+mantle init [directory] [--dry-run]  # write the cloudflare-d1 app shell once; never overwrites
 mantle generate <target> <output-directory> <manifest>... [options]
 mantle bundle <entry> <outdir> [--assets <dir>]
 ```
+
+`init` writes application code the app then owns. `generate` writes only generated output and Wrangler build keys,
+on every run; after writing, it follows the `--entry` file's imports and warns for each selected REST, MCP or Admin
+module the entry never imports.
 
 | Target | Dialect | Handle |
 | --- | --- | --- |
