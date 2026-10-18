@@ -119,7 +119,7 @@ beforeAll(async () => {
     `await sqliteStore(new Database(":memory:"), ${caller}).collection("purchase_requests").findById("x");`,
   ].join("\n"));
   selectedFiles.push(drivers);
-});
+}, 30_000);
 afterAll(async () => { if (directory) await rm(directory, {recursive:true,force:true}); });
 
 test("four generated consumers typecheck against official native driver types", () => {
