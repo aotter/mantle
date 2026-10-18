@@ -6,7 +6,7 @@ import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
-import { entryEditPath, hasFoldedChildCollections, isFoldedFieldChild } from "../../lib/collection-nav";
+import { entryEditPath, foldedChildScopeValue, hasFoldedChildCollections, isFoldedFieldChild } from "../../lib/collection-nav";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { AdminUser, Collection, EntryEditorPayload, JsonSchema, SiteInfo, AdminOperation } from "../../lib/types";
 import { Skeleton } from "@aotter/mantle-ui/kit";
@@ -63,6 +63,8 @@ export function ParentEntryWorkbench({
     isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
   );
   const selected = children.find((section) => section.collection.name === childParam) ?? children[0];
+  // the parent's value of the field the child references (its id or a unique field), never the id in its place
+  const selectedScope = selected ? foldedChildScopeValue(selected.relationship) : null;
   // the list's own data columns: the primary field is already the title, and the entry payload carries no native column
   const summary = (payload.collection.list?.columns ?? []).filter((f) => f !== payload.collection.list?.primaryField && !!payload.collection.schema?.properties?.[f]);
 
@@ -131,12 +133,14 @@ export function ParentEntryWorkbench({
               })}
             </TabsList>
           </Tabs>
-          {selected ? (
+          {selected && selectedScope === null ? (
+            <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
+          ) : selected && selectedScope !== null ? (
             <CollectionView
               collectionName={selected.collection.name}
               scope={{
                 field: selected.relationship.childField,
-                value: String(selected.relationship.parentValue ?? entryId),
+                value: selectedScope,
               }}
               layout="panel"
               pathBase={`/admin/c/${encodeURIComponent(collectionName)}/${encodeURIComponent(entryId)}`}
