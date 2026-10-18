@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "Retour vers",
+    "oauth.consent.scopes": "Accès demandé",
+    "oauth.consent.offline": "Autoriser l’accès en arrière-plan, même après la déconnexion de ce site. Vous pouvez le révoquer dans Applications connectées.",
+
     "common.reloadPage": "Recharger la page",
     "common.reloadPageHint": "Rechargez cette page pour réessayer. Les modifications non enregistrées risquent d’être perdues.",
     "ops.details": "Détails",

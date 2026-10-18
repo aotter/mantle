@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "Dönüş adresi",
+    "oauth.consent.scopes": "İstenen erişim",
+    "oauth.consent.offline": "Bu siteden çıkış yaptıktan sonra da arka plan erişimine izin verin. Bağlı uygulamalardan erişimi iptal edebilirsiniz.",
+
     "common.reloadPage": "Sayfayı yeniden yükle",
     "common.reloadPageHint": "Tekrar denemek için bu sayfayı yeniden yükleyin. Kaydedilmemiş değişiklikler kaybolabilir.",
     "ops.details": "Ayrıntılar",

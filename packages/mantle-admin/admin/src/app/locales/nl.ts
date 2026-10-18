@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "Terug naar",
+    "oauth.consent.scopes": "Gevraagde toegang",
+    "oauth.consent.offline": "Sta achtergrondtoegang toe, ook na afmelden bij deze website. Je kunt de toegang intrekken bij Gekoppelde apps.",
+
     "common.reloadPage": "Pagina opnieuw laden",
     "common.reloadPageHint": "Laad deze pagina opnieuw om het nogmaals te proberen. Niet-opgeslagen wijzigingen kunnen verloren gaan.",
     "ops.details": "Details",

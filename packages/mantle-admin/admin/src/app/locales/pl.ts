@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "Powrót do",
+    "oauth.consent.scopes": "Żądany dostęp",
+    "oauth.consent.offline": "Zezwól na dostęp w tle, także po wylogowaniu z tej witryny. Możesz go cofnąć w sekcji Połączone aplikacje.",
+
     "common.reloadPage": "Odśwież stronę",
     "common.reloadPageHint": "Odśwież tę stronę, aby spróbować ponownie. Niezapisane zmiany mogą zostać utracone.",
     "ops.details": "Szczegóły",

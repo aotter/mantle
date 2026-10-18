@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "חזרה אל",
+    "oauth.consent.scopes": "הרשאות מבוקשות",
+    "oauth.consent.offline": "אפשר גישה ברקע גם לאחר היציאה מאתר זה. אפשר לבטל את הגישה באפליקציות המחוברות.",
+
     "common.reloadPage": "טעינה מחדש של הדף",
     "common.reloadPageHint": "יש לטעון מחדש את הדף כדי לנסות שוב. שינויים שלא נשמרו עלולים ללכת לאיבוד.",
     "ops.details": "פרטים",

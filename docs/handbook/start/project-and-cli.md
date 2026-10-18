@@ -45,7 +45,7 @@ Other handles may adapt to the same [structural driver contracts](../guides/adap
 | `--wrangler <path>` | Existing JSONC/JSON/TOML config; default finds one or creates `wrangler.jsonc`. TOML receives manual-edit instructions. |
 | `--entry <path>` | Worker source entry; default `src/worker.ts`. |
 | `--outdir <path>` | Bundle output; default `dist`. The Worker goes to `<outdir>/worker`. Keep separate from source/generated files. |
-| `--assets <path>` | With `--admin`: the static assets directory `mantle bundle` builds Admin into (`<assets>/admin`); default `<outdir>/client`. Written to Wrangler's `assets.directory`, and to the build command when not the default. |
+| `--assets <path>` | With `--admin`: the static assets directory `mantle bundle` builds Admin into (`<assets>/admin`); default `<outdir>/client`. Written to Wrangler's `assets.directory`, and to the build command when not the default. New assets blocks default to `ASSETS`, Worker-first routing and no HTML rewriting; existing blocks keep their binding/routing. |
 
 ## Outputs
 

@@ -1,5 +1,23 @@
 import { test, expect } from "bun:test";
 import { mcp, type Tool } from "../src/kernel/mcp.js";
+import { fixtureCaller } from "./apps/fixtures.js";
+
+test("OAuth linking scope hints do not become required API scopes", async () => {
+  let caller: import("../src/kernel/contracts.js").Caller = { kind: "anonymous" };
+  const tools: Tool<null>[] = [{ name: "read", surface: "public", closed: true, scopes: ["read"], description: "Read", inputSchema: { type: "object" }, validate: () => ({}), page: async () => ({ rows: [] }) }];
+  const handle = mcp(tools, { db: () => null, caller: () => caller, authorizationScopes: ["offline_access", "mcp"] });
+  const request = () => new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "read", arguments: {} } }) });
+  const challenge = await handle(request(), {});
+  expect(challenge!.status).toBe(401);
+  expect(challenge!.headers.get("www-authenticate")).toContain('scope="mcp offline_access"');
+  caller = fixtureCaller({ kind: "user", subject: "u", role: null, admin: false, scopes: ["mcp", "read"], credential: "oauth", credentialId: null, clientId: null });
+  expect((await handle(request(), {}))!.status).toBe(200);
+  caller = fixtureCaller({ ...caller, scopes: ["mcp"] });
+  const missing = await handle(request(), {});
+  expect(missing!.status).toBe(403);
+  expect(missing!.headers.get("www-authenticate")).toContain('scope="mcp read"');
+  expect(missing!.headers.get("www-authenticate")).not.toContain("offline_access");
+});
 
 // A separate process keeps an earlier test's SDK import from hiding a startup regression.
 test("admin probes resolve authority before loading the SDK or reading a body", async () => {

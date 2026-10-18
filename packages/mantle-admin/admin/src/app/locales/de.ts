@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "Zurück zu",
+    "oauth.consent.scopes": "Angeforderter Zugriff",
+    "oauth.consent.offline": "Hintergrundzugriff auch nach der Abmeldung von dieser Website erlauben. Der Zugriff kann unter Verbundene Apps widerrufen werden.",
+
     "common.reloadPage": "Seite neu laden",
     "common.reloadPageHint": "Laden Sie diese Seite neu, um es erneut zu versuchen. Nicht gespeicherte Änderungen können verloren gehen.",
     "ops.details": "Details",

@@ -1,4 +1,8 @@
 export default {
+    "oauth.consent.redirect": "بازگشت به",
+    "oauth.consent.scopes": "دسترسی درخواستی",
+    "oauth.consent.offline": "دسترسی در پس‌زمینه حتی پس از خروج از این وب‌سایت مجاز است. می‌توانید آن را در برنامه‌های متصل لغو کنید.",
+
     "common.reloadPage": "بارگیری مجدد صفحه",
     "common.reloadPageHint": "برای تلاش دوباره، این صفحه را مجدداً بارگیری کنید. تغییرات ذخیره‌نشده ممکن است از بین بروند.",
     "ops.details": "جزئیات",
