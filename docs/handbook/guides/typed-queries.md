@@ -237,6 +237,9 @@ there. SQLite and D1 refuse that integer cast (`SQL_TYPE`, because SQLite
 truncates where PostgreSQL rounds), and their `->>` already returns the JSON
 number.
 
+[SQL patterns](sql-patterns.md) covers approving before reserving, choosing a status with `CASE`, partial updates,
+upserts, `EXISTS` guards and nested reads on the same `products`.
+
 Do not split this into a Store write, then a SQL Procedure, then a compensating
 delete: the rows are visible between the steps and a failure leaves cleanup to
 the handler. A `ref` handler that needs the rows written together calls this

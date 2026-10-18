@@ -48,10 +48,12 @@ spec:
   title: Budget ledger
   lifecycle: operational
   indexes: [[createdAt, id]]
+  # One row per spending request: submit-request relies on it to find the one request it just approved.
+  uniqueIndexes: [[requestId]]
   uiSchema: { list: { primaryField: department, columns: [amount, remainingAfter, requestId] } }
   schema:
     type: object
-    readOnly: true # written only by approve-request-write
+    readOnly: true # written only by approve-request-write and submit-request
     additionalProperties: false
     required: [requestId, department, amount, remainingAfter]
     properties:
@@ -117,7 +119,7 @@ kind: Procedure
 metadata: { name: submit-request }
 spec:
   title: Submit a purchase request
-  description: Submit a purchase request against an existing department budget.
+  description: Submit a purchase request against an existing department budget; a request of 100 or less is approved at once and spends the budget.
   requires: { auth: { all: [ctx.user] } }
   input:
     type: object
@@ -128,11 +130,21 @@ spec:
       amount: { type: integer, minimum: 1 }
       department: { type: string }
   output: { type: object }
+  # One program. CASE picks the status: up to 100 is approved now, more waits for an admin. A small request then spends
+  # the budget and writes its ledger row in the same transaction, so remaining >= 0 refuses all three when it would
+  # overspend. The ledger row is "this requester's approved requests without one": every other approved request got its
+  # row when it was approved, so that is exactly the new one. Keep the 100 in both CASE and the UPDATE.
   handler:
     sql: |
       INSERT INTO requests (title, amount, department, requestStatus)
-      SELECT input.title, input.amount, b.department, 'submitted' FROM budgets b WHERE b.department = input.department
-      RETURNING id, version
+      SELECT input.title, input.amount, b.department, CASE WHEN input.amount <= 100 THEN 'approved' ELSE 'submitted' END
+      FROM budgets b WHERE b.department = input.department
+      RETURNING id, version, requestStatus AS "requestStatus";
+      UPDATE budgets SET remaining = remaining - input.amount WHERE department = input.department AND input.amount <= 100;
+      INSERT INTO ledger (requestId, department, amount, remainingAfter)
+      SELECT r.id, r.department, r.amount, b.remaining FROM requests r JOIN budgets b ON b.department = r.department
+      WHERE r.author_id = auth.uid() AND r.requestStatus = 'approved'
+        AND NOT EXISTS (SELECT 1 FROM ledger l WHERE l.requestId = r.id)
 ---
 # The requester may change the amount while the request is still 'submitted'. The version moves on, so an admin
 # approving the version they reviewed before the change gets a 409 and looks again.

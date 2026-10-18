@@ -6,7 +6,7 @@ A View requires `surface: public | admin | internal` and one `sql` SELECT. Optio
 
 PostgreSQL syntax is parsed and checked at generation. Reads may reference declared Schemas, CTEs and reusable internal Views; no auth/system tables or arbitrary external relations. The compiler adds scope, TTL, publication and translation-parent visibility at every relation. SQL policy is not injected at request time.
 
-SQLite supports the compiler's subset: scalar expressions, comparisons, AND/OR/NOT, CASE, COALESCE, supported casts, INNER/LEFT JOIN, subqueries, grouping/aggregates, supported windows, ordered LIMIT, date operations and declared Mantle search/geo functions. PostgreSQL additionally supports recursive CTEs, lateral relations, more window/aggregate forms, ILIKE and jsonb operators where the allowlist permits them. Unsupported SQL fails with a source position; generation is the authority for each target.
+The SQL each dialect accepts, for Views and Procedures alike, is listed in [the SQL reference](sql.md); [SQL patterns](../guides/sql-patterns.md) shows the common ones. Unsupported SQL fails with a source position; generation is the authority for each target.
 
 OFFSET, arbitrary functions/relations, DDL and transaction control are not a read escape hatch. Use keyset paging. Select latitude/longitude explicitly instead of native geo projections.
 

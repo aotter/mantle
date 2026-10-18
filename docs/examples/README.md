@@ -20,6 +20,13 @@ take the pattern into your own manifests and `src/`. Do not copy an example dire
 | An order, cart or import with several rows that must all commit or none | one SQL Procedure over `json_each(input.items)` with a counted check that refuses unknown lines (`mantle help typed-queries`, "Several rows that commit together") |
 | Employees or customers who see only their own records | club-events' `restrict: { <schema>: "author_id = auth.uid()" }` |
 | An approval step, or any state machine | purchasing's guarded `UPDATE ... WHERE requestStatus = ...` Procedures |
+| Approve first, then reserve or spend | purchasing's `approve-request-write`: the guarded status change and the budget deduction in one program (`mantle help sql-patterns`, "Approve before reserving") |
+| A status chosen while writing (auto-approve small requests) | purchasing's `submit-request`: `CASE` in the INSERT ("Choose a status while writing: CASE") |
+| Edit only the fields given | `COALESCE(input.field, field)` ("Change only the fields given") |
+| Create or add (restock, counters) | `INSERT ... ON CONFLICT (...) DO UPDATE` ("Create or add") |
+| Refuse while something still refers to it | a `NOT EXISTS` guard in the UPDATE (purchasing's `submit-request` ledger row; "Refuse while something refers to it") |
+| A record with its children in one read | club-events' `event-roster`: a JSON array per row ("A row with its children in one read") |
+| The latest row per group, rankings | `row_number() OVER (PARTITION BY ...)` ("The latest row of each group") |
 | A third-party API that answers later (webhooks, callbacks) | purchasing's `src/routes.ts`: verify the raw request, then call a Procedure |
 | Public, multilingual, search- and AI-friendly pages | recipes' `src/routes.ts` |
 | Invite-only or members-only sign-up | club-events' `members` allowlist + `src/signup.ts` |

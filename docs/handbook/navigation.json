@@ -38,6 +38,10 @@
           "link": "/guides/public-pages"
         },
         {
+          "text": "SQL patterns",
+          "link": "/guides/sql-patterns"
+        },
+        {
           "text": "Native Admin",
           "link": "/guides/native-admin"
         },
@@ -134,6 +138,10 @@
         {
           "text": "Trigger",
           "link": "/reference/trigger"
+        },
+        {
+          "text": "SQL accepted by each dialect",
+          "link": "/reference/sql"
         },
         {
           "text": "Authorization requirements",

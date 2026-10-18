@@ -14,6 +14,11 @@ that have been waiting too long.
   `change-amount`, `mark-ordered`, `confirm-order`). The column is `requestStatus` because `status` is reserved for
   publishing Schemas. `requests` and `ledger` set `readOnly: true`, so Admin's generic editor cannot bypass the state
   machine (for example by moving an ordered request back to `submitted` and approving it again).
+- **A status chosen at submission**: `submit-request` uses `CASE WHEN input.amount <= 100 THEN 'approved' ELSE
+  'submitted' END`. A small request also spends the budget and writes its ledger row in the same program, so
+  `remaining >= 0` refuses all three when it would overspend. The ledger row is found with `NOT EXISTS`: the
+  requester's approved requests that have no row yet. Larger requests wait for an admin. An auto-approved request is
+  ordered from the supplier by the daily cron, which already retries every `approved` request.
 - **Admin-only operations**: `approve-request` and `reject-request` declare `requires: ctx.admin` and a `target`, so
   Admin shows them as operations on a request. Their `kind: mcp, surface: admin` Triggers make them
   `approve_request` / `reject_request` tools on `/mcp/admin`. They are not listed on `/mcp`.
