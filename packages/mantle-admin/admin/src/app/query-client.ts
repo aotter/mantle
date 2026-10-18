@@ -5,7 +5,7 @@ import { invalidateAfterWrite } from "../lib/after-write";
 export const queryClient = new QueryClient({
   mutationCache: new MutationCache({
     // a download changes nothing: `meta: { invalidates: false }`
-    onSuccess: (_data, _variables, _context, mutation): void => { if (mutation.meta?.["invalidates"] !== false) invalidateAfterWrite(queryClient); },
+    onSuccess: (_data, _variables, _context, mutation): void => { if (mutation.meta?.["invalidates"] !== false) void invalidateAfterWrite(queryClient); },
   }),
   defaultOptions: {
     queries: {

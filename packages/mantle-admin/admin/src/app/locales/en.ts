@@ -570,7 +570,7 @@ export default {
     "interaction.loading": "Loading the latest version…",
     "interaction.reading": "Checking for changes…",
     "interaction.unreadable": "This entry could not be loaded, so nothing can be submitted yet.",
-    "interaction.changedSinceList": "Someone changed this entry after you opened it. Review the newer version before you continue.",
+    "interaction.changedSinceList": "This record changed since the list was loaded; review the current version.",
     "interaction.reviewLatest": "Review newer version",
     "interaction.contested": "Someone else also changed fields you edited:",
     "interaction.conflict": "This entry changed before your update was saved. Nothing was saved. Load the latest version and review it again.",

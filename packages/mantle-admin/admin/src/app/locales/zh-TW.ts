@@ -569,7 +569,7 @@ export default {
     "interaction.loading": "正在載入最新版本…",
     "interaction.reading": "正在檢查是否有變更…",
     "interaction.unreadable": "無法載入這筆資料，暫時無法送出。",
-    "interaction.changedSinceList": "你開啟後這筆資料已被他人變更。請先檢視新版本再繼續。",
+    "interaction.changedSinceList": "載入清單後這筆資料已有變更，請檢視目前的版本。",
     "interaction.reviewLatest": "檢視新版本",
     "interaction.contested": "他人也變更了你編輯過的欄位：",
     "interaction.conflict": "這筆資料在你的更新儲存前已變更，因此沒有儲存。請載入最新版本並重新檢視。",

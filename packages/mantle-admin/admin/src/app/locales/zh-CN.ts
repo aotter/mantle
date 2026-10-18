@@ -462,7 +462,7 @@ export default {
     "interaction.loading": "正在加载最新版本…",
     "interaction.reading": "正在检查是否有更改…",
     "interaction.unreadable": "无法加载这条数据，暂时无法提交。",
-    "interaction.changedSinceList": "你打开后这条数据已被他人更改。请先查看新版本再继续。",
+    "interaction.changedSinceList": "加载列表后这条数据已有更改，请查看当前版本。",
     "interaction.reviewLatest": "查看新版本",
     "interaction.contested": "他人也更改了你编辑过的字段：",
     "interaction.conflict": "这条数据在你的更新保存前已更改，因此没有保存。请加载最新版本并重新查看。",

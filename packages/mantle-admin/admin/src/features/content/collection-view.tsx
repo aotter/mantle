@@ -244,7 +244,7 @@ function CollectionList({
     : t(language, "collection.table.title");
   const refreshEntries = React.useCallback(() => {
     clearSelection();
-    invalidateAfterWrite(queryClient);
+    void invalidateAfterWrite(queryClient);
   }, [queryClient, clearSelection]);
 
   const titleMutation = useMutation({
