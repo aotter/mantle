@@ -47,6 +47,7 @@ import {
 import { collectionSummaryKey } from "./collection-view";
 import { boundOperationsFor, RecordOperations, RowOperationsMenu } from "./row-operations";
 import { contentLocales, LocaleBadge, localeName } from "./locale-badge";
+import { RefPicker } from "./ref-picker";
 
 const MarkdownEditor = React.lazy(() => import("../editor/markdown-editor").then((module) => ({ default: module.MarkdownEditor })));
 const HtmlEditor = React.lazy(() => import("../editor/html-editor").then((module) => ({ default: module.HtmlEditor })));
@@ -517,6 +518,10 @@ export function SchemaFields({
     if (fieldSchema.enum || enumOptions(fieldSchema) || ["boolean", "number", "integer", "object"].includes(schemaType(fieldSchema))) return undefined;
     if (isMediaAssetRef(fieldSchema)) {
       return <MediaAssetField value={field.value} path={[...field.path]} collectionName={collectionName} mediaPurposes={mediaPurposes} language={language} onChange={field.setValue} />;
+    }
+    const ref = mantleRefOf(fieldSchema);
+    if (ref && ref.schema !== "media_assets" && schemaType(fieldSchema) === "string") {
+      return <RefPicker target={ref} value={field.value} onChange={field.setValue} label={field.label} language={language} canonical={canonical} fallback={() => field.renderDefault()} />;
     }
     const text = stringForInput(field.value);
     if (field.widget === "markdown") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><MarkdownEditor value={text} onChange={field.setValue} /></React.Suspense>;

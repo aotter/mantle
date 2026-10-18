@@ -376,7 +376,12 @@ field and stored value. The server resolves them for the caller with one page qu
 target. A missing, deleted or unreadable target is absent, so the three look the same: Admin shows the exact ID with copy.
 A resolved title links to the related record. Admin Views and the MCP App have no such step, since their rows come from the
 View itself; a View that wants a title selects it (join the referenced table, within its own `requires`). `/bootstrap?collection=...` can include
-the first requested list page. CSV exports use `/entries/export` and
+the first requested list page.
+In the entry editor and every operation form (including a `collectionAction` create), a string field with
+`x-mantle-ref` to another Admin collection is a searchable picker: it lists the target through the same `/entries` route
+(20 records per search, read as the caller), shows each record's title and stores the referenced value (`id`, or the
+ref's unique field). A target the caller cannot list (403/404) or that is not an Admin collection keeps the plain text
+input. The picker is a convenience; the server still validates the value. CSV exports use `/entries/export` and
 `/views/{name}/export`; native browser downloads stream paged server output.
 A failure after headers aborts the stream, so a download can fail after partial
 bytes have arrived. Existing databases need an app-owned migration for the
