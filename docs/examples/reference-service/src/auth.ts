@@ -27,7 +27,7 @@ export function authOptions(env: Env) {
     // Ends a user's OAuth grants (offline ones too) on password reset, admin ban or session revocation.
     oauthGrantRevocation(),
     // The client must request and consent to offline_access to receive a rotating refresh token.
-    mcp({ loginPage: "/admin/sign-in", consentPage: "/admin/oauth/consent", resource: `${origin}/mcp`, scopes: ["mcp", "offline_access"], extensions: [oauthGrantExtension], allowPublicClientPrelogin: true, clientRegistrationClientSecretExpiration: "90d" }),
+    mcp({ loginPage: "/admin/sign-in", consentPage: "/admin/oauth/consent", resource: `${origin}/mcp`, scopes: ["mcp", "offline_access"], clientRegistrationDefaultScopes: ["mcp", "offline_access"], extensions: [oauthGrantExtension], allowDynamicClientRegistration: true, allowUnauthenticatedClientRegistration: true, allowPublicClientPrelogin: true, clientRegistrationClientSecretExpiration: "90d" }),
     cimd({ fetchClientMetadataResource: (input, init) => fetch(input, { ...init, redirect: "manual" }), metadataProfile: "mcp-2026-07-28" }),
   ];
   return { database: d1Adapter(env.DB), secret, baseURL: origin, basePath: "/api/auth", plugins,

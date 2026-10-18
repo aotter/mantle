@@ -93,13 +93,22 @@ Grant lifetime follows Better Auth. Better Auth issues a refresh token only when
 the grant includes `offline_access`; a client registered for `authorization_code`
 may use `refresh_token` too, so registering only `authorization_code` does not
 prevent long-lived grants.
-For renewable MCP connections, the examples permit `scopes: ["mcp", "offline_access"]`.
-An explicit `scopes` list replaces the provider's defaults; `["mcp"]` alone
-disables refresh-token issuance. The client must also request `mcp offline_access`
-and the user must consent to background access. Declaring the `refresh_token`
-grant type alone is insufficient. `offline_access` belongs in authorization-server
-metadata, not in the protected resource's required scope floor; resource metadata
-continues to advertise `mcp`.
+CIMD is the primary client-discovery path; dynamic client registration (DCR)
+remains available for older MCP clients. Both paths require the client to request
+`offline_access` and the user to consent before a renewable grant is issued.
+The DCR registration defaults below apply only to that compatibility path.
+
+For renewable MCP connections, the examples set both `scopes` and
+`clientRegistrationDefaultScopes` to `["mcp", "offline_access"]`, so a dynamically
+registered client that omits `scope` is registered for `mcp offline_access`. The
+client must request those registered scopes during authorization and the user must
+consent to background access. If the client explicitly requests only `mcp`, OAuth
+must not add a scope the user did not consent to: the resulting grant is bound to
+the browser session and has no refresh token. The client must request
+`offline_access`, or the user must reconnect and authorize it, to gain renewable
+access. Declaring the `refresh_token` grant type alone is insufficient.
+`offline_access` belongs in authorization-server metadata, not in the protected
+resource's required scope floor; resource metadata continues to advertise `mcp`.
 
 For renewable connections, the app-shell's MCP handler also supplies an explicit
 OAuth linking hint:
