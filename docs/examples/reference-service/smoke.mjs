@@ -96,7 +96,7 @@ try {
   const tooMany = await call("POST", "/api/orders", { cookie: buyer, body: { itemId, qty: 99 } });
   assert.equal(tooMany.status, 409, JSON.stringify(tooMany.body));
   assert.deepEqual({ kind: tooMany.body.error.kind, schema: tooMany.body.error.schema, check: tooMany.body.error.check }, { kind: "check", schema: "items", check: "stock >= 0" });
-  assert.match(tooMany.body.error.message, /CHECK items: stock >= 0/);
+  assert.equal(tooMany.body.error.message, "A check of the Schema failed: items: stock >= 0");
   assert.equal(await stockOf(), 6);
   step("ordering 99 fails the stock >= 0 check in the second statement, and the order the first wrote is rolled back");
 
