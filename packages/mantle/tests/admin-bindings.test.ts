@@ -512,3 +512,14 @@ test("Admin accepts a keyless single-row aggregate View and counts only the call
  const page=await view.page(db,caller("A"),input,paging);expect(page.nextCursor).toBeUndefined();expect(page.rows.map((r:any)=>view.row?view.row(r):r)).toEqual([{count:2}]);
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
 });
+test("Admin View rows carry a computed JSON document as JSON, not SQLite text",async()=>{
+ const dir=await mkdtemp(join(import.meta.dir,"apps/.admin-json-")),db=new Database(":memory:");
+ try{
+ const result=await generateFromSources({target:"bun-sqlite",sources:{sources:[source,aggregateView("draft-labels","SELECT json_group_array(label) AS labels, json_set('{}', '$.n', COUNT(*)) AS summary FROM records WHERE status = 'draft'")]},admin:true});
+ if(!result.ok)throw Error(JSON.stringify(result.diagnostics));await writeBindings(dir,result.files);db.exec(result.files["schema.sql"]!);
+ expect(result.files["generated.ts"]).toContain('WireRow = { readonly "labels": unknown; readonly "summary": unknown; }');
+ db.exec(`INSERT INTO records(id,version,created_at,updated_at,status,ownerid,label,kind) VALUES ('a',1,0,0,'draft','A','x','a'),('b',1,0,0,'draft','A','y','a')`);
+ const view=(await import(join(dir,"admin-bindings.ts"))).adminBindings().views.find((v:any)=>v.name==="draft-labels"),{input,...paging}=view.query(new URLSearchParams());
+ const [row]=(await view.page(db,caller("A"),input,paging)).rows.map((r:any)=>view.row(r));expect(row.summary).toEqual({n:2});expect([...row.labels].sort()).toEqual(["x","y"]);
+ }finally{db.close();await rm(dir,{recursive:true,force:true});}
+});

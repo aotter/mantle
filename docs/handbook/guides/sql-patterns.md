@@ -228,11 +228,18 @@ spec:
     FROM products p ORDER BY p.id
 ```
 
-SQLite and D1 build each object with `json_set('{}', '$.id', o.id, …)` (`json_object` is not on the allowlist) and
-return the column as JSON text: parse it. PostgreSQL writes it as
-`COALESCE(jsonb_agg(jsonb_build_object('id', o.id, 'qty', o.qty)), CAST('[]' AS jsonb))` and returns an array;
+SQLite and D1 build each object with `json_set('{}', '$.id', o.id, …)` (`json_object` is not on the allowlist).
+PostgreSQL writes it as `COALESCE(jsonb_agg(jsonb_build_object('id', o.id, 'qty', o.qty)), CAST('[]' AS jsonb))`;
 `jsonb_agg` of no rows is `NULL`, hence the `COALESCE`. PostgreSQL can also order inside the aggregate
-(`jsonb_agg(… ORDER BY o.id)`); SQLite cannot, so sort the parsed array.
+(`jsonb_agg(… ORDER BY o.id)`); SQLite cannot, so sort the array.
+
+Generation types the column as JSON because its expression can only produce a JSON document: a `json_group_array`,
+`json_group_object`, `json_set`, `json_insert`, `json_remove`, `jsonb_agg`, `jsonb_object_agg`, `jsonb_build_object`,
+`jsonb_build_array`, `jsonb_strip_nulls`, `to_jsonb` or `CAST(… AS jsonb)` call, a scalar subquery of one, or a
+`COALESCE` of those with JSON literal fallbacks such as `'[]'`. REST, MCP (`structuredContent`) and Admin therefore
+return an array on every target, and `WireRow` types the column `unknown`. The bare View and the Store keep the
+driver's value: on SQLite and D1 that is JSON text, so code calling the bare View parses it. `json_extract`, `->>`
+and `CASE` can return a scalar, so their output stays native.
 
 ## The latest row of each group: row_number()
 
