@@ -135,6 +135,9 @@ SQLite and D1, `jsonb_array_elements(input.items) AS j(value)` on PostgreSQL.
 The Procedure's statements commit together on every target, so a Schema
 `checks` failure in any line refuses the whole call with `CONFLICT` and leaves
 no reservation and no line behind. Bound the array with `maxItems`.
+A statement cannot read an earlier statement's `RETURNING`, so rows that must
+refer to each other share a key from the input: here the caller (or a `ref`
+handler that then calls this Procedure) supplies `orderRef`.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2

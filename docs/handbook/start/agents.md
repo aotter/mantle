@@ -3,8 +3,8 @@ description: The entry point `mantle help` prints first: choose a complete app o
 ---
 # Build with an agent
 
-`mantle help` prints this page. `mantle help <topic>` prints one handbook page, then the next page and every page it links as `mantle help` commands;
-topics are the handbook paths below (for example `guides/native-admin`) or their last segment when unique (`native-admin`).
+`mantle help` prints this page. `mantle help <topic>` prints one handbook page and ends with the commands for its next page and for every page it links; run those to read further.
+Topics are the handbook paths below (for example `guides/native-admin`) or their last segment when unique (`native-admin`).
 The installed package's `docs/` is the source of every topic, so the text always matches the installed version.
 
 ## Choose how much Mantle owns

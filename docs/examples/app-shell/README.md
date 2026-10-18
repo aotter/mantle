@@ -14,9 +14,10 @@ pnpm install
 pnpm generate          # writes generated/ and lists any `handler: { ref }` to implement in src/handlers.ts
 pnpm types && pnpm check
 cp .dev.vars.example .dev.vars
-pnpm db:init && pnpm db:seed   # db:seed only when the example has seed.sql
+pnpm db:init                   # add seed.sql and run pnpm db:seed for fixtures
 pnpm dev                       # one-time codes print to this log
-pnpm smoke                     # when the copied example has smoke.mjs
+pnpm smoke                     # your smoke.mjs on smoke-kit.mjs (see Files you edit)
+pnpm test                      # Admin MCP App check: needs Chrome (npx playwright-core install chromium, or MANTLE_TEST_CHROMIUM=<executable>)
 ```
 
 npm works too (`npm install`, `npm run …`). `package.json` pins `@better-auth/core` and `@better-auth/utils` even though
@@ -53,7 +54,7 @@ Search for `AGENT:` to find what an app must fill in.
 - Admin HTTP routes are listed in `docs/handbook/guides/native-admin.md`.
 
 Scripted smoke is not independent acceptance; before reporting a user-facing
-deliverable done, follow the [independent acceptance guide](../../handbook/guides/agent-workflow-acceptance.md).
+deliverable done, follow the independent acceptance guide: `mantle help agent-workflow-acceptance`.
 
 ### MCP acceptance
 
