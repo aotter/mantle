@@ -63,6 +63,10 @@ function assertCleanable(label: string, dir: string, entry: string): void {
   if (within(dir, entry)) throw new Error(`${label} must not contain the source entry: it is cleaned before building.`);
 }
 
+/** The app's own modules only (packages external): enough to find its generated output and what it imports. */
+export const ownModules = async (entry: string): Promise<Metafile> =>
+  (await build({ entryPoints: [entry], bundle: true, write: false, metafile: true, packages: "external", format: "esm", platform: "neutral", logLevel: "silent", absWorkingDir: process.cwd() })).metafile;
+
 /**
  * `mantle bundle <entry> <outdir> [--assets <dir>]`: the Worker into `<outdir>/worker`, and Admin into `<assets>/admin`
  * (default `<outdir>/client`) when the Worker serves it (`@aotter/mantle-admin/server`; `/mcp` and the other subpaths alone do not).
@@ -73,8 +77,7 @@ export async function bundleApp(entry: string, outdir: string, assets = join(out
   // what is cleaned lies under these two, so neither may be the working directory or hold the source
   assertCleanable("Bundle outdir", outdir, source);
   assertCleanable("The assets directory", assets, source);
-  // The app's own modules only: enough to find its generated output and whether it imports the Admin server.
-  const { metafile: own } = await build({ entryPoints: [entry], bundle: true, write: false, metafile: true, packages: "external", format: "esm", platform: "neutral", logLevel: "silent" });
+  const own = await ownModules(entry);
   if (generatedDirs(own).some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"))) {
     // Packages are external here, so only the app's own imports of the Admin server are seen; one reached through another package is not.
     if (Object.values(own.inputs).some(input => input.imports.some(imported => /^@aotter\/mantle-admin\/server(?:\/|$)/.test(imported.path)))) await bundleAdmin(source, outdir, join(assets, "admin"));

@@ -9,7 +9,7 @@ import { once } from "node:events";
 import { generateOrThrow, loadFixtureSources, writeGenerated } from "./apps/link.js";
 import { seed, verifyMultiItem } from "./multi-item-scenarios.js";
 
-const base = resolve(import.meta.dir, "..");
+const base = resolve(import.meta.dir, ".."), port = process.env.MANTLE_NEXT_ORDERS_D1_PORT ?? "8991";
 const composition = `import {userCaller} from '${resolve(base, "src/kernel/user-caller.ts")}';import {rest} from './rest.js';
 export const app=rest({db:(env:{DB:any})=>env.DB,caller:async()=>userCaller({id:"u",role:"user"},{adminRoles:["admin"],credential:"api-key"}),handlers:{}});`;
 // PostgreSQL's row source over jsonb is jsonb_array_elements; its ->> is text, so lines cast to the column type.
@@ -54,15 +54,15 @@ await verifyMultiItem(request=>app(request,env),async sql=>(await env.DB.prepare
     const config = join(state, "wrangler.json");
     await writeFile(config, JSON.stringify({ name: "mantle-orders-local", main: join(dir, "worker.ts"), compatibility_date: "2026-09-28", compatibility_flags: ["nodejs_compat"], d1_databases: [{ binding: "DB", database_name: "mantle-orders-local", database_id: "00000000-0000-0000-0000-000000000001" }] }));
     log = await open(join(state, "wrangler.log"), "w");
-    worker = spawn("node", [join(base, "node_modules/wrangler/bin/wrangler.js"), "dev", "--local", "--config", config, "--ip", "127.0.0.1", "--port", "8994", "--inspector-port", "0", "--persist-to", join(state, "state")], { cwd: base, detached: true, env: { ...process.env, WRANGLER_SEND_METRICS: "false", NO_PROXY: "127.0.0.1,localhost", no_proxy: "127.0.0.1,localhost" }, stdio: ["ignore", log.fd, log.fd] });
+    worker = spawn("node", [join(base, "node_modules/wrangler/bin/wrangler.js"), "dev", "--local", "--config", config, "--ip", "127.0.0.1", "--port", port, "--inspector-port", "0", "--persist-to", join(state, "state")], { cwd: base, detached: true, env: { ...process.env, WRANGLER_SEND_METRICS: "false", NO_PROXY: "127.0.0.1,localhost", no_proxy: "127.0.0.1,localhost" }, stdio: ["ignore", log.fd, log.fd] });
     let ready = false;
     for (let i = 0; i < 60 && !ready; i++) {
       if (worker.exitCode !== null) throw Error(await readFile(join(state, "wrangler.log"), "utf8"));
-      try { ready = (await fetch("http://127.0.0.1:8994/health", { signal: AbortSignal.timeout(1000) })).ok; } catch {}
+      try { ready = (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) })).ok; } catch {}
       if (!ready) await new Promise(done => setTimeout(done, 1000));
     }
     expect(ready).toBe(true);
-    const response = await fetch("http://127.0.0.1:8994/verify", { signal: AbortSignal.timeout(30000) });
+    const response = await fetch(`http://127.0.0.1:${port}/verify`, { signal: AbortSignal.timeout(30000) });
     expect(await response.json()).toEqual({ ok: true });
   } finally {
     if (worker && worker.exitCode === null) { const ended = once(worker, "exit"); try { process.kill(-worker.pid!, "SIGTERM"); } catch {} await ended; }

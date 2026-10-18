@@ -15,12 +15,14 @@ export function init(destination: string, dryRun = false): string {
   const shell = resolve(docsRoot(), "examples/app-shell");
   const sdk = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")) as { version: string };
   const target = resolve(destination);
-  const all = files(shell);
+  // A packed shell carries `gitignore` (npm drops .gitignore); a workspace checkout has .gitignore itself.
+  const all = files(shell).map(file => file === "gitignore" ? ".gitignore" : file);
+  const source = (file: string) => file === ".gitignore" && !existsSync(join(shell, file)) ? join(shell, "gitignore") : join(shell, file);
   const existing = all.filter(file => existsSync(join(target, file)));
   if (existing.length) throw new Error(`mantle init writes the app shell once and never overwrites. These files already exist in ${target}:\n${existing.map(f => `  ${f}`).join("\n")}\nMove them aside or run mantle init in an empty directory; to use generated code inside an existing app, skip init and run mantle help typed-queries.`);
   const notes: string[] = [];
   for (const file of all) {
-    let text = readFileSync(join(shell, file), "utf8");
+    let text = readFileSync(source(file), "utf8");
     // Pin the shell's Mantle packages to the installed SDK.
     if (file === "package.json") {
       const pkg = JSON.parse(text);

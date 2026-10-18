@@ -23,8 +23,11 @@ try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     diff: { type: "string" }, check: { type: "boolean" }, admin: { type: "boolean" }, site: { type: "string" }, auth: { type: "string", multiple: true }, wrangler: { type: "string" }, entry: { type: "string", default: "src/worker.ts" }, outdir: { type: "string", default: "dist" }, assets: { type: "string" }, "dry-run": { type: "boolean" }, help: { type: "boolean", short: "h" },
   } });
-  const command = ["bundle", "generate", "describe", "help", "init"].includes(positionals[0]!) ? positionals.shift()! : values.help || !positionals.length ? "help" : "generate";
-  if (command === "help") {
+  const named = ["bundle", "generate", "describe", "help", "init"].includes(positionals[0]!) ? positionals.shift()! : undefined;
+  // `-h` prints usage and never runs a command; bare `mantle` starts at help, but options with no positionals stay a usage error.
+  const command = values.help ? "usage" : named ?? (process.argv.length > 2 ? "generate" : "help");
+  if (command === "usage") console.log(`${usage}\n\nStart with mantle help: the installed docs, one topic at a time.`);
+  else if (command === "help") {
     const { help, topicList } = await import("./help.js");
     if (positionals.length > 1) throw new Error(usage);
     console.log(positionals[0] === "topics" ? topicList() : help(positionals[0]));

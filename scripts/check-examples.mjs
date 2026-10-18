@@ -15,8 +15,8 @@ const MANAGERS = ["npm", "pnpm@10.28.0"];
 const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 const pins = expectedPins();
 // The consumer installs packed packages into a copy of app-shell; the packed `mantle init` then writes the app a user
-// gets into app/, which reuses that install (init pins the same dependencies).
-const initApp = (example, steps) => `node_modules/.bin/mantle init app >/dev/null && cp -R '${example}'/. app/ && ln -s ../node_modules app/node_modules && cd app && ${steps}`;
+// gets into app/, which reuses that install (init pins the same dependencies). npm pack drops .gitignore, so check init restored it.
+const initApp = (example, steps) => `node_modules/.bin/mantle init app >/dev/null && test -f app/.gitignore && cp -R '${example}'/. app/ && ln -s ../node_modules app/node_modules && cd app && ${steps}`;
 for (const example of PACKAGED) {
   const { dependencies } = JSON.parse(readFileSync(join(examples, example, "package.json"), "utf8"));
   for (const [name, pinned] of Object.entries(dependencies)) {
