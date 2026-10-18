@@ -10,10 +10,12 @@ import { pagedOf } from "../build/compiler.js";
 import type { MantleDialect } from "../build/compiler.js";
 import {castCursor,type PagingProof} from "../domain/paging.js";
 import type {AdminPage} from "../domain/model.js";
-export function adminPaging(plan:RuntimePlan,dialect:MantleDialect,proofs:Readonly<Record<string,PagingProof|undefined>>,project:(ast:SqlNode,names:readonly string[],keys:number,name:string)=>SqlNode):Record<string,{caller:AdminPage;trusted:AdminPage}>{
+/** Proved per View: an unproved View is already refused at `views/<name>`; any other failure is refused at `views/<name>/admin`. */
+export function adminPaging(plan:RuntimePlan,dialect:MantleDialect,proofs:Readonly<Record<string,PagingProof|undefined>>,project:(ast:SqlNode,names:readonly string[],keys:number,name:string)=>SqlNode,refuse:(path:string,message:string)=>void):Record<string,{caller:AdminPage;trusted:AdminPage}>{
   const all:Record<string,{caller:AdminPage;trusted:AdminPage}>=Object.create(null);
   for(const [name,v]of Object.entries(plan.views).filter(([,v])=>v.surface!=="internal")){
-    const proof=proofs[name];if(!proof || proof.reason)throw Error(proof?.reason ?? `Unproved Admin paging: ${name}`);
+    const proof=proofs[name];if(!proof || !proof.types.length&&!proof.single)continue;
+    try{
     const list=(v.uiSchema?.list??{}) as {filterFields?:string[];searchFields?:string[]};
     const modes=v.surface==="public" ? ["public","public"] as const : ["caller","trusted"] as const;
     const pages=modes.map(mode=>{
@@ -39,17 +41,17 @@ export function adminPaging(plan:RuntimePlan,dialect:MantleDialect,proofs:Readon
       return {marker:dialect.nativeOrder?`$${marker}`:`?${marker}`,binds:c.binds,keys,first:read(first),...(next?{next:read(next)}:{}),tail,eq:Object.fromEntries((list.filterFields??[]).map(field=>{const col=v.columns?.[field]??v.columns?.[field.toLowerCase()],type=col&&plan.schemas[col.schema]?.fields[col.field];return [field,fragment({eq:[{column:field,value:""}]},type)];})),...(list.searchFields?.length?{search:fragment({search:{columns:list.searchFields,text:"x"}})}:{})};
     });
     all[name]={caller:pages[0]!,trusted:pages[1]!};
+    }catch(error){refuse(`views/${name}/admin`,error instanceof Error?error.message:String(error));}
   }
   return all;
 }
 
 /** Only selected build-time Admin work; the ordinary generator remains unchanged. */
-export async function adminBindingsOf(plan:RuntimePlan,dialect:MantleDialect,paging:Readonly<Record<string,PagingProof|undefined>>,wire:Dialect,refusals:GenerateDiagnostic[]):Promise<{ok:true;adminPages:Record<string,{caller:AdminPage;trusted:AdminPage}>|undefined;adminEntries:Record<string,unknown>}>{
-  let adminPages:ReturnType<typeof adminPaging>|undefined;
-  try{adminPages=adminPaging(plan,dialect,paging,(ast,names,nkeys,name)=>{
+export async function adminBindingsOf(plan:RuntimePlan,dialect:MantleDialect,paging:Readonly<Record<string,PagingProof|undefined>>,wire:Dialect,refusals:GenerateDiagnostic[]):Promise<{ok:true;adminPages:Record<string,{caller:AdminPage;trusted:AdminPage}>;adminEntries:Record<string,unknown>}>{
+  const adminPages=adminPaging(plan,dialect,paging,(ast,names,nkeys,name)=>{
     const keys=[...names,...Array.from({length:nkeys},(_,i)=>`_k${i}`)];
     const projected=wireScalars(ast,keys,[...names.map(key=>boundaryType(plan,name,key)),...(paging[name]?.types??[])],wire,true);
     if(typeof projected==="string")throw Error(projected);return projected;
-  });}catch(error){refusals.push({code:"GENERATE_UNSUPPORTED",path:"admin/views",message:error instanceof Error?error.message:String(error)});}
+  },(path,message)=>refusals.push({code:"GENERATE_UNSUPPORTED",path,message}));
   return {ok:true as const,adminPages,adminEntries:await adminEntries(plan,dialect,wire as Dialect,refusals)};
 }
