@@ -11,7 +11,8 @@
     "test": "node --test generated/admin-mcp-app.check.mjs",
     "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
     "check": "mantle generate cloudflare-d1 generated manifests/*.yaml --auth src/auth.ts --entry src/index.ts --admin --check && wrangler types --include-runtime=false --check && tsc --noEmit",
-    "smoke": "node smoke.mjs"
+    "smoke": "node smoke.mjs",
+    "accept": "node accept.mjs"
   },
   "dependencies": {
     "@aotter/mantle": "0.2.0-alpha.9",

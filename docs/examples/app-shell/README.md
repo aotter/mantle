@@ -17,6 +17,7 @@ cp .dev.vars.example .dev.vars
 pnpm db:init                   # add seed.sql and run pnpm db:seed for fixtures
 pnpm dev                       # one-time codes print to this log
 pnpm smoke                     # your smoke.mjs on smoke-kit.mjs (see Files you edit)
+pnpm accept                    # hand each role to a fresh evaluator (see Independent acceptance)
 pnpm test                      # Admin MCP App check: needs Chrome (npx playwright-core install chromium, or MANTLE_TEST_CHROMIUM=<executable>)
 ```
 
@@ -38,6 +39,7 @@ on one version.
 | `src/signup.ts` | `allowSignUp(env, email)`: who may create an account (allow-all by default). `auth.ts` calls it before Better Auth creates a user; `ADMIN_EMAIL` is always allowed. |
 | `src/auth.ts` | Better Auth options. Two roles only: `admin` (the admin layer) and `user`. Replace the console OTP sender before deploying. |
 | `smoke.mjs` | Your acceptance steps on `smoke-kit.mjs` (fresh local D1, OTP sign-in per user, REST/MCP/Admin calls). |
+| `accept.mjs` | Independent acceptance setup: one URL per role that carries its session, plus a minimal MCP client. Add a fixtures module for realistic data. |
 
 `src/service.ts` and `src/index.ts` rarely change. The default shell mounts REST and MCP together. If the app deliberately
 chooses asymmetric exposure, delete the blocks marked `MCP / OAuth (deliberate exception)` in `auth.ts` and `service.ts`;
@@ -51,10 +53,36 @@ Search for `AGENT:` to find what an app must fill in.
   `cf-connecting-ip`; when testing by hand, wait a minute or vary that header.
 - `ADMIN_EMAIL`'s first verified sign-in becomes `admin` while no admin exists. The sign-in response may still show
   the previous role; `/admin/api/me` shows the current one.
+- More administrators: in Admin, **More → Administrators** invites by email and **More → Members** grants Admin to an
+  existing member. `docs/handbook/cloudflare/authentication.md` (Identity helpers) has the same operations as an API.
 - Admin HTTP routes are listed in `docs/handbook/guides/native-admin.md`.
 
 Scripted smoke is not independent acceptance; before reporting a user-facing
 deliverable done, follow the independent acceptance guide: `mantle help agent-workflow-acceptance`.
+
+### Independent acceptance
+
+`pnpm accept` (optionally `-- --fixtures fixtures.mjs --user member@example.test`) starts the app on a fresh local D1,
+signs the admin in, runs your fixtures module, signs the user in and prints one local URL per role:
+
+```text
+admin (owner@example.test): http://127.0.0.1:46467  MCP http://127.0.0.1:46467/mcp/admin  Admin http://127.0.0.1:46467/admin
+user (member@example.test): http://127.0.0.1:42607  MCP http://127.0.0.1:42607/mcp
+```
+
+Each URL forwards to the app with that role's session; the evaluator never sees a cookie, and the URL refuses
+`/api/auth/*`, so it cannot sign out, sign in as someone else or mint credentials. Give an evaluator only its role's URL:
+
+- MCP: configure the URL as a streamable HTTP MCP server, or, without an MCP client,
+  `node accept.mjs mcp <url>/mcp` lists the tools and `node accept.mjs mcp <url>/mcp <tool> '<json>'` calls one.
+- Admin and member pages: open the URL in a browser (a person's, or Playwright for an agent); it is already
+  signed in.
+- REST: send requests to the URL with no credential.
+
+The fixtures module's default export receives `{ call, mcp, signIn, sql, sessions, user }` and runs between the two
+sign-ins, so an invite-only app can admit the user first. Create records through the app's own REST/MCP as real
+users (other members' records, several states, more than one page); `sql` is for what no surface may write.
+Ctrl-C stops the app and deletes its data. To accept an external MCP host's OAuth connection instead, see the guide.
 
 ### MCP acceptance
 

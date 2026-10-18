@@ -3,6 +3,7 @@
 //   import { smoke } from "./smoke-kit.mjs";
 //   await smoke(async ({ call, mcp, signIn, owner, step }) => { const admin = await signIn(owner); ... step("..."); });
 //   Extra Worker variables: await smoke(scenario, { vars: { SUPPLIER_API_URL: "http://127.0.0.1:9999" } });
+// accept.mjs uses startApp() to keep the app running for fresh evaluators.
 import assert from "node:assert/strict";
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -67,8 +68,20 @@ export async function assertMcpDiscovery(endpoint, { tools, headers = {} }) {
 const database = "mantle-app"; // wrangler.jsonc d1_databases[0].database_name
 const env = { ...process.env, WRANGLER_SEND_METRICS: "false" };
 
-export async function smoke(scenario, { vars = {} } = {}) {
-  const port = 18000 + Math.floor(Math.random() * 1000), origin = `http://127.0.0.1:${port}`, owner = "owner@example.test";
+export async function smoke(scenario, options) {
+  const app = await startApp(options);
+  try {
+    await scenario(app);
+    console.log("smoke passed");
+  } catch (error) {
+    console.error(app.logs().slice(-4000));
+    throw error;
+  } finally { await app.stop(); }
+}
+
+/** Start the app on a fresh local D1 (schema.sql, then seed.sql when present); stop() ends wrangler and deletes the state. */
+export async function startApp({ vars = {}, port = 18000 + Math.floor(Math.random() * 1000) } = {}) {
+  const origin = `http://127.0.0.1:${port}`, owner = "owner@example.test";
   const state = mkdtempSync(join(tmpdir(), "mantle-smoke-"));
   // Deployment DDL is explicit: nothing at runtime creates tables.
   for (const file of ["generated/schema.sql", ...(existsSync("seed.sql") ? ["seed.sql"] : [])]) {
@@ -128,6 +141,17 @@ export async function smoke(scenario, { vars = {} } = {}) {
     assert.fail(`no log line matching ${pattern}`);
   };
   const step = name => console.log(`ok - ${name}`);
+  const stop = async () => {
+    const kill = signal => { try { process.kill(-wrangler.pid, signal); } catch { /* already gone */ } };
+    kill("SIGTERM");
+    await new Promise(resolve => {
+      if (wrangler.exitCode !== null) return resolve();
+      const timer = setTimeout(() => { kill("SIGKILL"); resolve(); }, 5_000);
+      wrangler.once("exit", () => { clearTimeout(timer); resolve(); });
+    });
+    kill("SIGKILL");
+    rmSync(state, { recursive: true, force: true });
+  };
   try {
     for (let attempt = 0; ; attempt++) {
       if (wrangler.exitCode !== null) throw new Error(`wrangler exited ${wrangler.exitCode}`);
@@ -135,20 +159,10 @@ export async function smoke(scenario, { vars = {} } = {}) {
       if (attempt > 240) throw new Error("the Worker did not start");
       await new Promise(resolve => setTimeout(resolve, 250));
     }
-    await scenario({ origin, owner, call, mcp, signIn, sql, cron, waitForLog, step, logs: () => logs });
-    console.log("smoke passed");
   } catch (error) {
     console.error(logs.slice(-4000));
+    await stop();
     throw error;
-  } finally {
-    const stop = signal => { try { process.kill(-wrangler.pid, signal); } catch { /* already gone */ } };
-    stop("SIGTERM");
-    await new Promise(resolve => {
-      if (wrangler.exitCode !== null) return resolve();
-      const timer = setTimeout(() => { stop("SIGKILL"); resolve(); }, 5_000);
-      wrangler.once("exit", () => { clearTimeout(timer); resolve(); });
-    });
-    stop("SIGKILL");
-    rmSync(state, { recursive: true, force: true });
   }
+  return { origin, owner, call, mcp, signIn, sql, cron, waitForLog, step, logs: () => logs, stop };
 }
