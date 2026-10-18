@@ -2,7 +2,7 @@ import { infiniteQueryOptions } from "@tanstack/react-query";
 import { api } from "./api";
 import { queryClient } from "../app/query-client";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
-import { isFoldedFieldChild } from "./collection-nav";
+import { foldedChildScopeValue, isFoldedFieldChild } from "./collection-nav";
 import type { CollectionsMetadata, EntryDocument, AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, AdminOperation, ViewManifestInfo } from "./types";
 import { AUTH_BASE } from "./auth";
 
@@ -108,11 +108,12 @@ export function entryLandingChildQueryOptions(payload: EntryEditorPayload) {
     section.relationship.kind === "field" &&
     isFoldedFieldChild(section.collection, payload.collection.name, section.relationship.childField)
   );
-  if (!child) return null;
+  const scopeValue = child ? foldedChildScopeValue(child.relationship) : null;
+  if (!child || scopeValue === null) return null;
   return entriesQueryOptions({
     ...entriesQueryArgsFromSearch(child.collection.name, ""),
     scopeField: child.relationship.childField,
-    scopeValue: String(child.relationship.parentValue ?? payload.entry.id),
+    scopeValue,
   });
 }
 
