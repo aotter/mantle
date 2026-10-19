@@ -548,6 +548,8 @@ export default {
     "entryEdit.publishMissingRequired": "請先完成必填欄位才能發布。",
     "entryEdit.unpublish": "取消發布",
     "entryEdit.unpublishing": "取消發布中...",
+    "entryEdit.publishedHint": "已發布的資料無法直接編輯，請先取消發布。",
+    "entryEdit.archivedHint": "已封存的資料無法直接編輯，請先還原為草稿。",
     "entryEdit.unpublishTooltip": "將這筆資料改回草稿以便編輯。",
     "entryEdit.restore": "還原為草稿",
     "entryEdit.restoring": "還原中...",

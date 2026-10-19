@@ -73,6 +73,7 @@ describe("canEditEntry", () => {
     admin: true,
     isReadOnly: false,
     isOperational: true,
+    isDraft: true,
     operationalEditUnlocked: false,
     ...overrides,
   });
@@ -87,6 +88,11 @@ describe("canEditEntry", () => {
   it("allows admin publishing edits but never grants a member access", () => {
     expect(access({ isOperational: false })).toBe(true);
     expect(access({ admin: false, isOperational: false })).toBe(false);
+  });
+
+  it("edits a publishing entry only as a draft, so Unpublish never discards pending edits", () => {
+    expect(access({ isOperational: false, isDraft: false })).toBe(false);
+    expect(access({ isDraft: false, operationalEditUnlocked: true })).toBe(true);
   });
 });
 

@@ -156,7 +156,8 @@ export function ParentEntryWorkbench({
 /**
  * Whether the parent's editor link reads Edit or View: the editor's own rule
  * (an admin, a writable Schema, a supported version). An operational record
- * still says Edit, since its editor offers the admin the unlock, as the list does.
+ * still says Edit, since its editor offers the admin the unlock, as the list does,
+ * and so does a published one, whose editor offers Unpublish.
  */
 export function canOpenForEdit(payload: Pick<EntryEditorPayload, "collection" | "entry">, admin: boolean | undefined): boolean {
   const unsupportedVersion = typeof payload.entry.version !== "number" || !Number.isSafeInteger(payload.entry.version);
@@ -164,6 +165,7 @@ export function canOpenForEdit(payload: Pick<EntryEditorPayload, "collection" | 
     admin,
     isReadOnly: payload.collection.schema.readOnly === true || unsupportedVersion,
     isOperational: payload.collection.lifecycle !== "publishing",
+    isDraft: true,
     operationalEditUnlocked: true,
   });
 }
