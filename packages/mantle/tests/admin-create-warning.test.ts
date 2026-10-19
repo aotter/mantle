@@ -17,3 +17,24 @@ test("Admin create gaps are named for writable operational Schemas only", async 
   const readOnly = doc("Schema", "log", { title: "log", lifecycle: "operational", schema: { type: "object", readOnly: true, required: ["title"], properties: { title: { type: "string" } } } });
   expect(await warnings(readOnly)).toEqual([]);
 });
+
+test("a required readOnly field without a default warns only when Admin's generic create would need it", async () => {
+  const all = async (...docs: string[]) => {
+    const result = await generateFromSources({ target: "bun-sqlite", admin: true, sources: { sources: [{ sourceId: "app.yaml", text: docs.join("\n---\n") }] } });
+    if (!result.ok) throw new Error(JSON.stringify(result.diagnostics));
+    return result.warnings ?? [];
+  };
+  const deals = doc("Schema", "deals", { title: "deals", lifecycle: "operational", schema: { type: "object", required: ["title", "stage"], properties: { title: { type: "string" }, stage: { type: "string", readOnly: true } } } });
+  const field = (w: readonly string[]) => w.filter(x => x.includes("field 'stage'"));
+  expect(field(await all(deals))).toEqual([expect.stringContaining("Admin's generic create cannot fill it")]);
+  // A create action's Procedure writes the field itself (the CRM evaluator's case).
+  expect(field(await all(deals, doc("Procedure", "open-deal", { title: "Open", requires: { auth: { all: ["ctx.admin"] } }, uiSchema: { collectionAction: "deals" },
+    input: { type: "object", required: ["title"], additionalProperties: false, properties: { title: { type: "string" } } }, output: { type: "object" },
+    handler: { sql: "INSERT INTO deals (title, stage) VALUES (input.title, 'lead') RETURNING id" } }), doc("Trigger", "open-deal-admin", { source: { kind: "mcp", surface: "admin" }, target: { procedure: "open-deal" } })))).toEqual([]);
+});
+
+test("a child folded through the object form of x-mantle-ref is not reported as uncreatable", async () => {
+  const parent = doc("Schema", "orders", { title: "orders", lifecycle: "operational", uniqueIndexes: [["ref"]], schema: { type: "object", readOnly: true, required: ["ref"], properties: { ref: { type: "string" } } } });
+  const child = doc("Schema", "lines", { title: "lines", lifecycle: "operational", schema: { type: "object", required: ["orderRef"], properties: { orderRef: { type: "string", "x-mantle-ref": { schema: "orders", field: "ref" } } } } });
+  expect(await warnings(parent, child)).toEqual([]);
+});

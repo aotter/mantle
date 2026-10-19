@@ -85,6 +85,9 @@ All paths below start with `/admin/api` and require an admin session; mutations
 also require the shared same-origin check. Mount `entries(...)` for collection
 routes. Send JSON with `Content-Type: application/json`.
 
+These routes serve Admin's console with its session cookie; they are not a client API. A REST client reads back what it
+wrote through the app's own Views with HTTP Triggers (`mantle help trigger`).
+
 | Method and path | Request / response |
 | --- | --- |
 | `POST /entries` | Body `{ collection, data }`; creates an entry. |
