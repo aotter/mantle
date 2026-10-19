@@ -139,7 +139,8 @@ async function buildMcpApp(entry: string | undefined, outDir: string, explicitEn
   };
   const built = await build({
     ...core.config, base: "./", logLevel: "warn", plugins: [...core.plugins, replace, scan, viteSingleFile()],
-    build: { write: false, copyPublicDir: false, rollupOptions: { input: resolve(page, "mcp-app.html") } },
+    // the MCP SDK packages declare no `sideEffects`; their module bodies only define, so what the App bridge never reaches drops
+    build: { write: false, copyPublicDir: false, rollupOptions: { input: resolve(page, "mcp-app.html"), treeshake: { moduleSideEffects: (id: string) => !/[\\/]@modelcontextprotocol[\\/]/.test(id) } } },
   });
   const asset = (Array.isArray(built) ? built.flatMap(each => each.output) : "output" in built ? built.output : []).find(file => file.type === "asset" && file.fileName === "mcp-app.html");
   if (!asset || asset.type !== "asset") throw new Error("The Admin MCP App was not built.");
