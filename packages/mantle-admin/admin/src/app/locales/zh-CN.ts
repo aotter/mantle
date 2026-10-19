@@ -129,6 +129,8 @@ export default {
     "refPicker.empty": "没有符合的数据。",
     "refPicker.error": "无法加载这些数据。",
     "collection.searchPlaceholder": "搜索 ID 或可搜索字段...",
+    "collection.searchIdPlaceholder": "按 ID 搜索...",
+    "collection.empty.searchIdOnly": "没有符合“{search}”的资料。此列表只按 ID 搜索；在 Schema 声明 searchableFields 才能搜索其他字段。",
     "collection.search": "搜索",
     "collection.empty.title": "目前没有资料",
     "collection.empty.search": "没有符合“{search}”的资料。",

@@ -38,6 +38,8 @@ export default {
     "oauth.apps.empty": "연결된 MCP 클라이언트가 없습니다.",
     "oauth.apps.revoke": "연결 해제",
     "collection.filter.all": "전체",
+    "collection.searchIdPlaceholder": "ID로 검색...",
+    "collection.empty.searchIdOnly": "“{search}”와 일치하는 항목이 없습니다. 이 목록은 ID로만 검색합니다. 다른 필드를 검색하려면 Schema에 searchableFields를 선언하세요.",
     "nav.home": "홈",
     "nav.overview": "개요",
     "nav.model": "데이터 모델",

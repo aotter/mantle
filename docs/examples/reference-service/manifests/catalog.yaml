@@ -28,6 +28,7 @@ spec:
   scope: "owner = auth.uid()"
   uiSchema: { list: { primaryField: itemId, columns: [qty, orderStatus] } }
   indexes: [[owner, createdAt, id]]
+  searchableFields: [itemId]
   schema:
     type: object
     required: [owner, itemId, qty, orderStatus]

@@ -186,6 +186,8 @@ function CollectionList({
   // the list always ends with its own sortable updated-at column, so a declared `updatedAt` is not shown twice
   const dataColumns = isOperationalCollection ? (collection?.list?.columns ?? []).filter((c) => c !== "updatedAt") : [];
   const collectionFilter = isOperationalCollection ? collection?.filter ?? null : null;
+  // an older descriptor without the field keeps the generic wording
+  const searchesIdOnly = collection?.searchableFields?.length === 0;
   const listPath = pathBase ?? `/admin/c/${encodeURIComponent(collectionName)}`;
   const listState = {
     status,
@@ -352,6 +354,7 @@ function CollectionList({
           key={location.search}
           language={language}
           searchValue={searchTerm}
+          searchPlaceholder={searchesIdOnly ? t(language, "collection.searchIdPlaceholder") : undefined}
           filters={listQueryFilter ? [listQueryFilter] : []}
           leading={collection.nav?.standalone && !scope ? (
             <ParentScopeFilter
@@ -385,7 +388,7 @@ function CollectionList({
           title={t(language, "collection.empty.title")}
           description={
             searchTerm
-              ? t(language, "collection.empty.search", { search: searchTerm })
+              ? t(language, searchesIdOnly ? "collection.empty.searchIdOnly" : "collection.empty.search", { search: searchTerm })
               : filterValue
               ? t(language, "collection.empty.withStatus", {
                   collection: heading,
