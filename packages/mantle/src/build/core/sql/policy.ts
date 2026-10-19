@@ -15,6 +15,7 @@ export type DialectBind = { readonly k: 'dialect'; readonly [key: string]: unkno
 export type BindSpec =
   | { k: 'uid' } | { k: 'now' } | { k: 'admin' } | { k: 'cutoff'; seconds: number } | { k: 'const'; value: unknown }
   | { k: 'input'; name: string; type: string }
+  | { k: 'scoped'; column: string; field: string; type: 'string' | 'number'; name?: string; value?: string | number }
   | { k: 'user'; field: string; type: 'string' | 'number'; multiple: boolean; scope?: true }
   | DialectBind
   | { k: 'version' }
@@ -441,18 +442,41 @@ function del(n: N, c: C): N {
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { DeleteStmt: out };
 }
-function insert(n: N, c: C): N {
-  const s = c.schemas[String(n.relation.relname).toLowerCase()]!;
-  const columns = protectedColumns(s, c.mode !== 'trusted' ? c.restrict?.[String(n.relation.relname).toLowerCase()] : undefined);
-  if (n.onConflictClause?.action === 'ONCONFLICT_UPDATE' && n.onConflictClause.targetList.some((target: N) => columns.includes(String(target.ResTarget.name).toLowerCase()))) throw new Refused('USER_FIELD_POSITION', 'The scoped column is never writable through SET.');
-  // Owner columns are stamped from the caller on insert, so only value terms force a trusted insert.
-  const owner = c.mode !== 'trusted' ? c.restrict?.[String(n.relation.relname).toLowerCase()]?.owner : undefined;
-  if (columns.some(column => column !== owner) && c.mode !== 'trusted') throw new Refused('USER_FIELD_POSITION', 'Procedure INSERT/upsert into a field-scoped or restricted Schema requires trusted mode; use its scoped Store.');
+function insert(n0: N, c: C): N {
+  const table = String(n0.relation.relname).toLowerCase(), s = c.schemas[table]!, caller = c.mode !== 'trusted';
+  const columns = protectedColumns(s, caller ? c.restrict?.[table] : undefined);
+  if (n0.onConflictClause?.action === 'ONCONFLICT_UPDATE' && n0.onConflictClause.targetList.some((target: N) => columns.includes(String(target.ResTarget.name).toLowerCase()))) throw new Refused('USER_FIELD_POSITION', 'The scoped column is never writable through SET.');
+  // Owner columns are stamped from the caller. A Schema field scope gets the Store's insert rule (RLS WITH CHECK): the
+  // partition column binds the checked value itself, so the value checked is the value written. A target restrict
+  // term and INSERT ... SELECT stay trusted-only.
+  const owner = caller ? c.restrict?.[table]?.owner : undefined, scoped = caller ? (s.userScopes ?? []) : [];
+  const n: N = scoped.length ? structuredClone(n0) : n0; // the plan IR is compiled once per row mode
+  const rows: N[] | undefined = n.selectStmt?.SelectStmt?.valuesLists;
+  if (caller && (scoped.length && !rows || columns.some(column => column !== owner && !scoped.some(u => u.column === column)))) throw new Refused('USER_FIELD_POSITION', 'Procedure INSERT/upsert into a restricted Schema, or INSERT ... SELECT into a field-scoped one, requires trusted mode; use its scoped Store.');
+  const scopeFills: [string, BindSpec][] = [], checked: [row: number, i: number, type: string][] = [];
+  for (const u of scoped) {
+    const at = n.cols.flatMap((r: N, i: number) => String(r.ResTarget.name).toLowerCase() === u.column ? [i] : []), type = s.fields[u.column]!;
+    const spec = { k: 'scoped' as const, column: u.column, field: u.field, type: u.type };
+    if (!at.length) { scopeFills.push([u.column, spec]); continue; }
+    const refuse = (why: string) => { throw new Refused('USER_FIELD_POSITION', `The scope column '${u.column}' ${why}`); };
+    if (at.length > 1) refuse('is listed twice.');
+    rows!.forEach((row: N, r: number) => {
+      const item = row.List.items[at[0]!], f = item?.ColumnRef?.fields?.map((x: N) => x.String?.sval), k = item?.A_Const;
+      // The input's own type must be the column's: a cast between them (a date-time read back as text) would write another value.
+      if (f?.[0] === 'input' && f.length === 2) { if (c.inputs[f[1]] !== type) refuse(`is ${type}; input '${f[1]}' must be declared with the same type.`); row.List.items[at[0]!] = param$(c, { ...spec, name: f[1] }); }
+      else if (type === 'text' && k?.sval) row.List.items[at[0]!] = param$(c, { ...spec, value: k.sval.sval });
+      else if (type !== 'text' && k && 'ival' in k) row.List.items[at[0]!] = param$(c, { ...spec, value: k.ival.ival ?? 0 });
+      else refuse(`takes an input of type ${type}, a ${type === 'text' ? 'string' : 'integer'} literal, or is omitted (filled from the caller).`);
+      checked.push([r, at[0]!, type]);
+    });
+  }
   c.seen?.add('insert-target');
   const out = deep(n, c, 'InsertStmt');
+  // typed once, after deep() (which would lower a cast again): the same shape as the trusted statement's input
+  for (const [r, i, type] of checked) { const items = out.selectStmt.SelectStmt.valuesLists[r].List.items; items[i] = c.lower.input(items[i], type); }
   const named = (x: string) => n.cols.some((r: N) => r.ResTarget.name === x);
   const w = writePolicy(s, 'insert', { idGiven: named('id') });
-  const fill = w.fills.map(([name, v]): [string, N] => [name, v === 'newId' ? c.lower.newId() : param$(c, v)]);
+  const fill = w.fills.map(([name, v]): [string, N] => [name, v === 'newId' ? c.lower.newId() : param$(c, v)]).concat(scopeFills.map(([name, v]): [string, N] => [name, param$(c, v)]));
   out.cols = [...out.cols, ...fill.map(([name]) => ({ ResTarget: { name } }))];
   // The user's VALUES/SELECT becomes a derived table so the fills never interact with its DISTINCT or
   // GROUP BY; `WHERE true` is SQLite's disambiguator for INSERT ... SELECT ... ON CONFLICT.

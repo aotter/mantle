@@ -287,7 +287,10 @@ spec:
     `INPUT_VALIDATION_FAILED` otherwise. An anonymous insert is `UNAUTHENTICATED`.
   - A field-scoped Schema always generates the id.
   - Store and Admin inserts share one pre-check.
-  - Procedure `INSERT` and upsert into a field-scoped Schema run only in trusted mode.
+  - Procedure `INSERT … VALUES` and upsert into a field-scoped Schema follow the same
+    pre-check, bound to the value written. `INSERT … SELECT`, and an insert into a table
+    the target `restrict`s, run only in trusted mode. (Amended 2026-10-19: every such
+    Procedure was trusted-only, so no member could create a field-scoped row in SQL.)
   - The scoped column can never be changed by `SET`: not by Store, by the write
     allowlist, by `DO UPDATE SET`, or by Admin update fragments.
 - **Uniqueness.**
