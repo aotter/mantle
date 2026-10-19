@@ -183,7 +183,7 @@ function validateProcedureTargetShape(target: unknown, idx: number): void {
 }
 
 function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
-  const keys = Object.keys(h);
+  const keys = Object.keys(h).filter((k) => k !== "mustWrite");
   const key = keys.length === 1 ? keys[0]! : undefined;
   if (key !== "ref" && key !== "sql") {
     throw new ManifestParseError(
@@ -191,6 +191,14 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
       idx,
       "/spec/handler",
     );
+  }
+  // #1775: which statements must write a row. compilePlan checks each names a set-op write of the program.
+  if ("mustWrite" in h) {
+    const must = h["mustWrite"];
+    if (key === "ref") throw new ManifestParseError("Procedure.spec.handler.mustWrite applies to a `sql` handler; a ref handler throws its own ContractError", idx, "/spec/handler/mustWrite");
+    if (!Array.isArray(must) || !must.length || must.some((n) => !Number.isInteger(n) || n < 1) || new Set(must).size !== must.length) {
+      throw new ManifestParseError("Procedure.spec.handler.mustWrite must be a non-empty list of distinct statement numbers, counting from 1 (e.g. [1])", idx, "/spec/handler/mustWrite");
+    }
   }
   // For `sql` only the SQL compiler (compilePlan) reads the statements; here it just has to be present.
   if (typeof h[key] !== "string" || (h[key] as string).trim().length === 0) {
