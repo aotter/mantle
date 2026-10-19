@@ -1,13 +1,29 @@
 {
   "name": "@aotter/mantle-admin",
   "version": "0.2.0-alpha.9",
-  "description": "Admin app library and build, design preview and Admin MCP App; the SDK remains a peer.",
+  "description": "Native Admin console for Mantle apps: React admin app and build, same-origin preview and Admin MCP App. Uses @aotter/mantle as a peer.",
+  "keywords": [
+    "mantle",
+    "admin",
+    "admin-panel",
+    "admin-dashboard",
+    "agent-native",
+    "react",
+    "vite",
+    "mcp",
+    "mcp-apps",
+    "model-context-protocol",
+    "typescript"
+  ],
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aotter/mantle.git",
     "directory": "packages/mantle-admin"
+  },
+  "bugs": {
+    "url": "https://github.com/aotter/mantle/issues"
   },
   "type": "module",
   "sideEffects": [

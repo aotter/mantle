@@ -120,13 +120,33 @@
     "wrangler": "4.145.0",
     "vitest": "catalog:"
   },
-  "description": "Mantle: a manifest-driven service core. Store authored as SQL, surfaces as Fetch functions, and the mantle CLI.",
+  "description": "Agent-native app SDK and backend compiler: YAML manifests to native SQL (SQLite, Cloudflare D1, PostgreSQL) and typed TypeScript; optional REST and MCP.",
+  "keywords": [
+    "mantle",
+    "agent-native",
+    "sdk",
+    "backend",
+    "yaml",
+    "code-generation",
+    "sql",
+    "sqlite",
+    "postgresql",
+    "cloudflare-d1",
+    "cloudflare-workers",
+    "bun",
+    "typescript",
+    "mcp",
+    "model-context-protocol"
+  ],
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aotter/mantle.git",
     "directory": "packages/mantle"
+  },
+  "bugs": {
+    "url": "https://github.com/aotter/mantle/issues"
   },
   "publishConfig": {
     "access": "public",

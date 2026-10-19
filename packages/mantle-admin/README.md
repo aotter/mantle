@@ -1,8 +1,9 @@
 # @aotter/mantle-admin
 
-The complete Mantle Admin product: the Admin app library and its build,
-same-origin iframe preview and Admin MCP App. It uses the public `@aotter/mantle-ui` kit
-and declares `@aotter/mantle` as a peer. The SDK never imports this package.
+`@aotter/mantle-admin` is the optional native Admin console for Mantle apps: a React admin app library and its build
+(with an optional Vite plugin), a same-origin iframe preview, and the Admin MCP App for MCP hosts that render MCP Apps.
+It uses the public `@aotter/mantle-ui` kit and declares `@aotter/mantle` as a peer; the SDK never imports this package.
+Select it with `--admin` / `admin: true` when generating.
 
 ## Package migration
 

@@ -1,8 +1,9 @@
 # @aotter/mantle-ui
 
-Pure interaction UI, React components, visual kit and design tokens. The
-`/controller` subpath is framework-free; the root adds React components on top
-of it (React 19 is an optional peer, needed only for the root and `/kit`).
+`@aotter/mantle-ui` is the shared UI layer behind Mantle Admin, usable on its own: a framework-free interaction
+controller (`/controller`, zero imports), React 19 components, a shadcn-style visual kit on Radix UI (`/kit`), and
+Tailwind design tokens (`tokens.css`, `kit.css`). It has no dependency on the Mantle SDK; React 19 is an optional peer,
+needed only for the root and `/kit`.
 
 ## Controller
 
