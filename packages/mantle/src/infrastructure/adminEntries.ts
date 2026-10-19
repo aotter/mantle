@@ -9,6 +9,9 @@ import { wireScalars, wireReturning } from "../domain/wireScalars.js";
 import { recipesOf } from "../domain/recipes.js";
 import type { Dialect } from "../kernel/dialect/common.js";
 import type { GenerateDiagnostic } from "../domain/model.js";
+import { refChecks } from "../build/compiler.js";
+import { renderTerm, type Term } from "../kernel/store.js";
+import type { Recipe } from "../kernel/binds.js";
 
 type Schema=RuntimePlan["schemas"][string];
 const ref=(...names:string[]):SqlNode=>({ColumnRef:{fields:names.map(sval=>({String:{sval}}))}});
@@ -30,6 +33,15 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
     const schemas:Record<string,Schema>=Object.create(null);let relation:Schema|undefined=s;
     while(relation&&!Object.hasOwn(schemas,relation.name)){schemas[relation.name]=relation;relation=relation.translates?plan.schemas[relation.translates.parent.toLowerCase()]:undefined;}
     const ctx=(kind:"view"|"procedure",trusted:boolean,inputs:Record<string,string>)=>({dialect,schemas,inputs,kind,mode:trusted?"trusted" as const:"admin" as const,uncheckedRefs:true as const});
+    /**
+     * A caller's write of an `x-mantle-ref` to a scoped Schema (Core's `refChecks`), the Store's check: per field, a predicate the
+     * native route adds only when that field is written non-null. Hole `token` takes a written field's value (`string`) or a bind.
+     */
+    const refs=(child:(column:string,hole:(value:string|Recipe)=>string)=>string)=>Object.fromEntries(refChecks(s,plan.schemas).filter(r=>writable.includes(r.column)).map(r=>{
+      const holes:[token:string,value:string|Recipe][]=[],hole=(value:string|Recipe)=>{const token=wire.param(marker+1+holes.length);holes.push([token,value]);return token;};
+      const sql=`EXISTS (SELECT 1 FROM ${wire.ident(r.table)} _mantle_ref WHERE ${[`_mantle_ref.${wire.ident(r.field)} = ${hole(r.column)}`,...r.same.map(([parent,column])=>`_mantle_ref.${wire.ident(parent)} = ${child(column,hole)}`),...r.terms.map(t=>renderTerm(wire,t as Term,"_mantle_ref.",hole))].join(" AND ")})`;
+      return [r.column,{sql,holes}];
+    }));
     const select=`SELECT ${columns.map(c=>`${wire.ident(s.name)}.${wire.ident(c)}`).join(",")} FROM ${wire.ident(s.name)}`;
     const base=await parse(select);
     const project=(ast:SqlNode,names:readonly string[],keys:readonly string[])=>{
@@ -92,7 +104,9 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
       const insert=create.ast.InsertStmt,update=patch.ast.UpdateStmt;
       for(const [i,field]of writable.entries())entryFields[field]={column:wire.ident(field),insert:expr(insert.selectStmt.SelectStmt.fromClause[0].RangeSubselect.subquery.SelectStmt.valuesLists[0].List.items[i]),...(!protectedColumns(s).includes(field)&&!serverOwned(s.schema,field) ? {update:wire.ident(field)+" = "+expr(update.targetList[updateFields.indexOf(field)].ResTarget.val)} : {})};
       const returnSQL=(ast:SqlNode)=>" RETURNING "+ast.returningClause.exprs.map((t:SqlNode)=>expr(t.ResTarget.val)+(t.ResTarget.name?" AS "+wire.ident(t.ResTarget.name):"")).join(",");
-      return {projection,from,policy:policy?expr(policy):"",binds:recipesOf(compiled,[],message=>{throw Error(message);}),fields:entryFields,create:{prefix:print(create.ast).slice(0,print(create.ast).indexOf(" ("))+" (",between:") VALUES (",suffix:")",binds:create.binds,columns:insert.cols.slice(writable.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)),values:insert.selectStmt.SelectStmt.targetList.slice(writable.length?1:0).map((t:SqlNode)=>expr(t.ResTarget.val)),returning:returnSQL(insert)},patch:{prefix:print(patch.ast).slice(0,print(patch.ast).indexOf(" SET "))+" SET ",binds:patch.binds,sets:update.targetList.slice(updateFields.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)+" = "+expr(t.ResTarget.val)),where:" WHERE "+expr(update.whereClause),returning:returnSQL(update)},remove:{sql:print(remove.ast),binds:remove.binds,row:true}};
+      // the partition of a new row is the scope value written; a patch never SETs it, so it is the row's own
+      const created=trusted?{}:refs((column,hole)=>hole(column)),patched=trusted?{}:refs(column=>wire.ident(s.name)+"."+wire.ident(column));
+      return {projection,from,policy:policy?expr(policy):"",binds:recipesOf(compiled,[],message=>{throw Error(message);}),fields:entryFields,create:{...(Object.keys(created).length?{refs:created}:{}),prefix:print(create.ast).slice(0,print(create.ast).indexOf(" ("))+" (",between:") VALUES (",suffix:")",binds:create.binds,columns:insert.cols.slice(writable.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)),values:insert.selectStmt.SelectStmt.targetList.slice(writable.length?1:0).map((t:SqlNode)=>expr(t.ResTarget.val)),returning:returnSQL(insert)},patch:{...(Object.keys(patched).length?{refs:patched}:{}),prefix:print(patch.ast).slice(0,print(patch.ast).indexOf(" SET "))+" SET ",binds:patch.binds,sets:update.targetList.slice(updateFields.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)+" = "+expr(t.ResTarget.val)),where:" WHERE "+expr(update.whereClause),returning:returnSQL(update)},remove:{sql:print(remove.ast),binds:remove.binds,row:true}};
     }));
     result[s.name]={...(s.userScopes?.length ? {userScopes:s.userScopes} : {}),cursorAliases,scoped:!!s.scope,path:"schemas/"+s.name+"/admin",marker:markerText,id:wire.ident(s.name)+"."+wire.ident("id"),fields:fieldFacts,orderFields:Object.keys(ordered),search:`(${wire.ident(s.name)}.${wire.ident("id")} = ${markerText}${s.search?.length?` OR ${wire.search(s.name,s.search,wire.ident(s.name),markerText)}`:""})`,statistics:{rowsAlias,column:wire.ident(s.name)+"."+wire.ident("created_at"),time:postgres?`extract(epoch FROM ${wire.ident(s.name)}.${wire.ident("created_at")}) * 1000000`:wire.ident(s.name)+"."+wire.ident("created_at"),subtype},caller:modes[0],trusted:modes[1]};
   }catch(error){refusals.push({code:"GENERATE_UNSUPPORTED",path:error instanceof Error&&"path"in error&&typeof error.path==="string"?error.path:"schemas/"+s.name+"/admin",message:error instanceof Error?error.message:String(error)});}
