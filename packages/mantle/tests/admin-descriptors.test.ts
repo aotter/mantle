@@ -43,7 +43,8 @@ test("Admin projections match 0.2 collections, operations, SQL graph and MCP cat
   expect(m.developerConsole.graph.relations).toEqual(expect.arrayContaining([expect.objectContaining({kind:"schema-reference",pointer:"/spec/schema/properties/projectId/x-mantle-ref"}),expect.objectContaining({kind:"trigger-target",targetId:"Procedure:mark-done"})]));
   expect(m.developerConsole.operations).toMatchObject({schedules:[],ttlPolicies:[{schema:"tasks",field:"expiresAt",expireAfterSeconds:3600,sweepObservation:"unavailable"}],observationAvailability:"unavailable",runs:[],latestRuns:[]});
   expect(m.mcpAppCatalogues).toEqual({public:appCatalog(plan,"public"),admin:appCatalog(plan,"admin")});expect(m.mcpAppCatalogues.admin.views.tasks_board.actions).toEqual(["mark_done"]);expect(m.mcpAppCatalogues.admin.views.joined_board.actions).toEqual([]);expect(m.mcpAppCatalogues.admin.views.alias_board.actions).toEqual([]);
-  expect(m.webmcp.routes.mark_done).toEqual({path:"/admin/c/tasks",entry:true});for(const tool of m.webmcp.tools)expect(tool.description).toEndWith(` (tool version ${tool.version})`);expect(m.bootstrap).toEqual({collections:m.collections,allCollections:m.allCollections,operations:m.operations,views:m.views,webmcp:m.webmcp,developerConsole:m.developerConsole});
+  expect(m.webmcp.routes.mark_done).toEqual({path:"/admin/c/tasks",entry:true});for(const tool of m.webmcp.tools)expect(tool.description).toEndWith(` (tool version ${tool.version})`);expect(m.bootstrap).toEqual({collections:m.collections,allCollections:m.allCollections,operations:m.operations,views:m.views,webmcp:m.webmcp,developerConsole:expect.any(Function)});
+  expect((await loadGenerated(files["admin-developer-console.ts"]!)).developerConsole).toEqual(m.developerConsole);expect(files["admin-developer-console.ts"]).not.toMatch(/^import\b/m);
   for(const removed of ["extensionBindings","extensionMetadata","navGroups"])expect(Object.keys(m)).not.toContain(removed);expect(Object.keys(m)).toContain("bootstrap");
   expect(files["admin-descriptors.ts"]).not.toMatch(/^import\b/m);expect(files["admin-descriptors.ts"]).not.toContain('"stmts":');expect(files["admin-descriptors.ts"]).not.toContain('"ColumnRef":');
 });
@@ -80,7 +81,7 @@ test("descriptors have no runtime Core imports and unrelated Workers bundle none
   const {build}=await import("esbuild"),plan=await planOf(),{files}=await metadata(plan),dir=await mkdtemp(join(tmpdir(),"mantle-admin-metadata-"));
   try{
     await writeGenerated(dir,files);const entry=join(dir,"selected.ts");await writeFile(entry,'export {collections} from "./admin-descriptors.js";');
-    const selected=await build({entryPoints:[entry],bundle:true,write:false,metafile:true,platform:"neutral",format:"esm"});expect(Object.keys(selected.metafile!.inputs)).toHaveLength(2);expect(selected.outputFiles![0]!.text).not.toContain("observationAvailability");expect(selected.outputFiles![0]!.text).not.toContain("ColumnRef");
+    const selected=await build({entryPoints:[entry],bundle:true,write:false,metafile:true,platform:"neutral",format:"esm"});expect(Object.keys(selected.metafile!.inputs)).toHaveLength(3);expect(selected.outputFiles![0]!.text).not.toContain("observationAvailability");expect(selected.outputFiles![0]!.text).not.toContain("ColumnRef");
     const unrelated=join(dir,"worker.ts");await writeFile(unrelated,'export default {fetch:()=>new Response("ok")};');const bare=await build({entryPoints:[unrelated],bundle:true,write:false,metafile:true,platform:"neutral",format:"esm"});expect(Object.keys(bare.metafile!.inputs)).toHaveLength(1);expect(bare.outputFiles![0]!.text).not.toContain("tasks");
   }finally{await rm(dir,{recursive:true,force:true});}
 });

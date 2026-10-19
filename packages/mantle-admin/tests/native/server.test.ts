@@ -171,6 +171,13 @@ test("Admin navigation, bootstrap and developer metadata hide unauthorized targe
   expect(seen.some(t=>t.kind==="schema"&&t.action==="read")).toBe(true);
   const omitted=adminFunction(data,views,operations,{db:()=>{throw Error("metadata provider");},caller:()=>admin});
   expect((await(await omitted(new Request("https://app.test/admin/api/collections"),{}))!.json()).collections).toEqual(collections);
+  // generated output loads the snapshot on the developer-console request only; the response is the same
+  let loads=0;const lazy={...data,developerConsole:async()=>{loads++;return data.developerConsole;}};
+  for(const options of [{authorize:async(target:Target)=>target.name==="visible"},{}]){
+    const f=adminFunction(lazy,views,operations,{db:()=>{throw Error("metadata provider");},caller:()=>admin,...options}),get=async(path:string)=>(await f(new Request("https://app.test/admin/api"+path),{}))!.json();
+    await get("/bootstrap");await get("/collections");expect(loads).toBe(0);
+    expect(await get("/developer-console")).toEqual(options.authorize?developer:data.developerConsole);expect(loads).toBe(1);loads=0;
+  }
 });
 
 test("entry editor and translation badges do not query denied related collections",async()=>{

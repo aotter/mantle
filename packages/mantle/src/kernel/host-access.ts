@@ -1,6 +1,7 @@
 /** Request-only gateway decisions and observation; no database or compiler dependencies. */
 import { forwarded, ContractError, wire, type AccessEvent, type AccessTarget, type Caller, type GatewayOptions, type RequestContext } from "./contracts.js";
-import { isHostCaller, checkFresh } from "./caller-identity.js";
+import { isHostCaller } from "./caller-identity.js";
+import { checkFresh } from "./caller-mode.js";
 
 const logged = new WeakSet<NonNullable<GatewayOptions["onAccess"]>>();
 export function accessRequest(ctx: RequestContext | undefined, options: GatewayOptions) {

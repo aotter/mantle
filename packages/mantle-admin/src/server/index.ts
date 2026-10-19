@@ -102,6 +102,7 @@ export interface Metadata {
     readonly views: readonly Descriptor[];
     readonly operations: readonly Descriptor[];
     readonly webmcp: unknown;
+    /** The developer snapshot, or a function that loads it (generated output imports it on first use, outside Worker startup). */
     readonly developerConsole?: unknown;
 }
 export interface View<Database> {
@@ -152,9 +153,11 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     const me = async ({ caller, request, env }: Context<Env, Database>) => { const user = (options.getUser ? await options.getUser(caller.subject, request, env) : undefined) ?? userOf(caller); return { userId: caller.subject, role: caller.role, admin: isAdmin(caller), login: user?.githubLogin || user?.name || user?.email || null, image: user?.image ?? null }; };
     const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendAdminInvitation, mcpEndpoints: options.mcpEndpoints }); return { ...info, capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics") } }; };
     const checkTarget = async (target: Target, caller: Caller) => (await import("@aotter/mantle/authorization")).authorizeTarget(options.authorize!, target, caller);
-    const visibleMetadata = async (c: Context<Env, Database>) => {
+    const developerConsole = async () => typeof metadata.developerConsole === "function" ? await (metadata.developerConsole as () => unknown)() : metadata.developerConsole;
+    // only the developer-console route resolves and filters the snapshot
+    const visibleMetadata = async (c: Context<Env, Database>, developer = false) => {
         if (!options.authorize) return { ...metadata, views: sees(metadata.views, views, c.caller), operations: sees(metadata.operations, operations, c.caller), webmcp: catalogue };
-        return (await import("./authorization.js")).visibleMetadata(metadata, catalogue, views, operations, options.developerViews ?? views, options.authorize, c.caller);
+        return (await import("./authorization.js")).visibleMetadata(metadata, catalogue, views, operations, options.developerViews ?? views, options.authorize, c.caller, developer ? await developerConsole() : undefined);
     };
     const batchNames = (url: URL): string[] => {
         const names = [...new Set((url.searchParams.get("names") ?? "").split(",").filter(Boolean))];
@@ -234,7 +237,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 if (options.authorize) await checkTarget({ kind: "procedure", name: operation.name }, c.caller);
                 return { ok: true, output: await callTool({ ...operation, surface: "admin", description: "", inputSchema: {} }, await json(c), () => c.db, c.caller, options.handlers as Handlers) };
             } },
-        ...(metadata.developerConsole === undefined ? [] : [{ method: "GET", path: "/developer-console", run: (c: Context<Env, Database>) => options.authorize ? visibleMetadata(c).then(m => m.developerConsole) : metadata.developerConsole }]),
+        ...(metadata.developerConsole === undefined ? [] : [{ method: "GET", path: "/developer-console", run: (c: Context<Env, Database>) => options.authorize ? visibleMetadata(c, true).then(m => m.developerConsole) : developerConsole() }]),
         ...(options.routes ?? []),
     ];
     const table: RestRoute<Database, Handlers, Env>[] = routes.map(route => {

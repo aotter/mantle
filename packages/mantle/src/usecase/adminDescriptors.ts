@@ -57,7 +57,9 @@ export function emitAdminDescriptors({plan,admin=false}:Pick<GenerateInput,"plan
     snapshot.interfaces.callable.push({kind:"procedure",name:tool,target:name,surface:"admin",audience:"admin",title:null,description,input:publishingInput,output:null,trigger:null});
   }
   const data={allCollections,views,operations,fieldNames:Object.fromEntries(schemas.map(s=>[s.name,s.names])),viewNames,authorizations,developerConsole:snapshot,mcpAppCatalogues:catalogues,webmcp};
-  return {"admin-descriptors.ts":"// Generated static Admin metadata. Import only the exports the application uses.\n"+literals(data)+"\nexport const collections = ["+schemas.filter(s=>!s.translates).map(s=>"allCollections["+q(s.name)+"]").join(",")+"] as const;\nexport const bootstrap = {collections, allCollections, operations, views, webmcp, developerConsole} as const;\n"};
+  return {"admin-descriptors.ts":"// Generated static Admin metadata. Import only the exports the application uses.\n"+literals(data)+"\nexport const collections = ["+schemas.filter(s=>!s.translates).map(s=>"allCollections["+q(s.name)+"]").join(",")+"] as const;\nexport const bootstrap = {collections, allCollections, operations, views, webmcp, developerConsole: () => import(\"./admin-developer-console.js\").then(m => m.developerConsole)} as const;\n",
+    // the snapshot again, alone, so Admin loads it on a developer-console request instead of at Worker startup
+    "admin-developer-console.ts":"// Generated developer snapshot, loaded by bootstrap.developerConsole.\n"+literals({developerConsole:snapshot})+"\n"};
 }
 
 /**

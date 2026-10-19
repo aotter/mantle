@@ -1,5 +1,5 @@
 import { scoped } from "./user-fields.js";
-import { modeOf, checkFresh } from "./caller-identity.js";
+import { modeOf, checkFresh } from "./caller-mode.js";
 /**
  * Generic Store over Core's rowPolicy/writePolicy rules and per-Schema Facts (scope, TTL, publishing, dates).
  * Generated types own storage column names, values, filters and writable columns; the dialect quotes names and binds values.

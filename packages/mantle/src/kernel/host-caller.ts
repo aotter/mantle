@@ -1,6 +1,7 @@
 /** Request-only host contract validation. */
 export { draining } from "./drain.js";
-import { forwarded, ContractError, surfaceError, surfaceFailure, type Caller, type Gateway, type RequestContext } from "./contracts.js";
+import { forwarded, ContractError, type Caller, type Gateway, type RequestContext } from "./contracts.js";
+import { surfaceError, surfaceFailure } from "./surface-failure.js";
 import { userCaller } from "./user-caller.js";
 import type { UserFields, UserValue } from "./user-fields.js";
 import { identities, isHostCaller } from "./caller-identity.js";
@@ -61,4 +62,4 @@ export function hostFailure(error: unknown, caller?: Caller, where?: string, cha
 }
 
 export { isHostCaller } from "./caller-identity.js";
-export { checkFresh } from "./caller-identity.js";
+export { checkFresh } from "./caller-mode.js";

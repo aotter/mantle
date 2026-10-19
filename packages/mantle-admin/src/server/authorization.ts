@@ -5,7 +5,7 @@ import type { Metadata, View, Operation } from "./index.js";
 
 type Item = Record<string, unknown>;
 type Section = Record<string, unknown> & Record<string, readonly Item[]>;
-export async function visibleMetadata<Database, Handlers>(metadata: Metadata, catalogue: Item, views: readonly View<Database>[], operations: readonly Operation<Database, Handlers>[], previews: readonly View<Database>[], authorize: Authorize, caller: Caller): Promise<Metadata> {
+export async function visibleMetadata<Database, Handlers>(metadata: Metadata, catalogue: Item, views: readonly View<Database>[], operations: readonly Operation<Database, Handlers>[], previews: readonly View<Database>[], authorize: Authorize, caller: Caller, snapshot?: unknown): Promise<Metadata> {
     const filter = async <T>(items: readonly T[], allows: (item: T) => boolean | Promise<boolean>): Promise<T[]> => {
         const permitted = await Promise.all(items.map(allows));
         return items.filter((_, i) => permitted[i]);
@@ -25,7 +25,7 @@ export async function visibleMetadata<Database, Handlers>(metadata: Metadata, ca
     });
     const toolNames = new Set(tools.map(tool => tool.name));
     const webmcp = {...catalogue, tools, routes: Object.fromEntries(Object.entries((catalogue.routes ?? {}) as Item).filter(([name]) => toolNames.has(name)))};
-    let developerConsole = metadata.developerConsole;
+    let developerConsole = snapshot;
     if (developerConsole) {
         const d = developerConsole as Record<string, Section>;
         const schemas = await filter(d.dataModel?.schemas ?? [], item => permits({kind:"schema",name:String(item.name),action:"read"}));
