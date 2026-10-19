@@ -17,10 +17,10 @@ Pin every package you use to the same exact version and upgrade them together.
 
 ## 0.2.0 — in preparation
 
-### Upgrading to 0.2.0-alpha.10
+### Upgrading to 0.2.0-alpha.11
 
 Pin every selected `@aotter/mantle`, `@aotter/mantle-ui` and
-`@aotter/mantle-admin` dependency to `0.2.0-alpha.10`, refresh the lockfile,
+`@aotter/mantle-admin` dependency to `0.2.0-alpha.11`, refresh the lockfile,
 then regenerate and check the application's owned artifacts. Keep existing
 production migrations application-owned; generated initial DDL is for an empty
 database. This alpha includes breaking Admin authoring and paging changes.
@@ -112,7 +112,7 @@ Existing alpha.6 applications require a source migration:
   application code. Review [authorization and Caller wiring](../concepts/runtime-and-adapters.md)
   and regenerate all owned artifacts before running `generate --check`.
 
-The [reference Worker](https://github.com/aotter/mantle/tree/v0.2.0-alpha.10/docs/examples/reference-service) and
+The [reference Worker](https://github.com/aotter/mantle/tree/v0.2.0-alpha.11/docs/examples/reference-service) and
 [app shell](../../examples/app-shell/) demonstrate the current composition.
 The following earlier-alpha notes are historical; the current handbook and
 the native migration above supersede their runtime and CLI instructions.
