@@ -1,5 +1,5 @@
 ---
-description: The entry point `mantle help` prints first: choose a complete app or generation only, use examples as references, accept before done.
+description: "The entry point `mantle help` prints first: choose a complete app or generation only, use examples as references, accept before done."
 ---
 # Build with an agent
 
