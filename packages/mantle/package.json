@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle",
-  "version": "0.2.0-alpha.10",
+  "version": "0.2.0-alpha.11",
   "type": "module",
   "sideEffects": false,
   "engines": {

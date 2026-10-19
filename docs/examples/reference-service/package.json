@@ -11,8 +11,8 @@
     "check": "mantle generate cloudflare-d1 generated manifests/catalog.yaml manifests/orders.yaml --auth src/auth.ts --entry src/index.ts --admin && mantle generate cloudflare-d1 generated manifests/catalog.yaml manifests/orders.yaml --auth src/auth.ts --entry src/index.ts --admin --check && wrangler types --include-runtime=false && wrangler types --include-runtime=false --check && tsc --noEmit && node smoke.mjs"
   },
   "dependencies": {
-    "@aotter/mantle": "0.2.0-alpha.10",
-    "@aotter/mantle-ui": "0.2.0-alpha.10",
+    "@aotter/mantle": "0.2.0-alpha.11",
+    "@aotter/mantle-ui": "0.2.0-alpha.11",
     "@better-auth/cimd": "1.7.7",
     "@better-auth/core": "1.7.7",
     "@better-auth/mcp": "1.7.7",
@@ -23,7 +23,7 @@
     "better-auth": "1.7.7",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "@aotter/mantle-admin": "0.2.0-alpha.10"
+    "@aotter/mantle-admin": "0.2.0-alpha.11"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260904.1",
