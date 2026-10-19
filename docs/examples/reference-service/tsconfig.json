@@ -16,7 +16,8 @@
     ]
   },
   "include": [
+    "worker-configuration.d.ts",
     "src/**/*.ts",
-    ".mantle/generated/**/*.ts"
+    "generated/**/*.ts"
   ]
 }

@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local sign-in: one-time codes are printed to the wrangler log. Never deploy these values.
+PUBLIC_ORIGIN=http://127.0.0.1:8787
+ADMIN_EMAIL=you@example.com
+BETTER_AUTH_SECRET=replace-with-a-random-32-byte-secret

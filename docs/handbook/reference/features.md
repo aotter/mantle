@@ -1,53 +1,45 @@
----
-description: A task-to-feature table for Mantle 0.2.0 manifests — what to declare for each common need, with links to the field reference and an example.
----
-# Manifest feature reference
+# Supported declarations
 
-| You need | Declare | Reference | Example |
-|---|---|---|---|
-| A table | a Schema with a JSON Schema | [Schema](./schema.md) | every example |
-| Authored content with drafts and publishing | `lifecycle: publishing` (the default) | [Lifecycle](../concepts/lifecycle-and-locales.md) | [Publication](../../examples/publication.md) |
-| Records written by the system | `lifecycle: operational` | [Lifecycle](../concepts/lifecycle-and-locales.md) | [Intake form](../../examples/intake.md) |
-| Rows only their owner may ever see | `scope: { owner: auth.uid() }` | [Authorization](../concepts/authorization.md) | reference service `orders` |
-| A member sees their own rows, staff see all | store `auth.uid()` in the SQL, filter `WHERE x = auth.uid()` | [Authorization](../concepts/authorization.md) | [Procurement](../../examples/procurement.md) |
-| A rule every write obeys | `checks: ["stock >= 0"]` | [Schema](./schema.md#checks) | [Commerce inventory](../../examples/commerce-inventory.md) |
-| Uniqueness | `uniqueIndexes` | [Schema](./schema.md#indexes) | [Commerce](../../examples/commerce.md) |
-| Full-text search | `searchableFields` and `mantle.search` | [View](./view.md) | [Publication](../../examples/publication.md) |
-| Places | `format: geo` and `mantle.near` / `mantle.distance` | [View](./view.md) | |
-| Rows that expire | `ttl`, then `sweepExpired` | [Lifecycle](../concepts/lifecycle-and-locales.md#ttl) | |
-| Translations | `localized`, `translates` | [Schema](./schema.md#localized-and-translates) | [Publication](../../examples/publication.md) |
-| A public read | a View, `surface: public` | [View](./view.md) | every example |
-| A staff report with CSV | a View, `surface: staff`, `uiSchema.list` | [Admin](../guides/admin-ui.md) | [Reservation](../../examples/reservation.md) |
-| A read only code uses | a View, `surface: internal` | [Query from TypeScript](../guides/typed-queries.md) | [Commerce inventory](../../examples/commerce-inventory.md) |
-| Joins, aggregates, windows | the View's SQL | [View](./view.md#what-the-d1-dialect-accepts) | reference service `sales-by-item` |
-| A write | a Procedure with `handler: { sql }` | [Procedure](./procedure.md) | every example |
-| Several writes, all or nothing | several statements in one `sql` | [Procedure](./procedure.md#handlersql) | reference service `place-order` |
-| An upsert | `INSERT … ON CONFLICT (…) DO UPDATE` | [Procedure](./procedure.md) | reference service `restock` |
-| No lost updates | `WHERE id = input.id AND version = input.expectedVersion` | [Procedure](./procedure.md#row-ops-and-set-ops) | [Commerce](../../examples/commerce.md) |
-| Code: call a service, read then write, set `status` | `handler: { ref }` | [Procedure](./procedure.md#handlerref) | [Commerce inventory](../../examples/commerce-inventory.md) |
-| An HTTP route | a Trigger `kind: http` | [Trigger](./trigger.md#http) | every example |
-| An agent tool | a Trigger `kind: mcp`, or a View | [MCP and agents](../concepts/mcp-and-agents.md) | every example |
-| An Admin operation | a Trigger `kind: mcp, surface: staff` | [Admin](../guides/admin-ui.md) | [Procurement](../../examples/procurement.md) |
-| Signed-in callers only | `requires: { auth: { all: [ctx.user] } }` | [Authorization requirements](./authorization.md) | [Procurement](../../examples/procurement.md) |
-| Staff roles | `{ ctx.staff: [owner, editor] }` | [Authorization requirements](./authorization.md) | [Commerce](../../examples/commerce.md) |
-| API keys and scopes | a custom `CallerResolver`, `{ ctx.auth.scope: … }` | [Authorization](../concepts/authorization.md) | [Guarded API access](../../examples/guarded-api.md) |
-| A live check before one action | `requires.guard` | [Authorization requirements](./authorization.md#guard) | [Intake with bot check](../../examples/intake-hooks.md) |
-| A rule before every write of a Schema | a `before_*` lifecycle Trigger | [Trigger](./trigger.md#lifecycle) | |
-| Side effects after a write | an `after_*` lifecycle Trigger | [Trigger](./trigger.md#lifecycle) | [Intake with bot check](../../examples/intake-hooks.md) |
-| A recurring job | a Trigger `kind: schedule` (POSIX cron) | [Trigger](./trigger.md#schedule) | [Commerce inventory](../../examples/commerce-inventory.md) |
-| A signed webhook | a route in the service's `fetch`, then `runtime.invokeProcedure` | [Writes](../concepts/procedures-and-triggers.md#webhooks) | [Commerce inventory](../../examples/commerce-inventory.md) |
-| Media uploads | `d1Storage(db, { site })` and `r2MediaStorage` | [Media uploads with R2](../cloudflare/media-r2.md) | |
+The native 0.2.0 SDK compiles the closed v2 grammar for four targets. Generation diagnostics, rather than historical APIs or release plans, define the checked-out implementation. Existing integrations require explicit app wiring and data migration; initial schema.sql is for an empty database.
 
-## Not in 0.2.0
+## Supported
 
-| 0.1.x feature | In 0.2.0 |
-|---|---|
-| builtin handlers (`create`, `update`, `upsert`, `delete`, `archive`) | SQL statements; `archive` is a `ref` handler setting `status` |
-| the Filter AST, `params`, `$param`, `$ctx.user` | the View's SQL, `input`, `input.<name>`, `auth.uid()` |
-| `page` / `show` | `limit` / `cursor` |
-| `x-mantle-bind` | `scope`, or `auth.uid()` / `now()` in the SQL |
-| generated record tools on Staff MCP | declared Procedures with `mcp` Triggers |
-| `errorPolicy` on lifecycle hooks | before hooks fail closed; after hooks are best effort |
-| deferred hooks on a Queue | after hooks run after the commit; a queue is the service's own |
-| Mantle-rendered public pages, templates, sitemap | not ported; render from your own `fetch` |
-| `mantle validate`, `emit-openapi`, `mantle skills` | `mantle generate` and `mantle generate --check` |
+| Feature | Availability / agent action |
+| --- | --- |
+| Closed v2 Schema/View/Procedure grammar, PostgreSQL SQL authoring | Generated for Bun SQLite, Bun PostgreSQL, Cloudflare D1 and Cloudflare PostgreSQL; dialect behavior stays native. |
+| Operational Schemas, scope, TTL read visibility, indexes, checks, native SQL facilities | Generated initial DDL and compiled SQL policy; run migrations and TTL maintenance in application code. |
+| System-only TTL maintenance | Generated `<schema>.sweepExpired`, bounded cursor scans and optional dry-run; app owns `scheduled()` wiring and cron configuration. See [TTL maintenance](../guides/native-execution.md#ttl-maintenance). |
+| Typed SQL Views and Procedures, auth predicates, OCC, atomic writes | Generated bare queries accept validated inputs and a verified Caller; date/date-time outputs are ISO strings, native errors stay internal. |
+| Typed Store collections and internal Views/Procedures | Shared Store, AND-only filters, indexed non-null keyset ordering, atomic batches; interactive transactions on SQLite/PostgreSQL. |
+| Searchable fields, Store search and SQL search/rank | Generated SQLite/D1 FTS5 trigram table and maintenance triggers; PostgreSQL ILIKE. Store find/first trim non-empty search and match exact id OR declared fields, within the caller's row rules. |
+| Better Auth integration and Workers builds | App owns `auth.ts` and `resolveCaller`; optional [OAuth helpers](../guides/oauth.md) provide consent/connected apps, live grant/session checks and DPoP. `mantle generate` emits native Wrangler build configuration. Keep heavy auth imports lazy. |
+| Transactional email port, English templates and dev console sender | Optional `@aotter/mantle/email`; app supplies the sender and passes locale through. See [email wiring](../guides/email.md). |
+| View keyset pages, generated boundary validation and HTTP error mapping | Generated `paged/views/*` for proved exposed/internal Views: indexed non-null tuples, complete groups and singleton joins/lookups; `validation/*` and `wire`; see [surface contracts](surface.md). |
+| REST and `http` Trigger exposure | Supported generated `rest.ts`; app mounts with `{ db, caller }` and required `handlers` for ref contracts. Public Views page at `/api/views/<name>`; HTTP Triggers keep method/path. |
+| Generated MCP and `mcp` Trigger exposure | Public/admin tools, shared generated checks, publishing transitions on admin only; SDK loads on matching requests. Install the official MCP peer for manifests selecting this surface. |
+| Dynamic `web.ts` (`llms.txt`, sitemap, `.md` alternates, head tags) | Generated; mount `web({ ... })`; see [surface contracts](surface.md#optional-web-output). |
+| Native Admin bindings, server and console | Supported; select `--admin` / `admin: true` and mount `entries(bindings.schemas, bindings.adapter)`. Shared authorized read templates, native Procedure writes and the console; see [Native Admin](../guides/native-admin.md).  |
+| Localized Schemas and translations | Plain-string locale values, atomic published-parent guard, SQL parent visibility and generated page locale helper; see [Translations](../concepts/lifecycle-and-locales.md#translations). |
+| Opt-in `lifecycle: publishing` | Generated status, `published_at`, admin-only transitions and published-only public reads; see [Publishing](../concepts/lifecycle-and-locales.md). |
+| `ref` Procedures and typed `Handlers` | Generated `Handlers` type; pass implementations at `store(db, caller, { handlers })`; `mantle generate` lists them. See [ref Procedures](../guides/native-execution.md#ref-procedures). |
+| Optional site settings and media | Select `site` defaults at generation to emit the generated `site` module and deployment tables; native media upload lifecycle, app-owned R2/signing. See [media](../cloudflare/media-r2.md). |
+
+## Refused
+
+Each unsupported declaration produces `GENERATE_UNSUPPORTED`, its manifest path,
+and the following hint. Invalid grammar/SQL retains the compiler's own diagnostic
+codes and paths. Multiple declarations produce multiple diagnostics.
+
+| Declaration | Do instead |
+| --- | --- |
+| `schedule` Triggers, including disabled ones | Wire `scheduled()` yourself. |
+| `lifecycle` Triggers: before/after hooks, including targets using `ref` | Write a custom handler. |
+| `requires.guard` on a View or Procedure | Write a custom handler that checks authorization before executing queries. |
+| A View projecting a native `geo` value | Select the latitude and longitude columns explicitly. |
+| Dynamic or repeated View output names | Give each SELECT output a unique explicit alias. |
+| Declared date/date-time outputs without one SELECT item per output | Expand the SELECT list explicitly. |
+| Input properties differing only in case | Rename input properties to be unique without regard to case. |
+| PostgreSQL JSON/date/date-time parameters used without the declared cast | Wrap each occurrence in the concrete `CAST(... AS <type>)` shown by the diagnostic. |
+
+
+Store handles simple AND reads and writes; use internal Views for OR, joins, aggregates and reuse. Ref Procedures are supported with a typed caller/transaction-bound Store. See [typed queries](../guides/typed-queries.md), [lifecycle/locales](../concepts/lifecycle-and-locales.md) and [database ownership](../concepts/runtime-and-adapters.md).

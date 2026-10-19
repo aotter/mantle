@@ -1,127 +1,23 @@
----
-description: Procedure field reference for Mantle 0.2.0 — input and output, SQL and ref handlers, write rules, row ops and locks, target, mcp annotations, uiSchema and diagnostics.
----
 # Procedure
 
-```yaml
-apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: review-order }
-spec:
-  title: Review order                 # optional, a string or a locale map
-  description: …                      # optional; the MCP tool's and Admin operation's description
-  requires: { … }                     # optional, see Authorization requirements
-  input: { type: object, … }          # required JSON Schema
-  output: { type: object }            # required JSON Schema
-  handler: { sql: "…" }               # or { ref: <name> }
-  target: { schema, id, version? }    # optional; inferred for one locked row op
-  mcp: { destructiveHint: true }      # optional tool annotations
-  uiSchema: { … }                     # optional, Admin only
-```
+A Procedure requires `input`, `output` JSON Schemas and a `handler` containing SQL or a ref name. Optional fields include title, description, requires, target, MCP annotations and Admin uiSchema. See [manifest envelope](manifest.md).
 
-`input` is validated before the handler runs (`INPUT_VALIDATION_FAILED`),
-and the result against `output` (`OUTPUT_VALIDATION_FAILED`, a 500: the bug
-is the handler's). `expectedVersion` is the conventional input name for the
-version a caller read.
+SQL uses declared Schemas, `input.<name>`, `auth.uid()` and the expressions [the SQL reference](sql.md) lists for the selected dialect; [SQL patterns](../guides/sql-patterns.md) shows conditional status, approval, partial updates, upserts and guards. Compiler policy supplies scope and system fields. Do not assign scope, version, status, published_at, timestamps or author columns yourself. A SQL Procedure cannot write a `publishing` Schema: create and edit its rows from a ref handler through the Store, and change status with the generated publish/unpublish/archive transitions. `restrict` narrows the rows the statements read and write, as on a [View](view.md#restrict); it is refused on ref handlers.
 
-## `handler.sql`
+A row-classified INSERT/UPDATE/DELETE (one that targets a single row, e.g. `WHERE id = input.id`) must affect one row. Use `WHERE id = input.id AND version = input.expectedVersion` for explicit OCC. Set operations, including UPDATE with a subquery and `INSERT ... SELECT`, may affect zero rows without an error: check the returned rows when zero means failure. A unique clash, a failed Schema `checks` constraint or a failed row assertion is `CONFLICT` (409) with `kind` `"unique"`, `"check"` or `"row"` ([diagnostics](diagnostics.md)); statements run atomically. A check failure keeps that code, and its message is `A check of the Schema failed: <schema>: <check>` on every target, with the driver's own error only in `cause`; `ContractError.fields` is `{ kind: "check", schema, check }`. `check` is the expression on SQLite/D1 and the generated constraint name on PostgreSQL. Results are raw `{ results }`: one array of RETURNING rows per statement, in order (`results[0][0].id` is the first statement's first row), not runtime-validated authored outputs, with driver-native values: a SQLite/D1 boolean is `1`/`0` here, while a View returns a declared boolean column as `true`/`false`; read a row back through a View when a client needs the typed form. An array input is a row source: `json_each(input.items)` on SQLite/D1 and `jsonb_array_elements(input.items) AS j(value)` on PostgreSQL write any number of rows in the same atomic program. Callers pass the array itself (from a handler, `ctx.store.procedures["place-order"]({ orderRef, items })`); the generated input type is the authored one and the generated query serializes a JSON input for the driver, so no `JSON.stringify` is needed (a string is bound as it is). See [several rows that commit together](../guides/typed-queries.md#several-rows-that-commit-together). RETURNING uses SQL output names; quote an explicit alias to preserve declared case (`RETURNING reqStatus AS "reqStatus"`). Generation warns about unaliased direct fields whose declared name differs from storage.
 
-One or more `INSERT`, `UPDATE` and `DELETE` statements separated by `;`,
-applied as one batch: all or nothing, in order. The output is
-`{ "results": [[…], …] }`, the `RETURNING` rows of each statement in order; so
-an `output` of `{ type: object }` accepts it.
+A row-classified UPDATE/DELETE on an excluded or missing id affects zero rows and returns HTTP 409 (`CONFLICT`), just like a stale version; reads return not found. Native Admin's visible-row pre-read returns 404 for excluded/missing ids.
 
-| Statement | Supported |
-|---|---|
-| `INSERT` | `INSERT INTO t (cols) VALUES (…)` (one row), `INSERT INTO t (cols) SELECT …`, `ON CONFLICT (cols) DO NOTHING \| DO UPDATE SET c = EXCLUDED.c …`, `RETURNING` |
-| `UPDATE` | `UPDATE t SET c = <expr> … WHERE …`, `RETURNING` |
-| `DELETE` | `DELETE FROM t WHERE …`, `RETURNING` |
+A ref handler is application code called as `(ctx, input)`. Generation lists the `Handlers` keys the app must provide (every run, whether or not they exist yet); `tsc --noEmit` checks the implementation against the generated `Handlers` type. Wire them at `store(db, caller, { handlers })` and selected surfaces. The context has the Caller, the native db and a Store for that caller. A handler is not one transaction by itself: when it runs inside a caller's `store.transaction`, its db and Store are that transaction's; otherwise each write commits on its own. On PostgreSQL and bun:sqlite, `ctx.transaction(async ({ store, db }) => …)` makes writes that must commit together atomic; it joins the transaction the handler already runs in. A joined transaction has no savepoint, so let an error inside `ctx.transaction` propagate: a handler that catches it and carries on keeps the writes made before the error. Keep external calls (payments, supplier APIs) outside it, so a callback never waits for an uncommitted row. D1 has no interactive transactions, so its `HandlerContext` has no `transaction`: put writes that must commit together in one SQL Procedure, whose statements commit together, and call it through `ctx.store.procedures`. It is not a sandbox; the app owns external side effects and input/output handling. The context has no `env`: on Workers read bindings and secrets with `import { env } from "cloudflare:workers"`. The Caller carries no name or email; `userOf(caller)` from `@aotter/mantle/auth` returns the Better Auth user record it was resolved from, for session, OAuth and service credentials alike (undefined for system callers).
 
-Expressions are those of [View SQL](./view.md#what-the-d1-dialect-accepts).
-References: `input.<name>`, `auth.uid()`, `auth.role()`, `now()`.
+`target: { schema, id, version? }` binds an Admin operation to a row. SQL targets can be inferred for a single locked row operation; declare a target for a ref operation when needed. Input fields must have the required shapes.
 
-**A write may not name** the scope field, `version`, `status`, `created_at`,
-`updated_at`, `author_id`, or `id` in an `UPDATE`, in a column list, `SET` or
-`DO UPDATE SET`; on a scoped Schema an `INSERT` names no `id`. Store fills
-them (`SQL_WRITE`). Multi-row `VALUES` is refused: insert from
-`json_each(input.items)` instead. `UPDATE … FROM`, `DELETE … USING`,
-`INSERT OR …` and `last_insert_rowid()` are refused.
+## MCP tool hints
 
-**RETURNING names** fold to lower case unless quoted:
-`RETURNING id, orderNumber AS "orderNumber"`.
+Every generated AI-facing tool (MCP, WebMCP, publishing and media tools) carries a `title`, `readOnlyHint` and `destructiveHint`; clients such as Claude use them to decide between auto-approval and confirmation. The title is the declared `title`, else the name made readable (`add-item` reads `Add item`). A View is `readOnlyHint: true, destructiveHint: false`. A Procedure is `readOnlyHint: false`, and `destructiveHint` is `false` only when its SQL inserts without overwriting: any DELETE or UPDATE, an `ON CONFLICT DO UPDATE` or a ref handler makes it `true`. Of the generated publishing transitions only `archive` is destructive. The media tools always carry `openWorldHint: true`; the upload policy, list and get tools are read-only and only `delete_media_asset` is destructive. Admin's WebMCP navigation tools (`admin_get_context`, `admin_navigate`) are read-only. `spec.mcp` accepts `readOnlyHint`, `destructiveHint` and `openWorldHint`, and a declaration always wins; a declared `readOnlyHint: true` defaults `destructiveHint` to `false`. Outside the media tools `openWorldHint` appears only when declared. `idempotentHint` is never generated, and `spec.mcp` refuses it. Hints never change authorization.
 
-### Row ops and set ops
+Generated requires checks gate calls. Boundary input validators are generated separately; direct queries accept driver-ready, app-validated input. Dynamic guards and lifecycle hooks are rejected. See [native execution](../guides/native-execution.md) and [surface contracts](surface.md).
 
-- **Row op**: an `UPDATE` or `DELETE` whose top-level `WHERE` has
-  `id = <value>`, or a one-row `INSERT … VALUES` without `ON CONFLICT`. If it
-  writes no row the batch fails with `CONFLICT` and nothing applies.
-- **Set op**: everything else. Writing no row is a normal result. Refused on a
-  `publishing` Schema, and on a Schema with a `before_*` hook for that
-  operation.
-- **Lock**: `AND version = input.<name>` in a row op's `WHERE`. A stale version
-  matches nothing, so it is `CONFLICT` (HTTP 409).
+SQL `INSERT … VALUES`/upsert into a user-field scoped Schema follows the Store's insert rule ([field scope](schema.md#field-scope)); `INSERT … SELECT` into it is system-only, so a ref handler inserts those rows through `ctx.store`. `ctx.store` speaks storage names, not the manifest's: the handler's `input` uses authored names (`input.parentId`), while Store writes, filters and rows use the folded column (`insert({ parentid: input.parentId })`, `where: { parentid }`, `row.parentid`); generated Store types show the exact names ([typed queries](../guides/typed-queries.md)). SET cannot change a field-scope column, including ON CONFLICT DO UPDATE. Scoped unique conflict targets gain the owner/field prefix automatically.
 
-### `target`
-
-`{ schema, id, version? }`: the Schema the Procedure mutates, the required
-string input holding the row id, and the integer input holding the version it
-locks. Admin binds an operation to a row by it. A Procedure whose SQL is
-exactly one row op pinning `id` (and `version`) to inputs gets it inferred;
-declare it for a `ref` handler. `PROCEDURE_TARGET_INVALID` when the inputs do
-not have those shapes.
-
-## `handler.ref`
-
-```yaml
-handler: { ref: cancelOrder }
-```
-
-The name of a function in the service's `handlers` map. The generated
-`MantleHandlers` type lists exactly the plan's refs, with typed input and
-output; boot refuses a missing one (`HANDLER_NOT_REGISTERED`) and an extra
-one (`HANDLER_NOT_DECLARED`).
-
-```ts
-(input, ctx) => output | Promise<output>
-// ctx: { caller, cause, store, invoke, env, waitUntil }
-```
-
-A handler reaches Mantle-owned rows only through `ctx.store`
-([Query from TypeScript](../guides/typed-queries.md)). It throws
-`DiagnosticError` (from `@aotter/mantle`) to answer with a code; any
-other throw is logged and answered as `INTERNAL_ERROR`. Guards, before hooks
-and lifecycle targets must be `ref` handlers.
-
-## `requires`
-
-`requires.auth.all` (predicates) and `requires.guard.procedure` (a `ref`
-Procedure run before this one). See
-[Authorization requirements](./authorization.md).
-
-## `mcp`
-
-`readOnlyHint`, `destructiveHint`, `openWorldHint` (booleans), copied onto the
-MCP tool. `readOnlyHint` and `destructiveHint` may not both be true, and a SQL
-handler, which always writes, may not claim `readOnlyHint: true`.
-
-## `uiSchema`
-
-| Key | Effect in Admin |
-|---|---|
-| `fields.<name>.widget: textarea` | a multiline input |
-| `collectionAction: <schema>` | offer the operation on that collection's list |
-
-Admin lists a Procedure as an operation only when a Trigger binds it to the
-staff MCP surface.
-
-## Diagnostics
-
-Validate: `SQL_SYNTAX`, `SQL_UNSUPPORTED`, `SQL_FUNCTION`, `SQL_RELATION`,
-`SQL_COLUMN`, `SQL_WRITE`, `SQL_SHAPE`, `SQL_TYPE`, `PROCEDURE_TARGET_INVALID`,
-`GUARD_PROCEDURE_UNKNOWN`, `GUARD_SELF_REFERENCE`, `GUARD_PROCEDURE_NOT_REF`,
-`GUARD_CHAIN_NOT_ALLOWED`, `MCP_TOOL_DESCRIPTION_MISSING` (a warning),
-`MCP_TOOL_INPUT_UNION_AMBIGUOUS`, `MCP_TOOL_INPUT_UNBOUNDED`. Boot:
-`HANDLER_NOT_REGISTERED`, `HANDLER_NOT_DECLARED`. Run time:
-`INPUT_VALIDATION_FAILED`, `UNAUTHENTICATED`, `AUTH_DENIED`,
-`ENTITLEMENT_REQUIRED`, `CONFLICT`, `OUTPUT_VALIDATION_FAILED`,
-`INVOCATION_DEPTH_EXCEEDED`, `INTERNAL_ERROR`. See [Diagnostics](./diagnostics.md).
+Triggers are the only way request data reaches a Procedure: REST and MCP validate the input against the Procedure's schema, then call it. App code may also call a generated Procedure directly (`import run from "../generated/procedures/<name>.js"`, `await run(db, caller, input)`) or through the Store (`ctx.store.procedures[name](input)` in a handler); `requires`, row policy and checks still apply, but input validation does not, so pass only data the app produced or has verified (a cron job, a callback after its signature check). A page that takes user input submits it to the Procedure's REST Trigger; see `node_modules/@aotter/mantle/docs/examples/purchasing/src/requests-page.ts`.

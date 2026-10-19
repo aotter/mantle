@@ -15,7 +15,7 @@ No task implicitly authorizes publication; no manual package/tag writer exists.
 |---|---|---|
 | Reviewed source; unused version | Core source/packed-consumer gates, then immutable Core tag | Exact canonical merged PR SHA and version required |
 | Tag exists; registry candidates partial | Existing npm/GPR publication steps | Verify existing artifact identity; publish missing versions only |
-| Tag exists and both npmjs packages already exist | Metadata verify, then channel promote and the GitHub release | Skip pack and immutable tarball compare. The controller tip must not rebuild published artifact identity. npm integrity metadata still has to be `sha512`. The public-registry Worker gate stays skipped |
+| Tag exists and all three npmjs packages already exist | Metadata verify, then channel promote and the GitHub release | Skip pack and immutable tarball compare. The controller tip must not rebuild published artifact identity. npm integrity metadata still has to be `sha512`. The public-registry Worker gate stays skipped |
 | Tag exists on an ancestor of the dispatched tip; tip package versions still match | Resolve binds release identity to the tag SHA; later steps stay the existing writers | Controller-only recovery. Do not retag. The canonical merged-PR check uses the tag SHA. Fail when the tip version differs or the tag commit is not an ancestor |
 | Registry candidates verified | Public-registry reference consumer gate | No mutation; failure leaves public channels and `mantle-release` unchanged |
 | Consumer passes | That registry's promote step: monotonic channel add for every package | Same version is a no-op; older runs cannot move a channel backward. Public channels are only `alpha`, `beta`, `rc`, and `latest`. `mantle-release` is never removed |
@@ -111,17 +111,14 @@ dist-tag DELETE only added failure and re-run state, and Actions
    git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
 
-   The plugin's Cloud helper, `skills/mantle/scripts/mantle-cloud.mjs`, is
-   plain source with no build; it ships with the plugin version above.
-
-   Leave the consumer cold-start entry **untagged**: `npx skills add
-   aotter/mantle`, `/plugin marketplace add aotter/mantle`,
-   `codex plugin marketplace add aotter/mantle` and the plugin-manifest
-   descriptions carry no `@v…` / `--ref`. Untagged resolves to `main`, which
-   normally moves at a release but may contain a source-only hotfix; the
-   installed npm package remains the version authority
-   (#995, #998). Only "installed version" statements such as
-   `(currently \`X.Y.Z\`)` are bumped.
+   Pin consumer skill/plugin installation examples to the release's Git tag;
+   follow the client syntax in [agent setup](handbook/guides/agent-setup.md).
+   Alpha releases stay on `develop`, so unqualified installs from `main` can
+   return an incompatible older skill. Update the root README, agent setup,
+   skills README and versioned reference-service links together. Keep plugin
+   descriptions version-neutral; the installed npm package remains the API
+   authority. The new tag becomes installable only after the controller creates
+   it. Do not create it manually or promote `main` just to deliver alpha skills.
 
 3. Review API compatibility and migration instructions for actual consumers.
    Frozen legacy consumers stay on their pinned version; do not make them
@@ -129,21 +126,31 @@ dist-tag DELETE only added failure and re-run state, and Actions
 4. Run `pnpm check`, including the reference service from exact packed
    tarballs, skills, release invariants, types and tests. The controller runs
    the same `pnpm check` against a PostgreSQL service (`MANTLE_PG_URL`), then
-   native Bun conformance (`test:bun`), before it tags. Inspect the `@aotter/mantle` docs payload
-   (`scripts/sync-package-docs.mjs`: the upgrade guide, ADRs, handbook,
-   examples and package skills): no workspace dependencies, secrets or local
-   state.
+   four-target native conformance (`test:native`), before it tags. Inspect the `@aotter/mantle` docs payload
+   (`scripts/sync-package-docs.mjs`: the upgrade guide, handbook, selected
+   runnable examples, workflow skills and plugin skill): no workspace
+   dependencies, secrets or local state. ADRs and the reference-service source
+   stay in the repository; packaged links to them must use a versioned URL.
+   Run the maintainer release skill's
+   [startup and request-cost checkpoint](../.agents/skills/mantle-release/SKILL.md#startup-and-request-cost-checkpoint)
+   when its auth/kernel/generator trigger applies and before every alpha or beta.
 5. Freeze the PR head for self review; CI must pass before merge. Merge into
    `develop` with a merge commit for every version. For an alpha, dispatch
    release.yml from that merge with `version` (without v). For beta, RC and
    stable, continue with the promotion below. The controller refuses an
    untagged source that is no longer the expected branch tip.
 
-The two public packages, in dependency order (0.2.0 folded the other twelve
-into `@aotter/mantle`'s subpaths and `@aotter/mantle-ui/admin`, ADR-0032 decision 13):
+The three public packages, in dependency order:
 
-1. @aotter/mantle-ui
-2. @aotter/mantle
+1. @aotter/mantle-ui — pure shared UI/controller/kit.
+2. @aotter/mantle — the single native Core SDK, compiler, generator and CLI.
+3. @aotter/mantle-admin — optional Admin server, SPA and MCP App; SDK is a peer.
+
+All three versions stay in lockstep. The same package list drives existence,
+packing, registry verification and channel promotion; partial publication must
+not bypass the consumer gate. Frozen legacy releases retain their tagged
+controller and two-package topology. This migration does not authorize a
+release or reusing an already published version.
 
 A `0.2.0-alpha.N` publishes on the same `alpha` channel as every alpha: the
 controller owns channels, so `publishConfig.tag` never picks one. Promoting it
@@ -224,7 +231,7 @@ preflight cannot prove write access for a package's first publish
 (`@aotter/mantle-ui` with 0.2): `npm access` lists only existing packages, so
 confirm NPM_TOKEN has `@aotter` scope write before the immutable tag.
 
-Completion requires the Core tag SHA, both npmjs/GPR packages, exact
+Completion requires the Core tag SHA, all three npmjs/GPR packages, exact
 integrity, no workspace dependencies, a passing public-registry Worker gate,
 correct channel tags, and the GitHub release. Leftover `mantle-release`
 pointing at the last published candidate is expected. Retain run links and
@@ -246,7 +253,7 @@ from the source branch. Resolve recovers using the existing tag SHA when
 that commit is an ancestor of the tip and package versions on the tip still
 match. The tag owns the release SHA; the tip only carries controller fixes.
 Tagged recovery skips the Core source check because that tree was already
-released from the immutable tag. When `tag_exists` and both npmjs
+released from the immutable tag. When `tag_exists` and all three npmjs
 packages already exist at that version, that same existence check skips
 packing, immutable tarball comparison, and the public-registry Worker gate.
 The controller tip must not rebuild an artifact whose identity is already

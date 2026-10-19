@@ -1,0 +1,75 @@
+# Recipes. The parent row is the default locale (zh-TW); recipe_translations holds each other locale (en, ...).
+# Both use the publishing lifecycle: Admin creates drafts, publish makes them visible to visitors.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: recipes}
+spec:
+  title: Recipes
+  lifecycle: publishing
+  uniqueIndexes: [[slug]]
+  searchableFields: [title]
+  schema:
+    type: object
+    required: [slug, title, summary, ingredients, steps, total_minutes, servings]
+    properties:
+      slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}
+      title: {type: string}
+      summary: {type: string, description: "One or two sentences; used as the meta description."}
+      ingredients: {type: string, description: "One ingredient per line."}
+      steps: {type: string, description: "One step per line."}
+      total_minutes: {type: integer, minimum: 1}
+      servings: {type: integer, minimum: 1}
+      cover_url: {type: string, description: "Public URL of a committed cover image from the media library."}
+  uiSchema:
+    fields:
+      summary: {widget: textarea}
+      ingredients: {widget: textarea}
+      steps: {widget: textarea}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: recipe_translations}
+spec:
+  title: Recipe translations
+  lifecycle: publishing
+  localized: true
+  # Shares `slug` with its parent; reads merge the parent's total_minutes, servings and cover_url.
+  # A translation publishes only while its parent is published.
+  translates: {parent: recipes, on: slug}
+  uniqueIndexes: [[slug, locale]]
+  schema:
+    type: object
+    required: [slug, locale, title, summary, ingredients, steps]
+    properties:
+      slug: {type: string, maxLength: 80}
+      locale: {type: string, description: "BCP 47 tag, e.g. en"}
+      title: {type: string}
+      summary: {type: string}
+      ingredients: {type: string}
+      steps: {type: string}
+  uiSchema:
+    fields:
+      summary: {widget: textarea}
+      ingredients: {widget: textarea}
+      steps: {widget: textarea}
+---
+# Visitor list for the default locale. Public Views return published rows only.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: published_recipes}
+spec:
+  surface: public
+  sql: SELECT id, slug, title, summary FROM recipes ORDER BY id
+---
+# Visitor list for one translated locale; a translation is hidden while its parent is unpublished.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: published_translations}
+spec:
+  surface: public
+  input:
+    type: object
+    required: [locale]
+    additionalProperties: false
+    properties: {locale: {type: string, minLength: 2, maxLength: 35}}
+  sql: SELECT id, slug, title, summary FROM recipe_translations WHERE locale = input.locale ORDER BY id

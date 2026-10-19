@@ -2,6 +2,8 @@
 
 **Status:** Accepted for 0.2.0. Amends ADR-0032 decisions 6 and 12, ADR-0033, and ADR-0034 decisions 2, 3, 5, 6, 7, 8 and 9. Amended by its PostgreSQL dialect amendment (#1293), [ADR-0036](0036-host-and-dialect.md) and [ADR-0037](0037-postgresql-is-the-reference-dialect.md).
 
+**0.2.0 status (2026-10-13):** The open SQL dialect interface in decisions 3, 5 and 8 is superseded by the native Core database boundary (#1566). Drivers remain open structural handles; dialects are closed to `postgres` and `sqlite`. A third engine requires a compiler and Store runtime fork. Runtime schema installation described here is historical; the runtime runs no DDL or schema checks.
+
 **Date:** 2026-09-30
 
 **Related:** ADR-0032, ADR-0033, ADR-0034
@@ -125,6 +127,8 @@ Proposed.
 > - `mantle.config.json` version 2 takes an optional `dialect`, a package name (never a path). `mantle generate` resolves `<dialect>/compile` from the project with `require.resolve`, so the package's `exports` must give it a `default` (or `require`) condition, imports it and compiles with it; absent, or `@aotter/mantle/d1`, it is the built-in dialect. The config's other keys are unchanged.
 > - The shared front end refuses decision 4's list before `accepts`: statements other than `SELECT`, `INSERT`, `UPDATE`, `DELETE` and `MERGE`; a relation that is not a declared Schema or a CTE of the statement, or that names a schema; an undeclared `input.<name>`; a `mantle.*` or `auth.*` function that decision 2 does not define; and the session, server and outside-access functions (`set_config` and `current_setting` of a `mantle.*` setting or of a name that is not a literal, advisory locks, file and large-object access, `dblink`, backend signals, `pg_reload_conf`, `pg_notify`, sequences, and the functions that run SQL text: `query_to_xml` and its kin, `ts_stat`, `ts_rewrite`); `SELECT … INTO`. Function names are compared as PostgreSQL resolves them (a catalog prefix and `pg_catalog.` dropped); a relation that names a CTE in scope, by PostgreSQL's scoping, is tagged `cte`.
 > - Lowering stays on the runtime side: Store builds its JSON queries at run time (and `StoreSelect.search`, How to apply 3), so they need it there. The compile side's `lower` and `outputs` are not built; `viewOutputs` reads a View's row type for every dialect.
+>
+> > Amended by ADR-0044: sealed Views and inline Procedures are also lowered by `mantle generate`; Store JSON reads and request shapes that cannot be enumerated are still lowered at run time.
 
 
 > **Amendment (How to apply 4, 2026-09-30):** Decision 9 as built. Better Auth does not expose its Kysely instance, and reaching it would add a dependency (`@better-auth/kysely-adapter`) for a handful of statements, so `createMantleAuth` does not use Kysely:
@@ -152,3 +156,8 @@ Proposed.
 >
 >   Elsewhere the meaning is PostgreSQL's (`LIKE` case, division by zero, `->>` returning text).
 > - **Not yet:** site settings and media (D1 only), a trigram or GiST index behind `searchableFields` and `format: geo`, and `mantle generate --check`'s storage dry run (D1 only).
+
+## 2026-10-10 amendment — Schema readers (ADR-0043)
+
+- **Decision 7:** `StoreSelect.search` is the reader's `search` (`find({ search })` and `first({ search })`): the same text match over the declared search fields, or the id, under the caller's visibility. The compliance cases run on readers.
+- **Lowering:** the runtime lowering described above still holds. Readers lower a query shape on its first use and keep the compiled shape (ADR-0043); the plan format and fingerprint are unchanged.

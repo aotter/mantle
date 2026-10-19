@@ -1,90 +1,19 @@
----
-description: Publishing and operational Schemas, the draft-publish-archive rules Store enforces, TTL expiry, and localized Schemas in Mantle 0.2.0.
----
 # Lifecycle and locales
 
-## Two lifecycles
+Schemas default to `operational`: rows are live immediately and edit in place. Opt-in `publishing` adds `status` (draft/published/archived), nullable `published_at` and a scope-aware `(published_at, id)` index.
 
-A Schema's `lifecycle` decides how its rows move. The default is
-`publishing`.
+Generated `<table>.publish`, `.unpublish` and `.archive` Procedures take `{ id, expectedVersion }`, require admin/system and perform one atomic UPDATE. Publish checks required fields, visibility, TTL, source state and OCC. A failed guard is `CONFLICT`. Store cannot write status/published_at directly. Admin permits generic publishing edits only on drafts; Store does not add that separate Admin editing rule.
 
-| | `publishing` | `operational` |
-|---|---|---|
-| For | authored content: posts, products, legal text | records written by Procedures: orders, requests, audit rows |
-| A new row | is a `draft`, saved even when incomplete | is live at once, validated in full |
-| Editing | only drafts are editable; a published row is protected | rows edit in place |
-| Statuses | `draft` → `published` → `archived`, `published` → `draft` (unpublish), `archived` → `draft` | none: no `status` column; a row is live once written |
-| Public Views | see published rows only | see every row |
-| Set ops | refused (every write pins one row) | allowed |
+Public Views see published rows only. Other reads expose drafts only to admin/system. This policy applies to joins and nested queries too.
 
-One domain service, the lifecycle state machine inside Store, enforces these
-rules for every path: SQL Procedures, `ctx.store`, Admin and imports.
-Publishing a row needs its required fields complete, and publishing a
-translation needs its parent published first.
+## Translations
 
-**SQL cannot set `status`.** A write that names it is refused. Status moves
-through:
+`localized: true` declares a locale string. `translates: { parent, on }` declares a localized child sharing a join key with its parent. A scoped parent needs the same child scope column. A publishing translation can publish only when its caller-visible parent is published (or operational); the parent guard is inside the atomic UPDATE. Unpublishing a parent hides translations without changing their status.
 
-- Admin's API: `POST /admin/api/entries/{id}/publish` and `/unpublish`;
-- a `ref` handler: `ctx.store.write([{ update: "posts", set: { status: "archived" }, where: { id }, lock }])`.
+Store translation reads merge visible parent fields, with child fields taking precedence. Authored Views return only their SELECT outputs. Generated `translations.ts` exports `translationLocales(db, caller, parent, rows)` for a parent page (up to 500 storage-named rows); it uses batched authorized child reads rather than one query per parent. Stored locale values remain plain strings; site locales do not rewrite or validate them automatically.
 
-## TTL
+SQLite/PostgreSQL interactive Store transactions refuse to combine translation publication and a parent status change in either order. D1 has no interactive Store transactions. The app owns consistency for native transactions outside Store.
 
-```yaml
-spec:
-  ttl: { field: expiresAt, expireAfterSeconds: 0 }
-  schema:
-    properties:
-      expiresAt: { type: string, format: date-time }
-```
+## Expiry
 
-A row expires `expireAfterSeconds` after the time in `field`, a top-level
-`date-time` field. Expiry is logical: every read and write, `runtime.store`
-included, treats an expired row as absent. Removing the rows is a separate,
-host-only step:
-
-```ts
-await runtime.store.sweepExpired({ collection: "sessions", limit: 500 }); // { scanned, removed, nextCursor? }
-```
-
-Run it from a schedule Trigger's `ref` handler, where the system caller's
-`ctx.store` has it (`await ctx.store.sweepExpired?.({ collection: "sessions" })`;
-a member's `ctx.store` does not), or from your own maintenance code.
-`delete: false` counts without deleting. Until it runs, an expired row still
-holds its unique keys: an insert that reuses one is `CONFLICT` (`unique`). A translation Schema may not
-declare `ttl`.
-
-## Localized Schemas
-
-`localized: true` marks a Schema whose rows carry a `locale` field; a
-non-localized Schema may not declare a field named `locale`.
-
-```yaml
-kind: Schema
-metadata: { name: post-translations }
-spec:
-  localized: true
-  translates: { parent: posts, on: slug }
-  uniqueIndexes: [[slug, locale]]
-```
-
-`translates` makes the Schema the localized child of a non-localized parent,
-joined on a field both declare. It needs `localized: true`, at least one
-content field besides the join field and `locale`, and a parent that exists
-and is not localized. Admin groups translations under their parent, and
-publishing a translation needs its parent published.
-
-In 0.2.0, `locale` is a plain string field: Store does not check it against the
-site's locales, and no surface resolves a request's locale or falls back to a
-default one. A View takes the locale as `input` (see
-[Publication](../../examples/publication.md)); fallback is the reader's code.
-
-Manifest text (`title`, `description`) may be a locale map,
-`{ en: Products, zh-TW: 商品 }`. Admin picks the viewer's locale and MCP the surface's `locale` option (default `en`), then
-`en`, then the first entry.
-
-## Further reading
-
-- [Schema reference](../reference/schema.md)
-- [Site defaults and site_config](../reference/site-config.md): the site's
-  `locales` list
+TTL hides expired rows but does not delete them. Use generated system-only `<schema>.sweepExpired` from an application scheduler; [TTL maintenance](../guides/native-execution.md#ttl-maintenance) defines limits and cursors. Until removed, expired rows still occupy unique keys.

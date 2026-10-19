@@ -66,9 +66,9 @@ try {
   if(!cached) { await api(who,'/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'});
     await api(who,'/api/auth/sign-in/email-otp',{email,otp:await code(email)}); await context.storageState({path:state}); }
   const login=await api(who,'/api/auth/get-session'); users[who]=login.user.id;
-  if(who!=='outsider')await api('owner',`/admin/api/staff/${login.user.id}/role`,{role:'contributor'},200,'PATCH');
+  if(who!=='outsider')await api('owner',`/admin/api/admin/${login.user.id}/role`,{role:'contributor'},200,'PATCH');
  }
- check('real sessions and staff role assignment');
+ check('real sessions and admin role assignment');
  const flags={owner:[true,true,true,true,true],requester:[true,false,false,false,false],manager:[true,true,false,false,false],finance:[false,false,true,false,false],buyer:[false,false,false,true,false],receiver:[false,false,false,false,true]};
  await seed('roles',Object.entries(flags).map(([who,v])=>({id:`role-${who}`,values:{name:`自訂角色 ${who}`,...Object.fromEntries(['request','approve','finance','purchase','receive'].map((f,i)=>[f,v[i]]))}})));
  await seed('memberships',Object.keys(flags).map(who=>({id:`member-${who}`,values:{subject:users[who],displayName:`內控測試 ${who}`,department:'研發部',roleId:`role-${who}`}})));

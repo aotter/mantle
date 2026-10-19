@@ -1,0 +1,247 @@
+# Club events: officers (admin) create events in Admin; signed-in members register and cancel their own seats.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: events }
+spec:
+  title: Events
+  lifecycle: operational
+  # Registering adds to seats_taken in the same program as the insert: past capacity the check fails and the insert rolls back.
+  # It also refuses an officer lowering capacity below the seats already taken.
+  checks: ["seats_taken <= capacity"]
+  indexes: [[startsAt, id]]
+  uiSchema: { list: { primaryField: title, columns: [startsAt, capacity, seats_taken, closed] } }
+  schema:
+    type: object
+    required: [title, startsAt, capacity, closed]
+    properties:
+      title: { type: string, minLength: 1 }
+      startsAt: { type: string, format: date-time }
+      capacity: { type: integer, minimum: 0, title: Capacity }
+      # readOnly: server-maintained. Admin's generic create/edit never writes it; only register/cancel change it.
+      seats_taken: { type: integer, minimum: 0, default: 0, readOnly: true, title: Seats taken }
+      closed: { type: boolean, default: false }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: registrations }
+spec:
+  title: Registrations
+  lifecycle: operational
+  # No `scope` here: a field scope would hide rows from officers too. Members are narrowed by `restrict` below.
+  # `member` is written by the register handler from the caller; native authorId cannot be in a unique index.
+  uniqueIndexes: [[eventId, member]]
+  indexes: [[authorId, createdAt, id]]
+  # Officers read registrations in Admin; generic edits would bypass seats_taken, so writes go through the Procedures.
+  uiSchema: { list: { primaryField: eventId, columns: [memberName] } }
+  schema:
+    type: object
+    readOnly: true
+    required: [eventId, member]
+    properties:
+      eventId: { type: string, x-mantle-ref: events }
+      member: { type: string }
+      # A snapshot of the member's name at sign-up, so officers see who registered (member is an opaque id).
+      memberName: { type: string, maxLength: 200 }
+---
+# The sign-up allowlist: officers add members in Admin; src/signup.ts lets only these emails create an account.
+# No View or Trigger reads it, so it stays out of the public API and MCP.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: members }
+spec:
+  title: Members
+  lifecycle: operational
+  uniqueIndexes: [[email]]
+  # Better Auth lowercases emails; the check refuses a mixed-case entry that would never match.
+  checks: ["email = lower(email)"]
+  uiSchema: { list: { primaryField: email, columns: [name] } }
+  schema:
+    type: object
+    required: [email]
+    properties:
+      email: { type: string, format: email, maxLength: 254, title: Email }
+      name: { type: string, maxLength: 200, title: Name }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: events }
+spec:
+  surface: public
+  description: Upcoming club events with the seats still available.
+  requires: { auth: { all: [ctx.user] } }
+  sql: |
+    SELECT id, title, startsAt AS "startsAt", capacity - seats_taken AS seats_left, closed FROM events ORDER BY startsAt, id
+---
+# Only the caller's own rows: restrict narrows registrations to author_id = the caller.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: my-registrations }
+spec:
+  surface: public
+  description: The signed-in member's registrations.
+  requires: { auth: { all: [ctx.user] } }
+  restrict: { registrations: "author_id = auth.uid()" }
+  sql: |
+    SELECT r.id, r.eventId AS "eventId", e.title, e.startsAt AS "startsAt"
+    FROM registrations r JOIN events e ON e.id = r.eventId
+    ORDER BY r.created_at DESC, r.id DESC
+---
+# Officers' roster: each event with its attendees as one JSON array, so one read answers "who is coming".
+# The correlated subquery gives [] for an event nobody registered for (a LEFT JOIN + GROUP BY would give one empty object).
+# SQLite/D1 builds the objects with json_set; on PostgreSQL write jsonb_agg(jsonb_build_object('memberName', r.memberName)).
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: event-roster }
+spec:
+  title: Event roster
+  surface: admin
+  requires: { auth: { all: [ctx.admin] } }
+  sql: |
+    SELECT e.id, e.title, e.startsAt AS "startsAt", e.seats_taken AS "seatsTaken",
+      (SELECT json_group_array(json_set('{}', '$.memberName', r.memberName)) FROM registrations r WHERE r.eventId = e.id) AS attendees
+    FROM events e ORDER BY e.startsAt, e.id
+---
+# The member-facing entry: a ref handler checks the event, then runs register-write.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: register }
+spec:
+  title: Register for an event
+  description: Take one seat at a club event for the signed-in member. Fails when the event is closed, full or already registered.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [eventId]
+    additionalProperties: false
+    properties:
+      eventId: { type: string }
+  output: { type: object }
+  handler: { ref: register }
+---
+# Internal (no Trigger): one program, so a failed seat check rolls back the insert too.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: register-write }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [eventId, member]
+    properties:
+      eventId: { type: string }
+      member: { type: string }
+      memberName: { type: string, maxLength: 200 }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO registrations (eventId, member, memberName) VALUES (input.eventId, input.member, input.memberName) RETURNING id, eventId AS "eventId";
+      UPDATE events SET seats_taken = seats_taken + 1 WHERE id = input.eventId RETURNING capacity - seats_taken AS seats_left
+---
+# restrict: another member's registration is invisible here, so the UPDATE matches no row -> CONFLICT, nothing changes.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: cancel-registration }
+spec:
+  title: Cancel a registration
+  description: Cancel one of the signed-in member's registrations and return the seat.
+  requires: { auth: { all: [ctx.user] } }
+  restrict: { registrations: "author_id = auth.uid()" }
+  input:
+    type: object
+    required: [id]
+    additionalProperties: false
+    properties:
+      id: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE events SET seats_taken = seats_taken - 1 WHERE id = (SELECT eventId FROM registrations WHERE id = input.id) RETURNING capacity - seats_taken AS seats_left;
+      DELETE FROM registrations WHERE id = input.id RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: register-http }
+spec:
+  source: { kind: http, method: POST, path: /api/registrations }
+  target: { procedure: register }
+---
+# "Your AI" registers for the member over the member MCP endpoint (/mcp) with the member's own sign-in.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: register-mcp }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: register }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: cancel-registration-http }
+spec:
+  source: { kind: http, method: POST, path: /api/registrations/cancel }
+  target: { procedure: cancel-registration }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: cancel-registration-mcp }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: cancel-registration }
+---
+# Officers add records through declared Procedures: operational collections have no generic create in Admin.
+# collectionAction puts the Procedure's button and input form in that collection's list header; the admin MCP
+# Trigger is what makes it an Admin operation (and lets the officers' AI do the same).
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: create-event }
+spec:
+  title: New event
+  description: Create a club event with its capacity.
+  requires: { auth: { all: [ctx.admin] } }
+  uiSchema: { collectionAction: events }
+  input:
+    type: object
+    required: [title, startsAt, capacity]
+    additionalProperties: false
+    properties:
+      title: { type: string, minLength: 1, maxLength: 200, title: Title }
+      startsAt: { type: string, format: date-time, title: Starts at }
+      capacity: { type: integer, minimum: 1, title: Capacity }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO events (title, startsAt, capacity, closed, seats_taken) VALUES (input.title, input.startsAt, input.capacity, false, 0) RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: add-member }
+spec:
+  title: Add a member
+  description: Let an email sign up as a club member.
+  requires: { auth: { all: [ctx.admin] } }
+  uiSchema: { collectionAction: members }
+  input:
+    type: object
+    required: [email]
+    additionalProperties: false
+    properties:
+      email: { type: string, format: email, maxLength: 254, title: Email }
+      name: { type: string, maxLength: 200, title: Name }
+  output: { type: object }
+  handler:
+    # Better Auth lowercases emails, so the list stores them lowercased too.
+    sql: |
+      INSERT INTO members (email, name) VALUES (lower(input.email), input.name) RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: create-event-admin }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: create-event }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: add-member-admin }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: add-member }

@@ -1,121 +1,82 @@
 ---
-description: Deploy a Mantle 0.2.0 service to Cloudflare Workers, change Schemas safely with storage convergence, resolve a blocked change, and operate schedules, expiry and the boot handshake.
+description: Install schema explicitly, migrate before deploying, and operate a native Worker.
 ---
 # Deploy and operate
 
-## First deploy
+Run the same generation command with `--check`, typecheck the application and test its selected routes before deploying. Keep generated TypeScript, SQL and Wrangler edits committed; keep bundle `dist/` untracked. The app owns the database, auth secrets, trusted origin and assets.
 
-```sh
-pnpm exec mantle generate --check          # nothing stale
-pnpm exec tsc --noEmit
-pnpm exec wrangler d1 create my-service     # copy database_id into wrangler.jsonc's d1_databases[0]
-pnpm exec wrangler secret put BETTER_AUTH_SECRET   # identity mantle
-pnpm exec wrangler secret put ADMIN_EMAIL
-pnpm exec wrangler deploy
+## Public fetch routing
+
+Workers use `compatibility_flags: ["nodejs_compat", "global_fetch_strictly_public"]`.
+The public-fetch flag routes native `fetch` through Cloudflare's public Internet
+boundary. OAuth verification needs it to fetch JWKS on the service's own public
+hostname; CIMD also requires this boundary for client metadata. `nodejs_compat`
+alone does not establish it.
+
+`mantle generate cloudflare-*` adds these flags without replacing other flags,
+including in environments with their own `compatibility_flags` array. The same
+command with `--check` refuses missing flags without writing. JSON/JSONC configs
+are updated; TOML receives manual-edit instructions. Keep both flags in every
+TOML environment override. An explicit `global_fetch_private_origin` is preserved
+for applications without OAuth/CIMD, but conflicts with selected OAuth/CIMD auth
+and with the public-fetch flag: generation refuses that config without rewriting
+it. Such applications must use public routing for their OAuth/CIMD transport.
+
+After deployment, complete a real OAuth sign-in and use the resulting bearer
+for MCP `initialize` and `tools/list`. Local development and cookie-only Admin
+checks do not verify production public-hostname routing.
+
+## Install and change schemas
+
+The runtime never creates, alters or checks tables. Boot and requests run no DDL, introspection or schema checks.
+
+For the first install, apply generated `schema.sql`, including selected auth/site DDL, to an empty database. Apply selected seed SQL explicitly.
+
+For every later schema change, the application's coding agent diffs the regenerated `schema.sql`, writes a migration with the host's native tool (`wrangler d1 migrations` or the app's PostgreSQL migration tool), rehearses it on a copy, and applies it before deploying the new code.
+
+Destructive changes and type changes need explicit data migration. Mantle drops nothing. Initial `schema.sql` is not an upgrade script.
+
+For D1, create a migration with `pnpm exec wrangler d1 migrations create <database> <name>`, review its SQL, then rehearse `pnpm exec wrangler d1 migrations apply <database> --local` against copied data. Apply the reviewed migrations to the target before `wrangler deploy`. Initial DDL may be placed in the first migration for a new database.
+
+For PostgreSQL, use the app's migration tool and deployment credentials. Plan lock waits and long index builds there; request credentials need no DDL privileges. Configure session settings on the role/database as described in [native execution](../guides/native-execution.md#postgresql-settings). Hyperdrive query caching must be disabled for authority and mutation visibility.
+
+## Latency placement and D1 read replication
+
+Measure these options against the application's real traffic; neither is a
+default latency guarantee. [Smart Placement](https://developers.cloudflare.com/workers/configuration/placement/)
+can move fetch execution closer to observed back-end services:
+
+```jsonc
+"placement": { "mode": "smart" }
 ```
 
-With dialect `postgres`, create the Hyperdrive config instead of the D1
-database (`pnpm exec wrangler hyperdrive create my-service --caching-disabled
---connection-string=…`) and copy its id into `hyperdrive[0].id`.
+For globally distributed, read-heavy D1 traffic, enable
+[read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/)
+on the database and pass one request-scoped `env.DB.withSession(...)` handle to
+the selected generated Views, Procedures and Store. Those D1 entry points accept
+`D1DatabaseSession`. Without the Sessions API, queries continue to use the primary.
 
-Set `PUBLIC_ORIGIN` in `wrangler.jsonc` `vars` to the deployed origin, and
-replace the console email sender first
-([Authentication](./authentication.md#production)). The first request boots
-the runtime, which creates every table the plan needs on the empty database.
+Use `first-unconstrained` only when a replica snapshot is acceptable,
+`first-primary` when the flow must start from the latest primary state, or carry
+a bookmark between logical sessions for sequential consistency. Reuse the same
+session within that logical flow; all writes still go to the primary. Keep fresh
+authentication/authorization checks and mutation/read-after-write paths on their
+required current-authority path rather than weakening them for replica latency.
 
-Deploying anywhere is your choice: Cloudflare and Bun have generated presets,
-`host: none` composes any other, and you may always self-host. Mantle Cloud is one option, never a
-requirement.
+## Operate
 
-## Changing Schemas
+Enable Workers Logs and traces in production. The top-level `observability.enabled` alone does not enable traces:
 
-There are no migration files. Edit the manifests, run `mantle generate`, and
-deploy. The first request after a plan change compares the database with the
-plan:
-
-- **Applied**: a new Schema table, a new field column, a new index, a new
-  unique index that existing rows satisfy, new `checks` and search triggers.
-- **Blocked** (`STORAGE_CHANGE_BLOCKED`, the service refuses to serve): a
-  unique index that existing rows break, a field whose type changed, an index
-  whose columns changed under the same name, an undeclared unique index.
-- **Kept, with a warning**: a column or non-unique index the plan no longer
-  declares. Nothing is dropped.
-
-Before deploying, see what boot will do against a local SQLite file, such as
-Wrangler's local D1 under `.wrangler/state/v3/d1/` after it has run the
-previous plan:
-
-```sh
-pnpm exec mantle generate --check --database .wrangler/state/v3/d1/<…>.sqlite
+```jsonc
+"observability": {
+  "enabled": true,
+  "logs": { "enabled": true, "head_sampling_rate": 1 },
+  "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+}
 ```
 
-It prints the SQL boot would run, the undeclared differences as comments, or
-the blocked change (exit 1). It reads the file read-only. The dry run is the
-SQLite dialect's; PostgreSQL has none.
+Auth configuration and production email delivery are app-owned; follow [authentication](authentication.md). Keep secrets in the platform's secret store. With `secrets.required`, `wrangler deploy` refuses to upload while a required secret is unset: set them with `wrangler secret put` (or pass `--secrets-file` on the first deploy). Serve the selected Admin assets through the [native Admin](../guides/native-admin.md) shell contract.
 
-### Resolving a blocked change
+Scheduling is app-owned. Wire generated system-only TTL sweeps into `scheduled()` and configure Wrangler crons explicitly. Bound each invocation and retain a cursor if work remains; see [TTL maintenance](../guides/native-execution.md#ttl-maintenance). Expired rows remain stored and hold unique keys until removed.
 
-Mantle verifies; you change. The diagnostic names the change and hints SQL
-that would reach the plan. For example, to make `email` unique when duplicates
-exist: remove the duplicates (with a Procedure run as the system caller, or
-`wrangler d1 execute`), then deploy again; boot creates the index. To rename a
-field: add the new field, copy the data with a Procedure or SQL, then drop the
-old field from the manifest (its column stays, unused). Never edit `_mantle_*`
-tables.
-
-### Hosts that refuse DDL from the Worker
-
-If a host applies schema changes only through its own migration mechanism,
-take the SQL `mantle generate --check --database` prints and deliver it
-through that mechanism; boot then finds the database converged.
-
-## Schedules
-
-`wrangler.jsonc` `triggers.crons` holds the Cloudflare spelling of every
-enabled schedule Trigger. `mantle generate` warns when it drifts from the plan;
-update it by hand (the file is yours). Locally:
-
-```sh
-pnpm exec wrangler dev --local --test-scheduled
-curl 'http://127.0.0.1:8787/__scheduled?cron=0+3+*+*+1'
-```
-
-The cron in the URL is the Cloudflare spelling.
-
-## Expired rows
-
-TTL hides expired rows at once. To delete them, call
-`ctx.store.sweepExpired({ collection, limit })` in a schedule Trigger's `ref`
-handler (the system caller's Store has it), or `runtime.store.sweepExpired` from
-your own maintenance route, page with `nextCursor`, and use
-`delete: false` to count first.
-
-## The boot handshake
-
-`runtime.bootReport()` returns `{ fingerprint, coreVersion }`. Pass
-`expectedFingerprint` to `createMantle` to refuse booting any plan but the one
-you built (`PLAN_FINGERPRINT_MISMATCH`). The fingerprint is in
-`.mantle/generated/plan.json`; reformatting a manifest does not change it.
-
-## Mantle Cloud
-
-Mantle Cloud accepts its pinned 0.2 service contract through host protocol 4. A verified source receipt is required before save.
-Connect Cloud MCP and follow the plugin's `mantle` skill and its
-`references/cloud.md` workflow. Call `cloud_host_contract` for the selected
-project before installing or packing: Cloud returns the exact Core version
-and revision. Do not substitute a moving npm tag or upload a self-hosted
-Worker's platform wiring. Cloud supplies identity and D1 storage; PostgreSQL
-plans are not accepted.
-
-The skill's `scripts/mantle-cloud.mjs` helper orchestrates save, paired
-preview and publish through the connected MCP tools. Follow its literal
-`nextAction`, keeping grants on stdin and preserving the project and operation
-IDs on retry. A saved or paired version is not a serving deployment; publish
-only under the user's authorization and verify Cloud's returned serving state.
-Its offline `check` reports `cloud: "not_checked"`, which proves local
-readiness only. Use Cloud's workflow, not `wrangler deploy`, for that target.
-
-## Moving data from 0.1.x
-
-Give the 0.2.0 service a new database and import through
-`runtime.store`; `docs/upgrade-0.1-to-0.2.md` describes the steps.
+After deployment, verify public and protected reads, member/admin sign-in, a persisted write, stale OCC and selected MCP/Admin/web routes. An `OUTCOME_UNKNOWN` write may have committed; reconcile before deciding what to do next and never retry automatically.

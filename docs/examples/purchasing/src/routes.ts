@@ -1,0 +1,53 @@
+import { ContractError, type Caller } from "@aotter/mantle/contracts";
+import { store } from "../generated/generated.js";
+import confirmOrder from "../generated/procedures/confirm-order.js";
+import { handlers } from "./handlers.js";
+import { requestsPage } from "./requests-page.js";
+import { signInPage } from "./sign-in.js";
+
+const MAX_BODY = 64 * 1024, MAX_SKEW_SECONDS = 300;
+
+/**
+ * App-owned routes, tried before Admin, MCP and REST. Return undefined to fall through.
+ * GET /sign-in: member sign-in (src/sign-in.ts). GET /requests: the employee's page (src/requests-page.ts).
+ * POST /callbacks/supplier: the supplier confirms an order. The signature is checked over the RAW body before parsing.
+ * AGENT: match the real supplier's signature scheme (header names, what is signed, encoding).
+ */
+export async function appRoutes(request: Request, env: Env, context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
+  const path = new URL(request.url).pathname;
+  if (path === "/sign-in" && request.method === "GET") return signInPage();
+  if (path === "/requests" && request.method === "GET") return requestsPage(request, env, await context.caller());
+  if (path !== "/callbacks/supplier") return undefined;
+  if (request.method !== "POST") return new Response(null, { status: 405, headers: { allow: "POST" } });
+  if (Number(request.headers.get("content-length") ?? MAX_BODY + 1) > MAX_BODY) return new Response(null, { status: 413 });
+  const raw = await request.arrayBuffer();
+  const timestamp = request.headers.get("x-supplier-timestamp") ?? "";
+  if (!(await verified(env.SUPPLIER_WEBHOOK_SECRET, timestamp, raw, request.headers.get("x-supplier-signature") ?? "")))
+    return new Response(null, { status: 401 });
+
+  let body: { reference?: unknown; orderId?: unknown };
+  try { body = JSON.parse(new TextDecoder().decode(raw)); } catch { return new Response(null, { status: 400 }); }
+  if (typeof body.reference !== "string" || typeof body.orderId !== "string") return new Response(null, { status: 400 });
+  // Trusted path: a system caller, after the signature proved the sender.
+  const system: Caller = { kind: "system", reason: "supplier callback" };
+  try {
+    await confirmOrder(env.DB, system, { id: body.reference, supplierOrderId: body.orderId });
+  } catch (error) {
+    if (!(error instanceof ContractError && error.code === "CONFLICT")) throw error;
+    // A replay of a callback already applied succeeds again, so the supplier stops retrying.
+    const current = await store(env.DB, system, { handlers }).collection("requests").findById(body.reference);
+    if (current?.requeststatus === "confirmed" && current.supplierorderid === body.orderId) return new Response(null, { status: 204 });
+    return new Response(null, { status: 409 }); // unknown request, another order id, or not approved/ordered
+  }
+  return new Response(null, { status: 204 });
+}
+
+/** HMAC-SHA256 over `${timestamp}.${raw body}`, hex encoded; crypto.subtle.verify compares in constant time. */
+async function verified(secret: string, timestamp: string, raw: ArrayBuffer, signature: string) {
+  if (!/^\d+$/.test(timestamp) || Math.abs(Date.now() / 1000 - Number(timestamp)) > MAX_SKEW_SECONDS) return false;
+  if (!/^[0-9a-f]{64}$/.test(signature)) return false;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
+  const signed = new Uint8Array([...new TextEncoder().encode(`${timestamp}.`), ...new Uint8Array(raw)]);
+  const bytes = new Uint8Array(signature.match(/../g)!.map(pair => parseInt(pair, 16)));
+  return crypto.subtle.verify("HMAC", key, bytes, signed);
+}

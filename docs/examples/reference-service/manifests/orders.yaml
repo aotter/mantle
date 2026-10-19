@@ -5,7 +5,26 @@ kind: Procedure
 metadata: { name: place-order }
 spec:
   title: Place an order
-  description: Order one item for the signed-in caller; the stock check fails the whole order when stock runs out.
+  description: Place one order using a backend itemId from search_items or catalog. Returns the first row of the first statement, results[0][0], with id, itemId, qty, orderStatus and observed version; verify with get_order. Order and stock change atomically. Not idempotent; after an uncertain response reconcile via my_orders instead of blindly retrying.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [itemId, qty]
+    properties:
+      itemId: { type: string }
+      qty: { type: integer, minimum: 1 }
+  output:
+    type: object
+    required: [results]
+    properties:
+      results: { type: array, items: { type: array, items: { type: object } } }
+  handler: { ref: placeOrder }
+---
+# Internal native program; its ref wrapper owns the post-commit activity effect.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: place-order-write }
+spec:
   requires: { auth: { all: [ctx.user] } }
   input:
     type: object
@@ -18,7 +37,7 @@ spec:
     sql: |
       INSERT INTO orders (itemId, qty, orderStatus, placedAt)
       SELECT id, input.qty, 'placed', now() FROM items WHERE id = input.itemId
-      RETURNING id, qty, orderStatus;
+      RETURNING id, itemId AS "itemId", qty, orderStatus AS "orderStatus", version;
       UPDATE items SET stock = stock - input.qty WHERE id = input.itemId
 ---
 # Optimistic concurrency: the caller sends the version it saw.
@@ -27,6 +46,7 @@ kind: Procedure
 metadata: { name: cancel-order }
 spec:
   title: Cancel an order
+  description: Cancel your placed order and restore stock atomically. Supply expectedVersion from the snapshot you reviewed in get_order. A stale version or already cancelled order is CONFLICT; do not refresh and retry automatically. Not an idempotency-key API.
   requires: { auth: { all: [ctx.user] } }
   input:
     type: object
@@ -44,7 +64,8 @@ metadata: { name: restock }
 spec:
   title: Restock an item
   description: Add stock to an item by SKU, creating the item if it is new.
-  requires: { auth: { all: [{ ctx.staff: [owner, editor] }] } }
+  requires: { auth: { all: [ctx.admin] } }
+  uiSchema: { collectionAction: items }
   input:
     type: object
     required: [sku, name, qty]
@@ -58,22 +79,6 @@ spec:
       INSERT INTO items (sku, name, stock) VALUES (input.sku, input.name, input.qty)
       ON CONFLICT (sku) DO UPDATE SET stock = items.stock + EXCLUDED.stock
       RETURNING id, sku, stock
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: record-orders }
-spec:
-  input: { type: object }
-  output: { type: object }
-  handler: { ref: recordOrders }
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: weekly-digest }
-spec:
-  input: { type: object }
-  output: { type: object }
-  handler: { ref: weeklyDigest }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
@@ -100,21 +105,83 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: restock-mcp }
 spec:
-  source: { kind: mcp, surface: staff }
+  source: { kind: mcp, surface: admin }
   target: { procedure: restock }
 ---
-# After hooks get every row one statement touched.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
-metadata: { name: orders-recorded }
+metadata: { name: cancel-order-mcp }
 spec:
-  source: { kind: lifecycle, schema: orders, on: [after_create, after_update] }
-  target: { procedure: record-orders }
+  source: { kind: mcp, surface: public }
+  target: { procedure: cancel-order }
 ---
-# POSIX cron, UTC: Sundays at 03:00.
+# A single-row write needs no authored SQL; the caller-bound Store returns its committed row.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: create-item }
+spec:
+  title: Create a catalog item
+  description: Admin-only create with zero stock. Optional priceCents is in minor currency units; omitted or null means unknown price. Returns a safe item snapshot with actual backend id and version. Not idempotent; duplicate SKU is CONFLICT. Use restock for inventory changes.
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [sku, name]
+    properties:
+      sku: { type: string, minLength: 1 }
+      name: { type: string, minLength: 1 }
+      priceCents: { type: [integer, 'null'], minimum: 0, maximum: 9007199254740991 }
+  output:
+    type: object
+    additionalProperties: false
+    required: [id, version, sku, name, priceCents, stock]
+    properties:
+      id: { type: string }
+      version: { type: integer }
+      sku: { type: string }
+      name: { type: string }
+      priceCents: { type: [integer, 'null'] }
+      stock: { type: integer }
+  handler: { ref: createItem }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: rename-item }
+spec:
+  title: Rename a catalog item
+  description: Admin-only partial update of name using the reviewed expectedVersion. Returns actual committed item id/version and safe fields. Stock, price and SKU are preserved; they are not replacement inputs. Null name is invalid. Stale/concurrent writes are CONFLICT; no automatic refresh/retry.
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion, name]
+    properties:
+      id: { type: string, minLength: 1 }
+      expectedVersion: { type: integer, minimum: 1 }
+      name: { type: string, minLength: 1 }
+  output:
+    type: object
+    additionalProperties: false
+    required: [id, version, sku, name, priceCents, stock]
+    properties:
+      id: { type: string }
+      version: { type: integer }
+      sku: { type: string }
+      name: { type: string }
+      priceCents: { type: [integer, 'null'] }
+      stock: { type: integer }
+  handler: { ref: renameItem }
+---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
-metadata: { name: weekly-digest }
+metadata: { name: create-item-mcp }
 spec:
-  source: { kind: schedule, cron: "0 3 * * 0" }
-  target: { procedure: weekly-digest }
+  source: { kind: mcp, surface: admin }
+  target: { procedure: create-item }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: rename-item-mcp }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: rename-item }

@@ -1,5 +1,7 @@
 # ADR-0032: Store-centric Core, an application-owned service, and caller identity
 
+> **2026-10-10 amendment:** [ADR-0041](0041-native-driver-and-application-hook-ownership.md) governs native driver execution, SQLite handle ownership and application-owned before hooks. Its explicit removals supersede the corresponding historical guarantees below.
+
 **Status:** Accepted for 0.2.0 (#1188). Amends ADR-0014, ADR-0026, ADR-0027 and ADR-0030; storage evolution is decided separately in [ADR-0033](0033-storage-converges-to-the-plan.md). Decisions 1–5, 10 and 13 are amended by [ADR-0034](0034-store-is-authored-as-sql.md): manifests carry SQL, which the CLI compiles to the IR. Decisions 6 and 12 are amended by [ADR-0035](0035-sql-dialects.md).
 
 **Date:** 2026-09-27
@@ -212,6 +214,12 @@ Every Mantle package versions and releases together, so splitting by area buys n
 
 > **Amendment (ADR-0034):** `/indexeddb` is removed, with no browser driver in 0.2.0. D1 test helpers live at `/cloudflare/testing`. The plugin's helper scripts compile with the project's installed `@aotter/mantle/spec` and bundle no parser.
 
+## 2026-10-07 amendment — metadata observation belongs to its native boundary (#1356)
+
+MCP offers optional `onObservation` at registered tool dispatch and its existing request-refusal gates. Attempt and completion share the runtime cause ID; output/input, requested unknown names, URLs and exception messages are never observation fields. Unknown and client-hidden tools are not registered invocations. An authentication-refused request or batch is a request refusal, not a set of executed tools. Invalid credentials and session-origin refusals remain owned by `withCaller`, which offers optional `onRefusal` without parsing the body or exposing credentials.
+
+Callbacks are best-effort and platform-independent. Their synchronous exceptions and rejected promises do not change the business result or authentication challenge; delivery promises are not awaited. A host owns request lifetime, transport, source enrichment, storage, query authorization and reporting delivery failure. A pending callback can outlive the available request lifetime or be lost. Neither callback promises exactly-once capture or transactional audit. Core adds no telemetry table, provider binding, queue or global I/O promise. The existing business Store audit contract is unchanged.
+
 ## Conformance cases
 
 The three contracts #1188 made ADR gates are accepted only with these cases, run against every `StoreExecutor` and the lifecycle layer:
@@ -356,6 +364,39 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 
     > **Amendment (MCP App catalog):** row actions reach an MCP App through the catalog `planApp` embeds in the App's HTML (ADR-0029 amendment), not through results; `read_entry` and `preview_entry` stay out, and a locked action reviews the row as listed.
 
+- **2026-10-10, experimental Durable Object SQLite driver (#1395).** `@aotter/mantle/cloudflare` exports `durableObjectDriver(storage)`, `durableObjectStorage(storage, options?)` and the structural type `DurableObjectSqliteStorage`, all `@experimental`; see [ADR-lite #1395](adr-lite-1395-durable-object-driver.md). Recorded here per "How to apply" item 3.
+
 ## Implementation status
 
 Proposed. Nothing in decisions 1–13 is implemented beyond the ADR-0030 slices already on `develop`.
+
+## 2026-10-08 amendment — optional staff media MCP
+
+Issue #1384 restores the pre-consolidation media lifecycle without adding
+Schema CRUD or a new Runtime path. `createMcpSurface` may receive `media:
+MediaStorage`; only a staff surface with `runtime.site` advertises the native
+media policy/create/commit/list/get/update/delete tools. They delegate to the
+same `runtime.site.media(media)` library as Admin and use its editor/owner
+permission, purpose/type/size validation, expiry and object verification.
+The surface retains its shared credential scope floor and invocation
+observations; a collision with a manifest Procedure/View fails at assembly.
+Media bytes remain direct PUT capabilities. The deliberately removed base64
+variant-upload tool is not restored. No grammar, portable Runtime execution,
+storage schema or provider ownership changes. Application-owned/generated
+service files pass their chosen adapter to both Admin and staff MCP; the
+preset cannot invent object-storage credentials. Admin WebMCP continues to
+list manifest tools; its native media operations remain REST-backed.
+
+## 2026-10-10 amendment — Schema readers (ADR-0043)
+
+[ADR-0043](0043-schema-readers.md) changes the Store surface and the handler context.
+
+- **Decision 1:** the Store surface is `db` readers, `write`, `view`, `id` and `sweepExpired` (and `as` on `MantleStore`). `select` is removed; between PR A and PR B of #1432 it is `@deprecated` and works as before.
+- **Decision 7:** `HandlerContext` gains `db`, and `ctx.db === ctx.store.db`. `HandlerContext`, `HandlerFn` and `MantleHandlers` take a store type parameter (`HandlerContext<Env, S>`), so the generated `Handler` types `ctx.store` and `ctx.db` per plan while Core's untyped context stays assignable.
+- **Implementation status:** readers, the shape memo, `ctx.db` and the reader-name checks are implemented by #1432 PR A; the removal of `select` by PR B.
+
+- **2026-10-12, OSS plugin distribution boundary (#1466).** The public plugin
+  retains local authoring, installed-version documentation and self-hosted
+  deployment. Hosted-service MCP connections, packers and lifecycle instructions
+  are distributed separately; earlier Cloud-helper distribution text is historical.
+  Generic platform adapters and SDK contracts remain public.

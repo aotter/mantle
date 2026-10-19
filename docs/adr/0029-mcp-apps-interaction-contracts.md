@@ -1,6 +1,6 @@
 # ADR-0029: Official MCP SDK, interaction contracts and MCP Apps
 
-**Status:** Accepted
+**Status:** Accepted; amended by [ADR-lite 1376](adr-lite-1376-admin-extensions.md) revision 4
 
 **Date:** 2026-09-25
 
@@ -69,6 +69,36 @@ version negotiation, transports, `tools/*`, `resources/*` and MCP Apps
 metadata. Mantle keeps authorization, guards, OCC, audit, validation and the
 diagnostic vocabulary. Official packages are pinned to exact versions and
 never forked. No hand-written JSON-RPC handling remains in the repository.
+
+**Application-built Apps ownership (#1705).** Core accepts generic static or
+request-time async resource contributors, validates endpoint and renderer ownership,
+and serves them after its origin/identity gates. It does not import React, read UI
+build files or compute UI digests. `mantle-ui` remains presentation/controller code
+receiving data and callbacks, with no Core, Admin or MCP dependency. `mantle-admin`
+owns the default Admin App and its existing typed hooks/surface transport, adapting
+the pinned official client. Applications own frontend App entries and domain
+components; they can use official ext-apps plus optional mantle-ui without Admin.
+No fourth bridge package or parallel provider/slot/query-cache system is introduced.
+
+Resource identity belongs to the UI contributor. Admin hashes its built HTML,
+static catalogue and material resource metadata into its default URI; custom HTML
+functions declare an explicit immutable build URI. A new build updates tool and
+resource links together. Only raw immutable assets may be cached across callers;
+the caller-filtered catalogue is embedded per resource read. Explicit `renders`
+partitioning replaces registration-order overrides. Visibility metadata never
+grants tool execution permission. The existing default caller-independent discovery
+contract remains; `authorize` enables caller-filtered discovery and resource catalogues.
+
+**Compatible upgrade retention (#1730).** Applications may retain previously deployed
+Admin resource snapshots in their source/artifact storage and pass them as `previous`
+to `adminMcpApps`. Each keeps its original URI, executable HTML, catalogue and CSP/domain;
+only the embedded catalogue is filtered again against the current caller's tools.
+Retained resources claim no current renderer or app-only tool. Current links still name
+the new build. Retention is explicit and survives clean builds; it is not an isolate
+cache, a redirect to current HTML, or authority to execute a removed tool. Applications
+own the retention window and compatibility of existing tool names/inputs/results.
+Breaking tool contracts need an application migration; Core cannot force a host to
+rediscover its saved tool definitions or renew a revoked OAuth grant.
 
 Both protocol eras are served: `2026-07-28` and `2025-*` in stateless mode
 (`createMcpHandler(..., { legacy: "stateless" })`).
@@ -158,6 +188,14 @@ mantle-spec ◄── mantle-runtime ◄── mantle-mcp ◄── adapters, ma
 > `@aotter/mantle-ui/mcp-app`) reviews a row as listed; a moved version is the
 > server's `CONFLICT`. The preset serves it on `/mcp/staff`; a member-facing
 > App is the application's own.
+>
+> **Amendment ([ADR-lite 1376](adr-lite-1376-admin-extensions.md) revision
+> 4, decision 8):** the Admin App is built by the application from its Admin
+> entry and served from the assets directory; the prebuilt `mantleAppHtml`
+> (`@aotter/mantle-admin/mcp-app`) goes away. The catalog embedded when
+> `ui://mantle-admin/admin/<digest>` is read is limited to the tools that caller can
+> list: names and fields only, never rows. This is an exception to §10's "no
+> caller data": that resource must not be cached or shared across callers.
 - `@aotter/mantle-admin-ui/kit` re-exports from `@aotter/mantle-ui` for one
   minor release, then is removed.
 - No exported UI module depends on Admin's router, global API client, query
@@ -322,3 +360,15 @@ Work follows epic #1110 as stacked PRs:
 5. #1115, #1116 — grammar-revise; then #1120 interaction descriptors.
 6. #1121 — MCP Apps registration; #1122, #1123, #1124 — `@aotter/mantle-ui`;
    #1125 — preview; #1119 — host matrix.
+
+### OAuth linking hints and the reference consent UI (2026-10-17)
+
+An application may declare additional `authorizationScopes` for Core's standard
+unauthenticated `WWW-Authenticate` challenge. This is a client authorization
+request hint, separate from `requiredScopes` and tool guards; it never upgrades
+an issued credential or modifies provider consent. Background access remains
+explicit and application-owned. The Admin-selected reference uses its mantle-ui
+consent page and Core's signed consent data/POST contract. The script-free Core
+HTML remains the adapter-neutral fallback. Admin asset generation defaults
+`html_handling` to `none` when omitted so a Worker-fetched shell is not
+canonicalized back into a redirect loop; explicit application settings survive.

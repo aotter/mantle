@@ -3,6 +3,8 @@
 **Status:** Accepted for 0.2.0. Amends ADR-0034 decisions 2 and 8 and ADR-0035 decisions 1, 4 and 6, and replaces the
 PostgreSQL dialect amendment's "What it accepts".
 
+> **2026-10-10 amendment:** [Native View CTEs](adr-lite-1430-native-view-ctes.md) adds ordinary nonrecursive SELECT CTEs to base and replaces copied named-View subqueries with native CTE dependencies on D1; PostgreSQL retains FROM subqueries.
+
 **Date:** 2026-10-02
 
 **Related:** ADR-0014 (Cloud and tenants), ADR-0034, ADR-0035, ADR-0036, #1293
@@ -74,14 +76,23 @@ amendment.
 ### 4. A narrowing hook
 
 - `postgresStorage` and `sqliteStorage` take `restrict?: (plan, context) => readonly SqlDiagnostic[]`. Core runs it on every
-  program's IR after the dialect's own check, at runtime (ADR-0035: the runtime never trusts an IR). It can only refuse.
+  program's IR after the dialect's own check, at runtime (ADR-0035: the runtime never trusts an IR). Since the SQL compile
+  cache, an accepted verdict is cached with the compiled program, so `restrict` runs again only for a program Core compiles anew. It can only refuse.
 - It is for an operator that runs other people's plans. A self-hosted service does not set it.
 
-### 5. Every PostgreSQL transaction has a statement timeout
+### 5. PostgreSQL reads and write batches have statement limits
 
-- The PostgreSQL driver pins `statement_timeout` with `SET LOCAL` in every transaction, as it pins `DateStyle` and `TimeZone`:
-  10 seconds unless `postgresStorage({ statementTimeoutMs })` says otherwise. A recursive CTE or a regular expression that runs
-  away ends there.
+**Amended:** #1379 and #1383 established bare reads and boot-checked session settings; #1391 records this correction.
+
+- Bare reads run under the role/database session configuration, checked once by `bootRead`. With a nonzero
+  `postgresStorage({ statementTimeoutMs })` ceiling (10 seconds by default), the session's `statement_timeout` must be
+  positive and at most that ceiling. Write batches set their own `statement_timeout` with `SET LOCAL` in the transaction.
+- `statementTimeoutMs: 0` disables the write limit and the boot requirement on the read timeout. It does not unset an
+  existing role/database timeout for bare reads.
+- Decoding and SQL meaning still require boot-checked `DateStyle` ISO, `IntervalStyle` postgres, `extra_float_digits >= 1`,
+  `standard_conforming_strings` on and `TimeZone` UTC. These are role/database settings, not pinned per transaction.
+- Convergence is the exception: it sets `statement_timeout = 0` to build indexes on large tables. Its lock waits and retries
+  are finite; those lock bounds do not bound the total convergence work.
 - A database role used by Mantle is not a superuser and holds no file or server privilege (`pg_read_server_files`,
   `pg_execute_server_program`). The handbook says so; Mantle does not check.
 

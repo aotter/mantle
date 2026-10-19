@@ -1,5 +1,7 @@
 # ADR-0034: Store is authored as SQL and compiled to IR by the CLI
 
+> **2026-10-10 amendment:** [ADR-0041](0041-native-driver-and-application-hook-ownership.md) governs native driver execution, SQLite handle ownership and application-owned before hooks. Its explicit removals supersede the corresponding historical guarantees below.
+
 **Status:** Accepted for 0.2.0 (#1188), after the spike (#1203). Amends ADR-0030, ADR-0032 decisions 1, 2, 3, 4, 5, 10 and 13, and ADR-0033. Amended by [ADR-0035](0035-sql-dialects.md) and [ADR-0037](0037-postgresql-is-the-reference-dialect.md).
 
 **Date:** 2026-09-29
@@ -190,3 +192,7 @@ What `verifyPlan` proves is that a plan reads and writes only through the policy
 Proposed.
 
 > **Amendment (spike, #1203, 2026-09-29):** The spike's findings are folded into decisions 2 to 5, 8 and 9 and How to apply 3. Changes: the four printer overrides and four AST rewrites; the 14 measured reserved names; `row_number()`-only window key; one-row upsert as a set op; hook rows always carry `id` and `version`, invisible before-hook rows fail with `CONFLICT`; time zone parity not claimed; a non-literal `CAST` to int is refused in favor of `round(x)` (replacing the earlier warning); relation positions as a hand-kept, type-bound list; the printed form of `search`; production D1 probed.
+
+## 2026-10-10 amendment — Schema readers (ADR-0043)
+
+Where this ADR says `ctx.store.select` or `StoreSelect` (Decision "handler-built queries", Alternatives), read **Schema readers ([ADR-0043](0043-schema-readers.md))**: `ctx.db.<schema>.get | first | find`. A handler-built read is still converted to the same AST and passes the same validation and policy; a reader converts each query shape once and keeps the compiled shape. `ctx.store.write` keeps ADR-0030's JSON shape.

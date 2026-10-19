@@ -1,0 +1,428 @@
+import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Eye, MoreHorizontal, PencilLine, Plus, Workflow } from "lucide-react";
+import {
+  createInteractionController,
+  type EntrySnapshot,
+  type InteractionController,
+  type InvokeOutcome,
+} from "@aotter/mantle-ui";
+import { fieldLabel } from "../../lib/field-label";
+import { api, ApiError, refusalOf } from "../../lib/api";
+import { resolveLocalizedText } from "../../lib/localized-text";
+import { entryApiPath } from "../../lib/queries";
+import type { Collection, EntryEditorPayload, AdminOperation, AdminOperationInteraction } from "../../lib/types";
+import { Button } from "@aotter/mantle-ui/kit";
+import { Skeleton } from "@aotter/mantle-ui/kit";
+import { ErrorBox, redirectToSignIn } from "../../ui/page";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogTitle } from "@aotter/mantle-ui/kit";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@aotter/mantle-ui/kit";
+import type { AdminLanguage } from "../../app/preferences";
+import { t } from "../../app/i18n";
+import { idempotencyFields } from "../ops/interaction-schema";
+
+const InteractionDialog = React.lazy(() => import("../ops/interaction-dialog").then(module => ({ default: module.InteractionDialog })));
+
+export { operationFormSchema } from "../ops/interaction-schema";
+
+/**
+ * The row an operation opens from, as the page listed it. `version` and
+ * `data` are what the page showed; bound fields missing from them are read
+ * before the dialog opens.
+ */
+export type OperableRow = {
+  id: string;
+  collection: string;
+  version?: number | string;
+  data?: Record<string, unknown>;
+  data_preview?: Record<string, unknown>;
+};
+
+/** Operations bound to rows from this collection. */
+export function boundOperationsFor(
+  operations: readonly AdminOperation[] | undefined,
+  collectionName: string,
+): AdminOperation[] {
+  return (operations ?? []).filter((op) => (op.interactions ?? []).some((item) => item.collection === collectionName));
+}
+
+/** Operations explicitly exposed from a collection header. */
+export function collectionOperationsFor(
+  operations: readonly AdminOperation[] | undefined,
+  collectionName: string,
+): AdminOperation[] {
+  return (operations ?? []).filter((op) => op.uiSchema?.["collectionAction"] === collectionName);
+}
+
+/** The values a row feeds the controller: its id, version and fields. */
+export function rowValues(row: OperableRow): Record<string, unknown> {
+  return {
+    ...(row.data_preview ?? {}),
+    ...(row.data ?? {}),
+    id: row.id,
+    ...(typeof row.version === "number" ? { version: row.version } : {}),
+  };
+}
+
+/** Missing preview fields cannot establish a mismatch; the server still checks every write. */
+export function operationMatchesRow(operation: AdminOperation, row: OperableRow): boolean {
+  const values = rowValues(row);
+  return (operation.preconditions ?? []).every(({ field, values: allowed }) =>
+    !Object.prototype.hasOwnProperty.call(values, field) || allowed.some(value => value === values[field]));
+}
+
+const emptyValue = (value: unknown): boolean =>
+  value == null ||
+  (Array.isArray(value) && value.every(emptyValue)) ||
+  (typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0);
+
+/** Nothing worth showing: no output, `{}`, or a `results` list whose statements returned nothing. */
+export function isEmptyOperationOutput(output: unknown): boolean {
+  if (emptyValue(output)) return true;
+  if (typeof output !== "object" || Array.isArray(output)) return false;
+  const keys = Object.keys(output as object);
+  return keys.length === 1 && keys[0] === "results" && emptyValue((output as { results: unknown }).results);
+}
+
+/** An operation's returned output, folded under Details; a Procedure that returned nothing shows only the success line. */
+export function OperationResult({ output, language }: { output: unknown; language: AdminLanguage }): React.ReactElement | null {
+  if (isEmptyOperationOutput(output)) return null;
+  return <details className="mt-2 min-w-0">
+    <summary className="cursor-pointer text-sm">{t(language, "ops.details")}</summary>
+    <pre className="mt-2 max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 text-xs" tabIndex={0}>{JSON.stringify(output ?? null, null, 2)}</pre>
+  </details>;
+}
+
+/** A record page shows this many operations as buttons before the rest move to a menu. */
+export const INLINE_RECORD_OPERATIONS = 3;
+
+/**
+ * Splits a record's operations for its page header: a few stay visible as
+ * labeled buttons; past the limit the first ones stay and the rest share a
+ * "More actions" menu, so the menu never holds a single item.
+ */
+export function splitRecordOperations<T>(available: readonly T[], limit = INLINE_RECORD_OPERATIONS): { inline: T[]; overflow: T[] } {
+  if (available.length <= limit) return { inline: [...available], overflow: [] };
+  const visible = Math.max(0, limit - 1);
+  return { inline: available.slice(0, visible), overflow: available.slice(visible) };
+}
+
+function operationTitle(operation: AdminOperation, language: AdminLanguage, canonical: string | null): string {
+  return resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
+}
+
+/** Compact operation menu for list rows: an icon trigger named "Actions for …". */
+export function RowOperationsMenu({
+  row,
+  collection,
+  operations,
+  itemName,
+  language,
+  canonical,
+  onSuccess,
+}: {
+  row: OperableRow;
+  collection?: Collection;
+  /** Pre-filtered via `boundOperationsFor(allOps, row.collection)`. */
+  operations: readonly AdminOperation[];
+  /** The row's title, so the trigger names the record it acts on. */
+  itemName?: string;
+  language: AdminLanguage;
+  canonical: string | null;
+  onSuccess: () => void;
+}): React.ReactElement | null {
+  const [activeOperation, setActiveOperation] = React.useState<AdminOperation | null>(null);
+  const available = operations.filter(op => operationMatchesRow(op, row));
+  if (!available.length) return null;
+  const label = itemName ? t(language, "rowActions.menuLabelFor", { name: itemName }) : t(language, "rowActions.menuLabel");
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="ghost" size="icon-sm" title={label} aria-label={label}>
+            <MoreHorizontal className="size-3.5" aria-hidden />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {available.map(op => <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}><Workflow aria-hidden />{operationTitle(op, language, canonical)}</DropdownMenuItem>)}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {activeOperation ? (
+        <RowOperationDialog key={activeOperation.name} operation={activeOperation} row={row} collection={collection} language={language} canonical={canonical} onClose={() => setActiveOperation(null)} onSuccess={onSuccess} />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * A record page's own actions: the Edit link (View when the person cannot
+ * edit, as the list labels it) and the operations that apply to the record
+ * as labeled buttons; past `INLINE_RECORD_OPERATIONS` the rest share a menu.
+ * Each operation still opens its review dialog and the server checks it.
+ */
+export function RecordOperations({
+  row,
+  collection,
+  operations,
+  entryLink,
+  language,
+  canonical,
+  onSuccess,
+}: {
+  row: OperableRow;
+  collection?: Collection;
+  /** Pre-filtered via `boundOperationsFor(allOps, row.collection)`. */
+  operations: readonly AdminOperation[];
+  entryLink?: { href: string; canEdit: boolean };
+  language: AdminLanguage;
+  canonical: string | null;
+  onSuccess: () => void;
+}): React.ReactElement | null {
+  const [activeOperation, setActiveOperation] = React.useState<AdminOperation | null>(null);
+  const available = operations.filter(op => operationMatchesRow(op, row));
+  if (!available.length && !entryLink) return null;
+  const { inline, overflow } = splitRecordOperations(available);
+
+  return (
+    <>
+      {entryLink ? (
+        <Button asChild variant="outline">
+          <a href={entryLink.href}>
+            {entryLink.canEdit ? <PencilLine className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
+            {t(language, entryLink.canEdit ? "entryWorkbench.editEntry" : "entryWorkbench.viewEntry")}
+          </a>
+        </Button>
+      ) : null}
+      {inline.map(op => (
+        <Button key={op.name} type="button" variant="secondary" onClick={() => setActiveOperation(op)}>
+          <Workflow className="size-4" aria-hidden />
+          {operationTitle(op, language, canonical)}
+        </Button>
+      ))}
+      {overflow.length ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="secondary">
+              <MoreHorizontal className="size-4" aria-hidden />
+              {t(language, "rowActions.more")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {overflow.map(op => <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}><Workflow aria-hidden />{operationTitle(op, language, canonical)}</DropdownMenuItem>)}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+      {activeOperation ? (
+        <RowOperationDialog key={activeOperation.name} operation={activeOperation} row={row} collection={collection} language={language} canonical={canonical} onClose={() => setActiveOperation(null)} onSuccess={onSuccess} />
+      ) : null}
+    </>
+  );
+}
+
+function RowOperationDialog({ operation, row, ...rest }: {
+  operation: AdminOperation;
+  row: OperableRow;
+  collection?: Collection;
+  language: AdminLanguage;
+  canonical: string | null;
+  onClose: () => void;
+  onSuccess: () => void;
+}): React.ReactElement {
+  return (
+    <OperationDialog
+      operation={operation}
+      interaction={(operation.interactions ?? []).find((item) => item.collection === row.collection)}
+      row={row}
+      {...rest}
+    />
+  );
+}
+
+/** Collection-level operation buttons shared by all collection lists. */
+export function CollectionOperations({
+  operations,
+  language,
+  canonical,
+  onSuccess,
+}: {
+  operations: readonly AdminOperation[];
+  language: AdminLanguage;
+  canonical: string | null;
+  onSuccess: () => void;
+}): React.ReactElement | null {
+  const [activeOperation, setActiveOperation] = React.useState<AdminOperation | null>(null);
+  if (operations.length === 0) return null;
+
+  return (
+    <>
+      {operations.map((operation) => (
+        <Button key={operation.name} type="button" onClick={() => setActiveOperation(operation)}>
+          <Plus className="size-4" aria-hidden />
+          {resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name)}
+        </Button>
+      ))}
+      {activeOperation ? (
+        <OperationDialog
+          key={activeOperation.name}
+          operation={activeOperation}
+          language={language}
+          canonical={canonical}
+          onClose={() => setActiveOperation(null)}
+          onSuccess={onSuccess}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * One admin operation through the shared interaction controller
+ * (ADR-0029), from a row, a collection header or the Operations page.
+ * Bindings and the version lock come only from the operation's declared
+ * interaction for the row's collection; nothing is inferred from names.
+ * Without one, the operation is an ordinary form.
+ */
+export function OperationDialog({
+  operation,
+  interaction,
+  row,
+  collection,
+  language,
+  canonical,
+  onClose,
+  onSuccess,
+}: {
+  operation: AdminOperation;
+  interaction?: AdminOperationInteraction;
+  row?: OperableRow;
+  collection?: Collection;
+  language: AdminLanguage;
+  canonical: string | null;
+  onClose: () => void;
+  onSuccess: () => void;
+}): React.ReactElement {
+  const title = resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
+  const binding = row && interaction ? interaction : undefined;
+  const listed = row ? rowValues(row) : undefined;
+  // A bound field the page did not list (for example a unique key) is read
+  // once before the dialog opens; that read is the row the person reviews.
+  const missing = Boolean(binding && listed && binding.bind.some(({ field }) => !(field in listed)));
+  const entry = useQuery<EntryEditorPayload>({
+    queryKey: ["entry-editor", row?.collection ?? "", row?.id ?? "", "operation"],
+    queryFn: ({ signal }) => api.get<EntryEditorPayload>(entryApiPath(row!.collection, row!.id), { signal }),
+    enabled: missing,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const automatic = idempotencyFields(operation.input);
+  const hidden = [
+    ...(binding ? binding.bind.map(({ input }) => input) : []),
+    ...(binding?.version ? [binding.version] : []),
+    ...automatic,
+  ];
+
+  if (missing && !entry.data) {
+    return (
+      <InteractionLoading language={language} onClose={onClose}>
+        {entry.isError ? <ErrorBox error={entry.error} /> : <Skeleton className="h-24 w-full" />}
+      </InteractionLoading>
+    );
+  }
+  const reviewed = entry.data ? { ...listed, ...entry.data.entry.data, id: entry.data.entry.id, version: entry.data.entry.version } : listed;
+  return (
+    <React.Suspense fallback={<InteractionLoading language={language} onClose={onClose}><Skeleton className="h-40 w-full" /></InteractionLoading>}>
+      <InteractionDialog
+        create={() => createOperationController(operation, binding, row?.collection, reviewed)}
+        operation={operation}
+        hidden={hidden}
+        automatic={automatic}
+        language={language}
+        canonical={canonical}
+        sourceSchema={collection?.schema ?? entry.data?.collection.schema}
+        previewFields={row ? [...new Set([collection?.list?.primaryField, ...(collection?.list?.columns ?? []), ...(collection?.list ? [] : Object.keys(collection?.schema?.properties ?? entry.data?.collection.schema.properties ?? {}))])].filter((field): field is string => !!field && field !== "id" && field !== "version" && !!reviewed && field in reviewed) : undefined}
+        onClose={onClose}
+        onDone={onSuccess}
+        onSucceeded={() => toast.success(t(language, "ops.success", { name: title }))}
+        renderResult={output => <OperationResult output={output} language={language} />}
+      />
+    </React.Suspense>
+  );
+}
+
+/**
+ * The controller for one Admin operation: it reads the entry through the
+ * Admin entry API and runs the operation through the Admin operations API,
+ * so HTTP-only admin operations work the same as MCP ones.
+ */
+export function createOperationController(
+  operation: AdminOperation,
+  interaction: AdminOperationInteraction | undefined,
+  collection: string | undefined,
+  row: Record<string, unknown> | undefined,
+): InteractionController {
+  const automatic = idempotencyFields(operation.input);
+  return createInteractionController({
+    interaction: interaction ?? { bind: [] },
+    ...(interaction && row ? { row: Number.isSafeInteger(row["version"]) ? row : { ...row, version: undefined } } : {}),
+    ...(interaction?.version && collection && row
+      ? { read: (signal: AbortSignal) => readEntry(collection, String(row["id"]), signal) }
+      : {}),
+    invoke: (values, signal) => invokeOperation(operation.name, values, signal),
+    // Minted once per dialog, so a retry after an uncertain write reuses it.
+    initialInput: Object.fromEntries(automatic.map((field) => [field, crypto.randomUUID()])),
+    automatic,
+  });
+}
+
+async function readEntry(collection: string, id: string, signal: AbortSignal): Promise<EntrySnapshot> {
+  try {
+    const { entry } = await api.get<EntryEditorPayload>(entryApiPath(collection, id), { signal });
+    if (typeof entry.version !== "number" || !Number.isSafeInteger(entry.version)) throw new Error("This native entry version is outside the supported interaction range; it is read-only.");
+    return { id: entry.id, version: entry.version, data: entry.data };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) redirectToSignIn();
+    throw error;
+  }
+}
+
+/** A refusal carries the runtime diagnostic; anything else is thrown so the
+ *  controller treats the write as uncertain and never retries it. */
+async function invokeOperation(name: string, values: Record<string, unknown>, signal: AbortSignal): Promise<InvokeOutcome> {
+  try {
+    const { output } = await api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(name)}`, values, { signal });
+    return { ok: true, data: output };
+  } catch (error) {
+    // An expired session was never let in, so nothing ran: sign in again.
+    if (error instanceof ApiError && error.status === 401) redirectToSignIn();
+    const diagnostic = error instanceof ApiError
+      ? refusalOf(error.body)
+      : undefined;
+    if (!diagnostic || typeof diagnostic.code !== "string") throw error;
+    return {
+      ok: false,
+      diagnostics: [{ ...diagnostic, code: diagnostic.code, message: typeof diagnostic.message === "string" ? diagnostic.message : diagnostic.code }],
+    };
+  }
+}
+
+function InteractionLoading({ language, onClose, children }: {
+  language: AdminLanguage;
+  onClose: () => void;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent closeLabel={t(language, "interaction.close")} aria-describedby={undefined}>
+        <DialogTitle className="sr-only">{t(language, "interaction.loading")}</DialogTitle>
+        {children}
+      </DialogContent>
+    </Dialog>
+  );
+}

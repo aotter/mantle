@@ -1,158 +1,71 @@
 ---
-description: The files of a Mantle 0.2.0 project, who owns each, mantle.config.json, and every option of mantle generate.
+description: Generation targets, CLI options and ownership of native application files.
 ---
 # Project layout and CLI
 
-## Files
+| File | Owner |
+| --- | --- |
+| `manifests/*.yaml` | App: closed v2 declarations and SQL |
+| `src/worker.ts`, auth, handlers, frontend | App: routing, Caller verification and side effects |
+| `generated/` | Generator: TypeScript, native SQL and selected bindings |
+| `migrations/` | App's agent and native migration tool |
+| `wrangler.jsonc` | App configuration; generator maintains selected split-build keys |
+| `dist/` | Disposable bundle output (`dist/worker`, `dist/client`); do not commit |
 
-| Path | Written by | Owner |
-|---|---|---|
-| `manifests/*.yaml` | you | you |
-| `mantle.config.json` | `mantle generate`, when the selection changes | you may edit it; generate keeps keys it does not know |
-| `.mantle/generated/plan.json` | every `mantle generate` | generated: never edit, commit it |
-| `.mantle/generated/mantle.ts` | every `mantle generate` | generated: never edit, commit it |
-| `src/service.ts`, `src/index.ts`, `src/handlers.ts`, `src/identity.ts` (identity `custom`) | the first `mantle generate` | yours from then on |
-| `wrangler.jsonc` (Cloudflare, unless a `wrangler.json` or `wrangler.toml` exists), `tsconfig.json`, `.dev.vars.example` (Cloudflare, identity `mantle`) or `.env.example` (Bun), `.gitignore` | the first `mantle generate`, each only if missing | yours |
+## Accept user-facing work
 
-`mantle generate` writes each preset file only when it does not exist, and
-writes none once `src/service.ts` exists: from then on the application owns
-its composition. To get a fresh preset, move the old file aside and rerun.
+Before reporting any user-facing deliverable as done, run the installed
+version's [independent acceptance
+flow](../guides/agent-workflow-acceptance.md) with a fresh agent on the surface
+its user uses. For MCP work, also run that guide's design audit before choosing
+tool names or writing manifests/handlers.
 
-- `plan.json` is `{ "sourceHash": …, "plan": … }`: the sealed `RuntimePlan`
-  and the SHA-256 of the manifest sources. The plan's `fingerprint` is what
-  boot checks; reformatting a manifest changes `sourceHash` but not the
-  fingerprint.
-- `mantle.ts` exports `plan`, `sourceHash`, the `Mantle` namespace of row, input and output
-  types, `Store` and `CallerStore` typed over your Schemas and
-  Views, and `MantleHandlers`, which lists exactly the plan's `ref` handlers. A
-  missing or extra handler is a type error. See
-  [Query from TypeScript](../guides/typed-queries.md).
-
-## `mantle.config.json`
-
-```json
-{ "version": 2, "identity": "mantle", "features": ["mcp", "admin", "web"] }
-```
-
-| Key | Values | Meaning |
-|---|---|---|
-| `version` | `2` | `1` (a 0.1.x config) fails with exit 2 |
-| `identity` | `mantle`, `custom`, `none` | who the callers are. `mantle`: `@aotter/mantle/auth` (Better Auth sign-in, staff roles, OAuth for MCP). `custom`: your `src/identity.ts` maps your own sessions to callers. `none`: every caller is anonymous |
-| `features` | a subset of `mcp`, `admin`, `web`, in that order | `mcp`: the public MCP surface at `/mcp` (and staff MCP inside Admin). `admin`: the Admin console and its API at `/admin`, which needs an identity. `web`: reserved for public pages; REST at `/api` is always mounted |
-| `host` | `cloudflare`, `bun`, `none`, optional | where the service runs (ADR-0036); absent is `cloudflare`. `none` writes no preset: only the plan and its types, and your code calls `createMantle`. The host never enters the plan |
-| `dialect` | `sqlite` (alias `d1`), `postgres`, or a dialect package name, optional | the SQL engine; absent is `sqlite`, which runs on D1. `postgres` runs on PostgreSQL, through Hyperdrive on Cloudflare. The plan records the dialect (the SQLite dialect as `@aotter/mantle/d1`) |
-
-Without a config or flags, the selection is identity `mantle` and every
-feature. An explicit `--features` without `--identity` means identity `none`.
-A rerun keeps the saved identity, host and dialect; asking for another one is
-refused (exit 2), so switching never drops tables or orphans data. Change
-`mantle.config.json` deliberately once the data is moved.
-
-| | `cloudflare` | `bun` | `none` |
-|---|---|---|---|
-| `sqlite` | preset over D1 (the default) | native bun:sqlite | plan and types only |
-| `postgres` | preset over Hyperdrive and `pg` | native Bun.SQL PostgreSQL pool | plan and types only |
-| a dialect package | plan and types only; compose `src/service.ts` with its storage adapter | plan and types only | plan and types only |
-
-Each selection needs packages in the project. `mantle generate` checks them
-and stops before writing anything, naming the install command for your
-package manager. It never installs anything. The host and dialect rows, and the
-staff MCP App, are checked only while the preset is still to be written.
-
-Use the versions in the installed Core's `package.json` `peerDependencies`,
-not registry latest, for optional auth and MCP packages. The diagnostic's
-install command includes those versions and incompatible installed peers are
-refused before generation. Keep `@aotter/mantle-ui` at Core's
-exact version. A package manager accepting an incompatible peer does not make
-it a supported combination; inspect peer warnings before starting the service.
-
-| Selection | Packages |
-|---|---|
-| always | `@aotter/mantle` |
-| identity `mantle` | `better-auth`, `@better-auth/oauth-provider`, `@better-auth/mcp`, `@better-auth/cimd` |
-| feature `mcp` | `@modelcontextprotocol/server`, `@modelcontextprotocol/ext-apps` |
-| feature `admin` | `@aotter/mantle-ui` (its `dist/admin` is the console, bound as `ASSETS` in `wrangler.jsonc`) |
-| dialect `postgres` on `cloudflare` | `pg` |
-| host `bun` | `bun-types` |
-| feature `mcp` with an identity, without `admin` | `@aotter/mantle-ui` (the staff MCP App) |
-
-On Cloudflare the project also installs `wrangler`, `@cloudflare/workers-types` and
-`@types/node` itself. A TypeScript Cloudflare/PostgreSQL project also installs
-`@types/pg` as a dev dependency for the generated `pg` import.
-
-## `mantle generate`
+## Commands
 
 ```sh
-mantle generate [--manifests <dir>] [--features <list>] [--identity <kind>] [--host <host>] [--dialect <name>]
-mantle generate --check [--database <file>]
+mantle help [topic]                  # these docs, one page at a time; start here
+mantle init [directory] [--dry-run]  # write the cloudflare-d1 app shell once; never overwrites
+mantle generate <target> <output-directory> <manifest>... [options]
+mantle bundle <entry> <outdir> [--assets <dir>]
 ```
+
+`init` writes application code the app then owns. `generate` writes only generated output and Wrangler build keys,
+on every run; after writing, it follows the `--entry` file's imports and warns for each selected REST, MCP or Admin
+module the entry never imports.
+
+| Target | Dialect | Handle |
+| --- | --- | --- |
+| `bun-sqlite` | sqlite | bun:sqlite Database |
+| `bun-postgres` | postgres | Bun.SQL |
+| `cloudflare-d1` | sqlite | D1 binding/session |
+| `cloudflare-postgres` | postgres | postgres.js, usually with Hyperdrive |
+
+Other handles may adapt to the same [structural driver contracts](../guides/adapter-guide.md). Dialects are exactly postgres and sqlite in 0.2.0.
 
 | Option | Meaning |
-|---|---|
-| `--manifests <dir>` | the manifest directory, default `./manifests`. Every `.yaml` and `.yml` file directly in it is read |
-| `--features <list>` | comma-separated, a positive list. A missing dependency fails with `GENERATE_FEATURE_DEPENDENCY_MISSING`; an omitted feature is never added back |
-| `--identity <kind>` | `mantle`, `custom` or `none` |
-| `--host <host>` | `cloudflare`, `bun` or `none`, chosen on the first run. `bun` defaults the dialect to `postgres` |
-| `--dialect <name>` | `sqlite` (alias `d1`), `postgres` or a dialect package, chosen on the first run |
-| `--check` | writes nothing. Exits 1 when `plan.json`, `mantle.ts` or `mantle.config.json` differs from what generate would write, or a package is missing |
-| `--database <file>` | with `--check`: also read a local SQLite file (Wrangler's local D1 is under `.wrangler/state/v3/d1/`) read-only, and print the SQL storage convergence would run |
+| --- | --- |
+| `--check` | Compare generated owned files and Wrangler build keys without writing; stale output exits nonzero. No database or credentials are needed. |
+| `--admin` | Emit native Admin bindings and `admin/*` modules; install the separate Admin package. |
+| `--auth <module>` | Read plain `authOptions(env)` (or an exported auth instance's options) and append selected Better Auth DDL. Repeat it once per Better Auth instance. Prefer plain options without initialization side effects. |
+| `--site <module>` | Read `siteDefaults`; emit site/media bindings and deployment SQL. |
+| `--wrangler <path>` | Existing JSONC/JSON/TOML config; default finds one or creates `wrangler.jsonc`. TOML receives manual-edit instructions. |
+| `--entry <path>` | Worker source entry; default `src/worker.ts`. |
+| `--outdir <path>` | Bundle output; default `dist`. The Worker goes to `<outdir>/worker`. Keep separate from source/generated files. |
+| `--assets <path>` | With `--admin`: the static assets directory `mantle bundle` builds Admin into (`<assets>/admin`); default `<outdir>/client`. Written to Wrangler's `assets.directory`, and to the build command when not the default. New assets blocks default to `ASSETS`, Worker-first routing and no HTML rewriting; existing blocks keep their binding/routing. |
 
-Exit codes: 0 success, 1 a diagnostic or a stale file, 2 a usage or file
-error. Diagnostics name the manifest file, the path in it and, for SQL, the
-position in the statement.
+## Outputs
 
-`--check` is the gate for CI and for agents: run `mantle generate`, then
-`mantle generate --check`, then your typecheck.
+`generated/.mantle-inputs.json` records the Mantle version, the target, and a hash of every input the run read (manifests and the
+`--auth` and `--site` modules). `mantle bundle`, which Wrangler runs for `wrangler dev` and every
+deploy, refuses to build when an input changed since, so stale generated code cannot run; regenerate and rebuild.
+Commit it with the other generated files.
+The bundle also prints notes, never errors, for SQL in the app's own code against Better Auth's tables (read users
+through `userOf(caller)` or `readIdentity(auth)` instead) and for Better Auth roles beyond `admin` and `user`.
 
-### Schedules and Cloudflare crons
+`generated.ts` exports typed queries and Store. Direct `views/<encoded-name>.ts` and `procedures/<encoded-name>.ts` entries export an operation and its types. Proved pageable Views also have `paged/views/*`; boundary checks live in `validation/*`. `admin-descriptors.ts`, `rest.ts` and `web.ts` are always emitted. Manifest exposure selects `mcp.ts`; `admin-bindings.ts`, `admin-client.ts` (browser-side types and hooks for `admin.tsx`) and `admin/*` require `--admin`. Auth and site are explicit options.
 
-On host `cloudflare`, schedule Triggers use POSIX cron. `mantle generate` translates each enabled
-one with `toCloudflareCron` and refuses (exit 1, before writing) one that
-Cloudflare cannot run the same way. It writes `triggers.crons` into a new
-`wrangler.jsonc`; once the file is yours it only warns when the crons differ
-from the plan, and you update them.
+Apply `schema.sql` only to an empty database. Later changes require [explicit migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations); generation and runtime do not inspect the database. Ref declarations print the `Handlers` keys to implement.
 
-### Storage SQL
+Never edit generated output by hand. Merge manifests/options, regenerate with the same command, then review TypeScript and SQL diffs. Use that exact command with `--check` in CI. Unmarked app files are preserved. Imported option modules must be pure; generation does not make their side effects safe.
 
-Boot creates what the plan adds (tables, columns, indexes, check triggers) and
-refuses what it cannot change safely. `--check --database` prints the same
-diff without applying it, for the `sqlite` dialect; see [Deploy and operate](../cloudflare/deploy-and-operate.md).
-
-### PostgreSQL on Cloudflare
-
-`mantle generate --dialect postgres` writes the same preset over Hyperdrive:
-`src/service.ts` opens a `pg` client per operation from `env.HYPERDRIVE`, and
-`wrangler.jsonc` binds `HYPERDRIVE` with a placeholder id and a
-`localConnectionString` for `wrangler dev`. Before deploying, create the config
-with caching off and put its id in place of the placeholder; generate warns
-until you do:
-
-```sh
-wrangler hyperdrive create my-app --caching-disabled --connection-string="postgres://user:pass@host:5432/db"
-```
-
-## 0.1.x projects
-
-`apiVersion: cms.mantle.aotter.net/v1` manifests, a `version: 1` config, `mantle validate`,
-`mantle emit-openapi`, `mantle skills` and the `mantle-harness` bin are gone.
-`docs/upgrade-0.1-to-0.2.md` in the installed package is the guide.
-
-## Bun
-
-`mantle generate --host bun` selects PostgreSQL on first run. Install `bun-types`
-for the generated project's typecheck, the selected feature/identity packages,
-then set DATABASE_URL in `.env` and run `bun src/index.ts`. For SQLite pass
-`--dialect sqlite` and optionally DATABASE_FILE (default mantle.sqlite).
-The preset is written once, uses native drivers from `@aotter/mantle/bun`, and
-owns Bun.serve, trusted socket IP and shutdown/background work. Admin binds the
-installed UI bundle. Enabled schedule Triggers fail generation; use `host: none`
-with an explicit scheduler when schedules are required. Behind a reverse proxy,
-set TRUSTED_PROXIES to its addresses: otherwise every client shares the proxy's
-address, and with it one sign-in rate limit.
-
-PostgreSQL pools must set `prepare: false`: Bun otherwise re-encodes JSON strings,
-and the role needs TEMPORARY on the database (`GRANT TEMPORARY ON DATABASE app TO
-app_role`), which describing a result takes.
-Mantle refuses another setting. Native raw result metadata comes from PostgreSQL
-with three extra round trips per result, preserving microseconds and exact numeric
-scale. No pg dependency or PostgreSQL clone is added. See ADR-0038.
+On Workers, generation configures `mantle bundle` as Wrangler's build command. It emits minified split ESM into `<outdir>/worker` with a startup guard for eager Better Auth imports and for Admin's browser code (`@aotter/mantle-admin/app` and `/hooks`, which `generated/admin-client.ts` imports; they belong to `admin.tsx`). When the Worker imports `@aotter/mantle-admin/server`, it also builds Admin with Vite into `<assets>/admin` (`--assets`, default `<outdir>/client`), from `admin.tsx` beside the Worker entry or Admin's built-in entry; `src/admin.ts` is not an entry. The assets directory must not overlap the Worker directory, and neither the outdir nor the assets directory may be the working directory or contain the Worker entry. The built-in entry is not rebuilt while the installed `@aotter/mantle-admin` keeps its path and version and its direct dependencies and its `react`/`react-dom` peers keep theirs; an `admin.tsx` entry builds every time. The build needs no install scripts (`npm ci --ignore-scripts` works). A `package-lock.json` made on one OS can lack the native build binaries (rolldown, `@tailwindcss/oxide`, lightningcss) that npm installs per platform from `optionalDependencies`, so a lockfile made on macOS can fail the build on a Linux host; create the lockfile on the build platform or use pnpm. `wrangler dev` and `wrangler deploy` run that build command, so they need `node_modules`. The built output (`<outdir>/worker`, `<assets>`) never reads it, so a pipeline that deletes `node_modules` must run `wrangler deploy` first. On Bun, the app owns `Bun.serve`, its Database/SQL pool and scheduler; Bun runs the server as TypeScript, so for a `bun-*` target recorded in `.mantle-inputs.json`, `mantle bundle src/server.ts dist` skips the Worker bundle and builds only Admin, into `dist/client/admin` (read with `bunAdminAssets("dist/client/admin")`, adapted for `adminShell` as in service composition). See [service composition](../cloudflare/service-entry.md).

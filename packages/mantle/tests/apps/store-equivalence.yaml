@@ -1,0 +1,56 @@
+# Core-compiled SQL for the same rows the generic Store reads (rows keyed by storage column names, as the Store returns them): tests/store-scenarios.ts compares the two, per Schema and mode.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: eq-purchases-all}
+spec:
+  surface: internal
+  sql: >-
+    SELECT r.id AS "id", r.version AS "version", r.created_at AS "created_at", r.updated_at AS "updated_at", r.author_id AS "author_id", r.requestNumber AS "requestnumber", r.title AS "title", r.amount AS "amount", r.approved AS "approved", r.sortBucket AS "sortbucket", r.requestedUnits AS "requestedunits", r.submittedAt AS "submittedat", r.neededOn AS "neededon", r.payload AS "payload"
+    FROM purchase_requests r ORDER BY r.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: eq-purchases-filtered}
+spec:
+  surface: internal
+  sql: >-
+    SELECT r.id AS "id", r.version AS "version", r.created_at AS "created_at", r.updated_at AS "updated_at", r.author_id AS "author_id", r.requestNumber AS "requestnumber", r.title AS "title", r.amount AS "amount", r.approved AS "approved", r.sortBucket AS "sortbucket", r.requestedUnits AS "requestedunits", r.submittedAt AS "submittedat", r.neededOn AS "neededon", r.payload AS "payload"
+    FROM purchase_requests r
+    WHERE r.amount >= 2.5 AND r.title LIKE 'Item 1%' AND r.approved = false AND r.submittedAt >= CAST('2026-10-11T00:01:00.123456Z' AS timestamptz) AND r.neededOn < CAST('2026-10-18' AS date) AND r.sortBucket <> 'bucket-1' AND r.requestedUnits IN (1, 2, 3, 4) AND r.created_at >= CAST('2020-01-01T00:00:00Z' AS timestamptz)
+    ORDER BY r.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: eq-notes-all}
+spec:
+  surface: internal
+  sql: >-
+    SELECT r.id AS "id", r.version AS "version", r.created_at AS "created_at", r.updated_at AS "updated_at", r.author_id AS "author_id", r.body AS "body", r.expiresAt AS "expiresat"
+    FROM session_notes r ORDER BY r.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: eq-notes-filtered}
+spec:
+  surface: internal
+  sql: >-
+    SELECT r.id AS "id", r.version AS "version", r.created_at AS "created_at", r.updated_at AS "updated_at", r.author_id AS "author_id", r.body AS "body", r.expiresAt AS "expiresat"
+    FROM session_notes r WHERE r.body IN ('live', 'forever', 'gone') AND r.expiresAt IS NULL ORDER BY r.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: eq-catalog-all}
+spec:
+  surface: internal
+  sql: >-
+    SELECT r.id AS "id", r.version AS "version", r.created_at AS "created_at", r.updated_at AS "updated_at", r.author_id AS "author_id", r.sku AS "sku", r.name AS "name", r.price AS "price", r.position AS "position"
+    FROM catalog_items r ORDER BY r.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: eq-catalog-filtered}
+spec:
+  surface: internal
+  sql: >-
+    SELECT r.id AS "id", r.version AS "version", r.created_at AS "created_at", r.updated_at AS "updated_at", r.author_id AS "author_id", r.sku AS "sku", r.name AS "name", r.price AS "price", r.position AS "position"
+    FROM catalog_items r WHERE r.price >= 2 AND r.name <> 'pen' ORDER BY r.id

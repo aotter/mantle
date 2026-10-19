@@ -1,169 +1,117 @@
----
-description: What Admin serves in 0.2.0, how manifests and uiSchema become Admin's collections, reports and operations, and how to verify a change.
----
 # Customize Admin from manifests
 
-`createAdminSurface` serves Admin's API at `/admin/api/*` behind a staff gate.
-Every route reads and writes through `runtime.store.as(caller)` and
-`invokeProcedure`, so Admin sees exactly what the signed-in staff member may
-see. What Admin shows is derived from the compiled plan: labels, forms, list
-columns, reports and operations are manifest edits.
+Select `--admin` and mount [native Admin](native-admin.md) from `@aotter/mantle-admin`. The app serves its assets and owns authentication. UI and SDK are separate packages.
 
-With feature `admin`, the generated preset also serves the console, the
-prebuilt SPA in `@aotter/mantle-ui/admin`, at `/admin`: `wrangler.jsonc` binds
-`node_modules/@aotter/mantle-ui/dist/admin` as the Worker's `ASSETS`
-(`run_worker_first`), and `src/service.ts` passes `createAdminSurface` an
-`assets` function that reads from it. `mantle generate` warns when `admin` is
-selected and `wrangler.jsonc` binds no `ASSETS`. The Bun preset reads the
-same files with `bunAdminAssets` from `@aotter/mantle/bun`. Sign in at
-`/admin/sign-in`.
+Schema `uiSchema` selects fields, widgets, list columns, enum tabs and child navigation. The compiler derives sortable fields from indexed required/non-null fields; it emits selected system/statistics indexes in initial DDL. Apply those indexes through an explicit migration on existing databases.
 
-## Manifest to Admin
+Admin Views provide custom read lists; their SELECT outputs, column lineage and `uiSchema.list` define display/search/filter metadata. Procedures and MCP admin Triggers define operations with declared authorization, input checks and optional row targets. A hidden button never authorizes an operation.
 
-| You want | Author this | Effect and limits |
-|---|---|---|
-| Rename a collection or explain a field | Schema `title` / `description`, property `title` / `description` (a string or a locale map) | Labels and help. Stored names do not change |
-| Required fields and option lists | JSON Schema `required`, `enum`, `type` | Data contracts, checked on every write, not styling |
-| Option labels | a string property's `oneOf: [{ const: open, title: { en: Open, zh-TW: 處理中 } }, …]` instead of `enum` | Selects, filter tabs and list cells show the `title` |
-| A multiline string | Schema or Procedure `uiSchema.fields.<name>.widget: textarea` | `textarea` is the only explicit widget |
-| Markdown or HTML | property `x-mcp-hint: markdown` or `html` | A rich editor |
-| A timestamp, a date or money | `format: date-time`, `format: date`; `x-mcp-hint: money-minor` on an integer | Date controls; money in minor units, with a sibling `currency` when present |
-| Columns of an operational list | Schema `uiSchema.list.primaryField`, `.columns` | `primaryField` is a scalar data field; `columns` may name native columns (`createdAt`, `updatedAt`) |
-| Business-state tabs | Schema `uiSchema.list.filterField` | Operational Schemas only; a string enum that leads an index |
-| Search | Schema `searchableFields` | Full-text search over those string fields, plus `id` |
-| Related records | a required property with `x-mantle-ref` | Children fold under their parent |
-| A folded child in navigation too | Schema `uiSchema.nav.standalone: true`, optional `parentField` | Its own list with a parent filter |
-| A read-only report with CSV | a View with `surface: staff`, `title`, `uiSchema.list` | `columns`, `searchFields` and `filterFields` name the View's outputs; the search box and filters become `LIKE` and `=` on them. `GET /admin/api/views/<name>/export` returns every matching row |
-| An operation | a Procedure bound by a Trigger with `source: { kind: mcp, surface: staff }` | Listed at `/admin/api/operations` for staff its `requires` admits, and run with `POST /admin/api/operations/<name>` |
-| A row operation | that Procedure's `target` (declared or inferred from `WHERE id = … AND version = …`) | Bound to the row's `id`, and its version when the target names one |
-| A list-level operation | Procedure `uiSchema.collectionAction: <schema>` | Shown on that collection |
-| No generic edits | Schema root `schema.readOnly: true` | Admin's entry routes refuse writes (`CONFLICT`); declared Procedures still run |
+Generic publishing edits apply to drafts; publishing transitions retain their atomic guards and OCC. Read-only collections refuse generic edits while declared Procedures can still run. Ref operations receive the caller/transaction-bound Store.
 
-Schema list presentation (`primaryField`, `columns`, `filterField`) is for
-`lifecycle: operational`. Publishing Schemas keep the draft, publish and
-archive workflow (`POST /admin/api/entries/{id}/publish` and `/unpublish`).
+Use [`defineAdmin` components](native-admin.md#customising-admin) for app-owned cells, inputs, record asides and actions; server work is a Procedure, a View or an application route. Keep exact conflict/uncertain-outcome handling in the shared UI controller.
 
-## Example: an operational inbox
+## Theme
 
-```yaml
-apiVersion: cms.mantle.aotter.net/v2
-kind: Schema
-metadata: { name: support-tickets }
-spec:
-  title: { en: Support tickets, zh-TW: 客服工單 }
-  lifecycle: operational
-  indexes: [[ticketState]]
-  searchableFields: [subject, details]
-  uiSchema:
-    fields:
-      details: { widget: textarea }
-    list:
-      primaryField: subject
-      columns: [ticketState, createdAt]
-      filterField: ticketState
-  schema:
-    type: object
-    additionalProperties: false
-    required: [subject, ticketState]
-    properties:
-      subject: { type: string, title: Subject }
-      details: { type: string, description: Include the steps to reproduce. }
-      ticketState: { type: string, enum: [open, waiting, closed] }
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: support-report }
-spec:
-  title: Support report
-  surface: staff
-  requires: { auth: { all: [{ ctx.staff: [owner, editor] }] } }
-  uiSchema:
-    list:
-      columns: [subject, ticketState, created_at]
-      searchFields: [subject]
-      filterFields: [ticketState]
-  sql: SELECT id, subject, ticketState, created_at FROM "support-tickets" ORDER BY created_at DESC
+Admin is themed with CSS variables. Import your own stylesheet from `src/admin.tsx` (`import "./admin.css"`) and override the public tokens on `:root` for light and on `.dark` for dark:
+
+```css
+:root {
+  --primary: #0f766e;
+  --primary-foreground: #ffffff;
+  --radius: 0.5rem;
+}
+.dark {
+  --primary: #2dd4bf;
+  --primary-foreground: #042f2e;
+}
 ```
 
-Schema `uiSchema.list` and View `uiSchema.list` are different contracts; do
-not copy keys between them. The report's search box matches `subject`
-(`LIKE`), its filter is `ticketState` (`=`), and a declared `input` would add
-a form above them; all of them keep cursor paging.
+Admin marks the active theme as both the `.dark` class and `data-theme="dark"` (or `"light"`) on the root. Dark tokens and Tailwind's `dark:` variant apply when either is present, so `[data-theme="dark"] {}` is equivalent to `.dark {}`. Your overrides apply in the browser Admin and, because the entry imports your CSS, in the [MCP App](mcp-apps.md#theme) too, where the host's neutral colours are laid over them.
 
-## Developer console
+| Token | Meaning |
+| --- | --- |
+| `--background` | Page background |
+| `--foreground` | Default text |
+| `--card` | Card and panel surface |
+| `--card-foreground` | Text on a card |
+| `--popover` | Menu, popover and dialog surface |
+| `--popover-foreground` | Text on a popover |
+| `--primary` | Brand color: primary buttons, active states |
+| `--primary-foreground` | Text on `--primary` |
+| `--secondary` | Secondary button surface |
+| `--secondary-foreground` | Text on `--secondary` |
+| `--muted` | Subtle surface: table stripes, disabled areas |
+| `--muted-foreground` | Secondary text |
+| `--accent` | Hover and selected surface |
+| `--accent-foreground` | Text on `--accent` |
+| `--destructive` | Destructive actions and errors |
+| `--border` | Borders and dividers |
+| `--input` | Form control borders |
+| `--ring` | Focus ring |
+| `--radius` | Base corner radius; the other radii derive from it |
+| `--success` | Success status color |
+| `--warning` | Warning status color |
+| `--info` | Informational status color |
+| `--chart-1` | Chart series 1 |
+| `--chart-2` | Chart series 2 |
+| `--chart-3` | Chart series 3 |
+| `--chart-4` | Chart series 4 |
+| `--chart-5` | Chart series 5 |
+| `--sidebar` | Sidebar surface |
+| `--sidebar-foreground` | Sidebar text |
+| `--sidebar-primary` | Sidebar active item |
+| `--sidebar-primary-foreground` | Text on `--sidebar-primary` |
+| `--sidebar-accent` | Sidebar hover surface |
+| `--sidebar-accent-foreground` | Text on `--sidebar-accent` |
+| `--sidebar-border` | Sidebar borders |
+| `--sidebar-ring` | Sidebar focus ring |
+| `--app-base` | Solid color behind the page |
+| `--app-background` | Page backdrop (any CSS background, such as a gradient) |
 
-The Developer console's Procedure overview projects the sealed SQL AST into
-a static execution diagram: authorization, validated input, guard, applicable
-lifecycle hooks, ordered atomic statements, commit or rollback, and output
-validation. Statement cards show read/write dependencies, row versus set
-semantics, RETURNING and ordered CASE assignments. CASE chooses a field value;
-WHERE filters rows. A set operation can affect zero rows and still continue.
-Output validation and after-hook failures do not roll back an existing commit.
-Unsupported expression shapes remain explicitly opaque beside authored SQL;
-code handlers' effects and actual run history are not inferred.
+Every other variable, including `--mantle-blue-*` and `--chrome-glass`, is internal and may change without notice.
 
-The inline business flow uses Schema/property titles and titled enum options
-from the developer snapshot; generic verbs and operators are UI translations.
-It expands direct `UPDATE SET field = CASE … END` assignments only. CASE
-inside arithmetic, casts, functions, SELECT or INSERT remains in the SQL
-detail tree, rather than pretending its intermediate result is the assigned
-value. SQL identifiers match manifest names case-insensitively. The existing
-`money-minor` display convention uses hundredths and a single-valued sibling
-`currency` enum; if numeric conversion or currency formatting would round a
-threshold, the flow shows its exact SQL literal marked as a raw SQL value.
-These display hints do not establish or validate business units.
+## Eject a component
 
-## Roles
+`@aotter/mantle-admin` ships a [shadcn registry](https://ui.shadcn.com/docs/registry) of starting-point components for the `defineAdmin` slots. Ejecting copies one into your source: you own that file and edit it freely, while the hooks it calls (`@aotter/mantle-admin/hooks`) and the slot prop types (`@aotter/mantle-admin/app`) keep upgrading with the package. The registry is inside the installed package, so the copy matches the version you run and no registry host is involved (the shadcn CLI itself downloads from npm and needs network). Install from the package, in the app's root:
 
-Admin's gate admits any staff role. Inside it, each route names the least role
-it needs: `contributor` reads and edits drafts, `editor` publishes, deletes
-and manages media, `owner` manages staff, site settings and the developer
-console. Operations and staff Views are further limited by their own
-`requires`.
-
-Those atom predicates do not restrict generic Schema entry routes. A root
-Schema `readOnly: true` blocks generic writes, not reads. In a service where
-only owner/editor reviewers may read an unscoped table, restrict the Admin
-surface in the application-owned `src/service.ts`:
-
-```ts
-// Replace the preset's Admin composition, keeping its existing options.
-const adminSurface = createAdminSurface(runtime, { /* existing Admin options */ });
-const admin = withCaller(resolver, async (request, caller) => {
-  if (new URL(request.url).pathname.startsWith("/admin/api/") &&
-      caller.kind === "user" && caller.role === "contributor") {
-    return Response.json({ error: {
-      code: "AUTH_DENIED", message: "Admin access requires an owner or editor role.",
-    } }, { status: 403 });
-  }
-  return adminSurface(request, caller);
-});
+```bash
+npx shadcn@4 add ./node_modules/@aotter/mantle-admin/dist/registry/admin-cell.json
 ```
 
-The preset already imports `withCaller` from `@aotter/mantle`. Reuse its
-resolver so credential validation and the session origin guard run once;
-Admin retains its own gates for members and anonymous callers. Contributors
-can use an application-owned page over an owner-filtered public View. Keep
-sign-in, OAuth consent and UI assets reachable; restricting the whole `/admin`
-prefix would also block member MCP consent at `/admin/oauth/consent`. This is
-host surface composition, not a Procedure `ref` handler or a new Manifest
-permission key. Exercise generic entry reads, reports and operations with
-each role, including after revoking a role in an existing session.
+The file lands in `src/admin/<item>.tsx` (the item's `target` ignores aliases). The CLI needs a `tsconfig.json` and a `components.json` in the app's root; this minimal one works, because no alias or stylesheet is used:
 
-## Verify a change
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": { "config": "", "css": "", "baseColor": "neutral", "cssVariables": true },
+  "aliases": { "components": "@/components", "utils": "@/lib/utils" }
+}
+```
 
-1. Run `mantle generate`, then `mantle generate --check`.
-2. Restart `wrangler dev` (or the Bun process) so the runtime loads the new plan.
-3. Open `/admin` with a staff session and check the affected list, form,
-   report or operation. `GET /admin/api/bootstrap` carries the collections,
-   Views, operations and site the console renders.
+The CLI removes a comment above a file's first import, so each item keeps its header below the imports. Import it in `src/admin.tsx` and name the slot, replacing the sample collection, field, View and operation with your own:
 
-`uiSchema` keys are closed. Schema takes `fields`, `list` and `nav`;
-Procedure takes `collectionAction` and `fields`; a staff View takes `list`. No
-layout, CSS, component or permission keys exist; build those in your own UI
-over Admin's API or your own surfaces.
+```tsx
+import { AdminCell } from "./admin/admin-cell";
 
-## Source
+export default defineAdmin(admin, { components: { "cell:requests.status": AdminCell } });
+```
 
-- [Schema](../reference/schema.md#uischema), [View](../reference/view.md) and [Procedure](../reference/procedure.md) references
-- [HTTP, MCP, CLI and packages](../reference/surface.md): every Admin route
+| Item | Slots | Surface |
+| --- | --- | --- |
+| `admin-cell` | `cell:view:<view>.<column>` | both (also reusable as a browser collection cell) |
+| `admin-input` | `input:<schema>.<field>` | browser |
+| `admin-record-actions` | `record.actions:<schema>` (runs an operation with `useOperation`) | browser |
+| `admin-record-aside` | `record.aside:<schema>` (lists a View's rows with `useView`) | browser |
+| `admin-sidebar` | `Sidebar` (`renderDefault` with a footer link) | browser |
+| `admin-home` | `Home` (`renderDefault` under a section that reads a View) | browser |
+
+Each file starts with a comment naming its surface and rules, and imports only `react`, `@aotter/mantle-admin/app` and `@aotter/mantle-admin/hooks`. A `both` component also renders in the Admin MCP App, inside a host's sandboxed iframe, so keep it to these rules:
+
+- Read data only through `useView` and `useOperation`; `useEntries`, `useEntry`, `useCollectionTotal`, `useMe` and `useBadges` read `unavailable` there. Declare what a card needs as an admin View.
+- Link only with `<AdminLink>` or `useOpenLink()`; never `window.open` or `target="_blank"`.
+- No `fetch`, no `document.cookie` or `localStorage` authentication, no remote origin that the host's CSP does not allow, and no assumed width.
+- Where `useOperation` returns no `run` (a host without server tools), show the control disabled with a note rather than throwing or vanishing.
+- Branch on `useAdminSurface()` (or the `surface` prop) if you must, and render something sensible in both branches.

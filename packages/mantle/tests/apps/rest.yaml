@@ -1,0 +1,91 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: notes}
+spec:
+ title: Notes
+ lifecycle: operational
+ schema: {type: object, required: [title], properties: {title: {type: string}, approved: {type: boolean}, payload: {type: object}}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: notes}
+spec:
+ surface: public
+ sql: SELECT id,title FROM notes ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: secret}
+spec:
+ surface: internal
+ sql: SELECT id FROM notes ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: edit}
+spec:
+ requires: {auth: {all: [ctx.admin]}}
+ input: {type: object, required: [id,title,version], properties: {id: {type: string}, title: {type: string}, version: {type: integer}}, additionalProperties: false}
+ output: {type: object}
+ handler: {sql: 'UPDATE notes SET title=input.title WHERE id=input.id AND version=input.version RETURNING id,title'}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: edit-http}
+spec:
+ source: {kind: http, method: PUT, path: '/api/notes/{id}'}
+ target: {procedure: edit}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: admin-notes}
+spec:
+ surface: admin
+ sql: SELECT id,title FROM notes ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: options}
+spec:
+ requires: {auth: {all: [ctx.admin]}}
+ input: {type: object, required: [id,approved,payload], properties: {id: {type: string}, approved: {type: boolean}, payload: {type: object}}, additionalProperties: false}
+ output: {type: object}
+ handler: {sql: 'UPDATE notes SET approved=input.approved,payload=CAST(input.payload AS jsonb) WHERE id=input.id RETURNING id,approved,payload'}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: options-http}
+spec:
+ source: {kind: http, method: POST, path: /api/options}
+ target: {procedure: options}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: posts}
+spec:
+ title: Posts
+ lifecycle: publishing
+ schema: {type: object, required: [title], properties: {title: {type: string}}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: posts}
+spec:
+ surface: public
+ sql: SELECT id,title FROM posts ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: echo}
+spec:
+ requires: {auth: {all: [ctx.admin]}}
+ input: {type: object, required: [message], properties: {message: {type: string}}, additionalProperties: false}
+ output: {type: object, required: [reply,title], properties: {reply: {type: string}, title: {type: string}}}
+ handler: {ref: echoHandler}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: echo-http}
+spec:
+ source: {kind: http, method: POST, path: /api/echo}
+ target: {procedure: echo}

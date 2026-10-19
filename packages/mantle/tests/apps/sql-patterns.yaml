@@ -1,0 +1,197 @@
+# The manifest in docs/handbook/guides/sql-patterns.md, plus REST Triggers for the tests. SQLite/D1 spelling; the test
+# rewrites the two JSON aggregations for PostgreSQL.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: products }
+spec:
+  title: Products
+  lifecycle: operational
+  uniqueIndexes: [[sku]]
+  checks: ["reserved <= stock"]
+  schema:
+    type: object
+    required: [sku, name, price, stock, reserved, active]
+    properties:
+      sku: { type: string }
+      name: { type: string, minLength: 1 }
+      note: { type: string }
+      price: { type: integer, minimum: 0 }
+      stock: { type: integer, minimum: 0 }
+      reserved: { type: integer, minimum: 0 }
+      active: { type: boolean }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  lifecycle: operational
+  indexes: [[productId, createdAt, id]]
+  schema:
+    type: object
+    required: [productId, qty, total, orderStatus]
+    properties:
+      productId: { type: string, x-mantle-ref: products }
+      qty: { type: integer, minimum: 1 }
+      total: { type: integer, minimum: 0 }
+      orderStatus: { type: string, enum: [reserved, pending_approval] }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: place-order }
+spec:
+  description: Order a product. An order over 5000 waits for approval and reserves nothing yet.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [productId, qty]
+    properties:
+      productId: { type: string }
+      qty: { type: integer, minimum: 1 }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO orders (productId, qty, total, orderStatus)
+        SELECT p.id, input.qty, input.qty * p.price,
+          CASE WHEN input.qty * p.price > 5000 THEN 'pending_approval' ELSE 'reserved' END
+        FROM products p WHERE p.id = input.productId AND p.active
+        RETURNING id, orderStatus AS "orderStatus";
+      UPDATE products SET reserved = reserved + input.qty
+        WHERE id IN (SELECT p.id FROM products p WHERE p.id = input.productId AND p.active AND input.qty * p.price <= 5000)
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: approve-order }
+spec:
+  description: Approve a pending order at the version you reviewed; reserves its stock.
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: integer }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE orders SET orderStatus = 'reserved'
+        WHERE id = input.id AND version = input.expectedVersion AND orderStatus = 'pending_approval'
+        RETURNING id, version;
+      UPDATE products SET reserved = reserved + (SELECT o.qty FROM orders o WHERE o.id = input.id)
+        WHERE id = (SELECT o.productId FROM orders o WHERE o.id = input.id)
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: update-product }
+spec:
+  description: Change a product's name or note; a field you leave out keeps its value.
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: integer }
+      name: { type: string, minLength: 1 }
+      note: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE products SET name = COALESCE(input.name, name), note = COALESCE(NULLIF(input.note, ''), note)
+        WHERE id = input.id AND version = input.expectedVersion
+        RETURNING id, version, name, note
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: restock }
+spec:
+  description: Add stock by SKU, creating the product the first time.
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [sku, name, price, qty]
+    properties:
+      sku: { type: string }
+      name: { type: string, minLength: 1 }
+      price: { type: integer, minimum: 0 }
+      qty: { type: integer, minimum: 1 }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO products (sku, name, price, stock, reserved, active) VALUES (input.sku, input.name, input.price, input.qty, 0, true)
+        ON CONFLICT (sku) DO UPDATE SET stock = products.stock + excluded.stock
+        RETURNING id, stock
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: discontinue-product }
+spec:
+  description: Stop selling a product; refused while an order for it waits for approval.
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id]
+    properties:
+      id: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE products SET active = false
+        WHERE id = input.id
+          AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.productId = products.id AND o.orderStatus = 'pending_approval')
+        RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: products-with-orders }
+spec:
+  description: Each product with its orders as one JSON array.
+  surface: admin
+  requires: { auth: { all: [ctx.admin] } }
+  sql: |
+    SELECT p.id, p.name,
+      (SELECT json_group_array(json_set('{}', '$.id', o.id, '$.qty', o.qty)) FROM orders o WHERE o.productId = p.id) AS orders
+    FROM products p ORDER BY p.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: latest-order-per-product }
+spec:
+  description: The most recent order of each product.
+  surface: admin
+  requires: { auth: { all: [ctx.admin] } }
+  sql: |
+    SELECT x.productId AS "productId", x.id, x.qty FROM (
+      SELECT o.productId, o.id, o.qty, row_number() OVER (PARTITION BY o.productId ORDER BY o.created_at DESC, o.id DESC) AS n
+      FROM orders o
+    ) x WHERE x.n = 1 ORDER BY x.productId
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: place-order-http }
+spec: { source: { kind: http, method: POST, path: /api/orders }, target: { procedure: place-order } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: approve-order-http }
+spec: { source: { kind: http, method: POST, path: /api/orders/approve }, target: { procedure: approve-order } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: update-product-http }
+spec: { source: { kind: http, method: POST, path: /api/products/update }, target: { procedure: update-product } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: restock-http }
+spec: { source: { kind: http, method: POST, path: /api/products/restock }, target: { procedure: restock } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: discontinue-product-http }
+spec: { source: { kind: http, method: POST, path: /api/products/discontinue }, target: { procedure: discontinue-product } }

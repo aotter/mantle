@@ -6,32 +6,42 @@ source, tests, package READMEs, and accepted ADRs define the current contract.
 
 ## Product and architecture contract
 
-Mantle Core is an embeddable manifest engine. A consumer may use only the parser
-and linker, bind Runtime to application-owned storage, add generated TypeScript
-bindings, or compose optional Web, Admin, UI, and platform adapters. For new
-applications, `mantle generate` assembles a full blank site by default or a
-smaller positively selected composition (ADR-0026). Application source remains
-user-owned; a minimal reference consumer validates the package contract.
+Mantle Core is an embeddable manifest engine. It compiles manifests into native
+SQL and typed TypeScript. Consumers
+generate selected queries and bind their own native handles and verified Caller,
+or compose optional REST, MCP, web, auth and separate Admin/UI modules. The parser
+and linker are private compiler implementation, not public consumer exports.
+`mantle generate <target> <output-directory> <manifest>...` writes generated
+artifacts and selected Workers build settings; applications own their entry,
+routes, auth and resources. It does not scaffold a website or service preset.
+A directly authored reference consumer validates the package contract.
 
-The sealed pipeline is:
+The sealed build-time pipeline is:
 
 ```text
-ManifestSourceSet -> parse -> ParsedManifestSet -> link -> LinkedManifestSet
-  -> compile -> RuntimePlan -> prepare storage -> bind MantleRuntime
+ManifestSourceSet -> parse -> link -> compile -> native SQL + generated TypeScript
 ```
 
-Each rule has one owner. Runtime and adapters consume the sealed output of the
-previous stage rather than interpreting raw manifests again. Generated
-bindings project typed lower-camel properties over the same plan; they are a DX
-option, not a prerequisite for embedding Core. Public APIs must remain usable
-and understandable by human engineers without a generated Starter.
+Applications pass native database handles and their own verified Caller to generated
+queries. The compiler owns grammar, diagnostics, SQL allowlist and row policy;
+request code does not interpret a RuntimePlan. Public APIs remain usable by human engineers without a generated Starter.
 
-The package topology is:
+[ADR-0045](docs/adr/0045-next-runtime-core.md) defines the native dialect/driver,
+generated Store and row-policy ownership. Authors own application routing,
+auth configuration, migrations and side effects; scope/auth, OCC, atomicity and
+uncertain commit outcomes remain required.
 
 | Package | Responsibility |
 |---|---|
-| `@aotter/mantle` | One package, one folder of `src/` per subpath (ADR-0032 decision 13): Core (`.`), the grammar and compiler (`/spec`), the built-in dialects (D1/SQLite `/d1`, `/d1/compile`; PostgreSQL `/postgres`, `/postgres/compile`), the hosts (Cloudflare `/cloudflare`, Bun `/bun`), Auth, Admin, MCP and REST surfaces (`/auth`, `/admin`, `/mcp`, `/web`), the dialect compliance suite (`/testing`) and the `mantle` CLI. `check:boundaries` enforces what each folder may import. |
-| `@aotter/mantle-ui` | The Admin console (`/admin`: built static files the preset binds) and optional shared UI (ADR-0029): the framework-free interaction controller (`/controller`), React interaction components (`/`), the UI kit (`/kit`, libraries as optional peers) and the MCP App (`/mcp-app`). Admin and MCP Apps both use it. |
+| `@aotter/mantle` | Native SDK, generator and `mantle` CLI. Request modules live in `src/kernel` and selected `src/auth`; the single private compiler closure lives in `src/build`. |
+| `@aotter/mantle-ui` | Pure UI and the framework-free controller, with no SDK or server dependency. |
+| `@aotter/mantle-admin` | Optional native Admin API, application-built React Admin, public slots/hooks, developer workspace, design preview and MCP App; SDK peer and shared UI dependency. |
+
+Applications own frontend MCP App entries and domain pages. They may use the
+official ext-apps client and optional pure UI without Admin. Core accepts generic
+resources and enforces endpoint/renderer ownership; Admin owns its built-asset
+identity and thin official-client adapter. Do not add another bridge package,
+provider, slot registry or query cache beside the application-built composition.
 
 `skills/*` are versioned consumer product artifacts. Maintainer instructions
 live at the repository root and in `.agents/skills`; do not merge the two
@@ -39,59 +49,43 @@ audiences or copy maintainer policy into shipped skills.
 
 ## Hard invariants
 
-- `src/spec` stays environment- and adapter-free (only its CLI front end,
-  `spec/infrastructure`, reaches `d1/compile`); only the CLI runs on Node.
-- `src/core` holds no engine or platform code: no Cloudflare or Bun
-  primitive, no SQLite. It keeps the engine-neutral SQL allowlist and policy
-  (ADR-0037); a dialect (ADR-0035) and a storage adapter bind Core's ports.
-- Store is authored as SQL in PostgreSQL syntax (ADR-0035). PostgreSQL is the
-  reference dialect and D1/SQLite runs its base subset (ADR-0037); both ship
-  built in. Another engine implements `MantleDialect` and passes
-  `@aotter/mantle/testing`'s compliance suite.
-- Web, Admin, Admin UI, Auth, and every platform adapter remain optional. Core must
-  not require routes, HTML, static assets, auth, or an Admin surface.
-- Runtime input is a sealed `RuntimePlan`, never raw manifests. Deployment
-  preparation owns migrations, indexes, native query lowering, and readiness.
-- The manifest grammar is v2 (`cms.mantle.aotter.net/v2`). New keys and
-  closed-enum members need an ADR amendment before implementation. Atom names remain Schema, View,
-  Procedure, and Trigger.
-- Trust-boundary input fails with structured diagnostics or stable transport
-  errors. Never simplify away validation, authorization, data-loss protection,
-  or accessibility basics.
-- Auth is a selected product/platform contract, not a Runtime port. The
-  portable surface lives in `@aotter/mantle/auth`; the preset owns host wiring
-  (trusted IP headers, the auth database). Better Auth is the default implementation, not
-  an option pass-through API; see
-  [ADR-0014](docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md).
+- `src/build/spec` keeps the closed v2 grammar (`cms.mantle.aotter.net/v2`), diagnostics
+  and SQL allowlist. Grammar changes require an accepted ADR amendment.
+- Compiler code stays build-time only. `src/kernel` and `src/auth` do not import
+  `build`, `domain`, `usecase`, `infrastructure`, Admin, or another SDK.
+- Generated operations call only the selected native driver and dialect. Bare
+  query output preserves native driver values; selected HTTP/MCP/Admin boundaries
+  own static declared-column transport conversion, including exact stored int64 text.
+- Auth, REST, MCP, web, site/media and Admin remain selected capabilities.
+  Better Auth and the MCP SDK load on a matching request, outside Worker startup.
+  The application writes `auth.ts` and resolves Caller; Mantle does not wrap Auth.
+- Runtime runs no DDL or boot-time schema checks. Apply initial `schema.sql` to an
+  empty database; application authors own migrations.
+- Scope/auth, publishing visibility, explicit OCC, atomic writes and uncertain
+  commit outcomes remain enforced. Input at transport boundaries uses generated
+  checks; never remove data-loss protection, security or accessibility to meet size.
+- Generated module imports perform no kernel initialization. Store metadata is
+  initialized once on first `store()`, with database/Caller/handlers bound per call.
 
 ### Clean architecture
 
-`src/spec` follows:
-
 ```text
-kernel <- domain (model + service) <- usecase <- infrastructure
+kernel <- domain <- usecase <- infrastructure
+                   build-time compiler: src/build
 ```
 
-- `kernel/` imports only external libraries and other kernel files.
-- `domain/` does not import `usecase/`, `infrastructure/`, or assembly code.
-- `usecase/` does not import `infrastructure/`.
-- Spec declares no ports. Core's ports (`MantleDialect`, the storage and
-  driver interfaces) live in `src/core`; dialect and host folders implement
-  them.
-- Use cases accept request DTOs and explicit dependencies. Infrastructure is
-  thin envelope handling and delegation.
-- `src/core/runtime/createRuntime.ts` assembles the runtime. It must not regain
-  database, Web, Admin, or platform ownership.
-- A new top-level folder under `domain/`, `usecase/`, or `infrastructure/`
-  needs an ADR-lite rationale in the PR description.
-
-Spec owns authored and validated data types. Runtime owns execution facts and
-rows supplied by dispatchers. If a Spec function accepts, returns, or validates
-a type, that type belongs to Spec.
+- `kernel/` contains native request primitives. `auth/` owns selected Auth integration.
+- `domain/` does not import `usecase/` or `infrastructure/`; `usecase/` does not
+  import `infrastructure/`. Build-time layers may consume the one private compiler.
+- Infrastructure owns source loading, CLI envelopes and deployment assembly.
+- The pure UI imports no SDK or server. Admin composes generated authorized reads,
+  native Procedures and generated validators; it does not become a second Store.
+- Each rule has one source owner. Reuse compiler/dialect/native helpers rather
+  than duplicate SQL policy, schema interpretation, routing or resource management.
 
 ## Local setup and checks
 
-Requirements: Node.js 22 or newer and pnpm 9 or newer.
+Requirements: Node.js 22.22 or newer and pnpm 9 or newer.
 
 ```bash
 pnpm install --frozen-lockfile
@@ -103,7 +97,33 @@ self-checks, builds, compiles the documented examples, typechecks, tests the
 workspace and runs the reference service from exact packed tarballs. Use
 package filters while iterating. PostgreSQL tests skip unless `MANTLE_PG_URL`
 names a disposable database; native Bun conformance is separate
-(`pnpm --filter @aotter/mantle test:bun`, Bun 1.3.14). CI runs both.
+(`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14).
+
+Maintainers merge on a local `pnpm check` (judge by its exit code) plus review; CI does not gate their PRs, and a
+failure found later is fixed forward. PR CI runs only for PRs from outside the organization (forks, bots).
+PR CI builds once in each of two parallel jobs: typecheck plus boundaries,
+skills, plugin manifests, startup graphs/budgets and release/packed-consumer
+self-tests; and the three packages’ tests running concurrently. Both jobs use
+the pnpm store cache and must pass the combined required status.
+PR tests skip PostgreSQL; Full checks retains PostgreSQL-backed coverage.
+Build typechecks library sources; `pnpm typecheck` checks the remaining test,
+app, example and config roots (including their imports). Run build first.
+Build before running package tests locally; `pnpm test` does not rebuild or pack.
+Package and upload bytes are reports; cold-start checks remain gates.
+
+Run the **Full checks** workflow (`.github/workflows/full-checks.yml`) by hand
+(Actions → Full checks → Run workflow on the branch) before releases, or when a change to drivers, auth,
+generator output or Admin UI may behave differently on Linux. It runs native
+four-target and Wrangler/D1 integrations, packed-consumer checks, doc examples,
+OSS plugin validation, the two Chrome sandbox-boundary tests (design preview
+and MCP App host bridge), and size reports. Run the boundaries locally with
+`pnpm --filter @aotter/mantle-admin test:browser` and Chrome installed. The
+Admin sign-in/list/edit/publish/translation browser flow is covered by maintainer
+manual acceptance; the packed worker-consumer smoke checks the service and Admin
+API round trip. Shared Store, publishing and search scenarios run through
+`test:native`; focused unit tests retain security and correctness invariants.
+`pnpm check` remains the broad local/release check; the release workflow is
+unchanged.
 
 ## Branches, commits, and pull requests
 

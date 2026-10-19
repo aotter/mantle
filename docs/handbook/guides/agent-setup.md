@@ -10,37 +10,59 @@ carries.
 
 ## 1. Install the `mantle` skill
 
-The Mantle plugin carries one skill, `mantle`, its helper script, and the
-Mantle Cloud MCP connection (`https://cloud.mantle.tools/mcp`).
+The Mantle plugin carries one OSS authoring skill, `mantle`, and local
+acceptance references. It does not configure a hosted-service connection.
+Install from the Git tag matching the exact SDK version you selected (currently
+`v0.2.0`). Pin the tag to keep instructions aligned with the application's
+SDK. A skill install does not upgrade the application's SDK.
 
-```bash
-# Claude Code: two separate prompts
-/plugin marketplace add aotter/mantle
-/plugin install mantle@mantle
+For Codex, pin the marketplace checkout:
 
-# Codex
-codex plugin marketplace add aotter/mantle
+```sh
+codex plugin marketplace add aotter/mantle --ref v0.2.0
 codex plugin add mantle@mantle
 ```
 
-Cursor and GitHub Copilot read the plugin manifests from the repository.
-Without a plugin host, install the skill alone:
+For Claude Code, first clone the release into a directory you will keep:
 
 ```sh
-npx skills add aotter/mantle
+git clone --depth 1 --branch v0.2.0 https://github.com/aotter/mantle.git mantle-plugin
 ```
 
-A skill-only install has no Cloud MCP connection; add one by hand if you need
-it. Either way, read the path the installer prints (for project-local Codex,
+Then, in Claude Code, use that checkout's absolute path:
+
+```text
+/plugin marketplace add /absolute/path/to/mantle-plugin
+/plugin install mantle@mantle
+```
+
+Cursor and GitHub Copilot use their plugin manifests from the same tagged
+checkout. Without a plugin host, install only the consumer skill by name:
+
+```sh
+npx skills add https://github.com/aotter/mantle/tree/v0.2.0 --skill mantle
+```
+
+When upgrading the SDK, update the marketplace ref or local tagged checkout and
+refresh/reinstall the plugin using the host's native workflow. Verify the loaded
+manifest version and skill source. Do not reset a checkout containing local edits.
+
+Read the path the installer prints (for project-local Codex,
 `.agents/skills/mantle/SKILL.md`). The skill installs no SDK, creates no
 project and copies no handbook.
 
 ## 2. Install the SDK, then read its own docs
 
-Use the version the project already pins. For a new project, choose a 0.2.x
-version with `npm view @aotter/mantle dist-tags` and install it with an exact
-version; every `@aotter/mantle*` package stays at that same version. Then
-read, from the application:
+Use the version the project already pins. For a new project, install stable
+0.2.0 exactly:
+
+```sh
+pnpm add --save-exact @aotter/mantle@0.2.0
+```
+
+Add optional `@aotter/mantle-ui@0.2.0` and `@aotter/mantle-admin@0.2.0` only
+when the selected surfaces need them. Every selected `@aotter/mantle*` package
+stays at the same exact version. Read, from the application:
 
 ```text
 node_modules/@aotter/mantle/README.md
@@ -65,18 +87,6 @@ An agent reads these files from `node_modules` when the task calls for them.
 
 ## 3. Verify the application
 
-Installing instructions proves only that they were copied. Prove the service:
+Run the app's exact generation command with `--check`, typecheck, implement every printed handler and typecheck again. Test actual routes and persisted state. With selected Admin, mount `entries(bindings.schemas, bindings.adapter)` and serve assets separately. Verify member/admin OTP, row visibility and OCC. Installing a skill proves none of these flows.
 
-1. `mantle generate` and `mantle generate --check` exit 0.
-2. The project typechecks against `.mantle/generated/mantle.ts`.
-3. `wrangler dev` (or, on Bun, `bun src/index.ts`) starts, and the routes you depend on answer: a REST View, an
-   HTTP Trigger, `/mcp` `tools/list`, and with identity `mantle` a sign-in and
-   `GET /admin/api/me`.
-
-| Symptom | Cause and next step |
-|---|---|
-| `docs/...` is missing after installing the skill | The skill carries no docs. Install the SDK and read `node_modules/@aotter/mantle/docs/`. |
-| `mantle` is not found | Install `@aotter/mantle` locally and run it through the package manager (`pnpm exec mantle`). |
-| `mantle skills` is unknown | It is 0.1.x. Follow the installed 0.2.x docs. |
-| A v1 manifest or a `version: 1` config fails | The project is on 0.1.x. Follow `docs/upgrade-0.1-to-0.2.md`. |
-| A documented feature is missing | The installed version is older than the docs you read. Read its own docs, or upgrade deliberately. |
+If packaged docs are missing, reinstall the SDK version pinned by the app. If a feature differs from an online page, read the installed docs rather than assuming compatibility.

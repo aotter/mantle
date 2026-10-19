@@ -11,91 +11,34 @@ metadata:
 
 # Provision a Mantle project
 
-Provision only after the user asks to create remote resources or ship. Read the
-installed `docs/handbook/cloudflare/deploy-and-operate.md` and
-`docs/handbook/cloudflare/authentication.md` first.
+## Workflow
 
-## Choose the target
+Read the installed SDK README, then follow the version-matched [project and CLI
+workflow](../../handbook/start/project-and-cli.md) before editing.
 
-Ask which target, unless the project already shows one.
+Deploy/create resources only within the user's authorization; reuse configured
+host resources. Apply reviewed and rehearsed migrations before routing traffic;
+imports/first requests perform no DDL or schema checks. Keep auth dynamic, production
+secrets in the host store, trusted HTTPS origin and verified bootstrap rule,
+production email and selected media wiring. Configure Admin ASSETS worker-first
+as in [Workers assets and secrets](../../handbook/cloudflare/service-entry.md#workers-assets-and-secrets). Hyperdrive caching stays off; PG settings are deployment-owned.
+Keep the Workers [public-fetch flags](../../handbook/cloudflare/deploy-and-operate.md#public-fetch-routing),
+including environment overrides; verify deployed MCP with a real OAuth bearer
+(`initialize` and `tools/list`), not only a browser session cookie.
+For MCP Apps, also follow [deployed host acceptance](../../handbook/guides/mcp-apps.md#verify-a-deployed-app-in-chatgpt):
+compare the current resource URI and visibly verify a newly invoked render tool.
+Archive deployed Admin pages using the guide's `previous` recipe and carry them
+through clean builds. Test the same old conversation after changing the UI build,
+without reconnecting, refreshing host tools or clearing caches. A deliberate tool
+contract change has its own migration/host rediscovery step. OAuth renewal, `tools/call` success and a
+local official-host replay do not establish that the deployed App rendered.
+Bun uses native Database/SQL, an app server and scheduler. Verify admin sign-in
+(role admin), denied access, public reads, a persisted write, MCP and selected UI.
+Report artifact/resources/checks and keep rollback artifacts.
 
-| Target | Config | Follow |
-|---|---|---|
-| Cloudflare Workers | `wrangler.jsonc` | the rest of this skill |
-| ChatGPT Sites | the Site's hosting config | installed `docs/handbook/cloudflare/chatgpt-sites.md`; publish through Sites, never `wrangler deploy` |
-| Mantle Cloud | Cloud project link | the plugin's `mantle` skill and its Cloud workflow; connect Cloud MCP and use its exact host contract, not `wrangler deploy` |
-| Bun (host `bun`) | `.env` | self-hosted; installed `docs/handbook/start/project-and-cli.md` (Bun), not this skill |
+For ChatGPT Sites, follow [Mantle on ChatGPT Sites](../../handbook/cloudflare/chatgpt-sites.md).
 
-Self-hosting is always an option; never present a hosted target as required.
-
-## Local gate
-
-```bash
-pnpm install --frozen-lockfile
-pnpm exec mantle generate --check
-pnpm exec tsc --noEmit
-git status --short
-```
-
-Confirm the active Cloudflare account with the user before creating anything.
-
-## Cloudflare
-
-1. **Database.** `pnpm exec wrangler d1 create <name>` and put the
-   `database_id` into `wrangler.jsonc`'s `d1_databases[0]`, keeping the
-   binding `DB`. With dialect `postgres`, instead run
-   `pnpm exec wrangler hyperdrive create <name> --caching-disabled --connection-string=...`
-   (the connection string by hidden input) and replace the placeholder id in
-   `hyperdrive[0]`, keeping the binding `HYPERDRIVE`. An existing 0.1.x
-   database is never reused: 0.2 starts on a new one.
-2. **Origin.** Set `PUBLIC_ORIGIN` in `vars` to the deployed HTTPS origin.
-   Update it together with any OAuth callback when a custom domain is added.
-3. **Sign-in (identity `mantle`).** Choose one production method and edit
-   `src/service.ts`; never deploy `ConsoleEmailSender`:
-   - **Email OTP or magic link** with the application's own `EmailSender`
-     over its email provider, `bootstrapOwner: { match: "email", value }`.
-   - **GitHub**: `{ kind: "social", provider: "github", options: { clientId, clientSecret } }`
-     and `bootstrapOwner: { match: "github-login", value }`. The user creates a
-     GitHub OAuth App with callback `<PUBLIC_ORIGIN>/api/auth/callback/github`.
-   Remove the preset's loopback-only check once the method is real.
-4. **Secrets.** Never commit them or put them in chat, logs or `wrangler.jsonc`
-   `vars`. Store production values in the deployment's secret store. Use a
-   connector, or hidden input:
-
-```bash
-openssl rand -hex 32 | pnpm exec wrangler secret put BETTER_AUTH_SECRET
-read -rsp "GitHub client secret: " S && printf '%s' "$S" | pnpm exec wrangler secret put GITHUB_CLIENT_SECRET; unset S
-```
-
-   Set `BETTER_AUTH_SECRET` once; rotating it signs everyone out.
-5. **Optional bindings.** R2 for media only when asked
-   (`docs/handbook/cloudflare/media-r2.md`).
-6. **Deploy.** `pnpm exec wrangler deploy`. The first request creates the
-   tables. Later Schema changes on D1: run
-   `mantle generate --check --database <local SQLite file>` (local D1 under
-   `.wrangler/state/v3/d1/`, which must have run the plan now deployed) before
-   each deploy and resolve any blocked change by hand.
-
-Commit and push only non-secret changes.
-
-## Verify the deployed service
-
-- A public View and an HTTP Trigger answer.
-- Sign-in works with the production method; the owner gets
-  `GET /admin/api/me` → `owner`, a second account gets 403.
-- `/mcp` answers `tools/list`, and an anonymous call to a protected tool is
-  401 with a `WWW-Authenticate` challenge. When every public tool `requires` a
-  caller, anonymous `initialize` and `tools/list` are already that 401.
-- Every enabled schedule appears in the Worker's cron triggers.
-
-## Handoff
-
-Return the public origin, the sign-in method and who the owner is, the MCP
-URL (`<origin>/mcp`), the resources created or reused, and anything deferred.
-
-## Don't
-
-- Don't create remote resources before the user asks to ship.
-- Don't commit secrets or put them in `wrangler.jsonc` `vars`.
-- Don't point a 0.2 service at a 0.1.x database.
-- Don't patch `site_config` or `_mantle_*` tables; boot owns them.
+The app builds Admin with `mantle bundle`; serve it as [Native
+Admin](../../handbook/guides/native-admin.md) describes. Verify both member and
+admin OTP/UI flows. Deployment of an authorized application does not authorize
+SDK publication; a workspace preview remains a preview.

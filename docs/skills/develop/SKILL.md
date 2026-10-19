@@ -1,6 +1,6 @@
 ---
 name: develop
-description: Work on an existing Mantle 0.2 project — manifests, SQL Views and Procedures, ref handlers, the service entry, surfaces, identity and MCP — using the installed package's contract.
+description: Work on an existing Mantle 0.2 project — manifests, SQL Views and Procedures, ref handlers, the service entry, surfaces, identity, MCP tool design and independent acceptance — using the installed package's contract.
 metadata:
   source: "@aotter/mantle"
   sourcePath: docs/skills/develop/SKILL.md
@@ -10,133 +10,79 @@ metadata:
 
 # Mantle Develop
 
-The workflow for changing a Mantle 0.2 project. The installed package's docs
-govern behavior: `node_modules/@aotter/mantle/docs/`.
+## Workflow
 
-## First read
+Read the installed SDK README, then follow the version-matched [project and CLI
+workflow](../../handbook/start/project-and-cli.md) before editing.
 
-1. `package.json` and the lockfile: the installed `@aotter/mantle` version.
-   Every `@aotter/mantle*` package is at that same exact version. If
-   `node_modules/` is missing, install with the lockfile first.
-2. `mantle.config.json`: `identity` (`mantle`, `custom`, `none`),
-   `features`, `host` (`cloudflare`, `bun`, `none`) and `dialect` (`sqlite`,
-   `postgres`); absent host and dialect mean Cloudflare over D1. A
-   `version: 1` config or `cms.mantle.aotter.net/v1` manifests mean 0.1.x:
-   switch to `docs/skills/update/SKILL.md`.
-3. `manifests/*.yaml`, `src/service.ts`, `src/handlers.ts`, `src/index.ts`
-   (and `src/identity.ts` for `custom`), `wrangler.jsonc` (not on Bun).
-4. Installed docs: `docs/handbook/reference/features.md` to map the request to
-   manifest features, then the field references it links to.
-   `docs/examples/` holds whole services in the v2 grammar.
+Use the native Store/query/surface entries and app-owned fetch from the [service
+composition guide](../../handbook/cloudflare/service-entry.md).
+Pair every HTTP Trigger with an MCP Trigger by default; see [Trigger](../../handbook/reference/trigger.md)
+for the generate warning and deliberate asymmetry exception.
+Keep optional modules out of unused entry imports and auth dynamically loaded.
+Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
+visibility, OCC and restart persistence, not just a 200 response.
+Before reporting any new app or feature as done, follow the [independent
+acceptance guide](../../handbook/guides/agent-workflow-acceptance.md): write a
+private rubric, then give one fresh agent per role (`admin`, `user`) only its
+role and entry points, across every surface it uses. This is not limited to
+MCP; if it was not run, say so explicitly and report the work as UNVERIFIED
+rather than done. For MCP workflows, also run the guide's design audit before implementing
+tools.
 
-## The model
+For native Admin, read the [current guide](../../handbook/guides/native-admin.md):
+the app builds Admin with `mantle bundle`. To customise pages, slots, hooks or
+MCP-host-safe components, follow [Customising Admin](../../handbook/guides/native-admin.md#customising-admin).
+Keep matching SDK, Admin and UI versions. Ref handlers retain caller-bound
+`ctx.store`; generic Admin reads use shared generated View templates and writes
+use native Procedure fragments.
+Check actual member/Admin OTP, private scope/TTL/translation visibility, paging,
+statistics, safe/exact OCC and no automatic retry after unknown 503 outcomes.
 
-Four atoms, nothing else: **Schema** (rows), **View** (one SQL `SELECT`),
-**Procedure** (SQL write statements, or a `ref` handler), **Trigger** (HTTP,
-MCP, lifecycle, schedule). Do not invent kinds such as `Form` or `Workflow`.
+For application-owned MCP App entries and host checks, follow the [MCP Apps
+guide](../../handbook/guides/mcp-apps.md).
 
-Choose in this order, stopping at the first that works:
+Build a custom frontend with `App` from `@modelcontextprotocol/ext-apps`: register
+`ontoolinput`/`ontoolresult` before `connect()`, and use `callServerTool` for
+host-proxied calls. Keep protocol negotiation and message routing in the official
+client; importing its types while writing a second `postMessage` bridge is
+insufficient.
 
-1. A Schema feature: `checks`, `uniqueIndexes`, `scope`, `ttl`,
-   `searchableFields`, `lifecycle`.
-2. SQL: a View for reads; a Procedure's `sql` for writes. Several statements in
-   one `sql` apply together or not at all.
-3. `requires` for who may call; a guard for a live check before one action.
-4. A `ref` handler, only for what SQL cannot do: calling another service,
-   reading before writing, setting `status`, branching on a read.
+For Admin UI upgrades, follow the installed handbook's
+[retained-page recipe](../../handbook/guides/mcp-apps.md#keep-old-conversations-working-after-an-upgrade).
+Keep deployed snapshots in source/artifact storage and pass `previous` to
+`adminMcpApps`; verify old conversations after a changed UI build without host
+tool refresh, reconnection or cache clearing. Keep tool contracts compatible
+through the declared retention window.
 
-## SQL rules that trip agents
 
-- PostgreSQL syntax over declared Schemas only. References: `input.<name>`,
-  `auth.uid()`, `auth.role()`, `now()`; search is `mantle.search(t, q)`.
-- Native columns are snake_case in SQL (`created_at`, `author_id`) and
-  camelCase in `ctx.store` JSON and in `indexes`.
-- A write never names the scope field, `id` (on update), `version`, `status`,
-  `created_at`, `updated_at` or `author_id`. Set an owner with `auth.uid()` and
-  a time with `now()`, never from input.
-- Optimistic lock: `WHERE id = input.id AND version = input.expectedVersion`.
-  Writing no row is `CONFLICT`. Keep omitted optional fields with
-  `COALESCE(input.x, x)`.
-- `LIMIT` needs `ORDER BY`. No `OFFSET`, `RIGHT JOIN` or `CURRENT_TIMESTAMP`
-  on any dialect. On SQLite (D1) also no `WITH`, `UNION`, `ILIKE` or jsonb
-  operators, and `CAST(x AS int)` only on an integer literal: use `round(x)`.
-  PostgreSQL accepts these (`docs/handbook/reference/view.md`).
-- Unquoted aliases fold to lower case: `AS "orderCount"` keeps the case.
-- The runtime injects scope and TTL into every Schema reference, and
-  published-only into public Views. Never repeat them.
-- `scope` hides rows from staff too. When staff must see every row, store
-  `auth.uid()` in a field and filter on it instead.
-- That filter protects the View, not generic Admin Schema reads. Root
-  `schema.readOnly: true` blocks generic writes only. If a contributor must
-  not read other users' rows, restrict the application-owned Admin surface
-  inside its existing `withCaller` boundary; see
-  `docs/handbook/guides/admin-ui.md` (Roles). Keep business transitions in SQL.
+Place admin MCP Procedures in Admin deliberately: `spec.uiSchema.collectionAction:
+<schema-name>` adds a collection-header action; `spec.target: { schema, id,
+version? }` selects row actions and binds the row id / reviewed OCC version to
+the named inputs. Other admin operations appear under Operations in the sidebar.
+Keep state conditions in the SQL WHERE: simple AND equality/IN literals become
+row-menu hints, while the Procedure remains the authority. Required-ref child
+collections fold under their parent's sidebar group; with two or more required
+`id` refs, set Schema `uiSchema.nav.parentField` to the parent's ref (generate
+refuses otherwise); use `uiSchema.nav.standalone: true` for a top-level entry.
 
-## Handlers
+## Database changes
 
-- `src/handlers.ts` exports `handlers: MantleHandlers` (`MantleHandlers<Env>`
-  types `ctx.env`); the generated type
-  lists exactly the plan's refs. Read and write only through `ctx.store`.
-- After hooks: loop over `ctx.cause.rows`; never read only `rows[0]`.
-- Before hooks and guards are read-only and reject by throwing
-  `DiagnosticError` (from `@aotter/mantle`); any other throw is a 500.
-- `ctx.caller.kind === "user"` means signed in; a schedule runs as `system`.
-  Never test `!== "anonymous"`.
-- `ctx.invoke(name, input)` calls another Procedure with the same caller.
+The runtime never creates, alters or checks tables. Boot and requests run no DDL, introspection or schema checks.
 
-## The service
+For the first install, apply generated `schema.sql`, including selected auth/site DDL, to an empty database. Apply selected seed SQL explicitly.
 
-`src/service.ts`, `src/index.ts` and `wrangler.jsonc` belong to the
-application after the first `mantle generate`; it never rewrites them. Add
-routes, bindings and env there (`docs/handbook/cloudflare/service-entry.md`).
-Reach data from service code through `runtime.store.as(caller)` or
-`runtime.invokeProcedure`; `runtime.store` alone is unscoped. A signed webhook
-is a route in the service's `fetch` that verifies the raw body, then invokes
-a Procedure as `systemCaller(...)`.
+For every later schema change, the application's coding agent diffs the regenerated `schema.sql`, writes a migration with the host's native tool (`wrangler d1 migrations` or the app's PostgreSQL migration tool), rehearses it on a copy, and applies it before deploying the new code.
 
-## MCP
+Destructive changes and type changes need explicit data migration. Mantle drops nothing. Initial `schema.sql` is not an upgrade script.
 
-With feature `mcp`, the preset mounts `/mcp` (public tools) and, with an
-identity, `/mcp/staff` (staff tools for a staff role; with identity `mantle`,
-the same OAuth token as `/mcp`). `/mcp/staff` serves
-Mantle's MCP App: a host that renders MCP Apps shows each staff View's rows and
-the operations on one row. A member-facing App on `/mcp` is the application's
-to build when the product asks for one: follow [the recipe](mcp-app.md).
+## Data paths
 
-## Loop
+Writes use Store `insert` / `update` / `delete`, `batch`, `transaction`, or declared Procedures. Never use raw SQL writes: they bypass scope, TTL, publishing and system-column rules. For reads beyond an id lookup or simple AND filter (joins, aggregates, OR, reuse), declare an internal View so the SQL is reviewable and typed. Store `findById`, `find` and `first` remain suitable for handler lookups and embedding in an existing app. Ref handlers receive `ctx.store` bound to the same Caller and transaction.
 
-```bash
-pnpm exec mantle generate
-pnpm exec mantle generate --check
-pnpm exec tsc --noEmit
-pnpm exec wrangler dev --local   # on Bun: bun src/index.ts
-```
-
-Then exercise what changed over HTTP: the REST View or Trigger, `/mcp`
-`tools/list` and a call, and with identity `mantle` a console email-OTP
-sign-in and the Admin route (`docs/handbook/cloudflare/authentication.md`).
-Check the stored rows, not only a 200. Before deploying a Schema change on
-SQLite, run `mantle generate --check --database <file>` to see the storage SQL.
-For a workflow, verify valid and invalid state transitions, ownership on every
-mounted surface (including generic Admin reads and writes), concurrent writes
-with one expected version, and persisted data and sessions after a restart.
-Exercise the actual UI when the product includes one; serving HTML alone does
-not verify its forms or operations.
-
-## Rules
-
-- Never edit `.mantle/generated/`. Commit it.
-- Never write a Schema's table with `env.DB`, KV or SQL from outside Store;
-  never touch `_mantle_*` tables. The application's own tables are its own.
-- A blocked storage change (`STORAGE_CHANGE_BLOCKED`) is the author's to make
-  by hand, then rerun; Mantle never drops a column or index.
-- Do not commit secrets (`.dev.vars`, provider keys).
-- Every 0.1.x term is gone: builtin handlers, `from`/`filter`, `params`,
-  `$ctx`, `x-mantle-bind`, `mantle validate`, `mantle skills`,
-  `createMantleWorker`.
-
-## When you are done
-
-Report the manifests and code you changed, the `generate --check` and
-typecheck results, the HTTP calls you made and what they returned, and any
-access you made stricter or could not express.
+For simple creates/partial updates, prefer Store-backed ref Procedures; keep
+Procedure `requires`/generated input checks, use only allowed patch fields and
+return safe business fields with the actual returned ID/version. Preserve
+omitted fields and document null semantics. Retain SQL for atomic conditional
+or related writes; D1 batches cannot consume an earlier result. Follow the
+[Store write guidance](../../handbook/guides/typed-queries.md#prefer-store-backed-ref-procedures-for-simple-writes).

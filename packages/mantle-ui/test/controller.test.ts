@@ -46,24 +46,6 @@ describe("createInteractionController", () => {
     expect(invoke.mock.calls[0]![0]).toMatchObject({ expectedVersion: 5 });
   });
 
-  it("keeps edits and the reviewed version through a background refresh", async () => {
-    const read = vi.fn(async () => entry(3));
-    const { controller: c, invoke } = controller({ read });
-    await c.open();
-    c.edit("note", "Within budget");
-    read.mockResolvedValueOnce(entry(4, { note: "someone else" }));
-    await c.refresh();
-    expect(c.getSnapshot()).toMatchObject({
-      phase: "changedSinceList",
-      draft: { note: "Within budget" },
-      reviewed: { version: 3 },
-      latest: { version: 4 },
-    });
-    // The reviewed mutation is not moved onto the new version behind the person's back.
-    await c.submit();
-    expect(invoke).not.toHaveBeenCalled();
-  });
-
   it("keeps the input on a conflict and requires a reread and a new review", async () => {
     const invoke = vi.fn(async (): Promise<InvokeOutcome> => ({ ok: false, diagnostics: [conflict] }));
     const read = vi.fn(async () => entry(3));
@@ -206,6 +188,8 @@ describe("createInteractionController", () => {
     expect(c.latestChanges()).toEqual(expect.arrayContaining([
       { field: "note", before: "", after: "added by someone else" },
     ]));
+    await c.submit();
+    expect(invoke).not.toHaveBeenCalled();
     c.review();
     expect(c.getSnapshot().draft).toEqual({ requestStatus: "approved", note: "added by someone else" });
     await c.submit();

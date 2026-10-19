@@ -1,0 +1,157 @@
+{
+  "name": "@aotter/mantle-admin",
+  "version": "0.2.0",
+  "description": "Native Admin console for Mantle apps: React admin app and build, same-origin preview and Admin MCP App. Uses @aotter/mantle as a peer.",
+  "keywords": [
+    "mantle",
+    "admin",
+    "admin-panel",
+    "admin-dashboard",
+    "agent-native",
+    "react",
+    "vite",
+    "mcp",
+    "mcp-apps",
+    "model-context-protocol",
+    "typescript"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://mantle.tools/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aotter/mantle.git",
+    "directory": "packages/mantle-admin"
+  },
+  "bugs": {
+    "url": "https://github.com/aotter/mantle/issues"
+  },
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha",
+    "registry": "https://registry.npmjs.org"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    "./app": {
+      "types": "./dist/admin-app/index.d.ts",
+      "import": "./dist/admin-app/index.js"
+    },
+    "./hooks": {
+      "types": "./dist/admin-app/hooks.d.ts",
+      "import": "./dist/admin-app/hooks.js"
+    },
+    "./build": {
+      "types": "./dist/build/index.d.ts",
+      "default": "./dist/build/index.js"
+    },
+    "./admin-preview": {
+      "types": "./dist/admin-preview/index.d.ts",
+      "import": "./dist/admin-preview/index.js"
+    },
+    "./package.json": "./package.json",
+    "./controller": {
+      "types": "./dist/app/bridge.d.ts",
+      "import": "./dist/app/bridge.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    },
+    "./server/entries": {
+      "types": "./dist/server/entries.d.ts",
+      "import": "./dist/server/entries.js"
+    },
+    "./server/site": {
+      "types": "./dist/server/site.d.ts",
+      "import": "./dist/server/site.js"
+    },
+    "./server/webmcp": {
+      "types": "./dist/server/webmcp.d.ts",
+      "import": "./dist/server/webmcp.js"
+    },
+    "./server/native": {
+      "types": "./dist/server/native.d.ts",
+      "import": "./dist/server/native.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/server/mcp.d.ts",
+      "import": "./dist/server/mcp.js"
+    },
+    "./server/design": {
+      "types": "./dist/server/design.d.ts",
+      "import": "./dist/server/design.js"
+    }
+  },
+  "dependencies": {
+    "@aotter/mantle-ui": "workspace:*",
+    "@dagrejs/dagre": "^3.1.1",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/react-query": "^5.104.0",
+    "@tiptap/react": "^3.31.4",
+    "@tiptap/starter-kit": "^3.31.4",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@xyflow/react": "^12.12.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "input-otp": "^1.5.0",
+    "lucide-react": "^1.49.0",
+    "radix-ui": "^1.6.7",
+    "react-day-picker": "^10.0.2",
+    "react-markdown": "^10.1.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^4.3.3",
+    "tw-animate-css": "^1.4.0",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.0",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@aotter/mantle": "0.2.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "playwright-core": ">=1.40 <2"
+  },
+  "peerDependenciesMeta": {
+    "playwright-core": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@aotter/mantle": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "date-fns": "^4.4.0",
+    "playwright": "catalog:",
+    "playwright-core": "catalog:",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "shadcn": "^4.21.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "scripts": {
+    "prebuild": "rm -rf dist .tsbuildinfo",
+    "build": "tsc -b tsconfig.lib.json && node ../../scripts/strip-comments.mjs tsconfig.lib.json && vite build --config vite.app.config.ts && node scripts/emit-app-types.mjs && vite build --config vite.preview.config.ts && vite build --config vite.testing.config.ts && shadcn build registry/registry.json -o dist/registry && rm dist/registry/registry.json",
+    "typecheck": "tsc -p tsconfig.config.json && tsc --noEmit -p admin/tsconfig.json",
+    "test": "bun test tests/native/*.test.ts && vitest run",
+    "test:browser": "MANTLE_BROWSER_TESTS=1 vitest run admin/test/preview-boundary.test.ts admin/test/atom-graph-browser.test.ts admin/test/load-more-browser.test.ts test/mcp-app-browser.test.ts test/frontend-mcp-app-browser.test.ts test/custom-admin-browser.test.ts test/nav-browser.test.ts test/testing.test.ts test/registry-compat.test.ts",
+    "check:size": "node ../../scripts/check-ui-size.mjs mantle-admin",
+    "test:native-server": "MANTLE_NATIVE_TESTS=1 bun test tests/native/*.test.ts"
+  }
+}

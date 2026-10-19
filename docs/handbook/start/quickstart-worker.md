@@ -1,146 +1,68 @@
 ---
-description: Create a Mantle 0.2.0 service on Cloudflare Workers from an empty directory, run it locally, then add sign-in, Admin and MCP.
+description: Generate a small native D1 service and mount an application-owned Worker.
 ---
-# Quickstart: a service on Cloudflare Workers
+# Quickstart: a service on Workers
 
-From an empty directory to a running service with a public View and a write.
-You need Node 22 or later and a package manager (pnpm is used below).
+Create an application outside the SDK checkout. Install stable `@aotter/mantle@0.2.0` exactly, TypeScript, Wrangler and Cloudflare Worker types; `node_modules/@aotter/mantle/docs/examples/app-shell/package.json` lists the versions this release is tested with. Read that installed version's handbook; this page describes the native 0.2.0 contract.
 
-## 1. Create the project
-
-```sh
-mkdir notes && cd notes
-pnpm init
-npm pkg set type=module
-npm view @aotter/mantle dist-tags
-```
-
-Pick a `0.2.x` version from the output. While 0.2.0 is in prerelease it is
-on the `alpha` tag, and `latest` still names 0.1.x. Install it with an exact
-version:
-
-```sh
-pnpm add --save-exact @aotter/mantle@<0.2.x version>
-pnpm add -D wrangler @cloudflare/workers-types @types/node typescript
-```
-
-## 2. Write a manifest
-
-`manifests/notes.yaml`:
+Save `manifests/tickets.yaml`:
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
-metadata: { name: notes }
+metadata: { name: tickets }
 spec:
-  title: Notes
+  title: Tickets
   lifecycle: operational
+  indexes: [[ticketState]]
   schema:
     type: object
-    required: [text]
+    additionalProperties: false
+    required: [subject, ticketState]
     properties:
-      text: { type: string, minLength: 1, maxLength: 500 }
+      subject: { type: string }
+      ticketState: { type: string, enum: [open, closed] }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
-metadata: { name: latest-notes }
+metadata: { name: tickets-by-state }
 spec:
   surface: public
-  sql: SELECT id, text, created_at FROM notes ORDER BY created_at DESC LIMIT 20
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: add-note }
-spec:
   input:
     type: object
-    required: [text]
+    additionalProperties: false
+    required: [ticketState]
     properties:
-      text: { type: string, minLength: 1, maxLength: 500 }
-  output: { type: object }
-  handler:
-    sql: INSERT INTO notes (text) VALUES (input.text) RETURNING id
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: add-note-http }
-spec:
-  source: { kind: http, method: POST, path: /api/notes }
-  target: { procedure: add-note }
+      ticketState: { type: string, enum: [open, closed] }
+  sql: |
+    SELECT id, subject, ticketState AS "ticketState" FROM tickets
+    WHERE ticketState = input.ticketState
+    ORDER BY id ASC
 ```
-
-## 3. Generate
-
-Start with the smallest selection: no identity (every caller is anonymous)
-and only the REST surface.
 
 ```sh
-pnpm exec mantle generate --identity none --features web
+pnpm exec mantle generate cloudflare-d1 generated manifests/tickets.yaml
+pnpm exec mantle generate cloudflare-d1 generated manifests/tickets.yaml --check
 ```
 
-It writes `.mantle/generated/plan.json` and `mantle.ts`, `mantle.config.json`,
-and once, the preset: `src/service.ts`, `src/index.ts`, `src/handlers.ts`,
-`wrangler.jsonc`, `tsconfig.json` and `.gitignore`. Commit all of them,
-`.mantle/generated` included.
+Write `src/worker.ts`:
 
-## 4. Run it
-
-```sh
-pnpm exec wrangler dev --local
+```ts
+import { rest } from '../generated/rest.js';
+interface Env { DB: D1Database }
+const api = rest<Env>({
+  db: env => env.DB,
+  caller: () => ({ kind: 'anonymous' }),
+});
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    return await api(request, env) ?? new Response('Not found', { status: 404 });
+  },
+};
 ```
 
-On the first request the runtime creates the tables on the local D1 database.
-Then:
+Set the database binding `DB`, Worker name and compatibility date in `wrangler.jsonc`. Generation adds the split build configuration. Apply `generated/schema.sql` explicitly to an empty local database, for example `pnpm exec wrangler d1 execute <database> --local --file generated/schema.sql`. The first request creates nothing.
 
-```sh
-curl -sS -X POST http://127.0.0.1:8787/api/notes -H 'content-type: application/json' -d '{"text":"hello"}'
-curl -sS http://127.0.0.1:8787/api/views/latest-notes
-```
+Typecheck, then run `pnpm exec wrangler dev --local`. Query `/api/views/tickets-by-state?ticketState=open`; the response is `{ rows, nextCursor? }`. The empty database returns no rows. Use Store or a declared Procedure for writes.
 
-The write answers `{ "results": [[{ "id": "…" }]] }` and the View
-`{ "rows": [{ "id": "…", "text": "hello", "created_at": … }] }`.
-
-## 5. Add sign-in, Admin and MCP
-
-The full selection is identity `mantle` (Better Auth sign-in, staff roles,
-OAuth for MCP) and the features `mcp`, `admin` and `web`. A rerun cannot
-switch identity, and the preset is never rewritten, so start a project that
-needs them with the full selection instead:
-
-```sh
-pnpm exec mantle generate
-```
-
-With no flags the selection is identity `mantle` and every feature. The first
-run names the packages it needs, with versioned install commands from the
-installed Core's `peerDependencies`, and writes nothing until they are installed
-at compatible versions. Copy those commands rather than installing registry
-latest; `@aotter/mantle-ui` must match Core's exact version:
-
-```sh
-# Run each versioned pnpm add command printed above first.
-pnpm exec mantle generate
-cp .dev.vars.example .dev.vars   # set ADMIN_EMAIL and a random BETTER_AUTH_SECRET
-pnpm exec wrangler dev --local
-```
-
-Request a code for `ADMIN_EMAIL` (`POST /api/auth/email-otp/send-verification-otp`
-with `{ "email": …, "type": "sign-in" }`). The code is printed to the wrangler
-log, and that email becomes the owner. Codes in the log are for local
-development only; [Authentication](../cloudflare/authentication.md) covers
-production sign-in.
-
-Or open `/admin/sign-in` in a browser: the console is served at `/admin` from
-`@aotter/mantle-ui/admin`, which the generated `wrangler.jsonc` binds as the
-Worker's `ASSETS`. Admin's API answers at `/admin/api/*`, the public MCP
-surface at `/mcp`, and the staff MCP surface at `/mcp/staff`. The
-[reference service](../../examples/reference-service/README.md) is this
-selection with a smoke test that signs in and drives every surface.
-
-## Next
-
-- [Project layout and CLI](./project-and-cli.md): what each generated file is,
-  and `mantle generate --check`.
-- [Writes: Procedures, Triggers and hooks](../concepts/procedures-and-triggers.md)
-  and [Reads: Views, REST and MCP](../concepts/views.md).
-- [Deploy and operate](../cloudflare/deploy-and-operate.md).
+Commit generated files and Wrangler edits; keep bundle `dist/` untracked. Follow [service composition](../cloudflare/service-entry.md) to add auth, Admin or MCP and [deploy and operate](../cloudflare/deploy-and-operate.md) before changing schema or deploying.

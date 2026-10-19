@@ -10,47 +10,29 @@ metadata:
 
 # Mantle Update
 
-Upgrade deliberately; never overwrite application-owned code.
+## Workflow
 
-1. Inspect `git status`, `package.json`, the lockfile and the installed
-   `@aotter/mantle` version. Keep unrelated local changes. Work on a branch.
-2. Choose an explicit target version (`npm view @aotter/mantle dist-tags`).
-   Read its release notes on GitHub and, after installing, its own
-   `node_modules/@aotter/mantle/docs/`. The old version's docs are not the new
-   contract.
-3. **From 0.1.x to 0.2:** stop here and follow
-   `node_modules/@aotter/mantle/docs/upgrade-0.1-to-0.2.md` after installing
-   the target. There is no codemod and no in-place database upgrade: the
-   project moves by hand, to a new database.
-4. Set `@aotter/mantle`, and `@aotter/mantle-ui` where present, to the same
-   exact version (`@aotter/mantle-admin-ui` is gone: the console is
-   `@aotter/mantle-ui/admin`), and update the lockfile with the
-   package manager. Review the dependency diff and any peer changes
-   `mantle generate` names.
-   With identity `mantle`, inspect auth database upgrade requirements in
-   `docs/handbook/cloudflare/authentication.md` before starting the new service.
-   Better Auth 1.7.0–1.7.2's required legacy `account.issuer` needs a
-   data-preserving host-specific constraint migration when moving to 1.7.7;
-   fresh-database success alone does not verify an upgrade. Back up the service's
-   own database and retain existing users, sessions, roles and content.
-5. Regenerate and check:
+Read the installed SDK README, then follow the version-matched [project and CLI
+workflow](../../handbook/start/project-and-cli.md) before editing.
 
-```sh
-pnpm exec mantle generate
-pnpm exec mantle generate --check
-pnpm exec tsc --noEmit
-```
+For 0.1.x, follow [Upgrade 0.1 to 0.2](../../upgrade-0.1-to-0.2.md): give the
+0.2 service a new database and move data by export and import; never boot 0.2
+against a 0.1.x database. Between 0.2 versions, apply reviewed migrations
+rehearsed on a copy.
 
-6. The preset (`src/service.ts`, `src/index.ts`, `src/handlers.ts`,
-   `wrangler.jsonc`) is never
-   rewritten. Generate into a scratch directory with the same manifests and
-   `mantle.config.json`, diff it against the project's files, and apply the
-   changes that matter by hand.
-7. Run the service locally and test its real routes and sign-in. Before
-   deploying a SQLite project, run
-   `mantle generate --check --database <local SQLite file>` to see what boot
-   will change.
+For the stable 0.2 line, pin every selected Mantle package to `0.2.0`; do not upgrade an existing application by following a moving dist-tag.
 
-Report the old and new versions, the checks and their results, what changed
-in the service files, and what remains. A dependency update does not
-authorize a deploy. Never commit secrets.
+Pin exact target SDK/peer versions and read its release notes and Admin build
+instructions. Core-to-native replaces app imports/wiring; it is not
+a package-only update. For 0.2-to-0.2 updates, preserve users, sessions, content
+and application code; review emitted SQL/policy diffs and rehearse explicit
+data-preserving schema/auth/role migrations on a copy. Initial schema.sql never
+authorizes rebuilding production tables. Verify auth/Admin/MCP/REST, locks and
+persistence before authorized cutover.
+
+Follow [Customising Admin](../../handbook/guides/native-admin.md#customising-admin)
+for the current application-built Admin; old UI subpaths have no compatibility
+aliases. Pin only actually published versions, or explicitly use a matching
+workspace preview. Recheck member and Admin OTP, all affected native routes,
+private field visibility, OCC and unknown outcomes. Do not publish a package as
+part of an application dependency update.

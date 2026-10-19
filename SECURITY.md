@@ -39,7 +39,7 @@ Security-sensitive areas include:
 - HTTP request handling,
 - MCP endpoints,
 - auth and session handling,
-- staff role and permission enforcement,
+- admin role and permission enforcement,
 - D1, PostgreSQL and asset storage boundaries,
 - entry write chokepoints,
 - render and content ingestion paths,

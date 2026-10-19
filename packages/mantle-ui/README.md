@@ -1,61 +1,9 @@
 # @aotter/mantle-ui
 
-Shared interaction UI for the Mantle Admin and MCP Apps (ADR-0029). The
-`/controller` subpath is framework-free; the root adds React components on top
-of it (React 19 is an optional peer, needed only for the root and `/kit`).
-
-## Admin
-
-The full SPA has a separate opt-in iframe artifact at
-`@aotter/mantle-ui/admin/preview.html`. Resolve that exported file, copy its
-adjacent assets, and use `adminPreviewDocument` from `/admin-preview` to prepare
-the document for the host's mount and asset paths. It installs the exported
-`admin/host-bridge.js` synchronously before Admin starts. Mount the document at
-`/builder/admin/dev` to open the complete Developer workspace's system flow.
-The canonical `admin/index.html` continues to refuse framing.
-
-The immediate parent must be same-origin. The host accepts only that iframe's
-`mantle:host-api:request` messages (protocolVersion 1), validates each envelope
-with `readAdminPreviewRequest`, and replies on the supplied MessagePort with
-`{ ok: true, status, headers, body }` or `{ ok: false, error }`. No unknown
-request falls through to native HTTP, authentication, OAuth, or another origin.
-Remount on project/revision changes; do not let an old frame address a new target.
-
-For an authoring draft, pass `design: true`: the same full Admin SPA opens its
-Developer pages, with data and account actions unavailable until a service is
-built. Core's public `developerConsole(plan)` and `createAdminDesignSurface`
-(`@aotter/mantle/admin`) project a compiled plan without creating a runtime,
-database, authenticated caller, or role grant. A compiler host must bind the
-snapshot to the exact source hash and revision. This does not relax the running
-Admin API's owner-only developer-console route. Runtime preview hosts instead
-dispatch through the real authorized Admin surface.
-
-`dist/admin/` is the built Admin console (a static SPA with base `/admin/`).
-Nothing imports it: `mantle generate`'s Cloudflare preset binds
-`node_modules/@aotter/mantle-ui/dist/admin` as the Worker's static assets (the
-Bun preset resolves `@aotter/mantle-ui/admin/index.html` and serves its
-directory with `bunAdminAssets`), and
-`createAdminSurface` (`@aotter/mantle/admin`) serves it at `/admin`. It is
-built for that path, so `createAdminSurface` refuses `assets` under any other
-`basePath`. Its source is `admin/`.
-
-## MCP App
-
-`/mcp-app` exports `mantleAppHtml`, one self-contained HTML document. Give it
-to `planApp` from `@aotter/mantle/mcp`, which embeds the plan's catalog of
-Views and row operations and renders every View tool of a surface:
-
-```ts
-apps: { resources: [planApp(runtime.plan, { surface: "staff", html: mantleAppHtml })] }
-```
-
-The App shows a View's rows with Admin's value renderers and opens one row
-operation at a time through the controller and `OperationPanel`. Every read
-and write is a tool call through the host; it holds no credentials.
-
-An App of your own reuses the same pieces from the root: `readCatalog`,
-`toolOf`, `outputOf`, `rowsOf`, `invokeTool` and `actionsFor` read the catalog
-and tool results as Mantle's App does (the `develop` skill's MCP App recipe).
+`@aotter/mantle-ui` is the shared UI layer behind Mantle Admin, usable on its own: a framework-free interaction
+controller (`/controller`, zero imports), React 19 components, a shadcn-style visual kit on Radix UI (`/kit`), and
+Tailwind design tokens (`tokens.css`, `kit.css`). It has no dependency on the Mantle SDK; React 19 is an optional peer,
+needed only for the root and `/kit`.
 
 ## Controller
 
@@ -80,7 +28,7 @@ controller.edit("reviewerNote", "Within budget.");
 await controller.submit();
 ```
 
-The host injects `read` and `invoke`. Admin uses the staff MCP client, an MCP
+The host injects `read` and `invoke`. Admin uses the admin MCP client, an MCP
 App uses `App.callServerTool`, and an application can use its own HTTP
 client. `subscribe` and `getSnapshot` plug straight into React's
 `useSyncExternalStore`, or into any other store. A listener that throws is
@@ -155,11 +103,12 @@ exactly as the console does:
 `@aotter/mantle-ui/kit` is Admin's domain-neutral React/shadcn visual
 language, for applications that do not embed the Admin product: the
 primitives, the email sign-in flow and the compiled theme. Its libraries are
-optional peers, so `/controller` and `/mcp-app` consumers install none of them.
-Install them with the kit:
+optional peers, so `/controller` consumers install none of them.
+Install them with the kit (pin `react` and `react-dom` to the same exact version):
 
 ```sh
-pnpm add @aotter/mantle-ui react react-dom radix-ui lucide-react class-variance-authority clsx tailwind-merge sonner input-otp react-day-picker
+pnpm add --save-exact react react-dom
+pnpm add @aotter/mantle-ui radix-ui lucide-react class-variance-authority clsx tailwind-merge sonner input-otp react-day-picker
 ```
 
 Then:
@@ -186,4 +135,11 @@ views; use the static Admin SPA or sandbox preview for the complete product.
 Applications that compile Tailwind themselves import `tokens.css` and add
 `@source` for `node_modules/@aotter/mantle-ui/dist/kit` instead of `kit.css`.
 
-Developer overview URLs accept `?diagram=system` or `?diagram=business`. The mode switch updates the URL, preserving other query parameters; without a recognized mode the existing graph heuristic applies. Hosts choose their initial iframe URL. Preview documents require an explicit local `basePath` through `adminPreviewDocument`; the SDK does not choose a host mount or deployment destination.
+
+## Admin package migration
+
+The Admin SPA, extension API, iframe preview and MCP App live in
+`@aotter/mantle-admin`. Their former `/admin/*`, `/extension`, `/admin-preview`
+and `/mcp-app` exports have moved to that package without compatibility aliases.
+Admin-specific catalog adapters use `@aotter/mantle-admin/controller`; the generic
+interaction controller stays here. This package has no SDK or server dependency.

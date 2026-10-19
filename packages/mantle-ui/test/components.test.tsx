@@ -92,3 +92,12 @@ describe("@aotter/mantle-ui components", () => {
     expect(preview).toContain("Version");
   });
 });
+
+
+it.each([true, false])("allows localized diagnostics in conflicts (locked: %s) without changing retry state", async locked => {
+  const c = controller({interaction: locked ? interaction : {bind: []}, invoke: async () => ({ok: false, diagnostics: [{code: "CONFLICT", message: "Expected one affected row."}]})});
+  await c.open(); await c.submit();
+  expect(c.getSnapshot().phase).toBe(locked ? "conflict" : "failed");
+  const html = renderToStaticMarkup(<OperationStatus controller={c} state={c.getSnapshot()} renderDiagnostic={d => <><span>Refresh and try again.</span><details><summary>Details</summary>{d.message}</details></>} />);
+  expect(html).toContain("Refresh and try again."); expect(html).toContain("Expected one affected row."); expect(html).toContain("<details>");
+});

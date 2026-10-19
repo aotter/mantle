@@ -1,0 +1,43 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: search_records}
+spec:
+  title: Search records
+  lifecycle: operational
+  searchableFields: [title, body]
+  scope: "owner = auth.uid()"
+  indexes: [[owner]]
+  ttl: {field: expiresAt, expireAfterSeconds: 0}
+  schema:
+    type: object
+    required: [owner, title]
+    properties:
+      owner: {type: string}
+      title: {type: string}
+      body: {type: [string, "null"]}
+      expiresAt: {type: [string, "null"], format: date-time}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: searched-records}
+spec:
+  surface: internal
+  input: {type: object, required: [q], additionalProperties: false, properties: {q: {type: string}}}
+  sql: SELECT r.id, r.title, mantle.search_rank(r) AS rank FROM search_records r WHERE r.id = input.q OR mantle.search(r, input.q) ORDER BY r.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: search_posts}
+spec:
+  title: Search posts
+  lifecycle: publishing
+  searchableFields: [title]
+  schema: {type: object, properties: {title: {type: string}}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: search_ids}
+spec:
+  title: Id only
+  lifecycle: operational
+  schema: {type: object, required: [title], properties: {title: {type: string}}}

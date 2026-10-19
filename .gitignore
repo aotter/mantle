@@ -1,4 +1,5 @@
-node_modules/
+node_modules
+
 .understand-anything/
 dist/
 dist-*/
@@ -34,3 +35,9 @@ coverage/
 .release-tarballs/
 .github-package-tarballs/
 .claude/worktrees/
+# Benchmark harness: local result files (packages/mantle/bench). Its cache lives in the OS temp dir.
+packages/mantle/bench/results/
+# Native local generated test consumers and private timing artifacts.
+packages/mantle/tests/apps/.generated/
+packages/mantle/results/
+packages/mantle/tests/.mcp-types-*/

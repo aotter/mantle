@@ -1,0 +1,199 @@
+/** Optional provider integration. Better Auth owns signatures, PKCE, redirects and token rotation. */
+import type { AuthContext, BetterAuthOptions, BetterAuthPlugin } from "@better-auth/core";
+import { createAuthMiddleware } from "@better-auth/core/api";
+import type { oauthProvider } from "@better-auth/oauth-provider";
+import type { AuthInstance } from "./caller.js";
+import { nativeAuthRead } from "./adapter.js";
+import { ContractError } from "../kernel/contracts.js";
+
+const pair = (field: string, value: string) => ({ field, value });
+const array = (value: unknown): string[] | null => {
+  try { const parsed = typeof value === "string" ? JSON.parse(value) : value; return Array.isArray(parsed) && parsed.every(x => typeof x === "string") ? parsed : null; } catch { return null; }
+};
+
+/**
+ * Fail closed for unbound tokens; reconsent cannot resurrect an issued JWT. As in Better Auth, an `offline_access` grant outlives
+ * the browser session: without a live session it stands on an unrevoked, unexpired offline refresh token for the same user and client.
+ */
+export async function assertActiveUserGrant(auth: AuthInstance, claims: Record<string, unknown>, audience: string | readonly string[]) {
+  const { sub, azp, sid, mantle_consent_id: id, mantle_consent_reference: reference, mantle_skip_consent: skip } = claims;
+  const tokenScopes = typeof claims.scope === "string" ? claims.scope.split(/\s+/).filter(Boolean) : array(claims.scope);
+  const offline = !!tokenScopes?.includes("offline_access");
+  if (![sub, azp].every(x => typeof x === "string" && x.length) || !(offline && sid == null || typeof sid === "string" && sid.length) || !(skip === true && id === null || typeof id === "string" && id.length)) throw new ContractError("UNAUTHENTICATED", "OAuth token is not bound to a user session.");
+  const { exec, param, now, table, column } = nativeAuthRead(auth.options);
+  const at = now(Date.now());
+  const c = (field: string) => `c.${column("oauthConsent", field)}`, s = (field: string) => `s.${column("session", field)}`, client = (field: string) => `client.${column("oauthClient", field)}`, r = (field: string) => column("oauthRefreshToken", field);
+  const { rows } = await exec(`SELECT ${s("id")} AS session, ${c("id")} AS "consentId", ${c("referenceId")} AS reference, ${c("resources")} AS resources, ${c("scopes")} AS scopes,
+      ${client("skipConsent")} AS "skipConsent", ${client("disabled")} AS disabled, ${client("scopes")} AS "clientScopes"
+    FROM ${table("oauthClient")} client LEFT JOIN ${table("session")} s ON ${s("id")} = ${param(1)} AND ${s("userId")} = ${param(2)} AND ${s("expiresAt")} > ${param(3)}
+    LEFT JOIN ${table("oauthConsent")} c ON ${c("id")} = ${param(4)} AND ${c("userId")} = ${param(2)} AND ${c("clientId")} = ${client("clientId")}
+    WHERE ${client("clientId")} = ${param(5)}`, [sid ?? null, sub, at, id, azp]);
+  const grant = rows[0];
+  const live = !!grant?.session || offline && !!grant && (await exec(`SELECT ${r("scopes")} AS scopes FROM ${table("oauthRefreshToken")}
+    WHERE ${r("userId")} = ${param(1)} AND ${r("clientId")} = ${param(2)} AND ${r("revoked")} IS NULL AND ${r("expiresAt")} > ${param(3)}`, [sub, azp, at])).rows.some(row => array(row.scopes)?.includes("offline_access"));
+  const provider = auth.options.plugins?.find(plugin => plugin.id === "oauth-provider") as { options?: { scopes?: string[] } } | undefined;
+  const firstParty = skip === true && id === null && !!grant?.skipConsent;
+  const resources = firstParty ? (typeof claims.aud === "string" ? [claims.aud] : array(claims.aud)) : array(grant?.resources);
+  const scopes = firstParty ? array(grant?.clientScopes) ?? provider?.options?.scopes : array(grant?.scopes);
+  const requested = typeof audience === "string" ? [audience] : audience;
+  const tokenAudiences = typeof claims.aud === "string" ? [claims.aud] : array(claims.aud) ?? [];
+  if (!grant || !live || grant.disabled || !firstParty && (!grant.consentId || (grant.reference ?? null) !== reference) || !resources || !scopes || !tokenScopes || !requested.some(x => resources.includes(x) && tokenAudiences.includes(x)) || !tokenScopes.every(x => scopes.includes(x))) throw new ContractError("UNAUTHENTICATED", "OAuth authorization grant is no longer active.");
+  return { id: sub as string };
+}
+
+/** Add first to oauthProvider/mcp extensions; Better Auth retains ownership of referenceId. */
+export const oauthGrantExtension: NonNullable<Parameters<typeof oauthProvider>[0]["extensions"]>[number] = {
+  claims: { accessToken: async ({ ctx, user, client, referenceId, grantType, scopes, sessionId }) => {
+    // Narrowing away offline_access on refresh would mint a session-bound token for a session that has already ended.
+    if (grantType === "refresh_token" && !scopes.includes("offline_access")) {
+      const session = sessionId ? await ctx.context.adapter.findOne<{ expiresAt: Date | string }>({ model: "session", where: [pair("id", sessionId)] }) : null;
+      if (!session || new Date(session.expiresAt).getTime() <= Date.now()) throw ctx.error("BAD_REQUEST", { error: "invalid_grant", error_description: "The browser session for this grant has ended; keep offline_access or sign in again." });
+    }
+    if (client.skipConsent) return { mantle_consent_id: null, mantle_skip_consent: true };
+    const consent = user && await ctx.context.adapter.findOne<{ id: string }>({ model: "oauthConsent", where: [pair("userId", user.id), pair("clientId", client.clientId), { field: "referenceId", value: referenceId ?? null }] });
+    return { mantle_consent_id: consent?.id ?? null, mantle_consent_reference: referenceId ?? null };
+  } },
+};
+
+export const OAUTH_GRANT_REVOCATION = "mantle-oauth-grant-revocation";
+/** Password resets (all channels) and an admin password change: the old credential may be compromised, so every session ends too. */
+const RESETS = ["/reset-password", "/email-otp/reset-password", "/phone-number/reset-password", "/admin/set-user-password"];
+const ENDING = [...RESETS, "/change-password", "/admin/ban-user", "/admin/update-user", "/admin/revoke-user-sessions"];
+const RESET_USER = "mantleResetPasswordUser";
+/** Better Auth's email-proof sign-ins: on an unverified user they delete its accounts and sessions (revokeUnprovenAccountAccess). */
+const PROVING = ["/sign-in/email-otp", "/magic-link/verify"];
+
+/**
+ * Add to the Better Auth plugins with the OAuth provider. An `offline_access` grant outlives sign-out and session expiry
+ * (as in Better Auth), but a successful password reset, a password change that signs out other devices, an admin ban
+ * (`/admin/ban-user`, or `/admin/update-user` setting `banned: true`), an admin session revocation or an admin password
+ * change ends every OAuth grant of that user: tokens, consents and unredeemed codes. So does an email OTP or magic-link
+ * sign-in attempt on an unverified user: Better Auth strips what was set up before that proof, possibly by someone else
+ * who registered the address first, and Mantle ends that party's grants before the attempt is checked.
+ */
+export function oauthGrantRevocation() {
+  return {
+    id: OAUTH_GRANT_REVOCATION,
+    hooks: {
+      // Better Auth consumes the reset token, so its user rides this request's own context to the after hook.
+      before: [{ matcher: ctx => ctx.path === "/reset-password", handler: createAuthMiddleware(async ctx => {
+        // Better Auth reads the token from the body or the query, in that order.
+        const token = (ctx.body as { token?: unknown } | undefined)?.token || (ctx.query as { token?: unknown } | undefined)?.token;
+        const value = typeof token === "string" && token ? await ctx.context.internalAdapter.findVerificationValue(`reset-password:${token}`) : null;
+        if (value) return { context: { [RESET_USER]: value.value } };
+      }) }, { matcher: ctx => PROVING.includes(ctx.path ?? ""), handler: createAuthMiddleware(async ctx => {
+        // Before the endpoint, while the user is still unverified and the magic-link token is unconsumed: once Better Auth
+        // marks the address verified, no later request would tell the pre-registrant's grants apart. A failure here fails
+        // the request before verification, so a retry ends them. A failed attempt ends them too: an unverified user's grants
+        // are exactly the pre-hijack risk.
+        const email = ctx.path === "/sign-in/email-otp" ? (ctx.body as { email?: unknown } | undefined)?.email : await magicLinkEmail(ctx.context, (ctx.query as { token?: unknown } | undefined)?.token);
+        const found = typeof email === "string" && email ? await ctx.context.internalAdapter.findUserByEmail(email.toLowerCase()) : null;
+        if (found && !found.user.emailVerified) await endGrants(ctx.context.adapter, found.user.id);
+      }) }],
+      // After the endpoint: its own validation and permission checks have passed and it succeeded.
+      after: [{ matcher: ctx => ENDING.includes(ctx.path ?? ""), handler: createAuthMiddleware(async ctx => {
+        const returned = ctx.context.returned, path = ctx.path ?? "";
+        if (returned instanceof Error || returned instanceof Response && !returned.ok) return;
+        const body = ctx.body as { userId?: unknown; revokeOtherSessions?: unknown; data?: { banned?: unknown }; email?: unknown; phoneNumber?: unknown } | undefined;
+        const userId = path === "/reset-password" ? (ctx as { [RESET_USER]?: unknown })[RESET_USER]
+          : path === "/email-otp/reset-password" ? typeof body?.email === "string" && (await ctx.context.internalAdapter.findUserByEmail(body.email.toLowerCase()))?.user.id
+          : path === "/phone-number/reset-password" ? typeof body?.phoneNumber === "string" && (await ctx.context.adapter.findOne<{ id: string }>({ model: "user", where: [pair("phoneNumber", body.phoneNumber)] }))?.id
+          // Better Auth itself ends the other sessions and keeps the current one.
+          : path === "/change-password" ? body?.revokeOtherSessions === true && (ctx.context.session?.user.id ?? (returned as { user?: { id?: unknown } } | null)?.user?.id)
+          : path === "/admin/update-user" ? body?.data?.banned === true && body.userId
+          : body?.userId;
+        if (typeof userId !== "string" || !userId) return;
+        // Sessions first: a live session (perhaps the attacker's) could otherwise authorize a new grant after endGrants.
+        if (RESETS.includes(path)) await ctx.context.internalAdapter.deleteUserSessions(userId);
+        await endGrants(ctx.context.adapter, userId);
+      }) }],
+    },
+  } satisfies BetterAuthPlugin;
+}
+
+/** The email a magic-link token names, read without consuming it; the token is stored as the magic-link plugin's `storeToken` says. */
+async function magicLinkEmail(context: AuthContext, token: unknown): Promise<unknown> {
+  if (typeof token !== "string" || !token) return;
+  const store = (context.options.plugins?.find(plugin => plugin.id === "magic-link") as { options?: { storeToken?: unknown } } | undefined)?.options?.storeToken ?? "plain";
+  const hash = typeof store === "object" && store && "hash" in store && typeof store.hash === "function" ? store.hash as (token: string) => Promise<string> : undefined;
+  const stored = store === "plain" ? token : hash ? await hash(token)
+    : store === "hashed" ? btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token))))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") : undefined;
+  const value = stored === undefined ? null : await context.internalAdapter.findVerificationValue(`magic-link:${stored}`);
+  try { return value ? (JSON.parse(value.value) as { email?: unknown }).email : undefined; } catch { return; }
+}
+
+/** Ends a user's grants (for one client, or all): consents, tokens and unredeemed authorization codes. */
+async function endGrants(db: AuthContext["adapter"], userId: string, clientId?: string) {
+  const where = [pair("userId", userId), ...clientId ? [pair("clientId", clientId)] : []];
+  // Delete first: even if cleanup fails, every issued JWT fails the live-grant check immediately.
+  await db.deleteMany({ model: "oauthConsent", where });
+  for (const model of ["oauthRefreshToken", "oauthAccessToken"]) await db.updateMany({ model, where: [...where, { field: "revoked", value: null }], update: { revoked: new Date() } });
+  // An unredeemed code would mint a new token lineage after reconsent.
+  const code = (v: string) => { const x = authCode(v); return x?.userId === userId && (!clientId || x.query.client_id === clientId); };
+  const codes = [userId, clientId].filter(x => x !== undefined).map(x => ({ field: "value", operator: "contains" as const, value: JSON.stringify(x) }));
+  for (let offset = 0; ;) {
+    const page = await db.findMany<{ id: string; value: string }>({ model: "verification", where: codes, limit: 100, offset, sortBy: { field: "id", direction: "asc" } });
+    const ids = page.filter(v => code(v.value)).map(v => v.id);
+    if (ids.length) await db.deleteMany({ model: "verification", where: [{ field: "id", operator: "in", value: ids }] });
+    if (page.length < 100) break;
+    offset += page.length - ids.length;
+  }
+}
+
+/** A verification value that is an authorization code, with its user and client; else undefined. */
+function authCode(text: string): { userId: string; query: { client_id: string } } | undefined {
+  let value;
+  try { value = JSON.parse(text); } catch { return; }
+  return value?.type === "authorization_code" && typeof value.userId === "string" && typeof value.query?.client_id === "string" ? value : undefined;
+}
+
+export interface OAuthConsentRequest { readonly clientName: string; readonly redirectUri: string; readonly scopes: readonly string[]; readonly oauthQuery: string }
+export interface OAuthConsentInfo { readonly id: string; readonly clientId: string; readonly clientName: string; readonly scopes: readonly string[] }
+
+/** Signed-query and consent APIs over the same application-owned instance and adapter (including renamed tables). */
+export function oauthConsents(auth: AuthInstance & { handler(request: Request): Promise<Response> }) {
+  const adapter = async () => (await auth.$context as AuthContext).adapter;
+  return {
+    getOAuthConsentRequest: async (request: Request): Promise<OAuthConsentRequest | null> => {
+      const url = new URL(request.url), clientId = url.searchParams.get("client_id");
+      if (!clientId || !url.search) return null;
+      const api = auth.api as unknown as { getOAuthClientPublicPrelogin(input: { headers: Headers; body: { client_id: string; oauth_query: string } }): Promise<{ client_name?: string; redirect_uris?: string[] }> };
+      const oauthQuery = url.search.slice(1);
+      const client = await api.getOAuthClientPublicPrelogin({ headers: request.headers, body: { client_id: clientId, oauth_query: oauthQuery } });
+      return { clientName: client.client_name ?? clientId, redirectUri: url.searchParams.get("redirect_uri") ?? client.redirect_uris?.[0] ?? "", scopes: (url.searchParams.get("scope") ?? "").split(/\s+/).filter(Boolean), oauthQuery };
+    },
+    completeOAuthConsent: async (request: Request, accept: boolean): Promise<string> => {
+      const oauth_query = (await request.formData()).get("oauth_query");
+      if (typeof oauth_query !== "string" || !oauth_query) throw new ContractError("INPUT_VALIDATION_FAILED", "Missing signed authorization request.");
+      const headers = new Headers(request.headers); headers.set("content-type", "application/json"); headers.delete("content-length");
+      const response = await auth.handler(new Request(new URL(`${auth.options.basePath ?? "/api/auth"}/oauth2/consent`, request.url).href, { method: "POST", headers, body: JSON.stringify({ accept, oauth_query }) }));
+      const body = await response.json() as { url?: unknown };
+      if (!response.ok || typeof body.url !== "string") throw new ContractError("INPUT_VALIDATION_FAILED", "Invalid authorization request.");
+      return body.url;
+    },
+    listOAuthConsents: async (userId: string): Promise<OAuthConsentInfo[]> => {
+      const { exec, param, table, column } = nativeAuthRead(auth.options);
+      const c = (field: string) => `c.${column("oauthConsent", field)}`, client = (field: string) => `client.${column("oauthClient", field)}`;
+      const { rows } = await exec(`SELECT ${c("id")} AS id, ${c("clientId")} AS "clientId", COALESCE(${client("name")}, ${c("clientId")}) AS "clientName", ${c("scopes")} AS scopes
+        FROM ${table("oauthConsent")} c LEFT JOIN ${table("oauthClient")} client ON ${client("clientId")} = ${c("clientId")}
+        WHERE ${c("userId")} = ${param(1)} ORDER BY ${c("updatedAt")} DESC, ${c("id")} ASC`, [userId]);
+      return rows.map(row => ({ id: row.id as string, clientId: row.clientId as string, clientName: row.clientName as string, scopes: array(row.scopes) ?? [] }));
+    },
+    revokeOAuthConsent: async (userId: string, consentId: string): Promise<boolean> => {
+      const db = await adapter();
+      const consent = await db.findOne<{ clientId: string }>({ model: "oauthConsent", where: [pair("id", consentId), pair("userId", userId)] });
+      if (!consent) return false;
+      await endGrants(db, userId, consent.clientId);
+      return true;
+    },
+  };
+}
+
+/** Optional scheduled storage hygiene, not boot work or an authorization rule. Owned/CIMD clients survive. */
+export async function pruneLegacyOAuthClients(auth: AuthInstance): Promise<number> {
+  const { adapter } = await auth.$context as AuthContext;
+  return adapter.deleteMany({ model: "oauthClient", where: [
+    { field: "clientDiscoveryId", value: null }, { field: "userId", value: null }, { field: "referenceId", value: null },
+    { field: "createdAt", operator: "lt", value: new Date(Date.now() - 90 * 86400_000) },
+  ] });
+}

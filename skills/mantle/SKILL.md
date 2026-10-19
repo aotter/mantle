@@ -1,12 +1,12 @@
 ---
 name: mantle
-description: Create a Mantle 0.2 service, continue an existing one, or save, preview and publish it on Mantle Cloud, using the installed @aotter/mantle package's own docs and this skill's Cloud helper script.
+description: Create, continue, test or deploy a Mantle application using installed @aotter/mantle docs, including manifests, SQL Views and Procedures, MCP tools, app-built Admin, mantle generate and Mantle upgrades.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/mantle/SKILL.md
   applies_to: mantle 0.2
   projection: plugin
-  projectionReason: The plugin's entry skill; it creates projects and carries the Cloud helper, so it is installed from the repository, not the npm package.
+  projectionReason: The plugin's authoring entry skill is installed from the repository; workflow documentation comes from the installed SDK package.
 ---
 
 # Mantle
@@ -17,107 +17,60 @@ authority: `node_modules/@aotter/mantle/README.md` and
 `node_modules/@aotter/mantle/docs/`. Prefer them over this file, the SDK
 checkout, or any online copy.
 
+## Start with `mantle help`
+
+Run `mantle help` first (in a project: `npx mantle help`; before one exists:
+`npx @aotter/mantle@<exact version> help`). It prints the installed version's
+entry page and every topic; `mantle help <topic>` prints one page with the next
+and linked topics as commands. Follow it rather than browsing the SDK checkout
+or an online copy.
+
 ## Find the project and its version
 
-Locate the user's application (never use the SDK repository as the
-application). If it has `@aotter/mantle`, read its `package.json`, lockfile and
-`node_modules/@aotter/mantle/package.json`, and follow that version's docs.
+Work in the user's application, outside the SDK checkout. Read package.json, the lockfile, installed SDK README and node_modules/@aotter/mantle/docs/. Those files define the exact version's contract. Preserve existing identity, handles, routes and resources.
+For existing older applications, use their installed docs until the user requests an upgrade; if an older version
+lacks a guide named here, record the missing guidance and keep that version's contract.
 
-- `0.2.x`: continue below; for ongoing work read
-  `node_modules/@aotter/mantle/docs/skills/develop/SKILL.md`.
-- `0.1.x` (v1 manifests, a `version: 1` `mantle.config.json`, `mantle skills`):
-  upgrade only when asked, with `docs/skills/update/SKILL.md` and
-  `docs/upgrade-0.1-to-0.2.md` of the 0.2 package.
+## Choose the installed package skill
 
-## New project
+- Read `node_modules/@aotter/mantle/docs/skills/develop/SKILL.md` to change an existing project's manifests, SQL, handlers, service entry or surfaces.
+- Read `node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md` to add Mantle to an application with existing code, users or data.
+- Read `node_modules/@aotter/mantle/docs/skills/update/SKILL.md` to upgrade Mantle, including from 0.1.x.
+- Read `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` only for an authorized production deployment.
+- Read `node_modules/@aotter/mantle/docs/skills/media-gc/SKILL.md` only to audit or remove stale uncommitted media uploads.
 
-1. Create a directory outside the SDK checkout with Node 22+ and
-   `"type": "module"` in `package.json`.
-2. For a Mantle Cloud project, first connect Cloud MCP and select or create the
-   organization/project as described in [Cloud workflow](references/cloud.md).
-   Use the exact Core version returned by `cloud_host_contract`. Otherwise
-   choose the version: `npm view @aotter/mantle dist-tags`. Use a `0.2.x`
-   version (while 0.2.0 is in prerelease it is on `alpha`; `latest` may still
-   be 0.1.x). Install it exactly: `npm install --save-exact @aotter/mantle@<version>`
-   (or the pnpm/yarn/bun equivalent). Install `@types/node` and `typescript`
-   as dev dependencies; Cloudflare additionally needs `wrangler` and
-   `@cloudflare/workers-types`, while Bun needs `bun-types`. Pin every
-   `@aotter/mantle*` package to that same version. If the project's registry
-   overrides npmjs, add `@aotter:registry=https://registry.npmjs.org/` to the
-   project's `.npmrc`.
-3. Read `node_modules/@aotter/mantle/docs/handbook/start/quickstart-worker.md`
-   for Cloudflare, or `docs/handbook/start/project-and-cli.md` for Bun,
-   and `docs/handbook/reference/features.md`.
-4. Choose the identity and features with the user's request:
-   `mantle generate` with no flags is Better Auth sign-in plus Admin, MCP and
-   REST; `--identity custom` keeps the user's own auth;
-   `--identity none --features web` is a public REST service. The default
-   host is Cloudflare over D1; `--host bun` (PostgreSQL unless
-   `--dialect sqlite`) or `--dialect postgres` choose another
-   (`docs/handbook/start/project-and-cli.md`). Identity, host and dialect
-   cannot be switched later.
-5. Write only the user's Schemas, Views, Procedures and Triggers in
-   `manifests/`. `docs/examples/` shows whole services; do not copy one
-   wholesale or invent business data.
-6. Run `mantle generate`. When it names missing packages, install exactly
-   those with the project's package manager and run it again. Use Core's
-   installed `package.json` `peerDependencies` versions for auth/MCP peers,
-   not registry latest; resolve incompatible peer warnings before running.
-   Then
-   `mantle generate --check` and `tsc --noEmit`.
-7. With identity `mantle`: `cp .dev.vars.example .dev.vars`, set
-   `ADMIN_EMAIL` and a random `BETTER_AUTH_SECRET`, run `wrangler dev --local`
-   (on Bun: `.env.example` to `.env`, then `bun src/index.ts`),
-   sign in at `/admin/sign-in` with the one-time code printed to the log, and
-   check that the console loads and `GET /admin/api/me` is `owner`. Exercise the REST routes and `/mcp` `tools/list`.
+## New application
 
-For a local cold start, do not push, deploy or configure providers. For a
-requested hosted app, continue with the selected hosting workflow.
+Node must be 22.22 or newer. Stable 0.2.0 is available as `@aotter/mantle@0.2.0`; pin selected Mantle packages to that exact version. Create it with `npx @aotter/mantle@<exact version> init <directory>`, then follow
+`mantle help` ("Build from a product brief") and the app's `README.md`. Without the user listing them, a complete app
+includes:
 
-## Hosting and publishing
+- Email OTP sign-in, the two roles `admin` and `user`, Admin for `admin`, MCP for both roles (`/mcp`, `/mcp/admin`)
+  and REST: the shell already wires them; keep them.
+- Real business rules in SQL Procedures (`mantle help sql-patterns`), not in handler code around separate writes.
+- For visitor pages, everything in `mantle help public-pages` (SEO, AEO, sitemap, robots, `llms.txt`), styled.
+- Local HTTP checks (`mantle help local-testing`), then independent acceptance with `pnpm accept`
+  (`mantle help agent-workflow-acceptance`).
 
-Follow the user's requested host. A request for a complete hosted Mantle Cloud
-app includes saving, previewing and publishing it; continue through the terminal
-release result. A local-only or save-only request stops there. Creating a local
-project alone does not imply a deploy request. Self-hosting remains available.
+Take patterns from `mantle help examples` into the app's own manifests and `src/`; do not copy an example directory
+over the app. Resolve each `AGENT:` or name the ones you left. Generation only, inside an app you already have: skip
+`init` and use `mantle generate` (`mantle help project-and-cli`).
 
-- **Cloudflare Workers or ChatGPT Sites:** follow
-  `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` and that host's
-  native deployment workflow.
-- **Mantle Cloud:** follow [Cloud workflow](references/cloud.md). The bundled
-  `scripts/mantle-cloud.mjs` supports `link`, `source`, `open`, `save`, `status`, `deploy`,
-  `rollback` and `version`. Run it by absolute path from the application root;
-  execute its literal `nextAction` using the connected Cloud MCP, not guessed
-  tool names. It uses the project's installed compiler and esbuild; it bundles
-  no Core, SQL parser, provider credentials or application runtime.
+## Accept before reporting done
 
-For an offline readiness check:
+Before reporting any new app or feature as done, follow `mantle help agent-workflow-acceptance`: a private rubric,
+then one fresh agent per role given only its role and the URLs `pnpm accept` prints, at most three rounds. If it was
+not run, report the work as UNVERIFIED rather than done; if it could not run, BLOCKED.
 
-```bash
-node <this skill>/scripts/mantle-cloud.mjs check [--project <dir>] [--core <Cloud version>]
-```
+## Deployment
 
-It reads only the project, compiles with its installed `@aotter/mantle/spec`,
-and prints `{ ok, coreVersion, fingerprint, sourceHash, planFile, cloud,
-nextAction? }`. `cloud: "not_checked"` is not a deployment result.
-`planFile: "stale"` means regenerate and commit `.mantle/generated/`;
-`core_mismatch` means install Cloud's exact version. Cloud serves D1 plans.
-
-The plugin configures `https://cloud.mantle.tools/mcp`. The same Cloud workflow
-works with a staging MCP connection; do not change production to staging behind
-the user's back. Never put tokens or grants in files, commands or chat. Pipe
-Cloud results to the helper over stdin. Existing OAuth/session and project
-edit/deploy rules still apply; Cloud membership never grants tenant staff access.
+Deploy only when the user requests it, following the installed `docs/skills/provision/SKILL.md` and the selected
+host's native workflow. Local project creation alone is not deployment authorization.
 
 ## Existing project and handoff
 
-Preserve the user's manifests, `src/` files, identity, package versions and
-provider resources. `src/service.ts`, `src/index.ts` and `wrangler.jsonc` are
-the application's after the first generate. Run `mantle generate --check` and
-the project's own tests before and after a change.
+Preserve the user's manifests, `src/` files, identity, package versions and provider resources. Run the project's
+generate command with `--check` and its own tests before and after a change.
 
-To add Mantle to an application that has its own code, users and data, read
-`node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md` first.
-
-Report the project path, the exact Mantle version, what you changed, the checks
-you ran with their results, and anything left for the user.
+Report the project path, the exact Mantle version, what you changed, the checks you ran with their results, the
+independent acceptance verdict (CONVERGED / BLOCKED / UNVERIFIED), and anything left for the user.

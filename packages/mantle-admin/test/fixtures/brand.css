@@ -1,0 +1,3 @@
+/* the application's own CSS, imported by its entry: its brand colours reach the MCP App */
+:root { --primary: rgb(10, 20, 30); --primary-foreground: rgb(240, 240, 240); }
+.dark { --primary: rgb(200, 210, 220); --primary-foreground: rgb(5, 5, 5); }

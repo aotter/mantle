@@ -9,12 +9,12 @@ await rm(`evidence/${name}/extras.json`, { force: true });
 const checks=[];
 let buyer;
 async function rpc(method,params={}) {
- const r=await api.post(origin+'/mcp/staff',{headers:{accept:'application/json, text/event-stream'},data:{jsonrpc:'2.0',id:1,method,params}});
+ const r=await api.post(origin+'/mcp/admin',{headers:{accept:'application/json, text/event-stream'},data:{jsonrpc:'2.0',id:1,method,params}});
  assert.equal(r.status(),200,await r.text());const text=await r.text(), line=text.split('\n').find(l=>l.startsWith('data:')); const body=JSON.parse(line?line.slice(5):text);assert(!body.error,JSON.stringify(body));return body.result;
 }
 try {
- const tools=await rpc('tools/list');assert(tools.tools.some(t=>t.name==='create_role'));checks.push('staff MCP discovers manifest tools');
- const role=await rpc('tools/call',{name:'create_role',arguments:{name:'MCP 矩陣驗收 '+Date.now(),request:true,approve:false,finance:false,purchase:false,receive:false}});assert(!role.isError,JSON.stringify(role));checks.push('real staff MCP procedure writes business role');
+ const tools=await rpc('tools/list');assert(tools.tools.some(t=>t.name==='create_role'));checks.push('admin MCP discovers manifest tools');
+ const role=await rpc('tools/call',{name:'create_role',arguments:{name:'MCP 矩陣驗收 '+Date.now(),request:true,approve:false,finance:false,purchase:false,receive:false}});assert(!role.isError,JSON.stringify(role));checks.push('real admin MCP procedure writes business role');
  const resource=await rpc('resources/list');assert(resource.resources.length);checks.push('MCP App resources available');
  const scoped=await api.get(origin+'/admin/api/entries?collection=child-items&scope_field=parentId&scope_value=request-000000&sort=position&direction=asc&limit=100');assert.equal(scoped.status(),200);assert.deepEqual((await scoped.json()).items.map(row=>row.data_preview.position),Array.from({length:100},(_,i)=>i));
  const filtered=await api.get(origin+'/admin/api/entries?collection=requests&filter_field=state&filter_value=approved&sort=amount&direction=asc&limit=100');assert.equal(filtered.status(),200);const ordered=(await filtered.json()).items;assert(ordered.length);assert(ordered.every((row,i)=>row.data_preview.state==='approved'&&(i===0||row.data_preview.amount>=ordered[i-1].data_preview.amount)));checks.push('scoped positions and indexed filtered amounts are actually ordered');

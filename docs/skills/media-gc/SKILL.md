@@ -11,14 +11,25 @@ metadata:
 
 # Mantle Media GC
 
+## Generated native applications (alpha.7 and later)
+
+If the installed README describes generated native queries, read
+`docs/handbook/cloudflare/media-r2.md` and app-owned site/media wiring instead of Core storage
+options. Resolve the exact configured bucket and declared purposes. The
+`uploads/` candidate audit below still applies. Committed copies live under
+`committed/` and must never be candidates. Attempt-isolated committed copies
+retained after an uncertain DB outcome require reconciliation with live DB
+references before any separately authorized cleanup.
+
 Use the connected Cloudflare API. Audit by default; delete only the exact
 objects approved by the user.
 
 ## Preflight
 
-1. Read `wrangler.jsonc` and `src/service.ts`. Resolve the R2 bucket that
-   `r2MediaStorage` uses and the media purpose names in the site defaults
-   passed to `d1Storage(db, { site })`.
+1. Read `wrangler.jsonc`, the app-owned entry (`src/worker.ts` by default,
+   or the generation command's `--entry`) and its media wiring. Resolve the R2
+   bucket that `r2MediaStorage` uses and the media purpose names in
+   `siteDefaults.media.purposes` selected by `--site`.
 2. Confirm the exact Cloudflare account and bucket. If either is ambiguous,
    ask; never choose by name similarity.
 3. Use the Cloudflare OpenAPI search before execution to resolve the current
@@ -30,11 +41,13 @@ objects approved by the user.
 
 `POST /admin/api/media/uploads` issues presigned PUT URLs that expire after 15
 minutes, for keys under `uploads/<purpose>/<group>/<role>.<ext>`. Commit
-copies each checked object to `<purpose>/<group>/<role>.<ext>` (with
-`committedAt` metadata) and deletes the upload key; a rejected group's upload
-keys are deleted. So an object still under `uploads/` long after its URL
-expired belongs to an upload that was never committed, and nothing can commit
-it any more. Objects outside `uploads/` are committed media: never candidates.
+copies each checked object to `committed/<group>/<attempt>/<role>.<ext>` (with
+`committedAt` metadata); the attempt UUID isolates concurrent commits. Upload
+keys are removed after the database commit succeeds, or when a group is
+rejected. An old upload key may also be leftover cleanup from a successful or
+uncertain commit: it is not evidence that the media row is absent. Once expired,
+it cannot create a new asset. Objects outside `uploads/` are never candidates;
+reconcile attempt copies separately with live database references.
 
 ## Audit
 

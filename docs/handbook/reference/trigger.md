@@ -1,104 +1,77 @@
----
-description: Trigger field reference for Mantle 0.2.0 — http, mcp, lifecycle and schedule sources, POSIX cron and its Cloudflare translation, and the diagnostics each raises.
----
 # Trigger
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata: { name: place-order-http }
+kind: Schema
+metadata: { name: tickets }
 spec:
-  source: { kind: http, method: POST, path: /api/orders }
-  target: { procedure: place-order }
+  title: Tickets
+  lifecycle: operational
+  schema: { type: object, required: [closed], properties: { closed: { type: boolean } } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: close-ticket }
+spec:
+  requires: { auth: { all: [ctx.admin] } }
+  input: { type: object, required: [id, version], properties: { id: { type: string }, version: { type: integer } }, additionalProperties: false }
+  output: { type: object }
+  handler: { sql: 'UPDATE tickets SET closed=true WHERE id=input.id AND version=input.version RETURNING id,closed' }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: close-ticket-http }
+spec:
+  source: { kind: http, method: POST, path: '/api/tickets/{id}/close' }
+  target: { procedure: close-ticket }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: close-ticket-mcp }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: close-ticket }
 ```
 
-`target.procedure` names a declared Procedure
-(`TRIGGER_TARGET_PROCEDURE_UNKNOWN`). Several Triggers may target one
-Procedure; each source runs it as an `Invocation` with the same `requires`,
-guard and validation.
+The target names a declared Procedure. `http` sources use POST/PUT/PATCH/DELETE and an `/api/` path. Path parameters bind to corresponding declared input fields and override JSON-body values. The generated REST module retains the Procedure's authorization and validates boundary input.
 
-## `http`
+An MCP source is `{ kind: mcp, surface: public }` or admin. The selected MCP module exposes the Procedure as a snake-case tool with its description, [tool hints](procedure.md#mcp-tool-hints) and requires checks.
 
-| Field | Values |
-|---|---|
-| `method` | `POST`, `PUT`, `PATCH`, `DELETE` (reads are Views) |
-| `path` | starts with `/api/` (`TRIGGER_PATH_INVALID`); `{param}` segments bind to inputs of the same name, coerced to their declared types |
+By default, pair every HTTP Trigger with an MCP Trigger so the same operation is reachable by the user's AI. `mantle generate` warns when a Procedure has HTTP exposure but no MCP exposure, suggesting `surface: admin` for an admin-only Procedure and `public` otherwise. Triggers still decide every Procedure surface: intentional asymmetric exposure is allowed and generation succeeds.
 
-The REST surface answers it. The JSON body and the path parameters merge into
-the input (a path parameter wins). A `(method, path)` pair is unique
-(`TRIGGER_PATH_COLLISION`); a route with fewer parameters is tried first, so
-`/api/items/search` is not shadowed by `/api/items/{id}`. The answer is the
-Procedure's output, or `{ "error": … }`. `ctx.cause.kind` is `http`.
+Lifecycle and schedule sources are rejected at generation with `GENERATE_UNSUPPORTED`, including disabled schedules. Use an app-owned handler or scheduler. For signed webhooks, verify the original raw Request in the app and call a generated Procedure with validated input; do not route it through a JSON boundary before signature verification.
 
-The body is parsed JSON. For a signed webhook, verify the raw body in the
-service's own `fetch` and call `runtime.invokeProcedure`.
+## Input rules
 
-## `mcp`
+The admin MCP tool below lists `reason` and `closed` without the rules, and its
+description ends "'reason' is required when 'closed' is false."; a call with
+`closed: false` and no `reason` fails with `INPUT_VALIDATION_FAILED` at
+`procedures/set-ticket/input/reason` (the error path is
+`procedures/<name>/input/<field>`). See [surface contracts](surface.md) for the
+supported rules.
 
-| Field | Values |
-|---|---|
-| `surface` | `public` (`/mcp`) or `staff` (the staff MCP surface; also an Admin operation) |
+```yaml
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: set-ticket }
+spec:
+  description: Open or close a ticket.
+  input:
+    type: object
+    required: [id, closed]
+    properties: { id: { type: string }, closed: { type: boolean }, reason: { type: string, maxLength: 200 } }
+    additionalProperties: false
+    if: { properties: { closed: { const: false } }, required: [closed] }
+    then: { required: [reason] }
+  output: { type: object }
+  handler: { sql: 'UPDATE tickets SET closed=input.closed WHERE id=input.id RETURNING id,closed' }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: set-ticket-mcp }
+spec:
+  source: { kind: mcp, surface: admin }
+  target: { procedure: set-ticket }
+```
 
-The tool is named after the Procedure, kebab to snake case
-(`MCP_TOOL_NAME_COLLISION` when two names meet). Give the Procedure a
-`description` (`MCP_TOOL_DESCRIPTION_MISSING` warns). `ctx.cause.kind` is
-`mcp`.
-
-## `lifecycle`
-
-| Field | Values |
-|---|---|
-| `schema` | the Schema watched (`LIFECYCLE_SCHEMA_UNKNOWN`) |
-| `on` | non-empty: `before_create`, `after_create`, `before_update`, `after_update`, `before_delete`, `after_delete`, `before_publish`, `after_publish` |
-
-The target is a `ref` Procedure (`LIFECYCLE_TARGET_NOT_REF`). `ctx.cause` is
-`{ kind: "lifecycle", trigger, hook, schema, rows, id }`.
-
-- A **before** hook runs before the batch, receives the one row (for an insert,
-  the row about to be written), reads only, and rejects by throwing; nothing is
-  applied. The write then locks the version the hook saw. Before hooks on one
-  operation run in Trigger-name order.
-- An **after** hook runs after the commit, once per statement and Trigger, with
-  every written row in `rows` (each with `id` and `version`). A failure is
-  logged and never undoes the write. `id` is stable for a replay.
-
-A hook sees the originating caller. Any path that writes the Schema fires its
-hooks: SQL Procedures, `ctx.store`, Admin. A set op on a Schema with a before
-hook for that operation is refused.
-
-## `schedule`
-
-| Field | Values |
-|---|---|
-| `cron` | five-field POSIX cron in UTC; weekday 0 = Sunday |
-| `enabled` | optional, default `true` |
-
-The target runs as the system caller with input `{}`. It may not declare
-`requires.auth` predicates (`SCHEDULE_AUTH_INVALID`), and its input must
-accept an empty object (`SCHEDULE_INPUT_INVALID`). `ctx.cause` is
-`{ kind: "schedule", trigger, cron, scheduledTime, id: "<trigger>:<scheduledTime>" }`.
-
-The service passes `schedules: true` to `createMantle`; without it boot
-refuses an enabled schedule (`SCHEDULE_NOT_WIRED`). The Cloudflare preset
-passes it. The Bun preset has no scheduler, so `mantle generate --host bun`
-refuses an enabled schedule; use host `none` with your own scheduler calling
-`invokeSchedule(cron, scheduledTime, env)` on what `createMantle` returns.
-
-### Cloudflare
-
-Cloudflare numbers weekdays 1 (Sunday) to 7. `toCloudflareCron` from
-`@aotter/mantle/cloudflare` adds one to every explicit weekday number and
-leaves `*`, names and the other fields alone:
-
-| POSIX (manifest) | Cloudflare (`wrangler.jsonc`) |
-|---|---|
-| `0 3 * * 0` | `0 3 * * 1` |
-| `0 9 * * 1-5` | `0 9 * * 2-6` |
-| `*/5 * * * *` | `*/5 * * * *` |
-
-It refuses what it cannot translate faithfully: `?`, `L`, `W`, `#`, weekday
-`7`, numbers with a leading zero, a backwards range, a name with a step, and a
-day of month together with a weekday. `mantle generate` runs it on every
-enabled schedule and fails before writing on a refusal. The generated
-`src/index.ts` maps Cloudflare's cron back to every POSIX expression that
-shares it.
+See [surfaces](surface.md) for mounted paths, error mapping and origin checks.

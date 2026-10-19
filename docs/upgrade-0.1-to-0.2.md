@@ -1,9 +1,24 @@
 # Upgrading from 0.1.x to 0.2.0 (for AI agents)
 
+For **0.2.0-alpha.7 and later**, use the
+[native SDK migration](handbook/releases/index.md#native-sdk-migration-alpha7),
+[current CLI](handbook/start/project-and-cli.md) and
+[app shell](examples/app-shell/). The application owns routing,
+Auth, native handles and database migrations; the former `createMantle` runtime,
+host presets, boot-time convergence and CLI flags below have been replaced.
+Install the same exact version of `@aotter/mantle`, `@aotter/mantle-ui` and,
+when selecting Admin, `@aotter/mantle-admin`. Start with a new database for a
+0.1.x migration and preserve every authorization, scope and OCC requirement.
+The remainder describes the earlier alpha contract for historical reference.
+
 No codemod, and no in-place upgrade of a 0.1.x database. A coding agent moves
-one project by hand with this guide. When it and ADR-0032 to ADR-0035
-(`docs/adr/`), ADR-0036 (host and dialect) or ADR-0038 (Bun) disagree, the
-ADR wins.
+one project by hand with this guide. When it and
+[ADR-0032](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0032-store-centric-core-and-service-contract.md),
+[ADR-0033](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0033-storage-converges-to-the-plan.md),
+[ADR-0034](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0034-store-is-authored-as-sql.md),
+[ADR-0035](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0035-sql-dialects.md),
+[ADR-0036](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0036-host-and-dialect.md) or
+[ADR-0038](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0038-bun-native-host.md) disagree, the ADR wins.
 
 ## Rules
 
@@ -50,7 +65,7 @@ command; it never installs anything.
 - `features` is a subset of `mcp`, `admin`, `web`, in that order. The 0.1.x
   features `spec`, `runtime` and `api` are dropped: REST is always mounted.
 - `dialect` is `sqlite` (alias `d1`, the default, left out) or `postgres`
-  (PostgreSQL through Hyperdrive on `cloudflare`; Bun.SQL on `bun`, where it
+  (PostgreSQL through Hyperdrive on `cloudflare`; node-postgres on `bun`, where it
   is the default). A 0.1.x project was SQLite: keep `sqlite` (with
   `--host bun`, pass `--dialect sqlite`) unless the data also moves to
   PostgreSQL.
@@ -70,10 +85,10 @@ camelCase names.)
 
 | 0.1.x | 0.2.0 |
 |---|---|
-| `scope: { owner: $ctx.user.id }` | `scope: { owner: auth.uid() }`. The field is a required string, the leftmost column of an index (`indexes: [[owner]]`), and the first column of every `uniqueIndexes` entry. Store fills it; a write never sets it |
+| `scope: { owner: $ctx.user.id }` | `scope: "owner = auth.uid()"`. The field is a required string, the leftmost column of an index (`indexes: [[owner]]`), and the first column of every `uniqueIndexes` entry. Store fills it; a write never sets it |
 | `x-mantle-bind: ctx.user` on a field only its owner may see | remove the bind; add `scope` as above |
 | any other `x-mantle-bind: ctx.user` | remove the bind; every write that sets the field sets it to `auth.uid()`, never to an input |
-| `x-mantle-bind: ctx.staff` | remove the bind; set it to `auth.uid()` in writes whose Procedure `requires` `ctx.staff` |
+| `x-mantle-bind: ctx.staff` | remove the bind; set it to `auth.uid()` in writes whose Procedure requires `ctx.admin` |
 | `x-mantle-bind: now` | remove the bind; set it to `now()` in every write that sets it |
 | `searchableFields` | unchanged, now trigram full-text search; date and date-time fields are refused |
 
@@ -158,11 +173,11 @@ The generated types list exactly the plan's refs.
 |---|---|
 | `ctx.user` present | `ctx.caller.kind === "user"`. Never test `!== "anonymous"`: a schedule runs as `system` |
 | `ctx.user.id` | `ctx.caller.subject` (after that check) |
-| `ctx.staff` | `ctx.caller.kind === "user" && ctx.caller.role !== null` |
+| `ctx.staff` | `isAdmin(ctx.caller)` from `@aotter/mantle/contracts` |
 | `ctx.event`, `ctx.schedule` | `ctx.cause` (`kind`: `http`, `mcp`, `internal`, `schedule`, `lifecycle`); `ctx.cause.cron` is POSIX, so shift any cron string the code compares |
 | `ctx.event.entry` | **a loop** over `ctx.cause.rows` (one statement can touch many rows; never `rows[0]`). Rows are flat: `entry.data.x` → `row.x` |
 | `ctx.store.view(name, { params, page, show, search, filters })` | `ctx.store.view(name, { input, limit, cursor, search, filters })`; `search` and `filters` match only the View's `uiSchema.list.searchFields` and `filterFields` |
-| `runtime.entries`, `runtime.executeView`, `ctx.writeAtomically` | `ctx.store.select`, `ctx.store.view`, `ctx.store.write([...ops])` (all or nothing), `ctx.store.id()` |
+| `runtime.entries`, `runtime.executeView`, `ctx.writeAtomically` | `ctx.db.<schema>.get / first / find`, `ctx.store.view`, `ctx.store.write([...ops])` (all or nothing), `ctx.store.id()` |
 | `runtime.store.as(ctx)` | `runtime.store.as(caller)` |
 | calling another Procedure through a `getRuntime` closure | `await ctx.invoke("procedure-name", input)` (keeps the caller, re-checks its auth) |
 
@@ -179,8 +194,9 @@ only in trusted host code.
    old Worker into the new files by hand.
 3. With `identity: mantle`, sign-in uses a console email sender locally;
    replace it with a real `EmailSender` before deploying.
-4. Staff MCP stays at `/mcp/staff`, behind an OAuth token with the `mcp`
-   scope and a staff role; MCP clients keep their URL.
+4. Admin MCP moves from `/mcp/staff` to `/mcp/admin`. Update MCP client URLs.
+   It admits only the admin layer classified by Better Auth’s admin plugin
+   `adminRoles` (default `["admin"]`), and requires the `mcp` scope for tokens.
 5. Import data into the new database through `runtime.store`. A scoped row
    goes through `runtime.store.as(<its owner's caller>)`, so the scope field is
    the owner. `status`, `created_at` and `author_id` cannot be imported:

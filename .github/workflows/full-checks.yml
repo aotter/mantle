@@ -1,0 +1,87 @@
+name: Full checks
+
+# Manual: Actions → Full checks → Run workflow (on any branch; the dispatch entry comes from main). Run it before a release
+# or when a change may behave differently on Linux. Maintainers otherwise rely on local `pnpm check`.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: mantle, POSTGRES_PASSWORD: mantle, POSTGRES_DB: mantle }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      MANTLE_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+      MANTLE_NEXT_BUN_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+      MANTLE_NEXT_WORKER_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+      MANTLE_TEST_CHROMIUM: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm check:startup
+      - run: pnpm check:release
+      - name: Native four-target conformance
+        run: pnpm --filter @aotter/mantle test:native
+      - name: Native Wrangler/D1 integrations
+        working-directory: packages/mantle
+        env:
+          MANTLE_NEXT_REST_D1: "1"
+          MANTLE_NEXT_PAGING_D1: "1"
+          MANTLE_NEXT_TRANSLATIONS_D1: "1"
+          MANTLE_NEXT_MCP_MEDIA_D1: "1"
+          MANTLE_NEXT_SITE_D1: "1"
+          MANTLE_NEXT_D1_REST: "1"
+          MANTLE_NEXT_AUTH_D1: "1"
+          MANTLE_NEXT_ADMIN_D1: "1"
+        run: bun test tests/rest-native.test.ts tests/paging-d1.test.ts tests/translations-d1.test.ts tests/mcp-media-d1.test.ts tests/site-d1.test.ts tests/wire.test.ts tests/auth-cookie.test.ts tests/admin-bindings.test.ts
+      - name: Wrangler CLI and Admin D1 integrations
+        env:
+          MANTLE_NATIVE_TESTS: "1"
+          MANTLE_ADMIN_LOCAL_D1: "1"
+        run: |
+          pnpm --filter @aotter/mantle exec bun test tests/cli.test.ts tests/web-example.test.ts
+          pnpm --filter @aotter/mantle-admin test:native-server
+      - name: Packed-consumer provenance self-test
+        run: node scripts/check-packed-consumer.mjs --self-test
+      - run: pnpm check:worker-consumer
+      - name: Install Chrome
+        run: pnpm --filter @aotter/mantle-admin exec playwright install --with-deps chrome
+      - run: pnpm check:examples
+      - name: Admin build under npm ci --ignore-scripts, served without node_modules
+        run: node scripts/check-admin-build.mjs
+      - run: pnpm check:doc-examples
+      - run: pnpm check:oss-plugin
+      - name: Admin sandbox boundaries (Chrome)
+        run: pnpm --filter @aotter/mantle-admin test:browser
+      - name: SDK bundle size report
+        working-directory: packages/mantle
+        run: bun scripts/check-size.ts
+      - name: SDK package size report
+        working-directory: packages/mantle
+        run: bun scripts/check-package.ts
+      - name: UI and Admin size report
+        run: pnpm check:ui-size

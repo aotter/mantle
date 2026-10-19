@@ -1,74 +1,11 @@
----
-description: The manifest envelope of Mantle 0.2.0 — apiVersion, kind, metadata, files and documents, names, localized text, and the SQL naming conventions every atom shares.
----
-# Manifest envelope and conventions
+# Manifest envelope
 
-```yaml
-apiVersion: cms.mantle.aotter.net/v2
-kind: Schema            # Schema | View | Procedure | Trigger
-metadata:
-  name: orders          # required, unique per kind
-spec: { … }             # kind-specific
-```
+Every YAML document has `apiVersion: cms.mantle.aotter.net/v2`, `kind`, `metadata.name` and `spec`. Kinds are Schema, View, Procedure and Trigger. Pass explicit file paths to `mantle generate`; a file may contain several documents separated by `---`.
 
-- `apiVersion` is exactly `cms.mantle.aotter.net/v2`. A `v1` document fails
-  and names the upgrade guide.
-- `metadata` has `name` only.
-- Unknown keys anywhere in `spec` are refused, not ignored.
+The grammar is closed. Unknown keys and invalid declarations fail generation. Names are unique per kind; Schema and field names cannot differ only by case. Quote non-identifier Schema names in SQL. `input` and `auth` are reserved.
 
-## Files
+Titles and descriptions accept a string or locale map, such as `{ en: Products, zh-TW: 商品 }`. Selected UI/MCP chooses the configured locale with fallback.
 
-`mantle generate` reads every `.yaml` and `.yml` file directly in the manifest
-directory (`./manifests`, or `--manifests <dir>`), not subdirectories. A file
-may hold several documents separated by `---`. File names and order do not
-matter to the plan; they enter only `sourceHash`.
+Author SQL in PostgreSQL syntax. Generation renders it for postgres or sqlite, including bound inputs and compiled row policy. SQL native columns use `id`, `version`, `created_at`, `updated_at`, `author_id`, plus `status` / `published_at` for publishing. Store uses storage names too. Manifest index declarations use authored field/native names (`createdAt`), which compile to storage names.
 
-## Names
-
-- Names are unique per kind (`DUPLICATE_NAME`). Two Schemas, or two fields of
-  one Schema, may not differ only in case: SQL resolves identifiers
-  case-insensitively.
-- A Schema name that is not a plain identifier (`support-tickets`) is written
-  quoted in SQL: `"support-tickets"`.
-- `input` and `auth` are reserved and cannot name a Schema or an alias. On
-  the `sqlite` dialect, SQL may not name a Schema, field or alias that is one
-  of the 14 words SQLite refuses unquoted (`SQL_UNSUPPORTED`):
-  `add alter autoincrement commit delete drop escape index insert nothing raise set transaction update`.
-- MCP tool names are the View or Procedure name in snake case.
-
-## Localized text
-
-`title` and `description` on every atom, and `title` and `description` on
-JSON Schema properties, take a string or a locale map:
-
-```yaml
-title: { en: Products, zh-TW: 商品 }
-```
-
-Admin chooses the viewer's locale and MCP the surface's `locale` option (default `en`), then `en`, then the first entry.
-
-## SQL conventions
-
-| | |
-|---|---|
-| Syntax | PostgreSQL, parsed by PostgreSQL 18's parser; a dialect decides what runs |
-| Native columns | snake_case in SQL: `id`, `status`, `version`, `created_at`, `updated_at`, `author_id`. In `ctx.store` JSON, in `indexes` and in Schema `uiSchema`: `createdAt`, `updatedAt`, `authorId` |
-| References | `input.<name>`, `auth.uid()`, `auth.role()`, `now()` |
-| Mantle functions | `mantle.search`, `mantle.search_rank`, `mantle.near`, `mantle.distance` |
-| Literals | SQL literals; strings in single quotes |
-| Multi-line SQL | a YAML block scalar (`sql: \|`) |
-
-## Wire values
-
-| JSON Schema | On the wire |
-|---|---|
-| `format: date-time`, and the native `createdAt` / `updatedAt` | an ISO 8601 string |
-| `format: date` | `YYYY-MM-DD` |
-| `boolean` | `true` / `false` |
-| `object`, `array` | JSON |
-
-## Generated output
-
-`plan.json` and `mantle.ts` under `.mantle/generated/` are rewritten by every
-`mantle generate` and compared by `--check`. Commit them; never edit them. See
-[Project layout and CLI](../start/project-and-cli.md).
+Use `input.<name>`, `auth.uid()`, `now()` and supported `mantle.*` functions. Only declared relations and allowed SQL constructs may be referenced. See [Schema](schema.md), [View](view.md), [Procedure](procedure.md), [Trigger](trigger.md) and [CLI](../start/project-and-cli.md).

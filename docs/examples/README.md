@@ -1,20 +1,43 @@
-# Examples hub
+# Examples
 
-Every page is a whole service in the 0.2.0 grammar: its manifests compile with
-`mantle generate` (the SDK repository compiles each one in its checks). Copy the shape you need into
-your project's `manifests/`; none is a template to copy wholesale.
+Start an app with `mantle init`, which writes the **app shell** once. The examples are references: each shows a few
+capabilities the others do not. Find each need in **Combining** below, read that example's manifest and source, and
+take the pattern into your own manifests and `src/`. Do not copy an example directory over your app.
 
-| Example | What it shows | Handler code |
-|---|---|---|
-| [`reference-service/`](./reference-service/README.md) | A runnable service with its smoke test: scoped orders, SQL Views and Procedures, hooks, a cron, REST, both MCP surfaces, Admin's API and console email-OTP sign-in. The release gate runs it. | yes |
-| [Intake form](./intake.md) | An anonymous form: one SQL `INSERT` and a staff View. | none |
-| [Intake with bot check and notification](./intake-hooks.md) | A Turnstile check as the Procedure's guard, an email from an after hook. | 2 handlers |
-| [Reservation requests](./reservation.md) | A request queue with a Schema `check`. | none |
-| [Publication](./publication.md) | Localized posts with a parent identity, per-locale lists and `mantle.search`. | none |
-| [Legal documents and consent](./legal-documents.md) | Immutable revisions, and an acceptance written only for a published revision. | none |
-| [Procurement approvals](./procurement.md) | Members see their own rows through `auth.uid()`; staff review with an optimistic lock. | none |
-| [Commerce catalog and orders](./commerce.md) | A published catalog, guest orders and a locked staff review. | none |
-| [Commerce inventory](./commerce-inventory.md) | Server-side pricing, atomic stock reservation with `checks` and locks, a scheduled expiry and a verified payment callback. | 3 handlers |
-| [Guarded API access](./guarded-api.md) | API keys through a custom `CallerResolver`, scopes and a live entitlement guard. | 2 handlers |
+| Example | Shows |
+|---|---|
+| [App shell](./app-shell/README.md) | Better Auth (email OTP, `admin` + `user`), one Worker fetch, Admin, MCP, REST, local acceptance kit. No business manifests. |
+| [Recipes](./recipes/README.md) | Publishing (draft → publish), translations, visitor pages with SEO, JSON-LD, `llms.txt`, Markdown and hreflang alternates, R2 media. |
+| [Club events](./club-events/README.md) | Members who see and change only their own rows, no duplicates, capacity that never oversells, a handler that checks before writing, a member MCP tool, members-only sign-up. |
+| [Purchasing](./purchasing/README.md) | An internal workflow: guarded status transitions, admin-only approval (Admin and admin MCP), optimistic concurrency, several writes in one transaction, an external API with a signed callback, email and cron. |
+| [Generated website](./generated-web/README.md) | The smallest public site: list and detail pages, REST, `llms.txt`, sitemap, Markdown alternates. |
 
+## Combining
+
+| You need | Take |
+|---|---|
+| Stock that never oversells (orders, tickets, bookings) | club-events' capacity: a Schema `checks` constraint plus the decrement in the same program |
+| An order, cart or import with several rows that must all commit or none | one SQL Procedure over `json_each(input.items)` with a counted check that refuses unknown lines (`mantle help typed-queries`, "Several rows that commit together") |
+| Employees or customers who see only their own records | club-events' `restrict: { <schema>: "author_id = auth.uid()" }` |
+| An approval step, or any state machine | purchasing's guarded `UPDATE ... WHERE requestStatus = ...` Procedures |
+| Approve first, then reserve or spend | purchasing's `approve-request-write`: the guarded status change and the budget deduction in one program (`mantle help sql-patterns`, "Approve before reserving") |
+| A status chosen while writing (auto-approve small requests) | purchasing's `submit-request`: `CASE` in the INSERT ("Choose a status while writing: CASE") |
+| Edit only the fields given | `COALESCE(input.field, field)` ("Change only the fields given") |
+| Create or add (restock, counters) | `INSERT ... ON CONFLICT (...) DO UPDATE` ("Create or add") |
+| Refuse while something still refers to it | a `NOT EXISTS` guard in the UPDATE (purchasing's `submit-request` ledger row; "Refuse while something refers to it") |
+| A record with its children in one read | club-events' `event-roster`: a JSON array per row ("A row with its children in one read") |
+| The latest row per group, rankings | `row_number() OVER (PARTITION BY ...)` ("The latest row of each group") |
+| A third-party API that answers later (webhooks, callbacks) | purchasing's `src/routes.ts`: verify the raw request, then call a Procedure |
+| Public, multilingual, search- and AI-friendly pages | recipes' `src/routes.ts` |
+| Invite-only or members-only sign-up | club-events' `members` allowlist + `src/signup.ts` |
+| Notifications and reminders | purchasing's `EmailSender` call and `src/schedule.ts` |
+
+If you do copy an example's files, delete what your app does not need. Copying club-events, for example, also brings its `members` allowlist and `src/signup.ts` (members-only sign-up); remove both, or restore the
+shell's allow-all `src/signup.ts`, unless sign-up should be invite-only. Purchasing brings its supplier callback
+(`src/routes.ts`, `src/supplier.ts`), email (`src/notify.ts`), cron (`src/schedule.ts` and `triggers.crons`) and its
+`wrangler.jsonc` secrets. `pnpm generate` and `tsc` point at leftovers that reference removed Schemas.
+
+Every example uses two roles: `admin` (the admin layer) and `user`.
+
+[Reference service](https://github.com/aotter/mantle/tree/v0.2.0/docs/examples/reference-service) is the release smoke test for packed packages, not a starting point. Its source lives in the tagged repository; it is not included in the npm docs.
 Projects on 0.1.x move with [the upgrade guide](../upgrade-0.1-to-0.2.md).

@@ -12,10 +12,14 @@ checkout dependency; the frozen legacy line is never changed by one.
 
 Prepare a same-repository release PR: prove the new version/tag unused,
 preview native release notes and correct PR metadata, align package/plugin
-versions (the consumer cold-start commands stay untagged — see
+versions and the consumer installation examples to the release tag (see
 docs/release-process.md step 2), inspect the packed docs/skills payload, run `pnpm check` and review
 its exact SHA. The reference consumer gate runs
-from packed packages outside workspace links. Merge into develop for every
+from packed packages outside workspace links. Bump `MANTLE_VERSION`
+(`packages/mantle/src/build/core/version.ts`) with `package.json`, then regenerate
+`docs/examples/reference-service` using that example's native generation command.
+Keep compiler version metadata and the committed generated artifacts fresh.
+Merge into develop for every
 version; 0.2 work on `0.2.x` reaches a release only after a `0.2.x` -> develop
 PR merges (docs/release-process.md). Beta, RC and stable then follow "Promote to main" in
 docs/release-process.md: pin
@@ -23,14 +27,77 @@ docs/release-process.md: pin
 merge commit, dispatch with `--ref main`. Stable also needs recorded owner
 acceptance on the version's release-gate issue, and its entry added to
 docs/handbook/releases/index.md. Do not infer permission to publish from an
-implementation PR.
+implementation PR. Before an alpha or beta, also run the startup and
+request-cost checkpoint below.
+
+## Startup and request-cost checkpoint
+
+Run this checkpoint for a PR that changes `packages/mantle/src/auth`,
+`packages/mantle/src/kernel` or generator code/output, and once before every
+alpha or beta. It is a maintainer measurement, not a CI job or a committed script;
+the existing `startupGraph`, `check-size`, `check-package` and `check:ui-size`
+gates remain unchanged.
+
+1. Build and check the reference service from the exact packed packages, then
+   ask Wrangler for the exact upload:
+
+   ```sh
+   checkpoint_dir="$(mktemp -d)"
+   node scripts/check-packed-consumer.mjs \
+     --project docs/examples/reference-service \
+     --output "$checkpoint_dir/packed" -- pnpm check
+   cd "$checkpoint_dir/packed/consumer"
+   pnpm exec wrangler deploy --dry-run \
+     --outfile "$checkpoint_dir/worker.bundle"
+   ```
+
+2. Walk the entry's static imports in `dist/worker` and compare them with the
+   dry-run module list. Better Auth, the MCP SDK, zod and compiler/YAML code
+   must be absent. Record entry-static bytes and module count. Also report the
+   whole upload by module, calling out deferred packages, duplicated chunks and
+   unused modules.
+3. Profile that same upload five times and report every sample:
+
+   ```sh
+   for run in 1 2 3 4 5; do
+     pnpm exec wrangler check startup \
+       --worker "$checkpoint_dir/worker.bundle" \
+       --outfile "$checkpoint_dir/startup-$run.cpuprofile"
+   done
+   ```
+
+   Local startup profiles are diagnostic. Treat short or noisy profiles as
+   inconclusive, never as a numeric pass or deployed startup time.
+4. In the disposable packed consumer, instrument the D1 binding at its native
+   execution boundary and run it under local Wrangler/workerd on an unused
+   port. Count a bound `all`, `first`, `run` or `raw` as one round trip and a
+   `batch` as one; `prepare` alone is not a round trip. For each request class,
+   record the first request in a new isolate and a repeat in the same isolate,
+   separating authority reads, business queries and refresh writes:
+   - health or another fixed no-data route: 0 DB and 0 DDL;
+   - `/api/auth/get-session`;
+   - cookie-authenticated REST read, with cookie cache off and on;
+   - MCP `initialize`;
+   - MCP `tools/list`;
+   - one successful authenticated write.
+
+   Restart only the Wrangler process started for this checkpoint when a fresh
+   isolate is needed. Apply schema before probing; imports, startup and ordinary
+   requests must execute no DDL.
+5. Put the commands, five startup samples, graph/upload breakdown and cold/warm
+   D1 counts in the PR body, or on the release issue for an alpha or beta.
+
+Real-edge `startup_time_ms` and deployed latency are optional. If measured,
+use only the maintainer's existing Wrangler login and temporary `spike-`-prefixed
+Worker and D1 resources. Delete only those resources afterwards and verify their
+absence with Wrangler list commands; never record account IDs.
 
 Dispatch the controller from the reviewed release merge with the version
 without v. Watch all gates, not only publication:
 
 1. Core tag resolves to that canonical merge.
-2. Both npmjs artifacts exist with matching integrity and no workspace:*.
-3. GitHub Packages mirrors verify the same candidate.
+2. All three npmjs artifacts exist with matching integrity and no workspace:*.
+3. GitHub Packages mirrors verify the same three-package candidate.
 4. The reference Worker installs exact public packages, generates/types/checks
    successfully and serves its declared HTTP route before channel promotion.
 5. Monotonic channel promotion succeeds for every package on `alpha`,

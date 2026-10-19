@@ -9,8 +9,11 @@ It does not validate a deployed Cloudflare account or publish a release.
 ## Prepare
 
 Use Bun 1.3.14, Node 22+, pnpm 9+, Chrome and PostgreSQL. Create two **disposable,
-separate databases** with a role allowed to converge tables and create temporary
-tables (native Bun metadata needs TEMPORARY; ADR-0038). Keep other data out.
+separate databases** with a role allowed to converge tables. Keep other data out.
+Both PostgreSQL pairs (bun-postgres and cf-postgres) run on node-postgres, and boot
+checks the role's settings on each: set `statement_timeout` (10s or less) and
+`TimeZone` to `UTC` on the role, for example
+`ALTER ROLE alpha SET statement_timeout = '10s'; ALTER ROLE alpha SET TimeZone = 'UTC';`.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -55,7 +58,7 @@ node extras.mjs bun-sqlite
 The same case includes 20,000 requisitions, 500 vendors, 300 related items,
 budgets, custom business roles and seven real users. It checks:
 
-- Browser OTP bootstrap-owner login; real staff grants and outsider denial.
+- Browser OTP bootstrap-owner login; real admin grants and outsider denial.
 - Store-validated data imports, rejection of invalid dynamic rows, searchable
   announcements, indexed filters/sorts and disjoint cursor pages.
 - Related scope + compound-index sorting (actual ordered values, not only
@@ -66,7 +69,7 @@ budgets, custom business roles and seven real users. It checks:
 - Whole SQL-batch rollback on insufficient budget and stale-version conflicts.
 - Actual Admin form/enum editing, save, publish/unpublish, joined report,
   expanded developer flow and data-relation toggle, with no page errors.
-- Staff MCP discovery, actual role creation, MCP App resources and eight
+- Admin MCP discovery, actual role creation, MCP App resources and eight
   concurrent HTTP writers: exactly one commit, seven conflicts.
 - Explicit 501 for unconfigured optional site settings. Media has no blob
   binding in these default presets and is outside this populated fixture.

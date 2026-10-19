@@ -12,14 +12,15 @@
       "DOM.Iterable"
     ],
     "types": [],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "sourceMap": false,
+    "declarationMap": false
   },
   "include": [
     "src/**/*"
   ],
   "exclude": [
     "test/**/*",
-    "dist/**/*",
-    "src/mcp-app/**/*"
+    "dist/**/*"
   ]
 }

@@ -44,7 +44,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Check Core source runs the PostgreSQL dialect's tests and native Bun conformance against this server, as CI does;
+    # Check Core source runs the PostgreSQL dialect's tests and four-target native conformance against this server, as CI does;
     # without MANTLE_PG_URL they would skip and the release would gate less than a PR.
     services:
       postgres:
@@ -52,19 +52,20 @@ jobs:
         env: { POSTGRES_USER: mantle, POSTGRES_PASSWORD: mantle, POSTGRES_DB: mantle }
         ports: ["5432:5432"]
         options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
-    # Single source of truth for the two public packages, in dependency order.
+    # Single source of truth for the three public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
       PKG_DIRS: >-
         packages/mantle-ui
         packages/mantle
+        packages/mantle-admin
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -164,12 +165,31 @@ jobs:
         run: pnpm check
         env:
           MANTLE_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+          MANTLE_NEXT_BUN_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+          MANTLE_NEXT_WORKER_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
 
-      - name: Check native Bun host
+      # the examples' MCP App compatibility test (npm test) runs in Chrome
+      - name: Install Chrome
         if: steps.ver.outputs.tag_exists != 'true'
-        run: pnpm --filter @aotter/mantle test:bun
+        run: pnpm --filter @aotter/mantle-admin exec playwright install --with-deps chrome
+
+      - name: Fresh copies of packaged examples (npm and pnpm 10)
+        if: steps.ver.outputs.tag_exists != 'true'
+        run: node scripts/check-examples.mjs --fresh
+        env:
+          MANTLE_TEST_CHROMIUM: /usr/bin/google-chrome
+
+      - name: Admin build under npm ci --ignore-scripts, served without node_modules
+        if: steps.ver.outputs.tag_exists != 'true'
+        run: node scripts/check-admin-build.mjs
+
+      - name: Check native hosts
+        if: steps.ver.outputs.tag_exists != 'true'
+        run: pnpm --filter @aotter/mantle test:native
         env:
           MANTLE_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+          MANTLE_NEXT_BUN_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+          MANTLE_NEXT_WORKER_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
 
       - name: Verify package, plugin, and marketplace versions match ${{ steps.ver.outputs.version }}
         run: |

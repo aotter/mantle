@@ -1,4 +1,4 @@
-# A small shop: a public catalog, orders that only their owner sees, and staff tools.
+# A small shop: a public catalog, orders that only their owner sees, and admin tools.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: items }
@@ -16,6 +16,7 @@ spec:
   checks: ["stock >= 0"]
   uiSchema: { list: { primaryField: name, columns: [sku, stock] } }
   uniqueIndexes: [[sku]]
+  indexes: [[name, id]]
   searchableFields: [name, sku]
 ---
 apiVersion: cms.mantle.aotter.net/v2
@@ -24,9 +25,9 @@ metadata: { name: orders }
 spec:
   title: Orders
   lifecycle: operational
-  scope: { owner: auth.uid() }
+  scope: "owner = auth.uid()"
   uiSchema: { list: { primaryField: itemId, columns: [qty, orderStatus] } }
-  indexes: [[owner]]
+  indexes: [[owner, createdAt, id]]
   schema:
     type: object
     required: [owner, itemId, qty, orderStatus]
@@ -43,8 +44,11 @@ metadata: { name: activity }
 spec:
   title: Activity
   lifecycle: operational
+  indexes: [[createdAt, id]]
   schema:
     type: object
+    # Written by the app's after-effects; Admin reads it.
+    readOnly: true
     required: [kind, subject]
     properties:
       kind: { type: string }
@@ -57,47 +61,89 @@ kind: View
 metadata: { name: catalog }
 spec:
   surface: public
-  sql: SELECT id, sku, name, priceCents, stock FROM items ORDER BY name
+  description: Browse the bounded catalog; use search_items to locate an item by name or SKU before placing an order. priceCents is in minor currency units.
+  sql: SELECT id, sku, name, priceCents AS "priceCents", stock FROM items ORDER BY name, id
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: search-items }
 spec:
-  surface: public
-  input: { type: object, required: [q], properties: { q: { type: string, minLength: 1 } } }
+  surface: internal
+  input:
+    type: object
+    required: [q, afterRank, afterName, afterId, cap]
+    properties:
+      q: { type: string, minLength: 1 }
+      afterRank: { type: [number, 'null'] }
+      afterName: { type: [string, 'null'] }
+      afterId: { type: [string, 'null'] }
+      cap: { type: integer, minimum: 1, maximum: 501 }
   sql: |
-    SELECT i.id, i.name, i.stock FROM items i
-    WHERE mantle.search(i, input.q)
-    ORDER BY mantle.search_rank(i), i.name
+    SELECT i.id, i.name, i.stock, mantle.search_rank(i) AS rank FROM items i
+    WHERE mantle.search(i, input.q) AND (input.afterRank IS NULL
+      OR mantle.search_rank(i) > input.afterRank
+      OR (mantle.search_rank(i) = input.afterRank AND i.name > input.afterName)
+      OR (mantle.search_rank(i) = input.afterRank AND i.name = input.afterName AND i.id > input.afterId))
+    ORDER BY mantle.search_rank(i), i.name, i.id LIMIT input.cap
 ---
 # Scope is injected into every Schema reference: this join only ever sees the caller's orders.
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: my-orders }
 spec:
+  description: List only your orders and observed versions. Use get_order for one order and cancel_order with that observed version to cancel it.
   surface: public
   requires: { auth: { all: [ctx.user] } }
   sql: |
-    SELECT o.id, o.qty, o.orderStatus, i.name AS item, o.version
+    SELECT o.id, o.qty, o.orderStatus AS "orderStatus", i.name AS item, o.version
     FROM orders o JOIN items i ON i.id = o.itemId
-    ORDER BY o.created_at DESC
+    ORDER BY o.created_at DESC, o.id DESC
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: sales-by-item }
 spec:
-  surface: staff
-  requires: { auth: { all: [{ ctx.staff: [owner, editor] }] } }
+  surface: internal
+  requires: { auth: { all: [ctx.admin] } }
+  input:
+    type: object
+    required: [afterUnits, afterName, cap]
+    properties:
+      afterUnits: { type: [integer, 'null'] }
+      afterName: { type: [string, 'null'] }
+      cap: { type: integer, minimum: 1, maximum: 501 }
   sql: |
     SELECT i.name, count(o.id) AS orders, coalesce(sum(o.qty), 0) AS units
     FROM items i LEFT JOIN orders o ON o.itemId = i.id AND o.orderStatus = 'placed'
     GROUP BY i.name
-    ORDER BY units DESC, i.name
+    HAVING input.afterUnits IS NULL OR coalesce(sum(o.qty), 0) < input.afterUnits
+      OR (coalesce(sum(o.qty), 0) = input.afterUnits AND i.name > input.afterName)
+    ORDER BY units DESC, i.name LIMIT input.cap
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: recent-activity }
 spec:
-  surface: staff
-  requires: { auth: { all: [{ ctx.staff: [owner, editor] }] } }
-  sql: SELECT kind, subject, detail FROM activity ORDER BY created_at DESC LIMIT 50
+  surface: admin
+  requires: { auth: { all: [ctx.admin] } }
+  sql: SELECT kind, subject, detail FROM activity ORDER BY created_at DESC, id DESC LIMIT 50
+---
+# A bounded detail read uses the same owner scope as the list, never a staff bypass.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: get-order }
+spec:
+  surface: public
+  description: Read one of your orders by backend orderId, including item relation, state and current version. Empty rows means absent or inaccessible. Use this after place_order and before a deliberate cancel_order; never silently refresh a stale version and retry a write.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [orderId]
+    properties:
+      orderId: { type: string, minLength: 1 }
+  sql: |
+    SELECT o.id, o.itemId AS "itemId", i.sku, i.name AS item, o.qty,
+      o.orderStatus AS "orderStatus", o.placedAt AS "placedAt", o.version
+    FROM orders o JOIN items i ON i.id = o.itemId
+    WHERE o.id = input.orderId
+    ORDER BY o.id

@@ -1,93 +1,72 @@
----
-description: Media uploads in Mantle 0.2.0 on Cloudflare R2 — site media purposes, r2MediaStorage, wiring Admin's media routes, the presigned upload flow, and what to store in a Schema.
----
-# Media uploads with R2
+# Optional site settings and media
 
-Media is optional. It needs three things in `src/service.ts`: site defaults
-with media purposes, an `r2MediaStorage`, and both passed where they belong.
-The bytes go from the uploader straight to R2; the Worker never proxies them.
+Declare a TypeScript `siteDefaults` object using the 0.2 `SiteDefaults` shape and
+pass it to generation, or use `mantle generate ... --site ./site-config.ts`.
+Apply the emitted `schema.sql` to a new database; apply idempotent `site-seed.sql`
+on subsequent deployments to seed only absent operator fields. Import `site` from the generated
+`site` module; call `site(db, verifiedCaller).read()`, `.updateSettings({brand,title,
+description})`, or `.media(storage)` to access the library. Construction runs no
+queries, migrations, seeds, or storage work. The library accepts verified admin
+Callers of any credential kind; the Admin handler must additionally keep its
+cookie-session-only gate and the shared session-mutation origin check. The optional module is absent from
+a Worker that does not import it.
 
-## 1. A public bucket and S3 credentials
-
-- An R2 bucket served publicly, from a custom domain or `pub-<hash>.r2.dev`.
-  That URL is `publicBase`.
-- An R2 API token with write access to the bucket, for presigning PUT URLs:
-  `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` as Worker secrets.
-- A CORS rule on the bucket that allows `PUT` with `Content-Type` from your
-  Admin's origin, if a browser uploads.
-
-```jsonc
-// wrangler.jsonc
-"r2_buckets": [{ "binding": "MEDIA", "bucket_name": "my-media" }],
-"vars": { "MEDIA_PUBLIC_BASE": "https://media.example.com", "R2_ENDPOINT": "https://my-media.<account>.r2.cloudflarestorage.com" }
-```
-
-## 2. Wire it
+Each media purpose in `siteDefaults.media.purposes` lists mime **slots** and a byte cap per full mime type:
 
 ```ts
-import { AwsClient } from "aws4fetch";
-import { d1Storage, r2MediaStorage } from "@aotter/mantle/cloudflare";
+{ name: "cover", required: ["image/jpeg,image/png,image/webp"], maxBytes: { "image/jpeg": 5_000_000, "image/png": 5_000_000, "image/webp": 5_000_000 } }
+```
 
-// storage, with the purposes uploads may use
-export const mantle = createMantle(service, {
-  plan, schedules: true,
-  storage: (env) => d1Storage(env.DB, { site: {
-    title: "My site",
-    media: { purposes: [{ name: "cover", required: ["image/webp", "image/jpeg,image/png"], maxBytes: { "image/webp": 2_000_000, "image/jpeg": 2_000_000, "image/png": 2_000_000 } }] },
-  } }),
-});
+`required` entries use `<input accept>` grammar (full mime, comma list, or a subtype shorthand such as `webp`);
+`maxBytes` must cover every mime the slots allow, keyed by the full mime type.
 
-// in mount(): the media storage, handed to Admin
-const media = r2MediaStorage({
+Applications own their R2 binding, public bucket URL and S3 credentials; the SDK
+package does not manage them. Import `r2MediaStorage` from `@aotter/mantle/media/r2`:
+
+```ts
+const storage = r2MediaStorage({
   bucket: env.MEDIA,
-  signer: new AwsClient({ accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY, region: "auto", service: "s3" }),
-  endpoint: env.R2_ENDPOINT,
-  publicBase: env.MEDIA_PUBLIC_BASE,
+  endpoint: "https://bucket.account.r2.cloudflarestorage.com",
+  publicBase: "https://media.example.com",
+  signer, // app-owned SigV4 signer: sign(url, {method:"PUT",aws:{signQuery:true,service:"s3"}})
 });
-const admin = guard(createAdminSurface(runtime, { basePath: "/admin", media, /* …the generated options… */ }));
+const media = site(db, caller).media(storage);
+const upload = await media.createUpload({
+  filename: "cover.jpg", purpose: "cover",
+  variants: [{mimeType:"image/jpeg",byteSize:1234,role:"primary"}]
+});
+// Client PUTs bytes directly to upload.capabilities[i].uploadUrl,
+// with its requiredHeaders. Never send the bytes through Mantle.
+const asset = await media.commitUpload(upload.uploadGroupId);
 ```
 
-`aws4fetch` is the application's dependency; Mantle only calls its `sign`.
-Without both `media` and site defaults, every media route answers 501
-`MEDIA_NOT_CONFIGURED`.
+An existing S3 signer (for example an application already using aws4fetch) fits
+this port. This package adds no AWS SDK. The signer must return a SigV4
+query-signed PUT URL and preserve `X-Amz-Expires`; never give its credentials to
+the client. Configure bucket CORS to allow PUT from the application's origins
+and the returned Content-Type header. Serve the `committed/` prefix on the public domain; these keys differ from 0.2's `{purpose}/{group}/{role}` keys. Keep `uploads/` private/unserved on the
+public domain and add a bucket lifecycle rule for abandoned upload keys.
 
-## 3. The upload flow
+Commit checks every object's MIME and size, then rechecks the exact GET
+response used for the copy. Public keys cannot be reached by an upload URL. Each commit attempt has a separate
+public-key UUID, while the asset id remains the upload-group UUID. A concurrent
+loser can neither overwrite nor remove the winner's objects. After SQL selects
+the durable asset, the losing attempt removes only its own unselected copies.
+Upload sources remain until the database commit succeeds, so an uncertain DB
+write can be reconciled/retried with the same UUID. Failed object deletion keeps
+the media row; retry the same id. An upload group expires after 15 minutes. Asset `createdAt` is the upload-group creation time (epoch milliseconds), not the later commit time.
+No R2 upload or deployment is performed by generation.
 
-All through Admin's API, `editor` role or higher:
+A positively identified native rollback deletes only that attempt's copied
+objects. Plain/network failures lack rollback evidence, retain copies, and return
+`OUTCOME_UNKNOWN`, including a lost D1 batch response.
+An uncertain native write preserves copies, because they may belong to the
+durable winning row. If SQL durability or unselected-copy cleanup returns `OUTCOME_UNKNOWN`, reconcile
+storage with the durable `media_assets.variants` keys. Attempt-isolated copies
+may remain after an uncertain outcome; never delete the winning asset's keys or
+expire all `committed/` objects indiscriminately. The group UUID remains the
+reconciliation and retry id.
 
-1. `POST /admin/api/media/uploads` with
-   `{ filename, purpose, variants: [{ mimeType, byteSize, role }], alt?, caption? }`.
-   The purpose's MIME slots and per-type byte caps are checked here, and exactly one variant must be `role: "primary"`. The answer is
-   `{ uploadGroupId, capabilities: [{ role, mimeType, method: "PUT", uploadUrl, requiredHeaders }], expiresAt }`.
-2. `PUT` each variant's bytes to its `uploadUrl` with its `requiredHeaders`.
-3. `POST /admin/api/media/uploads/{uploadGroupId}/commit` (optionally with
-   `{ alt, caption }`). Commit checks every stored object's type and size,
-   then copies each to a public key no upload URL can reach. A rejected group
-   publishes nothing and its upload objects are deleted. An expired or unknown
-   group is 410 `MEDIA_UPLOAD_EXPIRED`.
-
-The committed asset is `{ id, variants: [{ role, mimeType, publicUrl, storageKey, byteSize }], alt?, caption?, createdAt }`.
-`GET /admin/api/media` lists assets (`search`, `limit`, `cursor`); `GET`,
-`PATCH` (`alt`, `caption`) and `DELETE /admin/api/media/{id}` manage one.
-Delete removes the objects first, then the row, so a partial failure can be
-retried.
-
-Optimize images where they are made (in the browser or the agent), and upload
-the variants; Mantle does not transform images.
-
-## Storing media in a Schema
-
-Store the asset's `publicUrl` (or its `id`) in a string field and mark it:
-
-```yaml
-cover: { type: string, x-mcp-hint: media-image }
-```
-
-The hint tells Admin and agents what the field holds. No MCP tool uploads
-media in 0.2.0; an agent uploads through Admin's API with a staff session.
-
-## Stale uploads
-
-A group created but never committed leaves objects under `uploads/` until its
-URLs expire. The package skill `docs/skills/media-gc/SKILL.md` audits and
-removes them.
+Admin's `media` option takes a `MediaStorage` value, so build it where `env` is available (for example once per
+Worker in the fetch handler). Uploads use presigned S3 PUT URLs: `wrangler dev --local` has an R2 binding but no S3
+endpoint, so test the upload flow against a real bucket; local tests can cover everything up to the signed URL.

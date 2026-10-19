@@ -4,66 +4,212 @@
     {
       "text": "Start here",
       "items": [
-        { "text": "Handbook overview", "link": "/start/overview" },
-        { "text": "Quickstart: a service on Workers", "link": "/start/quickstart-worker" },
-        { "text": "Project layout and CLI", "link": "/start/project-and-cli" }
+        {
+          "text": "Build with an agent",
+          "link": "/start/agents"
+        },
+        {
+          "text": "Handbook overview",
+          "link": "/start/overview"
+        },
+        {
+          "text": "Quickstart: a service on Workers",
+          "link": "/start/quickstart-worker"
+        },
+        {
+          "text": "Project layout and CLI",
+          "link": "/start/project-and-cli"
+        }
       ]
     },
     {
       "text": "Task guides",
       "items": [
-        { "text": "Agent installation and handoff", "link": "/guides/agent-setup" },
-        { "text": "Query from TypeScript", "link": "/guides/typed-queries" },
-        { "text": "Customize Admin from manifests", "link": "/guides/admin-ui" }
+        {
+          "text": "Agent installation and handoff",
+          "link": "/guides/agent-setup"
+        },
+        {
+          "text": "Query from TypeScript",
+          "link": "/guides/typed-queries"
+        },
+        {
+          "text": "Public pages: SEO, AEO and languages",
+          "link": "/guides/public-pages"
+        },
+        {
+          "text": "Local HTTP checks",
+          "link": "/guides/local-testing"
+        },
+        {
+          "text": "SQL patterns",
+          "link": "/guides/sql-patterns"
+        },
+        {
+          "text": "Native Admin",
+          "link": "/guides/native-admin"
+        },
+        {
+          "text": "Customize Admin",
+          "link": "/guides/admin-ui"
+        },
+        {
+          "text": "Another host or engine",
+          "link": "/guides/adapter-guide"
+        },
+        {
+          "text": "Native execution",
+          "link": "/guides/native-execution"
+        },
+        {
+          "text": "PostgreSQL adapters",
+          "link": "/guides/postgres-adapters"
+        },
+        {
+          "text": "OAuth and consent",
+          "link": "/guides/oauth"
+        },
+        {
+          "text": "Transactional email",
+          "link": "/guides/email"
+        },
+        {
+          "text": "MCP Apps",
+          "link": "/guides/mcp-apps"
+        },
+        {
+          "text": "Size and startup",
+          "link": "/guides/size-and-startup"
+        }
       ]
     },
     {
       "text": "Concepts",
       "items": [
-        { "text": "The four atoms", "link": "/concepts/four-atoms" },
-        { "text": "Lifecycle and locales", "link": "/concepts/lifecycle-and-locales" },
-        { "text": "Reads: Views, REST and MCP", "link": "/concepts/views" },
-        { "text": "Writes: Procedures, Triggers and hooks", "link": "/concepts/procedures-and-triggers" },
-        { "text": "Authorization", "link": "/concepts/authorization" },
-        { "text": "MCP and agents", "link": "/concepts/mcp-and-agents" },
-        { "text": "Runtime, Store and dialects", "link": "/concepts/runtime-and-adapters" }
+        {
+          "text": "The four atoms",
+          "link": "/concepts/four-atoms"
+        },
+        {
+          "text": "Lifecycle and locales",
+          "link": "/concepts/lifecycle-and-locales"
+        },
+        {
+          "text": "Reads: Views, REST and MCP",
+          "link": "/concepts/views"
+        },
+        {
+          "text": "Writes: Procedures and Triggers",
+          "link": "/concepts/procedures-and-triggers"
+        },
+        {
+          "text": "Authorization",
+          "link": "/concepts/authorization"
+        },
+        {
+          "text": "MCP and agents",
+          "link": "/concepts/mcp-and-agents"
+        },
+        {
+          "text": "Runtime, Store and dialects",
+          "link": "/concepts/runtime-and-adapters"
+        }
       ]
     },
     {
       "text": "Reference",
       "items": [
-        { "text": "Manifest feature table", "link": "/reference/features" },
-        { "text": "Manifest envelope", "link": "/reference/manifest" },
-        { "text": "Schema", "link": "/reference/schema" },
-        { "text": "View", "link": "/reference/view" },
-        { "text": "Procedure", "link": "/reference/procedure" },
-        { "text": "Trigger", "link": "/reference/trigger" },
-        { "text": "Authorization requirements", "link": "/reference/authorization" },
-        { "text": "Site defaults and site_config", "link": "/reference/site-config" },
-        { "text": "Diagnostic codes", "link": "/reference/diagnostics" },
-        { "text": "HTTP, MCP, CLI and packages", "link": "/reference/surface" }
+        {
+          "text": "Manifest feature table",
+          "link": "/reference/features"
+        },
+        {
+          "text": "Manifest envelope",
+          "link": "/reference/manifest"
+        },
+        {
+          "text": "Schema",
+          "link": "/reference/schema"
+        },
+        {
+          "text": "View",
+          "link": "/reference/view"
+        },
+        {
+          "text": "Procedure",
+          "link": "/reference/procedure"
+        },
+        {
+          "text": "Trigger",
+          "link": "/reference/trigger"
+        },
+        {
+          "text": "SQL accepted by each dialect",
+          "link": "/reference/sql"
+        },
+        {
+          "text": "Authorization requirements",
+          "link": "/reference/authorization"
+        },
+        {
+          "text": "Site defaults and site_config",
+          "link": "/reference/site-config"
+        },
+        {
+          "text": "Diagnostic codes",
+          "link": "/reference/diagnostics"
+        },
+        {
+          "text": "HTTP, MCP, CLI and packages",
+          "link": "/reference/surface"
+        },
+        {
+          "text": "Generated Admin descriptors",
+          "link": "/reference/admin-descriptors"
+        }
       ]
     },
     {
       "text": "Cloudflare",
       "items": [
-        { "text": "The service and its entry", "link": "/cloudflare/service-entry" },
-        { "text": "Authentication", "link": "/cloudflare/authentication" },
-        { "text": "Media uploads with R2", "link": "/cloudflare/media-r2" },
-        { "text": "Deploy and operate", "link": "/cloudflare/deploy-and-operate" },
-        { "text": "Mantle on ChatGPT Sites", "link": "/cloudflare/chatgpt-sites" }
+        {
+          "text": "The service and its entry",
+          "link": "/cloudflare/service-entry"
+        },
+        {
+          "text": "Authentication",
+          "link": "/cloudflare/authentication"
+        },
+        {
+          "text": "Media uploads with R2",
+          "link": "/cloudflare/media-r2"
+        },
+        {
+          "text": "Deploy and operate",
+          "link": "/cloudflare/deploy-and-operate"
+        },
+        {
+          "text": "Mantle on ChatGPT Sites",
+          "link": "/cloudflare/chatgpt-sites"
+        }
       ]
     },
     {
       "text": "Examples",
       "items": [
-        { "text": "Examples", "link": "/examples/hub" }
+        {
+          "text": "Examples",
+          "link": "/examples/hub"
+        }
       ]
     },
     {
       "text": "Releases",
       "items": [
-        { "text": "Releases", "link": "/releases/index" }
+        {
+          "text": "Releases",
+          "link": "/releases/index"
+        }
       ]
     }
   ]
