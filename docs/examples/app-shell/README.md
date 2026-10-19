@@ -60,7 +60,8 @@ Search for `AGENT:` to find what an app must fill in.
 `mantle help local-testing` lists what the smoke covers: every Procedure at its edges, each caller's isolation,
 visitor pages without JavaScript, MCP discovery and Admin's MCP App.
 Scripted smoke is not independent acceptance; before reporting a user-facing
-deliverable done, follow the independent acceptance guide: `mantle help agent-workflow-acceptance`.
+deliverable done, follow the independent acceptance guide: `mantle help agent-workflow-acceptance`. Hand off with
+its layered report ("Report done-ness in layers"): smoke and `pnpm test` are layer 2, `pnpm accept` rounds layer 3.
 
 ### Independent acceptance
 
@@ -115,7 +116,7 @@ and compares exact names without calling business tools. JSON/SSE protocol failu
 unexpected/missing tools and repeated/excessive pagination fail; it never obtains credentials or mounts routes.
 
 This local cookie test does not prove OAuth Bearer or an external client's connection. Test those separately
-with supplied credentials and record their results. For each declared interface, the existing handoff/README/test
-report must say verified (command, identity and result), intentionally not exposed, or deferred/unverified with a
-reason. WebMCP-only applications remain valid; an interrupted preview must retain the remote acceptance item
+with supplied credentials and record their results as layer 4 of the layered report. For each declared interface,
+the existing handoff/README/test report must say verified (command, identity and result), intentionally not exposed,
+or deferred/unverified with a reason. WebMCP-only applications remain valid; an interrupted preview must retain the remote acceptance item
 as deferred rather than silently claiming completion.
