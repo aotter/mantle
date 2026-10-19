@@ -139,7 +139,7 @@ Install the Mantle skill to get guided setup for your application and the
 features you need:
 
 ```sh
-npx skills add https://github.com/aotter/mantle/tree/v0.2.0-alpha.9 --skill mantle
+npx skills add https://github.com/aotter/mantle/tree/v0.2.0-alpha.10 --skill mantle
 ```
 
 Ask your agent to follow the installed skill and describe what you want to build.

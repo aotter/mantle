@@ -1,7 +1,7 @@
 {
   "name": "mantle-monorepo",
   "private": true,
-  "version": "0.2.0-alpha.9",
+  "version": "0.2.0-alpha.10",
   "description": "Mantle monorepo: agent-native application SDK that compiles YAML manifests to native SQL and typed TypeScript.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
