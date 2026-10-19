@@ -1,4 +1,5 @@
-import { checkOrigin, isAdmin, deny, ContractError, type Caller } from "../kernel/contracts.js";
+import { isAdmin, deny, ContractError, type Caller } from "../kernel/contracts.js";
+import { checkOrigin } from "../kernel/surface-failure.js";
 /** Shared selected-boundary guard. Resolve fresh database authority only for Better Auth's raw admin endpoints. */
 export async function guardAuthAdminRequest(request: Request, resolve: () => Caller | Promise<Caller>, basePath = "/api/auth"): Promise<void> {
     let path: string | undefined;

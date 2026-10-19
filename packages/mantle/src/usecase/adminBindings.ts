@@ -33,13 +33,23 @@ const allowed = (requires: Parameters<typeof authLines>[0], path: string) => {
   return lines.length ? `(caller:Caller)=>{try{${lines.join("")}return true;}catch{return false;}}` : "(_caller:Caller)=>true";
 };
 
-/** Share repeated compiler SQL constants; generated modules evaluate no decoder or kernel at import. */
-function sqlConstants(value:unknown):{code:string;constants:string[]} {
-  const counts=new Map<string,number>();
-  const visit=(v:unknown)=>{if(typeof v==="string"&&v.length>80)counts.set(v,(counts.get(v)??0)+1);else if(Array.isArray(v))v.forEach(visit);else if(v&&typeof v==="object")Object.values(v).forEach(visit);};visit(value);
-  const pool=new Map([...counts].filter(([,count])=>count>1).map(([text],n)=>[text,`sql${n}`]));
-  const literal=(v:unknown):string=>typeof v==="string"?pool.get(v)??q(v):Array.isArray(v)?"["+v.map(literal).join(",")+"]":v&&typeof v==="object"?"{"+Object.entries(v).map(([name,child])=>`${name==="__proto__"?`[${q(name)}]`:q(name)}:${literal(child)}`).join(",")+"}":q(v);
-  return {code:literal(value),constants:[...pool].map(([text,name])=>`const ${name}=${q(text)};`)};
+/**
+ * Share repeated compiler data: a SQL string or a subtree (equal caller and trusted modes, refs, page specs) printed over 80
+ * characters more than once is printed once, longest first, as a module constant; the runtime only reads these specs.
+ * Generated modules evaluate no decoder or kernel at import.
+ */
+function sqlConstants(values:readonly unknown[]):{code:string[];constants:string[]} {
+  const counts=new Map<string,number>(), seen=new Map<string,unknown>(), pool=new Map<string,string>(), constants:string[]=[];
+  let named=0;
+  const key=(v:unknown)=>typeof v==="string"?v.length>80?q(v):undefined:v&&typeof v==="object"?(text=>text.length>80?text:undefined)(q(v)):undefined;
+  const children=(v:unknown)=>v&&typeof v==="object"?Object.values(v):[];
+  const tally=(v:unknown,by=1):void=>{const k=key(v);if(k){counts.set(k,(counts.get(k)??0)+by);seen.set(k,v);}children(v).forEach(child=>tally(child,by));};
+  values.forEach(value=>children(value).forEach(child=>tally(child)));
+  // once a subtree is printed once, what it contains occurs (copies - 1) times fewer
+  for(const [k,v] of [...seen].sort(([a],[b])=>b.length-a.length)){const copies=counts.get(k)!;if(copies>1){pool.set(k,"");children(v).forEach(child=>tally(child,1-copies));}}
+  const print=(v:unknown):string=>Array.isArray(v)?"["+v.map(reference).join(",")+"]":v&&typeof v==="object"?"{"+Object.entries(v).map(([name,child])=>`${name==="__proto__"?`[${q(name)}]`:q(name)}:${reference(child)}`).join(",")+"}":q(v);
+  const reference=(v:unknown):string=>{const k=key(v);if(!k||pool.get(k)===undefined)return print(v);if(pool.get(k)===""){const name=`sql${named++}`;pool.set(k,name);constants.push(`const ${name}=${print(v)}${typeof v==="string"?"":" as const"};`);}return pool.get(k)!;};
+  return {code:values.map(print),constants};
 }
 
 export function emitAdminBindings(input: GenerateInput, refuse: (path:string,message:string)=>void): Record<string,string> {
@@ -48,7 +58,7 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
   const user = userReferences(plan, sqlite);
   const imports=[...(user.used ? [user.code,'import {userBinds} from "@aotter/mantle/user-fields";'] : []), databaseImport(target),'import {wireRows,type Caller,type Row} from "@aotter/mantle/contracts";','import {deny,isAdmin,isUser} from "@aotter/mantle/contracts";','import {invalid} from "@aotter/mantle/surface";','import type {Handlers} from "./generated.js";','import {bootstrap,allCollections} from "./admin-descriptors.js";','import type {View,Operation} from "@aotter/mantle-admin/server";','import type {EntrySchema} from "@aotter/mantle-admin/server/entries";'];
   imports.push('import {nativePage,nativeStatistics,nativeText} from "@aotter/mantle-admin/server/native";',`import * as D from "@aotter/mantle/dialect/${sqlite?"sqlite":"postgres"}";`,`import {read,procedure} from "@aotter/mantle/driver/${target==="bun-sqlite"?"bun-sqlite":target==="cloudflare-d1"?"d1":"postgres"}";`,`const adapter={read,procedure,values:${sqlite ? (user.used ? "{...D,...USER_VALUES}" : "D") :`{...D,${user.used ? "...USER_VALUES," : ""}timestamp:(v:Parameters<typeof D.timestamp>[0])=>{if(typeof v==="string"&&/^0000-/.test(v.trim()))invalid("PostgreSQL timestamps require a nonzero year.","admin/input");return D.timestamp(v);},date:(v:string)=>{if(/^0000-/.test(v.trim()))invalid("PostgreSQL dates require a nonzero year.","admin/input");return D.date(v);}}`},param:D.param,escapeLike:D.escapeLike,sqlite:${sqlite}} as const;`);
-  const schemas:string[]=[], views:string[]=[], adminViews:string[]=[], operations:string[]=[], pageSpecs:string[]=[];
+  const schemas:string[]=[], views:string[]=[], adminViews:string[]=[], operations:string[]=[], pageSpecs:unknown[]=[];
   for (const [n,s] of Object.values(plan.schemas).entries()) {
     const schemaPath=`schemas/${s.name}/admin`, declared=Object.keys(s.fields).filter(f=>f!==s.scope), writable=declared.filter(f=>scalar(s.fields[f])||s.fields[f]==="json");
     // readOnly properties are server-maintained: values() pins them to their default, and they have no Admin UPDATE.
@@ -108,7 +118,7 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
     const filterReads=Object.entries(filters).map(([field,s])=>{const type=[s.type].flat().find(t=>t&&t!=="null");return `if(params.has(${q("filter."+field)})&&params.get(${q("filter."+field)})!=="")filters[${q(field)}]=${type==="boolean"?`params.get(${q("filter."+field)})==="true"?true:params.get(${q("filter."+field)})==="false"?false:invalid("Expected true or false.",${q("views/"+name)})`:["number","integer"].includes(type??"")?`Number(params.get(${q("filter."+field)}))`:`params.get(${q("filter."+field)})!`};`;});
     const cursorKinds=(input.paging?.[name]?.types??[]).map(type=>type==="bool"?"bool":type==="integer"||type==="int8"?"int":type==="int4"?"int4":type.startsWith("numeric(")?"numeric":type==="real"||type==="float8"?"float":type==="date"?"date":type==="timestamptz"?"timestamp":"text");
     const modes=Object.fromEntries(Object.entries({caller:pageData.caller,trusted:pageData.trusted}).map(([mode,p])=>[mode,{...p,binds:recipesOf(p, Object.keys(v.input?.properties??{}),message=>refuse(`views/${name}/admin`,message))}]));
-    pageSpecs.push(`const viewPage${n}=${q({path:"views/"+name,cap:v.stmts[0]?.SelectStmt.limitCount?.A_Const?.ival?.ival??500,cursorKinds,...modes})} as const;`);
+    pageSpecs.push({path:"views/"+name,cap:v.stmts[0]?.SelectStmt.limitCount?.A_Const?.ival?.ival??500,cursorKinds,...modes});
     imports.push(`const allowsView${n}=${allowed(v.requires,`views/${name}`)};`);
     if(v.surface==="admin")adminViews.push(`view${n}`);
     views.push(`{${user.used ? `check:(caller)=>{${authLines(undefined, `views/${name}`, pageData.caller.binds, sqlite).join("")}},` : ""}name:${q(name)},allows:allowsView${n},query:(params)=>{const result=queryView${n}(params),filters:Record<string,unknown>=Object.create(null);${filterReads.join("")}filters${n}(filters);${filterTransforms.join("")}${sqlite?"":"nativeText(result.input);nativeText(filters);"}${kinds.searchFields?.length?`const search=params.get("search")?.trim();`:""}return {...result,match:{filters${kinds.searchFields?.length?",...(search?{search}:{})":""}}};},page:(db,caller,input,paging)=>{deny(caller,allowsView${n}(caller),${q("views/"+name)});return nativePage(viewPage${n},adapter,db,caller,input,paging);},${converted?`convert:${converted},`:""}row:(raw)=>{const row=(${wire((input.viewKeys[name]??[]).map(key=>[key,boundaryType(plan,name,key)] as const),sqlite)})(raw);return Object.fromEntries(Object.entries(row).map(([key,value])=>[Object.hasOwn(viewNames${n},key)?viewNames${n}[key as keyof typeof viewNames${n}]:key,value]));}}`);
@@ -118,8 +128,8 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
     imports.push(`import {validate as operation${n}} from "./validation/procedures/${encoded}.js";`);
     operations.push(`{${input.description.targets.find(t => t._meta.id === `procedure:${name}`)?._meta.readOnly ? "readOnly:true," : ""}${user.used || p.trustedOnly ? `check:(caller)=>{${authLines(undefined, `procedures/${name}`, lowered.procedures[name]?.caller?.flatMap(s=>s.binds), sqlite, p.trustedOnly).join("")}},` : ""}name:${q(name)},allows:${allowed(p.requires,`procedures/${name}`)},validate:operation${n},${converted?`convert:${converted},`:""}run:${ref?`async(db,caller,input)=>(await import("./generated.js")).store(db,caller,{handlers:options.handlers}).procedures[${q(name)}](input)`:`async(db,caller,input)=>(await import("./procedures/${encoded}.js")).default(db,caller,input)`}}`);
   }
-  const entryData=sqlConstants(input.adminEntries);
-  imports.push(...views.map((view,n)=>`const view${n}=${view} satisfies View<Database>;`),...pageSpecs,...entryData.constants,`const entrySpecs=${entryData.code} as const;`);
+  const {code:[entrySpecs,...pages],constants}=sqlConstants([input.adminEntries,...pageSpecs]);
+  imports.push(...views.map((view,n)=>`const view${n}=${view} satisfies View<Database>;`),...constants,...pages.map((page,n)=>`const viewPage${n}=${page} as const;`),`const entrySpecs=${entrySpecs} as const;`);
   imports.push(`export const statisticsView=(db:Database,caller:Caller,collection:keyof typeof entrySpecs,args:{from:number;to:number;bucketMs:number})=>nativeStatistics(entrySpecs,adapter,db,caller,collection,args);`);
   const metadataGuards = [...Object.entries(plan.views).map(([name,v]) => `case ${q("view:"+name)}: return (${allowed(v.requires,`views/${name}`)})(caller);`), ...Object.entries(plan.procedures).map(([name,p]) => `case ${q("procedure:"+name)}: return (${allowed(p.requires,`procedures/${name}`)})(caller);`), ...Object.values(plan.schemas).filter(s=>s.publishing).flatMap(s=>["publish","unpublish","archive"].map(verb=>`case ${q("procedure:"+s.name+"."+verb)}: return isAdmin(caller);`))];
   files["admin-bindings.ts"]=`${imports.filter(Boolean).join("\n")}\nexport function adminBindings${refs?"<const H extends Handlers>(options:{handlers:H & Record<Exclude<keyof H,keyof Handlers>,never>})":"(_options?:{handlers?:Handlers})"}{\nreturn {metadata:{...bootstrap,accessTargets:()=>import("./access-targets.js").then(m=>m.targets),${plan.access ? `userFields:${q(plan.access.userFields)} as const,` : ""}allows:(target:import("@aotter/mantle/contracts").Target,caller:Caller)=>{switch(target.kind+":"+target.name){${metadataGuards.join("")}default:return target.kind==="schema";}}},adapter,schemas:[${schemas.join(",\n")}] satisfies readonly EntrySchema<Database>[],views:[${adminViews.join(",")}],developerViews:[${views.map((_,n)=>`view${n}`).join(",")}],operations:[${operations.join(",\n")}] satisfies readonly Operation<Database,${refs?"Handlers":"never"}>[]};\n}\n`;

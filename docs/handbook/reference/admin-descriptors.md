@@ -37,7 +37,10 @@ execution plan or SQL AST, storage access or execution observer is included.
   admin tool names. A conflicting declared admin tool is refused.
 - `webmcp` carries static tool declarations and Admin page routes. `bootstrap`
   combines `collections`, `operations`, `views` and `webmcp`; the handler adds
-  request-owned `me`, `site` and any selected entries page.
+  request-owned `me`, `site` and any selected entries page. Its
+  `developerConsole` is a loader for the same snapshot, generated again in
+  `admin-developer-console.ts`, so Admin imports it on a developer-console
+  request instead of at Worker startup.
 
 Generation reuses the 0.2 projection and SQL-logic helpers. View columns come
 from the compiled plan (Core's `viewOutputs` provenance, including aliases,

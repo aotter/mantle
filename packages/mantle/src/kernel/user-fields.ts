@@ -42,7 +42,7 @@ export function scopeInsert(scopes: readonly { readonly column: string; readonly
   }
   return out;
 }
-export { modeOf } from "./caller-identity.js";
+export { modeOf } from "./caller-mode.js";
 export interface UserRecipe extends Extract<Recipe, { k: "user" }> {}
 const pgArray = (values: readonly (string | number)[]) => `{${values.map(value => `"${String(value).replace(/[\\"]/g, "\\$&")}"`).join(",")}}`;
 /** A missing or empty value is refused here, before any SQL runs; correctness never relies on NULL semantics. */

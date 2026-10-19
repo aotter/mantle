@@ -1,6 +1,7 @@
 /** Request-only MCP implementation, excluded from Worker startup. */
 import { authorized, authorizeTarget } from "./authorization.js";
-import { forwarded, isAdmin, ContractError, checkOrigin, surfaceCaller, surfaceError, wire, type Caller, type RequestContext } from "./contracts.js";
+import { forwarded, isAdmin, ContractError, wire, type Caller, type RequestContext } from "./contracts.js";
+import { checkOrigin, surfaceCaller, surfaceError } from "./surface-failure.js";
 import { draining } from "./drain.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
 import type { Tools, Options } from "./mcp.js";

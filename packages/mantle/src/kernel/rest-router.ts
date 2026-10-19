@@ -1,5 +1,6 @@
 /** Route matching and caller enforcement load on the first request. */
-import { forwarded, ContractError, checkOrigin, surfaceCaller, type Caller, type RequestContext } from "./contracts.js";
+import { forwarded, ContractError, type Caller, type RequestContext } from "./contracts.js";
+import { checkOrigin, surfaceCaller } from "./surface-failure.js";
 import { decode, invalid } from "./surface.js";
 import { draining } from "./drain.js";
 import type { Options, Route } from "./rest.js";
