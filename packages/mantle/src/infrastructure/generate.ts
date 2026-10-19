@@ -41,12 +41,15 @@ function adminCreateWarnings(plan: RuntimePlan): string[] {
   return Object.values(plan.schemas).filter(s => {
     const required = new Set(s.schema.required ?? []);
     // Folded children open from their parent; translations from their language tabs.
-    const folded = Object.entries(s.schema.properties ?? {}).some(([name, property]) => required.has(name) && typeof (property as { "x-mantle-ref"?: unknown })?.["x-mantle-ref"] === "string");
+    const folded = Object.entries(s.schema.properties ?? {}).some(([name, property]) => required.has(name) && (property as { "x-mantle-ref"?: unknown })?.["x-mantle-ref"] != null);
     // Field-scoped rows belong to their members, who create them.
     return !s.publishing && s.schema.readOnly !== true && !s.scope && !s.translates && !folded && !placed.has(s.name.toLowerCase());
-  }).map(s => `Schema '${s.name}' is operational and writable, but no Procedure places a create action on it, so Admin cannot add its records. Add a Procedure with uiSchema.collectionAction: ${s.name} and an admin MCP Trigger, or mark the Schema readOnly.`).concat(Object.values(plan.schemas).flatMap(s => Object.entries(s.schema.properties ?? {})
-    .filter(([name, property]) => (property as { readOnly?: unknown })?.readOnly === true && (s.schema.required ?? []).includes(name) && (property as { default?: unknown }).default === undefined)
-    .map(([name]) => `Schema '${s.name}' field '${name}' is required and readOnly without a default, so Admin cannot create its records. Give it a default (Admin stores it on create).`)));
+  }).map(s => `Schema '${s.name}' is operational and writable, but no Procedure places a create action on it, so Admin cannot add its records. Add a Procedure with uiSchema.collectionAction: ${s.name} and an admin MCP Trigger, or mark the Schema readOnly.`).concat(Object.values(plan.schemas)
+    // A create action's Procedure writes the field itself; only Admin's generic create needs the default.
+    .filter(s => s.schema.readOnly !== true && !placed.has(s.name.toLowerCase()))
+    .flatMap(s => Object.entries(s.schema.properties ?? {})
+      .filter(([name, property]) => (property as { readOnly?: unknown })?.readOnly === true && (s.schema.required ?? []).includes(name) && (property as { default?: unknown }).default === undefined)
+      .map(([name]) => `Schema '${s.name}' field '${name}' is required and readOnly without a default, so Admin's generic create cannot fill it. Give it a default (Admin stores it on create), or create the records through a Procedure with uiSchema.collectionAction: ${s.name}.`)));
 }
 
 /** Warn about SQL's case folding without changing the authored output names. */

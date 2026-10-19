@@ -111,7 +111,7 @@ export function checkMcpApp(html: string, csp: McpCsp | undefined, sources: read
   };
   const errors: string[] = [];
   for (const hit of hitsOf(html)) {
-    if (hit.rule === "api") errors.push(`${where(hit)}: "/admin/api" is Admin's browser route, which a host's App has no session for. Read data through the hooks (useView, useOperation), which call the host's tools.`);
+    if (hit.rule === "api") errors.push(`${where(hit)}: "/admin/api" is Admin's browser route, which a host's App has no session for. Read data through the hooks (useView, useOperation), which call the host's tools. The check reads the built code, so text that only displays the path matches too: keep such a page or integration out of the App with a sibling src/admin.mcp.tsx (mantle help native-admin).`);
     // the kit's sidebar remembers its state in a cookie: Mantle's own code is not the application's
     else if (hit.rule === "cookie" && !(found(hit).length > 0 && found(hit).every(source => library(source.module)))) errors.push(`${where(hit)}: document.cookie. The App holds no login state; the host's tools run as the caller.`);
     else if (hit.rule === "remote" && !declared(hit.url, csp, hit.kind)) errors.push(`${where(hit)}: ${hit.url} is a remote origin that defineAdmin({ mcp: { csp } }) does not declare in ${LIST[hit.kind]}, so a host would block it. Add its origin there, or bundle the asset into your entry.`);
