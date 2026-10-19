@@ -58,8 +58,17 @@ export const userBinds = (sqlite: boolean) => (recipe: UserRecipe, caller: Calle
 export const userRefs = (sqlite: boolean, version: number) => {
   if (version !== USER_REFS_V1) throw new ContractError('USER_REFS_VERSION', 'User-reference bind version differs.');
   const user = userBinds(sqlite);
-  return (recipe: Recipe, caller: Caller): unknown => {
+  return (recipe: Recipe, caller: Caller, input?: Readonly<Record<string, unknown>>): unknown => {
     if (recipe.k === 'user') return user(recipe, caller);
+    // A field-scoped Schema's scope column on an SQL INSERT: the Store's insert rule. A surface converts an omitted
+    // optional input that SQL also reads elsewhere to null, and a scope column is never null, so null is "not given".
+    if (recipe.k === 'scoped') {
+      const given = recipe.name !== undefined ? input?.[recipe.name] ?? undefined : recipe.value;
+      const value = (scopeInsert([recipe], caller, { [recipe.column]: given }) as Record<string, unknown>)[recipe.column];
+      // scopeInsert checks the type only against a caller's own set; { all: true } and system callers name any value.
+      if (typeof value !== recipe.type) throw new ContractError('INPUT_VALIDATION_FAILED', `'${recipe.column}' must be a ${recipe.type}.`);
+      return value;
+    }
     throw new ContractError('USER_REFS_VERSION', `Unknown user-reference bind recipe '${recipe.k}'.`);
   };
 };

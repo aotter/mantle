@@ -10,6 +10,8 @@ export type Recipe =
   | { readonly k: "uid" | "admin" | "now" | "version" }
   | { readonly k: "cutoff"; readonly seconds: number }
   | { readonly k: "const"; readonly value: unknown }
+  /** A field-scoped Schema's scope column on an SQL INSERT: the Store's insert rule (autofill one value, refuse a value outside the caller's set). */
+  | { readonly k: "scoped"; readonly column: string; readonly field: string; readonly type: "string" | "number"; readonly name?: string; readonly value?: string | number }
   | { readonly k: "input"; readonly name: string; /** Only a date-time, a date or JSON is converted, so only those carry a type. */ readonly type?: "timestamptz" | "date" | "json" };
 /** One printed statement and how to bind it. `row`: it must affect exactly one row. */
 export interface Step { readonly sql: string; readonly binds: readonly Recipe[]; readonly row?: boolean }
@@ -18,7 +20,7 @@ export type Bound = { readonly sql: string; readonly binds: unknown[]; readonly 
 /** The dialect functions the recipes in use call; generated code passes only those. */
 export type Values = Partial<Pick<Dialect, "now" | "cutoff" | "timestamp" | "date">> & {
   readonly scopeInsert?: Dialect['scopeInsert'];
-  readonly userRefs?: (recipe: Recipe, caller: Caller) => unknown;
+  readonly userRefs?: (recipe: Recipe, caller: Caller, input?: Readonly<Record<string, unknown>>) => unknown;
   /** Present only in apps with user fields: keeps, per caller, one printed form of each Schema scope term. */
   readonly scopedAll?: <T>(value: T, caller: Caller) => T;
 };
@@ -42,7 +44,7 @@ export function binds(d: Values, recipes: readonly Recipe[], caller: Caller, inp
       case "input": out.push(encode(d, r.type, input![r.name]));
         break;
       // Only apps whose plan uses caller values import the version-checked capability; it refuses an unknown recipe, and without it this throws before SQL.
-      default: out.push(d.userRefs!(r, caller));
+      default: out.push(d.userRefs!(r, caller, input));
     }
   }
   return out;

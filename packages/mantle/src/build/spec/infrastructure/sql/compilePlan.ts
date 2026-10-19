@@ -326,7 +326,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       const sets = stmt.UpdateStmt?.targetList ?? stmt.InsertStmt?.onConflictClause?.targetList ?? [];
       if (sets.some((set: SqlNode) => columns.includes(set.ResTarget.name.toLowerCase()))) diagnostics.push(validateDiagnostic({code:'USER_FIELD_POSITION',severity:'error',path:`procedures/${p.metadata.name}/handler/sql`,message:'The scoped column is never writable through SET.'}));
     }
-    if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), ...(plan.stmts.some(stmt => stmt.InsertStmt && schemas[stmt.InsertStmt.relation.relname]?.userScopes?.length) ? { trustedOnly: true as const } : {}), handler: { sql: plan, source: p.spec.handler.sql } };
+    if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), handler: { sql: plan, source: p.spec.handler.sql } };
   }
   if (diagnostics.length) return { ok: false, diagnostics };
   // `restrict`: extra row terms a target puts on the Schemas its SQL reads. Same grammar as `scope`; AND-ed, so it never widens.
@@ -383,7 +383,10 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     const proc = procedures[p.metadata.name];
     if (p.spec.restrict && proc && "ref" in proc.handler) { diagnostics.push(validateDiagnostic({ code: "USER_FIELD_CONFLICT", severity: "error", path: `procedures/${p.metadata.name}/restrict`, message: "restrict applies to SQL Procedures; a ref handler restricts rows through its scoped ctx.store." })); continue; }
     const restrict = proc && "sql" in proc.handler && inherit(restrictOf("procedures", p.metadata.name, p.spec.restrict, proc.handler.sql.stmts) || undefined, (p.spec.handler as { sql?: string }).sql, `procedures/${p.metadata.name}/restrict`);
-    if (restrict) procedures[p.metadata.name] = { ...proc!, restrict };
+    // The one place the trusted-only rule is decided (policy.ts insert enforces it): INSERT ... SELECT into a field-scoped
+    // table, or an insert into one this target restricts. Without a field scope a restricted insert fails generation.
+    const trustedOnly = !!proc && "sql" in proc.handler && proc.handler.sql.stmts.some(stmt => { const ins = stmt.InsertStmt, t = String(ins?.relation.relname ?? "").toLowerCase(); return !!ins && !!schemas[t]?.userScopes?.length && (!ins.selectStmt?.SelectStmt?.valuesLists || !!(restrict && restrict[t])); });
+    if (restrict || trustedOnly) procedures[p.metadata.name] = { ...proc!, ...(restrict ? { restrict } : {}), ...(trustedOnly ? { trustedOnly: true as const } : {}) };
   }
   const triggers: Record<string, PlanTrigger> = Object.fromEntries(linked.triggers.map(({ manifest: t }) => [t.metadata.name, { source: t.spec.source, procedure: t.spec.target.procedure }]));
   const warnings: string[] = [];

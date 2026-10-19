@@ -44,7 +44,7 @@ function adminCreateWarnings(plan: RuntimePlan): string[] {
     const folded = Object.entries(s.schema.properties ?? {}).some(([name, property]) => required.has(name) && (property as { "x-mantle-ref"?: unknown })?.["x-mantle-ref"] != null);
     // Field-scoped rows belong to their members, who create them.
     return !s.publishing && s.schema.readOnly !== true && !s.scope && !s.translates && !folded && !placed.has(s.name.toLowerCase());
-  }).map(s => `Schema '${s.name}' is operational and writable, but no Procedure places a create action on it, so Admin cannot add its records. Add a Procedure with uiSchema.collectionAction: ${s.name} and an admin MCP Trigger, or mark the Schema readOnly.`).concat(Object.values(plan.schemas)
+  }).map(s => `Schema '${s.name}' is operational and writable, but no Procedure places a create action on it, so Admin cannot add its records. Add a Procedure with uiSchema.collectionAction: ${s.name} and an admin MCP Trigger, or mark the Schema readOnly.${s.userScopes?.length ? ` That Procedure takes ${s.userScopes.map(u => `'${u.column}'`).join(', ')} as an optional input for callers holding { all: true } (field scope in the Schema reference).` : ''}`).concat(Object.values(plan.schemas)
     // A create action's Procedure writes the field itself; only Admin's generic create needs the default.
     .filter(s => s.schema.readOnly !== true && !placed.has(s.name.toLowerCase()))
     .flatMap(s => Object.entries(s.schema.properties ?? {})
@@ -155,7 +155,11 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
       !["Every reachable visibility mode must have canonical lowered SQL.", "Both caller and trusted SQL must be lowered."].includes(d.message));
     return { ok: false, diagnostics: [...refusals, ...diagnostics] };
   }
-  if (!result.ok) return result;
+  // A Procedure the runtime cannot lower names only that; the lowering's own refusal says why.
+  if (!result.ok) return { ...result, diagnostics: result.diagnostics.map(d => {
+    const why = d.message === "Both caller and trusted SQL must be lowered." ? warnings.find(w => w.includes(`${d.path} (caller)`) || w.includes(`${d.path} (admin)`)) : undefined;
+    return why ? { ...d, message: `${d.message} ${why.slice(why.indexOf("): ") + 3)}` } : d;
+  }) };
   const accessTargets = Object.fromEntries(report.targets.map(({ _meta: m }) => {
     const policy = ({ opaque, requires }: typeof m | typeof m.variants[number]) => ({ opaque, ...(requires.guard ? {guard: requires.guard} : {}) });
     return [m.id, { targetHash: m.targetHash, ...policy(m), ...(m.variants.length ? { variants: m.variants.map(v => ({ id: v.id, ...policy(v) })) } : {}) }];

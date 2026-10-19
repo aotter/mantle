@@ -11,6 +11,8 @@ import { renderTerm } from '../src/kernel/store.js';
 import { dialect } from '../src/kernel/dialect/sqlite.js';
 import { isAdmin, hasAdminRole } from '../src/kernel/contracts.js';
 import { generateOrThrow, writeGenerated } from './apps/link.js';
+import { hostCaller } from '../src/kernel/host-caller.js';
+import { mantleProps } from './gateway-fixture.js';
 import { compilePlan, compileProgram, d1Dialect, postgresCompiler, postgresDialect, rowPolicy, sqliteCompiler } from '../src/build/compiler.js';
 await mkdir(resolve(import.meta.dir, 'apps/.generated'), { recursive: true });
 const fields = { region: { type: 'string' as const, multiple: true }, tier: { type: 'string' as const, multiple: false } };
@@ -53,6 +55,8 @@ test('verified identities freeze values, discard unknown fields and lose authori
 const schema = JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Schema', metadata: { name: 'orders' }, spec: { title: 'Orders', schema: { type: 'object', required: ['region', 'tier'], properties: { region: { type: 'string' }, tier: { type: 'string' } } }, indexes: [['region', 'id']] } });
 const view = (name: string, sql: string, restrict?: Record<string, string>) => JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'View', metadata: { name }, spec: { surface: 'internal', sql, ...(restrict ? { restrict } : {}) } });
 const code = (run: () => Promise<unknown>) => run().then(() => 'ok', (e: { code?: string }) => e.code ?? String(e));
+const scopedOrders = () => { const s = JSON.parse(schema); s.spec.scope = "region IN auth.user('region')"; s.spec.indexes = [['region', 'id']]; return s; };
+const scopedProc = (name: string, sql: string, region: object = { type: 'string' }) => JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Procedure', metadata: { name }, spec: { title: name, input: { type: 'object', additionalProperties: false, properties: { region, tier: { type: 'string' } } }, output: { type: 'object' }, handler: { sql } } });
 test('restricted Procedure INSERT variants refuse caller compilation while trusted inserts and owner scope still work', async () => {
   const procedure = (sql: string, restrict?: Record<string, string>) => JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Procedure', metadata: { name: 'seed' }, spec: { title: 'Seed', input: { type: 'object', additionalProperties: false }, output: { type: 'object' }, ...(restrict ? { restrict } : {}), handler: { sql } } });
   const sqls = ["INSERT INTO orders(region,tier) VALUES ('TW','gold') RETURNING id", "INSERT INTO orders(region,tier) SELECT region,'copy' FROM orders RETURNING id", "INSERT INTO orders(region,tier) VALUES ('TW','gold') ON CONFLICT(id) DO NOTHING RETURNING id"];
@@ -82,6 +86,99 @@ test('restricted Procedure INSERT variants refuse caller compilation while trust
     expect((await app.procedures.seed(ownerDb, caller, {})).results[0]).toHaveLength(1);
     expect(ownerDb.query('SELECT owner,author_id FROM orders').all()).toEqual([{ owner: 'owner', author_id: 'owner' }]);
   } finally { ownerDb.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+for (const pg of [false, true]) (pg && !process.env.MANTLE_NEXT_BUN_PG_URL ? test.skip : test)(`Procedure INSERT into a field-scoped Schema follows the Store insert rule; INSERT ... SELECT stays trusted (${pg ? 'PostgreSQL' : 'SQLite'})`, async () => {
+  const scoped = scopedOrders();
+  const text = [JSON.stringify(scoped), scopedProc('add', 'INSERT INTO orders(tier) VALUES (input.tier) RETURNING id'), scopedProc('add_in', 'INSERT INTO orders(region,tier) VALUES (input.region,input.tier) RETURNING id'),
+    scopedProc('add_jp', "INSERT INTO orders(region,tier) VALUES ('JP','x') RETURNING id"), scopedProc('copy', "INSERT INTO orders(region,tier) SELECT region,'copy' FROM orders RETURNING id")].join('\n---\n');
+  const files = await generateOrThrow(pg ? 'bun-postgres' : 'bun-sqlite', [{ sourceId: 'scoped-insert.yaml', text }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, 'apps/.generated/scoped-insert-')), namespace = 'scoped_insert_' + crypto.randomUUID().replaceAll('-', '');
+  const db: any = pg ? new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!, { max: 1 }) : new Database(':memory:');
+  const rows = (sql: string) => pg ? db.unsafe(sql) : Promise.resolve(db.query(sql).all());
+  try {
+    await writeGenerated(dir, files); const app = await import(resolve(dir, 'generated.ts'));
+    if (pg) { await db.unsafe(`CREATE SCHEMA ${namespace}`); await db.unsafe(`SET search_path TO ${namespace}`); await db.unsafe(files['schema.sql']!); } else db.exec(files['schema.sql']!);
+    const tw = userCaller({ id: 'tw', region: 'TW' }, { fields }), both = userCaller({ id: 'both', region: ['TW', 'JP'] }, { fields });
+    const every = userCaller({ id: 'every', region: { all: true } }, { fields }), none = userCaller({ id: 'none' }, { fields });
+    expect((await app.procedures.add(db, tw, { tier: 'a' })).results[0]).toHaveLength(1);               // omitted: autofilled
+    expect(await code(() => app.procedures.add(db, both, { tier: 'b' }))).toBe('INPUT_VALIDATION_FAILED'); // several values: name one
+    expect(await code(() => app.procedures.add(db, every, { tier: 'c' }))).toBe('INPUT_VALIDATION_FAILED'); // { all: true }: name one
+    expect(await code(() => app.procedures.add(db, none, { tier: 'd' }))).toBe('AUTH_DENIED');            // no value at all
+    expect((await app.procedures.add_in(db, both, { region: 'JP', tier: 'e' })).results[0]).toHaveLength(1);
+    expect(await code(() => app.procedures.add_in(db, tw, { region: 'JP', tier: 'f' }))).toBe('AUTH_DENIED'); // outside the set
+    expect((await app.procedures.add_in(db, every, { region: 'KR', tier: 'g' })).results[0]).toHaveLength(1);
+    expect(await code(() => app.procedures.add_jp(db, tw, {}))).toBe('AUTH_DENIED');                       // a literal is checked too
+    expect(await code(() => app.procedures.copy(db, every, {}))).toBe('AUTH_DENIED');                      // INSERT ... SELECT: trusted only
+    expect([...await rows('SELECT region, tier FROM orders ORDER BY tier')]).toEqual([{ region: 'TW', tier: 'a' }, { region: 'JP', tier: 'e' }, { region: 'KR', tier: 'g' }]);
+  } finally { if (pg) { await db.unsafe(`DROP SCHEMA IF EXISTS ${namespace} CASCADE`); await db.close(); } else db.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test('generated REST and MCP surfaces apply the field-scope insert rule, including the null an omitted input becomes', async () => {
+  const scoped = scopedOrders();
+  const add = { apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Procedure', metadata: { name: 'add' }, spec: { title: 'Add', requires: { auth: { all: ['ctx.user'] } }, input: { type: 'object', additionalProperties: false, required: ['tier'], properties: { region: { type: 'string' }, tier: { type: 'string' } } }, output: { type: 'object' }, handler: { sql: 'INSERT INTO orders(region,tier) VALUES (input.region,input.tier) RETURNING id' } } };
+  const trigger = (name: string, source: object) => ({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Trigger', metadata: { name }, spec: { source, target: { procedure: 'add' } } });
+  const text = [scoped, add, trigger('add-http', { kind: 'http', method: 'POST', path: '/api/orders' }), trigger('add-mcp', { kind: 'mcp', surface: 'public' })].map(x => JSON.stringify(x)).join('\n---\n');
+  const files = await generateOrThrow('bun-sqlite', [{ sourceId: 'scoped-surface.yaml', text }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, 'apps/.generated/scoped-surface-')), raw = new Database(':memory:');
+  try {
+    await writeGenerated(dir, files); raw.exec(files['schema.sql']!);
+    const { rest } = await import(resolve(dir, 'rest.ts')), { mcp } = await import(resolve(dir, 'mcp.ts'));
+    let caller: unknown = userCaller({ id: 'tw', region: 'TW' }, { fields, credential: 'oauth', scopes: ['mcp'] });
+    const options = { db: () => raw, caller: async () => caller }, http = rest(options), tools = mcp(options);
+    const post = async (body: object) => (await http(new Request('https://app.test/api/orders', { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://app.test' }, body: JSON.stringify(body) }), {}))!;
+    const tool = async (args: object) => { const response = (await tools(new Request('https://app.test/mcp', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'add', arguments: args } }) }), {}))!; const text = await response.text(); return JSON.parse(text.split('\n').find((line: string) => line.startsWith('data:'))?.slice(5) ?? text) as { result?: { isError?: boolean } }; };
+    expect((await post({ tier: 'rest-omitted' })).status).toBe(200);               // omitted → null by convert → autofilled
+    expect((await post({ tier: 'rest-null', region: null })).status).toBe(400);  // explicit null fails input validation first
+    expect((await post({ tier: 'rest-jp', region: 'JP' })).status).toBe(403);    // outside the caller's set
+    const viaMcp = await tool({ tier: 'mcp-omitted' }); expect(viaMcp.result?.isError, JSON.stringify(viaMcp).slice(0, 400)).not.toBe(true);
+    const denied = await tool({ tier: 'mcp-jp', region: 'JP' }); expect(denied.result?.isError, JSON.stringify(denied).slice(0, 400)).toBe(true);
+    caller = userCaller({ id: 'both', region: ['TW', 'JP'] }, { fields, credential: 'oauth', scopes: ['mcp'] });
+    expect((await post({ tier: 'rest-both' })).status).toBe(400);                // several values: name one
+    expect((await post({ tier: 'rest-both-jp', region: 'JP' })).status).toBe(200);
+    expect(raw.query('SELECT region, tier FROM orders ORDER BY tier').all()).toEqual([{ region: 'TW', tier: 'mcp-omitted' }, { region: 'JP', tier: 'rest-both-jp' }, { region: 'TW', tier: 'rest-omitted' }]);
+  } finally { raw.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test('every statement of a Procedure is checked before SQL; gateway callers and { all: true } get the same rule and a typed value', async () => {
+  const scoped = scopedOrders();
+  const text = [JSON.stringify(scoped), scopedProc('pair', "INSERT INTO orders(region,tier) VALUES (input.region,'a') RETURNING id; INSERT INTO orders(region,tier) VALUES ('JP','b') RETURNING id"), scopedProc('add', 'INSERT INTO orders(tier) VALUES (input.tier) RETURNING id'),
+    scopedProc('typed', "INSERT INTO orders(region,tier) VALUES (input.region,'n') RETURNING id")].join('\n---\n');
+  const files = await generateOrThrow('bun-sqlite', [{ sourceId: 'scoped-rows.yaml', text }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, 'apps/.generated/scoped-rows-')), db = new Database(':memory:');
+  try {
+    await writeGenerated(dir, files); const app = await import(resolve(dir, 'generated.ts')); db.exec(files['schema.sql']!);
+    const tw = userCaller({ id: 'tw', region: 'TW' }, { fields }), both = userCaller({ id: 'both', region: ['TW', 'JP'] }, { fields }), every = userCaller({ id: 'every', region: { all: true } }, { fields });
+    expect(await code(() => app.procedures.pair(db, tw, { region: 'TW' }))).toBe('AUTH_DENIED');     // the second statement is outside the set
+    expect(db.query('SELECT COUNT(*) AS n FROM orders').get()).toEqual({ n: 0 });                // refused before SQL: no partial insert
+    expect((await app.procedures.pair(db, both, { region: 'TW' })).results).toHaveLength(2);
+    expect(await code(() => app.procedures.typed(db, every, { region: 5 }))).toBe('INPUT_VALIDATION_FAILED'); // a direct call skips input validation; the column's type still holds
+    const gwFields = { region: { type: 'string' as const, multiple: true } };
+    const member = hostCaller(mantleProps({ layer: 'member', user: { id: 'gw-member', region: ['TW'] } }), { tenant: 'example', fields: gwFields });
+    const staff = hostCaller(mantleProps({ layer: 'admin', user: { id: 'gw-staff', role: 'editor', region: ['TW'] } }), { tenant: 'example', fields: gwFields });
+    expect((await app.procedures.add(db, member, { tier: 'gw-member' })).results[0]).toHaveLength(1);  // member layer: autofilled from props
+    expect((await app.procedures.add(db, staff, { tier: 'gw-staff' })).results[0]).toHaveLength(1);    // admin layer: same rule, no bypass
+    expect(await code(() => app.procedures.pair(db, staff, { region: 'TW' }))).toBe('AUTH_DENIED');
+    expect(db.query("SELECT region, author_id FROM orders WHERE tier LIKE 'gw-%' ORDER BY tier").all()).toEqual([{ region: 'TW', author_id: 'gw-member' }, { region: 'TW', author_id: 'host:gw-staff' }]);
+  } finally { db.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test('the partition takes only an input of its own type or a matching literal, listed once', async () => {
+  const scoped = scopedOrders();
+  const refused = (sql: string, region?: object) => generateOrThrow('bun-postgres', [{ sourceId: 'p.yaml', text: JSON.stringify(scoped) + '\n---\n' + scopedProc('p', sql, region) }]).then(() => 'ok', (e: Error) => e.message);
+  // a date-time input read back as text would write another string than the one checked
+  expect(await refused("INSERT INTO orders(region,tier) VALUES (input.region,'x') RETURNING id", { type: 'string', format: 'date-time' })).toContain("input 'region' must be declared with the same type");
+  expect(await refused("INSERT INTO orders(region,tier,region) VALUES (input.region,'x','JP') RETURNING id")).toContain('is listed twice');
+  expect(await refused("INSERT INTO orders(region,tier) VALUES (COALESCE(input.region,'JP'),'x') RETURNING id")).toContain('takes an input of type text');
+  expect(await refused("INSERT INTO orders(region,tier) VALUES (input.region,'x') RETURNING id")).toBe('ok');
+  // libpg-query omits ival for 0; an integer partition still takes it as a literal
+  const team = JSON.parse(schema); team.spec.scope = "team IN auth.user('team')"; team.spec.indexes = [['team', 'id']]; team.spec.schema.properties.team = { type: 'integer' }; team.spec.schema.required.push('team');
+  expect(await generateOrThrow('bun-sqlite', [{ sourceId: 't.yaml', text: JSON.stringify(team) + '\n---\n' + scopedProc('zero', "INSERT INTO orders(team,region,tier) VALUES (0,'TW','x') RETURNING id") }]).then(() => 'ok', (e: Error) => e.message)).toBe('ok');
+});
+
+test('a restricted INSERT into a Schema without a field scope still fails generation, not at run time', async () => {
+  const p = JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Procedure', metadata: { name: 'seed' }, spec: { title: 'Seed', input: { type: 'object', additionalProperties: false }, output: { type: 'object' }, restrict: { orders: "region IN auth.user('region')" }, handler: { sql: "INSERT INTO orders(region,tier) VALUES ('TW','gold') RETURNING id" } } });
+  await expect(generateOrThrow('bun-sqlite', [{ sourceId: 'restricted-insert.yaml', text: schema + '\n---\n' + p }])).rejects.toThrow('Both caller and trusted SQL must be lowered');
 });
 
 test('upsert SET refuses restrict columns with the same diagnostic as UPDATE', async () => {
@@ -121,7 +218,7 @@ test('scope wraps SQL relations; { all: true } drops only the scope term, never 
   expect(queries).toBe(0);
   for(const name of Object.keys(sqls)){const own=await app.views[name](db,member,{});expect(own.length).toBe(1);expect(own.every((row:any)=>row.region==='TW')).toBe(true);expect(name==='restricted'?await code(()=>app.views[name](db,admin,{})):(await app.views[name](db,admin,{})).length).toBe(name==='restricted'?'AUTH_DENIED':2);expect(await code(()=>app.views[name](db,{...admin},{}))).toBe('AUTH_DENIED');}
   expect(await app.store(db,member).collection('orders').count()).toBe(1);expect(await app.store(db,admin).collection('orders').count()).toBe(2);
-  await expect(app.procedures.seed(db,member,{})).rejects.toMatchObject({code:'AUTH_DENIED'});expect((await app.procedures.seed(db,system,{})).results[0]).toHaveLength(1);
+  expect((await app.procedures.seed(db,member,{})).results[0]).toHaveLength(1);expect((await app.procedures.seed(db,system,{})).results[0]).toHaveLength(1);
   await expect(generateOrThrow('bun-sqlite',[{sourceId:'readonly.yaml',text:JSON.stringify(scoped)+'\n---\n'+procedure('bad',"INSERT INTO orders(region,tier) VALUES ('TW','gold') ON CONFLICT(tier) DO UPDATE SET region=excluded.region RETURNING id")}])).rejects.toThrow('scoped column');
   await expect(generateOrThrow('bun-sqlite',[{sourceId:'anti.yaml',text:JSON.stringify(scoped)+'\n---\n'+view('anti',"SELECT a.id FROM orders a LEFT JOIN orders b ON a.id=b.id AND b.region IN auth.user('region') WHERE b.id IS NULL")}])).rejects.toThrow('USER_REF_SCOPE_ONLY');
   await expect(generateOrThrow('bun-sqlite',[{sourceId:'unsupported-set.yaml',text:JSON.stringify(scoped)+'\n---\n'+view('set','SELECT id FROM orders UNION ALL SELECT id FROM orders')}])).rejects.toThrow('SQL_UNSUPPORTED');

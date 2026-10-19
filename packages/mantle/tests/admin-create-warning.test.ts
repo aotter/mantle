@@ -38,3 +38,8 @@ test("a child folded through the object form of x-mantle-ref is not reported as 
   const child = doc("Schema", "lines", { title: "lines", lifecycle: "operational", schema: { type: "object", required: ["orderRef"], properties: { orderRef: { type: "string", "x-mantle-ref": { schema: "orders", field: "ref" } } } } });
   expect(await warnings(parent, child)).toEqual([]);
 });
+
+test("a field-scoped Schema's create gap tells the author to take the partition as an optional input", async () => {
+  const scoped = doc("Schema", "leads", { title: "leads", lifecycle: "operational", scope: "region IN auth.user('region')", indexes: [["region", "id"]], schema: { type: "object", required: ["region", "title"], properties: { region: { type: "string" }, title: { type: "string" } } } });
+  expect(await warnings(scoped)).toEqual([expect.stringContaining("takes 'region' as an optional input")]);
+});
