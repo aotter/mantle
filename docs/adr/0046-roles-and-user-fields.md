@@ -293,6 +293,12 @@ spec:
     Procedure was trusted-only, so no member could create a field-scoped row in SQL.)
   - The scoped column can never be changed by `SET`: not by Store, by the write
     allowlist, by `DO UPDATE SET`, or by Admin update fragments.
+  - A non-trusted write of an `x-mantle-ref` to a scoped Schema must name a parent the
+    caller reads that shares the child's value of every common scope field, checked in
+    the same statement by Store and Procedure SQL (ADR-0034 §8; the full rule is in
+    `schema.md`). (Amended 2026-10-19, #1757: the reference was not checked, so a child
+    could name a missing parent or one in another partition. Native Admin generic writes
+    are not covered yet.)
 - **Uniqueness.**
   - Every `uniqueIndexes` entry and every `ON CONFLICT` target is prefixed with
     `[owner?, scoped field?]`. Storage adds the prefix, and both dialects are tested.

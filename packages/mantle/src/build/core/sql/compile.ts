@@ -30,6 +30,8 @@ export interface CompileContext {
   readonly seen?: Set<RelationPosition>;
   /** NEGATIVE CONTROL ONLY (see RunEnv). */
   readonly unsafeNoVisibility?: boolean;
+  /** Admin's generic writes print one WHERE for every field set, so they cannot carry a per-field reference check (#1757). */
+  readonly uncheckedRefs?: true;
 }
 
 /** Check every statement of a program with the dialect, then inject policy. A refused IR is `INPUT_VALIDATION_FAILED`. */
@@ -37,7 +39,7 @@ export function compileProgram(stmts: readonly SqlNode[], ctx: CompileContext): 
   const diagnostics = ctx.dialect.check({ grammar: PG_GRAMMAR, stmts } satisfies SqlPlan, { schemas: ctx.schemas, ...(ctx.columns ? { columns: ctx.columns } : {}), inputs: ctx.inputs, kind: ctx.kind, public: ctx.mode === "public" });
   if (diagnostics.length)
     throw new DiagnosticError(diagnostics.map((d) => runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: `${d.code}: ${d.message}` })));
-  const opts: PolicyOpts = { restrict: ctx.restrict, schemas: ctx.schemas, inputs: ctx.inputs, mode: ctx.mode, lockVersion: ctx.lockVersion, returning: ctx.returning, seen: ctx.seen, unsafeNoVisibility: ctx.unsafeNoVisibility, lower: ctx.dialect.lowering, nativeOrder: ctx.dialect.nativeOrder };
+  const opts: PolicyOpts = { restrict: ctx.restrict, schemas: ctx.schemas, inputs: ctx.inputs, mode: ctx.mode, lockVersion: ctx.lockVersion, returning: ctx.returning, seen: ctx.seen, unsafeNoVisibility: ctx.unsafeNoVisibility, uncheckedRefs: ctx.uncheckedRefs, lower: ctx.dialect.lowering, nativeOrder: ctx.dialect.nativeOrder };
   return stmts.map((stmt, i) => {
     const c = applyPolicy(stmt, { ...opts, status: ctx.statuses?.[i] });
     // a Schema whose published entries are protected takes row ops only (ADR-0032 decision 2, ADR-0034 decision 4)

@@ -9,7 +9,7 @@ import { NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, type RuntimePl
 import { declaredType, inputType, nativeType } from "../domain/columns.js";
 import { q } from "../domain/entry.js";
 import { expand, SCOPE, TTL, type Fact, type Rules } from "../kernel/store.js";
-import { userScopeTerm } from '../build/compiler.js';
+import { refChecks, userScopeTerm } from '../build/compiler.js';
 
 // Types the typed Store compares and writes as plain bind values. Fixed numerics are scaled integers on SQLite; geo is two columns.
 const SCALAR = new Set(["text", "real", "float8", "integer", "int4", "int8", "bool", "timestamptz", "date"]);
@@ -39,11 +39,13 @@ export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, n
     const parent = s.translates && schemas[s.translates.parent.toLowerCase()];
     const inherited = parent ? Object.keys(parent.fields).filter(c => c !== parent.scope && !Object.hasOwn(s.fields,c)).flatMap(c => parent.fields[c] === "geo" ? [`${c}_lat`, `${c}_lng`] : [c]) : [];
     const inheritedType = (c:string) => parent?.fields[c] ?? "real";
+    const ref = refChecks(s, schemas);
     const fact: Fact = {
       ...(s.userScopes?.length ? { u: s.userScopes.map(u => userScopeTerm(u, true)) } : {}),
       ...(s.scope ? { s: s.scope } : {}), ...(s.ttl ? { ttl: [s.ttl, s.ttlSeconds ?? 0] as const } : {}), ...(s.publishing ? { pub: 1 as const } : {}),
       ...(ts.length ? { ts } : {}), ...(dates.length ? { d: dates } : {}),
       ...(s.search?.length ? { search: s.search } : {}),
+      ...(ref.length ? { ref } : {}),
       ...(parent ? { parent: { on: s.translates!.on.toLowerCase(), ...(parent.scope ? {scope:[parent.scope,s.scope!] as const} : {}), table: s.translates!.parent.toLowerCase(), visible: rowPolicy(s,"caller",schemas).find(t=>t[1]==="parent")!, caller: rowPolicy(parent,"caller",schemas), trusted: rowPolicy(parent,"trusted",schemas), fields: inherited, ts: inherited.filter(c=>parent.fields[c]==="timestamptz"), d: inherited.filter(c=>parent.fields[c]==="date") } } : {}),
     };
     // the shared rules, with this Schema's scope and TTL put in, are Core's rules for it: or the runtime would enforce something else

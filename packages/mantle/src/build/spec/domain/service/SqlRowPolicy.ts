@@ -5,6 +5,7 @@
 import type { SqlSchemaDef } from "../model/SqlIr.js";
 import type { UserScope } from "../model/UserFields.js";
 import type { PlanRestrict } from "../model/RuntimePlan.js";
+import { resolveMantleRef } from "../model/ManifestGrammar.js";
 
 /** `caller` and `admin` hide publishing drafts from non-admin callers. */
 export type RowMode = "caller" | "public" | "trusted" | "admin";
@@ -22,6 +23,21 @@ export function protectedColumns(s: RowSchema, restrict?: PlanRestrict[string]):
 /** `swappable`: a Schema scope term, which `{ all: true }` drops at run time; a target's restrict term is never swappable. */
 export function userScopeTerm(scope: UserScope, swappable = false): Extract<RowTerm, readonly [string, 'in', ...unknown[]]> {
   return [scope.column, "in", { k: "user" as const, field: scope.field, type: scope.type, multiple: true, ...(swappable ? { scope: true as const } : {}) }];
+}
+/**
+ * An `x-mantle-ref` column whose target Schema is scoped (ADR-0034 §8). A caller's write of a non-null value must name a row
+ * of `table` by `field` that the caller sees (`terms`, the target's caller rules) and that shares the child's value of every
+ * scope column the two have in common (`same`: [target column, child column]). Trusted writes are not checked.
+ */
+export interface RowRef { readonly column: string; readonly table: string; readonly field: string; readonly same: readonly (readonly [parent: string, child: string])[]; readonly terms: readonly RowTerm[] }
+export function refChecks(s: SqlSchemaDef, schemas: Readonly<Record<string, SqlSchemaDef>>): RowRef[] {
+  return Object.entries(s.schema?.properties ?? {}).flatMap(([name, property]) => {
+    const ref = resolveMantleRef(property), table = ref?.schema.toLowerCase(), t = table ? schemas[table] : undefined;
+    if (!t || !t.scope && !t.userScopes?.length) return [];
+    const column = (x: SqlSchemaDef, field: string) => Object.keys(x.names ?? {}).find(c => x.names![c] === field) ?? field.toLowerCase();
+    const same = (t.userScopes ?? []).flatMap(u => (s.userScopes ?? []).filter(v => v.field === u.field).map(v => [u.column, v.column] as const));
+    return [{ column: column(s, name), table: table!, field: column(t, ref!.field), same, terms: rowPolicy(t, "caller", schemas) }];
+  });
 }
 export interface RowWrite {
   /** An insert's columns the policy fills, in order. `newId` is a new entry id. */
