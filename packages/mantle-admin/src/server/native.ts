@@ -128,6 +128,8 @@ export async function nativePage<Database>(spec: {
 }
 /** An OCC value must retain the exact native int8; a rounded number is never a lock. */
 export const exactVersion = (value: unknown): value is number | string => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 || typeof value === "string" && value.length <= 19 && /^(?:0|[1-9]\d*)$/.test(value) && BigInt(value) <= 9223372036854775807n;
+/** Per `x-mantle-ref` field to a scoped Schema, Core's check of a written value: each hole token takes a written field's value or a bind. */
+export type RefChecks = Readonly<Record<string, {readonly sql: string; readonly holes: readonly (readonly [token: string, value: string | Recipe])[]}>>;
 /** Constant procedure fragments and recipes are printed by Core; the app supplies only checked values. */
 export interface NativeEntryMode {
     readonly projection: string;
@@ -135,8 +137,8 @@ export interface NativeEntryMode {
     readonly policy: string;
     readonly binds: readonly Recipe[];
     readonly fields: Readonly<Record<string, {readonly column: string; readonly insert: string; readonly update?: string}>>;
-    readonly create: {readonly prefix: string; readonly between: string; readonly suffix: string; readonly binds: readonly Recipe[]; readonly columns: readonly string[]; readonly values: readonly string[]; readonly returning: string};
-    readonly patch: {readonly prefix: string; readonly binds: readonly Recipe[]; readonly sets: readonly string[]; readonly where: string; readonly returning: string};
+    readonly create: {readonly prefix: string; readonly between: string; readonly suffix: string; readonly binds: readonly Recipe[]; readonly columns: readonly string[]; readonly values: readonly string[]; readonly returning: string; readonly refs?: RefChecks};
+    readonly patch: {readonly prefix: string; readonly binds: readonly Recipe[]; readonly sets: readonly string[]; readonly where: string; readonly returning: string; readonly refs?: RefChecks};
     readonly remove: Step;
 }
 export interface NativeEntryProcedures {
@@ -190,17 +192,24 @@ export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures
         return;
     }
     const present = Object.entries(data).map(([field, value]) => {
-        return {fragment: m.fields[field]!, value};
+        return {field, fragment: m.fields[field]!, value};
     });
     const c = verb === "create" ? m.create : m.patch;
-    const values = binds(adapter.values, c.binds, caller, context);
-    const fragments = present.map(({fragment, value}) => {
+    const values = binds(adapter.values, c.binds, caller, context), params = new Map<string, string>();
+    const fragments = present.map(({field, fragment, value}) => {
         values.push(value);
+        params.set(field, adapter.param(values.length));
         return (verb === "create" ? fragment.insert : fragment.update!).replaceAll(spec.marker, adapter.param(values.length));
     });
+    // A non-null reference to a scoped Schema names a row the caller sees, in the child's partition; else no row is written (CONFLICT).
+    const checks = present.filter(({field, value}) => value !== null && c.refs?.[field]).map(({field}) => c.refs![field]!.holes.reduce((sql, [token, hole]) => {
+        const text = typeof hole === "string" ? params.has(hole) ? m.fields[hole]!.insert.replaceAll(spec.marker, params.get(hole)!) : "NULL"
+            : (values.push(...binds(adapter.values, [hole], caller, context)), adapter.param(values.length));
+        return sql.replaceAll(token, () => text);
+    }, c.refs![field]!.sql));
     const sql = verb === "create"
-        ? m.create.prefix + [...m.create.columns, ...present.map(({fragment}) => fragment.column)].join(", ") + m.create.between + [...m.create.values, ...fragments].join(", ") + m.create.suffix + m.create.returning
-        : m.patch.prefix + [...m.patch.sets, ...fragments].join(", ") + m.patch.where + m.patch.returning;
+        ? m.create.prefix + [...m.create.columns, ...present.map(({fragment}) => fragment.column)].join(", ") + (checks.length ? ") SELECT " : m.create.between) + [...m.create.values, ...fragments].join(", ") + (checks.length ? " WHERE " + checks.join(" AND ") : m.create.suffix) + m.create.returning
+        : m.patch.prefix + [...m.patch.sets, ...fragments].join(", ") + m.patch.where + checks.map(check => " AND " + check).join("") + m.patch.returning;
     const result = await adapter.procedure(db, [{sql, binds: values, row: true}], spec.path);
     return result[0]![0]!;
 }

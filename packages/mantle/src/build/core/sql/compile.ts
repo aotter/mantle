@@ -30,7 +30,7 @@ export interface CompileContext {
   readonly seen?: Set<RelationPosition>;
   /** NEGATIVE CONTROL ONLY (see RunEnv). */
   readonly unsafeNoVisibility?: boolean;
-  /** Admin's generic writes print one WHERE for every field set, so they cannot carry a per-field reference check (#1757). */
+  /** Admin's generic writes print one WHERE for every field set: they add each written field's reference check themselves (adminEntries). */
   readonly uncheckedRefs?: true;
 }
 
