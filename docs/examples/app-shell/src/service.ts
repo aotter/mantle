@@ -43,7 +43,8 @@ export async function fetchService(request: Request, env: Env, context: Executio
     const ownAuth = await withAuthTasks(context.waitUntil.bind(context), () => authRoutes(auth!, { methods: [{ kind: "email-otp" }], resolver: caller })(request));
     if (ownAuth) return respond(ownAuth);
     const url = new URL(request.url);
-    const own = await appRoutes(request, env, { caller, waitUntil: context.waitUntil.bind(context) });
+    // /admin and /mcp belong to Admin and MCP: a root catch-all page in src/routes.ts (/:slug) never shadows them.
+    const own = /^\/(?:admin|mcp)(?:\/|$)/.test(url.pathname) ? undefined : await appRoutes(request, env, { caller, waitUntil: context.waitUntil.bind(context) });
     if (own) return respond(own);
     let response: Response | undefined;
     if (url.pathname === "/admin/api" || url.pathname.startsWith("/admin/api/")) {

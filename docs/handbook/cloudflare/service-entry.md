@@ -81,6 +81,9 @@ export default {
         if (shell) return shell;
         // Your public frontend/web.ts routes can use an anonymous Caller without
         // loading auth; their generated SQL still controls publication visibility.
+        // Mounted here, after every Mantle surface, a root catch-all page (/:slug)
+        // cannot shadow /admin, /mcp or REST. Mount them earlier only behind a
+        // guard that skips those paths, as the app shell does.
         return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return surfaceFailure(error); }
     });
