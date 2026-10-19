@@ -27,7 +27,7 @@ release tag as the application's SDK; alpha releases on `develop` can be newer
 than the default `main` branch. For a skill-only installation:
 
 ```sh
-npx skills add https://github.com/aotter/mantle/tree/v0.2.0-alpha.9 --skill mantle
+npx skills add https://github.com/aotter/mantle/tree/v0.2.0-alpha.10 --skill mantle
 ```
 
 The explicit skill name excludes repository maintainer skills. The manifests
