@@ -12,7 +12,7 @@ function valueOf(value: unknown, spec: UserField, field: string): UserValue {
   if (isAllValues(value)) return Object.freeze({ all: true });
   const scalar = (value: unknown): string | number => {
     if (typeof value !== spec.type) return invalid(`User field '${field}' must contain ${spec.type} values.`);
-    if (typeof value === "number") { if (!Number.isFinite(value)) return invalid(`User field '${field}' must be finite.`); }
+    if (typeof value === "number") { if (!(spec.integer ? Number.isInteger(value) : Number.isFinite(value))) return invalid(`User field '${field}' must be ${spec.integer ? "an integer" : "finite"}.`); }
     else if (typeof value === "string" && (!(value as string & { isWellFormed(): boolean }).isWellFormed() || value.includes("\0") || new TextEncoder().encode(value).length < 1 || new TextEncoder().encode(value).length > 256))
       return invalid(`User field '${field}' must be 1–256 UTF-8 bytes, without NUL or lone surrogates.`);
     if (spec.enum && !spec.enum.includes(value as string | number)) return invalid(`User field '${field}' is outside its enum.`);

@@ -7,7 +7,7 @@ export const USER_REFS_V1 = 1 as const;
 /** The typed "every value" state of one field: a structural value, never a magic string. */
 export interface AllValues { readonly all: true }
 export type UserValue = string | number | readonly (string | number)[] | AllValues;
-export interface UserField { readonly type: "string" | "number"; readonly multiple: boolean; readonly enum?: readonly (string | number)[] }
+export interface UserField { readonly type: "string" | "number"; readonly integer?: true; readonly multiple: boolean; readonly enum?: readonly (string | number)[] }
 export type UserFields = Readonly<Record<string, UserField>>;
 import { valueFor, isHostCaller } from "./caller-identity.js";
 import { isAllValues } from "./user-caller.js";

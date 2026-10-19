@@ -1,4 +1,4 @@
-export interface UserFieldSpec { readonly type: "string" | "number"; readonly multiple: boolean; readonly enum?: readonly (string | number)[] }
+export interface UserFieldSpec { readonly type: "string" | "number"; readonly integer?: true; readonly multiple: boolean; readonly enum?: readonly (string | number)[] }
 /** One value term of a row template: `column IN auth.user('field')`. */
 export interface UserScope { readonly column: string; readonly field: string; readonly type: "string" | "number" }
 import { validUserFieldName } from "../../../../kernel/user-field-name.js";
