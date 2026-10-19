@@ -13,21 +13,20 @@ carries.
 The Mantle plugin carries one OSS authoring skill, `mantle`, and local
 acceptance references. It does not configure a hosted-service connection.
 Install from the Git tag matching the exact SDK version you selected (currently
-`v0.2.0-alpha.11`). Alpha releases integrate on `develop`; an unqualified
-`aotter/mantle` source follows `main` and can install older, incompatible
-instructions. A skill install does not upgrade the application's SDK.
+`v0.2.0`). Pin the tag to keep instructions aligned with the application's
+SDK. A skill install does not upgrade the application's SDK.
 
 For Codex, pin the marketplace checkout:
 
 ```sh
-codex plugin marketplace add aotter/mantle --ref v0.2.0-alpha.11
+codex plugin marketplace add aotter/mantle --ref v0.2.0
 codex plugin add mantle@mantle
 ```
 
 For Claude Code, first clone the release into a directory you will keep:
 
 ```sh
-git clone --depth 1 --branch v0.2.0-alpha.11 https://github.com/aotter/mantle.git mantle-plugin
+git clone --depth 1 --branch v0.2.0 https://github.com/aotter/mantle.git mantle-plugin
 ```
 
 Then, in Claude Code, use that checkout's absolute path:
@@ -41,7 +40,7 @@ Cursor and GitHub Copilot use their plugin manifests from the same tagged
 checkout. Without a plugin host, install only the consumer skill by name:
 
 ```sh
-npx skills add https://github.com/aotter/mantle/tree/v0.2.0-alpha.11 --skill mantle
+npx skills add https://github.com/aotter/mantle/tree/v0.2.0 --skill mantle
 ```
 
 When upgrading the SDK, update the marketplace ref or local tagged checkout and
@@ -54,10 +53,16 @@ project and copies no handbook.
 
 ## 2. Install the SDK, then read its own docs
 
-Use the version the project already pins. For a new project, choose a 0.2.x
-version with `npm view @aotter/mantle dist-tags` and install it with an exact
-version; every `@aotter/mantle*` package stays at that same version. Then
-read, from the application:
+Use the version the project already pins. For a new project, install stable
+0.2.0 exactly:
+
+```sh
+pnpm add --save-exact @aotter/mantle@0.2.0
+```
+
+Add optional `@aotter/mantle-ui@0.2.0` and `@aotter/mantle-admin@0.2.0` only
+when the selected surfaces need them. Every selected `@aotter/mantle*` package
+stays at the same exact version. Read, from the application:
 
 ```text
 node_modules/@aotter/mantle/README.md

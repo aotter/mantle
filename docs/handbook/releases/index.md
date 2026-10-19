@@ -15,15 +15,36 @@ From 0.2.0-alpha.7, Mantle publishes three packages together at one version:
 and `@aotter/mantle-admin` (optional Admin server, SPA and MCP App).
 Pin every package you use to the same exact version and upgrade them together.
 
-## 0.2.0 — in preparation
+## 0.2.0 (2026-10-19)
 
-### Upgrading to 0.2.0-alpha.11
+The first stable native 0.2 release compiles closed v2 manifests to SQL and
+TypeScript for Bun SQLite/PostgreSQL and Cloudflare D1/PostgreSQL. It ships
+three matching packages: Core, the pure UI kit and the optional application-built
+Admin. Applications own routing, verified identity, database handles, migrations
+and deployment; selected REST, MCP, public pages, publishing, translations and
+media compose around the generated operations.
+
+This is a breaking upgrade from 0.1.x: follow the [0.1-to-0.2 migration
+guide](../../upgrade-0.1-to-0.2.md), use a new 0.2 database and explicitly move
+data. From alpha.11, pin the three selected packages to 0.2.0, regenerate and
+review owned output; the stable version commit changes release metadata and
+documentation rather than adding another runtime API.
+
+[GitHub release](https://github.com/aotter/mantle/releases/tag/v0.2.0) is the
+complete change history. Known follow-ups remain tracked: [Admin/authoring
+refinements](https://github.com/aotter/mantle/issues/1752), [production social
+and magic-link recipe verification](https://github.com/aotter/mantle/issues/1273)
+and [real Sites guide verification](https://github.com/aotter/mantle/issues/1272).
+Those provider-specific paths are not claimed as verified by local OTP or
+native-host tests.
+
+### Upgrading to 0.2.0
 
 Pin every selected `@aotter/mantle`, `@aotter/mantle-ui` and
-`@aotter/mantle-admin` dependency to `0.2.0-alpha.11`, refresh the lockfile,
+`@aotter/mantle-admin` dependency to `0.2.0`, refresh the lockfile,
 then regenerate and check the application's owned artifacts. Keep existing
 production migrations application-owned; generated initial DDL is for an empty
-database. This alpha includes breaking Admin authoring and paging changes.
+database. This release includes breaking Admin authoring and paging changes.
 
 1. **Build output and host configuration.** `mantle bundle` writes server
    modules to `dist/worker` and static files to `dist/client`, including
@@ -112,7 +133,7 @@ Existing alpha.6 applications require a source migration:
   application code. Review [authorization and Caller wiring](../concepts/runtime-and-adapters.md)
   and regenerate all owned artifacts before running `generate --check`.
 
-The [reference Worker](https://github.com/aotter/mantle/tree/v0.2.0-alpha.11/docs/examples/reference-service) and
+The [reference Worker](https://github.com/aotter/mantle/tree/v0.2.0/docs/examples/reference-service) and
 [app shell](../../examples/app-shell/) demonstrate the current composition.
 The following earlier-alpha notes are historical; the current handbook and
 the native migration above supersede their runtime and CLI instructions.

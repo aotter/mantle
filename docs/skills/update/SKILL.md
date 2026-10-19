@@ -20,6 +20,8 @@ For 0.1.x, follow [Upgrade 0.1 to 0.2](../../upgrade-0.1-to-0.2.md): give the
 against a 0.1.x database. Between 0.2 versions, apply reviewed migrations
 rehearsed on a copy.
 
+For the stable 0.2 line, pin every selected Mantle package to `0.2.0`; do not upgrade an existing application by following a moving dist-tag.
+
 Pin exact target SDK/peer versions and read its release notes and Admin build
 instructions. Core-to-native replaces app imports/wiring; it is not
 a package-only update. For 0.2-to-0.2 updates, preserve users, sessions, content

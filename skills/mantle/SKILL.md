@@ -41,7 +41,7 @@ lacks a guide named here, record the missing guidance and keep that version's co
 
 ## New application
 
-Node must be 22.22 or newer. Create it with `npx @aotter/mantle@<exact version> init <directory>`, then follow
+Node must be 22.22 or newer. Stable 0.2.0 is available as `@aotter/mantle@0.2.0`; pin selected Mantle packages to that exact version. Create it with `npx @aotter/mantle@<exact version> init <directory>`, then follow
 `mantle help` ("Build from a product brief") and the app's `README.md`. Without the user listing them, a complete app
 includes:
 
