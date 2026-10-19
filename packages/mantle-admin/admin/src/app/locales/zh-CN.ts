@@ -445,6 +445,8 @@ export default {
     "entryEdit.publishMissingRequired": "请先完成必填字段才能发布。",
     "entryEdit.unpublish": "取消发布",
     "entryEdit.unpublishing": "取消发布中...",
+    "entryEdit.publishedHint": "已发布的资料无法直接编辑，请先取消发布。",
+    "entryEdit.archivedHint": "已归档的资料无法直接编辑，请先还原为草稿。",
     "entryEdit.unpublishTooltip": "将这笔资料改回草稿以便编辑。",
     "entryEdit.restore": "还原为草稿",
     "entryEdit.restoring": "还原中...",

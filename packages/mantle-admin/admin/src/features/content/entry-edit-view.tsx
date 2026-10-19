@@ -157,9 +157,10 @@ export function EntryEditView({
     admin: me.data?.admin,
     isReadOnly,
     isOperational,
+    isDraft,
     operationalEditUnlocked,
   });
-  const canSave = canEdit && dirty && (isDraft || isOperational);
+  const canSave = canEdit && dirty;
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
   const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId, payload.parentEntryTitle);
@@ -262,6 +263,10 @@ export function EntryEditView({
             </Button>
           ) : null}
         </div>
+      ) : !isDraft && canManageContent ? (
+        <p className="-mt-4 text-sm text-muted-foreground">
+          {t(language, isArchived ? "entryEdit.archivedHint" : "entryEdit.publishedHint")}
+        </p>
       ) : null}
 
       {save.isError ? <OperationErrorBox error={save.error} /> : null}
@@ -559,18 +564,21 @@ export function editorHiddenFields(
   ];
 }
 
+/** A publishing entry is edited only as a draft: a published or archived one is unpublished first, so no edit waits on a disabled Save. */
 export function canEditEntry({
   admin,
   isReadOnly,
   isOperational,
+  isDraft,
   operationalEditUnlocked,
 }: {
   admin: boolean | undefined;
   isReadOnly: boolean;
   isOperational: boolean;
+  isDraft: boolean;
   operationalEditUnlocked: boolean;
 }): boolean {
-  return admin === true && !isReadOnly && (!isOperational || operationalEditUnlocked);
+  return admin === true && !isReadOnly && (isOperational ? operationalEditUnlocked : isDraft);
 }
 
 function MediaAssetField({

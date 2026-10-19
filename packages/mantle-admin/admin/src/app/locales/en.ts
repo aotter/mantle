@@ -240,6 +240,8 @@ export default {
     "entryEdit.publishMissingRequired": "Complete the required fields before publishing.",
     "entryEdit.unpublish": "Unpublish",
     "entryEdit.unpublishing": "Unpublishing...",
+    "entryEdit.publishedHint": "Published entries are read-only. Unpublish to edit.",
+    "entryEdit.archivedHint": "Archived entries are read-only. Choose Restore to draft to edit.",
     "entryEdit.unpublishTooltip": "Move this entry back to draft so it can be edited.",
     "entryEdit.restore": "Restore to draft",
     "entryEdit.restoring": "Restoring...",
