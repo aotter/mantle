@@ -31,9 +31,9 @@
   <a href="docs/examples/README.md">Examples</a>
 </p>
 
-Mantle is an agent-native application SDK for TypeScript. You declare Schemas,
-Views, Procedures and Triggers in YAML manifests, and the Mantle compiler turns
-them into native SQL for SQLite, Cloudflare D1 and PostgreSQL, plus typed
+Mantle is an agent-native application SDK. You declare Schemas, Views,
+Procedures and Triggers in YAML manifests, and the Mantle compiler turns them
+into native SQL for SQLite, Cloudflare D1 and PostgreSQL, plus typed
 TypeScript operations. It is for developers and AI coding agents building
 publishing sites, internal operations apps and agent-facing APIs on Cloudflare
 Workers or Bun.
@@ -208,7 +208,7 @@ service also reads [the release notes](docs/handbook/releases/index.md).
 ### What is Mantle?
 
 Mantle is an open-source (Apache-2.0) agent-native application SDK and backend
-compiler for TypeScript. It compiles YAML manifests (Schemas, Views, Procedures
+compiler. It compiles YAML manifests (Schemas, Views, Procedures
 and Triggers) into native SQL for SQLite, Cloudflare D1 and PostgreSQL, plus
 typed TypeScript operations, on Cloudflare Workers or Bun, with optional REST,
 MCP, web, auth and admin surfaces.
