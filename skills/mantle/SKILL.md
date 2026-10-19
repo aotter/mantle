@@ -60,7 +60,9 @@ over the app. Resolve each `AGENT:` or name the ones you left. Generation only, 
 
 Before reporting any new app or feature as done, follow `mantle help agent-workflow-acceptance`: a private rubric,
 then one fresh agent per role given only its role and the URLs `pnpm accept` prints, at most three rounds. If it was
-not run, report the work as UNVERIFIED rather than done; if it could not run, BLOCKED.
+not run, report the work as UNVERIFIED rather than done; if it could not run, BLOCKED. Report status per layer as that
+guide's "Report done-ness in layers" defines; a block from your environment (approval policy, missing browser,
+network) is BLOCKED on its layer, not a product failure, and does not discard the other layers.
 
 ## Deployment
 
@@ -72,5 +74,6 @@ host's native workflow. Local project creation alone is not deployment authoriza
 Preserve the user's manifests, `src/` files, identity, package versions and provider resources. Run the project's
 generate command with `--check` and its own tests before and after a change.
 
-Report the project path, the exact Mantle version, what you changed, the checks you ran with their results, the
-independent acceptance verdict (CONVERGED / BLOCKED / UNVERIFIED), and anything left for the user.
+Report the project path, the exact Mantle version, what you changed, the four-layer status with each layer's checks
+and results (the independent acceptance verdict, CONVERGED / BLOCKED / UNVERIFIED, is layer 3), and anything left for
+the user, including what would unblock a BLOCKED layer.

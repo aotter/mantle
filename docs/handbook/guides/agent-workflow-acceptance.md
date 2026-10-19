@@ -11,7 +11,8 @@ role and the entry points that role uses; it derives realistic tasks itself
 and the author scores them against a private rubric.
 If independent acceptance is not run, report `UNVERIFIED`; if a fresh evaluator
 or authorized test transport is unavailable, report `BLOCKED`; neither outcome
-is done.
+is done. Either way, report the evidence you do have in the
+[layered handoff](#report-done-ness-in-layers).
 
 Use the surface the intended user actually uses: a real browser session for
 Admin and application pages; for REST, an HTTP client plus the public API
@@ -124,7 +125,10 @@ the evidence.
    discoverable), P2 (friction) or P3 (suggestion), with evidence and the
    smallest repair. Separate a violated explicit requirement, a demonstrated
    defect and a newly inferred product wish; a wish is not permission to grow
-   the product.
+   the product. A goal the evaluator's own environment stopped (its tool
+   approval, sandbox or network, not an app refusal) is not a finding: record
+   it as an [environment block](#report-done-ness-in-layers) and rerun that
+   role once it is lifted.
 6. **Repair outside the evaluator's context, then start over.** The author keeps
    the findings ledger, makes the smallest in-scope repair, adds focused
    regressions (authorization, OCC, atomicity), and freezes a new revision.
@@ -139,7 +143,8 @@ the evidence.
    `finally` after every round, including aborted ones.
 
 If a fresh agent or authorized test transport is unavailable, record independent
-acceptance as BLOCKED and report the scripted checks separately. Do not invent
+acceptance as BLOCKED and report the scripted checks on their own
+[layers](#report-done-ness-in-layers). Do not invent
 an independent result. Do not deploy or publish merely to obtain acceptance.
 
 ## Hand each role to its evaluator
@@ -185,7 +190,8 @@ Fill this in per role. It names the role and the doors, never the jobs:
 > first look at the interface and again after your first attempts. Then do the
 > work and report each goal as PASS/FAIL/BLOCKED with what you read back,
 > what was refused, what it cost you, and the smallest change that would have
-> helped. Report what you covered and what you could not reach; finding nothing
+> helped. For BLOCKED, say whether the service refused you or your own tools
+> or permissions stopped you. Report what you covered and what you could not reach; finding nothing
 > wrong is acceptable.
 
 The author separately verifies isolation between callers, stale-version
@@ -193,6 +199,50 @@ refusal, unknown-outcome handling and effects hidden from the evaluator's role
 through authorized test fixtures. Do not grant the evaluator extra authority
 just to observe hidden state. Keep author regressions distinct from what the
 fresh agent actually observed.
+
+## Report done-ness in layers
+
+Report a handoff in four layers, in this order, each for the exact commit. Each
+layer proves something the others do not; a passing layer neither replaces nor
+is invalidated by another layer's result.
+
+| Layer | What it proves | Evidence |
+| --- | --- | --- |
+| 1. Generation and types | Manifests compile, `generated/` is current, the app typechecks and builds. No handler runs. | `pnpm check` (includes `generate --check`), `pnpm build` |
+| 2. Business rules and permissions | Handlers on a fresh local D1 over HTTP: each operation at its edges, refusals, caller isolation, visitor pages, MCP discovery, the Admin MCP App loading. Author's evidence. | `pnpm smoke`, `pnpm test`; [Local HTTP checks](local-testing.md) |
+| 3. Independent acceptance, per role | A fresh agent given only its role and entry points finds and finishes that role's work on each surface it uses. | Per role: the [rounds](#run-role-only-acceptance-rounds-until-they-converge) verdict and surfaces covered |
+| 4. External platform | A real MCP host connects over OAuth; the production origin serves the deployed app. Local cookie sessions prove neither. | Host and version, identity, origin, observed result |
+
+Give each layer, and each role on layer 3, one status:
+
+- **verified**: the evidence above, with its command or host and result.
+- **failed**: the product is wrong. Name the failing check or finding.
+- **BLOCKED**: the layer could not run. Give the reason, what refused or is
+  missing, and what would unblock it.
+- **not applicable**: with the reason. Layer 4 is not applicable unless the
+  requested work includes an external host connection or a deployment.
+
+A layer nobody attempted is UNVERIFIED, as above. A block from the execution
+environment (an agent's approval policy refusing fictional writes, no browser,
+no network, a sandbox) is BLOCKED on that layer only. It is never a failed
+layer or a product finding, and it does not invalidate the evidence on other
+layers. Do not work around it by widening the evaluator's authority, faking a
+result or deploying; ask whoever controls the environment and rerun only that
+layer on the same revision.
+
+The work is done only when layers 1 to 3 are verified for every role and
+surface, and layer 4 is verified or not applicable. Partial evidence is still
+reported, layer by layer; it is not done:
+
+```markdown
+| Layer | Status | Evidence |
+| --- | --- | --- |
+| 1. Generation and types | verified | `pnpm check`, `pnpm build` at <commit> |
+| 2. Business rules and permissions | verified | `pnpm smoke` (<n> checks), `pnpm test` |
+| 3. Acceptance: admin | BLOCKED: evaluator's approval policy refused to create fictional records; needs <permission> | round 1 stopped at goal <n> |
+| 3. Acceptance: user | verified: CONVERGED in round <n> | MCP, member pages |
+| 4. External platform | not applicable: no deployment or external host requested | |
+```
 
 ## Record evidence in the existing issue or handoff
 
@@ -210,7 +260,8 @@ Use ordinary Markdown; no new receipt schema or framework is required:
   regression commands/results.
 - Coverage of each rubric item (evaluator-observed, author regression only, or
   UNVERIFIED); the final CONVERGED / BLOCKED / UNVERIFIED verdict and rounds
-  used. Retain every failed report.
+  used, which is layer 3 of the [layered report](#report-done-ness-in-layers).
+  Retain every failed report.
 - Fixture cleanup result and every remaining limitation.
 
 Keep credentials, raw auth logs, full resource HTML and private operational

@@ -7,8 +7,9 @@ description: Scripted local checks before acceptance - handlers over real HTTP, 
 or a feature ready, run it on a fresh local D1 and drive it over HTTP. In an app written by `mantle init`, that is
 `smoke.mjs` on the shell's `smoke-kit.mjs` (`pnpm smoke`): it applies `generated/schema.sql` and `seed.sql`, starts
 `wrangler dev --local`, signs users in with the console email code and deletes everything afterwards.
-These checks are the author's evidence. [Independent acceptance](agent-workflow-acceptance.md) comes after them and
-does not replace them, nor they it.
+These checks are the author's evidence: layers 1 and 2 of the
+[layered handoff report](agent-workflow-acceptance.md#report-done-ness-in-layers). [Independent
+acceptance](agent-workflow-acceptance.md) comes after them and does not replace them, nor they it.
 
 ## What smoke covers
 
@@ -26,7 +27,7 @@ does not replace them, nor they it.
 - **Admin:** `pnpm build`, then `pnpm test` (`generated/admin-mcp-app.check.mjs`) loads the Admin MCP App in an MCP
   host and fails on a network error, console error or exception. It needs `playwright-core` and Chrome
   (`npx playwright-core install chromium`, or `MANTLE_TEST_CHROMIUM=<executable>`). With no browser it fails: report
-  it as BLOCKED, not skipped.
+  that check as BLOCKED on layer 2, not skipped and not as a product failure.
 
 Better Auth allows 3 one-time-code requests per minute per client IP; the kit gives each user its own
 `cf-connecting-ip`. Credentials come only from the kit's sign-in: a check never scrapes another session or builds a
@@ -36,5 +37,6 @@ Caller by hand.
 
 In the app's README or handoff, list each declared surface (Admin, each MCP endpoint, REST, each visitor page type)
 as verified (command, identity and result), intentionally not exposed, or UNVERIFIED with a reason. Local cookie
-sessions do not prove an external MCP host's OAuth connection or a production origin; record those separately.
-Record the commands and their results for the exact commit, fix failures and rerun the affected checks.
+sessions do not prove an external MCP host's OAuth connection or a production origin; those are layer 4. Record the
+commands and their results for the exact commit in the layered report, fix failures and rerun the affected checks. A
+check the environment prevented (no browser, no network, a refused approval) is BLOCKED with its reason, not failed.
