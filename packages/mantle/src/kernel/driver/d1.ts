@@ -9,13 +9,13 @@ export interface Reader { prepare(sql: string): Statement }
 export interface Handle extends Reader { batch(statements: any[]): Promise<{ results: any[] }[]> }
 
 export const read = async (db: Reader, sql: string, binds: unknown[]): Promise<any[]> => (await db.prepare(sql).bind(...binds).all()).results;
-/** The assert table's trigger aborts the whole batch with `CONFLICT op=<k>` when statement k did not change exactly one row. */
+/** The assert table's trigger aborts the whole batch with `CONFLICT op=<k>` when statement k did not change exactly one row (at least one for `row: "some"`). */
 export async function procedure(db: Handle, steps: readonly Bound[], path: string): Promise<Row[][]> {
   const batch: Statement[] = [], at: number[] = [];
   steps.forEach((s, i) => {
     at.push(batch.length);
     batch.push(db.prepare(s.sql).bind(...s.binds));
-    if (s.row) batch.push(db.prepare(`INSERT INTO _mantle_assert (op,ok) SELECT ${i}, changes() = 1`));
+    if (s.row) batch.push(db.prepare(`INSERT INTO _mantle_assert (op,ok) SELECT ${i}, changes() ${s.row === "some" ? "> 0" : "= 1"}`));
   });
   let out;
   try { out = await db.batch(batch); } catch (error) {

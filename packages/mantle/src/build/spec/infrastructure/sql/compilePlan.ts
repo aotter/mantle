@@ -327,7 +327,14 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       const sets = stmt.UpdateStmt?.targetList ?? stmt.InsertStmt?.onConflictClause?.targetList ?? [];
       if (sets.some((set: SqlNode) => columns.includes(set.ResTarget.name.toLowerCase()))) diagnostics.push(validateDiagnostic({code:'USER_FIELD_POSITION',severity:'error',path:`procedures/${p.metadata.name}/handler/sql`,message:'The scoped column is never writable through SET.'}));
     }
-    if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), handler: { sql: plan, source: p.spec.handler.sql } };
+    // #1775: mustWrite turns a set op into one that must write a row; a row op already must change exactly one
+    const mustWrite = p.spec.handler.mustWrite;
+    for (const [i, n] of (plan ? mustWrite ?? [] : []).entries()) {
+      const stmt = plan!.stmts[n - 1], at = `/spec/handler/mustWrite/${i}`;
+      const problem = !stmt ? `names statement ${n}, but the program has ${plan!.stmts.length}` : classify(stmt) === "row" ? `names statement ${n}, a row op (one-row INSERT … VALUES, or UPDATE/DELETE with WHERE id = …), which already must change exactly one row; list only set ops` : undefined;
+      if (problem) diagnostics.push(validateDiagnostic({ code: "SQL_SHAPE", severity: "error", path: `${source.sourceId}#/${source.documentIndex}${at}`, source: { ...source, path: at }, value: n, message: `Procedure '${p.metadata.name}' handler.mustWrite ${problem}.` }));
+    }
+    if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), handler: { sql: plan, source: p.spec.handler.sql, ...(mustWrite ? { mustWrite } : {}) } };
   }
   if (diagnostics.length) return { ok: false, diagnostics };
   // `restrict`: extra row terms a target puts on the Schemas its SQL reads. Same grammar as `scope`; AND-ed, so it never widens.
