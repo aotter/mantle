@@ -11,6 +11,12 @@ here instead of repeating it.
 - **App-owned pages** in `src/routes.ts`, when the page needs its own layout, JSON-LD or languages. The reference
   implementation is `node_modules/@aotter/mantle/docs/examples/recipes` (`src/pages.ts`, `src/routes.ts`; `smoke.mjs` checks every item below).
 
+## URLs
+
+Mantle owns `/admin`, `/mcp`, `/api/auth/`, `/oauth/consent` and `/.well-known/oauth-*`, and the app's HTTP Triggers own
+their declared paths. Give visitor pages their own prefix (`/{locale}/…`, `/teas/{slug}`), or make a root page (`/{slug}`)
+return nothing for those paths; the app shell already keeps `/admin` and `/mcp` away from `src/routes.ts`.
+
 ## Every public page
 
 - Server-rendered HTML per URL with the content in the body. A client-only SPA shell or metadata set by script is not
