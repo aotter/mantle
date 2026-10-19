@@ -25,7 +25,7 @@ test("a required readOnly field without a default warns only when Admin's generi
     return result.warnings ?? [];
   };
   const deals = doc("Schema", "deals", { title: "deals", lifecycle: "operational", schema: { type: "object", required: ["title", "stage"], properties: { title: { type: "string" }, stage: { type: "string", readOnly: true } } } });
-  const field = (w: string[]) => w.filter(x => x.includes("field 'stage'"));
+  const field = (w: readonly string[]) => w.filter(x => x.includes("field 'stage'"));
   expect(field(await all(deals))).toEqual([expect.stringContaining("Admin's generic create cannot fill it")]);
   // A create action's Procedure writes the field itself (the CRM evaluator's case).
   expect(field(await all(deals, doc("Procedure", "open-deal", { title: "Open", requires: { auth: { all: ["ctx.admin"] } }, uiSchema: { collectionAction: "deals" },
