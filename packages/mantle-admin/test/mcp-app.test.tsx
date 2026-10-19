@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { MantleApp, appValue, pagesReducer, type Pages } from "../admin/src/mcp-app/app";
-import type { HostApi } from "../src/app/postmessage.js";
+import type { HostApi } from "../admin/src/mcp-app/postmessage";
 import { adminMcpApps } from "../src/server/mcp.js";
 import { defineAdmin } from "../admin/src/app/define-admin.js";
 import { SurfaceProvider } from "../admin/src/app/slots.js";

@@ -72,7 +72,7 @@
     "./target-hash": "./dist/domain/describe/target-hash.js"
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.lib.json && node scripts/bundle-compiler.mjs && node scripts/prune-declarations.mjs",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.lib.json && node ../../scripts/strip-comments.mjs tsconfig.lib.json && node scripts/bundle-compiler.mjs && node scripts/prune-declarations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test tests/*.test.ts && bun run test:compiler",
     "generate": "bun src/infrastructure/cli.ts",

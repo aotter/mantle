@@ -1,6 +1,6 @@
 import { App, PostMessageTransport } from "@modelcontextprotocol/ext-apps";
 import type { McpUiDisplayMode, McpUiHostCapabilities, McpUiHostContext, McpUiUpdateModelContextRequest } from "@modelcontextprotocol/ext-apps";
-import { outputOf, type CallTool, type ToolResult } from "./bridge.js";
+import { outputOf, type CallTool, type ToolResult } from "../../../src/app/bridge.js";
 
 /** What the host lets the App do beyond rendering; each request is sent only when the host advertised it. */
 export interface HostApi {

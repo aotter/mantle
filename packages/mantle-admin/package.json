@@ -147,7 +147,7 @@
   },
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
-    "build": "tsc -b tsconfig.lib.json && vite build --config vite.app.config.ts && node scripts/emit-app-types.mjs && vite build --config vite.preview.config.ts && vite build --config vite.testing.config.ts && shadcn build registry/registry.json -o dist/registry && rm dist/registry/registry.json",
+    "build": "tsc -b tsconfig.lib.json && node ../../scripts/strip-comments.mjs tsconfig.lib.json && vite build --config vite.app.config.ts && node scripts/emit-app-types.mjs && vite build --config vite.preview.config.ts && vite build --config vite.testing.config.ts && shadcn build registry/registry.json -o dist/registry && rm dist/registry/registry.json",
     "typecheck": "tsc -p tsconfig.config.json && tsc --noEmit -p admin/tsconfig.json",
     "test": "bun test tests/native/*.test.ts && vitest run",
     "test:browser": "MANTLE_BROWSER_TESTS=1 vitest run admin/test/preview-boundary.test.ts admin/test/atom-graph-browser.test.ts admin/test/load-more-browser.test.ts test/mcp-app-browser.test.ts test/frontend-mcp-app-browser.test.ts test/custom-admin-browser.test.ts test/nav-browser.test.ts test/testing.test.ts test/registry-compat.test.ts",

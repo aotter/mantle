@@ -1,4 +1,4 @@
-import { connectHost } from "../src/app/postmessage.js";
+import { connectHost } from "../admin/src/mcp-app/postmessage";
 const inputs: unknown[] = [], results: unknown[] = [], contexts: unknown[] = [], errors: string[] = [];
 const probe = { inputs, results, contexts, errors, cancelled: 0, call: undefined as unknown, close: () => {} };
 probe.close = connectHost({

@@ -55,7 +55,7 @@
   ],
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
-    "build": "tsc -b tsconfig.lib.json && vite build --config vite.kit.config.ts && node scripts/emit-kit-styles.mjs",
+    "build": "tsc -b tsconfig.lib.json && node ../../scripts/strip-comments.mjs tsconfig.lib.json && vite build --config vite.kit.config.ts && node scripts/emit-kit-styles.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.config.json",
     "test": "vitest run",
     "check:size": "node ../../scripts/check-ui-size.mjs mantle-ui"
