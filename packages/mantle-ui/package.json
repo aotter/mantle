@@ -1,13 +1,27 @@
 {
   "name": "@aotter/mantle-ui",
   "version": "0.2.0-alpha.9",
-  "description": "Pure shared UI: framework-free generic interaction controller, React components, UI kit and tokens. No SDK dependency or Admin/MCP App.",
+  "description": "Framework-free interaction controller, React 19 components, shadcn-style UI kit and Tailwind design tokens behind Mantle Admin. No SDK dependency.",
+  "keywords": [
+    "mantle",
+    "ui-kit",
+    "react",
+    "react-components",
+    "shadcn",
+    "radix-ui",
+    "tailwindcss",
+    "design-tokens",
+    "typescript"
+  ],
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aotter/mantle.git",
     "directory": "packages/mantle-ui"
+  },
+  "bugs": {
+    "url": "https://github.com/aotter/mantle/issues"
   },
   "type": "module",
   "sideEffects": [

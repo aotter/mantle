@@ -1,8 +1,10 @@
 # Mantle
 
-Generate native SQL for Bun SQLite/PostgreSQL and Cloudflare D1/PostgreSQL.
-The build-time compiler uses the closed v2 grammar and canonical SQL policy.
-Applications import contract primitives and official drivers.
+Mantle is an agent-native application SDK and backend compiler. Declare Schemas, Views, Procedures and Triggers in
+YAML manifests; `mantle generate` compiles them at build time into native SQL and typed TypeScript for SQLite (Bun or
+Cloudflare D1) and PostgreSQL (Bun or Cloudflare Workers). The compiler adds row policy to every query, and the closed v2
+grammar reports actionable diagnostics. Your app keeps its own entry, routes and auth; Mantle adds only the surfaces
+you select: REST, MCP, a web module, Better Auth sign-in and the native Admin.
 
 **Start here:** `npx mantle help` prints the installed docs one topic at a time. `mantle init <directory>` writes a
 complete app shell once (email OTP, `admin` + `user`, Admin, MCP, REST); [examples](./docs/examples/README.md) show
