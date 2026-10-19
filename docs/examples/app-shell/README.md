@@ -14,7 +14,7 @@ pnpm install
 pnpm generate          # writes generated/ and lists any `handler: { ref }` to implement in src/handlers.ts
 pnpm types && pnpm check
 cp .dev.vars.example .dev.vars
-pnpm db:init                   # add seed.sql and run pnpm db:seed for fixtures
+pnpm db:init                   # optional seed.sql for static reference data, then pnpm db:seed (see Seed data)
 pnpm dev                       # one-time codes print to this log
 pnpm smoke                     # your smoke.mjs on smoke-kit.mjs (see Files you edit)
 pnpm accept                    # hand each role to a fresh evaluator (see Independent acceptance)
@@ -46,6 +46,19 @@ chooses asymmetric exposure, delete the blocks marked `MCP / OAuth (deliberate e
 HTTP-only Procedures will keep generating with a warning.
 
 Search for `AGENT:` to find what an app must fill in.
+
+## Seed data
+
+Create test records through the app: your `smoke.mjs` or an `accept.mjs` fixtures module calls the app's own REST, MCP
+or Admin operations as a signed-in user, so Mantle fills `id`, `version`, `created_at`, `updated_at`, `author_id`
+and the publishing `status`/`published_at`. Keep `seed.sql` for static reference data no surface writes; native SQL
+must set those columns itself, timestamps as integer microseconds on D1. An omitted `updated_at` stores `0`, which
+Admin shows as 1970. `mantle help local-testing` (Seed data) has a complete seed:
+
+```sql
+INSERT INTO categories (id, version, created_at, updated_at, name) VALUES
+  ('books', 1, 1767225600000000, 1767225600000000, 'Books');
+```
 
 ## Local testing notes
 

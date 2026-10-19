@@ -71,6 +71,7 @@ jobs:
       - name: Install Chrome
         run: pnpm --filter @aotter/mantle-admin exec playwright install --with-deps chrome
       - run: pnpm check:examples
+      - run: pnpm check:init-audit
       - name: Admin build under npm ci --ignore-scripts, served without node_modules
         run: node scripts/check-admin-build.mjs
       - run: pnpm check:doc-examples

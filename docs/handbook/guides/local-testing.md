@@ -33,6 +33,49 @@ Better Auth allows 3 one-time-code requests per minute per client IP; the kit gi
 `cf-connecting-ip`. Credentials come only from the kit's sign-in: a check never scrapes another session or builds a
 Caller by hand.
 
+## Seed data
+
+Create test records through the app itself: in `smoke.mjs` or the `pnpm accept` fixtures module, call the app's own
+REST, MCP or Admin operations as a signed-in user (`call("POST", "/admin/api/operations/create-event", { cookie: admin,
+body })`), or insert through the Store (`store(db, caller).collection("events").insert(...)`). Mantle then fills every
+system column (`id`, `version`, `created_at`, `updated_at`, `author_id`, and on a publishing Schema `status` and
+`published_at` through its publish Procedure) and enforces the Schema's checks, scope and references, exactly as for
+real data.
+
+Keep `seed.sql` for static reference data that no surface writes, such as categories or department budgets.
+`pnpm db:seed` and `smoke-kit.mjs` apply it as native SQL, which bypasses all of the above, so the seed sets each
+system column itself:
+
+| Column | SQLite and D1 (`cloudflare-d1`, `bun-sqlite`) | PostgreSQL | If the seed omits it |
+|---|---|---|---|
+| `id` | text, unique | text, unique | the insert fails |
+| `version` | `1` | `1` | `1` |
+| `created_at` | integer microseconds since the Unix epoch | `timestamptz` | the insert fails |
+| `updated_at` | integer microseconds; the same as `created_at` | `timestamptz` | SQLite and D1 store `0`: Admin shows 1970-01-01. PostgreSQL stores `now()` |
+| `author_id` | the creator's user id, or `NULL` for system rows | the same | `NULL`: under `restrict: { <schema>: "author_id = auth.uid()" }` no member sees the row |
+| `status` (publishing) | `'draft'`, `'published'` or `'archived'` | the same | `'draft'` |
+| `published_at` (publishing) | microseconds when `status` is `'published'`, otherwise `NULL` | `timestamptz`, otherwise `NULL` | `NULL` |
+
+A field- or owner-scoped Schema also needs its scope column. Use fixed instants for repeatable fixtures
+(`1767225600000000` is 2026-01-01T00:00:00Z), or the moment the seed runs (`unixepoch() * 1000000` on SQLite and
+D1, `now()` on PostgreSQL). For a publishing `posts` Schema on D1:
+
+```sql
+INSERT INTO posts (id, version, created_at, updated_at, author_id, status, published_at, title, body) VALUES
+  ('welcome', 1, 1767225600000000, 1767225600000000, NULL, 'published', 1767225600000000, 'Welcome', '# Welcome'),
+  ('draft-note', 1, unixepoch() * 1000000, unixepoch() * 1000000, NULL, 'draft', NULL, 'Draft', '# Draft');
+```
+
+The same rows on PostgreSQL:
+
+```sql
+INSERT INTO posts (id, version, created_at, updated_at, author_id, status, published_at, title, body) VALUES
+  ('welcome', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', NULL, 'published', '2026-01-01T00:00:00Z', 'Welcome', '# Welcome'),
+  ('draft-note', 1, now(), now(), NULL, 'draft', NULL, 'Draft', '# Draft');
+```
+
+A seed is local test data; never apply it to an existing production database.
+
 ## Account for every surface
 
 In the app's README or handoff, list each declared surface (Admin, each MCP endpoint, REST, each visitor page type)
