@@ -42,6 +42,8 @@ export interface Fact {
   readonly d?: readonly string[];
   /** Declared searchable text fields; omitted collections search id only. */
   readonly search?: readonly string[];
+  /** `x-mantle-ref` columns to a scoped Schema (Core's `refChecks`): a caller's write names a row it sees, in the child's partition. */
+  readonly ref?: readonly { readonly column: string; readonly table: string; readonly field: string; readonly same: readonly (readonly [parent: string, child: string])[]; readonly terms: readonly Term[] }[];
   /** Generated parent policy and inherited read-only columns; no authored schema is interpreted. */
   readonly parent?: { readonly on: string; readonly scope?: readonly [parent: string, child: string]; readonly visible: Term; readonly table: string; readonly caller: readonly Term[]; readonly trusted: readonly Term[]; readonly fields: readonly string[]; readonly ts: readonly string[]; readonly d: readonly string[] };
 }
@@ -264,18 +266,24 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       const values: unknown[] = [], ms = Date.now(), into = d.ident(p.name);
       const push = (v: unknown) => (values.push(v), d.param(values.length));
       const recipe = (r: Recipe) => push(evaluate(d, [r], caller, { version: lock }, ms)[0]);
+      /** The marks of the non-null columns written, by folded name. */
+      const marks = new Map<string, string>();
       const given = (set: object, insert = false) => Object.entries(set).map(([name, v]) => {
         // SQLite matches column names without case, so compare folded
         const key = name.toLowerCase();
         if (SYSTEM.includes(key) || key === p.scope || !insert && !!f.u?.some(u => u[0] === key)) throw no(`${name} is not writable`);
         // a driver binds undefined as NULL: an update would silently clear the column
         if (v === undefined) throw no(`${name} is undefined`);
-        return [d.ident(name), put(values, name, v)] as const;
+        const mark = put(values, name, v);
+        if (v !== null) marks.set(key, mark);
+        return [d.ident(name), mark] as const;
       });
+      /** For each non-null reference written, the referenced row as the caller sees it, in the child's partition (`child`). */
+      const refs = (child: (column: string) => string | undefined): string[] => trusted ? [] : (f.ref ?? []).flatMap(r => { const v = marks.get(r.column); return v ? [`EXISTS (SELECT 1 FROM ${d.ident(r.table)} _mantle_ref WHERE ${[`_mantle_ref.${d.ident(r.field)} = ${v}`, ...r.same.map(([parent, column]) => `_mantle_ref.${d.ident(parent)} = ${child(column) ?? "NULL"}`), ...r.terms.map(t => renderTerm(d, t, "_mantle_ref.", recipe))].join(" AND ")})`] : []; });
       /** `WHERE id = ? AND <the caller's row rules> AND version = ?` */
-      const guard = (id: string) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...pol.terms, x.lock].map(t => renderTerm(d, t, t[1] === "parent" ? d.ident(p.name) + "." : "", recipe))].join(" AND ")}`;
+      const guard = (id: string, also: string[] = []) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...pol.terms, x.lock].map(t => renderTerm(d, t, t[1] === "parent" ? d.ident(p.name) + "." : "", recipe)), ...also].join(" AND ")}`;
       const step = (sql: string): Bound => ({ sql: scoped(sql, caller), binds: values, row: true });
-      return { given, recipe, guard, step, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
+      return { given, marks, recipe, refs, guard, step, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
     };
 
     return {
@@ -296,12 +304,16 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
         const w = writer(), names: string[] = [], marks: string[] = [];
         for (const [name, mark] of w.given(set, true)) { names.push(name); marks.push(mark); }
         for (const [column, v] of x.fills) { names.push(d.ident(column)); marks.push(v === "newId" ? rules.newId : w.recipe(v)); }
-        return w.step(`INSERT INTO ${w.into} (${names.join(", ")}) VALUES (${marks.join(", ")})${w.returning()}`);
+        // a reference to a scoped Schema: the row is inserted only if the parent check holds, else `row` fails with CONFLICT
+        const refs = w.refs(column => w.marks.get(column));
+        return w.step(`INSERT INTO ${w.into} (${names.join(", ")}) ${refs.length ? `SELECT ${marks.join(", ")} WHERE ${refs.join(" AND ")}` : `VALUES (${marks.join(", ")})`}${w.returning()}`);
       }, rows => clean(rows)[0], `${p.name}/insert`); },
       update(id: string, set: object, { lock }: { lock: number | string }) { return write(() => {
         const w = writer(lock), assigns = w.given(set).map(([name, mark]) => `${name} = ${mark}`);
         for (const [column, v] of x.sets) assigns.push(`${d.ident(column)} = ${v === "bump" ? `${d.ident(column)} + 1` : w.recipe(v)}`);
-        return w.step(`UPDATE ${w.into} SET ${assigns.join(", ")}${w.guard(id)}${w.returning()}`);
+        // the partition is never SET, so the child's is the row's own
+        const refs = w.refs(column => `${w.into}.${d.ident(column)}`);
+        return w.step(`UPDATE ${w.into} SET ${assigns.join(", ")}${w.guard(id, refs)}${w.returning()}`);
       }, rows => clean(rows)[0], `${p.name}/update`); },
       delete(id: string, { lock }: { lock: number | string }) { return write(() => {
         const w = writer(lock);

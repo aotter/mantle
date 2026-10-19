@@ -29,7 +29,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
     // Compiler scope names belong only to relations this generated query can reference.
     const schemas:Record<string,Schema>=Object.create(null);let relation:Schema|undefined=s;
     while(relation&&!Object.hasOwn(schemas,relation.name)){schemas[relation.name]=relation;relation=relation.translates?plan.schemas[relation.translates.parent.toLowerCase()]:undefined;}
-    const ctx=(kind:"view"|"procedure",trusted:boolean,inputs:Record<string,string>)=>({dialect,schemas,inputs,kind,mode:trusted?"trusted" as const:"admin" as const});
+    const ctx=(kind:"view"|"procedure",trusted:boolean,inputs:Record<string,string>)=>({dialect,schemas,inputs,kind,mode:trusted?"trusted" as const:"admin" as const,uncheckedRefs:true as const});
     const select=`SELECT ${columns.map(c=>`${wire.ident(s.name)}.${wire.ident(c)}`).join(",")} FROM ${wire.ident(s.name)}`;
     const base=await parse(select);
     const project=(ast:SqlNode,names:readonly string[],keys:readonly string[])=>{

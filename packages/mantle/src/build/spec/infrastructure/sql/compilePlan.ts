@@ -7,6 +7,7 @@ import { validateDiagnostic, type Diagnostic, type SourceLocation } from "../../
 import type { JsonSchema, ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
 import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type PlanSchema, type PlanTrigger, type PlanView, type RuntimePlan } from "../../domain/model/RuntimePlan.js";
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
+import { refChecks } from "../../domain/service/SqlRowPolicy.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
 import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
 import { AGGREGATES, NATIVE_COLUMNS, NATIVE_NOT_NULL, notNullColumns, viewCacheProblem, checkShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
@@ -385,7 +386,9 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     const restrict = proc && "sql" in proc.handler && inherit(restrictOf("procedures", p.metadata.name, p.spec.restrict, proc.handler.sql.stmts) || undefined, (p.spec.handler as { sql?: string }).sql, `procedures/${p.metadata.name}/restrict`);
     // The one place the trusted-only rule is decided (policy.ts insert enforces it): INSERT ... SELECT into a field-scoped
     // table, or an insert into one this target restricts. Without a field scope a restricted insert fails generation.
-    const trustedOnly = !!proc && "sql" in proc.handler && proc.handler.sql.stmts.some(stmt => { const ins = stmt.InsertStmt, t = String(ins?.relation.relname ?? "").toLowerCase(); return !!ins && !!schemas[t]?.userScopes?.length && (!ins.selectStmt?.SelectStmt?.valuesLists || !!(restrict && restrict[t])); });
+    const trustedOnly = !!proc && "sql" in proc.handler && proc.handler.sql.stmts.some(stmt => { const ins = stmt.InsertStmt, t = String(ins?.relation.relname ?? "").toLowerCase(); return !!ins && (!!schemas[t]?.userScopes?.length && (!ins.selectStmt?.SelectStmt?.valuesLists || !!(restrict && restrict[t]))
+      // INSERT ... SELECT that writes a reference to a scoped Schema (#1757): the check reads the one VALUES row
+      || !ins.selectStmt?.SelectStmt?.valuesLists && !!schemas[t] && refChecks(schemas[t], schemas).some(r => ins.cols?.some((x: SqlNode) => String(x.ResTarget.name).toLowerCase() === r.column))); });
     if (restrict || trustedOnly) procedures[p.metadata.name] = { ...proc!, ...(restrict ? { restrict } : {}), ...(trustedOnly ? { trustedOnly: true as const } : {}) };
   }
   const triggers: Record<string, PlanTrigger> = Object.fromEntries(linked.triggers.map(({ manifest: t }) => [t.metadata.name, { source: t.spec.source, procedure: t.spec.target.procedure }]));

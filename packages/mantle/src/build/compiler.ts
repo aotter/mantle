@@ -1,6 +1,6 @@
 /** Deployment compiler leaves. Optional request surfaces are never constructed. */
 export { compilePlan, tableOutputs, viewOutputs, jsonOutputs } from "./spec/infrastructure/sql/compilePlan.js";
-export { userScopeTerm } from './spec/domain/service/SqlRowPolicy.js';
+export { refChecks, userScopeTerm } from './spec/domain/service/SqlRowPolicy.js';
 export { DiagnosticError } from "./spec/kernel/diagnostic.js";
 export { BUILT_IN_NAV_GROUPS, navPlacementProblems } from "./spec/domain/model/AdminNav.js";
 export { enumOptions, parseNumeric, NATIVE_NOT_NULL, NATIVE_COLUMNS, notNullColumns, protectedColumns, rowPolicy, writePolicy, mcpTools, mcpToolNameSegment, toolTitle, viewAnnotations, procedureAnnotations, resolveLocalizedText, assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired, INPUT_RULE_KEYWORDS, lookupLocalRef, rootRefChain } from "./spec/domain/index.js";

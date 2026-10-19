@@ -4,7 +4,7 @@
 import { AGGREGATES, SqlRefusal as Refused, type SqlNode as N } from '../../spec/domain/index.js';
 import type { RelationPosition } from './positions.js';
 import type { StorageSchema as SchemaDef } from '../dialect.js';
-import { classify, protectedColumns, rowPolicy, userScopeTerm, writePolicy, type RowMode as Mode, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
+import { classify, protectedColumns, refChecks, rowPolicy, userScopeTerm, writePolicy, type RowMode as Mode, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
 import { S, num, op, ref as col, target as res } from './ast.js';
 import type { PlanRestrict } from '../../spec/domain/model/RuntimePlan.js';
 
@@ -40,6 +40,8 @@ export type PolicyOpts = {
   returning?: ReadonlySet<string>;
   /** NEGATIVE CONTROL ONLY: print no visibility predicate, so a probe that cannot fail is caught */
   unsafeNoVisibility?: boolean;
+  /** skip `refs` (see CompileContext) */
+  uncheckedRefs?: true;
   /** records every relation position the pass printed a wrapper for (the probe checks it is complete) */
   seen?: Set<RelationPosition>;
   /** what the dialect spells itself */
@@ -161,6 +163,22 @@ function visible(s: SchemaDef, a: string, c: C, table?: string): N | undefined {
   const extra: RowTerm[] = r ? [...(r.owner ? [[r.owner, 'eq', { k: 'uid' }] as const] : []), ...r.terms.map(u => userScopeTerm(u))] : [];
   return and(...[...rowPolicy(s, c.mode, c.schemas), ...extra].map((t) => term(c, a, t)));
 
+}
+/**
+ * A caller's write of an `x-mantle-ref` to a scoped Schema (Core's `refChecks`): `value` is NULL or names a row of the target the
+ * caller sees, in the child's partition (`child` reads a child column). A correlated EXISTS, so the target's unique index serves
+ * it; a bare column in `value` is qualified with `a`, the written row, so the subquery's alias cannot capture it. Where a row
+ * exists (`set`: UPDATE, DO UPDATE), a subquery in `value` could still read `_mantle_ref`'s columns for its own, so it is refused.
+ */
+function refs(s: SchemaDef, c: C, a: string, value: (column: string) => N | undefined, child: (column: string) => N, set = false): N | undefined {
+  if (c.mode === 'trusted' || c.uncheckedRefs) return undefined;
+  const qualify = (v: any): any => Array.isArray(v) ? v.map(qualify) : !v || typeof v !== 'object' || v.SubLink ? v : v.ColumnRef?.fields?.length === 1 && v.ColumnRef.fields[0].String ? col(a, v.ColumnRef.fields[0].String.sval) : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, qualify(x)]));
+  return and(...refChecks(s, c.schemas).flatMap(r => {
+    const v = value(r.column);
+    if (set && v && JSON.stringify(v).includes('"SubLink"')) throw new Refused('USER_FIELD_POSITION', `SET '${r.column}', a reference to a scoped Schema, takes no subquery for callers; read the value first or use trusted mode.`);
+    return v ? [or({ NullTest: { arg: qualify(v), nulltesttype: 'IS_NULL' } }, { SubLink: { subLinkType: 'EXISTS_SUBLINK', subselect: { SelectStmt: { targetList: [res(num(1))], fromClause: [{ RangeVar: { relname: r.table, alias: { aliasname: '_mantle_ref' }, inh: true, relpersistence: 'p', mantle: 'system' } }],
+      whereClause: and(op('=', col('_mantle_ref', r.field), qualify(v)), ...r.same.map(([parent, column]) => op('=', col('_mantle_ref', parent), child(column))), ...r.terms.map(t => term(c, '_mantle_ref', t))), limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } } } })] : [];
+  }));
 }
 /** A write's `SET` items beyond the author's own. */
 const sets = (w: RowWrite, c: C): N[] =>
@@ -426,8 +444,10 @@ function update(n: N, c: C): N {
   const out = deep(n, c, 'UpdateStmt');
   c.sel.pop();
   const w = writePolicy(s, 'update', { status: c.status, lock: c.lockVersion });
+  // the partition is never SET, so the child's is the row's own
+  const checked = refs(s, c, a, column => out.targetList.find((t: N) => String(t.ResTarget.name).toLowerCase() === column)?.ResTarget.val, column => col(a, column), true);
   out.targetList.push(...sets(w, c));
-  out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock));
+  out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock), checked);
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { UpdateStmt: out };
 }
@@ -482,10 +502,15 @@ function insert(n0: N, c: C): N {
   // GROUP BY; `WHERE true` is SQLite's disambiguator for INSERT ... SELECT ... ON CONFLICT.
   // an insert that names no column (a new draft) is the fills alone: there is no VALUES row to select from
   const empty = !n.cols.length;
+  // A caller's reference to a scoped Schema is checked on the VALUES row's own expressions (VALUES is one row); a row whose
+  // check fails is not inserted, so a one-row statement fails with CONFLICT. compilePlan keeps INSERT ... SELECT trusted-only.
+  const items: N[] | undefined = out.selectStmt?.SelectStmt?.valuesLists?.[0]?.List.items, at = (column: string) => n.cols.findIndex((r: N) => String(r.ResTarget.name).toLowerCase() === column);
+  if (!items && caller && refChecks(s, c.schemas).some(r => at(r.column) >= 0)) throw new Refused('USER_FIELD_POSITION', 'Procedure INSERT ... SELECT that writes a reference to a scoped Schema requires trusted mode; use INSERT ... VALUES.');
+  const parents = items && refs(s, c, String(n.relation.relname), column => at(column) < 0 ? undefined : structuredClone(items[at(column)]), column => structuredClone(at(column) < 0 ? fill.find(([name]) => name === column)![1] : items[at(column)]!));
   out.selectStmt = { SelectStmt: {
     targetList: [...(empty ? [] : [res({ ColumnRef: { fields: [S('_v'), { A_Star: {} }] } })]), ...fill.map(([, v]) => res(v))],
     ...(empty ? {} : { fromClause: [{ RangeSubselect: { subquery: out.selectStmt, alias: { aliasname: '_v' } } }] }),
-    whereClause: { A_Const: { boolval: { boolval: true } } }, limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } };
+    whereClause: parents ?? { A_Const: { boolval: { boolval: true } } }, limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } };
   const oc = out.onConflictClause;
   if (oc) {
     // every unique index of a scoped Schema leads with the scope field: an author may name it in the target or leave it out
@@ -496,7 +521,8 @@ function insert(n0: N, c: C): N {
     if (oc.action === 'ONCONFLICT_UPDATE') {
       c.seen?.add('conflict-update');
       oc.targetList.push(...sets(w, c));
-      oc.whereClause = and(oc.whereClause, visible(s, n.relation.relname, c, n.relation.relname)); // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one
+      const t = n.relation.relname, setRef = refs(s, c, t, column => oc.targetList.find((x: N) => String(x.ResTarget.name).toLowerCase() === column)?.ResTarget.val, column => col(t, column), true);
+      oc.whereClause = and(oc.whereClause, visible(s, t, c, t), setRef); // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one
     }
   }
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
