@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { applyHostContext, connectHost, type HostApi } from "../src/app/postmessage";
+import { applyHostContext, connectHost, type HostApi } from "../admin/src/mcp-app/postmessage";
 
 // Adapter semantics only. The browser suite exercises these calls against the real
 // official App/AppBridge pair, not a second implementation of their wire protocol.

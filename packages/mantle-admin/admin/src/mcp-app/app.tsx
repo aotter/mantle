@@ -20,7 +20,7 @@ import {
   type CallTool,
   type ToolResult,
 } from "../../../src/app/bridge";
-import { web, type HostApi } from "../../../src/app/postmessage";
+import { web, type HostApi } from "./postmessage";
 import { useLoadMore } from "../lib/use-load-more";
 import { Slot, useViewCellNames } from "../app/slots";
 import type { CellProps } from "../app/slot-props";

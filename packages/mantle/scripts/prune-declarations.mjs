@@ -1,6 +1,6 @@
 /** Keep the public declaration closure; inline only its private compiler types. */
 import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
 
 const root = resolve(import.meta.dirname, ".."), dist = join(root, "dist");
@@ -18,7 +18,7 @@ while (pending.length) {
 // Resolve aliases with TypeScript itself rather than retaining a barrel's unrelated exports.
 if (keep.has(compiler)) {
   const program = ts.createProgram([...keep], { module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext });
-  const checker = program.getTypeChecker(), statements = new Set(), seen = new Set(), symbols = [];
+  const checker = program.getTypeChecker(), statements = new Set(), seen = new Set(), symbols = [], shipped = new Map();
   const unalias = symbol => symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
   const inBuild = node => node.getSourceFile().fileName.startsWith(join(dist, "build") + "/");
   const references = node => {
@@ -35,6 +35,12 @@ if (keep.has(compiler)) {
     seen.add(symbol);
     for (const declaration of symbol.declarations ?? []) {
       if (!inBuild(declaration)) continue;
+      const source = declaration.getSourceFile();
+      if (source.fileName !== compiler && keep.has(source.fileName)) {
+        // Already shipped with its JSDoc: re-export it instead of declaring a second copy.
+        if (checker.getExportsOfModule(checker.getSymbolAtLocation(source)).includes(symbol)) shipped.set(symbol.name, source.fileName);
+        continue;
+      }
       let statement = declaration;
       while (!ts.isSourceFile(statement.parent)) statement = statement.parent;
       if (statements.has(statement)) continue;
@@ -58,7 +64,9 @@ if (keep.has(compiler)) {
     result.dispose();
     return declaration;
   }).join("\n");
-  writeFileSync(compiler, text + "\n");
+  const modules = Map.groupBy(shipped.keys(), name => `./${relative(dirname(compiler), shipped.get(name)).replace(/\.d\.ts$/, ".js")}`);
+  const reexports = [...modules].map(([path, names]) => `import { ${names.join(", ")} } from "${path}";\nexport { ${names.join(", ")} };\n`).join("");
+  writeFileSync(compiler, reexports + text + "\n");
   // Catch missing references and conflicting names in the flattened declarations.
   const declarations = ts.createProgram([compiler], { noEmit: true, types: [], strict: true, target: ts.ScriptTarget.ES2022 });
   const diagnostics = ts.getPreEmitDiagnostics(declarations);

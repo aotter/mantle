@@ -2,7 +2,7 @@ import { StrictMode, useEffect, useMemo, useState, type ReactNode } from "react"
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps";
-import { applyHostContext, connectHost, type HostApi } from "../../../src/app/postmessage";
+import { applyHostContext, connectHost, type HostApi } from "./postmessage";
 import { readCatalog, type ToolResult } from "../../../src/app/bridge";
 import type { AdminHost } from "../app/hooks";
 import { AdminHooksProvider } from "../app/hooks-context";
