@@ -9,7 +9,9 @@ export function registerUserField(fields: Record<string, UserFieldSpec>, field: 
   // Two scopes binding one field must agree on its type, and on its enum when both declare one.
   if (old && (old.type !== spec.type || old.enum && spec.enum && enumKey(old.enum) !== enumKey(spec.enum)))
     throw new SqlRefusal("USER_FIELD_CONFLICT", `'${field}' is bound by Schema scopes with conflicting column types or enums.`);
-  fields[field] = Object.freeze(old?.enum && !spec.enum ? old : spec);
+  // An integer column narrows the field for every use: a fractional value matches no integer row and is refused at identity.
+  const merged = old?.enum && !spec.enum ? old : spec;
+  fields[field] = Object.freeze(old?.integer && !merged.integer ? { ...merged, integer: true as const } : merged);
 }
 export const USER_REF_SCOPE_ONLY = "auth.user() belongs in a Schema scope or this target's restrict: { <schema>: \"<column> IN auth.user('<field>')\" }, never in SQL.";
 export function refuseUserReferences(node: unknown): void {

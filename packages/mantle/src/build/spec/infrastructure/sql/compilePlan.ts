@@ -185,7 +185,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     const userScopes = template && typeof template === "object" ? template.terms.map(({ column, field }) => {
       const property = m.spec.schema.properties?.[column];
       const type = property?.type === "string" ? "string" as const : "number" as const;
-      try { registerUserField(userFields, field, { type, multiple: true, ...(property?.enum ? { enum: property.enum as (string | number)[] } : {}) }); }
+      try { registerUserField(userFields, field, { type, ...([property?.type].flat().includes("integer") ? { integer: true as const } : {}), multiple: true, ...(property?.enum ? { enum: property.enum as (string | number)[] } : {}) }); }
       catch (error) { if (!(error instanceof SqlRefusal)) throw error; diagnostics.push(validateDiagnostic({ code: error.code, severity: "error", path: `schemas/${m.metadata.name}/scope`, message: error.message })); }
       return { column: column.toLowerCase(), field, type };
     }) : [];
@@ -358,7 +358,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       const terms = template.terms.flatMap(({ column: c, field }) => {
         const found = column(c); if (!found) { fail(`restrict column '${c}' is not a field of '${schema.name}'.`); return []; }
         const property = schema.schema?.properties?.[schema.names?.[found] ?? c], type = property?.type === "string" ? "string" as const : "number" as const;
-        try { registerUserField(userFields, field, { type, multiple: true, ...(property?.enum ? { enum: property.enum as (string | number)[] } : {}) }); }
+        try { registerUserField(userFields, field, { type, ...([property?.type].flat().includes("integer") ? { integer: true as const } : {}), multiple: true, ...(property?.enum ? { enum: property.enum as (string | number)[] } : {}) }); }
         catch (error) { if (!(error instanceof SqlRefusal)) throw error; fail(error.message); }
         return [{ column: found, field, type }];
       });

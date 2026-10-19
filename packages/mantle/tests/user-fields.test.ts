@@ -253,6 +253,10 @@ test('numeric user fields bind finite numbers and inferred enum/type conflicts a
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
  await expect(generateOrThrow('bun-sqlite',[{sourceId:'string.yaml',text:JSON.stringify(numeric)+'\n---\n'+view('stringly','SELECT id FROM orders',"author_id = auth.uid()" as never)}])).rejects.toThrow('restrict maps each Schema to a predicate');
  await expect(generateOrThrow('bun-sqlite',[{sourceId:'conflict.yaml',text:JSON.stringify(numeric)+'\n---\n'+view('conflicting','SELECT id FROM orders',{orders:"region IN auth.user('same')"})+'\n---\n'+view('conflicting2','SELECT id FROM orders',{orders:"amount IN auth.user('same')"})}])).rejects.toThrow('USER_FIELD_CONFLICT');
+ // A field bound to an integer column holds integers, also when another use binds a number column or a nullable integer one.
+ numeric.spec.schema.properties.seats={type:'integer'};numeric.spec.schema.properties.spare={type:['integer','null']};
+ for(const [a,b] of [['amount','seats'],['seats','amount'],['amount','spare']])expect((await generateOrThrow('bun-sqlite',[{sourceId:'integer.yaml',text:JSON.stringify(numeric)+'\n---\n'+view('first','SELECT id FROM orders',{orders:`${a} IN auth.user('same')`})+'\n---\n'+view('second','SELECT id FROM orders',{orders:`${b} IN auth.user('same')`})}]))['generated.ts']).toMatch(/userFields = \{"same":\{[^}]*"integer":true/);
+ expect(()=>userCaller({id:'bad',seats:[2,2.5]},{fields:{seats:{type:'number',integer:true,multiple:true}}})).toThrow('must be an integer');
 });
 
 test('unrelated { all: true } fields stay independent in one SQL per target',async()=>{
