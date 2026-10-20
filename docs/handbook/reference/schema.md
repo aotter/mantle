@@ -106,5 +106,8 @@ the publishing lifecycle; `version` backs `expectedVersion`; `author_id` is the 
 `restrict: { <schema>: "author_id = auth.uid()" }`.
 
 A seed or other SQL that inserts rows outside Mantle (`wrangler d1 execute --file seed.sql`) sets the native columns
-itself: `id` (text, unique) and `created_at` (integer microseconds since the Unix epoch, e.g. `1767225600000000`);
-`updated_at` and `version` have defaults. Procedures and the Store fill them for you.
+itself: `id` (text, unique), `created_at` and `updated_at` (on SQLite and D1 integer microseconds since the Unix epoch,
+e.g. `1767225600000000`; on PostgreSQL `timestamptz`), and on a publishing Schema `status` and `published_at`.
+SQLite and D1 default an omitted `updated_at` to `0`, which Admin shows as 1970. Procedures and the Store fill every
+native column for you; prefer them for fixtures. [Seed data](../guides/local-testing.md#seed-data) shows a complete
+seed for each dialect.
