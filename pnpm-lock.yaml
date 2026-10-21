@@ -61,8 +61,8 @@ importers:
         specifier: 18.1.5
         version: 18.1.5
       pgsql-deparser:
-        specifier: 18.3.8
-        version: 18.3.8
+        specifier: 18.3.10
+        version: 18.3.10
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -3527,8 +3527,8 @@ packages:
   pgpass@1.0.5:
     resolution: {integrity: sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==}
 
-  pgsql-deparser@18.3.8:
-    resolution: {integrity: sha512-/q26n9UumKXxN7UuBEpxS8+kSUfZcHBk3u1LQ2hVm1IoGMFN9bk2GmRBugIWrDbPrs8+uskEgPOcezxcA6t0ww==}
+  pgsql-deparser@18.3.10:
+    resolution: {integrity: sha512-VCSnAo+uGWkT3PrM8nOg/wectH/loy6J70oECpapLGamGym2Ri16I/k23pA7PGmLCu13Yc4d5KbOfyUvNsBbeg==}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -7559,7 +7559,7 @@ snapshots:
       split2: 4.2.0
     optional: true
 
-  pgsql-deparser@18.3.8:
+  pgsql-deparser@18.3.10:
     dependencies:
       '@pgsql/quotes': 18.2.4
       '@pgsql/types': 18.0.0
