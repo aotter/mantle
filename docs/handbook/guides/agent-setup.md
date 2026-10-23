@@ -40,8 +40,11 @@ Cursor and GitHub Copilot use their plugin manifests from the same tagged
 checkout. Without a plugin host, install only the consumer skill by name:
 
 ```sh
-npx skills add https://github.com/aotter/mantle/tree/v0.2.0 --skill mantle
+npx skills add aotter/mantle@mantle
 ```
+
+Without a version it follows `main`, the latest stable release. To match the
+application's SDK exactly, add its release tag: `npx skills add aotter/mantle#v0.2.0@mantle`.
 
 When upgrading the SDK, update the marketplace ref or local tagged checkout and
 refresh/reinstall the plugin using the host's native workflow. Verify the loaded
