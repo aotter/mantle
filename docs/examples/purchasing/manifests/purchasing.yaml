@@ -9,6 +9,7 @@ spec:
   uniqueIndexes: [[department]]
   # An approval that would overspend fails this check and the whole approval rolls back.
   checks: ["remaining >= 0"]
+  searchableFields: [department]
   uiSchema: { list: { primaryField: department, columns: [remaining] } }
   schema:
     type: object
@@ -25,6 +26,7 @@ spec:
   title: Purchase requests
   lifecycle: operational
   indexes: [[authorId, createdAt, id], [requestStatus, createdAt, id]]
+  searchableFields: [title, department]
   # Sidebar: in the Approvals group (src/admin.tsx), after the queue of requests waiting for a decision.
   uiSchema: { list: { primaryField: title, columns: [department, amount, requestStatus], filterField: requestStatus }, nav: { group: approvals, order: 2 } }
   schema:
@@ -50,6 +52,7 @@ spec:
   indexes: [[createdAt, id]]
   # One row per spending request.
   uniqueIndexes: [[requestId]]
+  searchableFields: [department]
   uiSchema: { list: { primaryField: department, columns: [amount, remainingAfter, requestId] } }
   schema:
     type: object

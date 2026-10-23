@@ -38,6 +38,8 @@ export default {
     "oauth.apps.empty": "لا يوجد عملاء MCP متصلون.",
     "oauth.apps.revoke": "قطع الاتصال",
     "collection.filter.all": "الكل",
+    "collection.searchIdPlaceholder": "البحث بالمعرّف...",
+    "collection.empty.searchIdOnly": "لا توجد إدخالات تطابق “{search}”. تبحث هذه القائمة بالمعرّف فقط؛ أعلن searchableFields في الـ Schema للبحث في حقول أخرى.",
     "nav.home": "الرئيسية",
     "nav.overview": "نظرة عامة",
     "nav.model": "نموذج البيانات",
