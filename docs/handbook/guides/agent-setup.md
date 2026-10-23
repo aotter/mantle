@@ -81,6 +81,7 @@ the skill's GitHub copy and over any online handbook.
 | `docs/skills/update/SKILL.md` | upgrading `@aotter/mantle`, including from 0.1.x |
 | `docs/skills/provision/SKILL.md` | deploying, with production sign-in |
 | `docs/skills/media-gc/SKILL.md` | auditing or removing stale R2 uploads |
+| `docs/skills/performance/SKILL.md` | after acceptance converges, or when a page, first request or query is slow |
 
 0.2.0 has no `mantle skills` command: nothing is copied into the project.
 An agent reads these files from `node_modules` when the task calls for them.
