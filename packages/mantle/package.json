@@ -86,7 +86,7 @@
     "check:startup": "bun scripts/check-size.ts --startup-only"
   },
   "peerDependencies": {
-    "@modelcontextprotocol/server": "2.2.0",
+    "@modelcontextprotocol/server": "2.3.1",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
     "better-auth": "catalog:peer"
@@ -107,7 +107,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.2.0",
-    "@modelcontextprotocol/server": "2.2.0",
+    "@modelcontextprotocol/server": "2.3.1",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/test-utils": "1.7.7",
