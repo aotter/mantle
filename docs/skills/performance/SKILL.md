@@ -32,8 +32,8 @@ skipped part with its reason.
 
 | Run | When the application or change has | Skip when |
 |---|---|---|
-| Front end | Visitor or member pages, or any browser UI the application authors: public pages, a custom frontend, Admin customisations, MCP App entries | The only browser UI is SDK-built Admin, unchanged; MCP and REST alone have no page to measure |
-| Cold start | A deployed Worker or service entry: always for a new application; for a change, any added or moved import in the entry, its startup graph or a page's first-load code | The change touched no import, entry or page bundle |
+| Front end | Pages a browser opens directly that the application authors: public pages, member pages, a custom frontend, Admin customisations | The only browser UI is SDK-built Admin, unchanged; MCP and REST alone have no page to measure |
+| Cold start | A deployed Worker or service entry: always for a new application; for a change, any added or moved import in the entry, its startup graph, a page's or an MCP App entry's first-load code | The change touched no import, entry, page or MCP App bundle |
 | Backend reads | Views, or Store reads in handlers, whose rows grow with data: lists, search, paging, joins, aggregates, totals, reports | Only id lookups and small, bounded configuration tables |
 | Backend writes | Procedures or Store writes that run often or concurrently: stock, counters, approvals, checkout, imports | Rare single-row administrative writes |
 
@@ -49,6 +49,10 @@ no regression in accessibility, SEO or best practices.
 - Measure a production build, several runs on mobile and desktop, and report the
   range. Separate what is real from what only the local environment causes
   (no compression or HTTP/2, a cold cache) and say which is which.
+- Measure pages behind sign-in (member pages, Admin) through the role's session
+  URL that `pnpm accept` prints
+  ([hand each role](../../handbook/guides/agent-workflow-acceptance.md#hand-each-role-to-its-evaluator)),
+  never by weakening sign-in.
 - Find the actual bottleneck before changing anything; a trace beats a guess.
 - Repair in this order: what blocks the first paint (render-blocking styles and
   font stylesheets, request chains, unused bytes), then main-thread work (heavy
@@ -68,13 +72,18 @@ no regression in accessibility, SEO or best practices.
 
 - **Worker:** its startup graph imports only what every request needs; auth, MCP,
   Admin and rarely used routes load on the request that uses them
-  ([size and startup](../../handbook/guides/size-and-startup.md)). Report the
-  startup graph you can measure locally; measure the host's startup time only on
+  ([size and startup](../../handbook/guides/size-and-startup.md)). On Workers the
+  startup graph is the entry chunk `mantle bundle` writes under `<outdir>/worker`
+  plus the chunks it imports statically ([outputs](../../handbook/start/project-and-cli.md#outputs));
+  anything behind a dynamic import is outside it. Report its compressed size
+  locally; measure the host's startup time only on
   a deployment the user has authorized, and keep it well under the host's limit
   (aim below 50 ms on Cloudflare).
 - **Pages:** each page's first load carries at most 100 KB of compressed
   JavaScript, and only what the first paint and first interaction need. Move the
-  rest behind dynamic imports, on use or when the browser is idle.
+  rest behind dynamic imports, on use or when the browser is idle. MCP App
+  entries are held to the same budget; they render inside a host, so Lighthouse
+  does not measure them.
 - An overrun is a finding to repair by splitting, not a budget to raise. Raise a
   budget only with the user's agreement and record why.
 
@@ -87,17 +96,23 @@ fast at a realistic volume, and no hot path scans a table that grows.
   with data shaped like real use: several owners and roles, every state, long
   text where fields allow it, and more than one page of results everywhere. Size
   the largest tables at 100,000 rows or 10 times the expected first-year volume,
-  whichever is larger.
+  whichever is larger. Seed with SQL straight into that database, setting the
+  native columns as [reserved entry columns](../../handbook/reference/schema.md#reserved-entry-columns)
+  describes: it is test data, not an application write.
 - **Load:** call every View and Procedure through the same callers and surfaces
-  the application uses, as each role. Record typical and slow-tail latency and
+  the application uses, as each role. The app's local test harness already
+  starts it on a fresh database, signs each role in and calls routes and MCP
+  tools as that role ([local HTTP checks](../../handbook/guides/local-testing.md#what-smoke-covers)).
+  Record typical and slow-tail latency and
   rows read, then run concurrent writers wherever contention matters. A business
   rule that breaks under concurrency (oversell, double approval, lost update) is
   a correctness defect, not a performance finding: fix it first.
 - **Aim:** hot reads stay in the tens of milliseconds locally at seeded volume,
   and their cost does not grow with table size.
 - **Repair in this order:**
-  1. Read the native query plan of each hot path; a full scan of a growing table
-     is a finding.
+  1. Read the native query plan of each hot path, using the SQL in its generated
+     query module under `generated/` against the seeded database; a full scan of a
+     growing table is a finding.
   2. Add the index that serves it in the Schema's `indexes`
      ([indexes](../../handbook/reference/schema.md#indexes-checks-and-search))
      together with a native migration ([database changes](../develop/SKILL.md#database-changes)).
@@ -112,7 +127,8 @@ fast at a realistic volume, and no hot path scans a table that grows.
 
 - Speed never buys a lower standard: scope, authorization, OCC, atomicity,
   accessibility, the public-page requirements and every explicit user
-  requirement stay intact. Writes still go through Store and Procedures.
+  requirement stay intact. The application's writes still go through Store and
+  Procedures; only seed data for the isolated test database is inserted directly.
 - Do not lower a target, shrink the seeded data or drop a slow case to pass.
   Report what is left instead.
 - Work locally. Deploying or measuring a deployment follows the

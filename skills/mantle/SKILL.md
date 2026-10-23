@@ -64,7 +64,10 @@ then one fresh agent per role given only its role and the URLs `pnpm accept` pri
 not run, report the work as UNVERIFIED rather than done; if it could not run, BLOCKED.
 
 Once acceptance is CONVERGED, read the installed `docs/skills/performance/SKILL.md`: it decides which of front end,
-cold start and backend load apply, and runs them before you report done.
+cold start and backend load apply, and runs them before you report done. This is the one exception to installed docs
+winning: if the installed package predates that skill, read
+[the copy on `main`](https://github.com/aotter/mantle/blob/main/docs/skills/performance/SKILL.md) and the pages it links
+from the installed docs with `mantle help <topic>`.
 
 ## Deployment
 
