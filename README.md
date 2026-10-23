@@ -139,12 +139,13 @@ Install the Mantle skill to get guided setup for your application and the
 features you need:
 
 ```sh
-npx skills add https://github.com/aotter/mantle/tree/v0.2.0 --skill mantle
+npx skills add aotter/mantle@mantle
 ```
 
 Ask your agent to follow the installed skill and describe what you want to build.
-Use the release tag matching your application's SDK; an unqualified repository
-install follows `main`, which can lag an alpha release on `develop`.
+Without a version the skill follows `main`, the latest stable release. To match
+your application's SDK exactly, add its release tag:
+`npx skills add aotter/mantle#v0.2.0@mantle`. `main` can lag an alpha release on `develop`.
 See the [agent setup guide](docs/handbook/guides/agent-setup.md) for supported
 editors, plugins, and project instructions.
 
