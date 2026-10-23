@@ -18,6 +18,7 @@ distributions (ADR-0032 decision 13):
 | [`update`](../docs/skills/update/SKILL.md) | Upgrade `@aotter/mantle`, including from 0.1.x. |
 | [`provision`](../docs/skills/provision/SKILL.md) | Ship to Cloudflare Workers or ChatGPT Sites with production sign-in. |
 | [`media-gc`](../docs/skills/media-gc/SKILL.md) | Audit or remove stale, uncommitted R2 uploads. |
+| [`performance`](../docs/skills/performance/SKILL.md) | Make an accepted app fast: Lighthouse, cold start, backend load, indexes and Views. Runs after acceptance converges. |
 
 ## Install
 
@@ -53,6 +54,7 @@ each other: `metadata.projection` is `plugin` for `skills/mantle` and
 | `update` | an SDK upgrade | never overwrite application files; 0.1.x moves by the upgrade guide to a new database | package | — |
 | `provision` | ship to production | secrets never in source, chat or logs; a new database for 0.2; self-hosting is always an option | package | Creates remote resources and handles production secrets; opt-in only. |
 | `media-gc` | stale R2 uploads | audit by default; exact keys only, never a prefix delete; re-audit before applying | package | Destructive remote object deletion and Cloudflare-specific; opt-in only. |
+| `performance` | converged acceptance, a slow page, first request or query | accepted behavior only; never trade scope, authorization, OCC or atomicity for speed; local unless deployment is authorized | package | — |
 
 ## Audience
 
