@@ -171,6 +171,8 @@ export default {
     "entryEdit.contentLanguage": "内容语言",
     "entryEdit.selectLanguage": "选择语言",
     "entryEdit.languageLocked": "保存后不能直接更改语言，请打开或创建另一笔翻译。",
+    "entryEdit.changedSinceRead": "你编辑期间已保存了较新的版本（v{version}）。你的更改仍保留，但无法覆盖保存；加载最新版本会舍弃你的更改。",
+    "entryEdit.keepEditing": "继续编辑",
     "entryEdit.languageTabs": "内容语言",
     "entryEdit.sharedFields": "共用字段",
     "entryEdit.saveSharedFirst": "请先保存共用字段，再新增翻译。",

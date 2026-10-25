@@ -230,6 +230,8 @@ export default {
     "entryEdit.contentLanguage": "Content language",
     "entryEdit.selectLanguage": "Select language",
     "entryEdit.languageLocked": "A saved entry's language cannot be changed. Open or create another translation instead.",
+    "entryEdit.changedSinceRead": "A newer version (v{version}) was saved while you were editing. Your changes are kept but cannot be saved over it; load the latest version to discard them.",
+    "entryEdit.keepEditing": "Keep editing",
     "entryEdit.languageTabs": "Content languages",
     "entryEdit.sharedFields": "Shared fields",
     "entryEdit.saveSharedFirst": "Save the shared fields before adding a translation.",
