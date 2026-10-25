@@ -220,6 +220,7 @@ export default {
     "entryEdit.removeItem": "移除項目",
     "entryEdit.emptyOption": "無值",
     "entryEdit.clearOption": "未設定",
+    "entryEdit.clear": "清除",
     "admin.invite.hintNoEmail": "此站未設定寄信，請自行通知對方；對方使用相同 Email 登入後就會加入團隊。",
     "entryEdit.chooseOption": "請選擇…",
     "entryEdit.boolean": "啟用",
