@@ -111,7 +111,9 @@ dist-tag DELETE only added failure and re-run state, and Actions
    git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
 
-   Pin consumer skill/plugin installation examples to the release's Git tag;
+   Keep the unversioned skill install (`npx skills add aotter/mantle@mantle`) as
+   the default command; pin its tagged form (`aotter/mantle#v<version>@mantle`)
+   and plugin installation examples to the release's Git tag;
    follow the client syntax in [agent setup](handbook/guides/agent-setup.md).
    Alpha releases stay on `develop`, so unqualified installs from `main` can
    return an incompatible older skill. Update the root README, agent setup,
