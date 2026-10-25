@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { InfiniteQueryObserver, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminUnavailableError, mcpAppTransport, useAdminSurface, useBadges, useCollectionTotal, useEntries, useEntry, useHost, useMe, useOperation, useView, type AdminHost, type AdminTransport, type McpToolResult } from "../src/app/hooks";
@@ -31,6 +31,20 @@ describe("browser transport", () => {
     expect(called(2).url).toBe("/admin/api/collections/requests/statistics?range=7d");
     expect(await browserTransport.me()).toMatchObject({ status: "ok", data: { userId: "u" } });
     expect(called(3).url).toBe("/admin/api/me");
+  });
+
+  it("hands each read's signal to its request, so a cancelled refetch stops it", async () => {
+    stubFetch(json({ rows: [] }), json({ items: [], next_cursor: null }), json({ entry: { id: "1", data: {} } }), json({ total: 1 }), json({ userId: "u" }), json({ views: {} }));
+    const signals = [new AbortController(), new AbortController(), new AbortController(), new AbortController(), new AbortController(), new AbortController()].map(controller => controller.signal);
+    await browserTransport.view("v", {}, { signal: signals[0] });
+    await browserTransport.entries("c", { signal: signals[1] });
+    await browserTransport.entry("c", "1", { signal: signals[2] });
+    await browserTransport.total("c", { signal: signals[3] });
+    await browserTransport.me({ signal: signals[4] });
+    await browserTransport.badges(["v"], { signal: signals[5] });
+    expect(fetchMock.mock.calls.map(([, init]) => init?.signal)).toEqual(signals);
+    // the signal is not a View parameter
+    expect(called().url).toBe("/admin/api/views/v");
   });
 
   it("runs an operation and returns its output", async () => {
@@ -250,7 +264,7 @@ describe("data hooks", () => {
       expect(second.read()).toMatchObject({ rows: [], status: "loading" });
       await client.getQueryCache().findAll({ queryKey: ["view", "pending", "hook", "browser", { q: 2 }] })[0]!.fetch();
       expect(second.read()).toMatchObject({ rows: [{ id: "2-1" }], hasMore: true });
-      expect(view.mock.calls[view.mock.calls.length - 1]![2]).toEqual({ limit: undefined, cursor: undefined });
+      expect(view.mock.calls[view.mock.calls.length - 1]![2]).toEqual({ limit: undefined, cursor: undefined, signal: expect.any(AbortSignal) });
       client.clear();
     });
 
@@ -272,7 +286,7 @@ describe("data hooks", () => {
       const r = reader(client, transportOf({ entries }), () => useEntries("requests", { search: "pay", limit: 1 }));
       (await r.first("entries")).loadMore();
       expect((await r.until(state => state.items!.length === 2))).toMatchObject({ items: [{ id: "1" }, { id: "2" }], hasMore: false });
-      expect(entries.mock.calls.map(([, options]) => options)).toEqual([{ search: "pay", limit: 1, cursor: undefined }, { search: "pay", limit: 1, cursor: "c2" }]);
+      expect(entries.mock.calls.map(([, options]) => options)).toEqual([{ search: "pay", limit: 1, cursor: undefined, signal: expect.any(AbortSignal) }, { search: "pay", limit: 1, cursor: "c2", signal: expect.any(AbortSignal) }]);
       const app = reader(fresh(), mcpAppTransport({ call: async () => result({}), host: host() }), () => useEntries("requests"));
       expect(await app.first("entries")).toMatchObject({ items: [], status: "unavailable", hasMore: false });
       client.clear();
@@ -308,6 +322,88 @@ describe("data hooks", () => {
     await queryClient.getMutationCache().build(queryClient, { mutationFn: async () => 1, meta: { invalidates: false } }).execute(undefined);
     expect(queryClient.getQueryState(["entries", "c"])?.isInvalidated).toBe(false);
     queryClient.clear();
+  });
+
+  describe("one refresh per write (#1789)", () => {
+    /** Renders the hooks once to build their queries, then observes each as a mounted component would, with the hook's own options. */
+    const activate = (client: QueryClient) => client.getQueryCache().findAll({ queryKey: ["view"] }).map(query => {
+      const observer = new InfiniteQueryObserver(client, query.options as never);
+      return observer.subscribe(() => {});
+    });
+    const settled = (client: QueryClient) => vi.waitFor(() => expect(client.isFetching()).toBe(0));
+    const counted = () => {
+      const calls: string[] = [];
+      const view = vi.fn(async (name: string) => { calls.push(name); await new Promise(resolve => setTimeout(resolve, 5)); return { status: "ok", data: { rows: [{ id: name }] } } as const; });
+      return { calls, view };
+    };
+
+    it("read each active View once after a useOperation success on Admin's client", async () => {
+      const { queryClient } = await import("../src/app/query-client");
+      const { calls, view } = counted();
+      const transport = transportOf({ view });
+      const state = mount(queryClient, transport, () => [useView("pending", {}), useView("done", { q: 1 }), useOperation("approve")]).seen as [unknown, unknown, { run: (input: object) => Promise<unknown> }];
+      const unsubscribe = activate(queryClient);
+      await settled(queryClient);
+      expect(calls.sort()).toEqual(["done", "pending"]);
+      calls.length = 0;
+      await state[2].run({ id: "1" });
+      await settled(queryClient);
+      expect(calls.sort()).toEqual(["done", "pending"]);
+      for (const stop of unsubscribe) stop();
+      queryClient.clear();
+    });
+
+    it("read each active View once after any other mutation on Admin's client", async () => {
+      const { queryClient } = await import("../src/app/query-client");
+      const { calls, view } = counted();
+      mount(queryClient, transportOf({ view }), () => useView("pending", {}));
+      const unsubscribe = activate(queryClient);
+      await settled(queryClient);
+      calls.length = 0;
+      await queryClient.getMutationCache().build(queryClient, { mutationFn: async () => 1 }).execute(undefined);
+      await settled(queryClient);
+      expect(calls).toEqual(["pending"]);
+      for (const stop of unsubscribe) stop();
+      queryClient.clear();
+    });
+
+    it("still refresh after useOperation on a client without Admin's global handler, such as an MCP App's", async () => {
+      const client = new QueryClient();
+      const { calls, view } = counted();
+      const state = mount(client, transportOf({ view }), () => [useView("pending", {}), useOperation("approve")]).seen as [unknown, { run: (input: object) => Promise<unknown> }];
+      const unsubscribe = activate(client);
+      await settled(client);
+      calls.length = 0;
+      await state[1].run({});
+      await settled(client);
+      expect(calls).toEqual(["pending"]);
+      for (const stop of unsubscribe) stop();
+      client.clear();
+    });
+
+    it("hand the query's signal to the View read, which a superseding refetch aborts", async () => {
+      const client = new QueryClient();
+      const signals: AbortSignal[] = [];
+      const view = vi.fn(async (_name: string, _input: object, page: { signal?: AbortSignal }) => {
+        signals.push(page.signal!);
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return { status: "ok", data: { rows: [] } } as const;
+      });
+      mount(client, transportOf({ view }), () => useView("pending", {}));
+      const unsubscribe = activate(client);
+      await settled(client);
+      expect(signals[0]).toBeInstanceOf(AbortSignal);
+      expect(signals[0]!.aborted).toBe(false);
+      // a refetch started while another is in flight cancels it: that one's request is aborted
+      void client.invalidateQueries({ queryKey: ["view"] });
+      void client.invalidateQueries({ queryKey: ["view"] });
+      await settled(client);
+      expect(signals).toHaveLength(3);
+      expect(signals[1]!.aborted).toBe(true);
+      expect(signals[2]!.aborted).toBe(false);
+      for (const stop of unsubscribe) stop();
+      client.clear();
+    });
   });
 
   it("do not refresh anything when an operation fails, and read a refusal as unavailable", async () => {

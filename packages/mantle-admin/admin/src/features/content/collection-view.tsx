@@ -242,6 +242,9 @@ function CollectionList({
   const titleColumnLabel = titleField
     ? propertyLabel(titleField, collection?.schema?.properties?.[titleField], language, canonical)
     : t(language, "collection.table.title");
+  // One refresh per write: a mutation here is refreshed by Admin's global MutationCache, and an operation
+  // dialog by InteractionDialog, so their callbacks only clear the selection. The bulk bar calls the API
+  // directly, outside any mutation, and so refreshes itself.
   const refreshEntries = React.useCallback(() => {
     clearSelection();
     void invalidateAfterWrite(queryClient);
@@ -253,12 +256,12 @@ function CollectionList({
         data: { title },
         expectedVersion: version,
       }),
-    onSuccess: refreshEntries,
+    onSuccess: clearSelection,
   });
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
       api.delete<{ removed: boolean }>(entryApiPath(collectionName, id)),
-    onSuccess: refreshEntries,
+    onSuccess: clearSelection,
   });
   // POST an empty draft and land in the schema-driven editor — no
   // modal, no pre-fill; the manifest form takes over from there.
@@ -320,7 +323,7 @@ function CollectionList({
         operations={collectionOperations}
         language={language}
         canonical={canonical}
-        onSuccess={refreshEntries}
+        onSuccess={clearSelection}
       />
       <Slot name={`list.actions:${collectionName}`} Default={Empty} props={{ collection: collectionName, selection: [] }} />
     </div>
@@ -514,7 +517,7 @@ function CollectionList({
                   dataColumns={isOperationalCollection ? dataColumns : null}
                   primaryField={isOperationalCollection ? titleField : null}
                   boundOperations={boundOperations}
-                  onOperationSuccess={refreshEntries}
+                  onOperationSuccess={clearSelection}
                   selected={selected.has(row.id)}
                   onToggleSelect={(checked) => {
                     setSelected((prev) => {
