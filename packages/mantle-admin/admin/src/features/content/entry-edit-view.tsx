@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Globe, Images, ImagePlus, LockKeyhole, Plus, RotateCcw, Save, Send } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { api } from "../../lib/api";
+import { api, ApiError, refusalOf } from "../../lib/api";
 import { entryTitle } from "../../lib/entry-title";
 import { isFoldedFieldChild } from "../../lib/collection-nav";
 import { enumOptions } from "../../lib/enum-options";
@@ -48,6 +48,7 @@ import { collectionSummaryKey } from "./collection-view";
 import { boundOperationsFor, RecordOperations, RowOperationsMenu } from "./row-operations";
 import { contentLocales, LocaleBadge, localeName } from "./locale-badge";
 import { RefPicker } from "./ref-picker";
+import { editEntryForm, followEntry, isEntryFormDirty, loadEntryForm, reannounceNewer, settleEntryForm, type EntryForm } from "./entry-form";
 
 const MarkdownEditor = React.lazy(() => import("../editor/markdown-editor").then((module) => ({ default: module.MarkdownEditor })));
 const HtmlEditor = React.lazy(() => import("../editor/html-editor").then((module) => ({ default: module.HtmlEditor })));
@@ -78,39 +79,56 @@ export function EntryEditView({
     () => boundOperationsFor(operationsQuery.data, collectionName),
     [operationsQuery.data, collectionName],
   );
-  const [data, setData] = React.useState<Record<string, unknown> | null>(null);
+  // the form against the entry it was loaded from: a re-read keeps unsaved edits (#1790)
+  const [form, setForm] = React.useState<EntryForm | null>(() => query.data ? loadEntryForm(query.data.entry) : null);
+  const data = form?.data ?? null;
+  const latest = query.data?.entry;
+  const setData = React.useCallback(
+    (next: Record<string, unknown>) => setForm((current) => current && editEntryForm(current, next, latest)),
+    [latest],
+  );
   const [operationalEditUnlocked, setOperationalEditUnlocked] = React.useState(false);
   React.useEffect(() => setOperationalEditUnlocked(false), [collectionName, entryId]);
   React.useEffect(() => {
-    if (query.data) setData(query.data.entry.data);
+    const entry = query.data?.entry;
+    if (entry) setForm((current) => followEntry(current, entry));
   }, [query.data]);
   const [relatedError, setRelatedError] = React.useState<unknown>();
   const syncPayload = React.useCallback(
-    async (document: EntryDocument) => {
+    async (document: EntryDocument, sent: Record<string, unknown> = document.entry.data) => {
       setRelatedError(undefined);
-      setData(document.entry.data);
+      setForm((current) => settleEntryForm(current, sent, document.entry));
       queryClient.setQueryData(queryOptions.queryKey, { ...document, parentEntryId: null, related: [] });
       try { queryClient.setQueryData(queryOptions.queryKey, await composeEntry(document)); }
       catch (error) { setRelatedError(error); }
     },
     [queryClient, queryOptions.queryKey],
   );
+  // a CONFLICT re-reads the entry, so the newer version's notice (and its reload action) shows
+  const onWriteError = React.useCallback((error: unknown) => {
+    if (!(error instanceof ApiError) || refusalOf(error.body)?.code !== "CONFLICT") return;
+    setForm(reannounceNewer);
+    void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey });
+  }, [queryClient, queryOptions.queryKey]);
 
   const save = useMutation({
     mutationFn: (nextData: Record<string, unknown>) =>
       api.patch<EntryDocument>(entryApiPath(collectionName, entryId), {
         data: nextData,
-        expectedVersion: query.data?.entry.version,
+        expectedVersion: form?.base.version,
       }),
-    onSuccess: syncPayload,
+    onSuccess: (document, sent) => syncPayload(document, sent),
+    onError: onWriteError,
   });
   const publish = useMutation({
-    mutationFn: () => api.post<EntryDocument>(entryApiPath(collectionName, entryId, "/publish"), { expectedVersion: query.data?.entry.version }),
-    onSuccess: syncPayload,
+    mutationFn: () => api.post<EntryDocument>(entryApiPath(collectionName, entryId, "/publish"), { expectedVersion: form?.base.version }),
+    onSuccess: (document) => syncPayload(document),
+    onError: onWriteError,
   });
   const unpublish = useMutation({
-    mutationFn: () => api.post<EntryDocument>(entryApiPath(collectionName, entryId, "/unpublish"), { expectedVersion: query.data?.entry.version }),
-    onSuccess: syncPayload,
+    mutationFn: () => api.post<EntryDocument>(entryApiPath(collectionName, entryId, "/unpublish"), { expectedVersion: form?.base.version }),
+    onSuccess: (document) => syncPayload(document),
+    onError: onWriteError,
   });
   const createTranslation = useMutation({
     mutationFn: ({ section, locale }: { section: RelatedEntrySection; locale: string }) =>
@@ -128,7 +146,7 @@ export function EntryEditView({
 
   if (query.isLoading) return <EntryEditSkeleton />;
   if (query.isError) return <ErrorBox error={query.error} />;
-  if (!query.data || !data) return <ErrorBox error={new Error(t(language, "common.unknownError"))} />;
+  if (!query.data || !form || !data) return <ErrorBox error={new Error(t(language, "common.unknownError"))} />;
 
   const payload = query.data;
   const canonical = site.data?.canonicalLocale ?? null;
@@ -142,7 +160,7 @@ export function EntryEditView({
   const backCollection = payload.collection.translates?.parent ?? collectionName;
   const backTitle = payload.collection.translates?.parent ?? collectionTitle;
   const collectionDescription = resolveLocalizedText(payload.collection.description, language, canonical);
-  const dirty = JSON.stringify(data) !== JSON.stringify(payload.entry.data);
+  const dirty = isEntryFormDirty(form);
   // Operational records (lifecycle: operational) have no content workflow:
   // no publish/unpublish controls, and they save in place regardless
   // of the stored status.
@@ -182,6 +200,14 @@ export function EntryEditView({
     <div className="flex min-h-full flex-col gap-6">
       {unsupportedVersion ? <p role="status">{t(language, "entryEdit.unsupportedVersion")}</p> : null}
       {relatedError ? <ErrorBox error={relatedError} /> : null}
+      {form.newer && !form.newer.dismissed ? (
+        <NewerVersionNotice
+          language={language}
+          version={String(form.newer.version)}
+          onReload={() => setForm(loadEntryForm(payload.entry))}
+          onKeepEditing={() => setForm((current) => current?.newer ? { ...current, newer: { ...current.newer, dismissed: true } } : current)}
+        />
+      ) : null}
       <PageHeader
         eyebrow={
           <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -398,6 +424,24 @@ export function EntryEditView({
           ) : null}
         </FormActionBar>
       ) : null}
+    </div>
+  );
+}
+
+/** A newer version arrived while the form had unsaved edits: the edits stay until the person loads the latest version. */
+export function NewerVersionNotice({ language, version, onReload, onKeepEditing }: {
+  language: AdminLanguage;
+  version: string;
+  onReload: () => void;
+  onKeepEditing: () => void;
+}): React.ReactElement {
+  return (
+    <div data-slot="operation-status" data-phase="changedSinceRead" role="status" className="rounded-md border bg-muted p-3 text-sm">
+      <p>{t(language, "entryEdit.changedSinceRead", { version })}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onReload}>{t(language, "interaction.reread")}</Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onKeepEditing}>{t(language, "entryEdit.keepEditing")}</Button>
+      </div>
     </div>
   );
 }

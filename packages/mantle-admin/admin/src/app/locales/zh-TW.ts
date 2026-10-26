@@ -231,6 +231,8 @@ export default {
     "entryEdit.contentLanguage": "內容語言",
     "entryEdit.selectLanguage": "選擇語言",
     "entryEdit.languageLocked": "儲存後不能直接更改語言，請開啟或建立另一筆翻譯。",
+    "entryEdit.changedSinceRead": "你編輯期間已儲存了較新的版本（v{version}）。你的變更仍保留，但無法覆蓋儲存；載入最新版本會捨棄你的變更。",
+    "entryEdit.keepEditing": "繼續編輯",
     "entryEdit.languageTabs": "內容語言",
     "entryEdit.sharedFields": "共用欄位",
     "entryEdit.saveSharedFirst": "請先儲存共用欄位，再新增翻譯。",
