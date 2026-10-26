@@ -158,7 +158,7 @@ export function DataModelView(): React.ReactElement {
   const visibleItems = query
     ? items.filter((item) => `${item.kind} ${item.model.name} ${resolveLocalizedText(item.model.title, language) ?? ""}`.toLowerCase().includes(query))
     : items;
-  const select = (id: string): void => navigate(developerSelectionHref(route, id));
+  const select = (id: string): void => { void navigate(developerSelectionHref(route, id)); };
   const openManifest = (id: string, pointer: string): void => {
     navigate(developerSelectionHref(route, id, { tab: "manifest", pointer }));
   };
