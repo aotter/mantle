@@ -1,5 +1,5 @@
 /** Schema.spec: its JSON Schema subset, local refs, indexes, search and Admin UI. */
-import { INPUT_RULE_KEYWORDS, MANTLE_BIND_KEYWORD, RESERVED_ENTRY_COLUMNS, RESERVED_PROCEDURE_INPUT_NAMES, type SchemaManifest } from "../model/ManifestGrammar.js";
+import { INPUT_RULE_KEYWORDS, LOCK_VERBS, MANTLE_BIND_KEYWORD, RESERVED_ENTRY_COLUMNS, RESERVED_PROCEDURE_INPUT_NAMES, type SchemaManifest } from "../model/ManifestGrammar.js";
 import { ManifestParseError, V01_LIFECYCLE_MODES, escapeJsonPointerSegment, rejectUnknownKeys, validateLocalizedText } from "./ManifestFieldChecks.js";
 import { checkSchemaAdminUi } from "./SchemaAdminUiChecker.js";
 import { checkSchemaIndexes, schemaIndexDiagnosticCode } from "./SchemaIndexChecker.js";
@@ -25,6 +25,7 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
       "lifecycle",
       "ttl",
       "scope",
+      "lock",
     ],
     idx,
     "/spec",
@@ -80,6 +81,7 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
   if ("checks" in s && (!Array.isArray(s["checks"]) || s["checks"].some((c) => typeof c !== "string" || !c.trim()))) {
     throw new ManifestParseError("Schema.spec.checks must be a list of SQL boolean expressions", idx, "/spec/checks");
   }
+  if (s["lock"] !== undefined) validateLocks(s["lock"], idx);
   if ("localized" in s && typeof s["localized"] !== "boolean") {
     throw new ManifestParseError(
       `Schema.spec.localized must be a boolean; got ${JSON.stringify(s["localized"])}`,
@@ -596,4 +598,24 @@ function validateLocalSchemaRef(
     );
   }
   return current as Record<string, unknown>;
+}
+
+/** `Schema.spec.lock` shape (#1822); its `when` SQL is checked when the plan compiles. */
+function validateLocks(value: unknown, idx: number): void {
+  const fail = (message: string, pointer = "/spec/lock") => { throw new ManifestParseError(`Schema.spec.lock${message}`, idx, pointer, "SCHEMA_LOCK_INVALID"); };
+  if (!Array.isArray(value) || !value.length) fail(" must be a non-empty list of { name, on, when, message }");
+  const names = new Set<string>();
+  (value as unknown[]).forEach((entry, i) => {
+    const at = `/spec/lock/${i}`;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return fail(`[${i}] must be a mapping { name, on, when, message }`, at);
+    const lock = entry as Record<string, unknown>;
+    rejectUnknownKeys(lock, ["name", "on", "when", "message"], idx, at);
+    const name = lock["name"], on = lock["on"];
+    if (typeof name !== "string" || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(name)) fail(`[${i}].name must be an identifier`, `${at}/name`);
+    if (names.has(String(name).toLowerCase())) fail(`[${i}].name '${name}' is declared twice`, `${at}/name`);
+    names.add(String(name).toLowerCase());
+    if (!Array.isArray(on) || !on.length || on.some((v) => !(LOCK_VERBS as readonly unknown[]).includes(v)) || new Set(on).size !== on.length)
+      fail(`[${i}].on must be a non-empty list of distinct verbs from ${LOCK_VERBS.join(", ")}`, `${at}/on`);
+    for (const key of ["when", "message"]) if (typeof lock[key] !== "string" || !(lock[key] as string).trim()) fail(`[${i}].${key} must be a non-empty string`, `${at}/${key}`);
+  });
 }

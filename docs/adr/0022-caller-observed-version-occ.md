@@ -210,3 +210,7 @@ spec:
   and does not enable submit on a resolvable OCC target until the
   observed version is captured.
 - Docs: this ADR, ADR-0020 amendment pointer, design-atoms, handbook.
+
+## 2026-10-26 amendment — conflict kind `lock` (#1822)
+
+A row write a Schema lock guards that changes no row is classified by one read of that row as its caller sees it, version and locks aside (the lock probe Core and the Store generate with the write). A missing or invisible row keeps the existing `kind: "row"` conflict, so nothing leaks; a visible row a lock holds is `CONFLICT` with `fields: { kind: "lock", schema, verb, lock, message }` (`message` is the manifest's static text), even when the observed version is also stale, since retrying with a fresh version cannot succeed; otherwise it stays `kind: "row"`. The write itself stays one atomic statement; the read only classifies, and a concurrent change between the two can misclassify, harmlessly.

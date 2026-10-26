@@ -3,7 +3,7 @@
  * Every SQL source is already IR here, so no Worker parses SQL. Pure types and constants.
  */
 import type { AuthorizationRequirements, JsonSchema, LocalizedText, ProcedureMcpAnnotations, ProcedureTarget, TriggerSource } from "./ManifestGrammar.js";
-import type { SqlNode, SqlPlan } from "./SqlIr.js";
+import type { SqlLock, SqlNode, SqlPlan } from "./SqlIr.js";
 import type { UserScope, UserFieldSpec } from "./UserFields.js";
 
 export const RUNTIME_PLAN_VERSION = 6 as const;
@@ -30,6 +30,8 @@ export interface PlanSchema {
   readonly schema: JsonSchema;
   /** Boolean expressions over the row's own columns, as IR. */
   readonly checks?: readonly SqlNode[];
+  /** `spec.lock` (#1822): each `when` as IR, its subqueries reading stored rows. A caller's update or delete gets `AND NOT (when)`. */
+  readonly locks?: readonly SqlLock[];
   /** A translation publishes only once the parent entry that shares `on` is published (ADR-0010). Names as declared. */
   readonly translates?: { readonly parent: string; readonly on: string };
   readonly search?: readonly string[];
@@ -96,6 +98,8 @@ export interface LoweredStatement {
   readonly returns?: true;
   /** A write's table, lower case (D1's unique-conflict op mapping). */
   readonly target?: string;
+  /** A row write a Schema lock guards: the read that tells a lock from the row conflict (#1822). */
+  readonly probe?: { readonly sql: string; readonly binds: LoweredStatement["binds"] };
 }
 
 /** A paged statement of a View under one request shape, printed. The page size is a bind (`limit`), so one statement serves every page size. */

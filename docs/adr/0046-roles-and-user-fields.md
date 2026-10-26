@@ -481,3 +481,8 @@ Then:
 - Version skew failing to link.
 - Batch refusal and pinning.
 - The `mantle dev` binding rules.
+
+## 2026-10-26 amendment — Schema locks (#1822)
+
+- **A separate axis.** `scope` decides which rows a caller sees ("you cannot see it"); a Schema `lock` decides which visible rows are frozen ("you can see it, but it does not change now"). A lock is a data-state invariant, not an authorization rule: no role, admin included, bypasses it, and `{ all: true }` does not lift it. It is never folded into `scope`, whose fixed template cannot express `EXISTS`.
+- **Bypass list.** Only an explicit trusted write skips a lock: the system caller (a migration, a maintenance script, a ref handler that deliberately opens a system Store), `runtime.store`, and the TTL sweep, a trusted delete of expired rows. `ctx.db` for non-host callers is application SQL outside Mantle's policy and never carries a lock either.

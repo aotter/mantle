@@ -112,6 +112,13 @@ export const ROW_CONFLICT = "No row matched this change: it does not exist or is
 /** CONFLICT for a write the database refused: a unique-index clash (`fields.kind` "unique"), or a row statement that did not change exactly one row ("row"). */
 export const conflict = (path: string, unique: boolean, cause?: unknown): ContractError =>
   new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : ROW_CONFLICT, path, { cause, fields: { kind: unique ? "unique" : "row" } });
+/** A guarded row write that changed no row (#1822): CONFLICT `kind: "lock"` when its probe found the row visible and held by a lock, else the row conflict, which reveals nothing. */
+export const lockConflict = (path: string, probe: { readonly schema: string; readonly verb: string; readonly locks: Readonly<Record<string, string>> }, rows: readonly Row[]): ContractError => {
+  const lock = rows[0]?.lock;
+  if (typeof lock !== "string" || !Object.hasOwn(probe.locks, lock)) return conflict(path, false);
+  const message = probe.locks[lock]!;
+  return new ContractError("CONFLICT", message, path, { fields: { kind: "lock", schema: probe.schema, verb: probe.verb, lock, message } });
+};
 /** A Schema `checks` violation (Mantle's SQLite check trigger, or PostgreSQL SQLSTATE 23514) is a CONFLICT naming the check. */
 export const checkConflict = (path: string, error: unknown): ContractError | undefined => {
   const message = (error as Error)?.message ?? "", marker = /MANTLE_CHECK ([^:\n]+): (.+)/.exec(message);
