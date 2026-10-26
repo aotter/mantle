@@ -47,7 +47,7 @@ the client. Configure bucket CORS to allow PUT from the application's origins
 and the returned Content-Type header. Uploads go to `uploads/<purpose>/<group>/<role>.<ext>` and each commit copies them
 to `committed/<group>/<attempt>/<role>.<ext>`. Serve the `committed/` prefix on the public domain. Keep `uploads/`
 private/unserved on the public domain and add a bucket lifecycle rule for abandoned upload keys. Mantle 0.1.x wrote
-`<purpose>/<group>/<role>.<ext>` keys; an asset reads its keys from the stored `storageKey` and `publicUrl` of each
+`<purpose>/<group>/<role>.<ext>` keys (`<group>/<role>.<ext>` when the purpose was not a plain slug); an asset reads its keys from the stored `storageKey` and `publicUrl` of each
 variant, so 0.1.x assets keep working while their prefixes stay served.
 
 Commit checks every object's MIME and size, then rechecks the exact GET
