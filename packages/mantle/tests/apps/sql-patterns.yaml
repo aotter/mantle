@@ -147,6 +147,28 @@ spec:
         RETURNING id
 ---
 apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: request-order }
+spec:
+  description: Ask for an order of a product that is still sold; it waits for approval. Refused (409) for an unknown or discontinued product.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [productId, qty]
+    properties:
+      productId: { type: string }
+      qty: { type: integer, minimum: 1 }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO orders (productId, qty, total, orderStatus)
+        SELECT p.id, input.qty, input.qty * p.price, 'pending_approval'
+        FROM products p WHERE p.id = input.productId AND p.active
+        RETURNING id
+    mustWrite: [1]
+---
+apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: products-with-orders }
 spec:
@@ -195,3 +217,8 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: discontinue-product-http }
 spec: { source: { kind: http, method: POST, path: /api/products/discontinue }, target: { procedure: discontinue-product } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: request-order-http }
+spec: { source: { kind: http, method: POST, path: /api/orders/request }, target: { procedure: request-order } }

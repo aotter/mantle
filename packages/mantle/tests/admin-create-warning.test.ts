@@ -43,3 +43,25 @@ test("a field-scoped Schema's create gap tells the author to take the partition 
   const scoped = doc("Schema", "leads", { title: "leads", lifecycle: "operational", scope: "region IN auth.user('region')", indexes: [["region", "id"]], schema: { type: "object", required: ["region", "title"], properties: { region: { type: "string" }, title: { type: "string" } } } });
   expect(await warnings(scoped)).toEqual([expect.stringContaining("takes 'region' as an optional input")]);
 });
+
+test("an Admin-listed Schema without searchableFields names the field its list is searched by", async () => {
+  const search = async (...docs: string[]) => {
+    const result = await generateFromSources({ target: "bun-sqlite", admin: true, sources: { sources: [{ sourceId: "app.yaml", text: docs.join("\n---\n") }] } });
+    if (!result.ok) throw new Error(JSON.stringify(result.diagnostics));
+    return (result.warnings ?? []).filter(w => w.includes("searchableFields"));
+  };
+  const people = (extra: object = {}) => doc("Schema", "people", { title: "people", lifecycle: "operational", schema: { type: "object", required: ["name"], properties: { name: { type: "string" }, age: { type: "integer" } } }, uiSchema: { list: { primaryField: "name" } }, ...extra });
+  expect(await search(people())).toEqual(["Schema 'people' declares no searchableFields, so Admin's list search matches the entry id only and a search for its 'name' finds nothing. Add searchableFields: [name] to search it."]);
+  expect(await search(people({ searchableFields: ["name"] }))).toEqual([]);
+  // a `title` field stands in for the list's primaryField
+  expect(await search(schema("events"))).toEqual([expect.stringContaining("Add searchableFields: [title]")]);
+  // nothing to name: no title and no string primaryField
+  expect(await search(doc("Schema", "counts", { title: "counts", lifecycle: "operational", schema: { type: "object", required: ["n"], properties: { n: { type: "integer" } } }, uiSchema: { list: { primaryField: "n" } } }))).toEqual([]);
+  // a date-time primaryField cannot be searchable, so the warning names the title instead
+  const dated = doc("Schema", "shows", { title: "shows", lifecycle: "operational", schema: { type: "object", required: ["startsAt", "title"], properties: { startsAt: { type: "string", format: "date-time" }, title: { type: "string" } } }, uiSchema: { list: { primaryField: "startsAt" } } });
+  expect(await search(dated)).toEqual([expect.stringContaining("Add searchableFields: [title]")]);
+  // a reference lists its target's title, so its stored id is not named
+  expect(await search(doc("Schema", "seats", { title: "seats", lifecycle: "operational", schema: { type: "object", readOnly: true, required: ["eventId"], properties: { eventId: { type: "string", "x-mantle-ref": "people" } } }, uiSchema: { list: { primaryField: "eventId" } } }), people({ searchableFields: ["name"] }))).toEqual([]);
+  const result = await generateFromSources({ target: "bun-sqlite", admin: false, sources: { sources: [{ sourceId: "app.yaml", text: people() }] } });
+  expect(result.ok && result.warnings?.filter(w => w.includes("searchableFields"))).toEqual([]);
+});

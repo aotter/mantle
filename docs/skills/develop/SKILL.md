@@ -27,7 +27,9 @@ acceptance guide](../../handbook/guides/agent-workflow-acceptance.md): write a
 private rubric, then give one fresh agent per role (`admin`, `user`) only its
 role and entry points, across every surface it uses. This is not limited to
 MCP; if it was not run, say so explicitly and report the work as UNVERIFIED
-rather than done. For MCP workflows, also run the guide's design audit before implementing
+rather than done. Hand off with the guide's [layered
+report](../../handbook/guides/agent-workflow-acceptance.md#report-done-ness-in-layers):
+an environment block is BLOCKED on its layer, never a product failure. For MCP workflows, also run the guide's design audit before implementing
 tools. Once acceptance converges, follow the [performance skill](../performance/SKILL.md) before reporting done.
 
 For native Admin, read the [current guide](../../handbook/guides/native-admin.md):

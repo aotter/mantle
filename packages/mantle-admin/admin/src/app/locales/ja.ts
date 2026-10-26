@@ -61,6 +61,8 @@ export default {
     "common.mobileSidebar": "ナビゲーション",
     "common.mobileSidebarDescription": "サイト管理ナビゲーション",
     "collection.filter.all": "すべて",
+    "collection.searchIdPlaceholder": "ID で検索...",
+    "collection.empty.searchIdOnly": "「{search}」に一致するエントリはありません。この一覧は ID のみで検索します。他のフィールドを検索するには Schema に searchableFields を宣言してください。",
     "nav.home": "ホーム",
     "nav.overview": "概要",
     "nav.model": "データモデル",
