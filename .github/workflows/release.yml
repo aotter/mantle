@@ -179,6 +179,10 @@ jobs:
         env:
           MANTLE_TEST_CHROMIUM: /usr/bin/google-chrome
 
+      - name: mantle init app installs without high or critical advisories
+        if: steps.ver.outputs.tag_exists != 'true'
+        run: node scripts/check-init-audit.mjs
+
       - name: Admin build under npm ci --ignore-scripts, served without node_modules
         if: steps.ver.outputs.tag_exists != 'true'
         run: node scripts/check-admin-build.mjs
