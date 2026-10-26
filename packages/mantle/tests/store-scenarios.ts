@@ -171,7 +171,8 @@ export async function verifyStore(env: StoreEnv) {
   await refused(a.update(wr.id, { title: undefined } as never, { lock: wr.version })); await refused(a.update(wr.id, { sortbucket: undefined } as never, { lock: wr.version })); await refused(a.insert({ sortbucket: undefined } as never));
   // a dotted write column is a database error and moves nothing
   for (const name of ["purchase_requests.ownerid", "r.ownerid", "title\" = 'x', \"ownerid"]) { await assert.rejects(async () => a.update(wr.id, { [name]: B } as never, { lock: wr.version })); await assert.rejects(async () => a.insert({ [name]: B } as never)); }
-  assert.deepEqual((await env.native("SELECT ownerid, title, version FROM purchase_requests WHERE id = ?", [wr.id]))[0], { ownerid: A, title: wr.title, version: wr.version });
+  const stored = (await env.native("SELECT ownerid, title, version FROM purchase_requests WHERE id = ?", [wr.id]))[0]!;
+  assert.deepEqual({ ...stored, version: Number(stored.version) }, { ownerid: A, title: wr.title, version: wr.version });
   assert.equal(await total(), ROWS * 2); ok();
 
   // ---- wire forms: ISO UTC with six digits and plain dates from SQL itself; booleans and JSON are the driver's own
@@ -251,7 +252,8 @@ export async function verifyStore(env: StoreEnv) {
     const got = (await store.find({ where, limit: 500 })).rows;
     // `*` also returns a geo field's two columns, which no View can name
     for (const r of got) { assert.ok(name.startsWith("eq-catalog") ? r.place_lat === null && r.place_lng === null : !("place_lat" in r)); delete r.place_lat; delete r.place_lng; }
-    assert.deepEqual(got, await env.view(name, caller, {}), `${name} as ${caller.kind}`);
+    // a View's version stays driver-native; the Store's is a number on every target (#1826)
+    assert.deepEqual([...got], [...await env.view(name, caller, {})].map((r: any) => ({ ...r, version: Number(r.version) })), `${name} as ${caller.kind}`);
     assert.equal(got.length > 0, rows, `${name} as ${caller.kind}: ${rows ? "vacuous" : "leaks rows"}`);
   };
   const purchases = { amount: { gte: 2.5 }, title: { like: "Item 1%" }, approved: false, submittedat: { gte: "2026-10-11T00:01:00.123456Z" }, neededon: { lt: "2026-10-18" }, sortbucket: { ne: "bucket-1" }, requestedunits: { in: [1, 2, 3, 4] }, created_at: { gte: "2020-01-01T00:00:00Z" } };
