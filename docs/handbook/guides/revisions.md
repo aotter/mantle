@@ -179,7 +179,7 @@ spec:
   handler:
     sql: |
       INSERT INTO post_revisions (post, title, summary, body, note)
-        SELECT p.id, COALESCE(r.title, ''), COALESCE(r.summary, ''), COALESCE(r.body, ''), 'Copied from the current revision'
+        SELECT p.id, COALESCE(r.title, ''), COALESCE(r.summary, ''), COALESCE(r.body, ''), CASE WHEN r.id IS NULL THEN 'First revision' ELSE 'Copied from the current revision' END
         FROM posts p LEFT JOIN post_revisions r ON r.id = p.current_revision AND r.post = p.id
         WHERE p.id = input.post
         RETURNING id, version
@@ -233,6 +233,11 @@ export const handlers: Handlers = {
   },
 };
 ```
+
+The checks and the write are two steps, not one transaction. A **Delete revision** or an edit of that revision that
+commits between them can leave the post pointing at a deleted or blank revision, and the page shows nothing until the
+next switch. Admins are the only ones who can do either, so for most sites this is acceptable: switch again to recover.
+If several editors work on the same post at once, check the page after switching.
 
 Rolling back is the same call with an earlier revision. Wire the handlers as every app does
 (`adminBindings({ handlers })`, `rest(...)`, `mcp(...)` options; see `mantle help native-admin`).

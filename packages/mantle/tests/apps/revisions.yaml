@@ -108,7 +108,7 @@ spec:
   handler:
     sql: |
       INSERT INTO post_revisions (post, title, summary, body, note)
-        SELECT p.id, COALESCE(r.title, ''), COALESCE(r.summary, ''), COALESCE(r.body, ''), 'Copied from the current revision'
+        SELECT p.id, COALESCE(r.title, ''), COALESCE(r.summary, ''), COALESCE(r.body, ''), CASE WHEN r.id IS NULL THEN 'First revision' ELSE 'Copied from the current revision' END
         FROM posts p LEFT JOIN post_revisions r ON r.id = p.current_revision AND r.post = p.id
         WHERE p.id = input.post
         RETURNING id, version
