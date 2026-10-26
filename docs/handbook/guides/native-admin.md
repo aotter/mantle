@@ -559,6 +559,15 @@ Names such as `approve` never determine placement. An operation without a row
 target or collection action appears on the Operations page, whose sidebar link
 appears whenever such operations exist.
 
+A collection action of a folded child (one with a parent; see above) also shows in that child's panel of the parent's
+workbench. Run from there, the input named exactly like the child's `nav.parentField` (the child's field holding the
+parent's value) is filled with this parent's value and locked: the form hides it and the dialog lists it under the
+bound values, like a row operation's `id`. The name is the rule because it is unambiguous (one input at most, the same
+name as the column the action writes). The value takes the input's type (a numeric parent key binds a number); an
+input with that name whose `x-mantle-ref` names another Schema or key, or whose type cannot hold the parent's value, is
+left to the person, and so is every input outside a workbench. With `nav.parentField: post`, `new-revision { post }` placed with
+`collectionAction: post_revisions` runs on the open post.
+
 A record's page shows its row operations as labeled buttons in the header (more than three: two buttons and a
 "More actions" menu); list rows keep them in an "Actions for …" menu.
 Generated row metadata includes simple AND-ed equality/IN literal conditions

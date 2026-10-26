@@ -6,6 +6,7 @@ import {
   operationFormSchema,
 } from "../src/features/content/row-operations";
 import { idempotencyFields } from "../src/features/ops/interaction-dialog";
+import { parentScopeInteraction, workbenchParentScope } from "../src/features/ops/interaction-schema";
 import { globalOperations } from "../src/features/ops/operations-view";
 import type { JsonSchema, AdminOperation, AdminOperationInteraction } from "../src/lib/types";
 
@@ -109,5 +110,44 @@ describe("operation placement", () => {
     expect(globalOperations(operations).map(({ name }) => name)).toEqual(["adjust-inventory"]);
     expect(collectionOperationsFor(operations, "orders").map(({ name }) => name)).toEqual(["create-manual-order"]);
     expect(boundOperationsFor(operations, "orders").map(({ name }) => name)).toEqual(["row-only"]);
+  });
+});
+
+describe("a child collection action in its parent's workbench (#1824)", () => {
+  const scope = { field: "post", value: "p1", parent: "posts", parentField: "id" };
+  const inputOf = (properties: JsonSchema["properties"]): JsonSchema => ({ type: "object", properties });
+
+  it("binds the input named like the child's nav.parentField to the parent", async () => {
+    const parent = parentScopeInteraction(inputOf({ post: { type: "string" }, note: { type: "string" } }), scope);
+    expect(parent).toEqual({ interaction: { collection: "posts", bind: [{ input: "post", field: "post" }], mutates: true }, row: { post: "p1" } });
+    const controller = createOperationController(operation("new-revision"), parent!.interaction, undefined, parent!.row);
+    await controller.open();
+    expect(controller.getSnapshot()).toMatchObject({ phase: "ready", bound: { post: "p1" }, canRead: false });
+    expect(parentScopeInteraction(inputOf({ post: { type: "string", "x-mantle-ref": "posts" } }), scope)).toBeDefined();
+  });
+
+  it("binds nothing outside a workbench, without that input, or when its reference names another Schema or key", () => {
+    expect(parentScopeInteraction(inputOf({ post: { type: "string" } }), undefined)).toBeUndefined();
+    expect(parentScopeInteraction(inputOf({ postId: { type: "string", "x-mantle-ref": "posts" } }), scope)).toBeUndefined();
+    expect(parentScopeInteraction(inputOf({ post: { type: "string", "x-mantle-ref": "pages" } }), scope)).toBeUndefined();
+    expect(parentScopeInteraction(inputOf({ post: { type: "string", "x-mantle-ref": { schema: "posts", field: "slug" } } }), scope)).toBeUndefined();
+  });
+
+  it("binds a numeric parent key as a number, and nothing to an input whose type cannot hold it", () => {
+    const numeric = { ...scope, value: "42" };
+    expect(parentScopeInteraction(inputOf({ post: { type: "integer" } }), numeric)?.row).toEqual({ post: 42 });
+    expect(parentScopeInteraction(inputOf({ post: { type: "number" } }), numeric)?.row).toEqual({ post: 42 });
+    expect(parentScopeInteraction(inputOf({ post: { type: ["string", "null"] } }), numeric)?.row).toEqual({ post: "42" });
+    expect(parentScopeInteraction(inputOf({ post: { type: "integer" } }), scope)).toBeUndefined();
+    expect(parentScopeInteraction(inputOf({ post: { type: "boolean" } }), numeric)).toBeUndefined();
+  });
+
+  it("takes the scope only from the child's own nav.parentField relationship", () => {
+    const revisions = { parent: { collection: "posts", parentField: "id", childField: "post" } };
+    expect(workbenchParentScope(revisions, { field: "post", value: "p1" })).toEqual(scope);
+    // a list scoped by another reference (say `reviewer`, to users) is not the parent's panel: nothing is bound
+    expect(workbenchParentScope(revisions, { field: "reviewer", value: "u1" })).toBeUndefined();
+    expect(workbenchParentScope({ parent: null }, { field: "post", value: "p1" })).toBeUndefined();
+    expect(workbenchParentScope(revisions, undefined)).toBeUndefined();
   });
 });

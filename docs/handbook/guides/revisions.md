@@ -158,7 +158,8 @@ sidebar, since it needs an input; the admin MCP endpoint and the preview route s
 
 One SQL statement copies the current revision (or starts empty when the post has none). `target` puts a "New revision"
 button on the post's page in Admin with the post filled in; `collectionAction` also puts it in the revisions list
-header, where the editor picks the post. It runs as one statement on every target, D1 included.
+header: in the post's Post revisions tab the post is filled in (the input is named like `nav.parentField`), and in the
+standalone list the editor picks it. It runs as one statement on every target, D1 included.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2

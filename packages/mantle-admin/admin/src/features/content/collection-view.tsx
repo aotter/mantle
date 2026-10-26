@@ -64,6 +64,7 @@ import {
   collectionOperationsFor,
   RowOperationsMenu,
 } from "./row-operations";
+import { workbenchParentScope } from "../ops/interaction-schema";
 import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
 import { DataCell } from "../../ui/data-cell";
 import { RefTitlesProvider } from "../../ui/ref-value";
@@ -323,6 +324,7 @@ function CollectionList({
       ) : null}
       <CollectionOperations
         operations={collectionOperations}
+        scope={workbenchParentScope(collection, scope)}
         language={language}
         canonical={canonical}
         onSuccess={clearSelection}
