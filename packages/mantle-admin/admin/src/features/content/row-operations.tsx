@@ -25,7 +25,7 @@ import {
 } from "@aotter/mantle-ui/kit";
 import type { AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { idempotencyFields, parentScopeInteraction, type ParentScope } from "../ops/interaction-schema";
+import { idempotencyFields, parentRefScopes, parentScopeInteraction, type ParentScope } from "../ops/interaction-schema";
 
 const InteractionDialog = React.lazy(() => import("../ops/interaction-dialog").then(module => ({ default: module.InteractionDialog })));
 
@@ -330,6 +330,11 @@ export function OperationDialog({
     staleTime: 0,
     gcTime: 0,
   });
+  // the Schemas a bound parent's ref pickers narrow to (`parentRefScopes`)
+  const collections = useQuery<Collection[]>({
+    queryKey: ["collections"],
+    queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
+  });
   const automatic = idempotencyFields(operation.input);
   const hidden = [
     ...(binding ? binding.bind.map(({ input }) => input) : []),
@@ -352,6 +357,7 @@ export function OperationDialog({
         operation={operation}
         hidden={hidden}
         automatic={automatic}
+        refScopes={parentRefScopes(operation.input, row ? binding : undefined, reviewed, collections.data)}
         language={language}
         canonical={canonical}
         sourceSchema={collection?.schema ?? entry.data?.collection.schema}

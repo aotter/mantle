@@ -192,7 +192,8 @@ spec:
 ## Switch, and roll back
 
 The Procedure is bound to the post (`target` with `version: expectedVersion`), so Admin shows "Switch revision" on the
-post's page with the version the editor reviewed; `revision` is a picker over revisions.
+post's page with the version the editor reviewed; `revision` is a picker over that post's revisions (it folds
+under the post, so Admin lists only the bound post's children).
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2

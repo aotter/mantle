@@ -1,3 +1,4 @@
+import { isFoldedFieldChild } from "../../lib/collection-nav";
 import { mantleRefOf, type AdminOperationInteraction, type Collection, type JsonSchema } from "../../lib/types";
 
 /** Inputs Admin fills itself: an idempotency key, minted once per dialog. */
@@ -68,4 +69,29 @@ export function parentScopeInteraction(input: JsonSchema, scope: ParentScope | u
     interaction: { collection: scope.parent, bind: [{ input: scope.field, field: scope.field }], mutates: true },
     row: { [scope.field]: value },
   };
+}
+
+/** A ref picker's list narrowed to one parent's children: `<field> = <value>`, as the folded child list is scoped. */
+export type RefScope = { field: string; value: string };
+
+/**
+ * The ref pickers of an operation bound to a row (`target`): an `x-mantle-ref` input to a Schema that folds under the
+ * bound row's collection (`nav.parentField`) lists only that row's children. Other inputs list the whole target.
+ */
+export function parentRefScopes(
+  input: JsonSchema,
+  interaction: Pick<AdminOperationInteraction, "collection"> | undefined,
+  row: Readonly<Record<string, unknown>> | undefined,
+  collections: readonly Collection[] | undefined,
+): Record<string, RefScope> {
+  const scopes: Record<string, RefScope> = {};
+  if (!interaction || !row) return scopes;
+  for (const [name, property] of Object.entries(input.properties ?? {})) {
+    const ref = mantleRefOf(property);
+    const child = ref && collections?.find((collection) => collection.name === ref.schema);
+    if (!child?.parent || !isFoldedFieldChild(child, interaction.collection)) continue;
+    const value = row[child.parent.parentField];
+    if ((typeof value === "string" && value !== "") || typeof value === "number") scopes[name] = { field: child.parent.childField, value: String(value) };
+  }
+  return scopes;
 }

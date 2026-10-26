@@ -400,7 +400,12 @@ In the entry editor and every operation form (including a `collectionAction` cre
 `x-mantle-ref` to another Admin collection is a searchable picker: it lists the target through the same `/entries` route
 (20 records per search, read as the caller), shows each record's title and stores the referenced value (`id`, or the
 ref's unique field). A target the caller cannot list (403/404) or that is not an Admin collection keeps the plain text
-input. The picker is a convenience; the server still validates the value. CSV exports use `/entries/export` and
+input. In an operation bound to a row (`target`), a picker whose Schema folds under that row's collection
+(`nav.parentField`) lists only that row's children, filtered by `<parentField> = <the bound row's value>` as the folded
+child list is: `switch-revision`'s `revision` on a post lists that post's revisions. There is no way to pick another
+parent's child there: an operation that needs one binds to that other row instead, or is not bound (`collectionAction`
+or the Operations page), where the picker lists the whole target. The picker is a convenience; the
+server still validates the value. CSV exports use `/entries/export` and
 `/views/{name}/export`; native browser downloads stream paged server output.
 A failure after headers aborts the stream, so a download can fail after partial
 bytes have arrived. Existing databases need an app-owned migration for the

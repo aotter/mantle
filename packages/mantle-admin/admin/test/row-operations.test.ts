@@ -6,9 +6,9 @@ import {
   operationFormSchema,
 } from "../src/features/content/row-operations";
 import { idempotencyFields } from "../src/features/ops/interaction-dialog";
-import { parentScopeInteraction, workbenchParentScope } from "../src/features/ops/interaction-schema";
+import { parentRefScopes, parentScopeInteraction, workbenchParentScope } from "../src/features/ops/interaction-schema";
 import { globalOperations } from "../src/features/ops/operations-view";
-import type { JsonSchema, AdminOperation, AdminOperationInteraction } from "../src/lib/types";
+import type { Collection, JsonSchema, AdminOperation, AdminOperationInteraction } from "../src/lib/types";
 
 const input: JsonSchema = {
   type: "object",
@@ -149,5 +149,29 @@ describe("a child collection action in its parent's workbench (#1824)", () => {
     expect(workbenchParentScope(revisions, { field: "reviewer", value: "u1" })).toBeUndefined();
     expect(workbenchParentScope({ parent: null }, { field: "post", value: "p1" })).toBeUndefined();
     expect(workbenchParentScope(revisions, undefined)).toBeUndefined();
+  });
+});
+
+describe("ref pickers of an operation bound to a parent (#1825)", () => {
+  const posts = { name: "posts", parent: null } as unknown as Collection;
+  const revisions = { name: "post_revisions", parent: { collection: "posts", parentField: "id", childField: "post" } } as unknown as Collection;
+  const translations = { ...revisions, name: "post_translations", translates: { parent: "posts", on: "post" } } as unknown as Collection;
+  const input: JsonSchema = { type: "object", properties: {
+    post: { type: "string" },
+    revision: { type: "string", "x-mantle-ref": "post_revisions" },
+    translation: { type: "string", "x-mantle-ref": "post_translations" },
+    other: { type: "string", "x-mantle-ref": "posts" },
+  } };
+  const collections = [posts, revisions, translations];
+
+  it("scopes a ref to a Schema folded under the bound collection by the parent's value", () => {
+    expect(parentRefScopes(input, { collection: "posts" }, { id: "p1" }, collections)).toEqual({ revision: { field: "post", value: "p1" } });
+  });
+
+  it("scopes nothing unbound, bound to another collection, or without the parent's value", () => {
+    expect(parentRefScopes(input, undefined, { id: "p1" }, collections)).toEqual({});
+    expect(parentRefScopes(input, { collection: "pages" }, { id: "p1" }, collections)).toEqual({});
+    expect(parentRefScopes(input, { collection: "posts" }, { slug: "x" }, collections)).toEqual({});
+    expect(parentRefScopes(input, { collection: "posts" }, { id: "p1" }, undefined)).toEqual({});
   });
 });

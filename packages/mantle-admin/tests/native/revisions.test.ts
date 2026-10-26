@@ -7,7 +7,7 @@ import {entries} from "../../src/server/entries.js";
 import {generateAdmin,writeAdminFixture} from "./generated-fixture.js";
 import {admin} from "./server-native-scenarios.js";
 import {createInteractionController} from "@aotter/mantle-ui/controller";
-import {parentScopeInteraction,workbenchParentScope} from "../../admin/src/features/ops/interaction-schema.js";
+import {parentRefScopes,parentScopeInteraction,workbenchParentScope} from "../../admin/src/features/ops/interaction-schema.js";
 
 // docs/handbook/guides/revisions.md through Admin's own routes: the manifests and handler are the guide's (see packages/mantle/tests/revisions.test.ts).
 const sdkTests=resolve(import.meta.dir,"../../../mantle/tests");
@@ -81,6 +81,16 @@ test("the revisions guide in Admin: revisions fold under their post, and the pos
   await ok(`/entries/${second.id}?collection=post_revisions`,"PATCH",{data:{body:"Version two."},expectedVersion:copy.version});
   expect(page()).toEqual(["Version one."]);
   const foreign=(await operation("new-revision",{post:elsewhere.id})).body.output.results[0][0];
+
+  // Switch revision on this post (aotter/mantle#1825): its `revision` picker lists only this post's revisions, read
+  // with the folded list's scope; other refs and other operations list the whole target.
+  const collections=(await ok("/collections")).collections,switching=bound("switch-revision");
+  const scopes=parentRefScopes(switching.input,switching.interactions[0],(await post(hello.id)).entry,collections);
+  expect(scopes).toEqual({revision:{field:"post",value:hello.id}});
+  const picker=new URLSearchParams({collection:"post_revisions",limit:"20",sort:"updatedAt",direction:"desc",scope_field:scopes.revision!.field,scope_value:scopes.revision!.value});
+  expect((await ok(`/entries?${picker}`)).items.map((e:any)=>e.id).sort()).toEqual([first.id,second.id].sort());
+  expect((await ok("/entries?collection=post_revisions&limit=20")).items.map((e:any)=>e.id)).toContain(foreign.id);
+  expect(parentRefScopes(bound("prune-revision").input,bound("prune-revision").interactions[0],{id:first.id},collections)).toEqual({});
   expect((await operation("switch-revision",{post:hello.id,revision:foreign.id,expectedVersion:live.version})).status).toBe(400);
   expect((await operation("switch-revision",{post:hello.id,revision:second.id,expectedVersion:live.version-1})).status).toBe(409);
   expect(page()).toEqual(["Version one."]);
