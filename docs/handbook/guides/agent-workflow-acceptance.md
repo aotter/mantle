@@ -147,6 +147,11 @@ acceptance as BLOCKED and report the scripted checks on their own
 [layers](#report-done-ness-in-layers). Do not invent
 an independent result. Do not deploy or publish merely to obtain acceptance.
 
+Acceptance proves the behavior, not its speed. Once a round converges, the
+[performance skill](../../skills/performance/SKILL.md) decides which performance
+checks apply and holds them to their targets; a performance repair that changes
+what a role sees or can do returns here for that surface.
+
 ## Hand each role to its evaluator
 
 Setup signs each role in; the evaluator receives the role's access, never a credential it could reuse or widen.
