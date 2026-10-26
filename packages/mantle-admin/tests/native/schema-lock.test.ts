@@ -52,7 +52,7 @@ for(const target of ["bun-sqlite","bun-postgres"] as const){
    const r1=await create("post_revisions",{body:"one"}),r2=await create("post_revisions",{body:"two"});
    const post=await create("posts",{title:"post",current_revision:r1.id});
    // the editor and list know before the edit: the live revision is locked, another is not, a Schema without locks has no field
-   const held={update:true,delete:true,lock:"live_revision",message:lock("update").message},free={update:false,delete:false};
+   const live={lock:"live_revision",message:lock("update").message},held={update:live,delete:live},free={update:false,delete:false};
    expect((await ask(`/entries/${r1.id}?collection=post_revisions`,"GET")).locks).toEqual(held);
    expect((await ask(`/entries/${r2.id}?collection=post_revisions`,"GET")).locks).toEqual(free);
    expect(post.locks).toBeUndefined();

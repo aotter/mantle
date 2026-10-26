@@ -7,7 +7,7 @@ export default {
     "common.reloadPageHint": "Ricarica questa pagina per riprovare. Le modifiche non salvate potrebbero andare perse.",
     "ops.details": "Dettagli",
     "ops.conditionConflict": "Il record è cambiato o non soddisfa più la condizione di questa azione. Aggiorna e riprova.",
-  "ops.uniqueConflict": "Esiste già un record con lo stesso valore univoco.",
+    "ops.uniqueConflict": "Esiste già un record con lo stesso valore univoco.",
     "ops.lockConflict": "Questo record è bloccato e non è stato modificato. {message}",
     "entryEdit.locked": "Questo record è bloccato. {message}",
     "entryEdit.liveEditHint": "Questa voce è pubblicata: le modifiche sono online appena salvi.",

@@ -106,22 +106,26 @@ export interface EntryEditorEntry {
   data: Record<string, unknown>;
   created_at?: number | null;
   updated_at: number;
-  /** Present when the Schema declares locks (#1822): whether one holds for this row's update or delete, and the first one's message. */
+  /** Present when the Schema declares locks and the read evaluated them (#1822): per verb, the first lock that holds, or false. */
   locks?: EntryLocks;
 }
 
+/** A lock that holds for one verb: its name and static message. */
+export interface HeldLock {
+  lock: string;
+  message: string;
+}
+
 export interface EntryLocks {
-  update: boolean;
-  delete: boolean;
-  lock?: string;
-  message?: string;
+  update: HeldLock | false;
+  delete: HeldLock | false;
 }
 
 /** The server's implicit publishing lock (drafts only; unpublish before delete), as opposed to a declared Schema lock. */
 export const PUBLISHING_LOCK = "publishing";
-/** Whether a declared Schema lock holds for the row's update: the server lists a declared update lock before the implicit one. */
+/** Whether a declared Schema lock holds for the row's update: the server names a declared update lock before the implicit one. */
 export function declaredLock(locks: EntryLocks | undefined): boolean {
-  return locks?.update === true && locks.lock !== PUBLISHING_LOCK;
+  return !!locks?.update && locks.update.lock !== PUBLISHING_LOCK;
 }
 
 export interface RelatedEntrySection {
@@ -216,7 +220,8 @@ export interface EntryRow {
   updated_at: number;
   translation_locales: string[];
   /** Explicit uiSchema.list data fields for operational collections. */
-  data_preview?: Record<string, unknown>;  locks?: EntryLocks;
+  data_preview?: Record<string, unknown>;
+  locks?: EntryLocks;
 }
 
 export interface ListEntriesResult {

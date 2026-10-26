@@ -24,8 +24,13 @@ const manifest=[schema("pages",""),schema("posts",` publishing: {liveEdits: true
     on: [update]
     when: title = 'frozen'
     message: This post is frozen.
+  - name: kept
+    on: [delete]
+    when: body IS NOT NULL AND body = 'keep'
+    message: Kept posts stay.
 `)].join("---\n");
 const DRAFTS="Only drafts may be edited.",UNPUBLISH="Published entries must be unpublished before deletion.";
+const D={lock:"publishing",message:"Only drafts may be edited."},U={lock:"publishing",message:"Published entries must be unpublished before deletion."};
 const implicit=(collection:string,verb:string,message:string)=>({status:409,code:"CONFLICT",kind:"lock",schema:collection,verb,lock:"publishing",message});
 
 for(const target of ["bun-sqlite","bun-postgres"] as const){
@@ -50,7 +55,7 @@ for(const target of ["bun-sqlite","bun-postgres"] as const){
    const page=await create("pages",{title:"p"});
    expect(page.locks).toEqual({update:false,delete:false});
    const livePage=await move("pages",page,"publish");
-   expect(livePage.locks).toEqual({update:true,delete:true,lock:"publishing",message:DRAFTS});
+   expect(livePage.locks).toEqual({update:D,delete:U});
    expect(await patch("pages",livePage,{body:"x"})).toMatchObject(implicit("pages","update",DRAFTS));
    expect(await ask(at("pages",livePage),"DELETE")).toMatchObject(implicit("pages","delete",UNPUBLISH));
    const unpublished=await move("pages",livePage,"unpublish");
@@ -59,7 +64,7 @@ for(const target of ["bun-sqlite","bun-postgres"] as const){
 
    // liveEdits: a published post edits in place, keeps published_at and moves updated_at
    const post=await create("posts",{title:"t"}),live=await move("posts",post,"publish");
-   expect(live.locks).toEqual({update:false,delete:true,lock:"publishing",message:UNPUBLISH});
+   expect(live.locks).toEqual({update:false,delete:U});
    const before=await stamps("posts",post.id);
    await new Promise(r=>setTimeout(r,5));
    const edited=await patch("posts",live,{body:"live"});
@@ -71,12 +76,13 @@ for(const target of ["bun-sqlite","bun-postgres"] as const){
    expect(await patch("posts",edited,{title:null})).toMatchObject({status:400,code:"INPUT_VALIDATION_FAILED"});
    expect(await ask(at("posts",edited),"DELETE")).toMatchObject(implicit("posts","delete",UNPUBLISH));
    // an archived post is not live: it stays draft-only, liveEdits or not
-   const archived=await move("posts",await create("posts",{title:"old"}),"archive");
-   expect(archived.locks).toEqual({update:true,delete:false,lock:"publishing",message:DRAFTS});
+   // each verb names its own lock: a declared delete lock on an archived post is not "unpublish first"
+   const archived=await move("posts",await create("posts",{title:"old",body:"keep"}),"archive");
+   expect(archived.locks).toEqual({update:D,delete:{lock:"kept",message:"Kept posts stay."}});
    expect(await patch("posts",archived,{body:"x"})).toMatchObject(implicit("posts","update",DRAFTS));
    // a declared lock still applies, and binds transitions too
    const frozen=await patch("posts",edited,{title:"frozen"});
-   expect(frozen.locks).toEqual({update:true,delete:true,lock:"frozen",message:"This post is frozen."});
+   expect(frozen.locks).toEqual({update:{lock:"frozen",message:"This post is frozen."},delete:U});
    expect(await patch("posts",frozen,{body:"x"})).toMatchObject({status:409,kind:"lock",lock:"frozen"});
    expect(await move("posts",frozen,"unpublish")).toMatchObject({status:409,kind:"lock",lock:"frozen"});
   }finally{

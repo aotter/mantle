@@ -7,7 +7,7 @@ export default {
     "common.reloadPageHint": "이 페이지를 새로고침한 후 다시 시도하세요. 저장하지 않은 변경사항이 사라질 수 있습니다.",
     "ops.details": "세부 정보",
     "ops.conditionConflict": "레코드가 변경되었거나 이 작업의 조건을 더 이상 충족하지 않습니다. 새로고침 후 다시 시도하세요.",
-  "ops.uniqueConflict": "동일한 고유 값을 가진 레코드가 이미 있습니다.",
+    "ops.uniqueConflict": "동일한 고유 값을 가진 레코드가 이미 있습니다.",
     "ops.lockConflict": "이 레코드는 잠겨 있어 변경되지 않았습니다. {message}",
     "entryEdit.locked": "이 레코드는 잠겨 있습니다. {message}",
     "entryEdit.liveEditHint": "이 항목은 게시되어 있습니다. 저장하면 변경 사항이 바로 게시됩니다.",

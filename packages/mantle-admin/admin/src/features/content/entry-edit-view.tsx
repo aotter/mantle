@@ -178,7 +178,7 @@ export function EntryEditView({
   // form; the implicit `publishing` lock (drafts only) keeps the published/archived hint and never binds a transition
   const locks = payload.entry.locks;
   const rowLocked = declaredLock(locks);
-  const lockedHint = rowLocked ? t(language, "entryEdit.locked", { message: locks?.message ?? "" }) : undefined;
+  const lockedHint = rowLocked && locks?.update ? t(language, "entryEdit.locked", { message: locks.update.message }) : undefined;
   // `publishing.liveEdits`: a published entry edits in place and goes live on save (an archived one stays locked)
   const liveEdits = !isOperational && !isDraft && locks?.update === false;
   const canEdit = canEditEntry({

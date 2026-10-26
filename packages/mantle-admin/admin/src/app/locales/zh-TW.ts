@@ -3,7 +3,7 @@ export default {
     "common.reloadPageHint": "請重新載入此頁面後再試一次。尚未儲存的變更可能會遺失。",
     "ops.details": "詳細資訊",
     "ops.conditionConflict": "這筆紀錄已變更，或已不符合此操作的條件。請重新整理後再試一次。",
-  "ops.uniqueConflict": "已有一筆資料使用相同的唯一值。",
+    "ops.uniqueConflict": "已有一筆資料使用相同的唯一值。",
     "ops.lockConflict": "這筆紀錄已鎖定，未做任何變更。{message}",
     "entryEdit.locked": "這筆紀錄已鎖定。{message}",
     "entryEdit.liveEditHint": "此資料已發布：儲存後，變更會立即上線。",

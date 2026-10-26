@@ -7,7 +7,7 @@ export default {
     "common.reloadPageHint": "请重新加载此页面后重试。未保存的更改可能会丢失。",
     "ops.details": "详细信息",
     "ops.conditionConflict": "此记录已更改，或已不符合此操作的条件。请刷新后重试。",
-  "ops.uniqueConflict": "已有一条记录使用相同的唯一值。",
+    "ops.uniqueConflict": "已有一条记录使用相同的唯一值。",
     "ops.lockConflict": "此记录已锁定，未做任何更改。{message}",
     "entryEdit.locked": "此记录已锁定。{message}",
     "entryEdit.liveEditHint": "此资料已发布：保存后，更改会立即上线。",

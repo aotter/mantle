@@ -7,7 +7,7 @@ export default {
     "common.reloadPageHint": "このページを再読み込みして再試行してください。未保存の変更は失われる可能性があります。",
     "ops.details": "詳細",
     "ops.conditionConflict": "レコードが変更されたか、この操作の条件を満たさなくなりました。更新して再試行してください。",
-  "ops.uniqueConflict": "同じ一意の値を持つレコードが既に存在します。",
+    "ops.uniqueConflict": "同じ一意の値を持つレコードが既に存在します。",
     "ops.lockConflict": "このレコードはロックされているため、変更されませんでした。{message}",
     "entryEdit.locked": "このレコードはロックされています。{message}",
     "entryEdit.liveEditHint": "このエントリは公開中です。保存すると変更がすぐに公開されます。",

@@ -3,7 +3,7 @@ export default {
     "common.reloadPageHint": "Reload this page to try again. Unsaved changes may be lost.",
     "ops.details": "Details",
     "ops.conditionConflict": "The record changed or no longer meets this action’s condition. Refresh and try again.",
-  "ops.uniqueConflict": "A record with the same unique value already exists.",
+    "ops.uniqueConflict": "A record with the same unique value already exists.",
     "ops.lockConflict": "This record is locked and was not changed. {message}",
     "entryEdit.locked": "This record is locked. {message}",
     "entryEdit.liveEditHint": "This entry is published: your changes go live as soon as you save.",

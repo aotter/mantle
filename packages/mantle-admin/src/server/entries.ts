@@ -49,21 +49,23 @@ const lockOf = (row: Row, expected = row.version): number | string => {
 const native = new Set(["id", "status", "version", "createdAt", "updatedAt", "authorId", "created_at", "updated_at", "author_id", "published_at", "_rid"]);
 const ms = (value: unknown) => typeof value === "number" ? value / 1000 : value == null ? null : Date.parse(String(value));
 /**
- * The publishing rules as implicit locks (#1822), named `publishing` (a declared lock's name has no dot or such clash): without
- * `liveEdits` a generic patch edits drafts only (with it, published rows too; an archived row never), and a published entry is unpublished before deletion. They bind data writes
- * only, never transitions. Shown through `entry.locks` with the declared ones, a declared update lock first.
+ * The publishing rules as implicit locks (#1822), named `publishing` (a declared lock's name has no dot, so cannot clash): a generic
+ * patch edits drafts only (with `liveEdits`, published rows too; an archived row never), and a published entry is unpublished
+ * before deletion. They bind data writes only, never transitions. Shown in `entry.locks`, after a declared lock on the same verb.
  */
 const PUBLISHING = "publishing", DRAFTS_ONLY = "Only drafts may be edited.", UNPUBLISH_FIRST = "Published entries must be unpublished before deletion.";
 const implicitLock = (schema: EntrySchema<any>, verb: "update" | "delete", message = verb === "update" ? DRAFTS_ONLY : UNPUBLISH_FIRST) =>
     new ContractError("CONFLICT", message, "admin/entries", {fields: {kind: "lock", schema: schema.name, verb, lock: PUBLISHING, message}});
 /** Whether a generic patch may edit this row: a draft, or a published row under `liveEdits` (an archived one is never live). */
 const editable = <Database>(schema: EntrySchema<Database>, row: Row) => !schema.publishing || row.status === "draft" || !!schema.liveEdits && row.status === "published";
+/** A row's locks, or undefined when none apply or the read did not evaluate the declared ones (it cannot claim none hold). */
 const locksOf = <Database>(schema: EntrySchema<Database>, raw: Row): EntryLocks | undefined => {
     const declared = entryLocks(raw);
-    if (!schema.publishing) return declared;
-    const update = !editable(schema, raw), remove = raw.status === "published";
-    const first = declared?.update ? declared : update ? {lock: PUBLISHING, message: DRAFTS_ONLY} : declared?.delete ? declared : remove ? {lock: PUBLISHING, message: UNPUBLISH_FIRST} : {};
-    return {update: update || !!declared?.update, delete: remove || !!declared?.delete, ...(first.lock ? {lock: first.lock, message: first.message!} : {})};
+    if (!schema.publishing || schema.binding.caller.locks && !declared) return declared;
+    return {
+        update: declared?.update || !editable(schema, raw) && {lock: PUBLISHING, message: DRAFTS_ONLY},
+        delete: declared?.delete || raw.status === "published" && {lock: PUBLISHING, message: UNPUBLISH_FIRST},
+    };
 };
 const entry = <Database>(schema: EntrySchema<Database>, raw: Row) => { const row = schema.row(raw), { id, status, version, created_at: _c, updated_at, author_id: _a, published_at: _p, ...data } = row, locks = locksOf(schema, raw); return { id: String(id), collection: schema.name, locale: typeof data.locale === "string" ? data.locale : null, status: status ?? null, version, data, created_at: ms(_c), updated_at: ms(updated_at), ...(locks ? {locks} : {}) }; };
 const dataOf = (raw: Record<string, unknown>) => {

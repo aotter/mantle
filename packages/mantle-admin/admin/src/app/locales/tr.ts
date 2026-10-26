@@ -7,7 +7,7 @@ export default {
     "common.reloadPageHint": "Tekrar denemek için bu sayfayı yeniden yükleyin. Kaydedilmemiş değişiklikler kaybolabilir.",
     "ops.details": "Ayrıntılar",
     "ops.conditionConflict": "Kayıt değişti veya artık bu işlemin koşulunu karşılamıyor. Yenileyip tekrar deneyin.",
-  "ops.uniqueConflict": "Aynı benzersiz değere sahip bir kayıt zaten var.",
+    "ops.uniqueConflict": "Aynı benzersiz değere sahip bir kayıt zaten var.",
     "ops.lockConflict": "Bu kayıt kilitli ve değiştirilmedi. {message}",
     "entryEdit.locked": "Bu kayıt kilitli. {message}",
     "entryEdit.liveEditHint": "Bu kayıt yayında: değişiklikleriniz kaydettiğiniz anda yayına girer.",

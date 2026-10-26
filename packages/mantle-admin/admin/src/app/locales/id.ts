@@ -7,7 +7,7 @@ export default {
     "common.reloadPageHint": "Muat ulang halaman ini untuk mencoba lagi. Perubahan yang belum disimpan mungkin hilang.",
     "ops.details": "Detail",
     "ops.conditionConflict": "Catatan berubah atau tidak lagi memenuhi kondisi tindakan ini. Muat ulang dan coba lagi.",
-  "ops.uniqueConflict": "Catatan dengan nilai unik yang sama sudah ada.",
+    "ops.uniqueConflict": "Catatan dengan nilai unik yang sama sudah ada.",
     "ops.lockConflict": "Catatan ini terkunci dan tidak diubah. {message}",
     "entryEdit.locked": "Catatan ini terkunci. {message}",
     "entryEdit.liveEditHint": "Entri ini sudah terbit: perubahan langsung tayang begitu Anda menyimpan.",

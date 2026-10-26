@@ -29,7 +29,7 @@ function editor(lifecycle: "operational" | "publishing", locks?: EntryLocks, sta
 const button = (html: string, label: string) => html.match(new RegExp(`<button[^>]*>(?:(?!</button>).)*${label}(?:(?!</button>).)*</button>`))?.[0];
 
 describe("a row a Schema lock holds (#1822)", () => {
-  const held = { update: true, delete: true, lock: "live_revision", message };
+  const live = { lock: "live_revision", message }, held = { update: live, delete: live };
 
   it("shows the lock's message, drops the unlock toggle and disables Save", () => {
     const html = editor("operational", held);
@@ -59,7 +59,8 @@ describe("a row a Schema lock holds (#1822)", () => {
 });
 
 describe("publishing entries and liveEdits (#1822)", () => {
-  const published = { update: true, delete: true, lock: "publishing", message: "Only drafts may be edited." };
+  const drafts = { lock: "publishing", message: "Only drafts may be edited." }, unpublish = { lock: "publishing", message: "Published entries must be unpublished before deletion." };
+  const published = { update: drafts, delete: unpublish };
 
   it("keeps a published entry read-only by default, with Unpublish, since the implicit lock binds no transition", () => {
     const html = editor("publishing", published, "published");
@@ -70,7 +71,7 @@ describe("publishing entries and liveEdits (#1822)", () => {
   });
 
   it("edits a published entry in place under liveEdits, saying the change goes live", () => {
-    const html = editor("publishing", { update: false, delete: true, lock: "publishing", message: "Published entries must be unpublished before deletion." }, "published");
+    const html = editor("publishing", { update: false, delete: unpublish }, "published");
     expect(html).toContain("This entry is published: your changes go live as soon as you save.");
     expect(html).not.toMatch(/<fieldset disabled=""/);
     expect(button(html, "Save")).toBeDefined();
@@ -78,7 +79,7 @@ describe("publishing entries and liveEdits (#1822)", () => {
   });
 
   it("keeps an archived entry read-only under liveEdits, since the server locks it", () => {
-    const html = editor("publishing", { update: true, delete: false, lock: "publishing", message: "Only drafts may be edited." }, "archived");
+    const html = editor("publishing", { update: drafts, delete: false }, "archived");
     expect(html).toContain("Archived entries are read-only.");
     expect(html).not.toContain("go live");
     expect(button(html, "Save")).toBeUndefined();
@@ -90,6 +91,6 @@ describe("publishing entries and liveEdits (#1822)", () => {
     expect(access({ liveEdits: true })).toBe(true);
     expect(access({ liveEdits: true, rowLocked: true })).toBe(false);
     expect(declaredLock(published)).toBe(false);
-    expect(declaredLock({ update: true, delete: false, lock: "live_revision" })).toBe(true);
+    expect(declaredLock({ update: { lock: "live_revision", message: "" }, delete: false })).toBe(true);
   });
 });

@@ -7,7 +7,7 @@ export default {
     "common.reloadPageHint": "Zkuste stránku znovu načíst. Neuložené změny mohou být ztraceny.",
     "ops.details": "Podrobnosti",
     "ops.conditionConflict": "Záznam se změnil nebo již nesplňuje podmínku této akce. Obnovte stránku a zkuste to znovu.",
-  "ops.uniqueConflict": "Záznam se stejnou jedinečnou hodnotou již existuje.",
+    "ops.uniqueConflict": "Záznam se stejnou jedinečnou hodnotou již existuje.",
     "ops.lockConflict": "Tento záznam je uzamčen a nebyl změněn. {message}",
     "entryEdit.locked": "Tento záznam je uzamčen. {message}",
     "entryEdit.liveEditHint": "Tato položka je publikovaná: změny se zveřejní hned po uložení.",

@@ -7,7 +7,7 @@ export default {
     "common.reloadPageHint": "أعد تحميل هذه الصفحة للمحاولة مجددًا. قد تُفقد التغييرات غير المحفوظة.",
     "ops.details": "التفاصيل",
     "ops.conditionConflict": "تغيّر السجل أو لم يعد يستوفي شرط هذا الإجراء. حدّث الصفحة وحاول مجددًا.",
-  "ops.uniqueConflict": "يوجد بالفعل سجل بالقيمة الفريدة نفسها.",
+    "ops.uniqueConflict": "يوجد بالفعل سجل بالقيمة الفريدة نفسها.",
     "ops.lockConflict": "هذا السجل مقفل ولم يتم تغييره. {message}",
     "entryEdit.locked": "هذا السجل مقفل. {message}",
     "entryEdit.liveEditHint": "هذا الإدخال منشور: تُنشر تغييراتك فور الحفظ.",
