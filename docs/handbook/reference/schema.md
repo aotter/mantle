@@ -55,15 +55,36 @@ Owner and field columns prefix every unique index in that order. User reads/writ
 `lock` freezes a row while a condition on it holds. It is a data-state invariant, not an authorization rule: it binds every caller, admins included.
 
 ```yaml
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  lifecycle: publishing
+  indexes: [[current_revision]]
+  schema:
+    type: object
+    properties:
+      slug: { type: string }
+      current_revision: { type: string, x-mantle-ref: post_revisions }
+---
+apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: post_revisions }
 spec:
+  title: Post revisions
   lifecycle: operational
   lock:
     - name: live_revision
       on: [update, delete]
       when: EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)
       message: "This revision is live. Create a new revision and switch to it."
+  schema:
+    type: object
+    required: [post, body]
+    properties:
+      post: { type: string, x-mantle-ref: posts }
+      body: { type: string }
 ```
 
 - `when` true means locked. It reads the existing row only (like RLS `USING`); new rows stay with `checks`. `on` lists `update` and/or `delete`; names are unique per Schema.
