@@ -112,7 +112,10 @@ Entry create/read/patch/transitions return
 `locks: { update, delete, lock?, message? }`: whether a lock holds for your generic update or delete of that row, and the
 first holding lock's name and message. Admin disables Save, rename, Delete and transitions on such a row and shows the
 message; the operational "Unlock editing" toggle does not override it. The write itself stays the authority: a refusal is
-409 `CONFLICT` with `kind: "lock"`.
+409 `CONFLICT` with `kind: "lock"`. Every publishing entry has `locks` too: the draft-only rule (without `liveEdits`) and
+"unpublish before deleting" are the implicit lock `lock: "publishing"`, listed after a declared update lock. It binds data
+writes only, so Publish, Unpublish and Archive stay available; with `liveEdits` a published entry's form is enabled with a
+"changes go live on save" notice.
 Transitions accept `{}` to use the current version; tests should send the
 observed `expectedVersion` to catch stale writes. Generic writes reject native
 columns inside `data`. See [publishing](../concepts/lifecycle-and-locales.md).
@@ -312,7 +315,9 @@ returns its one row on one page and has no cursor.
 Generated full/partial input checks validate creates, edits, operations and
 filters. Plain titled string `oneOf` choices use the same enum checks; general
 or constrained alternatives remain refused. Draft creates can be incomplete;
-publish checks required data. Publishing edits apply only to drafts. Read-only
+publish checks required data. Publishing edits apply only to drafts unless the Schema sets
+`publishing: { liveEdits: true }`; a live edit of a published entry must still pass those publish checks
+(`INPUT_VALIDATION_FAILED`), keeps `published_at` and goes live on save. Read-only
 collections refuse generic creates, edits, deletes and transitions with 403 `AUTH_DENIED`
 ("This record is read-only; use its operations.") before any read or write, while
 their declared Procedures can still run.

@@ -201,6 +201,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       ...(userScopes.length ? { userScopes } : {}),
       ...(m.spec.ttl ? { ttl: m.spec.ttl.field.toLowerCase(), ttlSeconds: m.spec.ttl.expireAfterSeconds } : {}),
       publishing: m.spec.lifecycle === "publishing",
+      ...(m.spec.publishing?.liveEdits ? { liveEdits: true as const } : {}),
       schema: m.spec.schema,
       ...(m.spec.translates ? { translates: { parent: m.spec.translates.parent, on: m.spec.translates.on } } : {}),
       fields: typesOf(m.spec.schema),

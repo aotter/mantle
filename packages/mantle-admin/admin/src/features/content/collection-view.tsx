@@ -36,7 +36,7 @@ import type {
   SiteInfo,
   AdminOperation,
 } from "../../lib/types";
-import { PUBLISHING_STATUSES } from "../../lib/types";
+import { PUBLISHING_LOCK, PUBLISHING_STATUSES } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Checkbox } from "@aotter/mantle-ui/kit";
@@ -936,7 +936,7 @@ function EntryRowDisplay({
 }): React.ReactElement {
   const supportedVersion = typeof row.version === "number" && Number.isSafeInteger(row.version);
   // a Schema lock holding for this row refuses its rename or delete (#1822); the button says why
-  const lockedHint = row.locks?.update || row.locks?.delete ? t(language, "entryEdit.locked", { message: row.locks.message ?? "" }) : undefined;
+  const lockedHint = !row.locks?.lock ? undefined : row.locks.lock === PUBLISHING_LOCK ? t(language, "crud.unpublishToDelete") : t(language, "entryEdit.locked", { message: row.locks.message ?? "" });
   const canEdit = allowEdit && supportedVersion && !row.locks?.update;
   const canDelete = allowDelete && supportedVersion;
   const isOperational = dataColumns !== null;

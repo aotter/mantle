@@ -10,6 +10,7 @@ import { declaredType, inputType, nativeType } from "../domain/columns.js";
 import { q } from "../domain/entry.js";
 import { expand, SCOPE, TTL, type Fact, type Lock, type Rules } from "../kernel/store.js";
 import { refChecks, userScopeTerm } from '../build/compiler.js';
+import { publishRequired } from "./publishing.js";
 
 // Types the typed Store compares and writes as plain bind values. Fixed numerics are scaled integers on SQLite; geo is two columns.
 const SCALAR = new Set(["text", "real", "float8", "integer", "int4", "int8", "bool", "timestamptz", "date"]);
@@ -42,7 +43,7 @@ export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, n
     const ref = refChecks(s, schemas);
     const fact: Fact = {
       ...(s.userScopes?.length ? { u: s.userScopes.map(u => userScopeTerm(u, true)) } : {}),
-      ...(s.scope ? { s: s.scope } : {}), ...(s.ttl ? { ttl: [s.ttl, s.ttlSeconds ?? 0] as const } : {}), ...(s.publishing ? { pub: 1 as const } : {}),
+      ...(s.scope ? { s: s.scope } : {}), ...(s.ttl ? { ttl: [s.ttl, s.ttlSeconds ?? 0] as const } : {}), ...(s.publishing ? { pub: 1 as const, ...(publishRequired(s).length ? { req: publishRequired(s) } : {}) } : {}),
       ...(ts.length ? { ts } : {}), ...(dates.length ? { d: dates } : {}),
       ...(s.search?.length ? { search: s.search } : {}),
       ...(ref.length ? { ref } : {}),

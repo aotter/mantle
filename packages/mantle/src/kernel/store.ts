@@ -39,6 +39,8 @@ export interface Fact {
   readonly ttl?: readonly [column: string, seconds: number];
   /** Opt-in publishing lifecycle. */
   readonly pub?: 1;
+  /** The columns `publish` requires non-null: an update keeps a published row publishable (#1822). */
+  readonly req?: readonly string[];
   /** Declared date-time and date columns (`created_at` and `updated_at` are always date-times). */
   readonly ts?: readonly string[];
   readonly d?: readonly string[];
@@ -52,6 +54,8 @@ export interface Fact {
   readonly parent?: { readonly on: string; readonly scope?: readonly [parent: string, child: string]; readonly visible: Term; readonly table: string; readonly caller: readonly Term[]; readonly trusted: readonly Term[]; readonly fields: readonly string[]; readonly ts: readonly string[]; readonly d: readonly string[] };
 }
 export const SCOPE = "$scope", TTL = "$ttl";
+/** The probe's answer for an update that would leave a published row unpublishable; no lock name has a dot. */
+export const REQUIRED = "publishing.required";
 /** The columns Mantle owns: no write names them (nor the scope column), and `_rid` is never returned. */
 const SYSTEM = ["id", "version", "created_at", "updated_at", "author_id", "status", "published_at", "_rid"];
 
@@ -298,13 +302,27 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       return { given, marks, recipe, refs, guard, step, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
     };
 
-    /** The caller's locks on `verb` (#1822): `NOT (<when>)` terms for its WHERE, and the probe a driver reads when the write changed no row. */
-    const locked = (id: string, verb: "update" | "delete") => {
+    /**
+     * A published row stays publishable (#1822): after an update, the columns `publish` requires are non-null, whoever writes (as
+     * `publish` checks them for a system caller too). The term for an update that sets `set`, or undefined when it cannot matter.
+     */
+    const publishable = (set: object): string | undefined => {
+      if (!f.req?.length) return undefined;
+      const given = new Map(Object.entries(set).map(([name, v]) => [name.toLowerCase(), v])), live = `${d.ident("status")} <> 'published'`;
+      if (f.req.some(c => given.get(c) === null)) return live;
+      const kept = f.req.filter(c => !given.has(c));
+      return kept.length ? `(${live} OR (${kept.map(c => `${d.ident(c)} IS NOT NULL`).join(" AND ")}))` : undefined;
+    };
+    /**
+     * The caller's locks on `verb` (#1822), and an update's `publishable` term: `NOT (<when>)` terms for its WHERE, and the probe
+     * a driver reads when the write changed no row, which names the lock or the missing publish data.
+     */
+    const locked = (id: string, verb: "update" | "delete", required?: string) => {
       const locks = trusted ? [] : (f.lock ?? []).filter(l => l.on.includes(verb));
-      if (!locks.length) return { terms: [] };
-      const w = writer(), where = w.guard(id, [], false);
-      const { sql, binds } = w.step(`SELECT CASE ${locks.map(l => `WHEN (${l.sql}) IS NOT FALSE THEN '${l.name}'`).join(" ")} END AS ${d.ident("lock")} FROM ${w.into}${where}`);
-      return { terms: locks.map(l => `NOT (${l.sql})`), lock: { sql, binds, schema: p.name, verb, locks: Object.fromEntries(locks.map(l => [l.name, l.message])) } };
+      if (!locks.length && !required) return { terms: [] };
+      const w = writer(), where = w.guard(id, [], false), cases = [...locks.map(l => `WHEN (${l.sql}) IS NOT FALSE THEN '${l.name}'`), ...required ? [`WHEN NOT ${required} THEN '${REQUIRED}'`] : []];
+      const { sql, binds } = w.step(`SELECT CASE ${cases.join(" ")} END AS ${d.ident("lock")} FROM ${w.into}${where}`);
+      return { terms: [...locks.map(l => `NOT (${l.sql})`), ...required ? [required] : []], lock: { sql, binds, schema: p.name, verb, locks: Object.fromEntries(locks.map(l => [l.name, l.message])), ...required ? { required: `This entry is published: an update must keep the data publish requires (${f.req!.join(", ")}).` } : {} } };
     };
     return {
       async findById(id: string) {
@@ -332,7 +350,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
         const w = writer(lock), assigns = w.given(set).map(([name, mark]) => `${name} = ${mark}`);
         for (const [column, v] of x.sets) assigns.push(`${d.ident(column)} = ${v === "bump" ? `${d.ident(column)} + 1` : w.recipe(v)}`);
         // the partition is never SET, so the child's is the row's own
-        const refs = w.refs(column => `${w.into}.${d.ident(column)}`), held = locked(id, "update");
+        const refs = w.refs(column => `${w.into}.${d.ident(column)}`), held = locked(id, "update", publishable(set));
         return w.step(`UPDATE ${w.into} SET ${assigns.join(", ")}${w.guard(id, [...refs, ...held.terms])}${w.returning()}`, held.lock);
       }, rows => clean(rows)[0], `${p.name}/update`); },
       delete(id: string, { lock }: { lock: number | string }) { return write(() => {

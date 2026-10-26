@@ -85,7 +85,7 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
     const defaults=Object.fromEntries(Object.entries(checks(s,true).properties??{}).flatMap(([key,p])=>p.default!==undefined?[[key,p.default]]:[]));
     const primary=isPrimaryCollection(s,Object.values(plan.schemas));
     const schemaCode=`{
-      name:${q(s.name)},primary:${primary},descriptor:allCollections[${q(s.name)}],publishing:${!!s.publishing},readOnly:${s.schema.readOnly===true||declared.some(f=>s.fields[f]==="geo")},fields:names${n},defaults:${q(defaults)},
+      name:${q(s.name)},primary:${primary},descriptor:allCollections[${q(s.name)}],publishing:${!!s.publishing},${s.liveEdits?"liveEdits:true,":""}readOnly:${s.schema.readOnly===true||declared.some(f=>s.fields[f]==="geo")},fields:names${n},defaults:${q(defaults)},
       binding:${entrySpec},
       query:query${n},validate:(data,full)=>{const checked=Object.fromEntries(Object.entries(data).filter(([key,v])=>v!==null||${s.publishing?"full&&":""}${q(s.schema.required??[])}.includes(key)));(full?full${n}:partial${n})(checked);${sqlite?"":"nativeText(data);"}${yearZero}return data;},
       values:values${n},row:${named},

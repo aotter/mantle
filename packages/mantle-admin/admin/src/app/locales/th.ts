@@ -10,6 +10,8 @@ export default {
   "ops.uniqueConflict": "มีรายการที่ใช้ค่าเฉพาะเดียวกันอยู่แล้ว",
     "ops.lockConflict": "ระเบียนนี้ถูกล็อกและไม่ได้เปลี่ยนแปลง {message}",
     "entryEdit.locked": "ระเบียนนี้ถูกล็อก {message}",
+    "entryEdit.liveEditHint": "รายการนี้เผยแพร่อยู่: การเปลี่ยนแปลงจะเผยแพร่ทันทีเมื่อคุณบันทึก",
+    "crud.unpublishToDelete": "ยกเลิกการเผยแพร่รายการนี้ก่อนลบ",
     "model.viewDataUnavailable": "ไม่สามารถดูข้อมูลสดได้: View นี้เป็นแบบภายในหรือบัญชีของคุณไม่มีสิทธิ์เรียกใช้",
     "admin.consoleTitle": "คอนโซลผู้ดูแล",
     "developer.workspaceTitle": "การพัฒนา",

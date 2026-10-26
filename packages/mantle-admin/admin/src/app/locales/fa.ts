@@ -10,6 +10,8 @@ export default {
   "ops.uniqueConflict": "رکوردی با همین مقدار یکتا از قبل وجود دارد.",
     "ops.lockConflict": "این رکورد قفل است و تغییری نکرد. {message}",
     "entryEdit.locked": "این رکورد قفل است. {message}",
+    "entryEdit.liveEditHint": "این مورد منتشر شده است: تغییرات شما بلافاصله پس از ذخیره منتشر می‌شوند.",
+    "crud.unpublishToDelete": "پیش از حذف، انتشار این مورد را لغو کنید.",
     "model.viewDataUnavailable": "داده‌های زنده در دسترس نیست: این View داخلی است یا حساب شما اجازه اجرای آن را ندارد.",
     "admin.consoleTitle": "کنسول مدیریت",
     "developer.workspaceTitle": "توسعه",

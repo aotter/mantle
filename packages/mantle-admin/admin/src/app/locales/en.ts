@@ -6,6 +6,8 @@ export default {
   "ops.uniqueConflict": "A record with the same unique value already exists.",
     "ops.lockConflict": "This record is locked and was not changed. {message}",
     "entryEdit.locked": "This record is locked. {message}",
+    "entryEdit.liveEditHint": "This entry is published: your changes go live as soon as you save.",
+    "crud.unpublishToDelete": "Unpublish this entry before deleting it.",
     "model.viewDataUnavailable": "Live data is unavailable: this View is internal or your account is not allowed to run it.",
     "entryEdit.unsupportedVersion": "Version unsupported. Read-only; exact value preserved.",
     "developer.sqlProcedure": "This procedure runs its SQL statements together: all of them apply, or none.",

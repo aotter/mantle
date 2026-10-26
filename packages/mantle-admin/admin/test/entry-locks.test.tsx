@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 import { TooltipProvider } from "@aotter/mantle-ui/kit";
 import { PreferencesProvider } from "../src/app/preferences";
 import { AdminRouterProvider } from "../src/app/router";
-import { EntryEditView } from "../src/features/content/entry-edit-view";
+import { canEditEntry, EntryEditView } from "../src/features/content/entry-edit-view";
 import { OperationDiagnostic } from "../src/features/ops/interaction-dialog";
 import { entryEditorQueryOptions } from "../src/lib/queries";
-import type { EntryEditorPayload, EntryLocks } from "../src/lib/types";
+import { declaredLock, type EntryEditorPayload, type EntryLocks } from "../src/lib/types";
 
 const message = "This revision is live. Create a new revision and switch to it.";
 /** The editor as an admin sees a cached payload: its notice and its action bar's buttons. */
@@ -55,5 +55,34 @@ describe("a row a Schema lock holds (#1822)", () => {
   it("explains a lock refusal with its message", () => {
     const html = renderToStaticMarkup(<>{OperationDiagnostic({ diagnostic: { code: "CONFLICT", kind: "lock", message }, language: "en" })}</>);
     expect(html).toBe(`This record is locked and was not changed. ${message}`);
+  });
+});
+
+describe("publishing entries and liveEdits (#1822)", () => {
+  const published = { update: true, delete: true, lock: "publishing", message: "Only drafts may be edited." };
+
+  it("keeps a published entry read-only by default, with Unpublish, since the implicit lock binds no transition", () => {
+    const html = editor("publishing", published, "published");
+    expect(html).toContain("Published entries are read-only. Unpublish to edit.");
+    expect(html).not.toContain("This record is locked");
+    expect(button(html, "Unpublish")).not.toMatch(/disabled=""/);
+    expect(button(html, "Save")).toBeUndefined();
+  });
+
+  it("edits a published entry in place under liveEdits, saying the change goes live", () => {
+    const html = editor("publishing", { update: false, delete: true, lock: "publishing", message: "Published entries must be unpublished before deletion." }, "published");
+    expect(html).toContain("This entry is published: your changes go live as soon as you save.");
+    expect(html).not.toMatch(/<fieldset disabled=""/);
+    expect(button(html, "Save")).toBeDefined();
+    expect(button(html, "Unpublish")).not.toMatch(/disabled=""/);
+  });
+
+  it("lets canEditEntry open a non-draft only under liveEdits, and never past a declared lock", () => {
+    const access = (o: Partial<Parameters<typeof canEditEntry>[0]>) => canEditEntry({ admin: true, isReadOnly: false, isOperational: false, isDraft: false, operationalEditUnlocked: false, ...o });
+    expect(access({})).toBe(false);
+    expect(access({ liveEdits: true })).toBe(true);
+    expect(access({ liveEdits: true, rowLocked: true })).toBe(false);
+    expect(declaredLock(published)).toBe(false);
+    expect(declaredLock({ update: true, delete: false, lock: "live_revision" })).toBe(true);
   });
 });

@@ -10,6 +10,8 @@ export default {
   "ops.uniqueConflict": "Záznam se stejnou jedinečnou hodnotou již existuje.",
     "ops.lockConflict": "Tento záznam je uzamčen a nebyl změněn. {message}",
     "entryEdit.locked": "Tento záznam je uzamčen. {message}",
+    "entryEdit.liveEditHint": "Tato položka je publikovaná: změny se zveřejní hned po uložení.",
+    "crud.unpublishToDelete": "Před smazáním tuto položku zrušte z publikace.",
     "model.viewDataUnavailable": "Živá data nejsou dostupná: tato View je interní nebo ji váš účet nesmí spustit.",
     "admin.consoleTitle": "Administrační konzole",
     "developer.workspaceTitle": "Vývoj",

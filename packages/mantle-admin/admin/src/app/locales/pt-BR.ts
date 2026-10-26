@@ -10,6 +10,8 @@ export default {
   "ops.uniqueConflict": "Já existe um registro com o mesmo valor único.",
     "ops.lockConflict": "Este registro está bloqueado e não foi alterado. {message}",
     "entryEdit.locked": "Este registro está bloqueado. {message}",
+    "entryEdit.liveEditHint": "Esta entrada está publicada: suas alterações entram no ar assim que você salvar.",
+    "crud.unpublishToDelete": "Despublique esta entrada antes de excluí-la.",
     "model.viewDataUnavailable": "Dados ao vivo indisponíveis: esta View é interna ou sua conta não pode executá-la.",
     "admin.consoleTitle": "Console de administração",
     "developer.workspaceTitle": "Desenvolvimento",

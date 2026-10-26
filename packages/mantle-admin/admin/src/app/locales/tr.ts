@@ -10,6 +10,8 @@ export default {
   "ops.uniqueConflict": "Aynı benzersiz değere sahip bir kayıt zaten var.",
     "ops.lockConflict": "Bu kayıt kilitli ve değiştirilmedi. {message}",
     "entryEdit.locked": "Bu kayıt kilitli. {message}",
+    "entryEdit.liveEditHint": "Bu kayıt yayında: değişiklikleriniz kaydettiğiniz anda yayına girer.",
+    "crud.unpublishToDelete": "Silmeden önce bu kaydı yayından kaldırın.",
     "model.viewDataUnavailable": "Canlı veriler kullanılamıyor: bu View dahilidir veya hesabınızın çalıştırma izni yoktur.",
     "admin.consoleTitle": "Yönetim konsolu",
     "developer.workspaceTitle": "Geliştirme",

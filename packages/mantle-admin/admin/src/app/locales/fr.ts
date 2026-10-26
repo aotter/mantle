@@ -10,6 +10,8 @@ export default {
   "ops.uniqueConflict": "Un enregistrement avec la même valeur unique existe déjà.",
     "ops.lockConflict": "Cet enregistrement est verrouillé et n’a pas été modifié. {message}",
     "entryEdit.locked": "Cet enregistrement est verrouillé. {message}",
+    "entryEdit.liveEditHint": "Cette entrée est publiée : vos modifications sont en ligne dès l’enregistrement.",
+    "crud.unpublishToDelete": "Dépubliez cette entrée avant de la supprimer.",
     "model.viewDataUnavailable": "Données en direct indisponibles : cette View est interne ou votre compte ne peut pas l’exécuter.",
     "admin.consoleTitle": "Console d’administration",
     "developer.workspaceTitle": "Développement",

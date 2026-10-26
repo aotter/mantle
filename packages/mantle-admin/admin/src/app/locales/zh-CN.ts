@@ -10,6 +10,8 @@ export default {
   "ops.uniqueConflict": "已有一条记录使用相同的唯一值。",
     "ops.lockConflict": "此记录已锁定，未做任何更改。{message}",
     "entryEdit.locked": "此记录已锁定。{message}",
+    "entryEdit.liveEditHint": "此资料已发布：保存后，更改会立即上线。",
+    "crud.unpublishToDelete": "请先取消发布，再删除此资料。",
     "model.viewDataUnavailable": "无法预览实时数据：此 View 仅供内部使用，或你的账号没有执行权限。",
     "developer.sqlProcedure": "此过程的 SQL 语句一起执行：全部生效，或全部不生效。",
     "webmcp.copied": "已复制",

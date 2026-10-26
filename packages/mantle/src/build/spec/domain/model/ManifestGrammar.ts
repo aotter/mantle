@@ -245,6 +245,9 @@ export interface SchemaManifestSpec {
    *  editable in place, and have no publish/unpublish transitions — the
    *  admin hides the content-lifecycle chrome for them. */
   readonly lifecycle?: LifecycleMode;
+  /** `lifecycle: publishing` options (#1822). `liveEdits: true` lets a caller's generic patch edit a published (or archived)
+   *  row in place; a published row must still pass `publish`'s checks. Default: generic patches edit drafts only. */
+  readonly publishing?: { readonly liveEdits?: boolean };
   /** Logical expiry policy. Physical removal requires an explicit sweep. */
   readonly ttl?: { readonly field: string; readonly expireAfterSeconds: number };
   /** The Schema's row template (ADR-0046 amendment): AND-joined `column = auth.uid()` /

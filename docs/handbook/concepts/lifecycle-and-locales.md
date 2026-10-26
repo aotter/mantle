@@ -2,7 +2,27 @@
 
 Schemas default to `operational`: rows are live immediately and edit in place. Opt-in `publishing` adds `status` (draft/published/archived), nullable `published_at` and a scope-aware `(published_at, id)` index.
 
-Generated `<table>.publish`, `.unpublish` and `.archive` Procedures take `{ id, expectedVersion }`, require admin/system and perform one atomic UPDATE. Publish checks required fields, visibility, TTL, source state and OCC. A failed guard is `CONFLICT`. Store cannot write status/published_at directly. Admin permits generic publishing edits only on drafts; Store does not add that separate Admin editing rule. To correct published content while it stays online, split it into a publishing parent and operational revisions ([edit published content without downtime](../guides/revisions.md)).
+Generated `<table>.publish`, `.unpublish` and `.archive` Procedures take `{ id, expectedVersion }`, require admin/system and perform one atomic UPDATE. Publish checks required fields, visibility, TTL, source state and OCC. A failed guard is `CONFLICT`. Store cannot write status/published_at directly. By default Admin's generic patch edits drafts only (published and archived entries are unpublished first), and a published entry is unpublished before it is deleted; both are an implicit lock named `publishing` that Admin shows before the edit, and neither applies to the transitions. A Store update may edit a published row in place, but never so that `publish` would refuse it: clearing a field `publish` requires is `INPUT_VALIDATION_FAILED` for every caller.
+
+To let admins correct a published entry in place, opt in with `publishing: { liveEdits: true }`. A personal blog needs nothing more than one Schema:
+
+```yaml
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  lifecycle: publishing
+  publishing: { liveEdits: true }
+  schema:
+    type: object
+    required: [title, body]
+    properties:
+      title: { type: string }
+      body: { type: string }
+```
+
+Admin then edits a published post with a "changes go live on save" notice. The save goes live on commit, `published_at` is kept and `updated_at` moves. The merged post must still pass `publish`'s checks, so emptying its title is refused with `INPUT_VALIDATION_FAILED`. Deleting it still requires unpublishing, and [declared locks](../reference/schema.md#locks) still apply. `publishing` is refused on an operational Schema, which already edits in place. To prepare changes to published content without exposing them, split it into a publishing parent and operational revisions instead ([edit published content without downtime](../guides/revisions.md)).
 
 Public Views see published rows only. Other reads expose drafts only to admin/system. This policy applies to joins and nested queries too.
 

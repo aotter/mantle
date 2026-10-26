@@ -17,6 +17,7 @@ import { renderDataValue } from "../../lib/render-data-value";
 import { RefLink, RefTitlesProvider, useRefTarget } from "../../ui/ref-value";
 import { CollectionView } from "./collection-view";
 import { canEditEntry, entryTitle } from "./entry-edit-view";
+import { declaredLock } from "../../lib/types";
 import { boundOperationsFor, RecordOperations } from "./row-operations";
 
 export function ParentEntryWorkbench({
@@ -168,7 +169,7 @@ export function canOpenForEdit(payload: Pick<EntryEditorPayload, "collection" | 
     isOperational: payload.collection.lifecycle !== "publishing",
     isDraft: true,
     operationalEditUnlocked: true,
-    rowLocked: payload.entry.locks?.update === true,
+    rowLocked: declaredLock(payload.entry.locks),
   });
 }
 
