@@ -174,12 +174,17 @@ export function EntryEditView({
   const isArchived = payload.entry.status === "archived";
   const missingRequired = hasMissingRequired(data, payload.collection.schema);
   const canManageContent = me.data?.admin === true;
+  // a Schema lock holds for this row (#1822): the server refuses its update, whoever asks, so no toggle unlocks the form
+  const locks = payload.entry.locks;
+  const rowLocked = locks?.update === true;
+  const lockedHint = rowLocked ? t(language, "entryEdit.locked", { message: locks.message ?? "" }) : undefined;
   const canEdit = canEditEntry({
     admin: me.data?.admin,
     isReadOnly,
     isOperational,
     isDraft,
     operationalEditUnlocked,
+    rowLocked,
   });
   const canSave = canEdit && dirty;
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
@@ -278,6 +283,11 @@ export function EntryEditView({
         <p className="-mt-4 text-sm text-muted-foreground">
           {t(language, "entryEdit.readOnlyHint")}
         </p>
+      ) : rowLocked ? (
+        <p role="status" className="-mt-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <LockKeyhole className="size-4" aria-hidden />
+          {lockedHint}
+        </p>
       ) : isOperational ? (
         <div className="-mt-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <p>{t(language, "entryEdit.operationalHint")}</p>
@@ -370,7 +380,7 @@ export function EntryEditView({
         </div>
       </div>
 
-      {canEdit || (canManageContent && !isOperational && !isReadOnly) ? (
+      {canEdit || (canManageContent && !isReadOnly && (!isOperational || rowLocked)) ? (
         <FormActionBar
           status={save.isPending
             ? t(language, "crud.saving")
@@ -391,8 +401,10 @@ export function EntryEditView({
               type="button"
               variant="secondary"
               onClick={() => publish.mutate()}
-              disabled={actionPending || dirty || missingRequired}
-              title={dirty
+              disabled={actionPending || dirty || missingRequired || rowLocked}
+              title={rowLocked
+                ? lockedHint
+                : dirty
                 ? t(language, "entryEdit.publishDisabledDirty")
                 : missingRequired
                 ? t(language, "entryEdit.publishMissingRequired")
@@ -406,8 +418,8 @@ export function EntryEditView({
               type="button"
               variant="secondary"
               onClick={() => unpublish.mutate()}
-              disabled={actionPending}
-              title={t(language, isArchived ? "entryEdit.restoreTooltip" : "entryEdit.unpublishTooltip")}
+              disabled={actionPending || rowLocked}
+              title={rowLocked ? lockedHint : t(language, isArchived ? "entryEdit.restoreTooltip" : "entryEdit.unpublishTooltip")}
             >
               <RotateCcw className="size-4" aria-hidden />
               {unpublish.isPending
@@ -415,12 +427,12 @@ export function EntryEditView({
                 : t(language, isArchived ? "entryEdit.restore" : "entryEdit.unpublish")}
             </Button>
           ))}
-          {canEdit ? (
+          {canEdit || rowLocked ? (
             <Button
               type="button"
               onClick={() => save.mutate(data)}
               disabled={actionPending || !canSave}
-              title={t(language, "entryEdit.saveTooltip")}
+              title={lockedHint ?? t(language, "entryEdit.saveTooltip")}
             >
               <Save className="size-4" aria-hidden />
               {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
@@ -618,21 +630,26 @@ export function editorHiddenFields(
   ];
 }
 
-/** A publishing entry is edited only as a draft: a published or archived one is unpublished first, so no edit waits on a disabled Save. */
+/**
+ * A publishing entry is edited only as a draft: a published or archived one is unpublished first, so no edit waits on a disabled
+ * Save. A row a Schema lock holds (`rowLocked`, #1822) is never editable, whatever the unlock toggle says.
+ */
 export function canEditEntry({
   admin,
   isReadOnly,
   isOperational,
   isDraft,
   operationalEditUnlocked,
+  rowLocked = false,
 }: {
   admin: boolean | undefined;
   isReadOnly: boolean;
   isOperational: boolean;
   isDraft: boolean;
   operationalEditUnlocked: boolean;
+  rowLocked?: boolean;
 }): boolean {
-  return admin === true && !isReadOnly && (isOperational ? operationalEditUnlocked : isDraft);
+  return admin === true && !isReadOnly && !rowLocked && (isOperational ? operationalEditUnlocked : isDraft);
 }
 
 function MediaAssetField({

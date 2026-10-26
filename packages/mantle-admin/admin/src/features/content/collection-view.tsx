@@ -935,7 +935,9 @@ function EntryRowDisplay({
   canDelete: boolean;
 }): React.ReactElement {
   const supportedVersion = typeof row.version === "number" && Number.isSafeInteger(row.version);
-  const canEdit = allowEdit && supportedVersion;
+  // a Schema lock holding for this row refuses its rename or delete (#1822); the button says why
+  const lockedHint = row.locks?.update || row.locks?.delete ? t(language, "entryEdit.locked", { message: row.locks.message ?? "" }) : undefined;
+  const canEdit = allowEdit && supportedVersion && !row.locks?.update;
   const canDelete = allowDelete && supportedVersion;
   const isOperational = dataColumns !== null;
   const itemName = renderTitleText(
@@ -1141,7 +1143,7 @@ function EntryRowDisplay({
             </Button>
           )}
           {canDelete ? (
-            <Button type="button" variant="ghost" size="icon-sm" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
+            <Button type="button" variant="ghost" size="icon-sm" title={row.locks?.delete ? lockedHint : t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy || row.locks?.delete === true} onClick={() => void remove()}>
               <Trash2 className="size-3.5" aria-hidden />
             </Button>
           ) : null}

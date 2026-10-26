@@ -22,6 +22,8 @@ const REQUIRED_TRANSLATED_KEYS = new Set([
   "ops.details",
   "ops.conditionConflict",
   "ops.uniqueConflict",
+  "ops.lockConflict",
+  "entryEdit.locked",
   "nav.build",
   "nav.docs",
   "nav.localizedContent",

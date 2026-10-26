@@ -8,6 +8,8 @@ export default {
     "ops.details": "รายละเอียด",
     "ops.conditionConflict": "ระเบียนเปลี่ยนแปลงหรือไม่ตรงตามเงื่อนไขของการดำเนินการนี้แล้ว โปรดรีเฟรชแล้วลองอีกครั้ง",
   "ops.uniqueConflict": "มีรายการที่ใช้ค่าเฉพาะเดียวกันอยู่แล้ว",
+    "ops.lockConflict": "ระเบียนนี้ถูกล็อกและไม่ได้เปลี่ยนแปลง {message}",
+    "entryEdit.locked": "ระเบียนนี้ถูกล็อก {message}",
     "model.viewDataUnavailable": "ไม่สามารถดูข้อมูลสดได้: View นี้เป็นแบบภายในหรือบัญชีของคุณไม่มีสิทธิ์เรียกใช้",
     "admin.consoleTitle": "คอนโซลผู้ดูแล",
     "developer.workspaceTitle": "การพัฒนา",

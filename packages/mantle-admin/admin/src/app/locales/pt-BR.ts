@@ -8,6 +8,8 @@ export default {
     "ops.details": "Detalhes",
     "ops.conditionConflict": "O registro mudou ou não atende mais à condição desta ação. Atualize e tente novamente.",
   "ops.uniqueConflict": "Já existe um registro com o mesmo valor único.",
+    "ops.lockConflict": "Este registro está bloqueado e não foi alterado. {message}",
+    "entryEdit.locked": "Este registro está bloqueado. {message}",
     "model.viewDataUnavailable": "Dados ao vivo indisponíveis: esta View é interna ou sua conta não pode executá-la.",
     "admin.consoleTitle": "Console de administração",
     "developer.workspaceTitle": "Desenvolvimento",

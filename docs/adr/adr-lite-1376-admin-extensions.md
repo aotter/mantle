@@ -65,6 +65,16 @@ authorizes.
    `/admin/api` routes in the browser (decision 8 covers MCP hosts), each of
    which checks the caller, and share Admin's query cache. Generated types bind
    names, inputs and rows. Refusals read as unavailable.
+   - **Schema locks (#1822).** When a Schema declares `spec.lock`, each entry
+     the editor and list routes return (`useEntry`, `useEntries`) carries
+     `locks: { update, delete, lock?, message? }`: whether a lock holds for
+     the caller's generic update or delete of that row, read by the same
+     `when` (NULL holds) in the read's projection, and the first holding
+     lock's name and message. A trusted caller reads both as `false`; a Schema
+     without locks has no `locks` field. It is advisory: the write's own WHERE
+     decides, and a refusal is `CONFLICT` `kind: "lock"`. Default components
+     disable Save, rename, Delete and transitions and show the message; the
+     operational unlock toggle never overrides it.
 5. **The manifest keeps data semantics;** only component references
    (`<extension>/<contribution>` widgets, `list.cells`, `panels`) are
    removed.

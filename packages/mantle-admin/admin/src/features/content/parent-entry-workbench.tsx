@@ -168,6 +168,7 @@ export function canOpenForEdit(payload: Pick<EntryEditorPayload, "collection" | 
     isOperational: payload.collection.lifecycle !== "publishing",
     isDraft: true,
     operationalEditUnlocked: true,
+    rowLocked: payload.entry.locks?.update === true,
   });
 }
 

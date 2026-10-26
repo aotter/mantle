@@ -51,6 +51,14 @@ for(const target of ["bun-sqlite","bun-postgres"] as const){
    const remove=(entry:{id:string})=>ask(`/entries/${entry.id}?collection=post_revisions`,"DELETE");
    const r1=await create("post_revisions",{body:"one"}),r2=await create("post_revisions",{body:"two"});
    const post=await create("posts",{title:"post",current_revision:r1.id});
+   // the editor and list know before the edit: the live revision is locked, another is not, a Schema without locks has no field
+   const held={update:true,delete:true,lock:"live_revision",message:lock("update").message},free={update:false,delete:false};
+   expect((await ask(`/entries/${r1.id}?collection=post_revisions`,"GET")).locks).toEqual(held);
+   expect((await ask(`/entries/${r2.id}?collection=post_revisions`,"GET")).locks).toEqual(free);
+   expect(post.locks).toBeUndefined();
+   const listed=(await ask("/entries?collection=post_revisions","GET")).items;
+   expect(Object.fromEntries(listed.map((row:any)=>[row.id,row.locks]))).toEqual({[r1.id]:held,[r2.id]:free});
+   expect(listed[0].data).not.toHaveProperty("_mantle_admin_lock_update");
    expect(await patch(r1,{body:"x"})).toMatchObject({status:409,...lock("update")});
    expect(await remove(r1)).toMatchObject({status:409,...lock("delete")});
    expect((await patch(r2,{body:"draft"})).data).toMatchObject({body:"draft"});
@@ -58,7 +66,9 @@ for(const target of ["bun-sqlite","bun-postgres"] as const){
    const revisions=bindings.schemas.find((s:any)=>s.name==="post_revisions");
    expect(await nativeEntryProcedure(revisions.binding,bindings.adapter,db,{kind:"system",reason:"fixture"},"patch",{body:"fixed"},r1.id,r1.version)).toMatchObject({body:"fixed"});
    // switch the post; the old revision is editable and deletable again
-   await ask(`/entries/${post.id}?collection=posts`,"PATCH",{data:{current_revision:r2.id},expectedVersion:post.version});
+   expect((await ask(`/entries/${post.id}?collection=posts`,"PATCH",{data:{current_revision:r2.id},expectedVersion:post.version})).locks).toBeUndefined();
+   // a written row's payload re-reads its locks
+   expect((await patch(await ask(`/entries/${r1.id}?collection=post_revisions`,"GET"),{body:"free"})).locks).toEqual(free);
    expect(await remove({id:r1.id})).toEqual({affected:1});
    expect(await remove(r2)).toMatchObject({status:409,...lock("delete")});
   }finally{

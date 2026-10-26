@@ -8,6 +8,8 @@ export default {
     "ops.details": "세부 정보",
     "ops.conditionConflict": "레코드가 변경되었거나 이 작업의 조건을 더 이상 충족하지 않습니다. 새로고침 후 다시 시도하세요.",
   "ops.uniqueConflict": "동일한 고유 값을 가진 레코드가 이미 있습니다.",
+    "ops.lockConflict": "이 레코드는 잠겨 있어 변경되지 않았습니다. {message}",
+    "entryEdit.locked": "이 레코드는 잠겨 있습니다. {message}",
     "model.viewDataUnavailable": "실시간 데이터를 사용할 수 없습니다. 이 View는 내부용이거나 계정에 실행 권한이 없습니다.",
     "admin.consoleTitle": "관리자 콘솔",
     "developer.workspaceTitle": "개발",

@@ -8,6 +8,8 @@ export default {
     "ops.details": "التفاصيل",
     "ops.conditionConflict": "تغيّر السجل أو لم يعد يستوفي شرط هذا الإجراء. حدّث الصفحة وحاول مجددًا.",
   "ops.uniqueConflict": "يوجد بالفعل سجل بالقيمة الفريدة نفسها.",
+    "ops.lockConflict": "هذا السجل مقفل ولم يتم تغييره. {message}",
+    "entryEdit.locked": "هذا السجل مقفل. {message}",
     "model.viewDataUnavailable": "البيانات المباشرة غير متاحة: هذا العرض داخلي أو حسابك غير مخوّل لتشغيله.",
     "admin.consoleTitle": "لوحة الإدارة",
     "developer.workspaceTitle": "التطوير",

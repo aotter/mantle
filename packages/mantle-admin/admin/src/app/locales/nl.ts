@@ -8,6 +8,8 @@ export default {
     "ops.details": "Details",
     "ops.conditionConflict": "Het record is gewijzigd of voldoet niet meer aan de voorwaarde van deze actie. Vernieuw en probeer opnieuw.",
   "ops.uniqueConflict": "Er bestaat al een record met dezelfde unieke waarde.",
+    "ops.lockConflict": "Dit record is vergrendeld en is niet gewijzigd. {message}",
+    "entryEdit.locked": "Dit record is vergrendeld. {message}",
     "model.viewDataUnavailable": "Actuele gegevens zijn niet beschikbaar: deze View is intern of je account mag deze niet uitvoeren.",
     "admin.consoleTitle": "Beheerconsole",
     "developer.workspaceTitle": "Ontwikkeling",

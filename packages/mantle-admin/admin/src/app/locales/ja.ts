@@ -8,6 +8,8 @@ export default {
     "ops.details": "詳細",
     "ops.conditionConflict": "レコードが変更されたか、この操作の条件を満たさなくなりました。更新して再試行してください。",
   "ops.uniqueConflict": "同じ一意の値を持つレコードが既に存在します。",
+    "ops.lockConflict": "このレコードはロックされているため、変更されませんでした。{message}",
+    "entryEdit.locked": "このレコードはロックされています。{message}",
     "model.viewDataUnavailable": "ライブデータを表示できません。この View は内部用か、アカウントに実行権限がありません。",
     "admin.consoleTitle": "管理コンソール",
     "developer.workspaceTitle": "開発",
