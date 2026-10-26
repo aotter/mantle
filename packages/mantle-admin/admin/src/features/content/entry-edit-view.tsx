@@ -541,6 +541,7 @@ export function SchemaFields({
   mediaPurposes,
   hiddenRootFields = [],
   inputSlots,
+  refScopes,
 }: {
   schema: JsonSchema;
   uiSchema?: Record<string, unknown> | null;
@@ -554,6 +555,8 @@ export function SchemaFields({
   hiddenRootFields?: readonly string[];
   /** A record form: its top-level fields go through the application's `input:<schema>.<field>` slots. */
   inputSlots?: { schema: string; readOnly: boolean };
+  /** An operation form's top-level ref pickers narrowed to one parent's children, by input name. */
+  refScopes?: Readonly<Record<string, { field: string; value: string }>>;
 }): React.ReactElement {
   const labels: FieldLabels = {
     emptyOption: t(language, "entryEdit.emptyOption"),
@@ -576,7 +579,8 @@ export function SchemaFields({
     const ref = mantleRefOf(fieldSchema);
     if (ref && ref.schema !== "media_assets" && schemaType(fieldSchema) === "string") {
       // a reference is an id or cleared, never "": a required one has no clear button unless null is one of its values
-      return <RefPicker target={ref} value={field.value} onChange={field.setValue} onClear={field.clearable ? () => field.setValue(field.cleared) : undefined}
+      const scope = field.path.length === path.length + 1 ? refScopes?.[field.name] : undefined;
+      return <RefPicker target={ref} scope={scope} value={field.value} onChange={field.setValue} onClear={field.clearable ? () => field.setValue(field.cleared) : undefined}
         label={field.label} language={language} canonical={canonical} fallback={() => field.renderDefault()} />;
     }
     const text = stringForInput(field.value);
