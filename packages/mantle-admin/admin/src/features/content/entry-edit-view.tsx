@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Globe, Images, ImagePlus, LockKeyhole, Plus, RotateCcw, Save, Send } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { api } from "../../lib/api";
+import { api, ApiError, refusalOf } from "../../lib/api";
 import { entryTitle } from "../../lib/entry-title";
 import { isFoldedFieldChild } from "../../lib/collection-nav";
 import { enumOptions } from "../../lib/enum-options";
@@ -48,7 +48,7 @@ import { collectionSummaryKey } from "./collection-view";
 import { boundOperationsFor, RecordOperations, RowOperationsMenu } from "./row-operations";
 import { contentLocales, LocaleBadge, localeName } from "./locale-badge";
 import { RefPicker } from "./ref-picker";
-import { followEntry, isEntryFormDirty, loadEntryForm, type EntryForm } from "./entry-form";
+import { editEntryForm, followEntry, isEntryFormDirty, loadEntryForm, reannounceNewer, settleEntryForm, type EntryForm } from "./entry-form";
 
 const MarkdownEditor = React.lazy(() => import("../editor/markdown-editor").then((module) => ({ default: module.MarkdownEditor })));
 const HtmlEditor = React.lazy(() => import("../editor/html-editor").then((module) => ({ default: module.HtmlEditor })));
@@ -82,7 +82,11 @@ export function EntryEditView({
   // the form against the entry it was loaded from: a re-read keeps unsaved edits (#1790)
   const [form, setForm] = React.useState<EntryForm | null>(() => query.data ? loadEntryForm(query.data.entry) : null);
   const data = form?.data ?? null;
-  const setData = React.useCallback((next: Record<string, unknown>) => setForm((current) => current && { ...current, data: next }), []);
+  const latest = query.data?.entry;
+  const setData = React.useCallback(
+    (next: Record<string, unknown>) => setForm((current) => current && editEntryForm(current, next, latest)),
+    [latest],
+  );
   const [operationalEditUnlocked, setOperationalEditUnlocked] = React.useState(false);
   React.useEffect(() => setOperationalEditUnlocked(false), [collectionName, entryId]);
   React.useEffect(() => {
@@ -91,15 +95,21 @@ export function EntryEditView({
   }, [query.data]);
   const [relatedError, setRelatedError] = React.useState<unknown>();
   const syncPayload = React.useCallback(
-    async (document: EntryDocument) => {
+    async (document: EntryDocument, sent: Record<string, unknown> = document.entry.data) => {
       setRelatedError(undefined);
-      setForm(loadEntryForm(document.entry));
+      setForm((current) => settleEntryForm(current, sent, document.entry));
       queryClient.setQueryData(queryOptions.queryKey, { ...document, parentEntryId: null, related: [] });
       try { queryClient.setQueryData(queryOptions.queryKey, await composeEntry(document)); }
       catch (error) { setRelatedError(error); }
     },
     [queryClient, queryOptions.queryKey],
   );
+  // a CONFLICT re-reads the entry, so the newer version's notice (and its reload action) shows
+  const onWriteError = React.useCallback((error: unknown) => {
+    if (!(error instanceof ApiError) || refusalOf(error.body)?.code !== "CONFLICT") return;
+    setForm(reannounceNewer);
+    void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey });
+  }, [queryClient, queryOptions.queryKey]);
 
   const save = useMutation({
     mutationFn: (nextData: Record<string, unknown>) =>
@@ -107,15 +117,18 @@ export function EntryEditView({
         data: nextData,
         expectedVersion: form?.base.version,
       }),
-    onSuccess: syncPayload,
+    onSuccess: (document, sent) => syncPayload(document, sent),
+    onError: onWriteError,
   });
   const publish = useMutation({
     mutationFn: () => api.post<EntryDocument>(entryApiPath(collectionName, entryId, "/publish"), { expectedVersion: form?.base.version }),
-    onSuccess: syncPayload,
+    onSuccess: (document) => syncPayload(document),
+    onError: onWriteError,
   });
   const unpublish = useMutation({
     mutationFn: () => api.post<EntryDocument>(entryApiPath(collectionName, entryId, "/unpublish"), { expectedVersion: form?.base.version }),
-    onSuccess: syncPayload,
+    onSuccess: (document) => syncPayload(document),
+    onError: onWriteError,
   });
   const createTranslation = useMutation({
     mutationFn: ({ section, locale }: { section: RelatedEntrySection; locale: string }) =>

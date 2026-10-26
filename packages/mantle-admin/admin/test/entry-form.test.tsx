@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { TooltipProvider } from "@aotter/mantle-ui/kit";
 import { PreferencesProvider } from "../src/app/preferences";
 import { AdminRouterProvider } from "../src/app/router";
-import { followEntry, isEntryFormDirty, loadEntryForm, type EntryForm } from "../src/features/content/entry-form";
+import { editEntryForm, followEntry, isEntryFormDirty, loadEntryForm, reannounceNewer, settleEntryForm, type EntryForm } from "../src/features/content/entry-form";
 import { EntryEditView, NewerVersionNotice } from "../src/features/content/entry-edit-view";
 import { entryEditorQueryOptions } from "../src/lib/queries";
 import type { EntryEditorPayload } from "../src/lib/types";
@@ -52,6 +52,39 @@ describe("the record form against an editor re-read (#1790)", () => {
     const afterRead = followEntry(afterSave, saved); // the query data it set, then any later re-read
     expect(afterRead).toMatchObject({ data: { title: "Saved by me" }, base: { version: 4 }, newer: null });
     expect(isEntryFormDirty(afterRead)).toBe(false);
+  });
+
+  it("shows a dismissed notice again on a CONFLICT, and a newer version than the one dismissed always shows it", () => {
+    const dismissed = { ...edit(loaded, { title: "Hello, edited" }), newer: { version: 4, dismissed: true } };
+    expect(reannounceNewer(dismissed)?.newer).toEqual({ version: 4, dismissed: false });
+    expect(reannounceNewer(loaded)).toBe(loaded);
+    // the CONFLICT's re-read of the same version keeps it showing
+    const shown = reannounceNewer(dismissed)!;
+    expect(followEntry(shown, entry(4, { title: "Changed elsewhere" }))).toBe(shown);
+    expect(followEntry(dismissed, entry(5, { title: "Changed again" })).newer).toEqual({ version: 5, dismissed: false });
+  });
+
+  it("keeps edits made while the person's own write was in flight, on top of the version it returned", () => {
+    const sent = { title: "Hello, edited" };
+    const typedMore = edit(loaded, { title: "Hello, edited more" });
+    const settled = settleEntryForm(typedMore, sent, entry(4, sent));
+    expect(settled).toMatchObject({ data: { title: "Hello, edited more" }, base: { version: 4 }, newer: null });
+    expect(isEntryFormDirty(settled)).toBe(true);
+    // nothing typed since: the server copy, clean
+    expect(settleEntryForm(edit(loaded, sent), sent, entry(4, sent))).toMatchObject({ data: sent, base: { version: 4 } });
+    // an unpublish keeps the server's data, so unsaved edits stay and become saveable on the returned draft
+    const unpublished = entry(4, { title: "Hello" });
+    const kept = settleEntryForm(edit(loaded, sent), unpublished.data, unpublished);
+    expect(kept).toMatchObject({ data: sent, base: { version: 4 } });
+    expect(isEntryFormDirty(kept)).toBe(true);
+  });
+
+  it("adopts a known newer version once the person reverts their edits by hand", () => {
+    const newer = entry(4, { title: "Changed elsewhere" });
+    const announced = followEntry(edit(loaded, { title: "Hello, edited" }), newer);
+    expect(editEntryForm(announced, { title: "Hello" }, newer)).toMatchObject({ data: { title: "Changed elsewhere" }, base: { version: 4 }, newer: null });
+    // still dirty: the edit stays on the old base, announced
+    expect(editEntryForm(announced, { title: "Hello, more" }, newer)).toMatchObject({ base: { version: 3 }, newer: { version: 4 } });
   });
 
   it("starts over on another entry rather than carrying edits across", () => {
