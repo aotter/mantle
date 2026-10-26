@@ -55,10 +55,11 @@ function adminCreateWarnings(plan: RuntimePlan): string[] {
 /** Admin's list search matches a Schema's `searchableFields` besides the entry id; name the field a Schema without any is listed by. */
 function adminSearchWarnings(plan: RuntimePlan): string[] {
   return Object.values(plan.schemas).filter(s => !s.translates && !s.search?.length).flatMap(s => {
-    const properties = (s.schema.properties ?? {}) as Record<string, { type?: unknown; "x-mantle-ref"?: unknown } | undefined>;
+    const properties = (s.schema.properties ?? {}) as Record<string, { type?: unknown; format?: unknown; "x-mantle-ref"?: unknown } | undefined>;
     const primary = (s.uiSchema?.["list"] as { primaryField?: unknown } | undefined)?.primaryField;
-    // searchableFields takes string properties only; a reference lists its target's title, not the stored id people would type
-    const field = [primary, "title"].find((f): f is string => typeof f === "string" && [properties[f]?.type].flat().includes("string") && properties[f]?.["x-mantle-ref"] == null);
+    // searchableFields takes string properties only, not a date or date-time (stored as a number); a reference lists its
+    // target's title, not the stored id people would type
+    const field = [primary, "title"].find((f): f is string => typeof f === "string" && [properties[f]?.type].flat().includes("string") && !["date", "date-time"].includes(String(properties[f]?.format)) && properties[f]?.["x-mantle-ref"] == null);
     return field ? [`Schema '${s.name}' declares no searchableFields, so Admin's list search matches the entry id only and a search for its '${field}' finds nothing. Add searchableFields: [${field}] to search it.`] : [];
   });
 }
