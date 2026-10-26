@@ -250,6 +250,22 @@ export interface SchemaManifestSpec {
   /** The Schema's row template (ADR-0046 amendment): AND-joined `column = auth.uid()` /
    *  `column IN auth.user('field')` terms, enforced on every read and write of the Schema. */
   readonly scope?: string;
+  /** Data-state invariants (#1822): while a lock's `when` holds for the existing row, a caller's update or delete of it is
+   *  refused, whatever the caller's role. Only a trusted (system) write bypasses it. */
+  readonly lock?: readonly SchemaLock[];
+}
+
+export const LOCK_VERBS = ["update", "delete"] as const;
+export type LockVerb = (typeof LOCK_VERBS)[number];
+export interface SchemaLock {
+  /** Unique within the Schema; named by the `kind: "lock"` conflict. */
+  readonly name: string;
+  readonly on: readonly LockVerb[];
+  /** A SQL boolean over the existing row: its columns, comparisons, AND/OR/NOT, IS [NOT] NULL and [NOT] EXISTS over declared
+   *  Schemas. True (or NULL) means locked. */
+  readonly when: string;
+  /** Static text the refusal carries. */
+  readonly message: string;
 }
 
 export interface TranslatesBinding {

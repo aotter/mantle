@@ -1,6 +1,6 @@
 # Schema
 
-A Schema declares one table and its typed Store collection. Required keys are title and an object JSON Schema. Optional keys include lifecycle, scope, TTL, indexes, uniqueIndexes, checks, searchableFields, localized, translates and uiSchema. Unknown keys fail validation.
+A Schema declares one table and its typed Store collection. Required keys are title and an object JSON Schema. Optional keys include lifecycle, scope, lock, TTL, indexes, uniqueIndexes, checks, searchableFields, localized, translates and uiSchema. Unknown keys fail validation.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
@@ -49,6 +49,29 @@ Generated types constrain Store fields and writes; Store does not interpret a JS
 Schemas default to operational. Publishing opts into draft/published/archived and generated admin/system transitions. Store cannot assign system columns or scope; generated policy fills them. See [lifecycle and locales](../concepts/lifecycle-and-locales.md).
 
 Owner and field columns prefix every unique index in that order. User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
+
+### Locks
+
+`lock` freezes a row while a condition on it holds. It is a data-state invariant, not an authorization rule: it binds every caller, admins included.
+
+```yaml
+kind: Schema
+metadata: { name: post_revisions }
+spec:
+  lifecycle: operational
+  lock:
+    - name: live_revision
+      on: [update, delete]
+      when: EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)
+      message: "This revision is live. Create a new revision and switch to it."
+```
+
+- `when` true means locked. It reads the existing row only (like RLS `USING`); new rows stay with `checks`. `on` lists `update` and/or `delete`; names are unique per Schema.
+- A caller's update or delete of the Schema gets `AND NOT (<when>)` in its WHERE, beside scope and the version check, so the write stays one atomic statement. Several locks are ANDed. A NULL `when` refuses the write: a lock fails closed. An `ON CONFLICT DO UPDATE` carries the `update` locks too.
+- It applies to the generic writes compiled by Core (Admin's generic patch and delete) and to caller-mode SQL Procedures' `UPDATE`/`DELETE` of the locked Schema. Only a trusted write (the system caller) bypasses it: the maintenance escape hatch, visible in code review.
+- `when` allows the Schema's own columns, constants, comparisons (`=`, `<>`, `<`, `>`, `<=`, `>=`, `IN (…)`), `AND`/`OR`/`NOT`, `IS [NOT] NULL` and `[NOT] EXISTS (SELECT … FROM <declared Schema> [alias] WHERE …)`. It calls no function (`now()`, `auth.*`, aggregates, windows) and reads no `input.*`, so it holds the same for every caller and request. Inside a subquery every column is qualified: `p.current_revision` for the subquery's Schema, `post_revisions.id` for the locked row (an unqualified `id` would silently read `posts.id`). A subquery reads one Schema, without join, `WITH`, `GROUP BY`, `ORDER BY`, `LIMIT` or `DISTINCT`, and its alias may not hide the locked Schema's name.
+- Subqueries read the stored rows, without the reader's scope, publishing filter or TTL: a referencing row the caller cannot see still locks.
+- **Index rule.** Locks are index-proven reads, like [paged Views](#index-prefixes-for-paged-views): every guarded write runs them. Each `EXISTS` needs an equality (`=` to the locked row's column, an outer subquery's column or a literal) on the first column of a declared index, unique index or `id` of its Schema. The example needs `indexes: [[current_revision]]` on `posts`; otherwise generation fails with `LOCK_INDEX_MISSING`, naming the index to declare. A condition on the locked row's own columns needs no index.
 
 `localized` and `translates: { parent, on }` declare a translation child. Parent visibility and publication are retained, with matching scope where needed. Locale values stay plain strings.
 

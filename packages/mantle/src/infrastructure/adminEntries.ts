@@ -32,6 +32,8 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
     // Compiler scope names belong only to relations this generated query can reference.
     const schemas:Record<string,Schema>=Object.create(null);let relation:Schema|undefined=s;
     while(relation&&!Object.hasOwn(schemas,relation.name)){schemas[relation.name]=relation;relation=relation.translates?plan.schemas[relation.translates.parent.toLowerCase()]:undefined;}
+    // a lock's subqueries read their Schemas (#1822)
+    const lockReads=(n:unknown):void=>{if(!n||typeof n!=="object")return;const v=(n as SqlNode).RangeVar;if(v&&plan.schemas[v.relname])schemas[v.relname]??=plan.schemas[v.relname]!;Object.values(n).forEach(lockReads);};lockReads(s.locks);
     const ctx=(kind:"view"|"procedure",trusted:boolean,inputs:Record<string,string>)=>({dialect,schemas,inputs,kind,mode:trusted?"trusted" as const:"admin" as const,uncheckedRefs:true as const});
     /**
      * A caller's write of an `x-mantle-ref` to a scoped Schema (Core's `refChecks`), the Store's check: per field, a predicate the

@@ -10,7 +10,7 @@ import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { refChecks } from "../../domain/service/SqlRowPolicy.js";
 import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
 import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
-import { AGGREGATES, NATIVE_COLUMNS, NATIVE_NOT_NULL, notNullColumns, viewCacheProblem, checkShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
+import { AGGREGATES, NATIVE_COLUMNS, NATIVE_NOT_NULL, notNullColumns, viewCacheProblem, checkShapeProblem, lockIndexProblem, lockShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 import * as d1 from "../../../d1/compile/index.js";
@@ -248,6 +248,31 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       checks.push(where!);
     }
     if (checks.length) schemas[name] = { ...schemas[name]!, checks };
+  }
+  // a lock (#1822) compiles like a check, as the WHERE of a read of its own Schema; its subqueries read stored rows (no reader
+  // scope), or a referencing row the caller cannot see would let the write through. Indexes are all known by now.
+  const field = (schema: string, column: string) => schemas[schema]!.names?.[column] ?? Object.keys(NATIVE_COLUMNS).find((f) => NATIVE_COLUMNS[f] === column) ?? column;
+  for (const { manifest: m, source } of linked.schemas) {
+    const name = m.metadata.name.toLowerCase(), locks: NonNullable<PlanSchema["locks"]>[number][] = [];
+    for (const [i, lock] of (m.spec.lock ?? []).entries()) {
+      const pointer = `/spec/lock/${i}/when`;
+      const res = await compileSql(`SELECT 1 FROM "${name.replace(/"/g, '""')}" WHERE ${lock.when}`, { schemas, inputs: {}, kind: "view" }, dialect);
+      if (!res.ok) { diagnostics.push(toDiagnostic(res.diagnostic, source, pointer)); continue; }
+      const where: SqlNode | undefined = res.plan.stmts[0]?.SelectStmt?.whereClause;
+      const problem = where ? lockShapeProblem(where, schemas, name) : "a lock is one boolean expression";
+      if (problem) { diagnostics.push(toDiagnostic({ code: "SQL_SHAPE", message: problem }, source, pointer)); continue; }
+      const unindexed = lockIndexProblem(where!, schemas);
+      if (unindexed) {
+        const target = schemas[unindexed.schema]!.name, columns = unindexed.columns.map((c) => field(unindexed.schema, c));
+        diagnostics.push(validateDiagnostic({ code: "LOCK_INDEX_MISSING", severity: "error", path: `${source.sourceId}#/${source.documentIndex}${pointer}`, source: { ...source, path: pointer },
+          message: `Schema '${m.metadata.name}' lock '${lock.name}': no index serves its EXISTS on '${target}', which every guarded write runs. ${columns.length ? `Declare indexes: [[${columns.join(", ")}]] on Schema '${target}'` : `Correlate the subquery to the locked row by an equality on one of '${target}''s columns (e.g. ${target}.<field> = ${name}.id), then index that column`} (handbook: reference/schema.md#locks).` }));
+        continue;
+      }
+      const system = (n: unknown): void => { if (!n || typeof n !== "object") return; const v = (n as SqlNode).RangeVar; if (v?.mantle === "table") v.mantle = "system"; Object.values(n).forEach(system); };
+      system(where);
+      locks.push({ name: lock.name, on: [...lock.on], when: where!, message: lock.message });
+    }
+    if (locks.length) schemas[name] = { ...schemas[name]!, locks };
   }
 
   // a View compiles after the Views it reads; a cycle is refused

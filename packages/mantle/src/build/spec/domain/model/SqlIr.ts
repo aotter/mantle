@@ -34,8 +34,12 @@ export interface SqlSchemaDef {
   /** lower-cased column -> the name the JSON Schema declares (the plan has it; `notNullColumns` reads it with `schema`) */
   readonly names?: Readonly<Record<string, string>>;
   /** the Schema's JSON Schema, of which storage reads only what is required and nullable */
+  /** `spec.lock` (#1822): `when` is the IR of its boolean over the existing row, whose subqueries read stored rows (`system`). */
+  readonly locks?: readonly SqlLock[];
   readonly schema?: { readonly required?: readonly string[]; readonly properties?: Readonly<Record<string, { readonly type?: unknown; readonly nullable?: boolean; readonly enum?: readonly unknown[]; readonly oneOf?: readonly { readonly const?: unknown }[] }>> };
 }
+
+export interface SqlLock { readonly name: string; readonly on: readonly ("update" | "delete")[]; readonly when: SqlNode; readonly message: string }
 
 /**
  * What the allowlist reads off every Schema of a context: computed from `schemas` (`schemaColumns`), once per plan by a caller that
@@ -194,4 +198,86 @@ export function checkShapeProblem(v: unknown, columns: ReadonlyMap<string, strin
     return undefined;
   };
   return walk(v);
+}
+
+const COMPARISONS = new Set(["=", "<>", "!=", "<", ">", "<=", ">="]);
+/**
+ * Why a Schema lock's `when` (the compiled WHERE of a read of `table`) is outside the lock subset, or undefined (#1822). It names
+ * the locked row's columns (unqualified, or qualified with the Schema's name) through comparisons, AND/OR/NOT and IS [NOT] NULL,
+ * and `[NOT] EXISTS (SELECT … FROM <declared Schema> [alias] WHERE …)`. Inside a subquery every column is qualified, so an
+ * unqualified name can never silently read the subquery's table instead of the locked row. No function call (`now()`, `auth.*`,
+ * aggregates, windows), cast, parameter or write.
+ */
+export function lockShapeProblem(where: SqlNode, schemas: Readonly<Record<string, SqlSchemaDef>>, table: string): string | undefined {
+  type Frame = { alias: string; columns: ReadonlyMap<string, string> };
+  const columnsOf = (name: string) => storageColumns(schemas[name]!);
+  const shape = "a lock's when allows columns, constants, comparisons, AND/OR/NOT, IS [NOT] NULL and [NOT] EXISTS (SELECT … FROM <Schema> WHERE …)";
+  const column = (n: SqlNode, frames: readonly Frame[]): string | undefined => {
+    const f: (string | undefined)[] = (n.fields ?? []).map((x: SqlNode) => x?.String?.sval);
+    if (f.some((x) => x === undefined) || f.length > 2) return `${shape}: ${f.map((x) => x ?? "*").join(".")} is not a column`;
+    if (f.length === 1) {
+      if (frames.length > 1) return `inside a subquery qualify every column: '${f[0]}' would read the subquery's table, not the locked row; write ${table}.${f[0]} for the locked row`;
+      return frames[0]!.columns.has(f[0]!) ? undefined : `'${f[0]}' is not a column of ${table}`;
+    }
+    const frame = [...frames].reverse().find((x) => x.alias === f[0]);
+    if (!frame) return `'${f[0]}' is neither ${table} nor a subquery's alias`;
+    return frame.columns.has(f[1]!) ? undefined : `'${f[1]}' is not a column of ${f[0]}`;
+  };
+  const value = (n: SqlNode | undefined, frames: readonly Frame[]): string | undefined => {
+    if (n?.A_Const) return undefined;
+    if (n?.ColumnRef) return column(n.ColumnRef, frames);
+    if (n?.List) { for (const x of n.List.items ?? []) { const p = value(x, frames); if (p) return p; } return undefined; }
+    if (n?.FuncCall) return "a lock calls no function: now(), auth.*, aggregates and window functions are refused, so it holds the same for every caller and every request";
+    return `${shape}: ${Object.keys(n ?? {})[0] ?? "this expression"} is refused`;
+  };
+  const sub = (s: SqlNode | undefined, frames: readonly Frame[]): string | undefined => {
+    const from: SqlNode[] = s?.fromClause ?? [];
+    if (!s || s.op !== "SETOP_NONE" || s.withClause || s.groupClause || s.havingClause || s.distinctClause || s.sortClause || s.limitCount || s.limitOffset || s.windowClause || s.valuesLists || from.length !== 1 || !from[0]!.RangeVar)
+      return "a lock's subquery is SELECT … FROM one declared Schema [alias] WHERE …: no join, WITH, GROUP BY, ORDER BY, LIMIT, DISTINCT or set operation";
+    const rv = from[0]!.RangeVar, name = String(rv.relname).toLowerCase();
+    if (rv.mantle !== "table" || !schemas[name]) return `${rv.relname} is not a declared Schema`;
+    const alias = rv.alias?.aliasname ?? rv.relname;
+    if (frames.some((x) => x.alias === alias)) return `the subquery's '${alias}' hides a name already in scope (the locked row is ${table}): give it its own alias`;
+    const inner = [...frames, { alias, columns: columnsOf(name) }];
+    for (const t of s.targetList ?? []) { const p = value(t.ResTarget?.val, inner); if (p) return p; }
+    return s.whereClause ? expr(s.whereClause, inner) : undefined;
+  };
+  const expr = (n: SqlNode, frames: readonly Frame[]): string | undefined => {
+    if (n.BoolExpr) { for (const x of n.BoolExpr.args) { const p = expr(x, frames); if (p) return p; } return undefined; }
+    if (n.NullTest) return value(n.NullTest.arg, frames);
+    if (n.SubLink) return n.SubLink.subLinkType === "EXISTS_SUBLINK" ? sub(n.SubLink.subselect?.SelectStmt, frames) : `${shape}: only an EXISTS subquery`;
+    const e = n.A_Expr;
+    if (e && ((e.kind === "AEXPR_OP" && COMPARISONS.has(e.name?.[0]?.String?.sval) && e.lexpr) || (e.kind === "AEXPR_IN" && e.rexpr?.List))) return value(e.lexpr, frames) ?? value(e.rexpr, frames);
+    return value(n, frames);
+  };
+  return expr(where, [{ alias: table, columns: columnsOf(table) }]);
+}
+
+/**
+ * Whether every EXISTS of a lock (already `lockShapeProblem`-free) is index-served (#1822): its equality predicates (top-level AND
+ * terms `col = <constant or outer column>` on the subquery's own Schema) must include the first column of a declared index, unique
+ * index or `id` of that Schema. Each lock runs on every guarded write, so an unindexed EXISTS would scan its table each time.
+ * Returns the first unproved subquery: its Schema and the columns an index could lead with.
+ */
+export function lockIndexProblem(where: SqlNode, schemas: Readonly<Record<string, SqlSchemaDef & { readonly unique?: readonly (readonly string[])[]; readonly indexes?: readonly (readonly string[])[] }>>): { schema: string; columns: string[] } | undefined {
+  const walk = (n: unknown): { schema: string; columns: string[] } | undefined => {
+    if (!n || typeof n !== "object") return undefined;
+    const s = (n as SqlNode).SubLink?.subselect?.SelectStmt;
+    if (s) {
+      const rv = s.fromClause[0].RangeVar, name = String(rv.relname).toLowerCase(), alias = rv.alias?.aliasname ?? rv.relname, def = schemas[name]!;
+      const own = (x: SqlNode | undefined) => x?.ColumnRef?.fields?.length === 2 && x.ColumnRef.fields[0].String?.sval === alias ? String(x.ColumnRef.fields[1].String.sval) : undefined;
+      const other = (x: SqlNode | undefined) => !!x?.A_Const || (x?.ColumnRef?.fields?.length === 2 && x.ColumnRef.fields[0].String?.sval !== alias);
+      const terms = (x: SqlNode | undefined): SqlNode[] => x?.BoolExpr?.boolop === "AND_EXPR" ? x.BoolExpr.args.flatMap(terms) : x ? [x] : [];
+      const columns = [...new Set(terms(s.whereClause).flatMap((t) => {
+        const e = t.A_Expr;
+        if (e?.kind !== "AEXPR_OP" || e.name?.[0]?.String?.sval !== "=") return [];
+        const c = own(e.lexpr) && other(e.rexpr) ? own(e.lexpr) : own(e.rexpr) && other(e.lexpr) ? own(e.rexpr) : undefined;
+        return c ? [c] : [];
+      }))];
+      if (![["id"], ...(def.indexes ?? []), ...(def.unique ?? [])].some((index) => columns.includes(index[0]!))) return { schema: name, columns };
+    }
+    for (const v of Object.values(n)) { const p = walk(v); if (p) return p; }
+    return undefined;
+  };
+  return walk(where);
 }
