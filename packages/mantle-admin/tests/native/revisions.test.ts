@@ -6,6 +6,8 @@ import {admin as createAdmin} from "../../src/server/index.js";
 import {entries} from "../../src/server/entries.js";
 import {generateAdmin,writeAdminFixture} from "./generated-fixture.js";
 import {admin} from "./server-native-scenarios.js";
+import {createInteractionController} from "@aotter/mantle-ui/controller";
+import {parentScopeInteraction} from "../../admin/src/features/ops/interaction-schema.js";
 
 // docs/handbook/guides/revisions.md through Admin's own routes: the manifests and handler are the guide's (see packages/mantle/tests/revisions.test.ts).
 const sdkTests=resolve(import.meta.dir,"../../../mantle/tests");
@@ -48,6 +50,20 @@ test("the revisions guide in Admin: revisions fold under their post, and the pos
   expect(workbench.related.find((s:any)=>s.collection.name==="post_revisions").entries.map((e:any)=>e.id)).toEqual([first.id]);
   expect((await ok(`/entries?collection=post_revisions&scope_field=post&scope_value=${hello.id}`)).items.map((e:any)=>e.id)).toEqual([first.id]);
   expect((await ok(`/entries/${first.id}?collection=post_revisions`)).parentEntryId).toBe(hello.id);
+
+  // New revision from the post's revision panel (aotter/mantle#1824): the panel's scope binds `post`, the input named
+  // like the child's nav.parentField, to this post, as CollectionView passes it to the header's operation dialog.
+  const revisions=(await ok("/collections")).collections.find((c:any)=>c.name==="post_revisions");
+  const panel=workbench.related.find((s:any)=>s.collection.name==="post_revisions").relationship;
+  const scoped=parentScopeInteraction(bound("new-revision").input,{field:panel.childField,value:String(panel.parentValue),parent:revisions.parent.collection,parentField:revisions.parent.parentField})!;
+  expect(scoped).toEqual({interaction:{collection:"posts",bind:[{input:"post",field:"post"}],mutates:true},row:{post:hello.id}});
+  const dialog=createInteractionController({...scoped,invoke:async values=>{const result=await operation("new-revision",values);return result.status===200?{ok:true,data:result.body.output}:{ok:false,diagnostics:[result.body.error]};}});
+  await dialog.open();
+  expect(dialog.getSnapshot()).toMatchObject({phase:"ready",bound:{post:hello.id}});
+  await dialog.submit();
+  const fromPanel=(dialog.getSnapshot().result as any).results[0][0];
+  expect((await ok(`/entries/${fromPanel.id}?collection=post_revisions`)).entry.data.post).toBe(hello.id);
+  await ok(`/entries/${fromPanel.id}?collection=post_revisions`,"DELETE");
 
   // Switch, then publish: the page is live.
   expect(await operation("switch-revision",{post:hello.id,revision:first.id,expectedVersion:hello.version})).toMatchObject({status:200});

@@ -323,6 +323,7 @@ function CollectionList({
       ) : null}
       <CollectionOperations
         operations={collectionOperations}
+        scope={scope && collection?.parent ? { ...scope, parent: collection.parent.collection, parentField: collection.parent.parentField } : undefined}
         language={language}
         canonical={canonical}
         onSuccess={clearSelection}
