@@ -27,7 +27,7 @@ import type {
   SiteInfo,
   AdminOperation,
 } from "../../lib/types";
-import { mantleRefOf } from "../../lib/types";
+import { declaredLock, mantleRefOf } from "../../lib/types";
 import { Button, buttonVariants } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@aotter/mantle-ui/kit";
@@ -174,14 +174,25 @@ export function EntryEditView({
   const isArchived = payload.entry.status === "archived";
   const missingRequired = hasMissingRequired(data, payload.collection.schema);
   const canManageContent = me.data?.admin === true;
+  // a declared Schema lock holds for this row (#1822): the server refuses its update, whoever asks, so no toggle unlocks the
+  // form; the implicit `publishing` lock (drafts only) keeps the published/archived hint and never binds a transition
+  const locks = payload.entry.locks;
+  const rowLocked = declaredLock(locks);
+  const lockedHint = rowLocked && locks?.update ? t(language, "entryEdit.locked", { message: locks.update.message }) : undefined;
+  // `publishing.liveEdits`: a published entry edits in place and goes live on save (an archived one stays locked)
+  const liveEdits = !isOperational && !isDraft && locks?.update === false;
   const canEdit = canEditEntry({
     admin: me.data?.admin,
     isReadOnly,
     isOperational,
     isDraft,
     operationalEditUnlocked,
+    rowLocked,
+    liveEdits,
   });
-  const canSave = canEdit && dirty;
+  // a live edit must keep the entry publishable: the server refuses one that drops required data
+  const liveMissing = liveEdits && missingRequired;
+  const canSave = canEdit && dirty && !liveMissing;
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
   const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId, payload.parentEntryTitle);
@@ -278,6 +289,11 @@ export function EntryEditView({
         <p className="-mt-4 text-sm text-muted-foreground">
           {t(language, "entryEdit.readOnlyHint")}
         </p>
+      ) : rowLocked ? (
+        <p role="status" className="-mt-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <LockKeyhole className="size-4" aria-hidden />
+          {lockedHint}
+        </p>
       ) : isOperational ? (
         <div className="-mt-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <p>{t(language, "entryEdit.operationalHint")}</p>
@@ -294,8 +310,8 @@ export function EntryEditView({
           ) : null}
         </div>
       ) : !isDraft && canManageContent ? (
-        <p className="-mt-4 text-sm text-muted-foreground">
-          {t(language, isArchived ? "entryEdit.archivedHint" : "entryEdit.publishedHint")}
+        <p role={liveEdits ? "status" : undefined} className="-mt-4 text-sm text-muted-foreground">
+          {t(language, liveEdits ? "entryEdit.liveEditHint" : isArchived ? "entryEdit.archivedHint" : "entryEdit.publishedHint")}
         </p>
       ) : null}
 
@@ -370,7 +386,7 @@ export function EntryEditView({
         </div>
       </div>
 
-      {canEdit || (canManageContent && !isOperational && !isReadOnly) ? (
+      {canEdit || (canManageContent && !isReadOnly && (!isOperational || rowLocked)) ? (
         <FormActionBar
           status={save.isPending
             ? t(language, "crud.saving")
@@ -380,7 +396,7 @@ export function EntryEditView({
             ? t(language, isArchived ? "entryEdit.restoring" : "entryEdit.unpublishing")
             : dirty
             ? t(language, "common.unsavedChanges")
-            : isDraft && !isOperational && missingRequired
+            : (isDraft || liveEdits) && !isOperational && missingRequired
             ? t(language, "entryEdit.publishMissingRequired")
             : save.isSuccess
             ? t(language, "common.saved")
@@ -391,8 +407,10 @@ export function EntryEditView({
               type="button"
               variant="secondary"
               onClick={() => publish.mutate()}
-              disabled={actionPending || dirty || missingRequired}
-              title={dirty
+              disabled={actionPending || dirty || missingRequired || rowLocked}
+              title={rowLocked
+                ? lockedHint
+                : dirty
                 ? t(language, "entryEdit.publishDisabledDirty")
                 : missingRequired
                 ? t(language, "entryEdit.publishMissingRequired")
@@ -406,8 +424,8 @@ export function EntryEditView({
               type="button"
               variant="secondary"
               onClick={() => unpublish.mutate()}
-              disabled={actionPending}
-              title={t(language, isArchived ? "entryEdit.restoreTooltip" : "entryEdit.unpublishTooltip")}
+              disabled={actionPending || rowLocked}
+              title={rowLocked ? lockedHint : t(language, isArchived ? "entryEdit.restoreTooltip" : "entryEdit.unpublishTooltip")}
             >
               <RotateCcw className="size-4" aria-hidden />
               {unpublish.isPending
@@ -415,12 +433,12 @@ export function EntryEditView({
                 : t(language, isArchived ? "entryEdit.restore" : "entryEdit.unpublish")}
             </Button>
           ))}
-          {canEdit ? (
+          {canEdit || rowLocked ? (
             <Button
               type="button"
               onClick={() => save.mutate(data)}
               disabled={actionPending || !canSave}
-              title={t(language, "entryEdit.saveTooltip")}
+              title={lockedHint ?? t(language, liveMissing ? "entryEdit.liveMissingRequired" : "entryEdit.saveTooltip")}
             >
               <Save className="size-4" aria-hidden />
               {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
@@ -618,21 +636,29 @@ export function editorHiddenFields(
   ];
 }
 
-/** A publishing entry is edited only as a draft: a published or archived one is unpublished first, so no edit waits on a disabled Save. */
+/**
+ * A publishing entry is edited only as a draft, or published under `liveEdits`: otherwise a published or archived one is
+ * unpublished first, so no edit waits on a disabled Save. A row a declared Schema lock holds (`rowLocked`, #1822) is never
+ * editable, whatever the unlock toggle says.
+ */
 export function canEditEntry({
   admin,
   isReadOnly,
   isOperational,
   isDraft,
   operationalEditUnlocked,
+  rowLocked = false,
+  liveEdits = false,
 }: {
   admin: boolean | undefined;
   isReadOnly: boolean;
   isOperational: boolean;
   isDraft: boolean;
   operationalEditUnlocked: boolean;
+  rowLocked?: boolean;
+  liveEdits?: boolean;
 }): boolean {
-  return admin === true && !isReadOnly && (isOperational ? operationalEditUnlocked : isDraft);
+  return admin === true && !isReadOnly && !rowLocked && (isOperational ? operationalEditUnlocked : isDraft || liveEdits);
 }
 
 function MediaAssetField({

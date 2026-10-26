@@ -1,7 +1,7 @@
 import { modeOf } from "@aotter/mantle/user-fields";
 /** Selected generated native adapters: constants and compiled predicates, never a manifest interpreter. */
 import { ContractError, isAdmin, deny, type Caller, type Row } from "@aotter/mantle/contracts";
-import { binds, bound, type Recipe, type Step, type Bound, type Values } from "@aotter/mantle/binds";
+import { binds, bound, type LockProbe, type Recipe, type Step, type Bound, type Values } from "@aotter/mantle/binds";
 import { query as readQuery } from "@aotter/mantle/validation";
 import { invalid } from "@aotter/mantle/surface";
 import { checkPageLimit, page, decodeNullableCursor, encodeCursor, validCursor, type CursorKind, type Pages } from "@aotter/mantle/paging";
@@ -138,9 +138,31 @@ export interface NativeEntryMode {
     readonly binds: readonly Recipe[];
     readonly fields: Readonly<Record<string, {readonly column: string; readonly insert: string; readonly update?: string}>>;
     readonly create: {readonly prefix: string; readonly between: string; readonly suffix: string; readonly binds: readonly Recipe[]; readonly columns: readonly string[]; readonly values: readonly string[]; readonly returning: string; readonly refs?: RefChecks};
-    readonly patch: {readonly prefix: string; readonly binds: readonly Recipe[]; readonly sets: readonly string[]; readonly where: string; readonly returning: string; readonly refs?: RefChecks};
+    readonly patch: {readonly prefix: string; readonly binds: readonly Recipe[]; readonly sets: readonly string[]; readonly where: string; readonly returning: string; readonly refs?: RefChecks; readonly lock?: LockProbe};
     readonly remove: Step;
+    /** Schema locks (#1822), caller mode only: `projection` outputs, per verb, the name of a lock that holds for the row, or NULL. */
+    readonly locks?: {readonly projection: string; readonly update: string; readonly delete: string; readonly messages: Readonly<Record<string, string>>};
 }
+/** A lock that holds for one verb: its name and static message. */
+export interface HeldLock { readonly lock: string; readonly message: string }
+/** What a caller's generic update and delete of a row would meet (#1822): per verb, the first lock that holds, or false. Advisory; the write's WHERE decides. */
+export interface EntryLocks { readonly update: HeldLock | false; readonly delete: HeldLock | false }
+const heldLocks = new WeakMap<Row, EntryLocks>();
+/** The locks a lock-reading `nativeEntryGet` or `nativeEntryPage` found on this row; undefined when the Schema has none or none were read. */
+export const entryLocks = (row: Row): EntryLocks | undefined => heldLocks.get(row);
+const withLocks = (spec: NativeEntryProcedures, m: NativeEntryMode, rows: Row[]): Row[] => {
+    if (!spec.caller.locks) return rows;
+    for (const row of rows) {
+        const l = m.locks, held = (alias: string | undefined): HeldLock | false => {
+            const lock = alias === undefined ? null : row[alias];
+            if (alias !== undefined) delete row[alias];
+            // a NULL `when` holds too; an unknown name cannot occur, but still reads as held
+            return typeof lock === "string" ? {lock, message: l!.messages[lock] ?? ""} : false;
+        };
+        heldLocks.set(row, {update: held(l?.update), delete: held(l?.delete)});
+    }
+    return rows;
+};
 export interface NativeEntryProcedures {
     readonly userScopes?: readonly { readonly column: string; readonly field: string; readonly type: "string" | "number" }[];
     readonly path: string;
@@ -166,7 +188,7 @@ export async function nativeEntryGet<Database>(spec: NativeCollection, adapter: 
     const m = selectMode(spec, caller, adapter.values), values = binds(adapter.values, m.binds, caller);
     values.push(id);
     const where = [m.policy, `${spec.id} = ${adapter.param(values.length)}`].filter(Boolean).map(term => "(" + term + ")").join(" AND ");
-    return (await adapter.read(db, `SELECT ${m.projection} ${m.from} WHERE ${where} LIMIT 1`, values))[0] ?? null;
+    return withLocks(spec, m, await adapter.read(db, `SELECT ${m.projection}${m.locks ? ", " + m.locks.projection : ""} ${m.from} WHERE ${where} LIMIT 1`, values))[0] ?? null;
 }
 /** Prepare and execution admit only writable fields; inserts fill the caller's scope values. */
 export function nativeEntryData(spec: NativeEntryProcedures, values: Values, caller: Caller, verb: "create" | "patch", data: Row): Row {
@@ -210,11 +232,13 @@ export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures
     const sql = verb === "create"
         ? m.create.prefix + [...m.create.columns, ...present.map(({fragment}) => fragment.column)].join(", ") + (checks.length ? ") SELECT " : m.create.between) + [...m.create.values, ...fragments].join(", ") + (checks.length ? " WHERE " + checks.join(" AND ") : m.create.suffix) + m.create.returning
         : m.patch.prefix + [...m.patch.sets, ...fragments].join(", ") + m.patch.where + checks.map(check => " AND " + check).join("") + m.patch.returning;
-    const result = await adapter.procedure(db, [{sql, binds: values, row: true}], spec.path);
+    const lock = verb === "patch" && m.patch.lock ? {lock: {...m.patch.lock, binds: binds(adapter.values, m.patch.lock.binds, caller, context)}} : {};
+    const result = await adapter.procedure(db, [{sql, binds: values, row: true, ...lock}], spec.path);
     return result[0]![0]!;
 }
 /** Fixed indexed keyset templates bind values; identifiers and Core policy come only from the compiled whitelist. */
-export async function nativeEntryPage<Database>(spec: NativeCollection, adapter: NativeAdapter<Database>, getDb: () => Database, caller: Caller, query: EntryPageQuery) {
+/** `locks`: also read each row's Schema locks (`entryLocks`), one CASE per verb per row. */
+export async function nativeEntryPage<Database>(spec: NativeCollection, adapter: NativeAdapter<Database>, getDb: () => Database, caller: Caller, query: EntryPageQuery, locks = false) {
     const match = /^(.*):(asc|desc)$/.exec(query.order), column = match?.[1], direction = match?.[2];
     if (!column || !Object.hasOwn(spec.fields, column) || !spec.orderFields.includes(column)) invalid("Unknown indexed order.", spec.path);
     const field = spec.fields[column]!;
@@ -256,10 +280,12 @@ export async function nativeEntryPage<Database>(spec: NativeCollection, adapter:
     const size = parameter(limit + 1), where = predicates.length ? " WHERE " + predicates.map(term => "(" + term + ")").join(" AND ") : "";
     const order = `${field.expression} ${ascending ? "ASC" : "DESC"} NULLS ${nullsFirst ? "FIRST" : "LAST"}, ${spec.id} ${idAscending ? "ASC" : "DESC"}`;
     const [keyAlias,idAlias] = spec.cursorAliases;
-    const rows = await adapter.read(getDb(), `SELECT ${m.projection}, ${field.wire} AS ${keyAlias.sql}, ${spec.id} AS ${idAlias.sql} ${m.from}${where} ORDER BY ${order} LIMIT ${size}`, values);
+    const lockProjection = locks && m.locks ? m.locks.projection + ", " : "";
+    const rows = await adapter.read(getDb(), `SELECT ${m.projection}, ${lockProjection}${field.wire} AS ${keyAlias.sql}, ${spec.id} AS ${idAlias.sql} ${m.from}${where} ORDER BY ${order} LIMIT ${size}`, values);
     const last = rows[limit - 1], nextCursor = rows.length > limit && last ? encodeCursor(last[keyAlias.name], last[idAlias.name], operation) : undefined;
     if (rows.length > limit) rows.length = limit;
     for (const row of rows) {delete row[keyAlias.name]; delete row[idAlias.name];}
+    if (locks) withLocks(spec, m, rows);
     return {rows, ...(nextCursor ? {nextCursor} : {})};
 }
 /** Shared URL assembly; each field's coercion and checks are compiled application callbacks. */

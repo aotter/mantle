@@ -65,6 +65,14 @@ describe("createInteractionController", () => {
     expect(invoke.mock.calls[1]![0]).toMatchObject({ requestStatus: "rejected", expectedVersion: 4 });
   });
 
+  it("treats a Schema lock's CONFLICT as a refusal, not a conflict a reread could resolve (#1822)", async () => {
+    const lock: Diagnostic = { ...conflict, kind: "lock", message: "This revision is live." };
+    const { controller: c } = controller({ invoke: async () => ({ ok: false, diagnostics: [lock] }) });
+    await c.open();
+    await c.submit();
+    expect(c.getSnapshot()).toMatchObject({ phase: "failed", diagnostics: [lock] });
+  });
+
   it("never retries a write whose outcome is unknown", async () => {
     const invoke = vi.fn(async (): Promise<InvokeOutcome> => { throw new Error("timeout"); });
     const read = vi.fn(async () => entry(3));
