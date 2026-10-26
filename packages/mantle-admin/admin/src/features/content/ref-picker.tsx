@@ -58,10 +58,12 @@ function storedValue(row: EntryRow & { data?: Record<string, unknown> }, field: 
  * entries route as the list page and stores the referenced value (the id unless the ref names another key).
  * Convenience only: the server validates the value, and anything the caller cannot list keeps the text input.
  */
-export function RefPicker({ target, value, onChange, label, language, canonical = null, fallback }: {
+export function RefPicker({ target, value, onChange, onClear, label, language, canonical = null, fallback }: {
   target: { schema: string; field: string };
   value: unknown;
   onChange: (next: unknown) => void;
+  /** Empties an optional field (to null in a record form; never ""); without it there is no clear button. */
+  onClear?: (() => void) | undefined;
   label: string;
   language: AdminLanguage;
   canonical?: string | null;
@@ -76,14 +78,15 @@ export function RefPicker({ target, value, onChange, label, language, canonical 
   // the first page doubles as the probe: a refusal keeps the text input before anyone opens the list
   const probe = useQuery({ ...refOptionsQueryOptions(target.schema, ""), enabled: Boolean(collection) });
   if (!collection || refPickerUnavailable(probe.error)) return <>{fallback()}</>;
-  return <RefCombobox collection={collection} field={target.field} value={value} onChange={onChange} label={label} language={language} canonical={canonical} />;
+  return <RefCombobox collection={collection} field={target.field} value={value} onChange={onChange} onClear={onClear} label={label} language={language} canonical={canonical} />;
 }
 
-function RefCombobox({ collection, field, value, onChange, label, language, canonical }: {
+function RefCombobox({ collection, field, value, onChange, onClear, label, language, canonical }: {
   collection: Collection;
   field: string;
   value: unknown;
   onChange: (next: unknown) => void;
+  onClear: (() => void) | undefined;
   label: string;
   language: AdminLanguage;
   canonical: string | null;
@@ -124,7 +127,7 @@ function RefCombobox({ collection, field, value, onChange, label, language, cano
     setTerm("");
     setOpen(false);
   };
-  const clear = () => { onChange(""); setTerm(""); setOpen(false); };
+  const clear = () => { onClear?.(); setTerm(""); setOpen(false); };
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") { event.preventDefault(); setActive((index) => Math.min(index + 1, Math.max(items.length - 1, 0))); }
     else if (event.key === "ArrowUp") { event.preventDefault(); setActive((index) => Math.max(index - 1, 0)); }
@@ -154,7 +157,7 @@ function RefCombobox({ collection, field, value, onChange, label, language, cano
             </span>
           </Button>
         </PopoverTrigger>
-        {stored ? (
+        {stored && onClear ? (
           <Button type="button" variant="ghost" size="icon-sm" onClick={clear} aria-label={t(language, "refPicker.clear", { name: label })} title={t(language, "refPicker.clear", { name: label })}>
             <X aria-hidden />
           </Button>
