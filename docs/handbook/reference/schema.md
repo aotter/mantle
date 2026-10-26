@@ -106,8 +106,9 @@ the publishing lifecycle; `version` backs `expectedVersion`; `author_id` is the 
 `restrict: { <schema>: "author_id = auth.uid()" }`.
 
 A seed or other SQL that inserts rows outside Mantle (`wrangler d1 execute --file seed.sql`) sets the native columns
-itself. Procedures and the Store fill every one of them for you; prefer them for fixtures. The Store never writes
-these columns or the scope column, for any caller, so SQL is also the only way to keep their existing values.
+itself. Procedures and the Store fill every one of them for you; prefer them for fixtures. The Store accepts no
+value for these columns or the scope column, for any caller: it sets them itself, so SQL is also the only way to keep
+their existing values.
 
 | Column | SQLite and D1 | PostgreSQL | If the SQL omits it |
 |---|---|---|---|
