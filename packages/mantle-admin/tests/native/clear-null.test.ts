@@ -8,7 +8,7 @@ import {entries} from "../../src/server/entries.js";
 import {generateAdmin,writeAdminFixture} from "./generated-fixture.js";
 import {admin} from "./server-native-scenarios.js";
 
-// #1787: the record form clears an optional field by sending null; a key it leaves out keeps the stored value.
+// #1787: the record form clears a field by sending null; a key it leaves out keeps the stored value.
 const manifest=`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: owners}
@@ -36,6 +36,14 @@ spec:
    day: {type: string, format: date}
    ownerId: {type: string, x-mantle-ref: owners}
    meta: {type: object}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: posts}
+spec:
+ title: Posts
+ lifecycle: publishing
+ schema: {type: object, required: [title, rank], properties: {title: {type: string}, rank: {type: integer}}}
 `;
 const optional={note:"hi",email:"a@b.test",count:3,kind:"a",due:"2026-10-25T08:00:00.000000Z",day:"2026-10-25",meta:{tags:["x"]}};
 
@@ -75,6 +83,11 @@ for(const target of ["bun-sqlite","bun-postgres"] as const){
    // a required field stays unclearable, and "" is not an empty constrained text (why the form sends null)
    expect(await patch(echoed,{name:null})).toBe("INPUT_VALIDATION_FAILED");
    for(const data of [{note:""},{email:""},{due:""},{day:""}]) expect(await patch(echoed,data)).toBe("INPUT_VALIDATION_FAILED");
+   // a draft may lack a required field (Publish refuses it): null clears one there, and the person sees it empty, not the old value back
+   const post=await ask("/entries","POST",{collection:"posts",data:{title:"p",rank:1}});
+   const draft=await ask(`/entries/${post.id}?collection=posts`,"PATCH",{data:{title:null,rank:null},expectedVersion:post.version});
+   expect(draft.data).toMatchObject({title:null,rank:null});
+   expect(await ask(`/entries/${post.id}/publish?collection=posts`,"POST",{expectedVersion:draft.version})).toBe("INPUT_VALIDATION_FAILED");
   }finally{
    if(pg){await db.unsafe(`DROP SCHEMA IF EXISTS ${namespace} CASCADE`);await db.close();}else db.close();
    await rm(dir,{recursive:true,force:true});

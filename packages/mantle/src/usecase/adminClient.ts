@@ -45,8 +45,10 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
   // the scope column belongs to the caller, so an entry's data has no such field
   const dataOf = (s: (typeof schemas)[number]) => {
     const scope = s.scope ? s.names[s.scope] ?? s.scope : undefined, { [scope ?? ""]: _scope, ...declared } = s.schema.properties ?? {};
-    // an unset field reads as null, and the entry PATCH clears one with null: a field the Schema does not require is `T | null`
-    const properties = Object.fromEntries(Object.entries(declared).map(([name, p]) => [name, s.schema.required?.includes(name) || nullable(p) ? p : { ...p, nullable: true }]));
+    // an unset field reads as null, and the entry PATCH clears one with null: a field the Schema does not require is `T | null`,
+    // and so is every field of a publishing collection, whose drafts may lack a required one (Publish refuses that)
+    const certain = (name: string) => !s.publishing && s.schema.required?.includes(name);
+    const properties = Object.fromEntries(Object.entries(declared).map(([name, p]) => [name, certain(name) || nullable(p) ? p : { ...p, nullable: true }]));
     // a draft of a publishing collection is only partly validated, so none of its fields is certain to be there
     const required = s.publishing ? [] : s.schema.required?.filter(f => f !== scope);
     const schema = { ...s.schema, properties, ...(required ? { required } : {}) };

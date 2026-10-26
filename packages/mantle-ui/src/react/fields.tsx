@@ -61,8 +61,10 @@ export interface FieldSlot {
   readonly value: unknown;
   readonly label: string;
   readonly required: boolean;
-  /** What clearing the field writes: null where the form clears optional fields to null or null is one of its values, else
-   *  undefined (left out). An emptied text control writes null where this is null, else ""; a reference or media id is never `""`. */
+  /** Whether the field offers a way to empty it (a Not set choice, a clear button): optional, or null is one of its values. */
+  readonly clearable: boolean;
+  /** What an emptied field writes: null in a record form or where null is one of its values, else undefined (left out).
+   *  An emptied text control writes null where this is null, else ""; a reference or media id is never `""`. */
   readonly cleared: null | undefined;
   /** The string widget the field asks for: `input`, `textarea`, `markdown` or `html`. */
   readonly widget: StringWidget;
@@ -89,7 +91,7 @@ export interface SchemaFieldsProps {
   /** Root properties not shown (bound inputs, a translation's key). */
   readonly hiddenRootFields?: readonly string[];
   /**
-   * A record form: clearing an optional root field writes null. The entry PATCH clears a column only on null and keeps
+   * A record form: clearing a root field, required or not, writes null. The entry PATCH clears a column only on null and keeps
    * a key JSON leaves out, so `undefined` would not clear it. Elsewhere (an operation's input) a cleared field is left
    * out unless null is one of its values.
    */
@@ -141,11 +143,12 @@ function SchemaField(props: SchemaFieldsProps & {
   // the runtime owns bound values, and a readOnly property is not the client's to set: the form shows both, read-only
   const readOnly = typeof schema["x-mantle-bind"] === "string" || schema.readOnly === true;
   const nullable = isNullable(schema);
-  // Text too: in a record form an emptied optional text field is null, not "". A record created without it stores
-  // NULL (the create route drops null), so "" would be a second "unset"; "" also fails minLength, pattern, a format
-  // (email, uri, date, date-time) and collides in a unique index where NULLs do not. Required fields keep "" as before
-  // (hasMissingRequired reads it as missing), and so does text outside a record form unless null is one of its values.
-  const cleared = props.clearToNull === true && !required ? null : clearedValue(schema);
+  // In a record form every emptied field is null, text too. A record created without it stores NULL (the create route
+  // drops null), so "" would be a second "unset"; "" also fails minLength, pattern, a format (email, uri, date,
+  // date-time) and collides in a unique index where NULLs do not. A required one too: left out, the PATCH would keep the
+  // old value and Save would bring it back; null is refused visibly, or clears it in a draft (which Publish refuses).
+  // Outside a record form text stays "" and anything else is left out, unless null is one of its values.
+  const cleared = props.clearToNull === true ? null : clearedValue(schema);
   const clearable = !required || nullable;
   const id = React.useId();
   const labelId = `${id}-label`;
@@ -224,7 +227,7 @@ readOnly ? (
       )
   );
 
-  const custom = readOnly ? undefined : props.renderField?.({ name, schema, path, value, label, required, cleared, widget: stringFieldWidget(schema, props.widget), setValue, renderDefault: (next) => renderControl(next ? next.value : value, next ? next.setValue : setValue) });
+  const custom = readOnly ? undefined : props.renderField?.({ name, schema, path, value, label, required, clearable, cleared, widget: stringFieldWidget(schema, props.widget), setValue, renderDefault: (next) => renderControl(next ? next.value : value, next ? next.setValue : setValue) });
 
   return (
     <div className="space-y-2">
@@ -341,9 +344,10 @@ function ArrayField({ schema, value, path, labels, setArray, nested }: {
   );
 }
 
-/** JSON as text; `onEmpty`, for an optional field, makes an empty box clear it (else empty text is invalid JSON). */
+/** JSON as text; `onEmpty`, for an optional field, makes an empty box clear it (else empty text is invalid JSON, and an
+ *  unset value shows `{}` as before). */
 function JsonEditor({ value, onChange, onEmpty }: { value: unknown; onChange: (value: unknown) => void; onEmpty: (() => void) | undefined }): React.ReactElement {
-  const text = (next: unknown) => (next == null ? "" : JSON.stringify(next, null, 2));
+  const text = (next: unknown) => (next == null && onEmpty ? "" : JSON.stringify(next ?? {}, null, 2));
   const [draft, setDraft] = React.useState(text(value));
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => setDraft(text(value)), [value]);

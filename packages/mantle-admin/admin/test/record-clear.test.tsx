@@ -71,9 +71,9 @@ describe("the record form clears Admin's own controls to null", () => {
     const f = await form();
     mediaBox("m1")["onChange"]({ target: { value: "" } });
     expect(f.changed()).toHaveProperty("cover", null);
-    // a required one is never "" either: it is left out, and the stored id stays
+    // a required one too, never "" or left out (the PATCH would keep the old id): the server refuses null visibly
     mediaBox("m2")["onChange"]({ target: { value: "" } });
-    expect(f.changed()).toHaveProperty("photo", undefined);
+    expect(JSON.parse(JSON.stringify(f.changed()))).toHaveProperty("photo", null);
   });
 
   it("emptied Markdown", async () => {

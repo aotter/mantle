@@ -528,7 +528,7 @@ export function SchemaFields({
     const ref = mantleRefOf(fieldSchema);
     if (ref && ref.schema !== "media_assets" && schemaType(fieldSchema) === "string") {
       // a reference is an id or cleared, never "": a required one has no clear button unless null is one of its values
-      return <RefPicker target={ref} value={field.value} onChange={field.setValue} onClear={field.required && field.cleared !== null ? undefined : () => field.setValue(field.cleared)}
+      return <RefPicker target={ref} value={field.value} onChange={field.setValue} onClear={field.clearable ? () => field.setValue(field.cleared) : undefined}
         label={field.label} language={language} canonical={canonical} fallback={() => field.renderDefault()} />;
     }
     const text = stringForInput(field.value);
@@ -545,7 +545,7 @@ export function SchemaFields({
       props={{ value: field.value, onChange: field.setValue, readOnly: inputSlots.readOnly, property: field.schema as Record<string, unknown>, field, build }} />
   );
   return (
-    // a record form saves through the entry PATCH, which clears a column only on null
+    // a record form saves through the entry PATCH, which clears a column only on null and keeps a key left out
     <SharedSchemaFields schema={schema} uiSchema={uiSchema} value={value} path={path} onChange={onChange} language={language} clearToNull={inputSlots !== undefined}
       canonical={canonical} hiddenRootFields={hiddenRootFields} labels={labels} renderField={renderField} propertyLabel={(name, fieldSchema, _language, fieldCanonical) => propertyLabel(name, fieldSchema as JsonSchema, language, fieldCanonical)} />
   );
@@ -602,7 +602,8 @@ function MediaAssetField({
   mediaPurposes: readonly MediaPurposePolicy[];
   language: AdminLanguage;
   onChange: (value: unknown) => void;
-  /** What an emptied id writes: an asset id is never "". */
+  /** What an emptied id writes: an asset id is never "", and in a record form a required one is null too, so Save
+   *  cannot quietly keep the old id. */
   cleared: null | undefined;
 }): React.ReactElement {
   const fileRef = React.useRef<HTMLInputElement | null>(null);

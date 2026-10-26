@@ -87,7 +87,7 @@ export function emitAdminBindings(input: GenerateInput, refuse: (path:string,mes
     const schemaCode=`{
       name:${q(s.name)},primary:${primary},descriptor:allCollections[${q(s.name)}],publishing:${!!s.publishing},readOnly:${s.schema.readOnly===true||declared.some(f=>s.fields[f]==="geo")},fields:names${n},defaults:${q(defaults)},
       binding:${entrySpec},
-      query:query${n},validate:(data,full)=>{const checked=Object.fromEntries(Object.entries(data).filter(([key,v])=>v!==null||${q(s.schema.required??[])}.includes(key)));(full?full${n}:partial${n})(checked);${sqlite?"":"nativeText(data);"}${yearZero}return data;},
+      query:query${n},validate:(data,full)=>{const checked=Object.fromEntries(Object.entries(data).filter(([key,v])=>v!==null||${s.publishing?"full&&":""}${q(s.schema.required??[])}.includes(key)));(full?full${n}:partial${n})(checked);${sqlite?"":"nativeText(data);"}${yearZero}return data;},
       values:values${n},row:${named},
       ${sqlite?"":"native:nativeText,"}
       ${s.publishing?`transition:async(db,caller,verb,id,expectedVersion)=>{const run=await ({publish:()=>import("./procedures/${encodeURIComponent(s.name+".publish")}.js"),unpublish:()=>import("./procedures/${encodeURIComponent(s.name+".unpublish")}.js"),archive:()=>import("./procedures/${encodeURIComponent(s.name+".archive")}.js")})[verb]();const version=wireRows([{version:expectedVersion}],[["version","int"]])[0]!.version;return run.default(db,caller,{id,expectedVersion:version} as Parameters<typeof run.default>[2]);},`:""}

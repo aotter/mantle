@@ -217,8 +217,10 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 
 `record.aside:` and `record.actions:` render beside Admin's own side cards and actions, which they do not replace. A
 record form's top-level fields go through `input:`; a View's parameters and a Procedure's inputs do not. A field the Schema
-does not require is `T | null` in the generated types: it reads `null` when unset, and `onChange(null)` clears it (Save sends
-`null`, which the entry PATCH stores as NULL; a field left out keeps its value). The built-in controls clear the same way. A read-only field
+does not require is `T | null` in the generated types, and so is every field of a publishing collection, whose draft may lack a
+required one: it reads `null` when unset, and `onChange(null)` clears it (Save sends `null`, which the entry PATCH stores as
+NULL; a field left out keeps its value). The built-in controls clear the same way, and an emptied required field is `null` too:
+an operational record refuses it with a validation error, and a draft keeps it empty until Publish, which refuses it. A read-only field
 (a bound or `readOnly` property) has no `input:` component, and `readOnly` tells yours that the caller cannot edit the
 record. In the browser Admin, a View column that reads a Schema field also goes through that field's `cell:` component, with the column's own
 `cell:view:` component outside it; the MCP App renders only `cell:view:`. The developer workspace (`/admin/dev`) is Admin's own tool and does not go through any slot. A record with folded child collections opens on a workbench at `/admin/c/<schema>/<id>`, which is not `RecordView`; the record form (and so `RecordView`, `record.aside:`, `record.actions:` and `input:`) is its `/edit` page. A `Shell` that does not call `renderDefault` has no status bar: the record form's Save and Publish bar then stays in the page.

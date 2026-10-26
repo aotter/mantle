@@ -95,22 +95,33 @@ describe("a record form (clearToNull) clears an optional field to null", () => {
     expect(changed).toEqual({ meta: null });
   });
 
-  it("tells a host's control the field's cleared value and whether it is required", () => {
+  it("tells a host's control the field's cleared value, whether it is required and whether it offers a clear", () => {
     const slots: FieldSlot[] = [];
     renderToStaticMarkup(<SchemaFields schema={schema} value={value} onChange={() => {}} language="en" clearToNull renderField={(field) => { slots.push(field); return null; }} />);
     const slot = (name: string) => slots.find((s) => s.name === name)!;
-    expect([slot("note").cleared, slot("note").required]).toEqual([null, false]);
-    expect([slot("owner").cleared, slot("owner").required]).toEqual([undefined, true]);
+    expect([slot("note").cleared, slot("note").required, slot("note").clearable]).toEqual([null, false, true]);
+    expect([slot("owner").cleared, slot("owner").required, slot("owner").clearable]).toEqual([null, true, false]);
   });
 });
 
-describe("required fields stay unclearable", () => {
-  it("no Not set, no clear button; emptied text stays the empty string as before", () => {
+describe("a required field offers no clear, but an emptied one is null too", () => {
+  it("no Not set, no clear button; emptied text or number is null, so the PATCH cannot keep the old value", () => {
     const f = form({ clearToNull: true });
     expect(seen.filter((p) => p.kind === "select-item" && p["value"] === "__empty__")).toHaveLength(1);
     expect(f.clearButton("Starts")).toBeUndefined();
-    expect(f.empty("input", "Title")).toHaveProperty("title", "");
-    expect(f.empty("input", "Size")).toHaveProperty("size", undefined);
+    const title = f.empty("input", "Title");
+    expect(JSON.parse(JSON.stringify(title))).toHaveProperty("title", null);
+    expect(JSON.parse(JSON.stringify(f.empty("input", "Size")))).toHaveProperty("size", null);
+  });
+
+  it("an unset required JSON value shows {} as before; an optional one shows an empty box", () => {
+    const shown = (required: boolean) => {
+      seen.length = 0;
+      renderToStaticMarkup(<SchemaFields schema={{ type: "object", required: required ? ["meta"] : [], properties: { meta: { type: "object" } } }} value={{ meta: null }} onChange={() => {}} language="en" clearToNull />);
+      return seen.find((p) => p.kind === "textarea")!["value"];
+    };
+    expect(shown(true)).toBe("{}");
+    expect(shown(false)).toBe("");
   });
 
   it("a nested property of a JSON value is not a column: it keeps the empty string", () => {
@@ -122,6 +133,8 @@ describe("required fields stay unclearable", () => {
 describe("outside a record form (an operation's input)", () => {
   it("a cleared field is left out, and text is the empty string, unless null is one of its values", () => {
     const f = form();
+    expect(f.empty("input", "Title")).toHaveProperty("title", "");
+    expect(f.empty("input", "Size")).toHaveProperty("size", undefined);
     expect(f.empty("input", "Note")).toHaveProperty("note", "");
     expect(f.notSet("Tier")).toHaveProperty("tier", undefined);
     expect(f.empty("input", "Count")).toHaveProperty("count", undefined);
