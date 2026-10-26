@@ -161,7 +161,7 @@ shows the button only when the host has `serverTools` (it calls the View's tool 
 <a id="scoped-refresh"></a>By default an operation's success reads every shown View again, since Admin cannot know which a
 Procedure changed. A page with many Views (say one per expanded branch of a tree) can name the ones to read again:
 `useOperation("move", { refresh: ["children", { view: "children", input: { parent: id } }] })`. A name covers every input of
-that View; `{ view, input }` covers the one `useView(view, input)` (any `limit`). The names and inputs are typed like `useView`'s.
+that View; `{ view, input }` covers the one `useView(view, input)` (any `limit`); `refresh: []` reads no View again. The names and inputs are typed like `useView`'s.
 Views not named are marked stale rather than read again, so each reads again when it is next shown. Entries, open entries,
 totals and badges still refresh: the Procedure may write any collection, and skipping those would show stale records with no
 way to name them. Leave `refresh` out when unsure; a View you forget to name keeps showing its old rows until it is shown again.
