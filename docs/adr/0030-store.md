@@ -45,3 +45,7 @@ MongoDB-flavoured operators (`deleteMany`, `$in`) were considered first and reje
 
 - The read `where` grammar is **AND only** through readers: an equality, a comparison (`eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `like`, `in` and `notIn` over a list, `isNull`). `or`, `not`, `in` subqueries, joins and aggregates are written as Views. **Writes keep** `and`/`or`/`not` and subqueries.
 - **Consequences, the codemod:** the promise that the grammar slice ships with a `mantle-update` codemod is **withdrawn**. ADR-0032 had already dropped the bin; ADR-0043 adds none for the move from `select` to readers.
+
+## 2026-10-26 amendment — Schema locks (#1822)
+
+A Store bound to a caller (`store(db, caller)`, and a ref handler's `ctx.store`) carries the Schema's locks: its `update` and `delete` get `AND NOT (<when>)` (Core's lock condition, printed for the dialect at generation and checked against Core's `writePolicy`), and a refusal is `CONFLICT` `kind: "lock"`. Only a **trusted Store** (a system caller) bypasses a lock. It is the maintenance escape hatch — a migration, a maintenance script, a ref handler that deliberately opens a system Store — and is documented as such, not as the normal path.

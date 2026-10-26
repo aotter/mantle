@@ -15,10 +15,14 @@ metadata:
 Read the installed SDK README, then follow the version-matched [project and CLI
 workflow](../../handbook/start/project-and-cli.md) before editing.
 
-For 0.1.x, follow [Upgrade 0.1 to 0.2](../../upgrade-0.1-to-0.2.md): give the
-0.2 service a new database and move data by export and import; never boot 0.2
-against a 0.1.x database. Between 0.2 versions, apply reviewed migrations
-rehearsed on a copy.
+For 0.1.x, follow [Upgrade 0.1 to 0.2](../../upgrade-0.1-to-0.2.md). Mantle
+ships no migration tool: plan the data move from
+[Moving data from 0.1.x](../../upgrade-0.1-to-0.2.md#moving-data-from-01x),
+verify each fact against the generated `schema.sql` and the 0.1.4 export, and
+have the plan reviewed. Give the 0.2 service a new database, rehearse the load
+on a copy, never boot 0.2 against a 0.1.x database, and keep exports out of the
+repository. The guide's appendix is historical; do not follow it. Between 0.2
+versions, apply reviewed migrations rehearsed on a copy.
 
 For the stable 0.2 line, pin every selected Mantle package to `0.2.0`; do not upgrade an existing application by following a moving dist-tag.
 

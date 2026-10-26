@@ -15,13 +15,20 @@ import { idTail } from "./field-render";
 /** How many records the picker lists per search; it narrows by typing, it does not page. */
 export const REF_PICKER_LIMIT = 20;
 
-/** Records of the target collection for one search term, read as the caller through the entries list route. */
-export function refOptionsQueryOptions(collection: string, term: string) {
+/**
+ * Records of the target collection for one search term, read as the caller through the entries list route; with a
+ * scope, only one parent's children (`scope_field`/`scope_value`, as the folded child list reads them).
+ */
+export function refOptionsQueryOptions(collection: string, term: string, scope?: { field: string; value: string }) {
   return {
-    queryKey: ["entries", "ref-options", collection, term] as const,
+    queryKey: ["entries", "ref-options", collection, term, ...(scope ? [scope.field, scope.value] : [])] as const,
     queryFn: ({ signal }: { signal?: AbortSignal }) => {
       const qs = new URLSearchParams({ collection, limit: String(REF_PICKER_LIMIT), sort: "updatedAt", direction: "desc" });
       if (term) qs.set("search", term);
+      if (scope) {
+        qs.set("scope_field", scope.field);
+        qs.set("scope_value", scope.value);
+      }
       return api.get<ListEntriesResult>(`/entries?${qs.toString()}`, signal ? { signal } : {});
     },
     retry: false,
@@ -58,8 +65,10 @@ function storedValue(row: EntryRow & { data?: Record<string, unknown> }, field: 
  * entries route as the list page and stores the referenced value (the id unless the ref names another key).
  * Convenience only: the server validates the value, and anything the caller cannot list keeps the text input.
  */
-export function RefPicker({ target, value, onChange, onClear, label, language, canonical = null, fallback }: {
+export function RefPicker({ target, scope, value, onChange, onClear, label, language, canonical = null, fallback }: {
   target: { schema: string; field: string };
+  /** Lists only one parent's children (an operation bound to that parent); the stored value is still looked up unscoped. */
+  scope?: { field: string; value: string } | undefined;
   value: unknown;
   onChange: (next: unknown) => void;
   /** Empties an optional field (to null in a record form; never ""); without it there is no clear button. */
@@ -76,14 +85,15 @@ export function RefPicker({ target, value, onChange, onClear, label, language, c
   });
   const collection = collections.data?.find((item) => item.name === target.schema);
   // the first page doubles as the probe: a refusal keeps the text input before anyone opens the list
-  const probe = useQuery({ ...refOptionsQueryOptions(target.schema, ""), enabled: Boolean(collection) });
+  const probe = useQuery({ ...refOptionsQueryOptions(target.schema, "", scope), enabled: Boolean(collection) });
   if (!collection || refPickerUnavailable(probe.error)) return <>{fallback()}</>;
-  return <RefCombobox collection={collection} field={target.field} value={value} onChange={onChange} onClear={onClear} label={label} language={language} canonical={canonical} />;
+  return <RefCombobox collection={collection} field={target.field} scope={scope} value={value} onChange={onChange} onClear={onClear} label={label} language={language} canonical={canonical} />;
 }
 
-function RefCombobox({ collection, field, value, onChange, onClear, label, language, canonical }: {
+function RefCombobox({ collection, field, scope, value, onChange, onClear, label, language, canonical }: {
   collection: Collection;
   field: string;
+  scope: { field: string; value: string } | undefined;
   value: unknown;
   onChange: (next: unknown) => void;
   onClear: (() => void) | undefined;
@@ -100,7 +110,7 @@ function RefCombobox({ collection, field, value, onChange, onClear, label, langu
   const [pickError, setPickError] = React.useState(false);
   const search = React.useDeferredValue(term.trim());
   const name = resolveLocalizedText(collection.title, language, canonical) ?? collection.name;
-  const options = useQuery({ ...refOptionsQueryOptions(collection.name, search), enabled: open || search === "" });
+  const options = useQuery({ ...refOptionsQueryOptions(collection.name, search, scope), enabled: open || search === "" });
   const stored = typeof value === "string" || typeof value === "number" ? String(value) : "";
   const lookup = useQuery({ ...refLookupQueryOptions(collection.name, field, stored), enabled: stored !== "" });
   const current = lookup.data?.items[0];

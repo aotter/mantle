@@ -107,7 +107,15 @@ wrote through the app's own Views with HTTP Triggers (`mantle help trigger`).
 
 Entry create/read/patch/transitions return
 `{ collection, entry, parentEntryId, parentEntryTitle, related }`; the entry has
-`{ id, collection, locale, status, version, data, created_at, updated_at }`.
+`{ id, collection, locale, status, version, data, created_at, updated_at }`. On a Schema with
+[locks](../reference/schema.md#locks), each entry of the editor payload and of `GET /entries` also has
+`locks: { update, delete }`: per verb, `{ lock, message }` of the first lock that holds for your generic write of that row,
+or `false`. Admin disables Save, rename, Delete and transitions on such a row and shows the
+message; the operational "Unlock editing" toggle does not override it. The write itself stays the authority: a refusal is
+409 `CONFLICT` with `kind: "lock"`. Every publishing entry has `locks` too: the draft-only rule (without `liveEdits`) and
+"unpublish before deleting" are the implicit lock `lock: "publishing"`, named only when no declared lock holds for that verb.
+It binds data writes only, so Publish, Unpublish and Archive stay available; with `liveEdits` a published entry's form is
+enabled with a "changes go live on save" notice, and Save waits until its required fields are filled.
 Transitions accept `{}` to use the current version; tests should send the
 observed `expectedVersion` to catch stale writes. Generic writes reject native
 columns inside `data`. See [publishing](../concepts/lifecycle-and-locales.md).
@@ -321,7 +329,9 @@ returns its one row on one page and has no cursor.
 Generated full/partial input checks validate creates, edits, operations and
 filters. Plain titled string `oneOf` choices use the same enum checks; general
 or constrained alternatives remain refused. Draft creates can be incomplete;
-publish checks required data. Publishing edits apply only to drafts. Read-only
+publish checks required data. Publishing edits apply only to drafts unless the Schema sets
+`publishing: { liveEdits: true }`, which opens published (never archived) entries; a live edit of a published entry must still pass those publish checks
+(`INPUT_VALIDATION_FAILED`), keeps `published_at` and goes live on save. Read-only
 collections refuse generic creates, edits, deletes and transitions with 403 `AUTH_DENIED`
 ("This record is read-only; use its operations.") before any read or write, while
 their declared Procedures can still run.
@@ -404,7 +414,12 @@ In the entry editor and every operation form (including a `collectionAction` cre
 `x-mantle-ref` to another Admin collection is a searchable picker: it lists the target through the same `/entries` route
 (20 records per search, read as the caller), shows each record's title and stores the referenced value (`id`, or the
 ref's unique field). A target the caller cannot list (403/404) or that is not an Admin collection keeps the plain text
-input. The picker is a convenience; the server still validates the value. CSV exports use `/entries/export` and
+input. In an operation bound to a row (`target`), a picker whose Schema folds under that row's collection
+(`nav.parentField`) lists only that row's children, filtered by `<parentField> = <the bound row's value>` as the folded
+child list is: `switch-revision`'s `revision` on a post lists that post's revisions. There is no way to pick another
+parent's child there: an operation that needs one binds to that other row instead, or is not bound (`collectionAction`
+or the Operations page), where the picker lists the whole target. The picker is a convenience; the
+server still validates the value. CSV exports use `/entries/export` and
 `/views/{name}/export`; native browser downloads stream paged server output.
 A failure after headers aborts the stream, so a download can fail after partial
 bytes have arrived. Existing databases need an app-owned migration for the
@@ -451,7 +466,10 @@ tabs. The parent is the reference named by `Schema.spec.uiSchema.nav.parentField
 the first required unique-field reference. A Schema with two or more required `id` references to
 existing Schemas (translations excluded) and no `parentField`, with or without `standalone`, is refused by `mantle generate` with `SCHEMA_UI_INVALID`; the diagnostic lists the
 candidates and the `nav: { parentField: <field> }` line that keeps the first one that is not a parent cycle. This applies to every build, with or without Admin, so a join table with two required `id` references needs it too. `parentField` is
-refused on a translation child and when its parent chain leads back to the Schema. Choosing the
+refused on a translation child and when its parent chain leads back to the Schema. An explicit
+`parentField` decides the fold direction: a required reference from that parent back to the child
+(a post's required `current_revision`) is not an inferred fold and does not count as a cycle,
+while two `parentField`s pointing at each other are still refused. Choosing the
 parent changes Admin navigation only: storage and authorization are unchanged.
 
 Set `nav.standalone: true` to put a child with a required `id` reference at the top level instead;
@@ -559,6 +577,15 @@ row id, and optional `version` names the input bound to its reviewed OCC version
 Names such as `approve` never determine placement. An operation without a row
 target or collection action appears on the Operations page, whose sidebar link
 appears whenever such operations exist.
+
+A collection action of a folded child (one with a parent; see above) also shows in that child's panel of the parent's
+workbench. Run from there, the input named exactly like the child's `nav.parentField` (the child's field holding the
+parent's value) is filled with this parent's value and locked: the form hides it and the dialog lists it under the
+bound values, like a row operation's `id`. The name is the rule because it is unambiguous (one input at most, the same
+name as the column the action writes). The value takes the input's type (a numeric parent key binds a number); an
+input with that name whose `x-mantle-ref` names another Schema or key, or whose type cannot hold the parent's value, is
+left to the person, and so is every input outside a workbench. With `nav.parentField: post`, `new-revision { post }` placed with
+`collectionAction: post_revisions` runs on the open post.
 
 A record's page shows its row operations as labeled buttons in the header (more than three: two buttons and a
 "More actions" menu); list rows keep them in an "Actions for …" menu.
