@@ -258,17 +258,28 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       const pointer = `/spec/lock/${i}/when`;
       const res = await compileSql(`SELECT 1 FROM "${name.replace(/"/g, '""')}" WHERE ${lock.when}`, { schemas, inputs: {}, kind: "view" }, dialect);
       if (!res.ok) { diagnostics.push(toDiagnostic(res.diagnostic, source, pointer)); continue; }
-      const where: SqlNode | undefined = res.plan.stmts[0]?.SelectStmt?.whereClause;
-      const problem = where ? lockShapeProblem(where, schemas, name) : "a lock is one boolean expression";
+      const select: SqlNode | undefined = res.plan.stmts[0]?.SelectStmt, where: SqlNode | undefined = select?.whereClause;
+      // `when` is spliced after WHERE: a GROUP BY, ORDER BY or LIMIT it carries would land on the read and be dropped
+      const tail = Object.keys(select ?? {}).find((k) => !["targetList", "fromClause", "whereClause", "op", "limitOption"].includes(k));
+      const problem = tail ? `a lock's when is one boolean expression: ${tail} is refused` : where ? lockShapeProblem(where, schemas, name) : "a lock is one boolean expression";
       if (problem) { diagnostics.push(toDiagnostic({ code: "SQL_SHAPE", message: problem }, source, pointer)); continue; }
       const unindexed = lockIndexProblem(where!, schemas);
       if (unindexed) {
         const target = schemas[unindexed.schema]!.name, columns = unindexed.columns.map((c) => field(unindexed.schema, c));
         diagnostics.push(validateDiagnostic({ code: "LOCK_INDEX_MISSING", severity: "error", path: `${source.sourceId}#/${source.documentIndex}${pointer}`, source: { ...source, path: pointer },
-          message: `Schema '${m.metadata.name}' lock '${lock.name}': no index serves its EXISTS on '${target}', which every guarded write runs. ${columns.length ? `Declare indexes: [[${columns.join(", ")}]] on Schema '${target}'` : `Correlate the subquery to the locked row by an equality on one of '${target}''s columns (e.g. ${target}.<field> = ${name}.id), then index that column`} (handbook: reference/schema.md#locks).` }));
+          message: `Schema '${m.metadata.name}' lock '${lock.name}': no index serves its EXISTS on '${target}', which every guarded write runs. ${columns.length ? `Declare indexes: [[${columns.join(", ")}]] on Schema '${target}'` : unindexed.or ? "OR is not index-proven: split it into separate locks, each with an equality on an indexed column" : `Correlate the subquery to the locked row by an equality on one of '${target}''s columns (e.g. ${target}.<field> = ${name}.id), then index that column`} (handbook: reference/schema.md#locks).` }));
         continue;
       }
-      const system = (n: unknown): void => { if (!n || typeof n !== "object") return; const v = (n as SqlNode).RangeVar; if (v?.mantle === "table") v.mantle = "system"; Object.values(n).forEach(system); };
+      // every subquery relation gets a reserved alias (authored `_mantle*` aliases are refused), so no statement alias the lock is
+      // spliced into can capture its references; a reference to the locked row (`<schema>.col`) is left for the write's alias
+      let serial = 0;
+      const rename = (n: unknown, from: string, to: string): void => { if (!n || typeof n !== "object") return; const f = (n as SqlNode).ColumnRef?.fields; if (f?.length === 2 && f[0].String?.sval === from) f[0] = { String: { sval: to } }; Object.values(n).forEach((x) => rename(x, from, to)); };
+      const system = (n: unknown): void => {
+        if (!n || typeof n !== "object") return;
+        const s = (n as SqlNode).SubLink?.subselect?.SelectStmt, v = s?.fromClause?.[0]?.RangeVar;
+        if (v) { const to = `_mantle_lock_${serial++}`; rename(s, v.alias?.aliasname ?? v.relname, to); v.alias = { aliasname: to }; v.mantle = "system"; }
+        Object.values(n).forEach(system);
+      };
       system(where);
       locks.push({ name: lock.name, on: [...lock.on], when: where!, message: lock.message });
     }

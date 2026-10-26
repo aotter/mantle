@@ -259,8 +259,8 @@ export function lockShapeProblem(where: SqlNode, schemas: Readonly<Record<string
  * index or `id` of that Schema. Each lock runs on every guarded write, so an unindexed EXISTS would scan its table each time.
  * Returns the first unproved subquery: its Schema and the columns an index could lead with.
  */
-export function lockIndexProblem(where: SqlNode, schemas: Readonly<Record<string, SqlSchemaDef & { readonly unique?: readonly (readonly string[])[]; readonly indexes?: readonly (readonly string[])[] }>>): { schema: string; columns: string[] } | undefined {
-  const walk = (n: unknown): { schema: string; columns: string[] } | undefined => {
+export function lockIndexProblem(where: SqlNode, schemas: Readonly<Record<string, SqlSchemaDef & { readonly unique?: readonly (readonly string[])[]; readonly indexes?: readonly (readonly string[])[] }>>): { schema: string; columns: string[]; or?: true } | undefined {
+  const walk = (n: unknown): { schema: string; columns: string[]; or?: true } | undefined => {
     if (!n || typeof n !== "object") return undefined;
     const s = (n as SqlNode).SubLink?.subselect?.SelectStmt;
     if (s) {
@@ -270,11 +270,14 @@ export function lockIndexProblem(where: SqlNode, schemas: Readonly<Record<string
       const terms = (x: SqlNode | undefined): SqlNode[] => x?.BoolExpr?.boolop === "AND_EXPR" ? x.BoolExpr.args.flatMap(terms) : x ? [x] : [];
       const columns = [...new Set(terms(s.whereClause).flatMap((t) => {
         const e = t.A_Expr;
+        // `col IN (<constants>)` is a set of equalities the index serves
+        if (e?.kind === "AEXPR_IN" && own(e.lexpr) && e.rexpr?.List?.items?.every((x: SqlNode) => x.A_Const)) return [own(e.lexpr)!];
         if (e?.kind !== "AEXPR_OP" || e.name?.[0]?.String?.sval !== "=") return [];
         const c = own(e.lexpr) && other(e.rexpr) ? own(e.lexpr) : own(e.rexpr) && other(e.lexpr) ? own(e.rexpr) : undefined;
         return c ? [c] : [];
       }))];
-      if (![["id"], ...(def.indexes ?? []), ...(def.unique ?? [])].some((index) => columns.includes(index[0]!))) return { schema: name, columns };
+      if (![["id"], ...(def.indexes ?? []), ...(def.unique ?? [])].some((index) => columns.includes(index[0]!)))
+        return { schema: name, columns, ...(!columns.length && JSON.stringify(s.whereClause ?? null).includes('"OR_EXPR"') ? { or: true as const } : {}) };
     }
     for (const v of Object.values(n)) { const p = walk(v); if (p) return p; }
     return undefined;
