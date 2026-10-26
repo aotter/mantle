@@ -34,7 +34,7 @@ for human review before it touches production data.
   then run the reviewed load once into the fresh production database, before
   it takes traffic.
 - **Never boot 0.2 against a 0.1.x database.** Apply the generated `schema.sql`
-  (and `site-schema.sql` when the site module is selected) to an empty
+  (it includes the site tables when the site module is selected) to an empty
   database, then load rows into it.
 - **Keep data files out of the repository.** Exports, dumps and copies hold
   user emails and content: keep them outside the working tree or ignored, and
@@ -44,9 +44,9 @@ for human review before it touches production data.
 
 - **Through the SDK.** The generated `store(db, caller)`, or `ctx.store` in a
   `ref` handler, with a trusted caller such as `{ kind: "system", reason }`
-  ([authorization](handbook/concepts/authorization.md)). It never writes `id`,
-  `version`, `created_at`, `updated_at`, `author_id`, `status`,
-  `published_at` or the scope column, for any caller, so new IDs, versions,
+  ([authorization](handbook/concepts/authorization.md)). It accepts no value
+  for `id`, `version`, `created_at`, `updated_at`, `author_id`, `status`,
+  `published_at` or the scope column, for any caller: it sets them itself, so new IDs, versions,
   timestamps and authors replace the old ones. Publishing goes through the
   generated `<schema>.publish` Procedure, which sets `published_at` to now
   ([lifecycle](handbook/concepts/lifecycle-and-locales.md)). With new IDs,
@@ -71,10 +71,12 @@ for human review before it touches production data.
 | the `scope` field | the same column, text, not null |
 | `date-time` field, ISO text | integer microseconds since the epoch |
 | `date` field, text | integer days since 1970-01-01 |
-| object field holding a position | a `format: geo` field is two columns, `<field>_lat` and `<field>_lng` |
+| object field (JSON text) | 0.1.4 had no geo type; if you remodel a position as a `format: geo` field, it is two columns, `<field>_lat` and `<field>_lng` |
 
 - 0.2 tables on D1 are `STRICT`: a value of the wrong type fails the insert
   instead of being stored.
+- A `numeric(p,s)` field is an integer scaled by 10^s on D1: rescale a 0.1.4
+  REAL value before loading it.
 - Schema `checks` run as `BEFORE INSERT` and `BEFORE UPDATE` triggers, so
   loaded rows are checked.
 - Full-text search and geo index tables are maintained by triggers: insert
@@ -89,7 +91,9 @@ tables `mantle generate --auth src/auth.ts` adds to `schema.sql`
 - The 0.2 caller subject is the Better Auth `user.id`. Keep user IDs, so that
   `author_id` and owner scopes still name the right people.
 - Copy `user` and `account` with explicit column lists on both sides; both
-  versions store dates as ISO text and booleans as 0/1 on D1.
+  versions store dates as ISO text and booleans as 0/1 on D1. 0.1.4's
+  `account` has an `issuer` column and `UNIQUE(issuer, accountId)` that the
+  0.2 table may not have; compare the two DDLs before copying.
 - 0.1.4 roles `owner`, `editor` and `contributor` have no 0.2 meaning. The
   admin layer is Better Auth's admin plugin `adminRoles` (default
   `["admin"]`) and `adminUserIds`
