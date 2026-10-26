@@ -1,5 +1,5 @@
 import * as React from "react";
-import { CalendarIcon, LockKeyhole, Plus, Trash2 } from "lucide-react";
+import { CalendarIcon, LockKeyhole, Plus, Trash2, X } from "lucide-react";
 import { Button } from "../kit/components/ui/button.js";
 import { Calendar } from "../kit/components/ui/calendar.js";
 import { Checkbox } from "../kit/components/ui/checkbox.js";
@@ -32,6 +32,8 @@ export interface FieldLabels {
   /** The choice that clears an optional enum; a host label set without it falls back to `emptyOption`. */
   readonly clearOption?: string;
   readonly chooseOption: string;
+  /** The button that clears an optional date and time; a host label set without it falls back to `clearOption`. */
+  readonly clear?: string;
   readonly boolean: string;
   readonly dateTimeSelect: string;
   readonly dateTimeTime: string;
@@ -43,6 +45,7 @@ export const defaultFieldLabels: FieldLabels = {
   emptyOption: "No value",
   clearOption: "Not set",
   chooseOption: "Choose…",
+  clear: "Clear",
   boolean: "Yes",
   dateTimeSelect: "Pick a date",
   dateTimeTime: "Time",
@@ -57,6 +60,12 @@ export interface FieldSlot {
   readonly path: readonly string[];
   readonly value: unknown;
   readonly label: string;
+  readonly required: boolean;
+  /** Whether the field offers a way to empty it (a Not set choice, a clear button): optional, or null is one of its values. */
+  readonly clearable: boolean;
+  /** What an emptied field writes: null in a record form or where null is one of its values, else undefined (left out).
+   *  An emptied text control writes null where this is null, else ""; a reference or media id is never `""`. */
+  readonly cleared: null | undefined;
   /** The string widget the field asks for: `input`, `textarea`, `markdown` or `html`. */
   readonly widget: StringWidget;
   readonly setValue: (next: unknown) => void;
@@ -81,6 +90,12 @@ export interface SchemaFieldsProps {
   readonly canonical?: string | null;
   /** Root properties not shown (bound inputs, a translation's key). */
   readonly hiddenRootFields?: readonly string[];
+  /**
+   * A record form: clearing a root field, required or not, writes null. The entry PATCH clears a column only on null and keeps
+   * a key JSON leaves out, so `undefined` would not clear it. Elsewhere (an operation's input) a cleared field is left
+   * out unless null is one of its values.
+   */
+  readonly clearToNull?: boolean;
   readonly labels?: FieldLabels;
   readonly renderField?: RenderField;
   /** How a field's label reads; defaults to its `title`, else its name humanized. */
@@ -128,13 +143,20 @@ function SchemaField(props: SchemaFieldsProps & {
   // the runtime owns bound values, and a readOnly property is not the client's to set: the form shows both, read-only
   const readOnly = typeof schema["x-mantle-bind"] === "string" || schema.readOnly === true;
   const nullable = isNullable(schema);
-  const cleared = clearedValue(schema);
+  // In a record form every emptied field is null, text too. A record created without it stores NULL (the create route
+  // drops null), so "" would be a second "unset"; "" also fails minLength, pattern, a format (email, uri, date,
+  // date-time) and collides in a unique index where NULLs do not. A required one too: left out, the PATCH would keep the
+  // old value and Save would bring it back; null is refused visibly, or clears it in a draft (which Publish refuses).
+  // Outside a record form text stays "" and anything else is left out, unless null is one of its values.
+  const cleared = props.clearToNull === true ? null : clearedValue(schema);
+  const clearable = !required || nullable;
   const id = React.useId();
   const labelId = `${id}-label`;
   const descriptionId = `${id}-description`;
   // the label names the control, its description describes it, and a required field says so
   const control = { id, "aria-describedby": description ? descriptionId : undefined, "aria-required": required && !readOnly ? true : undefined } as const;
-  const nested = (childSchema: FieldSchema, childPath: readonly string[]) => <SchemaFields {...props} schema={childSchema} path={childPath} />;
+  // a JSON column's own properties are checked whole: a nested null is not a cleared column
+  const nested = (childSchema: FieldSchema, childPath: readonly string[]) => <SchemaFields {...props} clearToNull={false} schema={childSchema} path={childPath} />;
 
   /** The field's own control for `value`. A host's `renderField` asks for it through `renderDefault`, with its own value and setter. */
   const renderControl = (value: unknown, setValue: (next: unknown) => void): React.ReactNode => (
@@ -175,7 +197,7 @@ readOnly ? (
       ) : type === "number" || type === "integer" ? (
         <div className="space-y-1">
           {timestampHint(schema) ? (
-            <DateTimePicker control={control} label={label} labels={labels} value={value} onChange={(date) => setValue(date?.getTime() ?? cleared)} />
+            <DateTimePicker control={control} label={label} labels={labels} value={value} onChange={(date) => setValue(date.getTime())} onClear={clearable ? () => setValue(cleared) : undefined} />
           ) : (
             <Input
               {...control}
@@ -194,17 +216,18 @@ readOnly ? (
         </div>
       ) : type === "object" ? (
         <div className="rounded-lg border bg-muted/20 p-4">
-          {schema.properties ? nested(schema, path) : <JsonEditor value={value} onChange={setValue} />}
+          {schema.properties ? nested(schema, path) : <JsonEditor value={value} onChange={setValue} onEmpty={clearable ? () => setValue(cleared) : undefined} />}
         </div>
       ) : type === "array" ? (
         <ArrayField schema={schema} value={Array.isArray(value) ? value : []} path={path} labels={labels}
           setArray={(next) => setValue(next)} nested={nested} />
       ) : (
-        <StringFieldControl control={control} schema={schema} widget={props.widget} value={value} label={label} labels={labels} onChange={setValue} />
+        <StringFieldControl control={control} schema={schema} widget={props.widget} value={value} label={label} labels={labels} onChange={setValue}
+          cleared={cleared} clearable={clearable} />
       )
   );
 
-  const custom = readOnly ? undefined : props.renderField?.({ name, schema, path, value, label, widget: stringFieldWidget(schema, props.widget), setValue, renderDefault: (next) => renderControl(next ? next.value : value, next ? next.setValue : setValue) });
+  const custom = readOnly ? undefined : props.renderField?.({ name, schema, path, value, label, required, clearable, cleared, widget: stringFieldWidget(schema, props.widget), setValue, renderDefault: (next) => renderControl(next ? next.value : value, next ? next.setValue : setValue) });
 
   return (
     <div className="space-y-2">
@@ -220,19 +243,28 @@ readOnly ? (
 
 type Control = { readonly id: string; readonly "aria-describedby": string | undefined; readonly "aria-required": true | undefined };
 
-function DateTimePicker({ control, label, labels, value, onChange }: {
-  control?: Control; label: string; labels: FieldLabels; value: unknown; onChange: (date: Date | undefined) => void;
+/** A date and time; `onClear`, for an optional field, adds a button that empties it. */
+function DateTimePicker({ control, label, labels, value, onChange, onClear }: {
+  control?: Control; label: string; labels: FieldLabels; value: unknown; onChange: (date: Date) => void; onClear: (() => void) | undefined;
 }): React.ReactElement {
   const selected = dateFromFieldValue(value);
   const timeId = React.useId();
+  const clear = labels.clear ?? labels.clearOption ?? labels.emptyOption;
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button {...control} type="button" variant="outline" className="w-full justify-start font-normal" aria-label={label}>
-          <CalendarIcon />
-          {selected ? formatTimestampMs(selected.getTime()) : labels.dateTimeSelect}
-        </Button>
-      </PopoverTrigger>
+      <div className="flex items-center gap-2">
+        <PopoverTrigger asChild>
+          <Button {...control} type="button" variant="outline" className="min-w-0 flex-1 justify-start font-normal" aria-label={label}>
+            <CalendarIcon />
+            {selected ? formatTimestampMs(selected.getTime()) : labels.dateTimeSelect}
+          </Button>
+        </PopoverTrigger>
+        {onClear && selected ? (
+          <Button type="button" variant="ghost" size="icon-sm" onClick={onClear} aria-label={`${clear}: ${label}`} title={clear}>
+            <X aria-hidden />
+          </Button>
+        ) : null}
+      </div>
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar
           mode="single"
@@ -312,10 +344,13 @@ function ArrayField({ schema, value, path, labels, setArray, nested }: {
   );
 }
 
-function JsonEditor({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }): React.ReactElement {
-  const [draft, setDraft] = React.useState(JSON.stringify(value ?? {}, null, 2));
+/** JSON as text; `onEmpty`, for an optional field, makes an empty box clear it (else empty text is invalid JSON, and an
+ *  unset value shows `{}` as before). */
+function JsonEditor({ value, onChange, onEmpty }: { value: unknown; onChange: (value: unknown) => void; onEmpty: (() => void) | undefined }): React.ReactElement {
+  const text = (next: unknown) => (next == null && onEmpty ? "" : JSON.stringify(next ?? {}, null, 2));
+  const [draft, setDraft] = React.useState(text(value));
   const [error, setError] = React.useState<string | null>(null);
-  React.useEffect(() => setDraft(JSON.stringify(value ?? {}, null, 2)), [value]);
+  React.useEffect(() => setDraft(text(value)), [value]);
   return (
     <div className="space-y-2">
       <Textarea
@@ -324,6 +359,11 @@ function JsonEditor({ value, onChange }: { value: unknown; onChange: (value: unk
         onChange={(event) => {
           const next = event.target.value;
           setDraft(next);
+          if (onEmpty && next.trim() === "") {
+            onEmpty();
+            setError(null);
+            return;
+          }
           try {
             onChange(JSON.parse(next) as unknown);
             setError(null);
@@ -338,14 +378,17 @@ function JsonEditor({ value, onChange }: { value: unknown; onChange: (value: unk
 }
 
 /** Markdown and HTML need a host's editor (`renderField`); without one they are a plain textarea. */
-function StringFieldControl({ control, schema, widget, value, label, labels, onChange }: {
+function StringFieldControl({ control, schema, widget, value, label, labels, onChange, cleared, clearable }: {
   control: Control; schema: FieldSchema; widget: "textarea" | null; value: unknown; label: string; labels: FieldLabels; onChange: (next: unknown) => void;
+  cleared: null | undefined; clearable: boolean;
 }): React.ReactElement {
   const kind = stringFieldWidget(schema, widget);
   const text = stringForInput(value);
-  if (kind !== "input") return <Textarea {...control} aria-label={label} className="min-h-24" value={text} maxLength={schema.maxLength} onChange={(event) => onChange(event.target.value)} />;
-  if (schema.format === "date-time") return <DateTimePicker control={control} label={label} labels={labels} value={value} onChange={(date) => onChange(date?.toISOString() ?? "")} />;
-  return <Input {...control} type="text" aria-label={label} value={text} onChange={(event) => onChange(event.target.value)} />;
+  // emptied: null where the field clears to null, else "" as typed
+  const onText = (next: string) => onChange(next === "" ? (cleared === null ? null : "") : next);
+  if (kind !== "input") return <Textarea {...control} aria-label={label} className="min-h-24" value={text} maxLength={schema.maxLength} onChange={(event) => onText(event.target.value)} />;
+  if (schema.format === "date-time") return <DateTimePicker control={control} label={label} labels={labels} value={value} onChange={(date) => onChange(date.toISOString())} onClear={clearable ? () => onChange(cleared) : undefined} />;
+  return <Input {...control} type="text" aria-label={label} value={text} onChange={(event) => onText(event.target.value)} />;
 }
 
 /** The string widget a field asks for: its `x-mcp-hint`, else the uiSchema widget, else an input. */
