@@ -6,18 +6,24 @@
 /** Where Admin serves its API. Admin route templates and `admin:` describe ids are relative to it. */
 export const ADMIN_API_BASE = "/admin/api";
 
-/** An http Trigger path as a describe template: `{name}` becomes `:name`. */
+/**
+ * An http Trigger path as a describe template: `{name}` becomes `:name`. The compiler refuses other braces and
+ * `:`-prefixed segments in these paths, so `routePath` inverts it exactly.
+ */
 export const pathTemplate = (path: string) => path.replace(/\{([^}]+)\}/g, ":$1");
+/** A describe template as the route path the routers compile: `:name` segments become `{name}`. */
+export const routePath = (template: string) => template.split("/").map(segment => segment.startsWith(":") ? `{${segment.slice(1)}}` : segment).join("/");
 
 /**
- * A template's anchored pattern source and capture keys. `{name}` and `:name` segments capture one segment; with
- * `suffix`, `{name*}` captures the rest of the path. Other segments match in encoded form. One trailing slash is optional.
+ * A template's anchored pattern source and capture keys. A `{name}` segment captures one segment; with `suffix`,
+ * `{name*}` captures the rest of the path. Other segments, `:name` included, match literally in encoded form. One
+ * trailing slash is optional.
  */
 export function routeSource(template: string, base = "", suffix = false): { source: string; keys: string[] } {
   const keys: string[] = [];
   const path = template.split("/").map(segment => {
-    const rest = suffix ? /^\{([a-zA-Z]\w*)\*\}$/.exec(segment) : null, one = /^\{([^}]+)\}$|^:(.+)$/.exec(segment);
-    if (rest || one) { keys.push((rest ?? one)![1] ?? one![2]!); return rest ? "(.*)" : "([^/]+)"; }
+    const rest = suffix ? /^\{([a-zA-Z]\w*)\*\}$/.exec(segment) : null, one = /^\{([^}]+)\}$/.exec(segment);
+    if (rest || one) { keys.push((rest ?? one)![1]!); return rest ? "(.*)" : "([^/]+)"; }
     return encodeURIComponent(segment).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }).join("/");
   return { source: `^${base}${path}/?$`, keys };
@@ -28,8 +34,8 @@ export function canonicalPath(pathname: string): string | undefined {
   try { return pathname.split("/").map(segment => encodeURIComponent(decodeURIComponent(segment))).join("/"); } catch { return undefined; }
 }
 
-const isParameter = (segment: string) => segment.startsWith(":") || segment.startsWith("{");
-/** REST precedence over describe path templates: fewer parameters, then a literal before a parameter from the left, then the template. */
+const isParameter = (segment: string) => /^\{[^}]+\}$/.test(segment);
+/** REST precedence over route paths: fewer parameters, then a literal before a parameter from the left, then the path. */
 export function routeOrder(a: string, b: string): number {
   const x = a.split("/"), y = b.split("/");
   const count = (segments: string[]) => segments.filter(isParameter).length;

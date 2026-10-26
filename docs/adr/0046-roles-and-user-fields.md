@@ -113,6 +113,8 @@ restrict: { orders: "owner = auth.uid()" }
   - the targets: id, `targetHash`, surface and input schema;
   - each Schema's scope terms and each target's `restrict` terms, with field types and enums;
   - a diff of scope and `restrict` terms between two plans, so that widening is visible.
+- **`matchTarget(describe, request)`** (#1617), exported beside `describeApp`, resolves a REST or Admin method and path, or an MCP tool name, to the target `_meta` the generated routers select, or `null`, from describe JSON alone. It shares the routers' pattern grammar, canonical path (per-segment decode and re-encode), `HEAD` handling (a public View's `GET` only), Admin mount and precedence; a conformance test over the example apps keeps the matcher and routers equal.
+- **REST precedence** (#1617). Generated REST routes order http Triggers by fewer `{name}` parameters, then a literal before a parameter from the left, then the path text: deterministic, independent of manifest order, most specific first. For overlapping same-method Triggers with equal parameter counts this changes the winner from the first declared to the most specific: `/api/items/latest` now selects `/api/items/{id}` over an earlier-declared `/api/{kind}/latest`. Trigger paths refuse `:`-prefixed and partial-brace segments, which describe's `:name` templates could not distinguish, and paths equal apart from parameter names.
 
 ### Testing
 `authenticatedAs(user)`.

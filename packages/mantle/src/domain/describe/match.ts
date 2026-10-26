@@ -1,4 +1,4 @@
-import { ADMIN_API_BASE, canonicalPath, routeOrder, routeSource } from "../../kernel/route-pattern.js";
+import { ADMIN_API_BASE, canonicalPath, routeOrder, routePath, routeSource } from "../../kernel/route-pattern.js";
 import { adminRoutes } from "./targets.js";
 import type { AppDescription, DescribeTarget } from "./index.js";
 
@@ -18,8 +18,8 @@ function compile(describe: Pick<AppDescription, "targets">): Table {
   const table: Table = { rest: [], admin: [], tools: [] };
   for (const { name, _meta: meta } of describe.targets) {
     const [, surface, method, template] = route.exec(meta.id) ?? [];
-    if (surface === "rest") table.rest.push({ method: method!, pattern: new RegExp(routeSource(template!).source), view: meta.variants[0]?.id.startsWith("view:") === true, meta });
-    else if (surface === "admin") table.admin.push({ method: method!, pattern: new RegExp(routeSource(template!, ADMIN_API_BASE).source), meta });
+    if (surface === "rest") table.rest.push({ method: method!, pattern: new RegExp(routeSource(routePath(template!)).source), view: meta.variants[0]?.id.startsWith("view:") === true, meta });
+    else if (surface === "admin") table.admin.push({ method: method!, pattern: new RegExp(routeSource(routePath(template!), ADMIN_API_BASE).source), meta });
     else {
       // The generated MCP tools: Views on their own surface, Procedures on their `mcp` Trigger surfaces (publishing on admin), media tools on admin.
       const s = meta.surfaces, endpoints = meta.id.startsWith("admin:tool:") ? ["admin"] : meta.id.startsWith("view:") ? s.includes("public") ? ["public"] : s.includes("internal") ? [] : ["admin"]
@@ -29,7 +29,8 @@ function compile(describe: Pick<AppDescription, "targets">): Table {
   }
   // The routers' own order: generated REST precedence, and Admin's declared route order.
   const order = (id: string) => adminRoutes.indexOf(id.slice(6) as typeof adminRoutes[number]) >>> 0;
-  table.rest.sort((a, b) => routeOrder(a.meta.id.slice(a.meta.id.indexOf(" ") + 1), b.meta.id.slice(b.meta.id.indexOf(" ") + 1)));
+  const path = (id: string) => routePath(id.slice(id.indexOf(" ") + 1));
+  table.rest.sort((a, b) => routeOrder(path(a.meta.id), path(b.meta.id)));
   table.admin.sort((a, b) => order(a.meta.id) - order(b.meta.id));
   return table;
 }

@@ -2,6 +2,8 @@
 import type { Caller, Target, Authorize, Gateway, RequestContext, GatewayOptions } from "./contracts.js";
 import { ContractError } from "./contract-error.js";
 import { invalid, type Conversions } from "./surface.js";
+/** The routers' path grammar, for Admin's router: its mount, route patterns and the canonical request path. */
+export { ADMIN_API_BASE, canonicalPath, routeSource } from "./route-pattern.js";
 
 type Paging = { limit?: number; cursor?: string };
 /** Options of a generated `rest(...)`; it adds required `handlers` when the app declares ref Procedures. */

@@ -1,11 +1,10 @@
 import type { GatewayOptions } from "@aotter/mantle/contracts";
 /** Optional Admin API: generated data and native calls, with one fresh admin session per request. */
 import { forwarded, deny, isAdmin, ContractError, checkOrigin, surfaceCaller, type Caller, type Target, type Authorize, type Gateway, type RequestContext } from "@aotter/mantle/contracts";
-import { nativeRest, body, type Route as RestRoute } from "@aotter/mantle/rest";
+import { nativeRest, body, ADMIN_API_BASE, canonicalPath, routeSource, type Route as RestRoute } from "@aotter/mantle/rest";
 import { userOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
 import { convert, type Conversions } from "@aotter/mantle/surface";
-import { ADMIN_API_BASE, canonicalPath, routeSource } from "@aotter/mantle/route-pattern";
 import { siteInfo, type MantleSite, type MediaStorage } from "@aotter/mantle/site";
 import { csv } from "./csv.js";
 export type Admin = (Extract<Caller, { kind: "user" }> & { readonly admin: true; readonly credential: "session" }) | (Extract<Caller, { kind: "host" }> & { readonly admin: true });

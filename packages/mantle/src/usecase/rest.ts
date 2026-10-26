@@ -18,9 +18,9 @@ export function emitRest(plan: RuntimePlan, lowered: PlanLowered, target: Target
   const views:string[]=[], procedures:string[]=[];
   let hasWire = false;
   const convert = (code:string) => code ? `, convert: ${code}` : "";
-  // The describe path template is the route: matchTarget compiles the same source and precedence from describe.
+  // matchTarget compiles the same source and precedence from the describe template, which `routePath` inverts exactly.
   const route = (method:string, path:string) => {
-    const { source, keys } = routeSource(template(path));
+    const { source, keys } = routeSource(path);
     return `method: ${q(method)}, pattern: new RegExp(${q(source)})${keys.length ? `, keys: ${q(keys)}` : ""}`;
   };
   for (const [name,view] of Object.entries(plan.views)) {
@@ -31,7 +31,7 @@ export function emitRest(plan: RuntimePlan, lowered: PlanLowered, target: Target
     hasWire ||= wire.length > 0;
     views.push(`{ ${route("GET",`/api/views/${name}`)}, target: ${q({kind:"view",name})}${guard(view.requires,`views/${name}`, (lowered.views[name]?.public ?? lowered.views[name]?.caller)?.binds)}, query: query${id}, page: ${boundaryPage(`page${id}`, wire)}${convert(conversions(view.input?.properties,(lowered.views[name]?.public ?? lowered.views[name]?.caller)?.binds ?? [],target))} }`);
   }
-  const triggers=Object.values(plan.triggers).filter(t=>t.source.kind==="http").sort((a,b)=>a.source.kind==="http"&&b.source.kind==="http"?routeOrder(template(a.source.path),template(b.source.path)):0);
+  const triggers=Object.values(plan.triggers).filter(t=>t.source.kind==="http").sort((a,b)=>a.source.kind==="http"&&b.source.kind==="http"?routeOrder(a.source.path,b.source.path):0);
   for(const trigger of triggers) {
     if(trigger.source.kind!=="http") continue;
     const {method,path}=trigger.source,name=trigger.procedure,procedure=plan.procedures[name]!,id=procedures.length,ref="ref" in procedure.handler;

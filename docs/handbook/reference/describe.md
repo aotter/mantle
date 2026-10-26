@@ -62,9 +62,9 @@ matchTarget(describe, { surface: "admin", method: request.method, path: url.path
 matchTarget(describe, { surface: "mcp", tool: params.name, path: url.pathname });         // view:orders, admin:tool:<name>
 ```
 
-The matcher uses the routers' own pattern grammar and precedence
-(`@aotter/mantle/route-pattern`), and a conformance test checks it against the
-generated REST, MCP and Admin routers for every route of the example apps:
+The matcher compiles describe ids with the routers' own pattern grammar and
+precedence, and a conformance test checks it against the generated REST, MCP
+and Admin routers for every route of the example apps:
 
 - Paths are the URL pathname. Each segment is percent-decoded and re-encoded,
   so `/api/views/%6Frders` matches `/api/views/orders`; a malformed escape
@@ -72,9 +72,9 @@ generated REST, MCP and Admin routers for every route of the example apps:
   different letter case do not match.
 - Methods are compared as `Request.method` reports them. `HEAD` selects a
   public View's `GET` route; Admin and Procedure routes do not serve `HEAD`.
-- REST precedence is the generated router's order: fewer parameters first,
-  then a literal segment before a parameter, from the left. Admin precedence
-  is Admin's declared route order, so `/entries/export` wins over `/entries/:id`.
+- REST precedence is the generated router's order (see
+  [http Triggers](trigger.md#route-precedence)). Admin precedence is Admin's
+  declared route order, so `/entries/export` wins over `/entries/:id`.
 - Admin paths start with `/admin/api`, where Admin mounts its API. Admin ids
   are relative to it.
 - MCP matches the `tools/call` name. Pass the `/mcp` or `/mcp/admin` path to
@@ -84,7 +84,9 @@ generated REST, MCP and Admin routers for every route of the example apps:
 Media tools (`admin:tool:<name>`) and the optional Admin developer and
 statistics routes match even when the application does not mount them; the
 application then answers `NOT_FOUND`. Routes and tools the application adds
-itself are not in describe and match nothing.
+itself, including Admin `routes` it passes to `admin()`, are not in describe and
+return `null`. Web and site pages (pinned by `view:<name>`) and auth routes are
+outside `matchTarget`.
 
 Diff records contain `id`, `field`, `direction` and optional `before`/`after`.
 Removing a scope or restrict term widens access; adding one narrows it.

@@ -35,6 +35,18 @@ spec:
 
 The target names a declared Procedure. `http` sources use POST/PUT/PATCH/DELETE and an `/api/` path. Path parameters bind to corresponding declared input fields and override JSON-body values. The generated REST module retains the Procedure's authorization and validates boundary input.
 
+A path parameter is a whole `{name}` segment. Other segments are literal and may not start with `:` or contain braces, since [describe](describe.md) writes `{name}` as `:name` (`TRIGGER_PATH_INVALID`). Two Triggers with the same method and the same path apart from parameter names are refused (`TRIGGER_PATH_COLLISION`).
+
+### Route precedence
+
+When several http Triggers with the same method match a request, the generated router picks the most specific one, independent of manifest order:
+
+1. fewer `{name}` parameters first;
+2. then, comparing segments from the left, a literal segment before a parameter;
+3. then the path text.
+
+So `POST /api/items/export` wins over `POST /api/items/{id}`, and for `/api/items/latest` the route `POST /api/items/{id}` wins over `POST /api/{kind}/latest`. A public View's `GET /api/views/<name>` route comes before every Trigger. Gateways resolve the same order from [`matchTarget`](describe.md#matching-a-request-to-its-target).
+
 An MCP source is `{ kind: mcp, surface: public }` or admin. The selected MCP module exposes the Procedure as a snake-case tool with its description, [tool hints](procedure.md#mcp-tool-hints) and requires checks.
 
 By default, pair every HTTP Trigger with an MCP Trigger so the same operation is reachable by the user's AI. `mantle generate` warns when a Procedure has HTTP exposure but no MCP exposure, suggesting `surface: admin` for an admin-only Procedure and `public` otherwise. Triggers still decide every Procedure surface: intentional asymmetric exposure is allowed and generation succeeds.

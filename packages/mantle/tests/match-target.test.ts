@@ -81,3 +81,20 @@ test('REST precedence is the router order, not manifest order or parameter count
   expect(matchTarget(describe, { surface: 'admin', method: 'GET', path: '/admin/api/entries/abc' })?.id).toBe('admin:GET /entries/:id');
   expect(matchTarget(describe, { surface: 'admin', method: 'GET', path: '/entries/abc' })).toBe(null);
 });
+
+test('only whole {name} segments are parameters; Trigger paths that describe could not tell apart are refused', async () => {
+  const { routeSource } = await import('../src/kernel/rest.js');
+  const literal = new RegExp(routeSource('/api/items/:id').source);
+  expect(literal.test('/api/items/%3Aid')).toBe(true);
+  expect(literal.test('/api/items/abc')).toBe(false);
+  expect(routeSource('/api/items/:id').keys).toEqual([]);
+  expect(routeSource('/x/{rest*}', '/admin/api', true)).toEqual({ source: '^/admin/api/x/(.*)/?$', keys: ['rest'] });
+  const compile = (paths: [string, string][]) => compilePlan({ sources: [{ sourceId: 'paths.yaml', text: paths.flatMap(([method, path], i) => [
+    `apiVersion: cms.mantle.aotter.net/v2\nkind: Procedure\nmetadata: { name: p${i} }\nspec:\n  input: { type: object }\n  output: { type: object }\n  handler: { ref: app.p${i} }`,
+    `apiVersion: cms.mantle.aotter.net/v2\nkind: Trigger\nmetadata: { name: p${i}-http }\nspec:\n  source: { kind: http, method: ${method}, path: '${path}' }\n  target: { procedure: p${i} }`]).join('\n---\n') }] }, sqliteCompiler, 'operational');
+  const codes = async (paths: [string, string][]) => { const r = await compile(paths); return r.ok ? [] : r.diagnostics.map(d => d.code); };
+  for (const path of ['/api/items/:id', '/api/items/a{id}', '/api/items/{id', '/api/items/id}'])
+    expect(await codes([['POST', path]])).toContain('TRIGGER_PATH_INVALID');
+  expect(await codes([['POST', '/api/{a}/x'], ['POST', '/api/{b}/x']])).toContain('TRIGGER_PATH_COLLISION');
+  expect(await codes([['POST', '/api/{a}/x'], ['PATCH', '/api/{b}/x'], ['POST', '/api/items/{id}'], ['POST', '/api/{kind}/latest']])).toEqual([]);
+});
