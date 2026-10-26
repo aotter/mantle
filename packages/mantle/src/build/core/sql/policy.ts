@@ -4,7 +4,7 @@
 import { AGGREGATES, SqlRefusal as Refused, type SqlNode as N } from '../../spec/domain/index.js';
 import type { RelationPosition } from './positions.js';
 import type { StorageSchema as SchemaDef } from '../dialect.js';
-import { classify, protectedColumns, refChecks, rowPolicy, userScopeTerm, writePolicy, type RowMode as Mode, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
+import { classify, protectedColumns, refChecks, rowPolicy, userScopeTerm, writePolicy, type RowMode as Mode, type LockTerm, type RowTerm, type RowWrite } from '../../spec/domain/index.js';
 import { S, num, op, ref as col, target as res } from './ast.js';
 import type { PlanRestrict } from '../../spec/domain/model/RuntimePlan.js';
 
@@ -155,6 +155,16 @@ function term(c: C, a: string, t: RowTerm): N {
   const value: N = v.k === 'const' ? { A_Const: { sval: { sval: v.value } } } : param$(c, v);
   if (kind === 'admin') return or(op('=', col(a, column), { A_Const: { sval: { sval: published! } } }), op('=', value, num(1)));
   return kind === 'ttl' ? or({ NullTest: { arg: col(a, column), nulltesttype: 'IS_NULL' } }, op('>', col(a, column), value)) : op('=', col(a, column), value);
+}
+/**
+ * A Schema lock (#1822) on the written row `a` of `table`: `NOT (when)`. Its subqueries read stored rows whatever the mode (the
+ * plan tags them `system`), and a reference to the locked row (`table.col`) is renamed to the statement's alias.
+ */
+function locked(c: C, a: string, table: string, [, , when]: LockTerm): N {
+  const rename = (v: any): any => Array.isArray(v) ? v.map(rename) : !v || typeof v !== 'object' ? v
+    : v.ColumnRef?.fields?.length === 2 && v.ColumnRef.fields[0].String?.sval === table ? col(a, v.ColumnRef.fields[1].String.sval)
+    : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, rename(x)]));
+  return { BoolExpr: { boolop: 'NOT_EXPR', args: [tx(a === table ? structuredClone(when) : rename(when), c)] } };
 }
 /** Where a Schema's visibility rule is rendered (`rowPolicy` spells it). `a` is the alias (or table) the predicate reads through. */
 function visible(s: SchemaDef, a: string, c: C, table?: string): N | undefined {
@@ -443,11 +453,11 @@ function update(n: N, c: C): N {
   if (n.targetList.some((target: N) => columns.includes(String(target.ResTarget.name).toLowerCase()))) throw new Refused('USER_FIELD_POSITION', 'The scoped column is never writable through SET.');
   const out = deep(n, c, 'UpdateStmt');
   c.sel.pop();
-  const w = writePolicy(s, 'update', { status: c.status, lock: c.lockVersion });
+  const w = writePolicy(s, 'update', { status: c.status, lock: c.lockVersion, trusted: c.mode === 'trusted' });
   // the partition is never SET, so the child's is the row's own
   const checked = refs(s, c, a, column => out.targetList.find((t: N) => String(t.ResTarget.name).toLowerCase() === column)?.ResTarget.val, column => col(a, column), true);
   out.targetList.push(...sets(w, c));
-  out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock), checked);
+  out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock), checked, ...w.locks.map(l => locked(c, a, String(n.relation.relname).toLowerCase(), l)));
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { UpdateStmt: out };
 }
@@ -457,8 +467,8 @@ function del(n: N, c: C): N {
   dmlScope(n.relation, c);
   const out = deep(n, c, 'DeleteStmt');
   c.sel.pop();
-  const w = writePolicy(s, 'delete', { lock: c.lockVersion });
-  out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock));
+  const w = writePolicy(s, 'delete', { lock: c.lockVersion, trusted: c.mode === 'trusted' });
+  out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock), ...w.locks.map(l => locked(c, a, String(n.relation.relname).toLowerCase(), l)));
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { DeleteStmt: out };
 }
@@ -522,7 +532,9 @@ function insert(n0: N, c: C): N {
       c.seen?.add('conflict-update');
       oc.targetList.push(...sets(w, c));
       const t = n.relation.relname, setRef = refs(s, c, t, column => oc.targetList.find((x: N) => String(x.ResTarget.name).toLowerCase() === column)?.ResTarget.val, column => col(t, column), true);
-      oc.whereClause = and(oc.whereClause, visible(s, t, c, t), setRef); // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one
+      // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one; a lock: nor a locked one
+      const locks = writePolicy(s, 'update', { trusted: c.mode === 'trusted' }).locks.map(l => locked(c, alias$(n.relation), table, l));
+      oc.whereClause = and(oc.whereClause, visible(s, t, c, t), setRef, ...locks);
     }
   }
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));

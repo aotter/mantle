@@ -63,6 +63,9 @@ export const DIAGNOSTIC_CODES = [
   "SCHEMA_SEARCH_INVALID",
   "SCHEMA_SEARCH_FIELD_UNKNOWN",
   "SCHEMA_TTL_INVALID",
+  // #1822: a malformed `Schema.spec.lock`, and a lock `EXISTS` no declared index serves.
+  "SCHEMA_LOCK_INVALID",
+  "LOCK_INDEX_MISSING",
   "SCHEMA_UI_INVALID",
   "SCHEMA_NAME_CASE_COLLISION",
   // ADR-0043: two Schemas project to one `store.db` reader name, or a name is reserved.

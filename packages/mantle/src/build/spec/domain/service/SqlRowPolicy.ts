@@ -2,7 +2,7 @@
  * What a Schema's rows are, as data: who sees a row, and what a write adds to it. Core's policy rewriter renders these terms to
  * its AST, and a runtime that never compiles (a generated Store) renders them to its own SQL, so the rules are spelled once, here.
  */
-import type { SqlSchemaDef } from "../model/SqlIr.js";
+import type { SqlNode, SqlSchemaDef } from "../model/SqlIr.js";
 import type { UserScope } from "../model/UserFields.js";
 import type { PlanRestrict } from "../model/RuntimePlan.js";
 import { resolveMantleRef } from "../model/ManifestGrammar.js";
@@ -13,9 +13,11 @@ export type RowMode = "caller" | "public" | "trusted" | "admin";
 export type RowValue = { readonly k: "uid" | "admin" | "now" | "version" } | { readonly k: "cutoff"; readonly seconds: number } | { readonly k: "const"; readonly value: string } | { readonly k: "user"; readonly field: string; readonly multiple: boolean; readonly type: "string" | "number"; readonly scope?: true };
 /** `eq`: `column = value`. `ttl`: `column IS NULL OR column > value`. `admin`: published, or the bound caller holds the admin layer. */
 export type RowTerm = readonly [column: string, op: "eq" | "ttl", value: RowValue] | readonly [column: string, op: "admin", value: RowValue, published: string] | readonly [column: string, op: "parent", value: RowValue, parent: RowParent] | readonly [column: string, op: "in", value: Extract<RowValue, { k: 'user' }>];
+/** A Schema lock (#1822), named: the write's WHERE gets `NOT (when)`, so a NULL `when` refuses it too (fails closed). */
+export type LockTerm = readonly [lock: string, op: "lock", when: SqlNode];
 /** One correlated parent row must satisfy every visibility term; admin previews may omit this requirement. */
 export interface RowParent { readonly table: string; readonly terms: readonly RowTerm[]; readonly scope?: readonly [parent: string, child: string]; readonly admin?: true; }
-export type RowSchema = Pick<SqlSchemaDef, "scope" | "userScopes" | "ttl" | "ttlSeconds" | "publishing" | "translates">;
+export type RowSchema = Pick<SqlSchemaDef, "scope" | "userScopes" | "ttl" | "ttlSeconds" | "publishing" | "translates" | "locks">;
 /** Field scope and target restrictions protect these columns; owner scope is stamped separately by writePolicy. */
 export function protectedColumns(s: RowSchema, restrict?: PlanRestrict[string]): string[] {
   return [...(s.userScopes ?? []).map(u => u.column), ...(restrict?.owner ? [restrict.owner] : []), ...(restrict?.terms ?? []).map(u => u.column)];
@@ -46,6 +48,8 @@ export interface RowWrite {
   readonly sets: readonly (readonly [column: string, value: RowValue | "bump"])[];
   /** The optimistic-concurrency term; it joins `rowPolicy` in the WHERE. */
   readonly lock?: RowTerm;
+  /** The Schema's locks on this verb; every write but a trusted one carries them (#1822). */
+  readonly locks: readonly LockTerm[];
 }
 
 const PUBLISHED = "published";
@@ -71,16 +75,18 @@ export function rowPolicy(s: RowSchema, mode: RowMode, schemas?: Readonly<Record
   ];
 }
 
-/** What a write adds. `status`: the status an update moves the entry to. `idGiven`: the insert names its id. `lock`: the update is checked against a version. */
-export function writePolicy(s: RowSchema, kind: "insert" | "update" | "delete", o: { status?: string; idGiven?: boolean; lock?: boolean } = {}): RowWrite {
+/** What a write adds. `status`: the status an update moves the entry to. `idGiven`: the insert names its id. `lock`: the update is checked against a version. `trusted`: a system write, which no Schema lock binds. */
+export function writePolicy(s: RowSchema, kind: "insert" | "update" | "delete", o: { status?: string; idGiven?: boolean; lock?: boolean; trusted?: boolean } = {}): RowWrite {
   const lock = kind !== "insert" && o.lock ? ["version", "eq", { k: "version" }] as const : undefined;
-  if (kind === "delete") return { fills: [], sets: [], lock };
+  const locks = kind === "insert" || o.trusted ? [] : (s.locks ?? []).filter(l => l.on.includes(kind)).map(l => [l.name, "lock", l.when] as const);
+  if (kind === "delete") return { fills: [], sets: [], lock, locks };
   const sets = [["version", "bump"], ["updated_at", NOW], ...(o.status ? [["status", { k: "const", value: o.status }] as const] : [])] as const;
-  if (kind === "update") return { fills: [], sets, lock };
+  if (kind === "update") return { fills: [], sets, lock, locks };
   const uid: RowValue = { k: "uid" };
   return {
     // a scoped Schema always gets a generated id: a caller-chosen id would collide with (and reveal) another owner's row
     fills: [...(s.scope ? [[s.scope, uid] as const] : []), ["created_at", NOW], ["updated_at", NOW], ["author_id", uid], ...(o.idGiven && !s.scope && !s.userScopes?.length ? [] : [["id", "newId"] as const])],
     sets: sets.slice(0, 2),
+    locks,
   };
 }

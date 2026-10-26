@@ -116,7 +116,9 @@ fast at a realistic volume, and no hot path scans a table that grows.
   2. Add the index that serves it in the Schema's `indexes`
      ([indexes](../../handbook/reference/schema.md#indexes-checks-and-search))
      together with a native migration ([database changes](../develop/SKILL.md#database-changes)).
-     Index only what a measured query uses; every index costs writes.
+     Index only what a measured query uses; every index costs writes. Paged Views
+     and [Schema locks](../../handbook/reference/schema.md#locks) are index-proven
+     already: generation refuses one no index serves.
   3. Move complex reads (joins, aggregates, OR, reuse) into an
      [internal View](../../handbook/guides/typed-queries.md#declare-an-internal-view),
      page with keysets ([results and paging](../../handbook/reference/view.md#results-and-paging)),
