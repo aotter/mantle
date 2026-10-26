@@ -3,6 +3,7 @@ import { forwarded, ContractError, type Caller, type RequestContext } from "./co
 import { checkOrigin, surfaceCaller } from "./surface-failure.js";
 import { decode, invalid } from "./surface.js";
 import { draining } from "./drain.js";
+import { canonicalPath } from "./route-pattern.js";
 import type { Options, Route } from "./rest.js";
 const isApi = (path: string): boolean => path === "/api" || path.startsWith("/api/");
 const fail: (message: string) => never = message => invalid(message, "rest");
@@ -16,8 +17,8 @@ export function router<Env, Database, Handlers>(routes: readonly Route<Database,
       await access?.select(`rest:${request.method} ${new URL(request.url).pathname}`);
       if (isForwarded) caller = (await import("./host-caller.js")).gatewayCaller(ctx, options.gateway, options.fields);
       const original = new URL(request.url).pathname;
-      let path: string;
-      try { path = original.split("/").map(segment => encodeURIComponent(decodeURIComponent(segment))).join("/"); } catch { if (!isApi(original)) return undefined; fail("Malformed request path."); }
+      const path = canonicalPath(original);
+      if (path === undefined) { if (!isApi(original)) return undefined; fail("Malformed request path."); }
       const allowed = new Set<string>();
       for (const route of routes) {
         const match = route.pattern.exec(path); if (!match) continue; allowed.add(route.method);
@@ -35,7 +36,7 @@ export function router<Env, Database, Handlers>(routes: readonly Route<Database,
         return response;
       }
       if (allowed.size) { const error = new ContractError("METHOD_NOT_ALLOWED", "Method is not allowed for this route.", "rest"); access?.finish(error); const response = (await import("./host-caller.js")).hostFailure(error, caller, "rest"); response.headers.set("allow", [...allowed].join(", ")); return response; }
-      if (isApi(path!)) throw new ContractError("NOT_FOUND", "No such route.", "rest");
+      if (isApi(path)) throw new ContractError("NOT_FOUND", "No such route.", "rest");
       return undefined;
     } catch (error) { access?.finish(error); return (await import("./host-caller.js")).hostFailure(error, caller, `rest ${request.method} ${new URL(request.url).pathname}`); }
   });

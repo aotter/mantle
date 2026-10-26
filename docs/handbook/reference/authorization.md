@@ -52,6 +52,8 @@ Snapshots may read only: SQL writes, Store/Admin mutations, publishing transitio
 
 Pins use [describe](describe.md)'s `_meta.id`: `rest:<METHOD> <path>`, `admin:<METHOD> <path template>`, or the View/Procedure target for MCP and web. The route checks `target` and the generated target hash before execution: mismatches return 412 `TARGET_MISMATCH` or `TARGET_HASH_MISMATCH`. The generated `access-targets.ts` map loads only for gateway requests. Manually composed boundaries can supply an `accessTargets` loader returning the same metadata.
 
+A gateway computes the pin from the request with [`matchTarget(describe, request)`](describe.md#matching-a-request-to-its-target), which applies the routers' own path normalisation, `HEAD` handling, Admin mount and precedence to the saved `mantle describe` JSON. It returns the target's `_meta`, including `targetHash` and the `readOnly` flag that the freshness rule reads, or `null` when the application serves no such route or tool.
+
 MCP host callers may use `initialize` and `tools/call` of their pinned tool; batches stay refused and `tools/list` returns 403 because the host provides its catalogue.
 
 `dryRun: true` runs target/hash checks, input validation, generated caller checks, `authorize` and freshness, without SQL or side effects. It returns 200 `{ dryRun: true, event }`; MCP carries this result in the SDK tool response. Ref handlers, custom guards, uploads and opaque work return 412 `DRY_RUN_UNSUPPORTED`. Dry runs validate authority and input; they do not verify database state, row existence or OCC conflicts.

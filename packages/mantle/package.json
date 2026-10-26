@@ -36,6 +36,7 @@
     "./testing": "./dist/testing/index.js",
     "./host-access": "./dist/kernel/host-access.js",
     "./host-caller": "./dist/kernel/host-caller.js",
+    "./route-pattern": "./dist/kernel/route-pattern.js",
     "./user-fields": "./dist/kernel/user-fields.js",
     "./sweep": "./dist/kernel/sweep.js",
     "./cron": "./dist/kernel/cron.js",
