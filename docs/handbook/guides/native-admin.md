@@ -392,7 +392,9 @@ In the entry editor and every operation form (including a `collectionAction` cre
 ref's unique field). A target the caller cannot list (403/404) or that is not an Admin collection keeps the plain text
 input. In an operation bound to a row (`target`), a picker whose Schema folds under that row's collection
 (`nav.parentField`) lists only that row's children, filtered by `<parentField> = <the bound row's value>` as the folded
-child list is: `switch-revision`'s `revision` on a post lists that post's revisions. The picker is a convenience; the
+child list is: `switch-revision`'s `revision` on a post lists that post's revisions. There is no way to pick another
+parent's child there: an operation that needs one binds to that other row instead, or is not bound (`collectionAction`
+or the Operations page), where the picker lists the whole target. The picker is a convenience; the
 server still validates the value. CSV exports use `/entries/export` and
 `/views/{name}/export`; native browser downloads stream paged server output.
 A failure after headers aborts the stream, so a download can fail after partial
@@ -551,10 +553,11 @@ appears whenever such operations exist.
 
 A collection action of a folded child (one with a parent; see above) also shows in that child's panel of the parent's
 workbench. Run from there, the input named exactly like the child's `nav.parentField` (the child's field holding the
-parent's value) is filled with this parent's value and locked, shown as bound like a row operation's `id`. The name
-is the rule because it is unambiguous (one input at most, the same name as the column the action writes); an input
-with that name whose `x-mantle-ref` names another Schema or key is left to the person, and so is every input
-outside a workbench. With `nav.parentField: post`, `new-revision { post }` placed with
+parent's value) is filled with this parent's value and locked: the form hides it and the dialog lists it under the
+bound values, like a row operation's `id`. The name is the rule because it is unambiguous (one input at most, the same
+name as the column the action writes). The value takes the input's type (a numeric parent key binds a number); an
+input with that name whose `x-mantle-ref` names another Schema or key, or whose type cannot hold the parent's value, is
+left to the person, and so is every input outside a workbench. With `nav.parentField: post`, `new-revision { post }` placed with
 `collectionAction: post_revisions` runs on the open post.
 
 A record's page shows its row operations as labeled buttons in the header (more than three: two buttons and a

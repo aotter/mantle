@@ -7,7 +7,7 @@ import {entries} from "../../src/server/entries.js";
 import {generateAdmin,writeAdminFixture} from "./generated-fixture.js";
 import {admin} from "./server-native-scenarios.js";
 import {createInteractionController} from "@aotter/mantle-ui/controller";
-import {parentRefScopes,parentScopeInteraction} from "../../admin/src/features/ops/interaction-schema.js";
+import {parentRefScopes,parentScopeInteraction,workbenchParentScope} from "../../admin/src/features/ops/interaction-schema.js";
 
 // docs/handbook/guides/revisions.md through Admin's own routes: the manifests and handler are the guide's (see packages/mantle/tests/revisions.test.ts).
 const sdkTests=resolve(import.meta.dir,"../../../mantle/tests");
@@ -55,7 +55,7 @@ test("the revisions guide in Admin: revisions fold under their post, and the pos
   // like the child's nav.parentField, to this post, as CollectionView passes it to the header's operation dialog.
   const revisions=(await ok("/collections")).collections.find((c:any)=>c.name==="post_revisions");
   const panel=workbench.related.find((s:any)=>s.collection.name==="post_revisions").relationship;
-  const scoped=parentScopeInteraction(bound("new-revision").input,{field:panel.childField,value:String(panel.parentValue),parent:revisions.parent.collection,parentField:revisions.parent.parentField})!;
+  const scoped=parentScopeInteraction(bound("new-revision").input,workbenchParentScope(revisions,{field:panel.childField,value:String(panel.parentValue)}))!;
   expect(scoped).toEqual({interaction:{collection:"posts",bind:[{input:"post",field:"post"}],mutates:true},row:{post:hello.id}});
   const dialog=createInteractionController({...scoped,invoke:async values=>{const result=await operation("new-revision",values);return result.status===200?{ok:true,data:result.body.output}:{ok:false,diagnostics:[result.body.error]};}});
   await dialog.open();
