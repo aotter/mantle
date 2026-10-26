@@ -140,7 +140,7 @@ For inserts, one allowed partition autofills a missing value; multiple values re
 
 #### References to a scoped Schema
 
-A non-null `x-mantle-ref` value that points to a scoped Schema (field or owner scope) must name a row of that Schema the caller can read, matched on `id` or on the object form's `field`, and that row must have the same value as the child for every scope field the two share (`ADR-0034`: a reference between scoped Schemas stays inside one owner or partition). A Store insert or update, a Procedure `INSERT … VALUES`, `UPDATE … SET` or `DO UPDATE SET`, and native Admin's generic create and patch check it in the same statement; a missing, unreadable or other-partition parent behaves like a missing row: a single-row statement returns HTTP 409 (`CONFLICT`), and an `ON CONFLICT` insert or a set update writes nothing for that row. A caller holding several values or `{ all: true }` can still not point a child in one partition at a parent in another. `INSERT … SELECT` that writes such a reference runs only for system callers. A caller's `UPDATE … SET` or `DO UPDATE SET` of such a reference takes no subquery, which could read the parent's columns as its own. Trusted writes (system callers, `runtime.store`) are not checked, like the other row rules. NULL is always allowed; deleting a parent does not touch its children.
+A non-null `x-mantle-ref` value that points to a scoped Schema (field or owner scope) must name a row of that Schema the caller can read, matched on `id` or on the object form's `field`, and that row must have the same value as the child for every scope field the two share (`ADR-0034`: a reference between scoped Schemas stays inside one owner or partition). A Store insert or update, a Procedure `INSERT … VALUES`, `UPDATE … SET` or `DO UPDATE SET`, and native Admin's generic create and patch check it in the same statement; a missing, unreadable or other-partition parent behaves like a missing row: a single-row statement returns HTTP 409 (`CONFLICT`), and an `ON CONFLICT` insert or a set update writes nothing for that row. A caller holding several values or `{ all: true }` can still not point a child in one partition at a parent in another. `INSERT … SELECT` that writes such a reference runs only for system callers. A caller's `UPDATE … SET` or `DO UPDATE SET` of such a reference takes no subquery, which could read the parent's columns as its own. Trusted writes (`store(db, caller)` or a ref handler's `ctx.store` with a system caller, `{ kind: "system", reason }`) are not checked, like the other row rules. NULL is always allowed; deleting a parent does not touch its children.
 
 ## Reserved entry columns
 
@@ -152,8 +152,22 @@ the publishing lifecycle; `version` backs `expectedVersion`; `author_id` is the 
 `restrict: { <schema>: "author_id = auth.uid()" }`.
 
 A seed or other SQL that inserts rows outside Mantle (`wrangler d1 execute --file seed.sql`) sets the native columns
-itself: `id` (text, unique), `created_at` and `updated_at` (on SQLite and D1 integer microseconds since the Unix epoch,
-e.g. `1767225600000000`; on PostgreSQL `timestamptz`), and on a publishing Schema `status` and `published_at`.
-SQLite and D1 default an omitted `updated_at` to `0`, which Admin shows as 1970. Procedures and the Store fill every
-native column for you; prefer them for fixtures. [Seed data](../guides/local-testing.md#seed-data) shows a complete
-seed for each dialect.
+itself. Procedures and the Store fill every one of them for you; prefer them for fixtures. The Store accepts no
+value for these columns or the scope column, for any caller: it sets them itself, so SQL is also the only way to keep
+their existing values.
+
+| Column | SQLite and D1 | PostgreSQL | If the SQL omits it |
+|---|---|---|---|
+| `id` | text, unique | text, unique | the insert fails |
+| `version` | integer, `1` for a new row | `int8` | `1` |
+| `created_at` | integer microseconds since the Unix epoch (`1767225600000000` is 2026-01-01T00:00:00Z) | `timestamptz` | the insert fails |
+| `updated_at` | integer microseconds, like `created_at` | `timestamptz` | SQLite and D1 store `0`, which Admin shows as 1970-01-01; PostgreSQL stores `now()` |
+| `author_id` | the creator's Better Auth user id, or `NULL` | the same | `NULL`: `restrict: { <schema>: "author_id = auth.uid()" }` shows the row to no member |
+| `status` (publishing) | `'draft'`, `'published'` or `'archived'` | the same | `'draft'` |
+| `published_at` (publishing) | integer microseconds when `status` is `'published'`, otherwise `NULL` | `timestamptz` or `NULL` | `NULL` |
+| scope column (owner or field scope) | the field the `scope` names (`owner` in `owner = auth.uid()`), text, not null | the same | the insert fails |
+
+Units differ by table: entry timestamps (`created_at`, `updated_at`, `published_at` and declared `date-time` fields)
+are microseconds on SQLite and D1, while the optional media library's `media_assets.created_at` is epoch
+**milliseconds** on every dialect ([media](../cloudflare/media-r2.md)). A declared `date` field is integer days since
+1970-01-01 on SQLite and D1. [Seed data](../guides/local-testing.md#seed-data) shows a complete seed for each dialect.
