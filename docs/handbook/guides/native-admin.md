@@ -235,7 +235,8 @@ record. In the browser Admin, a View column that reads a Schema field also goes 
 
 While the record form has unsaved changes, leaving it asks first: Admin's own links, its in-app navigation and Back/Forward
 show a confirm dialog, and a reload, closing the tab or another site show the browser's own prompt (`beforeunload`). Save,
-"Load latest version" or confirming the leave clears it; there is nothing to configure or opt out of. Custom pages and
+"Load latest version" or confirming the leave clears it, and a `#hash` change on the same page never asks; a cancelled Back or
+Forward leaves the browser history as it was; there is nothing to configure or opt out of. Custom pages and
 operation forms have no such guard.
 
 `plugins` are fragments of `components`, applied in order: each one's `renderDefault` is the plugin before it, the first
