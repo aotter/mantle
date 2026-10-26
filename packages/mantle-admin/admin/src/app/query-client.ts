@@ -4,7 +4,8 @@ import { invalidateAfterWrite } from "../lib/after-write";
 
 export const queryClient = new QueryClient({
   mutationCache: new MutationCache({
-    // a download changes nothing: `meta: { invalidates: false }`
+    // The one refresh after an Admin write. `meta: { invalidates: false }` skips it: a download changes nothing, and
+    // `useOperation` refreshes on its own client. A caller that also invalidates here would refetch twice.
     onSuccess: (_data, _variables, _context, mutation): void => { if (mutation.meta?.["invalidates"] !== false) void invalidateAfterWrite(queryClient); },
   }),
   defaultOptions: {

@@ -92,7 +92,8 @@ export function ParentEntryWorkbench({
             }}
             language={language}
             canonical={canonical}
-            onSuccess={() => void query.refetch()}
+            // the operation dialog already refreshed this entry with every other Admin read
+            onSuccess={() => {}}
           />
         }
       />

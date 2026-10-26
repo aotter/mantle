@@ -70,6 +70,11 @@ export interface McpToolResult {
   readonly isError?: boolean;
 }
 
+/** A read's `signal`, from the query that asked for it. */
+export interface ReadOptions {
+  readonly signal?: AbortSignal | undefined;
+}
+
 /** How a surface reads and writes: `/admin/api` in the browser, `tools/call` through an MCP host. The hooks do not know which. */
 export interface AdminTransport {
   readonly surface: AdminSurface;
@@ -77,13 +82,14 @@ export interface AdminTransport {
   readonly host: AdminHost | null;
   /** Whether this surface can write: an MCP host without server tools is read-only. */
   readonly writable: boolean;
-  view(name: string, input: Row, page: { readonly limit?: number | undefined; readonly cursor?: string | undefined }, rowNames?: { readonly [column: string]: string }): Promise<Reply<{ readonly rows: readonly Row[]; readonly nextCursor?: string }>>;
-  entries(collection: string, options: { readonly filter?: { readonly field: string; readonly value: string } | undefined; readonly search?: string | undefined; readonly limit?: number | undefined; readonly cursor?: string | undefined }): Promise<Reply<{ readonly items: readonly AdminEntry<Row>[]; readonly nextCursor?: string }>>;
-  entry(collection: string, id: string): Promise<Reply<AdminEntry<Row>>>;
-  total(collection: string): Promise<Reply<number>>;
-  me(): Promise<Reply<AdminMe>>;
+  /** Each read takes the query's `signal`: a cancelled refetch (a newer write's, an unmount) stops its request where the surface can. */
+  view(name: string, input: Row, page: { readonly limit?: number | undefined; readonly cursor?: string | undefined; readonly signal?: AbortSignal | undefined }, rowNames?: { readonly [column: string]: string }): Promise<Reply<{ readonly rows: readonly Row[]; readonly nextCursor?: string }>>;
+  entries(collection: string, options: { readonly filter?: { readonly field: string; readonly value: string } | undefined; readonly search?: string | undefined; readonly limit?: number | undefined; readonly cursor?: string | undefined; readonly signal?: AbortSignal | undefined }): Promise<Reply<{ readonly items: readonly AdminEntry<Row>[]; readonly nextCursor?: string }>>;
+  entry(collection: string, id: string, read?: ReadOptions): Promise<Reply<AdminEntry<Row>>>;
+  total(collection: string, read?: ReadOptions): Promise<Reply<number>>;
+  me(read?: ReadOptions): Promise<Reply<AdminMe>>;
   /** One read of up to `MAX_BADGE_VIEWS` Views' first rows, each as the caller: a refused or missing View is `unavailable`, one that could not answer is `error`. */
-  badges(names: readonly string[]): Promise<Reply<{ readonly [name: string]: BadgeAnswer }>>;
+  badges(names: readonly string[], read?: ReadOptions): Promise<Reply<{ readonly [name: string]: BadgeAnswer }>>;
   run(name: string, input: Row): Promise<Reply<unknown>>;
 }
 
@@ -165,7 +171,7 @@ export interface AdminHooks<T extends AdminTypes> {
   useEntries<N extends keyof T["collections"] & string>(collection: N, options?: EntriesOptions<T["collections"][N]["data"]>): EntriesState<T["collections"][N]["data"]>;
   /** `GET /admin/api/entries/{id}`. Browser only. */
   useEntry<N extends keyof T["collections"] & string>(collection: N, id: string): EntryState<T["collections"][N]["data"]>;
-  /** `POST /admin/api/operations/{name}`, or the operation's admin MCP tool in a host. A success refreshes Views, entries and totals. */
+  /** `POST /admin/api/operations/{name}`, or the operation's admin MCP tool in a host. A success refreshes Views, entries and totals, once. */
   useOperation<N extends keyof T["operations"] & string>(name: N): OperationState<T["operations"][N]["input"], T["operations"][N]["output"]>;
   /** The `total` of `GET /admin/api/collections/{name}/statistics`. Browser only. */
   useCollectionTotal(collection: keyof T["collections"] & string): TotalState;
@@ -204,7 +210,7 @@ const implementation = {
     const query = useInfiniteQuery({
       queryKey: ["view", name, "hook", transport.surface, input, options.limit],
       initialPageParam: undefined as string | undefined,
-      queryFn: ({ pageParam }) => transport.view(name, input as Row, { limit: options.limit, cursor: pageParam }, rowNames),
+      queryFn: ({ pageParam, signal }) => transport.view(name, input as Row, { limit: options.limit, cursor: pageParam, signal }, rowNames),
       getNextPageParam: nextPage,
     });
     const { list, ...state } = useAccumulated(query, page => page.rows);
@@ -215,7 +221,7 @@ const implementation = {
     const query = useInfiniteQuery({
       queryKey: ["entries", collection, "hook", transport.surface, options],
       initialPageParam: undefined as string | undefined,
-      queryFn: ({ pageParam }) => transport.entries(collection, { ...options, cursor: pageParam }),
+      queryFn: ({ pageParam, signal }) => transport.entries(collection, { ...options, cursor: pageParam, signal }),
       getNextPageParam: nextPage,
     });
     const { list, ...state } = useAccumulated(query, page => page.items);
@@ -223,7 +229,7 @@ const implementation = {
   },
   useEntry(collection: string, id: string): EntryState<object> {
     const { transport } = useAdminContext();
-    const query = useQuery({ queryKey: ["entry-editor", collection, id, "hook", transport.surface], queryFn: () => transport.entry(collection, id) });
+    const query = useQuery({ queryKey: ["entry-editor", collection, id, "hook", transport.surface], queryFn: ({ signal }) => transport.entry(collection, id, { signal }) });
     return { entry: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
   },
   useOperation(name: string): OperationState<object, unknown> {
@@ -235,28 +241,31 @@ const implementation = {
         if (reply.status === "unavailable") throw new AdminUnavailableError();
         return reply.data;
       },
-      // the shared cache: what Admin shows and what the application's own components read both refetch
+      // the shared cache: what Admin shows and what the application's own components read both refetch. The hook
+      // refreshes on whichever client it runs under (an MCP App's has no global handler), so Admin's global
+      // `MutationCache` handler skips it: one refetch per write, not a second one cancelling the first.
       onSuccess: () => { void invalidateAfterWrite(client); },
+      meta: { invalidates: false },
     });
     return { run: transport.writable ? mutation.mutateAsync : undefined, pending: mutation.isPending };
   },
   useCollectionTotal(collection: string): TotalState {
     const { transport } = useAdminContext();
-    const query = useQuery({ queryKey: ["collection-statistics", collection, "total", transport.surface], queryFn: () => transport.total(collection) });
+    const query = useQuery({ queryKey: ["collection-statistics", collection, "total", transport.surface], queryFn: ({ signal }) => transport.total(collection, { signal }) });
     return { total: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
   },
   useMe(): MeState {
     const { transport } = useAdminContext();
-    const query = useQuery({ queryKey: ["me", "hook", transport.surface], queryFn: () => transport.me() });
+    const query = useQuery({ queryKey: ["me", "hook", transport.surface], queryFn: ({ signal }) => transport.me({ signal }) });
     return { me: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
   },
   useBadges(refs: readonly { readonly view: string; readonly field: string }[]): readonly BadgeState[] {
     const { transport } = useAdminContext();
-    const me = useQuery({ queryKey: ["me", "hook", transport.surface], queryFn: () => transport.me() });
+    const me = useQuery({ queryKey: ["me", "hook", transport.surface], queryFn: ({ signal }) => transport.me({ signal }) });
     const names = [...new Set(refs.map(ref => ref.view))].slice(0, MAX_BADGE_VIEWS);
     // the user is in the key: another identity never reads this one's counts
     const userId = me.data?.status === "ok" ? me.data.data.userId : undefined;
-    const query = useQuery({ queryKey: ["badges", userId, transport.surface, names], queryFn: () => transport.badges(names), enabled: names.length > 0 && userId !== undefined });
+    const query = useQuery({ queryKey: ["badges", userId, transport.surface, names], queryFn: ({ signal }) => transport.badges(names, { signal }), enabled: names.length > 0 && userId !== undefined });
     return refs.map((ref): BadgeState => {
       if (!names.includes(ref.view)) return { count: undefined, status: "unavailable" };
       if (me.isError || query.isError) return { count: undefined, status: "error" };
