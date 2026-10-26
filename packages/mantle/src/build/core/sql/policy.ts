@@ -550,7 +550,7 @@ function insert(n0: N, c: C): N {
       oc.targetList.push(...sets(w, c));
       const t = n.relation.relname, setRef = refs(s, c, t, column => oc.targetList.find((x: N) => String(x.ResTarget.name).toLowerCase() === column)?.ResTarget.val, column => col(t, column), true);
       // scope and TTL: a conflict cannot overwrite another owner's row or revive an expired one; a lock: nor a locked one
-      const locks = writePolicy(s, 'update', { trusted: c.mode === 'trusted' }).locks.map(l => locked(c, t, table, l));
+      const locks = writePolicy(s, 'update', { trusted: c.mode === 'trusted' }).locks.map(l => locked(c, alias$(n.relation), table, l));
       oc.whereClause = and(oc.whereClause, visible(s, t, c, t), setRef, ...locks);
     }
   }

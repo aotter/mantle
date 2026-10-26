@@ -9,7 +9,7 @@ import { lockManifest, verifyLock } from "./lock-scenarios.js";
 
 // #1822: a Schema lock is a row rule every caller's generic update and delete carries; a trusted write does not.
 const sources = [{ sourceId: "lock.yaml", text: lockManifest }];
-const NOT = "NOT (EXISTS (SELECT 1 FROM posts AS p WHERE p.current_revision = ";
+const NOT = "NOT (EXISTS (SELECT 1 FROM posts AS _mantle_lock_0 WHERE _mantle_lock_0.current_revision = ";
 
 test.each(["bun-sqlite", "cloudflare-d1", "bun-postgres"] as const)("%s: caller writes carry the lock, trusted ones do not", async target => {
   const files = await generateOrThrow(target, sources), code = files["generated.ts"]!;
@@ -18,6 +18,12 @@ test.each(["bun-sqlite", "cloudflare-d1", "bun-postgres"] as const)("%s: caller 
   expect(line(`${procedures.edit_revision}Caller`)).toContain(`${NOT}post_revisions.id))`);
   expect(line(`${procedures.prune_revision}Caller`)).toContain(`${NOT}r.id))`);
   expect(line(`${procedures.edit_revision}Caller`)).toContain(`lock: {"sql":"SELECT CASE WHEN (EXISTS`);
+  // the lock's relations read through reserved aliases, so the write's own alias (`p`, `posts`) names only the locked row
+  expect(line(`${procedures.prune_as_p}Caller`)).toContain("NOT (EXISTS (SELECT 1 FROM posts AS _mantle_lock_0 WHERE _mantle_lock_0.current_revision = p.id)) AND NOT (EXISTS (SELECT 1 FROM posts AS _mantle_lock_0 WHERE _mantle_lock_0.current_revision = p.id))");
+  expect(line(`${procedures.edit_as_posts}Caller`)).toContain("_mantle_lock_0.current_revision = posts.id");
+  expect(line(`${procedures.upsert_revision}Caller`)).toContain("_mantle_lock_0.current_revision = p.id");
+  // so does the probe that classifies the refusal
+  expect(line(`${procedures.prune_as_p}Caller`)).toContain(`lock: {"sql":"SELECT CASE WHEN (EXISTS (SELECT 1 FROM posts AS _mantle_lock_0 WHERE _mantle_lock_0.current_revision = p.id)) IS NOT FALSE`);
   expect(line(`${procedures.edit_revision}Trusted`)).not.toContain("NOT (EXISTS");
   expect(line(`${procedures.prune_revision}Trusted`)).not.toContain("NOT (EXISTS");
   // posts has no lock: switching revisions is unchanged
