@@ -36,7 +36,8 @@
     "check:ui-size": "node scripts/check-ui-size.mjs",
     "check:startup": "pnpm --filter @aotter/mantle check:startup && node scripts/check-ui-size.mjs --startup-only",
     "check:oss-plugin": "node scripts/check-oss-plugin.mjs",
-    "check:examples": "node scripts/check-examples.mjs"
+    "check:examples": "node scripts/check-examples.mjs",
+    "check:init-audit": "node scripts/check-init-audit.mjs"
   },
   "devDependencies": {
     "typescript": "catalog:"
@@ -44,7 +45,6 @@
   "packageManager": "pnpm@9.15.0",
   "pnpm": {
     "overrides": {
-      "miniflare>sharp": "0.35.5",
       "@better-auth/mcp>@better-auth/oauth-provider": "1.7.7"
     }
   }

@@ -38,6 +38,8 @@ export default {
     "oauth.apps.empty": "ยังไม่มีไคลเอนต์ MCP ที่เชื่อมต่อ",
     "oauth.apps.revoke": "ยกเลิกการเชื่อมต่อ",
     "collection.filter.all": "ทั้งหมด",
+    "collection.searchIdPlaceholder": "ค้นหาตาม ID...",
+    "collection.empty.searchIdOnly": "ไม่พบรายการที่ตรงกับ “{search}” รายการนี้ค้นหาตาม ID เท่านั้น ประกาศ searchableFields ใน Schema เพื่อค้นหาในฟิลด์อื่น",
     "nav.home": "หน้าแรก",
     "nav.overview": "ภาพรวม",
     "nav.model": "โมเดลข้อมูล",
