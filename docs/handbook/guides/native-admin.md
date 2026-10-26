@@ -107,7 +107,12 @@ wrote through the app's own Views with HTTP Triggers (`mantle help trigger`).
 
 Entry create/read/patch/transitions return
 `{ collection, entry, parentEntryId, parentEntryTitle, related }`; the entry has
-`{ id, collection, locale, status, version, data, created_at, updated_at }`.
+`{ id, collection, locale, status, version, data, created_at, updated_at }`. On a Schema with
+[locks](../reference/schema.md#locks), each entry of the editor payload and of `GET /entries` also has
+`locks: { update, delete }`: per verb, `{ lock, message }` of the first lock that holds for your generic write of that row,
+or `false`. Admin disables Save, rename, Delete and transitions on such a row and shows the
+message; the operational "Unlock editing" toggle does not override it. The write itself stays the authority: a refusal is
+409 `CONFLICT` with `kind: "lock"`.
 Transitions accept `{}` to use the current version; tests should send the
 observed `expectedVersion` to catch stale writes. Generic writes reject native
 columns inside `data`. See [publishing](../concepts/lifecycle-and-locales.md).

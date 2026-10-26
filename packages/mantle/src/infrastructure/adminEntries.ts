@@ -9,7 +9,7 @@ import { wireScalars, wireReturning } from "../domain/wireScalars.js";
 import { recipesOf } from "../domain/recipes.js";
 import type { Dialect } from "../kernel/dialect/common.js";
 import type { GenerateDiagnostic } from "../domain/model.js";
-import { refChecks } from "../build/compiler.js";
+import { lockCondition, refChecks } from "../build/compiler.js";
 import { renderTerm, type Term } from "../kernel/store.js";
 import type { Recipe } from "../kernel/binds.js";
 
@@ -54,6 +54,12 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
     const markerText=wire.param(marker);
     const usedNames=new Set([...columns,...(parent?fields(parent):[])].map(name=>name.toLowerCase()));
     const cursorAliases=[0,1].map(i=>{let name="_mantle_admin_key"+i;while(usedNames.has(name.toLowerCase()))name+="_";usedNames.add(name.toLowerCase());return {name,sql:wire.ident(name)};});
+    // #1822: per verb, the first lock that holds for the row as the probe reads it (NULL holds), else NULL; caller reads only
+    const lockColumns=s.locks?.length?(["update","delete"] as const).map(verb=>{let name="_mantle_admin_lock_"+verb;while(usedNames.has(name.toLowerCase()))name+="_";usedNames.add(name.toLowerCase());
+      const qualify=(n:unknown):void=>{if(!n||typeof n!=="object")return;const f=(n as SqlNode).ColumnRef?.fields;if(f?.length===1)f.unshift({String:{sval:s.name}});Object.values(n).forEach(qualify);};
+      const held=s.locks!.filter(l=>l.on.includes(verb)).map(l=>{const when=structuredClone(l.when);qualify(when);return {CaseWhen:{expr:{BooleanTest:{arg:lockCondition(when,plan.schemas,dialect.lowering),booltesttype:"IS_NOT_FALSE"}},result:{A_Const:{sval:{sval:l.name}}}}};});
+      return {name,sql:(held.length?expr({CaseExpr:{args:held}}):"NULL")+" AS "+wire.ident(name)};
+    }):undefined;
     const ordered=adminOrder(s),fieldFacts:Record<string,unknown>=Object.create(null);
     for(const column of [...system(s),...writable]){
       const type=declaredType(s.fields,column)??(column==="version"?"integer":"text");
@@ -111,7 +117,7 @@ export async function adminEntries(plan:RuntimePlan,dialect:MantleDialect,wire:D
       const returnSQL=(ast:SqlNode)=>" RETURNING "+ast.returningClause.exprs.map((t:SqlNode)=>expr(t.ResTarget.val)+(t.ResTarget.name?" AS "+wire.ident(t.ResTarget.name):"")).join(",");
       // the partition of a new row is the scope value written; a patch never SETs it, so it is the row's own
       const created=trusted?{}:refs((column,hole)=>hole(column)),patched=trusted?{}:refs(column=>wire.ident(s.name)+"."+wire.ident(column));
-      return {projection,from,policy:policy?expr(policy):"",binds:recipesOf(compiled,[],message=>{throw Error(message);}),fields:entryFields,create:{...(Object.keys(created).length?{refs:created}:{}),prefix:print(create.ast).slice(0,print(create.ast).indexOf(" ("))+" (",between:") VALUES (",suffix:")",binds:create.binds,columns:insert.cols.slice(writable.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)),values:insert.selectStmt.SelectStmt.targetList.slice(writable.length?1:0).map((t:SqlNode)=>expr(t.ResTarget.val)),returning:returnSQL(insert)},patch:{...(Object.keys(patched).length?{refs:patched}:{}),...(patch.lock?{lock:patch.lock}:{}),prefix:print(patch.ast).slice(0,print(patch.ast).indexOf(" SET "))+" SET ",binds:patch.binds,sets:update.targetList.slice(updateFields.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)+" = "+expr(t.ResTarget.val)),where:" WHERE "+expr(update.whereClause),returning:returnSQL(update)},remove:{sql:print(remove.ast),binds:remove.binds,row:true,...(remove.lock?{lock:remove.lock}:{})}};
+      return {projection,from,policy:policy?expr(policy):"",...(lockColumns&&!trusted?{locks:{projection:lockColumns.map(c=>c.sql).join(", "),update:lockColumns[0]!.name,delete:lockColumns[1]!.name,messages:Object.fromEntries(s.locks!.map(l=>[l.name,l.message]))}}:{}),binds:recipesOf(compiled,[],message=>{throw Error(message);}),fields:entryFields,create:{...(Object.keys(created).length?{refs:created}:{}),prefix:print(create.ast).slice(0,print(create.ast).indexOf(" ("))+" (",between:") VALUES (",suffix:")",binds:create.binds,columns:insert.cols.slice(writable.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)),values:insert.selectStmt.SelectStmt.targetList.slice(writable.length?1:0).map((t:SqlNode)=>expr(t.ResTarget.val)),returning:returnSQL(insert)},patch:{...(Object.keys(patched).length?{refs:patched}:{}),...(patch.lock?{lock:patch.lock}:{}),prefix:print(patch.ast).slice(0,print(patch.ast).indexOf(" SET "))+" SET ",binds:patch.binds,sets:update.targetList.slice(updateFields.length).map((t:SqlNode)=>wire.ident(t.ResTarget.name)+" = "+expr(t.ResTarget.val)),where:" WHERE "+expr(update.whereClause),returning:returnSQL(update)},remove:{sql:print(remove.ast),binds:remove.binds,row:true,...(remove.lock?{lock:remove.lock}:{})}};
     }));
     result[s.name]={...(s.userScopes?.length ? {userScopes:s.userScopes} : {}),cursorAliases,scoped:!!s.scope,path:"schemas/"+s.name+"/admin",marker:markerText,id:wire.ident(s.name)+"."+wire.ident("id"),fields:fieldFacts,orderFields:Object.keys(ordered),search:`(${wire.ident(s.name)}.${wire.ident("id")} = ${markerText}${s.search?.length?` OR ${wire.search(s.name,s.search,wire.ident(s.name),markerText)}`:""})`,statistics:{rowsAlias,column:wire.ident(s.name)+"."+wire.ident("created_at"),time:postgres?`extract(epoch FROM ${wire.ident(s.name)}.${wire.ident("created_at")}) * 1000000`:wire.ident(s.name)+"."+wire.ident("created_at"),subtype},caller:modes[0],trusted:modes[1]};
   }catch(error){refusals.push({code:"GENERATE_UNSUPPORTED",path:error instanceof Error&&"path"in error&&typeof error.path==="string"?error.path:"schemas/"+s.name+"/admin",message:error instanceof Error?error.message:String(error)});}

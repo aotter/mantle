@@ -4,7 +4,7 @@ import { ContractError, type Target, type Row, type Caller } from "@aotter/mantl
 import { invalid } from "@aotter/mantle/surface";
 import { csv } from "./csv.js";
 import { json, type Context, type Route } from "./index.js";
-import {exactVersion,nativeEntryData,nativeEntryGet,nativeEntryPage,nativeEntryProcedure,nativeStatistics,type NativeCollection,type NativeProcedureAdapter} from "./native.js";
+import {entryLocks,exactVersion,nativeEntryData,nativeEntryGet,nativeEntryPage,nativeEntryProcedure,nativeStatistics,type NativeCollection,type NativeProcedureAdapter} from "./native.js";
 export type EntryScalar = string | number | boolean;
 /** Validated parameters select generated native pages; this is not a generic Store query. */
 export interface EntryPageQuery {
@@ -46,7 +46,7 @@ const lockOf = (row: Row, expected = row.version): number | string => {
 };
 const native = new Set(["id", "status", "version", "createdAt", "updatedAt", "authorId", "created_at", "updated_at", "author_id", "published_at", "_rid"]);
 const ms = (value: unknown) => typeof value === "number" ? value / 1000 : value == null ? null : Date.parse(String(value));
-const entry = <Database>(schema: EntrySchema<Database>, raw: Row) => { const row = schema.row(raw), { id, status, version, created_at: _c, updated_at, author_id: _a, published_at: _p, ...data } = row; return { id: String(id), collection: schema.name, locale: typeof data.locale === "string" ? data.locale : null, status: status ?? null, version, data, created_at: ms(_c), updated_at: ms(updated_at) }; };
+const entry = <Database>(schema: EntrySchema<Database>, raw: Row) => { const row = schema.row(raw), { id, status, version, created_at: _c, updated_at, author_id: _a, published_at: _p, ...data } = row, locks = entryLocks(raw); return { id: String(id), collection: schema.name, locale: typeof data.locale === "string" ? data.locale : null, status: status ?? null, version, data, created_at: ms(_c), updated_at: ms(updated_at), ...(locks ? {locks} : {}) }; };
 const dataOf = (raw: Record<string, unknown>) => {
     const data = raw.data ?? {};
     if (!data || typeof data !== "object" || Array.isArray(data))
@@ -93,10 +93,10 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
         const parent = ctx.authorize && descriptor(schema).translates?.parent;
         if (parent && !await ctx.authorize!({kind: "schema", name: parent, action: "read"})) throw new ContractError("AUTH_DENIED", "Target is not authorized.", "schema/" + parent);
     };
-    const pageOf = async (schema: EntrySchema<DB>, ctx: Context<Env, DB>, params: URLSearchParams) => {
+    const pageOf = async (schema: EntrySchema<DB>, ctx: Context<Env, DB>, params: URLSearchParams, locks = false) => {
         await readable(schema, ctx);
         const q = schema.query(params);
-        return q ? nativeEntryPage(schema.binding, adapter, () => ctx.db, ctx.caller, q) : {rows: [] as Row[], nextCursor: undefined};
+        return q ? nativeEntryPage(schema.binding, adapter, () => ctx.db, ctx.caller, q, locks) : {rows: [] as Row[], nextCursor: undefined};
     };
     const find = async (schema: EntrySchema<DB>, ctx: Context<Env, DB>, field: string, value: unknown, limit: number) => {
         if (!scalar(value) || value === "") return [];
@@ -138,7 +138,8 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
         const inherited = descriptor(schema).translates?.parent;
         if (ctx.authorize && (!await ctx.authorize({kind: "schema", name: schema.name, action: "read"}) || inherited && !await ctx.authorize({kind: "schema", name: inherited, action: "read"})))
             return {collection: schema.descriptor, entry: {id: row.id, version: row.version}, parentEntryId: null, parentEntryTitle: null, related: []};
-        if (written) return editor(schema, row, ctx).catch(() => ({collection: schema.descriptor, entry: entry(schema, row), parentEntryId: null, parentEntryTitle: null, related: []}));
+        // a written row (RETURNING) carries no locks: re-read it for them (#1822)
+        if (written) return (async () => editor(schema, schema.binding.caller.locks && !entryLocks(row) ? await current(schema, ctx, String(row.id)) : row, ctx))().catch(() => ({collection: schema.descriptor, entry: entry(schema, row), parentEntryId: null, parentEntryTitle: null, related: []}));
         const d = descriptor(schema), e = entry(schema, row), up = d.parent;
         const parentCandidate = up && schemas.find(s => s.name === up.collection);
         const parentSchema = parentCandidate && (!ctx.authorize || await ctx.authorize({kind:"schema",name:parentCandidate.name,action:"read"})) ? parentCandidate : undefined;
@@ -161,7 +162,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
         return {collection: schema.descriptor, entry: e, parentEntryId: parent?.id ?? null, parentEntryTitle: parent && parentSchema ? titleOf(parentSchema, parent) ?? parent.id : null, related: related.filter(Boolean), ...await refTitles(schema, ctx, [e], Object.keys(e.data)).then(refs => Object.keys(refs).length ? {refTitles: refs} : {})};
     };
     const list = async (ctx: Context<Env, DB>) => {
-        const schema = schemaOf(ctx.url.searchParams.get("collection")), page = await pageOf(schema, ctx, ctx.url.searchParams);
+        const schema = schemaOf(ctx.url.searchParams.get("collection")), page = await pageOf(schema, ctx, ctx.url.searchParams, true);
         const items = page.rows.map(raw => entry(schema, raw)), locales = new Map(items.map(row => [row.id, new Set<string>()]));
         for (const child of schemas.filter(child => descriptor(child).translates?.parent === schema.name && descriptor(child).localized)) {
             if (ctx.authorize && !await ctx.authorize({kind:"schema",name:child.name,action:"read"})) continue;

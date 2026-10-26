@@ -106,6 +106,19 @@ export interface EntryEditorEntry {
   data: Record<string, unknown>;
   created_at?: number | null;
   updated_at: number;
+  /** Present when the Schema declares locks and the read evaluated them (#1822): per verb, the first lock that holds, or false. */
+  locks?: EntryLocks;
+}
+
+/** A lock that holds for one verb: its name and static message. */
+export interface HeldLock {
+  lock: string;
+  message: string;
+}
+
+export interface EntryLocks {
+  update: HeldLock | false;
+  delete: HeldLock | false;
 }
 
 export interface RelatedEntrySection {
@@ -201,6 +214,7 @@ export interface EntryRow {
   translation_locales: string[];
   /** Explicit uiSchema.list data fields for operational collections. */
   data_preview?: Record<string, unknown>;
+  locks?: EntryLocks;
 }
 
 export interface ListEntriesResult {

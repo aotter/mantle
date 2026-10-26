@@ -21,7 +21,7 @@ export interface InteractionDiagnostic {
   readonly code: string;
   readonly message: string;
   readonly path?: string;
-  /** What kind of refusal, when the runtime says (a CONFLICT's "row", "unique" or "check"). */
+  /** What kind of refusal, when the runtime says (a CONFLICT's "row", "unique", "check" or "lock"). */
   readonly kind?: string;
   readonly failure?: { readonly outcome?: string; readonly retry?: string };
 }
@@ -342,8 +342,8 @@ export function createInteractionController(options: InteractionControllerOption
       const { diagnostics } = outcome;
       const phase: InteractionPhase = diagnostics.some(isUncertain) ? "uncertain"
         // Only a version lock makes a conflict recoverable by review; any
-        // other CONFLICT (a unique key, a state rule) is a refusal to fix.
-        : locks && diagnostics.some((diagnostic) => diagnostic.code === "CONFLICT") ? "conflict"
+        // other CONFLICT (a unique key, a state rule, a Schema lock) is a refusal to fix.
+        : locks && diagnostics.some((diagnostic) => diagnostic.code === "CONFLICT" && diagnostic.kind !== "lock") ? "conflict"
         : "failed";
       set({ phase, diagnostics });
     },
