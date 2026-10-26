@@ -38,6 +38,8 @@ export default {
     "oauth.apps.empty": "Нет подключенных клиентов MCP.",
     "oauth.apps.revoke": "Отключить",
     "collection.filter.all": "Все",
+    "collection.searchIdPlaceholder": "Поиск по ID...",
+    "collection.empty.searchIdOnly": "Нет записей, соответствующих «{search}». Этот список ищет только по ID; объявите searchableFields в Schema, чтобы искать по другим полям.",
     "nav.home": "Главная",
     "nav.overview": "Обзор",
     "nav.model": "Модель данных",
