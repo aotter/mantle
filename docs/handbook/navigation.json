@@ -46,6 +46,10 @@
           "link": "/guides/sql-patterns"
         },
         {
+          "text": "Edit published content without downtime",
+          "link": "/guides/revisions"
+        },
+        {
           "text": "Native Admin",
           "link": "/guides/native-admin"
         },
