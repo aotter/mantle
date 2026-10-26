@@ -71,7 +71,7 @@ export interface PlanProcedure {
   readonly target?: ProcedureTarget;
   readonly mcp?: ProcedureMcpAnnotations;
   /** An inline handler carries its SQL as authored (`source`), which Admin shows; the IR is what runs. */
-  readonly handler: { readonly ref: string } | { readonly sql: SqlPlan; readonly source: string };
+  readonly handler: { readonly ref: string } | { readonly sql: SqlPlan; readonly source: string; readonly mustWrite?: readonly number[] };
 }
 
 export interface PlanTrigger {
@@ -86,6 +86,8 @@ export interface LoweredStatement {
   readonly kind: "read" | "row" | "set";
   readonly schema?: string;
   readonly verb?: "insert" | "update" | "delete";
+  /** A set op the Procedure names in `handler.mustWrite`: writing no row is CONFLICT (#1775). Omitted when false. */
+  readonly mustWrite?: true;
   /** Omitted when false. */
   readonly hooked?: true;
   /** Omitted when false. */
