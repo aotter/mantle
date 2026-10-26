@@ -192,8 +192,24 @@ export function checkTriggerRefs(
 
     if (t.spec.source.kind === "http") {
       const httpPath = t.spec.source.path;
-      const isValidPrefix = httpPath.startsWith("/api/");
-      if (!isValidPrefix) {
+      // describe writes `{name}` as `:name`, so a literal `:name` segment or a brace outside a whole `{name}` segment
+      // would read as another route; refused so describe templates name exactly one route.
+      const ambiguous = httpPath.split("/").find(segment => !/^\{[^{}/]+\}$/.test(segment) && (segment.startsWith(":") || /[{}]/.test(segment)));
+      const isValidPrefix = httpPath.startsWith("/api/") && ambiguous === undefined;
+      if (ambiguous !== undefined) {
+        out.push(
+          validateDiagnostic({
+            code: "TRIGGER_PATH_INVALID",
+            severity: "error",
+            path: manifestPath("Trigger", t.metadata.name, "/spec/source/path", filePaths),
+            value: httpPath,
+            expected: "literal segments not starting with ':', and parameters as whole '{name}' segments",
+            message:
+              `Trigger '${t.metadata.name}' has path segment '${ambiguous}' — describe writes a '{name}' parameter ` +
+              `as ':name', so this segment would be read as another route. Use '{name}' for a parameter.`,
+          }),
+        );
+      } else if (!httpPath.startsWith("/api/")) {
         out.push(
           validateDiagnostic({
             code: "TRIGGER_PATH_INVALID",
@@ -212,7 +228,8 @@ export function checkTriggerRefs(
       // TRIGGER_PATH_INVALID and TRIGGER_PATH_COLLISION for the same
       // bad path produces noisy diagnostics that misdescribe the root
       // cause (collision is secondary; the path is the real error).
-      const key = `${t.spec.source.method} ${httpPath}`;
+      // Parameter names do not change which requests match: `/api/{a}/x` and `/api/{b}/x` are one route, and the second is unreachable.
+      const key = `${t.spec.source.method} ${httpPath.replace(/\{[^}]+\}/g, "{}")}`;
       const prior = httpRoutes.get(key);
       if (prior) {
         out.push(
@@ -220,9 +237,9 @@ export function checkTriggerRefs(
             code: "TRIGGER_PATH_COLLISION",
             severity: "error",
             path: manifestPath("Trigger", t.metadata.name, "/spec/source", filePaths),
-            value: key,
-            expected: `unique (method, path) across all http Triggers (also declared by '${prior}')`,
-            message: `Trigger '${t.metadata.name}' shares route ${key} with Trigger '${prior}'.`,
+            value: `${t.spec.source.method} ${httpPath}`,
+            expected: `unique (method, path) across all http Triggers, parameter names aside (also declared by '${prior}')`,
+            message: `Trigger '${t.metadata.name}' shares route ${t.spec.source.method} ${httpPath} with Trigger '${prior}'; only one of them could ever match.`,
           }),
         );
       } else if (isValidPrefix) {
