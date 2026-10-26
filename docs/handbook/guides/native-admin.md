@@ -433,7 +433,10 @@ tabs. The parent is the reference named by `Schema.spec.uiSchema.nav.parentField
 the first required unique-field reference. A Schema with two or more required `id` references to
 existing Schemas (translations excluded) and no `parentField`, with or without `standalone`, is refused by `mantle generate` with `SCHEMA_UI_INVALID`; the diagnostic lists the
 candidates and the `nav: { parentField: <field> }` line that keeps the first one that is not a parent cycle. This applies to every build, with or without Admin, so a join table with two required `id` references needs it too. `parentField` is
-refused on a translation child and when its parent chain leads back to the Schema. Choosing the
+refused on a translation child and when its parent chain leads back to the Schema. An explicit
+`parentField` decides the fold direction: a required reference from that parent back to the child
+(a post's required `current_revision`) is not an inferred fold and does not count as a cycle,
+while two `parentField`s pointing at each other are still refused. Choosing the
 parent changes Admin navigation only: storage and authorization are unchanged.
 
 Set `nav.standalone: true` to put a child with a required `id` reference at the top level instead;
