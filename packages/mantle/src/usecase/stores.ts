@@ -43,7 +43,7 @@ export function emitStores(schemas: RuntimePlan["schemas"], isSqlite: boolean, n
     const ref = refChecks(s, schemas);
     const fact: Fact = {
       ...(s.userScopes?.length ? { u: s.userScopes.map(u => userScopeTerm(u, true)) } : {}),
-      ...(s.scope ? { s: s.scope } : {}), ...(s.ttl ? { ttl: [s.ttl, s.ttlSeconds ?? 0] as const } : {}), ...(s.publishing ? { pub: 1 as const, ...(publishRequired(s).length ? { req: publishRequired(s) } : {}) } : {}),
+      ...(s.scope ? { s: s.scope } : {}), ...(s.ttl ? { ttl: [s.ttl, s.ttlSeconds ?? 0] as const } : {}), ...(s.publishing ? { pub: 1 as const, ...(publishRequired(s).length ? { req: Object.fromEntries(publishRequired(s)) } : {}) } : {}),
       ...(ts.length ? { ts } : {}), ...(dates.length ? { d: dates } : {}),
       ...(s.search?.length ? { search: s.search } : {}),
       ...(ref.length ? { ref } : {}),

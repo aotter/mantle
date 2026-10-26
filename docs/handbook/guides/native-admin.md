@@ -113,9 +113,9 @@ Entry create/read/patch/transitions return
 or `false`. Admin disables Save, rename, Delete and transitions on such a row and shows the
 message; the operational "Unlock editing" toggle does not override it. The write itself stays the authority: a refusal is
 409 `CONFLICT` with `kind: "lock"`. Every publishing entry has `locks` too: the draft-only rule (without `liveEdits`) and
-"unpublish before deleting" are the implicit lock `lock: "publishing"`, listed after a declared update lock. It binds data
-writes only, so Publish, Unpublish and Archive stay available; with `liveEdits` a published entry's form is enabled with a
-"changes go live on save" notice.
+"unpublish before deleting" are the implicit lock `lock: "publishing"`, named only when no declared lock holds for that verb.
+It binds data writes only, so Publish, Unpublish and Archive stay available; with `liveEdits` a published entry's form is
+enabled with a "changes go live on save" notice, and Save waits until its required fields are filled.
 Transitions accept `{}` to use the current version; tests should send the
 observed `expectedVersion` to catch stale writes. Generic writes reject native
 columns inside `data`. See [publishing](../concepts/lifecycle-and-locales.md).

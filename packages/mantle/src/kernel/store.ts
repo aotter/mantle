@@ -39,8 +39,8 @@ export interface Fact {
   readonly ttl?: readonly [column: string, seconds: number];
   /** Opt-in publishing lifecycle. */
   readonly pub?: 1;
-  /** The columns `publish` requires non-null: an update keeps a published row publishable (#1822). */
-  readonly req?: readonly string[];
+  /** The columns `publish` requires non-null, each to its declared field: an update of a published row cannot clear one (#1822). */
+  readonly req?: Readonly<Record<string, string>>;
   /** Declared date-time and date columns (`created_at` and `updated_at` are always date-times). */
   readonly ts?: readonly string[];
   readonly d?: readonly string[];
@@ -303,26 +303,24 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     };
 
     /**
-     * A published row stays publishable (#1822): after an update, the columns `publish` requires are non-null, whoever writes (as
-     * `publish` checks them for a system caller too). The term for an update that sets `set`, or undefined when it cannot matter.
+     * A published row stays publishable (#1822): an update cannot clear a column `publish` requires, whoever writes (as `publish`
+     * checks a system caller too). Columns it leaves alone are not re-checked, so a field added to `required` later does not
+     * freeze the rows published before it. The fields such an update clears, for its `status <> 'published'` term.
      */
-    const publishable = (set: object): string | undefined => {
-      if (!f.req?.length) return undefined;
-      const given = new Map(Object.entries(set).map(([name, v]) => [name.toLowerCase(), v])), live = `${d.ident("status")} <> 'published'`;
-      if (f.req.some(c => given.get(c) === null)) return live;
-      const kept = f.req.filter(c => !given.has(c));
-      return kept.length ? `(${live} OR (${kept.map(c => `${d.ident(c)} IS NOT NULL`).join(" AND ")}))` : undefined;
+    const cleared = (set: object): string[] => {
+      const req = f.req ?? {};
+      return [...new Set(Object.entries(set).flatMap(([name, v]) => v === null && Object.hasOwn(req, name.toLowerCase()) ? [req[name.toLowerCase()]!] : []))];
     };
     /**
      * The caller's locks on `verb` (#1822), and an update's `publishable` term: `NOT (<when>)` terms for its WHERE, and the probe
      * a driver reads when the write changed no row, which names the lock or the missing publish data.
      */
-    const locked = (id: string, verb: "update" | "delete", required?: string) => {
-      const locks = trusted ? [] : (f.lock ?? []).filter(l => l.on.includes(verb));
+    const locked = (id: string, verb: "update" | "delete", fields: string[] = []) => {
+      const locks = trusted ? [] : (f.lock ?? []).filter(l => l.on.includes(verb)), required = fields.length ? `${d.ident("status")} <> 'published'` : undefined;
       if (!locks.length && !required) return { terms: [] };
-      const w = writer(), where = w.guard(id, [], false), cases = [...locks.map(l => `WHEN (${l.sql}) IS NOT FALSE THEN '${l.name}'`), ...required ? [`WHEN NOT ${required} THEN '${REQUIRED}'`] : []];
+      const w = writer(), where = w.guard(id, [], false), cases = [...locks.map(l => `WHEN (${l.sql}) IS NOT FALSE THEN '${l.name}'`), ...required ? [`WHEN NOT (${required}) THEN '${REQUIRED}'`] : []];
       const { sql, binds } = w.step(`SELECT CASE ${cases.join(" ")} END AS ${d.ident("lock")} FROM ${w.into}${where}`);
-      return { terms: [...locks.map(l => `NOT (${l.sql})`), ...required ? [required] : []], lock: { sql, binds, schema: p.name, verb, locks: Object.fromEntries(locks.map(l => [l.name, l.message])), ...required ? { required: `This entry is published: an update must keep the data publish requires (${f.req!.join(", ")}).` } : {} } };
+      return { terms: [...locks.map(l => `NOT (${l.sql})`), ...required ? [required] : []], lock: { sql, binds, schema: p.name, verb, locks: Object.fromEntries(locks.map(l => [l.name, l.message])), ...required ? { required: `This entry is published: publish requires ${fields.join(", ")}, so an update cannot clear ${fields.length > 1 ? "them" : "it"}.` } : {} } };
     };
     return {
       async findById(id: string) {
@@ -350,7 +348,7 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
         const w = writer(lock), assigns = w.given(set).map(([name, mark]) => `${name} = ${mark}`);
         for (const [column, v] of x.sets) assigns.push(`${d.ident(column)} = ${v === "bump" ? `${d.ident(column)} + 1` : w.recipe(v)}`);
         // the partition is never SET, so the child's is the row's own
-        const refs = w.refs(column => `${w.into}.${d.ident(column)}`), held = locked(id, "update", publishable(set));
+        const refs = w.refs(column => `${w.into}.${d.ident(column)}`), held = locked(id, "update", cleared(set));
         return w.step(`UPDATE ${w.into} SET ${assigns.join(", ")}${w.guard(id, [...refs, ...held.terms])}${w.returning()}`, held.lock);
       }, rows => clean(rows)[0], `${p.name}/update`); },
       delete(id: string, { lock }: { lock: number | string }) { return write(() => {

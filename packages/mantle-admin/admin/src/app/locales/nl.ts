@@ -11,6 +11,7 @@ export default {
     "ops.lockConflict": "Dit record is vergrendeld en is niet gewijzigd. {message}",
     "entryEdit.locked": "Dit record is vergrendeld. {message}",
     "entryEdit.liveEditHint": "Dit item is gepubliceerd: je wijzigingen staan live zodra je opslaat.",
+    "entryEdit.liveMissingRequired": "Dit item is gepubliceerd: vul de verplichte velden in om op te slaan.",
     "crud.unpublishToDelete": "Trek de publicatie van dit item in voordat je het verwijdert.",
     "model.viewDataUnavailable": "Actuele gegevens zijn niet beschikbaar: deze View is intern of je account mag deze niet uitvoeren.",
     "admin.consoleTitle": "Beheerconsole",

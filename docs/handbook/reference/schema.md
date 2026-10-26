@@ -46,7 +46,7 @@ Generated types constrain Store fields and writes; Store does not interpret a JS
 
 ## Row rules
 
-Schemas default to operational. Publishing opts into draft/published/archived and generated admin/system transitions. Store cannot assign system columns or scope; generated policy fills them. `publishing: { liveEdits: true }` (only with `lifecycle: publishing`) lets Admin's generic patch edit a published entry in place; without it, generic patches edit drafts only, an implicit lock named `publishing` that never binds the transitions. On every path an update of a published row must keep the fields `publish` requires (`INPUT_VALIDATION_FAILED`). See [lifecycle and locales](../concepts/lifecycle-and-locales.md).
+Schemas default to operational. Publishing opts into draft/published/archived and generated admin/system transitions. Store cannot assign system columns or scope; generated policy fills them. `publishing: { liveEdits: true }` (only with `lifecycle: publishing`) lets Admin's generic patch edit a published entry in place; without it, generic patches edit drafts only, an implicit lock named `publishing` that never binds the transitions. No update clears a field `publish` requires from a published row (`INPUT_VALIDATION_FAILED`): a Store update that sets one to null is refused, while Admin's live edit validates the whole merged entry as `publish` does. See [lifecycle and locales](../concepts/lifecycle-and-locales.md).
 
 Owner and field columns prefix every unique index in that order. User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
 

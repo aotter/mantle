@@ -11,6 +11,7 @@ export default {
     "ops.lockConflict": "Bản ghi này đã bị khóa và không được thay đổi. {message}",
     "entryEdit.locked": "Bản ghi này đã bị khóa. {message}",
     "entryEdit.liveEditHint": "Mục này đã được xuất bản: thay đổi sẽ có hiệu lực ngay khi bạn lưu.",
+    "entryEdit.liveMissingRequired": "Mục này đã được xuất bản: hãy điền các trường bắt buộc để lưu.",
     "crud.unpublishToDelete": "Hãy hủy xuất bản mục này trước khi xóa.",
     "model.viewDataUnavailable": "Không thể xem dữ liệu trực tiếp: View này là nội bộ hoặc tài khoản của bạn không được phép chạy.",
     "admin.consoleTitle": "Bảng điều khiển quản trị",

@@ -11,6 +11,7 @@ export default {
     "ops.lockConflict": "이 레코드는 잠겨 있어 변경되지 않았습니다. {message}",
     "entryEdit.locked": "이 레코드는 잠겨 있습니다. {message}",
     "entryEdit.liveEditHint": "이 항목은 게시되어 있습니다. 저장하면 변경 사항이 바로 게시됩니다.",
+    "entryEdit.liveMissingRequired": "이 항목은 게시되어 있습니다. 저장하려면 필수 항목을 입력하세요.",
     "crud.unpublishToDelete": "삭제하기 전에 이 항목의 게시를 취소하세요.",
     "model.viewDataUnavailable": "실시간 데이터를 사용할 수 없습니다. 이 View는 내부용이거나 계정에 실행 권한이 없습니다.",
     "admin.consoleTitle": "관리자 콘솔",

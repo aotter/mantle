@@ -11,6 +11,7 @@ export default {
     "ops.lockConflict": "Catatan ini terkunci dan tidak diubah. {message}",
     "entryEdit.locked": "Catatan ini terkunci. {message}",
     "entryEdit.liveEditHint": "Entri ini sudah terbit: perubahan langsung tayang begitu Anda menyimpan.",
+    "entryEdit.liveMissingRequired": "Entri ini sudah terbit: lengkapi kolom wajib untuk menyimpan.",
     "crud.unpublishToDelete": "Batalkan penerbitan entri ini sebelum menghapusnya.",
     "model.viewDataUnavailable": "Data langsung tidak tersedia: View ini bersifat internal atau akun Anda tidak diizinkan menjalankannya.",
     "admin.consoleTitle": "Konsol admin",

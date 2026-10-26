@@ -190,7 +190,9 @@ export function EntryEditView({
     rowLocked,
     liveEdits,
   });
-  const canSave = canEdit && dirty;
+  // a live edit must keep the entry publishable: the server refuses one that drops required data
+  const liveMissing = liveEdits && missingRequired;
+  const canSave = canEdit && dirty && !liveMissing;
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
   const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId, payload.parentEntryTitle);
@@ -394,7 +396,7 @@ export function EntryEditView({
             ? t(language, isArchived ? "entryEdit.restoring" : "entryEdit.unpublishing")
             : dirty
             ? t(language, "common.unsavedChanges")
-            : isDraft && !isOperational && missingRequired
+            : (isDraft || liveEdits) && !isOperational && missingRequired
             ? t(language, "entryEdit.publishMissingRequired")
             : save.isSuccess
             ? t(language, "common.saved")
@@ -436,7 +438,7 @@ export function EntryEditView({
               type="button"
               onClick={() => save.mutate(data)}
               disabled={actionPending || !canSave}
-              title={lockedHint ?? t(language, "entryEdit.saveTooltip")}
+              title={lockedHint ?? t(language, liveMissing ? "entryEdit.liveMissingRequired" : "entryEdit.saveTooltip")}
             >
               <Save className="size-4" aria-hidden />
               {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}

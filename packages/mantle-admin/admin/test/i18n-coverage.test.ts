@@ -25,6 +25,7 @@ const REQUIRED_TRANSLATED_KEYS = new Set([
   "ops.lockConflict",
   "entryEdit.locked",
   "entryEdit.liveEditHint",
+  "entryEdit.liveMissingRequired",
   "crud.unpublishToDelete",
   "nav.build",
   "nav.docs",

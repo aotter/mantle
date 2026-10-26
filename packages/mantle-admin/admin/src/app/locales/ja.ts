@@ -11,6 +11,7 @@ export default {
     "ops.lockConflict": "このレコードはロックされているため、変更されませんでした。{message}",
     "entryEdit.locked": "このレコードはロックされています。{message}",
     "entryEdit.liveEditHint": "このエントリは公開中です。保存すると変更がすぐに公開されます。",
+    "entryEdit.liveMissingRequired": "このエントリは公開中です。保存するには必須項目を入力してください。",
     "crud.unpublishToDelete": "削除する前にこのエントリを非公開にしてください。",
     "model.viewDataUnavailable": "ライブデータを表示できません。この View は内部用か、アカウントに実行権限がありません。",
     "admin.consoleTitle": "管理コンソール",

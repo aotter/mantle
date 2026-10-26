@@ -11,6 +11,7 @@ export default {
     "ops.lockConflict": "این رکورد قفل است و تغییری نکرد. {message}",
     "entryEdit.locked": "این رکورد قفل است. {message}",
     "entryEdit.liveEditHint": "این مورد منتشر شده است: تغییرات شما بلافاصله پس از ذخیره منتشر می‌شوند.",
+    "entryEdit.liveMissingRequired": "این مورد منتشر شده است: برای ذخیره، فیلدهای الزامی را کامل کنید.",
     "crud.unpublishToDelete": "پیش از حذف، انتشار این مورد را لغو کنید.",
     "model.viewDataUnavailable": "داده‌های زنده در دسترس نیست: این View داخلی است یا حساب شما اجازه اجرای آن را ندارد.",
     "admin.consoleTitle": "کنسول مدیریت",

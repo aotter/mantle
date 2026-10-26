@@ -11,12 +11,12 @@ import { declaredLock, type EntryEditorPayload, type EntryLocks } from "../src/l
 
 const message = "This revision is live. Create a new revision and switch to it.";
 /** The editor as an admin sees a cached payload: its notice and its action bar's buttons. */
-function editor(lifecycle: "operational" | "publishing", locks?: EntryLocks, status = "draft"): string {
+function editor(lifecycle: "operational" | "publishing", locks?: EntryLocks, status = "draft", schema: object = {}, data: object = { body: "Hello" }): string {
   const client = new QueryClient();
   client.setQueryData(["me"], { admin: true });
   client.setQueryData(entryEditorQueryOptions("revisions", "r1").queryKey, {
-    entry: { id: "r1", collection: "revisions", version: 3, status, locale: null, data: { body: "Hello" }, ...(locks ? { locks } : {}) },
-    collection: { name: "revisions", lifecycle, schema: { type: "object", properties: { body: { type: "string" } } } },
+    entry: { id: "r1", collection: "revisions", version: 3, status, locale: null, data, ...(locks ? { locks } : {}) },
+    collection: { name: "revisions", lifecycle, schema: { type: "object", properties: { body: { type: "string" } }, ...schema } },
     related: [],
     parentEntryId: null,
   } as unknown as EntryEditorPayload);
@@ -76,6 +76,13 @@ describe("publishing entries and liveEdits (#1822)", () => {
     expect(html).not.toMatch(/<fieldset disabled=""/);
     expect(button(html, "Save")).toBeDefined();
     expect(button(html, "Unpublish")).not.toMatch(/disabled=""/);
+  });
+
+  it("disables a live edit's Save while a required field is missing", () => {
+    const html = editor("publishing", { update: false, delete: unpublish }, "published", { required: ["body"] }, {});
+    expect(html).toContain("go live");
+    expect(button(html, "Save")).toMatch(/disabled=""/);
+    expect(button(html, "Save")).toContain("complete its required fields to save");
   });
 
   it("keeps an archived entry read-only under liveEdits, since the server locks it", () => {

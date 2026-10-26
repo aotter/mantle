@@ -11,6 +11,7 @@ export default {
     "ops.lockConflict": "הרשומה נעולה ולא שונתה. {message}",
     "entryEdit.locked": "הרשומה נעולה. {message}",
     "entryEdit.liveEditHint": "הרשומה מפורסמת: השינויים יפורסמו מיד עם השמירה.",
+    "entryEdit.liveMissingRequired": "הרשומה מפורסמת: יש למלא את שדות החובה כדי לשמור.",
     "crud.unpublishToDelete": "יש לבטל את פרסום הרשומה לפני מחיקתה.",
     "model.viewDataUnavailable": "נתונים עדכניים אינם זמינים: ה־View פנימי או שאין לחשבון שלך הרשאה להפעילו.",
     "admin.consoleTitle": "מסוף ניהול",

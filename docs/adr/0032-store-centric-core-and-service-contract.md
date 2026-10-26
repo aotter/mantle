@@ -56,11 +56,13 @@ Every entry read and write goes through `MantleStore` / `CallerStore` over the r
 > patch of a non-draft and a delete of a published row are `CONFLICT` with `kind: "lock"` (`verb` `update` or `delete`), and the
 > Admin payload's `entry.locks` shows them before the edit. The implicit lock binds data writes only, never the publish,
 > unpublish and archive transitions; deleting a published row still requires unpublishing, with or without `liveEdits`; declared
-> locks apply on top. A published row stays publishable on every path: Admin validates the merged row as `publish` does (its OCC
-> pins the row it read) and refuses with `INPUT_VALIDATION_FAILED`, and a Store update (`store(db, caller)`, `ctx.store`, any
-> caller, system included, as `publish` checks system callers too) carries `status <> 'published' OR <publish's required
-> columns> IS NOT NULL` in its WHERE, its probe answering `INPUT_VALIDATION_FAILED`. The Store and Admin are the only
-> generic paths: a SQL Procedure cannot write a publishing Schema at all, so the generated transitions are its only writes.
+> locks apply on top. No write clears data `publish` requires from a published row. Admin's live edit validates the whole
+> merged row as `publish` does (the form shows the whole entry; its OCC pins the row it read) and refuses with
+> `INPUT_VALIDATION_FAILED`. A Store update (`store(db, caller)`, `ctx.store`, any caller, system included, as `publish` checks
+> system callers too) that sets a required column to NULL (a geo field is its two columns) carries `status <> 'published'` in
+> its WHERE, its probe answering `INPUT_VALIDATION_FAILED` naming the declared fields; columns it leaves alone are not re-checked,
+> so a field added to `required` later does not freeze rows published before it. A SQL Procedure cannot write a publishing
+> Schema, so the generated transitions are its only writes there.
 
 ### 2. Row ops and set ops
 

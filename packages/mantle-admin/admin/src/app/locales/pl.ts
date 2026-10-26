@@ -11,6 +11,7 @@ export default {
     "ops.lockConflict": "Ten rekord jest zablokowany i nie został zmieniony. {message}",
     "entryEdit.locked": "Ten rekord jest zablokowany. {message}",
     "entryEdit.liveEditHint": "Ten wpis jest opublikowany: zmiany będą widoczne od razu po zapisaniu.",
+    "entryEdit.liveMissingRequired": "Ten wpis jest opublikowany: uzupełnij wymagane pola, aby zapisać.",
     "crud.unpublishToDelete": "Cofnij publikację tego wpisu przed jego usunięciem.",
     "model.viewDataUnavailable": "Dane na żywo są niedostępne: ta View jest wewnętrzna lub Twoje konto nie może jej uruchomić.",
     "admin.consoleTitle": "Konsola administracyjna",

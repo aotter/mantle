@@ -11,6 +11,7 @@ export default {
     "ops.lockConflict": "Bu kayıt kilitli ve değiştirilmedi. {message}",
     "entryEdit.locked": "Bu kayıt kilitli. {message}",
     "entryEdit.liveEditHint": "Bu kayıt yayında: değişiklikleriniz kaydettiğiniz anda yayına girer.",
+    "entryEdit.liveMissingRequired": "Bu kayıt yayında: kaydetmek için zorunlu alanları doldurun.",
     "crud.unpublishToDelete": "Silmeden önce bu kaydı yayından kaldırın.",
     "model.viewDataUnavailable": "Canlı veriler kullanılamıyor: bu View dahilidir veya hesabınızın çalıştırma izni yoktur.",
     "admin.consoleTitle": "Yönetim konsolu",

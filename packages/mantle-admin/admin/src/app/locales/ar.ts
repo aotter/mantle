@@ -11,6 +11,7 @@ export default {
     "ops.lockConflict": "هذا السجل مقفل ولم يتم تغييره. {message}",
     "entryEdit.locked": "هذا السجل مقفل. {message}",
     "entryEdit.liveEditHint": "هذا الإدخال منشور: تُنشر تغييراتك فور الحفظ.",
+    "entryEdit.liveMissingRequired": "هذا الإدخال منشور: أكمل حقوله المطلوبة للحفظ.",
     "crud.unpublishToDelete": "ألغِ نشر هذا الإدخال قبل حذفه.",
     "model.viewDataUnavailable": "البيانات المباشرة غير متاحة: هذا العرض داخلي أو حسابك غير مخوّل لتشغيله.",
     "admin.consoleTitle": "لوحة الإدارة",
