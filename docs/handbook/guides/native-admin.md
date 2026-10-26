@@ -225,6 +225,11 @@ an operational record refuses it with a validation error, and a draft keeps it e
 record. In the browser Admin, a View column that reads a Schema field also goes through that field's `cell:` component, with the column's own
 `cell:view:` component outside it; the MCP App renders only `cell:view:`. The developer workspace (`/admin/dev`) is Admin's own tool and does not go through any slot. A record with folded child collections opens on a workbench at `/admin/c/<schema>/<id>`, which is not `RecordView`; the record form (and so `RecordView`, `record.aside:`, `record.actions:` and `input:`) is its `/edit` page. A `Shell` that does not call `renderDefault` has no status bar: the record form's Save and Publish bar then stays in the page.
 
+While the record form has unsaved changes, leaving it asks first: Admin's own links, its in-app navigation and Back/Forward
+show a confirm dialog, and a reload, closing the tab or another site show the browser's own prompt (`beforeunload`). Save,
+"Load latest version" or confirming the leave clears it; there is nothing to configure or opt out of. Custom pages and
+operation forms have no such guard.
+
 `plugins` are fragments of `components`, applied in order: each one's `renderDefault` is the plugin before it, the first
 plugin's is the built-in component, and the application's own `components` are outermost. A plugin is
 `{ components: { ... } }`, so one can be written once and shared.

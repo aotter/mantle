@@ -5,6 +5,7 @@ export default {
 
     "common.reloadPage": "ページを再読み込み",
     "common.reloadPageHint": "このページを再読み込みして再試行してください。未保存の変更は失われる可能性があります。",
+    "entryEdit.leaveUnsaved": "保存されていない変更があります。このページを離れて変更を破棄しますか？",
     "ops.details": "詳細",
     "ops.conditionConflict": "レコードが変更されたか、この操作の条件を満たさなくなりました。更新して再試行してください。",
   "ops.uniqueConflict": "同じ一意の値を持つレコードが既に存在します。",

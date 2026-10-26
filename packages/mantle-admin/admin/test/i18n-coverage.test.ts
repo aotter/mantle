@@ -12,6 +12,7 @@ const REQUIRED_TRANSLATED_KEYS = new Set([
   "common.close",
   "common.reloadPage",
   "common.reloadPageHint",
+  "entryEdit.leaveUnsaved",
   "common.contentAdmin",
   "common.mobileSidebar",
   "common.mobileSidebarDescription",

@@ -1,6 +1,7 @@
 export default {
     "common.reloadPage": "重新載入頁面",
     "common.reloadPageHint": "請重新載入此頁面後再試一次。尚未儲存的變更可能會遺失。",
+    "entryEdit.leaveUnsaved": "有尚未儲存的變更。要離開此頁並捨棄變更嗎？",
     "ops.details": "詳細資訊",
     "ops.conditionConflict": "這筆紀錄已變更，或已不符合此操作的條件。請重新整理後再試一次。",
   "ops.uniqueConflict": "已有一筆資料使用相同的唯一值。",

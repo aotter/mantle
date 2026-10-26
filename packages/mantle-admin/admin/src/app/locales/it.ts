@@ -5,6 +5,7 @@ export default {
 
     "common.reloadPage": "Ricarica pagina",
     "common.reloadPageHint": "Ricarica questa pagina per riprovare. Le modifiche non salvate potrebbero andare perse.",
+    "entryEdit.leaveUnsaved": "Ci sono modifiche non salvate. Lasciare questa pagina e scartarle?",
     "ops.details": "Dettagli",
     "ops.conditionConflict": "Il record è cambiato o non soddisfa più la condizione di questa azione. Aggiorna e riprova.",
   "ops.uniqueConflict": "Esiste già un record con lo stesso valore univoco.",

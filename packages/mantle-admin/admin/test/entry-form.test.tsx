@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@aotter/mantle-ui/kit";
 import { PreferencesProvider } from "../src/app/preferences";
-import { AdminRouterProvider } from "../src/app/router";
+import { AdminRouterProvider, createNavigator, guardLeaving, type AdminLocation } from "../src/app/router";
+import { ConfirmProvider } from "../src/ui/confirm-dialog";
 import { editEntryForm, followEntry, isEntryFormDirty, loadEntryForm, reannounceNewer, settleEntryForm, type EntryForm } from "../src/features/content/entry-form";
 import { EntryEditView, NewerVersionNotice } from "../src/features/content/entry-edit-view";
 import { entryEditorQueryOptions } from "../src/lib/queries";
@@ -113,12 +114,109 @@ describe("the record form against an editor re-read (#1790)", () => {
     } as unknown as EntryEditorPayload;
     client.setQueryData(entryEditorQueryOptions("posts", "e1").queryKey, payload);
     const html = renderToStaticMarkup(
-      <PreferencesProvider initialLanguage="en"><QueryClientProvider client={client}><TooltipProvider><AdminRouterProvider>
+      <PreferencesProvider initialLanguage="en"><QueryClientProvider client={client}><TooltipProvider><AdminRouterProvider><ConfirmProvider>
         <EntryEditView collectionName="posts" entryId="e1" />
-      </AdminRouterProvider></TooltipProvider></QueryClientProvider></PreferencesProvider>,
+      </ConfirmProvider></AdminRouterProvider></TooltipProvider></QueryClientProvider></PreferencesProvider>,
     );
     expect(html).toContain("Hello");
     expect(html).toContain("v3");
     expect(html).not.toContain("was saved while you were editing");
+  });
+});
+
+/** A browser history, enough for the navigator: Back moves at once and reports the pop, as a `popstate` would. */
+function fakeBrowser(start: string) {
+  const stack = [start];
+  let index = 0;
+  const url = () => new URL(stack[index]!, "https://site.test");
+  const browser = {
+    onPop: () => {},
+    location: { get href() { return url().href; }, get pathname() { return url().pathname; }, get search() { return url().search; }, get hash() { return url().hash; } },
+    history: {
+      pushState: (_state: unknown, _title: string, next: string) => { stack.splice(++index, stack.length, next); },
+      replaceState: (_state: unknown, _title: string, next: string) => { stack[index] = next; },
+      back: () => { index -= 1; browser.onPop(); },
+    },
+    get path() { return stack[index]; },
+  };
+  return browser;
+}
+
+describe("leaving a record form with unsaved changes (#1792)", () => {
+  const setup = () => {
+    const browser = fakeBrowser("/admin/c/posts/e1");
+    const shown: AdminLocation[] = [];
+    const navigator = createNavigator(browser as unknown as Window, (location) => shown.push(location));
+    browser.onPop = navigator.popped;
+    const win = new EventTarget();
+    return { browser, shown, navigator, win };
+  };
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const beforeUnload = (win: EventTarget) => { const event = new Event("beforeunload", { cancelable: true }); win.dispatchEvent(event); return event.defaultPrevented; };
+
+  it("is active only while the form is dirty, and Save or Load latest version clears it", () => {
+    const loaded = loadEntryForm(entry(3, { title: "Hello" }));
+    const dirty = editEntryForm(loaded, { title: "Hello, edited" }, undefined);
+    expect([isEntryFormDirty(loaded), isEntryFormDirty(dirty)]).toEqual([false, true]);
+    // Save: the server copy of what was sent; Load latest version: the newer server copy
+    expect(isEntryFormDirty(settleEntryForm(dirty, dirty.data, entry(4, dirty.data)))).toBe(false);
+    expect(isEntryFormDirty(loadEntryForm(entry(4, { title: "Changed elsewhere" })))).toBe(false);
+  });
+
+  it("navigates freely without a guard, and the browser's prompt shows only while one is held", async () => {
+    const { browser, shown, navigator, win } = setup();
+    navigator.navigate("/admin/c/posts");
+    expect(browser.path).toBe("/admin/c/posts");
+    expect(shown).toEqual([{ pathname: "/admin/c/posts", search: "" }]);
+    expect(beforeUnload(win)).toBe(false);
+    const release = guardLeaving(win as unknown as Window, navigator.block, async () => false);
+    expect(beforeUnload(win)).toBe(true);
+    release();
+    expect(beforeUnload(win)).toBe(false);
+    const ask = vi.fn(async () => true);
+    guardLeaving(win as unknown as Window, navigator.block, ask)();
+    navigator.navigate("/admin");
+    expect(ask).not.toHaveBeenCalled();
+    expect(browser.path).toBe("/admin");
+  });
+
+  it("asks before Admin's own navigation: staying keeps the page, confirming proceeds", async () => {
+    const { browser, shown, navigator, win } = setup();
+    const answers = [false, true];
+    const ask = vi.fn(async () => answers.shift()!);
+    const release = guardLeaving(win as unknown as Window, navigator.block, ask);
+    navigator.navigate("/admin/c/posts");
+    await tick();
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(browser.path).toBe("/admin/c/posts/e1");
+    expect(shown).toEqual([]);
+    navigator.navigate("/admin/c/posts");
+    await tick();
+    expect(browser.path).toBe("/admin/c/posts");
+    expect(shown).toEqual([{ pathname: "/admin/c/posts", search: "" }]);
+    // the same location is not leaving
+    navigator.navigate("/admin/c/posts");
+    expect(ask).toHaveBeenCalledTimes(2);
+    release();
+  });
+
+  it("puts the page back on Back and redoes the move once confirmed", async () => {
+    const { browser, shown, navigator, win } = setup();
+    navigator.navigate("/admin/c/posts/e2");
+    shown.length = 0;
+    let answer = false;
+    const ask = vi.fn(async () => answer);
+    const release = guardLeaving(win as unknown as Window, navigator.block, ask);
+    browser.history.back();
+    await tick();
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(browser.path).toBe("/admin/c/posts/e2");
+    expect(shown).toEqual([]);
+    answer = true;
+    browser.history.back();
+    await tick();
+    expect(browser.path).toBe("/admin/c/posts/e1");
+    expect(shown).toEqual([{ pathname: "/admin/c/posts/e1", search: "" }]);
+    release();
   });
 });

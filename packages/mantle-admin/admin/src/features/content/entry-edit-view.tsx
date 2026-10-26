@@ -1,4 +1,4 @@
-import { useAdminRouter } from "../../app/router";
+import { useAdminRouter, useLeaveGuard } from "../../app/router";
 import { SchemaFields as SharedSchemaFields, type FieldLabels, type FieldSlot } from "@aotter/mantle-ui/kit";
 export { stringFieldWidget } from "@aotter/mantle-ui/kit";
 import * as React from "react";
@@ -34,6 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 import { CollapsibleDescription, ErrorBox, FormActionBar, OperationErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { useConfirm } from "../../ui/confirm-dialog";
 import { StatusBadge } from "../../ui/status-badge";
 import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
 import { MediaBrowser } from "../media/media-library-view";
@@ -85,6 +86,9 @@ export function EntryEditView({
   // the form against the entry it was loaded from: a re-read keeps unsaved edits (#1790)
   const [form, setForm] = React.useState<EntryForm | null>(() => query.data ? loadEntryForm(query.data.entry) : null);
   const data = form?.data ?? null;
+  // unsaved edits: leaving asks first; Save, "Load latest version" or confirming the leave clears it (#1792)
+  const confirm = useConfirm();
+  useLeaveGuard(form ? isEntryFormDirty(form) : false, () => confirm({ description: t(language, "entryEdit.leaveUnsaved") }));
   const latest = query.data?.entry;
   const setData = React.useCallback(
     (next: Record<string, unknown>) => setForm((current) => current && editEntryForm(current, next, latest)),

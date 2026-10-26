@@ -1,6 +1,7 @@
 export default {
     "common.reloadPage": "Reload page",
     "common.reloadPageHint": "Reload this page to try again. Unsaved changes may be lost.",
+    "entryEdit.leaveUnsaved": "You have unsaved changes. Leave this page and discard them?",
     "ops.details": "Details",
     "ops.conditionConflict": "The record changed or no longer meets this action’s condition. Refresh and try again.",
   "ops.uniqueConflict": "A record with the same unique value already exists.",
