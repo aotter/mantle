@@ -14,7 +14,7 @@ Bare queries preserve native errors except required conflict/uncertain-write cla
 | CONFLICT | 409 | Unique clash, stale lock or failed row/state guard |
 | OUTCOME_UNKNOWN | 503 | Write may have committed; reconcile without automatic retry |
 
-A `CONFLICT` carries `kind`: `"row"` when a row statement changed no row (missing or not visible, a stale version, or a
+A `CONFLICT` carries `kind`: `"row"` when a row statement, or a statement a Procedure lists in `handler.mustWrite`, changed no row (missing or not visible, a stale version, or a
 state its WHERE no longer allows; one message covers all three, so it never reveals whether the row exists), `"unique"`
 for a unique-index clash and `"check"` for a Schema check (with `schema` and `check`). Match `kind`, not the message.
 To recover from `"row"`, read the record again and decide from its current state: retry with its current version only when the change still applies, and never retry blindly. A Procedure can name a precise reason itself (a ref handler that reads the row first, or a RETURNING the caller checks).

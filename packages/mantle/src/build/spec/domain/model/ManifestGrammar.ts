@@ -419,6 +419,9 @@ export interface HandlerRefBinding {
  *  one batch. Reads `input.<name>`, `auth.uid()`, `auth.role()`, `now()`. */
 export interface HandlerSqlBinding {
   readonly sql: string;
+  /** Statement numbers, counting from 1, of set-op writes that must write at least one row, else
+   *  `CONFLICT` kind "row" and the whole program rolls back (ADR-0034 decision 4, #1775). */
+  readonly mustWrite?: readonly number[];
 }
 
 /** Closed predicate vocabulary. `ctx.user` and `ctx.auth` are bare
