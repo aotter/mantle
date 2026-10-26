@@ -53,6 +53,9 @@ import { editEntryForm, followEntry, isEntryFormDirty, loadEntryForm, reannounce
 const MarkdownEditor = React.lazy(() => import("../editor/markdown-editor").then((module) => ({ default: module.MarkdownEditor })));
 const HtmlEditor = React.lazy(() => import("../editor/html-editor").then((module) => ({ default: module.HtmlEditor })));
 
+/** An operation dialog refreshes every Admin read itself; a second invalidation here would refetch the entry twice. */
+const noRefresh = (): void => {};
+
 export function EntryEditView({
   collectionName,
   entryId,
@@ -248,7 +251,8 @@ export function EntryEditView({
               operations={boundOperations}
               language={language}
               canonical={canonical}
-              onSuccess={() => void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })}
+              // the operation dialog already refreshed this entry with every other Admin read
+              onSuccess={noRefresh}
             />
           </>
         }
@@ -344,7 +348,7 @@ export function EntryEditView({
               language={language}
               canonical={canonical}
               operations={operationsQuery.data}
-              onOperationSuccess={() => void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })}
+              onOperationSuccess={noRefresh}
             />
           ) : null}
         </div>
