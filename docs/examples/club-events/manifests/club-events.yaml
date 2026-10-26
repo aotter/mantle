@@ -9,6 +9,7 @@ spec:
   # It also refuses an officer lowering capacity below the seats already taken.
   checks: ["seats_taken <= capacity"]
   indexes: [[startsAt, id]]
+  searchableFields: [title]
   uiSchema: { list: { primaryField: title, columns: [startsAt, capacity, seats_taken, closed] } }
   schema:
     type: object
@@ -54,6 +55,7 @@ spec:
   uniqueIndexes: [[email]]
   # Better Auth lowercases emails; the check refuses a mixed-case entry that would never match.
   checks: ["email = lower(email)"]
+  searchableFields: [email, name]
   uiSchema: { list: { primaryField: email, columns: [name] } }
   schema:
     type: object

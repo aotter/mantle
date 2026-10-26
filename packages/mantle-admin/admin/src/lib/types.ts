@@ -37,6 +37,8 @@ export interface Collection {
   mediaFields?: Array<{ name: string; hint: string }>;
   /** Required scalar fields backed by a declared Schema index. */
   sortableFields?: string[];
+  /** Fields the list search matches besides the entry id (`searchableFields`); empty searches id only. */
+  searchableFields?: string[];
   /** Primary Admin list filter declared at uiSchema.list.filterField. */
   filter?: { field: string; values: string[] } | null;
   /** Operational list data fields resolved from uiSchema.list. */

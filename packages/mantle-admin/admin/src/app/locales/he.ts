@@ -38,6 +38,8 @@ export default {
     "oauth.apps.empty": "אין לקוחות MCP מחוברים.",
     "oauth.apps.revoke": "ניתוק",
     "collection.filter.all": "הכול",
+    "collection.searchIdPlaceholder": "חיפוש לפי מזהה...",
+    "collection.empty.searchIdOnly": "אין רשומות שתואמות ל“{search}”. רשימה זו מחפשת לפי מזהה בלבד; הצהירו על searchableFields ב־Schema כדי לחפש בשדות אחרים.",
     "nav.home": "בית",
     "nav.overview": "סקירה",
     "nav.model": "מודל נתונים",

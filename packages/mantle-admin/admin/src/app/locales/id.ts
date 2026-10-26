@@ -38,6 +38,8 @@ export default {
     "oauth.apps.empty": "Tidak ada klien MCP yang terhubung.",
     "oauth.apps.revoke": "Putuskan",
     "collection.filter.all": "Semua",
+    "collection.searchIdPlaceholder": "Cari berdasarkan ID...",
+    "collection.empty.searchIdOnly": "Tidak ada entri yang cocok dengan “{search}”. Daftar ini hanya mencari berdasarkan ID; deklarasikan searchableFields pada Schema untuk mencari di bidang lain.",
     "nav.home": "Beranda",
     "nav.overview": "Ringkasan",
     "nav.model": "Model data",

@@ -38,6 +38,8 @@ export default {
     "oauth.apps.empty": "Nejsou připojeni žádní klienti MCP.",
     "oauth.apps.revoke": "Odpojit",
     "collection.filter.all": "Vše",
+    "collection.searchIdPlaceholder": "Hledat podle ID...",
+    "collection.empty.searchIdOnly": "Hledání „{search}“ nic nenašlo. Tento seznam hledá jen podle ID; pro hledání v dalších polích deklarujte searchableFields ve Schema.",
     "nav.home": "Domů",
     "nav.overview": "Přehled",
     "nav.model": "Datový model",

@@ -38,6 +38,8 @@ export default {
     "oauth.apps.empty": "Chưa có ứng dụng MCP nào được kết nối.",
     "oauth.apps.revoke": "Ngắt kết nối",
     "collection.filter.all": "Tất cả",
+    "collection.searchIdPlaceholder": "Tìm theo ID...",
+    "collection.empty.searchIdOnly": "Không có mục nào khớp với “{search}”. Danh sách này chỉ tìm theo ID; khai báo searchableFields trong Schema để tìm trong các trường khác.",
     "nav.home": "Trang chủ",
     "nav.overview": "Tổng quan",
     "nav.model": "Mô hình dữ liệu",
