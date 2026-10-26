@@ -34,7 +34,7 @@ async function app(target: "bun-sqlite" | "bun-postgres") {
   };
 }
 
-const code = (run: () => Promise<unknown>) => run().then(() => "ok", (e: { code?: string }) => e.code ?? String(e));
+const code = (run: () => Promise<unknown>) => run().then(() => "ok", (e: { code?: string; fields?: { kind?: string } }) => e.fields?.kind ? `${e.code} ${e.fields.kind}` : e.code ?? String(e));
 
 async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }: Awaited<ReturnType<typeof app>>) {
   const admin = userCaller({ id: "editor", role: "admin" }, { adminRoles: ["admin"] }), member = userCaller({ id: "member" }, {});
@@ -46,7 +46,7 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
     const response = (await postRoutes(new Request(origin + path), db, origin, async () => caller))!;
     return { status: response.status, text: await response.text(), robots: response.headers.get("x-robots-tag") };
   };
-  const version = async (id: string) => Number((await posts.findById(id))!.version);
+  const version = async (id: string) => (await posts.findById(id))!.version;
   const fill = async (id: string, fields: Record<string, string>) => revisions.update(id, fields, { lock: (await revisions.findById(id))!.version });
 
   // A draft post and its first revision. new-revision starts an empty one, which the switch refuses as incomplete.
@@ -57,8 +57,12 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
   await fill(first.id, { title: "Hello", summary: "The first post.", body: "Version one." });
   expect(await code(() => generated.store(db, member, { handlers }).procedures["switch-revision"]({ post: hello.id, revision: first.id, expectedVersion: hello.version }))).toBe("AUTH_DENIED");
   const switched = await run("switch-revision", { post: hello.id, revision: first.id, expectedVersion: hello.version });
-  // PostgreSQL returns int8 as a string through the Store, so compare the number.
-  expect({ ...switched, version: Number(switched.version) }).toMatchObject({ id: hello.id, version: Number(hello.version) + 1, current_revision: first.id });
+  expect(switched).toEqual({ id: hello.id, version: hello.version + 1, current_revision: first.id });
+
+  // A post without a revision cannot be published: current_revision is required.
+  const empty = await posts.insert({ slug: "empty" });
+  expect(await code(() => generated.procedures["posts.publish"](db, admin, { id: empty.id, expectedVersion: empty.version }))).toBe("CONFLICT row");
+  expect((await posts.findById(empty.id))!.status).toBe("draft");
 
   // The public View shows nothing while the post is a draft, even with a current revision; publishing makes it live.
   expect(await page("hello")).toEqual([]);
@@ -70,6 +74,11 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
   expect([live.status, live.robots]).toEqual([200, null]);
   expect(live.text).toContain(`<link rel="canonical" href="${origin}/posts/hello">`);
   expect(live.text).not.toContain("noindex");
+
+  // The live_revision lock freezes the current revision for every caller: an edit or delete is CONFLICT kind lock.
+  expect(await code(() => fill(first.id, { body: "Edited live." }))).toBe("CONFLICT lock");
+  expect(await code(async () => revisions.delete(first.id, { lock: (await revisions.findById(first.id))!.version }))).toBe("CONFLICT lock");
+  expect(await page("hello")).toEqual(["Version one."]);
 
   // new-revision copies the current revision; editing the copy leaves the public page alone.
   const second = (await run("new-revision", { post: hello.id })).results[0][0];
@@ -88,9 +97,9 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
   expect(await code(() => generated.views["revision-preview"](db, member, { revision: second.id }))).toBe("AUTH_DENIED");
 
   // A stale version is CONFLICT and changes nothing; so does a revision of another post.
-  const stale = Number(hello.version) + 1;
+  const stale = hello.version + 1;
   expect(stale).toBeLessThan(await version(hello.id));
-  expect(await code(() => run("switch-revision", { post: hello.id, revision: second.id, expectedVersion: stale }))).toBe("CONFLICT");
+  expect(await code(() => run("switch-revision", { post: hello.id, revision: second.id, expectedVersion: stale }))).toBe("CONFLICT row");
   const other = await posts.insert({ slug: "other" });
   const foreign = (await run("new-revision", { post: other.id })).results[0][0];
   await fill(foreign.id, { title: "Other", summary: "Another post.", body: "Not hello." });
@@ -110,8 +119,9 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
   await run("switch-revision", { post: hello.id, revision: first.id, expectedVersion: await version(hello.id) });
   expect(await page("hello")).toEqual(["Version one."]);
 
-  // Pruning refuses the current revision and deletes any other.
-  expect(await code(() => run("prune-revision", { id: first.id }))).toBe("CONFLICT");
+  // The lock now holds the first revision, and no longer the second. Pruning refuses the current revision and deletes any other.
+  expect(await code(() => fill(first.id, { body: "Edited live." }))).toBe("CONFLICT lock");
+  expect(await code(() => run("prune-revision", { id: first.id }))).toBe("CONFLICT lock");
   expect(await code(() => run("prune-revision", { id: second.id }))).toBe("ok");
   expect(await revisions.findById(second.id)).toBeNull();
   expect(await page("hello")).toEqual(["Version one."]);
