@@ -7,7 +7,7 @@ export default {
     "common.reloadPageHint": "Rechargez cette page pour réessayer. Les modifications non enregistrées risquent d’être perdues.",
     "ops.details": "Détails",
     "ops.conditionConflict": "L’enregistrement a changé ou ne remplit plus la condition de cette action. Actualisez et réessayez.",
-  "ops.uniqueConflict": "Un enregistrement avec la même valeur unique existe déjà.",
+    "ops.uniqueConflict": "Un enregistrement avec la même valeur unique existe déjà.",
     "ops.lockConflict": "Cet enregistrement est verrouillé et n’a pas été modifié. {message}",
     "entryEdit.locked": "Cet enregistrement est verrouillé. {message}",
     "model.viewDataUnavailable": "Données en direct indisponibles : cette View est interne ou votre compte ne peut pas l’exécuter.",

@@ -143,17 +143,23 @@ export interface NativeEntryMode {
     /** Schema locks (#1822), caller mode only: `projection` outputs, per verb, the name of a lock that holds for the row, or NULL. */
     readonly locks?: {readonly projection: string; readonly update: string; readonly delete: string; readonly messages: Readonly<Record<string, string>>};
 }
-/** What a caller's generic write of a row would meet (#1822): the first holding lock names the refusal. Advisory; the write's WHERE decides. */
-export interface EntryLocks { readonly update: boolean; readonly delete: boolean; readonly lock?: string; readonly message?: string }
+/** A lock that holds for one verb: its name and static message. */
+export interface HeldLock { readonly lock: string; readonly message: string }
+/** What a caller's generic update and delete of a row would meet (#1822): per verb, the first lock that holds, or false. Advisory; the write's WHERE decides. */
+export interface EntryLocks { readonly update: HeldLock | false; readonly delete: HeldLock | false }
 const heldLocks = new WeakMap<Row, EntryLocks>();
 /** The locks a lock-reading `nativeEntryGet` or `nativeEntryPage` found on this row; undefined when the Schema has none or none were read. */
 export const entryLocks = (row: Row): EntryLocks | undefined => heldLocks.get(row);
 const withLocks = (spec: NativeEntryProcedures, m: NativeEntryMode, rows: Row[]): Row[] => {
     if (!spec.caller.locks) return rows;
     for (const row of rows) {
-        const l = m.locks, update = l ? row[l.update] : null, remove = l ? row[l.delete] : null, lock = (update ?? remove) as string | null;
-        if (l) {delete row[l.update]; delete row[l.delete];}
-        heldLocks.set(row, {update: update != null, delete: remove != null, ...(lock != null && l && Object.hasOwn(l.messages, lock) ? {lock, message: l.messages[lock]!} : {})});
+        const l = m.locks, held = (alias: string | undefined): HeldLock | false => {
+            const lock = alias === undefined ? null : row[alias];
+            if (alias !== undefined) delete row[alias];
+            // a NULL `when` holds too; an unknown name cannot occur, but still reads as held
+            return typeof lock === "string" ? {lock, message: l!.messages[lock] ?? ""} : false;
+        };
+        heldLocks.set(row, {update: held(l?.update), delete: held(l?.delete)});
     }
     return rows;
 };

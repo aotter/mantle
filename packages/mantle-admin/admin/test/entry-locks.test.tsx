@@ -29,7 +29,7 @@ function editor(lifecycle: "operational" | "publishing", locks?: EntryLocks, sta
 const button = (html: string, label: string) => html.match(new RegExp(`<button[^>]*>(?:(?!</button>).)*${label}(?:(?!</button>).)*</button>`))?.[0];
 
 describe("a row a Schema lock holds (#1822)", () => {
-  const held = { update: true, delete: true, lock: "live_revision", message };
+  const live = { lock: "live_revision", message }, held = { update: live, delete: live };
 
   it("shows the lock's message, drops the unlock toggle and disables Save", () => {
     const html = editor("operational", held);

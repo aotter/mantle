@@ -109,8 +109,8 @@ Entry create/read/patch/transitions return
 `{ collection, entry, parentEntryId, parentEntryTitle, related }`; the entry has
 `{ id, collection, locale, status, version, data, created_at, updated_at }`. On a Schema with
 [locks](../reference/schema.md#locks), each entry of the editor payload and of `GET /entries` also has
-`locks: { update, delete, lock?, message? }`: whether a lock holds for your generic update or delete of that row, and the
-first holding lock's name and message. Admin disables Save, rename, Delete and transitions on such a row and shows the
+`locks: { update, delete }`: per verb, `{ lock, message }` of the first lock that holds for your generic write of that row,
+or `false`. Admin disables Save, rename, Delete and transitions on such a row and shows the
 message; the operational "Unlock editing" toggle does not override it. The write itself stays the authority: a refusal is
 409 `CONFLICT` with `kind: "lock"`.
 Transitions accept `{}` to use the current version; tests should send the

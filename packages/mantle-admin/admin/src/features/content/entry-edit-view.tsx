@@ -176,8 +176,8 @@ export function EntryEditView({
   const canManageContent = me.data?.admin === true;
   // a Schema lock holds for this row (#1822): the server refuses its update, whoever asks, so no toggle unlocks the form
   const locks = payload.entry.locks;
-  const rowLocked = locks?.update === true;
-  const lockedHint = rowLocked ? t(language, "entryEdit.locked", { message: locks.message ?? "" }) : undefined;
+  const rowLocked = !!locks?.update;
+  const lockedHint = locks?.update ? t(language, "entryEdit.locked", { message: locks.update.message }) : undefined;
   const canEdit = canEditEntry({
     admin: me.data?.admin,
     isReadOnly,
