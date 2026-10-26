@@ -381,6 +381,33 @@ describe("data hooks", () => {
       client.clear();
     });
 
+    it("read again only the Views an operation's `refresh` names, marking the others stale (#1794)", async () => {
+      const { queryClient } = await import("../src/app/query-client");
+      const { calls, view } = counted();
+      for (const key of [["entries", "requests"], ["entry-editor", "requests", "1"], ["collection-statistics", "requests", "7d"], ["badges", "u", "browser", ["pending"]], ["site"]]) queryClient.setQueryData(key, 1);
+      const state = mount(queryClient, transportOf({ view }), () => [
+        useView("pending", {}), useView("done", { q: 1 }), useView("done", { q: 2 }),
+        useOperation("approve", { refresh: ["pending"] }),
+        useOperation("approve", { refresh: [{ view: "done", input: { q: 1 } }] }),
+      ]).seen as [unknown, unknown, unknown, { run: (input: object) => Promise<unknown> }, { run: (input: object) => Promise<unknown> }];
+      const unsubscribe = activate(queryClient);
+      await settled(queryClient);
+      calls.length = 0;
+      await state[3].run({});
+      await settled(queryClient);
+      expect(calls).toEqual(["pending"]);
+      const stale = queryClient.getQueryCache().getAll().filter(query => query.state.isInvalidated).map(query => query.queryKey[0] === "view" ? query.queryKey[1] : query.queryKey[0]).sort();
+      // the Views not named are stale, read again when next shown; everything else refreshes as always
+      expect(stale).toEqual(["badges", "collection-statistics", "done", "done", "entries", "entry-editor"]);
+      calls.length = 0;
+      await state[4].run({});
+      await settled(queryClient);
+      expect(calls).toEqual(["done"]);
+      expect(view).toHaveBeenLastCalledWith("done", { q: 1 }, expect.anything(), undefined);
+      for (const stop of unsubscribe) stop();
+      queryClient.clear();
+    });
+
     it("hand the query's signal to the View read, which a superseding refetch aborts", async () => {
       const client = new QueryClient();
       const signals: AbortSignal[] = [];

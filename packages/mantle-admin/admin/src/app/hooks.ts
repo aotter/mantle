@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteD
 import type { AdminBadge, AdminTypes } from "./define-admin";
 import { useAdminContext } from "./hooks-context";
 import { MAX_BADGE_VIEWS, createMcpAppTransport } from "./transport";
-import { invalidateAfterWrite } from "../lib/after-write";
+import { invalidateAfterWrite, type ViewRefresh } from "../lib/after-write";
 
 export { useOpenLink } from "./slots";
 
@@ -150,6 +150,17 @@ export interface MeState {
   readonly me: AdminMe | undefined;
   readonly status: ReadStatus;
 }
+/** A View `useOperation` reads again after a success: by name (every input), or one `useView` input of it. */
+export type OperationRefresh<T extends AdminTypes> = {
+  readonly [N in keyof T["views"] & string]: N | { readonly view: N; readonly input: T["views"][N]["input"] };
+}[keyof T["views"] & string];
+export interface OperationOptions<T extends AdminTypes> {
+  /**
+   * Read only these Views again after a success, instead of every View (#1794). Other Views are marked stale and read again
+   * when next shown; entries, open entries, totals and badges refresh as always. Leave it out to refresh every View.
+   */
+  readonly refresh?: readonly OperationRefresh<T>[];
+}
 export interface OperationState<I, O> {
   /** Undefined where the surface cannot write. Rejects with `AdminUnavailableError` when refused or missing. */
   readonly run: ((input: I) => Promise<O>) | undefined;
@@ -171,8 +182,11 @@ export interface AdminHooks<T extends AdminTypes> {
   useEntries<N extends keyof T["collections"] & string>(collection: N, options?: EntriesOptions<T["collections"][N]["data"]>): EntriesState<T["collections"][N]["data"]>;
   /** `GET /admin/api/entries/{id}`. Browser only. */
   useEntry<N extends keyof T["collections"] & string>(collection: N, id: string): EntryState<T["collections"][N]["data"]>;
-  /** `POST /admin/api/operations/{name}`, or the operation's admin MCP tool in a host. A success refreshes Views, entries and totals, once. */
-  useOperation<N extends keyof T["operations"] & string>(name: N): OperationState<T["operations"][N]["input"], T["operations"][N]["output"]>;
+  /**
+   * `POST /admin/api/operations/{name}`, or the operation's admin MCP tool in a host. A success refreshes Views, entries and
+   * totals, once; `refresh` narrows the Views read again to the ones named.
+   */
+  useOperation<N extends keyof T["operations"] & string>(name: N, options?: OperationOptions<T>): OperationState<T["operations"][N]["input"], T["operations"][N]["output"]>;
   /** The `total` of `GET /admin/api/collections/{name}/statistics`. Browser only. */
   useCollectionTotal(collection: keyof T["collections"] & string): TotalState;
   /** `GET /admin/api/me`. Browser only. */
@@ -232,9 +246,10 @@ const implementation = {
     const query = useQuery({ queryKey: ["entry-editor", collection, id, "hook", transport.surface], queryFn: ({ signal }) => transport.entry(collection, id, { signal }) });
     return { entry: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
   },
-  useOperation(name: string): OperationState<object, unknown> {
+  useOperation(name: string, options: { readonly refresh?: readonly ViewRefresh[] } = {}): OperationState<object, unknown> {
     const { transport } = useAdminContext();
     const client = useQueryClient();
+    const { refresh } = options;
     const mutation = useMutation({
       mutationFn: async (input: object): Promise<unknown> => {
         const reply = await transport.run(name, input as Row);
@@ -244,7 +259,7 @@ const implementation = {
       // the shared cache: what Admin shows and what the application's own components read both refetch. The hook
       // refreshes on whichever client it runs under (an MCP App's has no global handler), so Admin's global
       // `MutationCache` handler skips it: one refetch per write, not a second one cancelling the first.
-      onSuccess: () => { void invalidateAfterWrite(client); },
+      onSuccess: () => { void invalidateAfterWrite(client, refresh); },
       meta: { invalidates: false },
     });
     return { run: transport.writable ? mutation.mutateAsync : undefined, pending: mutation.isPending };
