@@ -255,10 +255,10 @@ export const handlers: Handlers = {
 Once the switch commits, the lock freezes the new current revision: nobody can edit or delete it until the post
 switches away again. The handler's checks and its write are still two steps, not one transaction, and the lock only
 holds once the write has committed. A delete of the chosen revision, or an edit that blanks it, that commits between
-the handler's read and its write is allowed (the revision is not live yet), and the post then points at a deleted or
-blank revision: the page shows nothing until the next switch. The same window runs the other way: under PostgreSQL READ
-COMMITTED, an edit of a revision that races the switch to it can still commit just after the switch, because its lock
-check did not see the new pointer yet. The switch Procedure is the serialization point; add your own checks there.
+the handler's read and its write is allowed (the revision is not live yet). A deleted revision leaves the post with no
+page (404) until the next switch; a blanked one still joins, so the page renders an empty post. The same window runs
+the other way: under PostgreSQL READ COMMITTED, an edit of a revision that races the switch to it can still commit just
+after the switch, because its lock check did not see the new pointer yet. The switch Procedure is the serialization point; add your own checks there.
 Only admins can do any of this, so for most sites it is acceptable: switch again to recover. If several editors work
 on the same post at once, check the page after switching.
 
@@ -269,9 +269,10 @@ Rolling back is the same call with an earlier revision. Wire the handlers as eve
 
 Old revisions are rows; keep them as history or delete them when you like. The Procedure is a plain `DELETE`: the
 `live_revision` lock adds its condition to the statement, so deleting the revision a post shows deletes nothing and is
-`CONFLICT` with `kind: "lock"` and the lock's message. Admin shows "Delete revision" on each revision, and its own
-Delete button on a revision is refused the same way; the Procedure also gives AI clients on `/mcp/admin` a delete
-tool (below).
+`CONFLICT` with `kind: "lock"` and the lock's message. Admin shows "Delete revision" on each revision. Its own Delete
+button on a revision's row (in the Post revisions list and tab) is disabled for the live revision, with the lock's
+message, and the server refuses it the same way if it is sent anyway. The Procedure also gives AI clients on
+`/mcp/admin` a delete tool (below).
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
@@ -294,7 +295,8 @@ spec:
       DELETE FROM post_revisions WHERE id = input.id RETURNING id
 ```
 
-Only a trusted write bypasses the lock: the system caller or a system Store, for a migration or a maintenance script.
+Only a trusted write bypasses the lock: the system caller, a system Store or the TTL sweep, for a migration or a
+maintenance script.
 That is the escape hatch, visible in code review, not the editor's path.
 
 ## Admin operations
@@ -325,8 +327,8 @@ An editor's flow:
    with the post filled in) and write the revision in the record form. **Switch revision** to it, open
    `/preview/<revision id>`, then **Publish** the post. Publishing before the switch is refused, naming
    `current_revision`.
-2. To correct it later: open the live revision and Admin shows "This record is locked." with the lock's message; Save
-   and Delete are disabled. So: **New revision** (a copy of what is live), edit the copy, preview it, then **Switch
+2. To correct it later: open the live revision and Admin shows "This record is locked." with the lock's message, and
+   Save is disabled; so is the Delete button on its row in the Post revisions list. So: **New revision** (a copy of what is live), edit the copy, preview it, then **Switch
    revision**, whose picker lists only this post's revisions. The page shows the old text until the switch commits;
    then the copy is the frozen one and the old revision edits again.
 3. To roll back: **Switch revision** to the earlier one. **Delete revision** on revisions you no longer want.
