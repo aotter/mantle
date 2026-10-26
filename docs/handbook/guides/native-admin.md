@@ -252,7 +252,7 @@ which is when any of these holds:
 - a publishing entry is not a draft: published without `publishing: { liveEdits: true }`, or archived, which stays read-only
   even with `liveEdits`. With `liveEdits` a published entry's form is editable and `readOnly` is `false`;
 - a declared [Schema lock](../reference/schema.md#locks) holds the row for `update` (`entry.locks.update`). No toggle overrides
-  it, and the form shows the lock's message.
+  it. The form shows the lock's message, unless the collection is read-only, whose read-only hint shows instead.
 
 The built-in form wraps the fields in a `<fieldset disabled>` that also blocks the pointer. That disables native form controls
 inside it, but not a custom element that is focusable on its own (a `contenteditable`, a `tabIndex` element, a third-party
@@ -436,8 +436,9 @@ Each write path reads a field it is given differently. Pick the one whose rule f
 
 | Write path | Field left out | A value | `null` |
 | --- | --- | --- | --- |
-| Admin entry routes (`POST`/`PATCH /entries`, the record form's Save) | keeps the stored value (unset on create) | replaces it | clears it to NULL; a required operational field refuses it |
-| Store `update` (a ref handler's `ctx.store`) | keeps the stored value | replaces it | clears it to NULL |
+| Admin create (`POST /entries`) | unset, or the Schema's default | sets it | dropped, the same as leaving it out, so the default applies |
+| Admin patch (`PATCH /entries/{id}`, the record form's Save) | keeps the stored value | replaces it | clears it to NULL; a required operational field refuses it, and so does a live edit (`liveEdits`) of a field `publish` requires (`INPUT_VALIDATION_FAILED`) |
+| Store `update` (a ref handler's `ctx.store`) | keeps the stored value | replaces it | clears it to NULL; on a published row a field `publish` requires is refused (`INPUT_VALIDATION_FAILED`) |
 | SQL Procedure (`input.x`) | binds NULL, so `SET note = input.note` clears it | replaces it | binds NULL too, where the input's schema accepts `null` |
 | `ref` handler input | the key is absent | present | present, as `null`, where the input's schema accepts it |
 
