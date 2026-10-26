@@ -18,6 +18,8 @@ export const lockManifest = [
   proc("upsert_revision", "INSERT INTO post_revisions AS p (id, body) VALUES (input.id, input.body) ON CONFLICT (id) DO UPDATE SET body = input.body RETURNING id"),
   // an owner-scoped Schema: another owner's row is invisible, so its refusal stays the row conflict
   m("Schema", "notes", { title: "Notes", lifecycle: "operational", scope: "owner = auth.uid()", indexes: [["owner", "id"]], lock: [{ name: "pinned", on: ["update", "delete"], when: "pinned = 'yes'", message: "Unpin the note first." }], schema: { type: "object", required: ["owner"], properties: { owner: { type: "string" }, body: { type: "string" }, pinned: { type: "string" } } } }),
+  // a publishing Schema: its generated transitions are updates, so they carry the update locks
+  m("Schema", "pages", { title: "Pages", lifecycle: "publishing", lock: [{ name: "frozen", on: ["update"], when: "title = 'frozen'", message: "This page is frozen." }], schema: { type: "object", properties: { title: { type: "string" } } } }),
   proc("add_note", "INSERT INTO notes (body, pinned) VALUES (input.body, input.rev) RETURNING id"),
   proc("edit_note", "UPDATE notes SET body = input.body WHERE id = input.id RETURNING id"),
 ].join("\n---\n");
@@ -69,6 +71,12 @@ export async function verifyLock({ procedures, store }: App, db: unknown) {
   equal(await outcome(() => revisions(admin).update("r3", { body: "x" }, { lock: r3.version + 7 })), "CONFLICT:row", "a stale Store update of an unlocked revision");
   equal(await outcome(() => revisions(admin).update("r3", { body: "edited" }, { lock: r3.version })), "ok", "a Store update of another revision");
   equal(await outcome(() => revisions(system).update("r2", { body: "fixed" }, { lock: r2.version })), "ok", "a system Store update of the live revision");
+  // publishing transitions
+  const pages = store(db, admin).collection("pages"), frozen = await pages.insert({ title: "frozen" }), open = await pages.insert({ title: "open" });
+  const transition = (caller: unknown, page: { id: string; version: number }) => outcome(() => procedures["pages.publish"]!(db, caller, { id: page.id, expectedVersion: page.version }));
+  equal(await transition(admin, frozen), locked, "publishing a frozen page");
+  equal(await transition(admin, open), "ok", "publishing another page");
+  equal(await transition(system, frozen), "ok", "a system transition of a frozen page");
   const notes = (caller: unknown) => store(db, caller).collection("notes"), mine = await notes(member).findById(note);
   equal(await outcome(() => notes(member).delete(note, { lock: mine.version })), locked, "a Store delete of one's own pinned note");
   equal(await outcome(() => notes(other).delete(note, { lock: mine.version })), "CONFLICT:row", "a Store delete of another owner's pinned note");

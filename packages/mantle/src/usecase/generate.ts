@@ -129,7 +129,7 @@ export function generate(input: GenerateInput): GenerateResult {
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input`, `export type { Output } from "${base}contracts";\n`);
   }
   emitTtl(plan, isSqlite, declarations, procedures, entries, refuse);
-  emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
+  emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse, input.locks);
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers, input.locks);
   const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target, input.description), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, input.description, refuse, !!site), ...emitAdminDescriptors({plan,admin},diagnostics), ...emitAdminBindings(input,refuse), ...(admin ? emitAdminClient(plan, typeOf) : {}), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
   if (diagnostics.length) return { ok: false, diagnostics };
