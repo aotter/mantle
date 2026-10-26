@@ -229,8 +229,16 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       return out;
     };
     const rows = (sql: string, values: unknown[]) => drv.read(db, scoped(sql, caller), values) as Promise<Record<string, unknown>[]>;
-    /** Core never reads back the scope column, and `_rid` is storage's. */
-    const clean = <R extends Record<string, unknown>>(list: R[]): R[] => { for (const r of list) { delete r._rid; if (f.s) delete r[f.s]; } return list; };
+    /** Core never reads back the scope column, and `_rid` is storage's. PostgreSQL's int8 `version` arrives as text (or bigint): it counts writes from 1, so it is a number on every dialect, and a value past 2^53 is refused rather than rounded into a lock. */
+    const clean = <R extends Record<string, unknown>>(list: R[]): R[] => {
+      for (const r of list) {
+        delete r._rid; if (f.s) delete r[f.s];
+        const v = Number(r.version);
+        if (!Number.isSafeInteger(v)) throw new ContractError("SQL_TYPE", `version ${r.version} is beyond Number.MAX_SAFE_INTEGER.`, p.name);
+        (r as Record<string, unknown>).version = v;
+      }
+      return list;
+    };
     const select = () => pol.select ??= `SELECT r.*, ${wires(p, "r.")}${pol.projection ? ", " + pol.projection : ""}${pol.from}`;
     const where = (conds: string[]) => { const all = pol.sql ? [pol.sql, ...conds] : conds; return all.length ? ` WHERE ${all.join(" AND ")}` : ""; };
     const base = () => evaluate(d, pol.recipes, caller);

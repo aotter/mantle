@@ -127,6 +127,7 @@ Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty va
 | `packages/mantle/tests/user-fields-drivers.test.ts` | One shared field-scope/restrict/Store/Procedure/encoding oracle across all native adapters. |
 | `packages/mantle/tests/user-fields.test.ts` | Branded immutable fields, scope/restrict composition and inheritance, denied empty values, parent correlation, paging proofs and forged markers. |
 | `packages/mantle/tests/validation.test.ts` | Generated boundary validation: nested types/bounds/enums/formats/refs, Unicode, safe numbers and depth limits. |
+| `packages/mantle/tests/version-type.test.ts` | Store, ref handler and REST/MCP `version` is a number on bun:sqlite and PostgreSQL; exact string locks; unsafe versions refused; Procedure RETURNING stays native. |
 | `packages/mantle/tests/web-example.test.ts` | Documented example executes visibility/REST/index/alternate flows and typechecks/bundles. |
 | `packages/mantle/tests/web.test.ts` | SQL-visible escaped/revalidated pages, exact public URL types, published-only output, bounded scans and optional imports. |
 | `packages/mantle/tests/wire.test.ts` | Shared REST/MCP conversion oracle, native output isolation, exact int64 transport/order and compiler-free startup. |
