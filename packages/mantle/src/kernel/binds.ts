@@ -19,9 +19,9 @@ export type Recipe =
  * each lock on this verb to its message.
  */
 export interface LockProbe<B = readonly Recipe[]> { readonly sql: string; readonly binds: B; readonly schema: string; readonly verb: "update" | "delete"; readonly locks: Readonly<Record<string, string>> }
-/** One printed statement and how to bind it. `row`: it must affect exactly one row. */
-export interface Step { readonly sql: string; readonly binds: readonly Recipe[]; readonly row?: boolean; readonly lock?: LockProbe }
-export type Bound = { readonly sql: string; readonly binds: unknown[]; readonly row?: boolean; readonly lock?: LockProbe<unknown[]> };
+/** One printed statement and how to bind it. `row`: it must affect exactly one row; `"some"`: at least one (`handler.mustWrite`). `lock`: only on a row op. */
+export interface Step { readonly sql: string; readonly binds: readonly Recipe[]; readonly row?: boolean | "some"; readonly lock?: LockProbe }
+export type Bound = { readonly sql: string; readonly binds: unknown[]; readonly row?: boolean | "some"; readonly lock?: LockProbe<unknown[]> };
 
 /** The dialect functions the recipes in use call; generated code passes only those. */
 export type Values = Partial<Pick<Dialect, "now" | "cutoff" | "timestamp" | "date">> & {

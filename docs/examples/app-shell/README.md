@@ -14,7 +14,7 @@ pnpm install
 pnpm generate          # writes generated/ and lists any `handler: { ref }` to implement in src/handlers.ts
 pnpm types && pnpm check
 cp .dev.vars.example .dev.vars
-pnpm db:init                   # add seed.sql and run pnpm db:seed for fixtures
+pnpm db:init                   # optional seed.sql for static reference data, then pnpm db:seed (see Seed data)
 pnpm dev                       # one-time codes print to this log
 pnpm smoke                     # your smoke.mjs on smoke-kit.mjs (see Files you edit)
 pnpm accept                    # hand each role to a fresh evaluator (see Independent acceptance)
@@ -47,6 +47,19 @@ HTTP-only Procedures will keep generating with a warning.
 
 Search for `AGENT:` to find what an app must fill in.
 
+## Seed data
+
+Create test records through the app: your `smoke.mjs` or an `accept.mjs` fixtures module calls the app's own REST, MCP
+or Admin operations as a signed-in user, so Mantle fills `id`, `version`, `created_at`, `updated_at`, `author_id`
+and the publishing `status`/`published_at`. Keep `seed.sql` for static reference data no surface writes; native SQL
+must set those columns itself, timestamps as integer microseconds on D1. An omitted `updated_at` stores `0`, which
+Admin shows as 1970. `mantle help local-testing` (Seed data) has a complete seed:
+
+```sql
+INSERT INTO categories (id, version, created_at, updated_at, name) VALUES
+  ('books', 1, 1767225600000000, 1767225600000000, 'Books');
+```
+
 ## Local testing notes
 
 - Better Auth allows 3 OTP requests per minute per client IP. `smoke-kit.mjs` gives each user its own
@@ -60,7 +73,8 @@ Search for `AGENT:` to find what an app must fill in.
 `mantle help local-testing` lists what the smoke covers: every Procedure at its edges, each caller's isolation,
 visitor pages without JavaScript, MCP discovery and Admin's MCP App.
 Scripted smoke is not independent acceptance; before reporting a user-facing
-deliverable done, follow the independent acceptance guide: `mantle help agent-workflow-acceptance`.
+deliverable done, follow the independent acceptance guide: `mantle help agent-workflow-acceptance`. Hand off with
+its layered report ("Report done-ness in layers"): smoke and `pnpm test` are layer 2, `pnpm accept` rounds layer 3.
 
 ### Independent acceptance
 
@@ -115,7 +129,7 @@ and compares exact names without calling business tools. JSON/SSE protocol failu
 unexpected/missing tools and repeated/excessive pagination fail; it never obtains credentials or mounts routes.
 
 This local cookie test does not prove OAuth Bearer or an external client's connection. Test those separately
-with supplied credentials and record their results. For each declared interface, the existing handoff/README/test
-report must say verified (command, identity and result), intentionally not exposed, or deferred/unverified with a
-reason. WebMCP-only applications remain valid; an interrupted preview must retain the remote acceptance item
+with supplied credentials and record their results as layer 4 of the layered report. For each declared interface,
+the existing handoff/README/test report must say verified (command, identity and result), intentionally not exposed,
+or deferred/unverified with a reason. WebMCP-only applications remain valid; an interrupted preview must retain the remote acceptance item
 as deferred rather than silently claiming completion.

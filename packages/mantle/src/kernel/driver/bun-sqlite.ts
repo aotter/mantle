@@ -42,7 +42,7 @@ export async function procedure(db: Handle, steps: readonly Bound[], path: strin
         changes = s.row ? Number(handle.query("SELECT changes() AS n").all()[0]!.n) : 0;
       }
     } catch (error) { throw unique(error) ? conflict(path, true, error) : checkConflict(path, error) ?? error; }
-    if (s.row && changes !== 1) throw s.lock ? lockConflict(path, s.lock, handle.query(s.lock.sql).all(...s.lock.binds)) : conflict(path, false);
+    if (s.row && (changes < 1 || changes > 1 && s.row !== "some")) throw s.row === true && s.lock ? lockConflict(path, s.lock, handle.query(s.lock.sql).all(...s.lock.binds)) : conflict(path, false);
     return rows;
   });
   return available(db, () => transactions.has(db) || steps.length === 1 ? execute(db) : db.transaction(execute)(db));

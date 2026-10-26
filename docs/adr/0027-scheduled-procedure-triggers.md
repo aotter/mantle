@@ -1,6 +1,19 @@
 # ADR-0027: Scheduled Procedure Triggers
 
-**Status:** Accepted for 0.1.5 (#1087). Revises the closed Trigger-source grammar from ADR-0001 and the host-only cron guidance of #322.
+**Status:** Accepted for 0.1.5 (#1087). Revises the closed Trigger-source grammar from ADR-0001 and the host-only cron guidance of #322. Cron dialect and host requirement amended by [ADR-0032](0032-store-centric-core-and-service-contract.md). Superseded for 0.2.0 by the native Core handbook (#1566); see the amendment below.
+
+> **Amended 2026-10-19.** No ADR records the 0.2.0 decision; the 0.2.0 native
+> Core handbook (#1566) superseded this one. Mantle is no longer the schedule
+> host: `mantle generate` rejects every `schedule` Trigger source, including
+> disabled ones, and every `lifecycle` source with `GENERATE_UNSUPPORTED`, so
+> no generated plan carries a schedule. Scheduling is application-owned: the app
+> exports `scheduled()`, lists its crons in Wrangler `triggers.crons`, and calls
+> generated Procedures directly as the system caller; TTL maintenance calls the
+> generated `<schema>.sweepExpired`. ADR-0032's `invokeSchedule` and
+> `schedules: true` are withdrawn with it. The body below is historical. See
+> [Trigger reference](../handbook/reference/trigger.md),
+> [features](../handbook/reference/features.md#refused) and
+> [TTL maintenance](../handbook/guides/native-execution.md#ttl-maintenance).
 
 **Date:** 2026-09-25
 
