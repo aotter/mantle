@@ -38,6 +38,8 @@ export default {
     "oauth.apps.empty": "هیچ کلاینت MCP متصلی وجود ندارد.",
     "oauth.apps.revoke": "قطع اتصال",
     "collection.filter.all": "همه",
+    "collection.searchIdPlaceholder": "جستجو با شناسه...",
+    "collection.empty.searchIdOnly": "هیچ موردی با «{search}» مطابقت نداشت. این فهرست فقط با شناسه جستجو می‌کند؛ برای جستجوی فیلدهای دیگر searchableFields را در Schema تعریف کنید.",
     "nav.home": "خانه",
     "nav.overview": "نمای کلی",
     "nav.model": "مدل داده",

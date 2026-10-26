@@ -73,9 +73,10 @@ export function generate(input: GenerateInput): GenerateResult {
   const values = new Set<string>();
   /** A statement as a constant: its text and how to bind it. */
   const step = (s: LoweredStatement, path: string, fields: readonly string[], row = false) => {
+    // a row op must change exactly one row; a `mustWrite` set op at least one (#1775)
     const recipes = recipesOf(s, fields, message => refuse(path, message));
     for (const r of recipes) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && r.type) values.add(r.type === "date" ? "date" : "timestamp"); }
-    return `{ sql: ${q(s.sql)}, binds: ${q(recipes)}${row ? ", row: true" : ""} }`;
+    return `{ sql: ${q(s.sql)}, binds: ${q(recipes)}${row ? ", row: true" : s.mustWrite ? ', row: "some"' : ""} }`;
   };
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [], refProcedures: string[] = [];
   const entries: Record<string, string> = {};

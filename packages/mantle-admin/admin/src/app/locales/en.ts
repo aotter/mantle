@@ -164,6 +164,8 @@ export default {
     "collection.moreLanguages": "{count} more",
     "collection.schemaDetails": "Schema notes",
     "collection.searchPlaceholder": "Search id or searchable fields...",
+    "collection.searchIdPlaceholder": "Search by id...",
+    "collection.empty.searchIdOnly": "No entries matched “{search}”. This list searches by id only; declare searchableFields on the Schema to search other fields.",
     "collection.search": "Search",
     "collection.filter.all": "All",
     "collection.parentFilter": "Parent {name}",

@@ -38,6 +38,8 @@ export default {
     "oauth.apps.empty": "Bağlı MCP istemcisi yok.",
     "oauth.apps.revoke": "Bağlantıyı kes",
     "collection.filter.all": "Tümü",
+    "collection.searchIdPlaceholder": "ID ile ara...",
+    "collection.empty.searchIdOnly": "“{search}” ile eşleşen kayıt yok. Bu liste yalnızca ID ile arar; diğer alanlarda aramak için Schema'da searchableFields bildirin.",
     "nav.home": "Ana sayfa",
     "nav.overview": "Genel bakış",
     "nav.model": "Veri modeli",

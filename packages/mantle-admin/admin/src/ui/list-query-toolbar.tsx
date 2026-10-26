@@ -17,6 +17,7 @@ export interface ListQueryFilter {
 export function ListQueryToolbar({
   language,
   searchable = true,
+  searchPlaceholder,
   searchValue = "",
   filters = [],
   leading,
@@ -25,6 +26,8 @@ export function ListQueryToolbar({
 }: {
   language: AdminLanguage;
   searchable?: boolean;
+  /** Overrides the default placeholder, e.g. when the list searches only by id. */
+  searchPlaceholder?: string;
   searchValue?: string;
   filters?: readonly ListQueryFilter[];
   leading?: React.ReactNode;
@@ -33,6 +36,7 @@ export function ListQueryToolbar({
 }): React.ReactElement {
   const optionFilters = filters.filter((filter) => filter.options);
   const fieldFilters = filters.filter((filter) => !filter.options);
+  const placeholder = searchPlaceholder ?? t(language, "collection.searchPlaceholder");
   return (
     <form
       className={cn("space-y-3", optionFilters.length > 0 ? "mb-5" : "mb-3")}
@@ -53,13 +57,13 @@ export function ListQueryToolbar({
           {leading}
           {searchable ? (
             <div className="flex min-w-64 max-w-xl flex-1 gap-2">
-              <label className="relative block flex-1" aria-label={t(language, "collection.searchPlaceholder")}>
+              <label className="relative block flex-1" aria-label={placeholder}>
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                 <Input
                   name="search"
                   className="h-9 ps-9"
                   defaultValue={searchValue}
-                  placeholder={t(language, "collection.searchPlaceholder")}
+                  placeholder={placeholder}
                 />
               </label>
               <SubmitButton language={language} />
