@@ -40,8 +40,11 @@ Cursor and GitHub Copilot use their plugin manifests from the same tagged
 checkout. Without a plugin host, install only the consumer skill by name:
 
 ```sh
-npx skills add https://github.com/aotter/mantle/tree/v0.2.0 --skill mantle
+npx skills add aotter/mantle@mantle
 ```
+
+Without a version it follows `main`, the latest stable release. To match the
+application's SDK exactly, add its release tag: `npx skills add aotter/mantle#v0.2.0@mantle`.
 
 When upgrading the SDK, update the marketplace ref or local tagged checkout and
 refresh/reinstall the plugin using the host's native workflow. Verify the loaded
@@ -81,6 +84,7 @@ the skill's GitHub copy and over any online handbook.
 | `docs/skills/update/SKILL.md` | upgrading `@aotter/mantle`, including from 0.1.x |
 | `docs/skills/provision/SKILL.md` | deploying, with production sign-in |
 | `docs/skills/media-gc/SKILL.md` | auditing or removing stale R2 uploads |
+| `docs/skills/performance/SKILL.md` | after acceptance converges, or when a page, first request or query is slow |
 
 0.2.0 has no `mantle skills` command: nothing is copied into the project.
 An agent reads these files from `node_modules` when the task calls for them.

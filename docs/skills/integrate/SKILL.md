@@ -22,7 +22,9 @@ data-preserving schema/auth/role migrations on a copy and retain rollback artifa
 Initial schema.sql is for an empty database, not an in-place upgrade. Requests run
 no DDL or storage checks; the only request-time write outside app operations is
 the configured OAuth resource row (see [OAuth](../../handbook/guides/oauth.md)).
-Verify cutover with actual app tests.
+Verify cutover with actual app tests. Before reporting user-facing work done, run
+[independent acceptance](../../handbook/guides/agent-workflow-acceptance.md), then the
+[performance skill](../performance/SKILL.md).
 
 Preserve the app router, verified identity and native resources. For selected
 Admin, follow the [native guide](../../handbook/guides/native-admin.md) for its
