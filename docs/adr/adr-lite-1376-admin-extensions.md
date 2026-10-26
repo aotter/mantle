@@ -70,9 +70,12 @@ authorizes.
      `locks: { update, delete }`: per verb, `{ lock, message }` of the first
      lock that holds for the caller's generic write of that row, read by the
      same `when` (NULL holds) in the read's projection, or `false`. A trusted
-     caller reads both as `false`. An entry has no `locks` field when the
-     Schema has no locks or the read did not evaluate them (related entries
-     and reference titles). It is advisory: the write's own WHERE
+     caller reads both as `false`. Every publishing entry carries `locks` too:
+     its draft-only and unpublish-before-delete rules are the implicit lock
+     `publishing`, after a declared lock on the same verb, and bind data
+     writes only, never transitions. An entry has no `locks` field when its
+     Schema is operational without locks, or when the read did not evaluate
+     the declared locks (related entries and reference titles). It is advisory: the write's own WHERE
      decides, and a refusal is `CONFLICT` `kind: "lock"`. Default components
      disable Save, rename, Delete and transitions and show the message; the
      operational unlock toggle never overrides it.

@@ -81,3 +81,31 @@ export async function verifyLock({ procedures, store }: App, db: unknown) {
   equal(await outcome(() => notes(member).delete(note, { lock: mine.version })), locked, "a Store delete of one's own pinned note");
   equal(await outcome(() => notes(other).delete(note, { lock: mine.version })), "CONFLICT:row", "a Store delete of another owner's pinned note");
 }
+
+/**
+ * #1822: a Store update of a published row cannot clear data `publish` requires, for any caller (a required geo field is its two
+ * columns); a draft may be incomplete, and columns an update leaves alone are not re-checked.
+ */
+export const liveManifest = m("Schema", "articles", { title: "Articles", lifecycle: "publishing", publishing: { liveEdits: true }, schema: { type: "object", required: ["title", "loc"], properties: { title: { type: "string" }, body: { type: "string" }, loc: { type: "object", format: "geo" } } } });
+export async function verifyLiveEdits({ procedures, store }: App, db: unknown) {
+  const articles = (caller: unknown) => store(db, caller).collection("articles");
+  const publish = (row: { id: string; version: number }) => outcome(() => procedures["articles.publish"]!(db, admin, { id: row.id, expectedVersion: row.version }));
+  // a draft may be incomplete, and publish refuses a missing title or position
+  const draft = await articles(admin).insert({ title: "t", body: "b" });
+  const cleared = await articles(admin).update(draft.id, { title: null }, { lock: draft.version });
+  equal(await publish(cleared), "CONFLICT:row", "publishing without a title or position");
+  const titled = await articles(admin).update(draft.id, { title: "t" }, { lock: cleared.version });
+  equal(await publish(titled), "CONFLICT:row", "publishing without a position");
+  const placed = await articles(admin).update(draft.id, { loc_lat: 25, loc_lng: 121 }, { lock: titled.version });
+  equal(await publish(placed), "ok", "publishing a complete article");
+  const live = await articles(admin).findById(draft.id);
+  equal(live.status, "published", "published");
+  for (const caller of [admin, system]) {
+    equal(await outcome(() => articles(caller).update(draft.id, { title: null }, { lock: live.version })), "INPUT_VALIDATION_FAILED", "clearing a required field of a published row");
+    equal(await outcome(() => articles(caller).update(draft.id, { loc_lat: null, loc_lng: null }, { lock: live.version })), "INPUT_VALIDATION_FAILED", "clearing a published row's position");
+  }
+  const edited = await articles(admin).update(draft.id, { body: "edited" }, { lock: live.version });
+  equal([edited.status, edited.body, edited.published_at, edited.version], ["published", "edited", live.published_at, live.version + 1], "a live edit keeps published_at");
+  // a stale version on a publishable update stays the row conflict
+  equal(await outcome(() => articles(admin).update(draft.id, { body: "x" }, { lock: live.version })), "CONFLICT:row", "a stale live edit");
+}

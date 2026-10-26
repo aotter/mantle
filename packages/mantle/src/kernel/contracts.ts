@@ -113,8 +113,10 @@ export const ROW_CONFLICT = "No row matched this change: it does not exist or is
 export const conflict = (path: string, unique: boolean, cause?: unknown): ContractError =>
   new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : ROW_CONFLICT, path, { cause, fields: { kind: unique ? "unique" : "row" } });
 /** A guarded row write that changed no row (#1822): CONFLICT `kind: "lock"` when its probe found the row visible and held by a lock, else the row conflict, which reveals nothing. */
-export const lockConflict = (path: string, probe: { readonly schema: string; readonly verb: string; readonly locks: Readonly<Record<string, string>> }, rows: readonly Row[]): ContractError => {
+export const lockConflict = (path: string, probe: { readonly schema: string; readonly verb: string; readonly locks: Readonly<Record<string, string>>; readonly required?: string }, rows: readonly Row[]): ContractError => {
   const lock = rows[0]?.lock;
+  // a published row would lose data `publish` requires: the input is wrong, not the row's state
+  if (lock === "publishing.required" && probe.required) return new ContractError("INPUT_VALIDATION_FAILED", probe.required, path);
   if (typeof lock !== "string" || !Object.hasOwn(probe.locks, lock)) return conflict(path, false);
   const message = probe.locks[lock]!;
   return new ContractError("CONFLICT", message, path, { fields: { kind: "lock", schema: probe.schema, verb: probe.verb, lock, message } });

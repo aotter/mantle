@@ -9,6 +9,10 @@ import { entry, exportName, q } from "../domain/entry.js";
 
 import { publishingAnnotations, publishingInput, publishingTransitions } from "../domain/generated-tools.js";
 export { publishingAnnotations, publishingInput, publishingTransitions };
+/** The columns `publish` requires non-null, each with its declared field (a geo field is its two columns); a Store update of a published row cannot clear one (#1822). */
+export const publishRequired = (s: RuntimePlan["schemas"][string]): [column: string, field: string][] => (s.schema.required ?? []).flatMap(field => Object.keys(s.fields).filter(c => (s.names?.[c] ?? c) === field).slice(0, 1)
+  .flatMap(c => s.fields[c] === "geo" ? [[`${c}_lat`, field], [`${c}_lng`, field]] as [string, string][] : [[c, field] as [string, string]]));
+
 export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declarations: string[], procedures: string[], entries: Record<string, string>, values: Set<string>, refuse: (path: string, message: string) => void, locks: Readonly<Record<string, readonly Lock[]>> = {}): void {
   const d = isSqlite ? sqlite : postgres;
   const translations = Object.values(plan.schemas).some(s=>s.translates);
@@ -29,10 +33,7 @@ export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declaration
         // the status term is replaced by the transition's own `status IN (...)`.
         for (const term of rowPolicy(schema, trusted ? "trusted" : "caller", plan.schemas)) if (term[1] !== "admin")
           conditions.push(renderTerm(d, term, term[1] === "parent" ? d.ident(s.name) + "." : "", recipe => (recipes.push(recipe), d.param(recipes.length))));
-        if (verb === "publish") for (const field of s.schema.required ?? []) {
-          const column = Object.keys(s.fields).find(c => (s.names?.[c] ?? c) === field);
-          if (column) conditions.push(`${d.ident(column)} IS NOT NULL`);
-        }
+        if (verb === "publish") for (const [column] of publishRequired(s)) conditions.push(`${d.ident(column)} IS NOT NULL`);
         if (verb === "publish" && s.translates) conditions.push(publishedParent(plan,schema,d,recipes,trusted));
         const clock = d.param(1);
         // a transition is an update: a caller's carries the Schema's `update` locks, and the probe that names one (#1822)

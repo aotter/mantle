@@ -36,7 +36,7 @@ import type {
   SiteInfo,
   AdminOperation,
 } from "../../lib/types";
-import { PUBLISHING_STATUSES } from "../../lib/types";
+import { PUBLISHING_LOCK, PUBLISHING_STATUSES } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Checkbox } from "@aotter/mantle-ui/kit";
@@ -1143,7 +1143,7 @@ function EntryRowDisplay({
             </Button>
           )}
           {canDelete ? (
-            <Button type="button" variant="ghost" size="icon-sm" title={deleteLock ? t(language, "entryEdit.locked", { message: deleteLock.message }) : t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy || !!deleteLock} onClick={() => void remove()}>
+            <Button type="button" variant="ghost" size="icon-sm" title={deleteLock ? deleteLock.lock === PUBLISHING_LOCK ? t(language, "crud.unpublishToDelete") : t(language, "entryEdit.locked", { message: deleteLock.message }) : t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy || !!deleteLock} onClick={() => void remove()}>
               <Trash2 className="size-3.5" aria-hidden />
             </Button>
           ) : null}

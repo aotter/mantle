@@ -23,6 +23,7 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
       "localized",
       "translates",
       "lifecycle",
+      "publishing",
       "ttl",
       "scope",
       "lock",
@@ -198,6 +199,13 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
         "/spec/lifecycle",
       );
     }
+  }
+  if ("publishing" in s) {
+    const p = s["publishing"];
+    if (!p || typeof p !== "object" || Array.isArray(p)) throw new ManifestParseError("Schema.spec.publishing must be a mapping { liveEdits }", idx, "/spec/publishing", "SCHEMA_PUBLISHING_INVALID");
+    rejectUnknownKeys(p as Record<string, unknown>, ["liveEdits"], idx, "/spec/publishing");
+    if ("liveEdits" in p && typeof (p as Record<string, unknown>)["liveEdits"] !== "boolean") throw new ManifestParseError("Schema.spec.publishing.liveEdits must be a boolean", idx, "/spec/publishing/liveEdits", "SCHEMA_PUBLISHING_INVALID");
+    if (s["lifecycle"] !== "publishing") throw new ManifestParseError("Schema.spec.publishing applies only to lifecycle: publishing; an operational Schema already edits rows in place", idx, "/spec/publishing", "SCHEMA_PUBLISHING_INVALID");
   }
   if ("translates" in s && s["translates"] != null) {
     const t = s["translates"];

@@ -22,6 +22,8 @@ export interface PlanSchema {
   readonly ttl?: string;
   readonly ttlSeconds?: number;
   readonly publishing?: boolean;
+  /** `spec.publishing.liveEdits` (#1822): a caller's generic patch may edit a non-draft row in place. */
+  readonly liveEdits?: true;
   /** column -> Mantle type: text integer real bool json timestamptz date numeric(p,s) geo */
   readonly fields: Readonly<Record<string, string>>;
   /** lower-cased column -> the name the JSON Schema declares */

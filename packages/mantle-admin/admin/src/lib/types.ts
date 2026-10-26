@@ -121,6 +121,13 @@ export interface EntryLocks {
   delete: HeldLock | false;
 }
 
+/** The server's implicit publishing lock (drafts only; unpublish before delete), as opposed to a declared Schema lock. */
+export const PUBLISHING_LOCK = "publishing";
+/** Whether a declared Schema lock holds for the row's update: the server names a declared update lock before the implicit one. */
+export function declaredLock(locks: EntryLocks | undefined): boolean {
+  return !!locks?.update && locks.update.lock !== PUBLISHING_LOCK;
+}
+
 export interface RelatedEntrySection {
   collection: EntryEditorCollection;
   relationship: {
