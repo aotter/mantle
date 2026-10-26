@@ -44,8 +44,11 @@ An existing S3 signer (for example an application already using aws4fetch) fits
 this port. This package adds no AWS SDK. The signer must return a SigV4
 query-signed PUT URL and preserve `X-Amz-Expires`; never give its credentials to
 the client. Configure bucket CORS to allow PUT from the application's origins
-and the returned Content-Type header. Serve the `committed/` prefix on the public domain; these keys differ from 0.2's `{purpose}/{group}/{role}` keys. Keep `uploads/` private/unserved on the
-public domain and add a bucket lifecycle rule for abandoned upload keys.
+and the returned Content-Type header. Uploads go to `uploads/<purpose>/<group>/<role>.<ext>` and each commit copies them
+to `committed/<group>/<attempt>/<role>.<ext>`. Serve the `committed/` prefix on the public domain. Keep `uploads/`
+private/unserved on the public domain and add a bucket lifecycle rule for abandoned upload keys. Mantle 0.1.x wrote
+`<purpose>/<group>/<role>.<ext>` keys; an asset reads its keys from the stored `storageKey` and `publicUrl` of each
+variant, so 0.1.x assets keep working while their prefixes stay served.
 
 Commit checks every object's MIME and size, then rechecks the exact GET
 response used for the copy. Public keys cannot be reached by an upload URL. Each commit attempt has a separate
@@ -54,7 +57,7 @@ loser can neither overwrite nor remove the winner's objects. After SQL selects
 the durable asset, the losing attempt removes only its own unselected copies.
 Upload sources remain until the database commit succeeds, so an uncertain DB
 write can be reconciled/retried with the same UUID. Failed object deletion keeps
-the media row; retry the same id. An upload group expires after 15 minutes. Asset `createdAt` is the upload-group creation time (epoch milliseconds), not the later commit time.
+the media row; retry the same id. An upload group expires after 15 minutes. Asset `createdAt` (`media_assets.created_at`) is the upload-group creation time in epoch milliseconds, not the later commit time; entry timestamps on D1 are microseconds ([reserved entry columns](../reference/schema.md#reserved-entry-columns)).
 No R2 upload or deployment is performed by generation.
 
 A positively identified native rollback deletes only that attempt's copied
