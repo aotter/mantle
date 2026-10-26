@@ -555,6 +555,7 @@ export function SchemaFields({
     emptyOption: t(language, "entryEdit.emptyOption"),
     clearOption: t(language, "entryEdit.clearOption"),
     chooseOption: t(language, "entryEdit.chooseOption"),
+    clear: t(language, "entryEdit.clear"),
     boolean: t(language, "entryEdit.boolean"),
     dateTimeSelect: t(language, "entryEdit.dateTime.select"),
     dateTimeTime: t(language, "entryEdit.dateTime.time"),
@@ -566,15 +567,19 @@ export function SchemaFields({
     // only where a plain text control would go: an enum, a number, an object or a boolean keeps its own control
     if (fieldSchema.enum || enumOptions(fieldSchema) || ["boolean", "number", "integer", "object"].includes(schemaType(fieldSchema))) return undefined;
     if (isMediaAssetRef(fieldSchema)) {
-      return <MediaAssetField value={field.value} path={[...field.path]} collectionName={collectionName} mediaPurposes={mediaPurposes} language={language} onChange={field.setValue} />;
+      return <MediaAssetField value={field.value} path={[...field.path]} collectionName={collectionName} mediaPurposes={mediaPurposes} language={language} onChange={field.setValue} cleared={field.cleared} />;
     }
     const ref = mantleRefOf(fieldSchema);
     if (ref && ref.schema !== "media_assets" && schemaType(fieldSchema) === "string") {
-      return <RefPicker target={ref} value={field.value} onChange={field.setValue} label={field.label} language={language} canonical={canonical} fallback={() => field.renderDefault()} />;
+      // a reference is an id or cleared, never "": a required one has no clear button unless null is one of its values
+      return <RefPicker target={ref} value={field.value} onChange={field.setValue} onClear={field.clearable ? () => field.setValue(field.cleared) : undefined}
+        label={field.label} language={language} canonical={canonical} fallback={() => field.renderDefault()} />;
     }
     const text = stringForInput(field.value);
-    if (field.widget === "markdown") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><MarkdownEditor value={text} onChange={field.setValue} /></React.Suspense>;
-    if (field.widget === "html") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><HtmlEditor value={text} onChange={field.setValue} /></React.Suspense>;
+    // emptied rich text clears like the plain text control: null where the field clears to null, else ""
+    const setText = (next: string) => field.setValue(next === "" ? (field.cleared === null ? null : "") : next);
+    if (field.widget === "markdown") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><MarkdownEditor value={text} onChange={setText} /></React.Suspense>;
+    if (field.widget === "html") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><HtmlEditor value={text} onChange={setText} /></React.Suspense>;
     return undefined;
   };
   const build = (field: FieldSlot): React.ReactNode => builtIn(field) ?? field.renderDefault({ value: field.value, setValue: field.setValue });
@@ -584,7 +589,8 @@ export function SchemaFields({
       props={{ value: field.value, onChange: field.setValue, readOnly: inputSlots.readOnly, property: field.schema as Record<string, unknown>, field, build }} />
   );
   return (
-    <SharedSchemaFields schema={schema} uiSchema={uiSchema} value={value} path={path} onChange={onChange} language={language}
+    // a record form saves through the entry PATCH, which clears a column only on null and keeps a key left out
+    <SharedSchemaFields schema={schema} uiSchema={uiSchema} value={value} path={path} onChange={onChange} language={language} clearToNull={inputSlots !== undefined}
       canonical={canonical} hiddenRootFields={hiddenRootFields} labels={labels} renderField={renderField} propertyLabel={(name, fieldSchema, _language, fieldCanonical) => propertyLabel(name, fieldSchema as JsonSchema, language, fieldCanonical)} />
   );
 }
@@ -632,6 +638,7 @@ function MediaAssetField({
   mediaPurposes,
   language,
   onChange,
+  cleared,
 }: {
   value: unknown;
   path: string[];
@@ -639,6 +646,9 @@ function MediaAssetField({
   mediaPurposes: readonly MediaPurposePolicy[];
   language: AdminLanguage;
   onChange: (value: unknown) => void;
+  /** What an emptied id writes: an asset id is never "", and in a record form a required one is null too, so Save
+   *  cannot quietly keep the old id. */
+  cleared: null | undefined;
 }): React.ReactElement {
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = React.useState(false);
@@ -683,7 +693,7 @@ function MediaAssetField({
         <Input
           className="min-w-0 flex-1"
           value={stringForInput(value)}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => onChange(event.target.value === "" ? cleared : event.target.value)}
         />
         <Button
           type="button"

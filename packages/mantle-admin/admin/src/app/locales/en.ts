@@ -223,6 +223,7 @@ export default {
     "entryEdit.removeItem": "Remove item",
     "entryEdit.emptyOption": "No value",
     "entryEdit.clearOption": "Not set",
+    "entryEdit.clear": "Clear",
     "admin.invite.hintNoEmail": "No invitation email is sent from this site: tell them yourself. They join after signing in with this email address.",
     "entryEdit.chooseOption": "Choose…",
     "entryEdit.boolean": "Enabled",

@@ -164,6 +164,7 @@ export default {
     "entryEdit.removeItem": "移除项目",
     "entryEdit.emptyOption": "无值",
     "entryEdit.clearOption": "未设置",
+    "entryEdit.clear": "清除",
     "admin.invite.hintNoEmail": "此站未设置发信，请自行通知对方；对方使用相同 Email 登录后就会加入团队。",
     "entryEdit.chooseOption": "请选择…",
     "entryEdit.boolean": "启用",
