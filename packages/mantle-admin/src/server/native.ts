@@ -1,7 +1,7 @@
 import { modeOf } from "@aotter/mantle/user-fields";
 /** Selected generated native adapters: constants and compiled predicates, never a manifest interpreter. */
 import { ContractError, isAdmin, deny, type Caller, type Row } from "@aotter/mantle/contracts";
-import { binds, bound, type Recipe, type Step, type Bound, type Values } from "@aotter/mantle/binds";
+import { binds, bound, type LockProbe, type Recipe, type Step, type Bound, type Values } from "@aotter/mantle/binds";
 import { query as readQuery } from "@aotter/mantle/validation";
 import { invalid } from "@aotter/mantle/surface";
 import { checkPageLimit, page, decodeNullableCursor, encodeCursor, validCursor, type CursorKind, type Pages } from "@aotter/mantle/paging";
@@ -138,7 +138,7 @@ export interface NativeEntryMode {
     readonly binds: readonly Recipe[];
     readonly fields: Readonly<Record<string, {readonly column: string; readonly insert: string; readonly update?: string}>>;
     readonly create: {readonly prefix: string; readonly between: string; readonly suffix: string; readonly binds: readonly Recipe[]; readonly columns: readonly string[]; readonly values: readonly string[]; readonly returning: string; readonly refs?: RefChecks};
-    readonly patch: {readonly prefix: string; readonly binds: readonly Recipe[]; readonly sets: readonly string[]; readonly where: string; readonly returning: string; readonly refs?: RefChecks};
+    readonly patch: {readonly prefix: string; readonly binds: readonly Recipe[]; readonly sets: readonly string[]; readonly where: string; readonly returning: string; readonly refs?: RefChecks; readonly lock?: LockProbe};
     readonly remove: Step;
 }
 export interface NativeEntryProcedures {
@@ -210,7 +210,8 @@ export async function nativeEntryProcedure<Database>(spec: NativeEntryProcedures
     const sql = verb === "create"
         ? m.create.prefix + [...m.create.columns, ...present.map(({fragment}) => fragment.column)].join(", ") + (checks.length ? ") SELECT " : m.create.between) + [...m.create.values, ...fragments].join(", ") + (checks.length ? " WHERE " + checks.join(" AND ") : m.create.suffix) + m.create.returning
         : m.patch.prefix + [...m.patch.sets, ...fragments].join(", ") + m.patch.where + checks.map(check => " AND " + check).join("") + m.patch.returning;
-    const result = await adapter.procedure(db, [{sql, binds: values, row: true}], spec.path);
+    const lock = verb === "patch" && m.patch.lock ? {lock: {...m.patch.lock, binds: binds(adapter.values, m.patch.lock.binds, caller, context)}} : {};
+    const result = await adapter.procedure(db, [{sql, binds: values, row: true, ...lock}], spec.path);
     return result[0]![0]!;
 }
 /** Fixed indexed keyset templates bind values; identifiers and Core policy come only from the compiled whitelist. */
