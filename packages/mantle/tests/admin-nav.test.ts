@@ -120,3 +120,25 @@ test("generate refuses a parentField that is not a required reference, sits on a
   expect((await run([schema("b"), ref("a", "b")])).ok).toBe(true);
   expect(codes(await run([posts, locales({}), ref("a", "postlocales")]))).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
 });
+
+// #1823: an explicit nav.parentField decides the fold direction; a required reference back from the parent is not an inferred fold
+test("a parent's required reference back to a child that declares nav.parentField onto it does not fold the parent or close a cycle", async () => {
+  const article = (required: string[]) => doc("posts", { title: "Posts", lifecycle: "publishing", indexes: [["slug"]], schema: { type: "object", required, properties: { slug: { type: "string" }, current_revision: { type: "string", "x-mantle-ref": "post_revisions" } } } });
+  const revisions = (nav?: object) => doc("post_revisions", { title: "Post revisions", lifecycle: "operational", ...(nav ? { uiSchema: { nav } } : {}), schema: { type: "object", required: ["post", "body"], properties: { post: { type: "string", "x-mantle-ref": "posts" }, body: { type: "string" } } } });
+  const parent = (r: Awaited<ReturnType<typeof run>>, name: string) => {
+    if (!r.ok) throw Error(JSON.stringify(r.diagnostics));
+    return new RegExp(`"name":"${name}".*?"parent":(null|\\{[^}]*\\})`).exec(r.files["admin-descriptors.ts"]!)?.[1];
+  };
+  const r = await run([article(["slug", "current_revision"]), revisions({ parentField: "post" })]);
+  expect(parent(r, "post_revisions")).toBe('{"collection":"posts","parentField":"id","childField":"post"}');
+  expect(parent(r, "posts")).toBe("null");
+  // standalone on the parent has nothing left to fold under
+  const standalone = doc("posts", { title: "Posts", lifecycle: "publishing", indexes: [["slug"]], uiSchema: { nav: { standalone: true } }, schema: { type: "object", required: ["slug", "current_revision"], properties: { slug: { type: "string" }, current_revision: { type: "string", "x-mantle-ref": "post_revisions" } } } });
+  expect(codes(await run([standalone, revisions({ parentField: "post" })]))).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/standalone"]);
+  // without the explicit line both references are inferred folds, as before: a cycle neither side declared
+  const inferred = await run([article(["slug", "current_revision"]), revisions()]);
+  expect(parent(inferred, "posts")).toBe('{"collection":"post_revisions","parentField":"id","childField":"current_revision"}');
+  // explicit against explicit is still refused
+  const both = doc("posts", { title: "Posts", lifecycle: "publishing", indexes: [["slug"]], uiSchema: { nav: { parentField: "current_revision" } }, schema: { type: "object", required: ["slug", "current_revision"], properties: { slug: { type: "string" }, current_revision: { type: "string", "x-mantle-ref": "post_revisions" } } } });
+  expect(codes(await run([both, revisions({ parentField: "post" })]))).toEqual(["SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField", "SCHEMA_UI_INVALID /spec/uiSchema/nav/parentField"]);
+});

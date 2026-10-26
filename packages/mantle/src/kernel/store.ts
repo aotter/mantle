@@ -28,6 +28,8 @@ export interface Rules {
   /** Core's new entry id as the dialect prints it (an SQL expression). */
   readonly newId: string;
 }
+/** A Schema lock (#1822): while `sql` (Core's `when`, printed for the dialect) holds for the existing row, a caller's write on `on` is refused. */
+export interface Lock { readonly name: string; readonly on: readonly ("update" | "delete")[]; readonly sql: string; readonly message: string }
 /** What a Schema adds to the rules. The table is the collection's name. */
 export interface Fact {
   readonly u?: readonly Extract<Term, readonly [string, 'in', ...unknown[]]>[];
@@ -37,6 +39,8 @@ export interface Fact {
   readonly ttl?: readonly [column: string, seconds: number];
   /** Opt-in publishing lifecycle. */
   readonly pub?: 1;
+  /** The columns `publish` requires non-null, each to its declared field: an update of a published row cannot clear one (#1822). */
+  readonly req?: Readonly<Record<string, string>>;
   /** Declared date-time and date columns (`created_at` and `updated_at` are always date-times). */
   readonly ts?: readonly string[];
   readonly d?: readonly string[];
@@ -44,10 +48,14 @@ export interface Fact {
   readonly search?: readonly string[];
   /** `x-mantle-ref` columns to a scoped Schema (Core's `refChecks`): a caller's write names a row it sees, in the child's partition. */
   readonly ref?: readonly { readonly column: string; readonly table: string; readonly field: string; readonly same: readonly (readonly [parent: string, child: string])[]; readonly terms: readonly Term[] }[];
+  /** Schema locks; a trusted caller is not bound by them. */
+  readonly lock?: readonly Lock[];
   /** Generated parent policy and inherited read-only columns; no authored schema is interpreted. */
   readonly parent?: { readonly on: string; readonly scope?: readonly [parent: string, child: string]; readonly visible: Term; readonly table: string; readonly caller: readonly Term[]; readonly trusted: readonly Term[]; readonly fields: readonly string[]; readonly ts: readonly string[]; readonly d: readonly string[] };
 }
 export const SCOPE = "$scope", TTL = "$ttl";
+/** The probe's answer for an update that would leave a published row unpublishable; no lock name has a dot. */
+export const REQUIRED = "publishing.required";
 /** The columns Mantle owns: no write names them (nor the scope column), and `_rid` is never returned. */
 const SYSTEM = ["id", "version", "created_at", "updated_at", "author_id", "status", "published_at", "_rid"];
 
@@ -288,12 +296,32 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
       });
       /** For each non-null reference written, the referenced row as the caller sees it, in the child's partition (`child`). */
       const refs = (child: (column: string) => string | undefined): string[] => trusted ? [] : (f.ref ?? []).flatMap(r => { const v = marks.get(r.column); return v ? [`EXISTS (SELECT 1 FROM ${d.ident(r.table)} _mantle_ref WHERE ${[`_mantle_ref.${d.ident(r.field)} = ${v}`, ...r.same.map(([parent, column]) => `_mantle_ref.${d.ident(parent)} = ${child(column) ?? "NULL"}`), ...r.terms.map(t => renderTerm(d, t, "_mantle_ref.", recipe))].join(" AND ")})`] : []; });
-      /** `WHERE id = ? AND <the caller's row rules> AND version = ?` */
-      const guard = (id: string, also: string[] = []) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...pol.terms, x.lock].map(t => renderTerm(d, t, t[1] === "parent" ? d.ident(p.name) + "." : "", recipe)), ...also].join(" AND ")}`;
-      const step = (sql: string): Bound => ({ sql: scoped(sql, caller), binds: values, row: true });
+      /** `WHERE id = ? AND <the caller's row rules> AND version = ?` (no version for a lock probe) */
+      const guard = (id: string, also: string[] = [], versioned = true) => ` WHERE ${[`${ID} = ${push(id)}`, ...[...pol.terms, ...versioned ? [x.lock] : []].map(t => renderTerm(d, t, t[1] === "parent" ? d.ident(p.name) + "." : "", recipe)), ...also].join(" AND ")}`;
+      const step = (sql: string, lock?: Bound["lock"]): Bound => ({ sql: scoped(sql, caller), binds: values, row: true, ...(lock ? { lock } : {}) });
       return { given, marks, recipe, refs, guard, step, into, returning: () => ` RETURNING *, ${p.returning ??= wires(p, "")}` };
     };
 
+    /**
+     * A published row stays publishable (#1822): an update cannot clear a column `publish` requires, whoever writes (as `publish`
+     * checks a system caller too). Columns it leaves alone are not re-checked, so a field added to `required` later does not
+     * freeze the rows published before it. The fields such an update clears, for its `status <> 'published'` term.
+     */
+    const cleared = (set: object): string[] => {
+      const req = f.req ?? {};
+      return [...new Set(Object.entries(set).flatMap(([name, v]) => v === null && Object.hasOwn(req, name.toLowerCase()) ? [req[name.toLowerCase()]!] : []))];
+    };
+    /**
+     * The caller's locks on `verb` (#1822), and an update's `publishable` term: `NOT (<when>)` terms for its WHERE, and the probe
+     * a driver reads when the write changed no row, which names the lock or the missing publish data.
+     */
+    const locked = (id: string, verb: "update" | "delete", fields: string[] = []) => {
+      const locks = trusted ? [] : (f.lock ?? []).filter(l => l.on.includes(verb)), required = fields.length ? `${d.ident("status")} <> 'published'` : undefined;
+      if (!locks.length && !required) return { terms: [] };
+      const w = writer(), where = w.guard(id, [], false), cases = [...locks.map(l => `WHEN (${l.sql}) IS NOT FALSE THEN '${l.name}'`), ...required ? [`WHEN NOT (${required}) THEN '${REQUIRED}'`] : []];
+      const { sql, binds } = w.step(`SELECT CASE ${cases.join(" ")} END AS ${d.ident("lock")} FROM ${w.into}${where}`);
+      return { terms: [...locks.map(l => `NOT (${l.sql})`), ...required ? [required] : []], lock: { sql, binds, schema: p.name, verb, locks: Object.fromEntries(locks.map(l => [l.name, l.message])), ...required ? { required: `This entry is published: publish requires ${fields.join(", ")}, so an update cannot clear ${fields.length > 1 ? "them" : "it"}.` } : {} } };
+    };
     return {
       async findById(id: string) {
         const values = base();
@@ -320,12 +348,12 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
         const w = writer(lock), assigns = w.given(set).map(([name, mark]) => `${name} = ${mark}`);
         for (const [column, v] of x.sets) assigns.push(`${d.ident(column)} = ${v === "bump" ? `${d.ident(column)} + 1` : w.recipe(v)}`);
         // the partition is never SET, so the child's is the row's own
-        const refs = w.refs(column => `${w.into}.${d.ident(column)}`);
-        return w.step(`UPDATE ${w.into} SET ${assigns.join(", ")}${w.guard(id, refs)}${w.returning()}`);
+        const refs = w.refs(column => `${w.into}.${d.ident(column)}`), held = locked(id, "update", cleared(set));
+        return w.step(`UPDATE ${w.into} SET ${assigns.join(", ")}${w.guard(id, [...refs, ...held.terms])}${w.returning()}`, held.lock);
       }, rows => clean(rows)[0], `${p.name}/update`); },
       delete(id: string, { lock }: { lock: number | string }) { return write(() => {
-        const w = writer(lock);
-        return w.step(`DELETE FROM ${w.into}${w.guard(id)}`);
+        const w = writer(lock), held = locked(id, "delete");
+        return w.step(`DELETE FROM ${w.into}${w.guard(id, held.terms)}`, held.lock);
       }, () => undefined, `${p.name}/delete`); },
     };
   }

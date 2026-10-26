@@ -53,6 +53,8 @@ export function interactionLabels(language: AdminLanguage): InteractionLabels {
 }
 
 export function OperationDiagnostic({ diagnostic, language, summary = true }: { diagnostic: InteractionDiagnostic; language: AdminLanguage; summary?: boolean }): React.ReactNode {
+  // a Schema lock (#1822): the record is frozen by a rule, and its message says why; re-reading does not help
+  if (diagnostic.code === "CONFLICT" && diagnostic.kind === "lock") return t(language, "ops.lockConflict", { message: diagnostic.message });
   const key = diagnostic.code !== "CONFLICT" ? undefined
     : diagnostic.kind === "row" ? "ops.conditionConflict"
     : diagnostic.kind === "unique" ? "ops.uniqueConflict"

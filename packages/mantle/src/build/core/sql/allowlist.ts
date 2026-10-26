@@ -394,7 +394,7 @@ const check: Record<string, Checker> = {
     const name: string = n.relname;
     if (name.startsWith('_mantle') || name === 'input' || name === 'auth') no('SQL_RELATION', `${name} is not a declared Schema`, at);
     const reference = ctx.p.name === 'reference';
-    if (n.alias && ['input', 'auth', 'excluded'].includes(n.alias.aliasname)) no('SQL_RELATION', `${n.alias.aliasname} is a reserved alias`, at);
+    if (n.alias && (['input', 'auth', 'excluded'].includes(n.alias.aliasname) || n.alias.aliasname.startsWith('_mantle'))) no('SQL_RELATION', `${n.alias.aliasname} is a reserved alias`, at);
     if (!reference) for (const ident of [name, n.alias?.aliasname]) if (ident && SQLITE_ONLY_KEYWORDS.has(ident)) no('SQL_UNSUPPORTED', `${ident} is an SQLite keyword: the printer would not quote it`, at);
     // a `cte` tag is honored only for a CTE in scope here (the runtime never trusts an IR's tags)
     if (n.mantle === 'cte') { if (ctx.scope.some((s) => s.has(n.relname))) return; no('SQL_RELATION', `${name}: a cte reference is not defined in scope`, at); }
@@ -517,6 +517,7 @@ const check: Record<string, Checker> = {
   RangeSubselect: (n, _c, _p, at) => {
     if (n.alias?.colnames) no('SQL_SHAPE', `a column list after ${n.alias.aliasname} is only for a row source: name the columns in the subquery`, at);
     if (!n.alias) no('SQL_SHAPE', 'a subquery in FROM needs an alias', at);
+    if (n.alias.aliasname.startsWith('_mantle')) no('SQL_RELATION', `${n.alias.aliasname} is a reserved alias`, at);
   },
   CommonTableExpr: (n, ctx, _p, at) => {
     if (!n.ctequery?.SelectStmt) no('SQL_SHAPE', 'a CTE body is a SELECT: a write inside WITH is refused', at);

@@ -19,6 +19,8 @@ export interface GenerateInput {
   readonly viewKeys: Readonly<Record<string, readonly string[] | undefined>>;
   /** Core's new entry id for this dialect, as an SQL expression (its `lowering.newId()`, printed). */
   readonly newId: string;
+  /** Each Schema's locks (#1822) with `when` printed for this dialect, for the Store's own WHERE. */
+  readonly locks?: Readonly<Record<string, readonly import("../kernel/store.js").Lock[]>>;
   /** Generation-time proofs for the canonical policy SELECT's complete cursor tuple. */
   readonly paging?: Readonly<Record<string, import("./paging.js").PagingProof | undefined>>;
 }

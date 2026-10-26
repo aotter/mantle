@@ -107,7 +107,15 @@ wrote through the app's own Views with HTTP Triggers (`mantle help trigger`).
 
 Entry create/read/patch/transitions return
 `{ collection, entry, parentEntryId, parentEntryTitle, related }`; the entry has
-`{ id, collection, locale, status, version, data, created_at, updated_at }`.
+`{ id, collection, locale, status, version, data, created_at, updated_at }`. On a Schema with
+[locks](../reference/schema.md#locks), each entry of the editor payload and of `GET /entries` also has
+`locks: { update, delete }`: per verb, `{ lock, message }` of the first lock that holds for your generic write of that row,
+or `false`. Admin disables Save, rename, Delete and transitions on such a row and shows the
+message; the operational "Unlock editing" toggle does not override it. The write itself stays the authority: a refusal is
+409 `CONFLICT` with `kind: "lock"`. Every publishing entry has `locks` too: the draft-only rule (without `liveEdits`) and
+"unpublish before deleting" are the implicit lock `lock: "publishing"`, named only when no declared lock holds for that verb.
+It binds data writes only, so Publish, Unpublish and Archive stay available; with `liveEdits` a published entry's form is
+enabled with a "changes go live on save" notice, and Save waits until its required fields are filled.
 Transitions accept `{}` to use the current version; tests should send the
 observed `expectedVersion` to catch stale writes. Generic writes reject native
 columns inside `data`. See [publishing](../concepts/lifecycle-and-locales.md).
@@ -307,7 +315,9 @@ returns its one row on one page and has no cursor.
 Generated full/partial input checks validate creates, edits, operations and
 filters. Plain titled string `oneOf` choices use the same enum checks; general
 or constrained alternatives remain refused. Draft creates can be incomplete;
-publish checks required data. Publishing edits apply only to drafts. Read-only
+publish checks required data. Publishing edits apply only to drafts unless the Schema sets
+`publishing: { liveEdits: true }`, which opens published (never archived) entries; a live edit of a published entry must still pass those publish checks
+(`INPUT_VALIDATION_FAILED`), keeps `published_at` and goes live on save. Read-only
 collections refuse generic creates, edits, deletes and transitions with 403 `AUTH_DENIED`
 ("This record is read-only; use its operations.") before any read or write, while
 their declared Procedures can still run.
@@ -442,7 +452,10 @@ tabs. The parent is the reference named by `Schema.spec.uiSchema.nav.parentField
 the first required unique-field reference. A Schema with two or more required `id` references to
 existing Schemas (translations excluded) and no `parentField`, with or without `standalone`, is refused by `mantle generate` with `SCHEMA_UI_INVALID`; the diagnostic lists the
 candidates and the `nav: { parentField: <field> }` line that keeps the first one that is not a parent cycle. This applies to every build, with or without Admin, so a join table with two required `id` references needs it too. `parentField` is
-refused on a translation child and when its parent chain leads back to the Schema. Choosing the
+refused on a translation child and when its parent chain leads back to the Schema. An explicit
+`parentField` decides the fold direction: a required reference from that parent back to the child
+(a post's required `current_revision`) is not an inferred fold and does not count as a cycle,
+while two `parentField`s pointing at each other are still refused. Choosing the
 parent changes Admin navigation only: storage and authorization are unchanged.
 
 Set `nav.standalone: true` to put a child with a required `id` reference at the top level instead;

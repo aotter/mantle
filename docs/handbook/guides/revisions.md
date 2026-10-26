@@ -4,7 +4,8 @@ description: Correct published content without taking it offline - a publishing 
 # Edit published content without downtime
 
 Admin's record form edits a `publishing` row only while it is a draft, so correcting a published post through it means
-unpublish, edit, republish, and the page is gone in between. This page splits the post into a stable parent and its
+unpublish, edit, republish, and the page is gone in between. (`publishing: { liveEdits: true }` edits it in place instead,
+but every save is live at once, with no preview: see [lifecycle](../concepts/lifecycle-and-locales.md).) This page splits the post into a stable parent and its
 revisions, so the public page keeps showing one revision while an editor prepares the next, previews it, and switches
 to it in one atomic write. Everything is manifests, one ref handler and one app route; nothing depends on generated
 storage internals.

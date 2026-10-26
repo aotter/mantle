@@ -4,7 +4,7 @@ import { ContractError, type Target, type Row, type Caller } from "@aotter/mantl
 import { invalid } from "@aotter/mantle/surface";
 import { csv } from "./csv.js";
 import { json, type Context, type Route } from "./index.js";
-import {exactVersion,nativeEntryData,nativeEntryGet,nativeEntryPage,nativeEntryProcedure,nativeStatistics,type NativeCollection,type NativeProcedureAdapter} from "./native.js";
+import {entryLocks,exactVersion,type EntryLocks,nativeEntryData,nativeEntryGet,nativeEntryPage,nativeEntryProcedure,nativeStatistics,type NativeCollection,type NativeProcedureAdapter} from "./native.js";
 export type EntryScalar = string | number | boolean;
 /** Validated parameters select generated native pages; this is not a generic Store query. */
 export interface EntryPageQuery {
@@ -23,6 +23,8 @@ export interface EntrySchema<Database = unknown> {
     readonly name: string;
     readonly descriptor: Record<string, unknown>;
     readonly publishing: boolean;
+    /** `spec.publishing.liveEdits` (#1822): a generic patch edits a published entry in place. */
+    readonly liveEdits?: boolean;
     readonly primary?: boolean;
     readonly readOnly: boolean;
     /** Generated indexed fields, selected input checks and cursor validation. */
@@ -46,7 +48,26 @@ const lockOf = (row: Row, expected = row.version): number | string => {
 };
 const native = new Set(["id", "status", "version", "createdAt", "updatedAt", "authorId", "created_at", "updated_at", "author_id", "published_at", "_rid"]);
 const ms = (value: unknown) => typeof value === "number" ? value / 1000 : value == null ? null : Date.parse(String(value));
-const entry = <Database>(schema: EntrySchema<Database>, raw: Row) => { const row = schema.row(raw), { id, status, version, created_at: _c, updated_at, author_id: _a, published_at: _p, ...data } = row; return { id: String(id), collection: schema.name, locale: typeof data.locale === "string" ? data.locale : null, status: status ?? null, version, data, created_at: ms(_c), updated_at: ms(updated_at) }; };
+/**
+ * The publishing rules as implicit locks (#1822), named `publishing` (a declared lock's name has no dot, so cannot clash): a generic
+ * patch edits drafts only (with `liveEdits`, published rows too; an archived row never), and a published entry is unpublished
+ * before deletion. They bind data writes only, never transitions. Shown in `entry.locks`, after a declared lock on the same verb.
+ */
+const PUBLISHING = "publishing", DRAFTS_ONLY = "Only drafts may be edited.", UNPUBLISH_FIRST = "Published entries must be unpublished before deletion.";
+const implicitLock = (schema: EntrySchema<any>, verb: "update" | "delete", message = verb === "update" ? DRAFTS_ONLY : UNPUBLISH_FIRST) =>
+    new ContractError("CONFLICT", message, "admin/entries", {fields: {kind: "lock", schema: schema.name, verb, lock: PUBLISHING, message}});
+/** Whether a generic patch may edit this row: a draft, or a published row under `liveEdits` (an archived one is never live). */
+const editable = <Database>(schema: EntrySchema<Database>, row: Row) => !schema.publishing || row.status === "draft" || !!schema.liveEdits && row.status === "published";
+/** A row's locks, or undefined when none apply or the read did not evaluate the declared ones (it cannot claim none hold). */
+const locksOf = <Database>(schema: EntrySchema<Database>, raw: Row): EntryLocks | undefined => {
+    const declared = entryLocks(raw);
+    if (!schema.publishing || schema.binding.caller.locks && !declared) return declared;
+    return {
+        update: declared?.update || !editable(schema, raw) && {lock: PUBLISHING, message: DRAFTS_ONLY},
+        delete: declared?.delete || raw.status === "published" && {lock: PUBLISHING, message: UNPUBLISH_FIRST},
+    };
+};
+const entry = <Database>(schema: EntrySchema<Database>, raw: Row) => { const row = schema.row(raw), { id, status, version, created_at: _c, updated_at, author_id: _a, published_at: _p, ...data } = row, locks = locksOf(schema, raw); return { id: String(id), collection: schema.name, locale: typeof data.locale === "string" ? data.locale : null, status: status ?? null, version, data, created_at: ms(_c), updated_at: ms(updated_at), ...(locks ? {locks} : {}) }; };
 const dataOf = (raw: Record<string, unknown>) => {
     const data = raw.data ?? {};
     if (!data || typeof data !== "object" || Array.isArray(data))
@@ -93,10 +114,10 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
         const parent = ctx.authorize && descriptor(schema).translates?.parent;
         if (parent && !await ctx.authorize!({kind: "schema", name: parent, action: "read"})) throw new ContractError("AUTH_DENIED", "Target is not authorized.", "schema/" + parent);
     };
-    const pageOf = async (schema: EntrySchema<DB>, ctx: Context<Env, DB>, params: URLSearchParams) => {
+    const pageOf = async (schema: EntrySchema<DB>, ctx: Context<Env, DB>, params: URLSearchParams, locks = false) => {
         await readable(schema, ctx);
         const q = schema.query(params);
-        return q ? nativeEntryPage(schema.binding, adapter, () => ctx.db, ctx.caller, q) : {rows: [] as Row[], nextCursor: undefined};
+        return q ? nativeEntryPage(schema.binding, adapter, () => ctx.db, ctx.caller, q, locks) : {rows: [] as Row[], nextCursor: undefined};
     };
     const find = async (schema: EntrySchema<DB>, ctx: Context<Env, DB>, field: string, value: unknown, limit: number) => {
         if (!scalar(value) || value === "") return [];
@@ -138,7 +159,8 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
         const inherited = descriptor(schema).translates?.parent;
         if (ctx.authorize && (!await ctx.authorize({kind: "schema", name: schema.name, action: "read"}) || inherited && !await ctx.authorize({kind: "schema", name: inherited, action: "read"})))
             return {collection: schema.descriptor, entry: {id: row.id, version: row.version}, parentEntryId: null, parentEntryTitle: null, related: []};
-        if (written) return editor(schema, row, ctx).catch(() => ({collection: schema.descriptor, entry: entry(schema, row), parentEntryId: null, parentEntryTitle: null, related: []}));
+        // a written row (RETURNING) carries no locks: re-read it for them (#1822)
+        if (written) return (async () => editor(schema, schema.binding.caller.locks && !entryLocks(row) ? await current(schema, ctx, String(row.id)) : row, ctx))().catch(() => ({collection: schema.descriptor, entry: entry(schema, row), parentEntryId: null, parentEntryTitle: null, related: []}));
         const d = descriptor(schema), e = entry(schema, row), up = d.parent;
         const parentCandidate = up && schemas.find(s => s.name === up.collection);
         const parentSchema = parentCandidate && (!ctx.authorize || await ctx.authorize({kind:"schema",name:parentCandidate.name,action:"read"})) ? parentCandidate : undefined;
@@ -161,7 +183,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
         return {collection: schema.descriptor, entry: e, parentEntryId: parent?.id ?? null, parentEntryTitle: parent && parentSchema ? titleOf(parentSchema, parent) ?? parent.id : null, related: related.filter(Boolean), ...await refTitles(schema, ctx, [e], Object.keys(e.data)).then(refs => Object.keys(refs).length ? {refTitles: refs} : {})};
     };
     const list = async (ctx: Context<Env, DB>) => {
-        const schema = schemaOf(ctx.url.searchParams.get("collection")), page = await pageOf(schema, ctx, ctx.url.searchParams);
+        const schema = schemaOf(ctx.url.searchParams.get("collection")), page = await pageOf(schema, ctx, ctx.url.searchParams, true);
         const items = page.rows.map(raw => entry(schema, raw)), locales = new Map(items.map(row => [row.id, new Set<string>()]));
         for (const child of schemas.filter(child => descriptor(child).translates?.parent === schema.name && descriptor(child).localized)) {
             if (ctx.authorize && !await ctx.authorize({kind:"schema",name:child.name,action:"read"})) continue;
@@ -238,14 +260,17 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
                 if (!exactVersion(lock))
                     fail("expectedVersion is required.");
                 const row = await current(schema, ctx, ctx.params.id!);
-                if (schema.publishing && row.status !== "draft")
-                    throw conflict("Only drafts may be edited.");
+                if (!editable(schema, row))
+                    throw implicitLock(schema, "update");
                 // Translation reads merge the parent's fields into data; an unchanged echo of one is a no-op, a changed one still fails as unknown.
                 const existing = entry(schema, row).data, data = Object.fromEntries(Object.entries(patch).filter(([key, value]) => Object.hasOwn(schema.fields, key) ? value !== null || existing[key] != null : !(Object.hasOwn(existing, key) && JSON.stringify(existing[key]) === JSON.stringify(value))));
                 schema.validate(data, false);
                 const version = lockOf(row, lock);
                 if (!Object.keys(data).length)
                     return editor(schema, row, ctx, true);
+                // a live edit keeps the row publishable: the merged row passes publish's checks (OCC pins it to the row read here)
+                if (schema.publishing && row.status === "published")
+                    schema.validate({...Object.fromEntries(Object.entries(existing).filter(([key]) => Object.hasOwn(schema.fields, key))), ...data}, true);
                 const patched = await nativeEntryProcedure(schema.binding,adapter,ctx.db,ctx.caller,"patch",schema.values(data, true),ctx.params.id!,version);
                 // RETURNING has only the child's columns; re-read so the response keeps the merged parent fields.
                 return editor(schema, schema.descriptor.translates ? await current(schema, ctx, ctx.params.id!) : patched, ctx, true);
@@ -256,7 +281,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
                 writable(schema);
                 const row = await current(schema, ctx, ctx.params.id!);
                 if (schema.publishing && row.status === "published")
-                    throw conflict("Published entries must be unpublished before deletion.");
+                    throw implicitLock(schema, "delete");
                 await nativeEntryProcedure(schema.binding,adapter,ctx.db,ctx.caller,"remove",{},ctx.params.id!,lockOf(row));
                 return { affected: 1 };
             } },
