@@ -91,6 +91,8 @@ export type Compiled = {
   hooked: boolean;
   /** the update publishes the entry: publish hooks fire instead of update hooks */
   publish: boolean;
+  /** a Schema lock guards this row write: the probe that classifies its conflict (#1822), with its own binds */
+  probe?: { ast: N; binds: BindSpec[] };
 
 };
 
@@ -124,6 +126,7 @@ type C = PolicyOpts & {
   /** the CTEs in scope, innermost last: a reference reads its body's outputs (ordering needs its id) */
   ctes: Map<string, N>[];
   dml?: { alias: string; schema: string };
+  probe?: N;
 };
 
 function param$(c: C, spec: BindSpec): N {
@@ -160,11 +163,23 @@ function term(c: C, a: string, t: RowTerm): N {
  * A Schema lock (#1822) on the written row `a` of `table`: `NOT (when)`. Its subqueries read stored rows whatever the mode (the
  * plan tags them `system`), and a reference to the locked row (`table.col`) is renamed to the statement's alias.
  */
-function locked(c: C, a: string, table: string, [, , when]: LockTerm): N {
+function holds(c: C, a: string, table: string, [, , when]: LockTerm): N {
   const rename = (v: any): any => Array.isArray(v) ? v.map(rename) : !v || typeof v !== 'object' ? v
     : v.ColumnRef?.fields?.length === 2 && v.ColumnRef.fields[0].String?.sval === table ? col(a, v.ColumnRef.fields[1].String.sval)
     : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, rename(x)]));
-  return { BoolExpr: { boolop: 'NOT_EXPR', args: [tx(a === table ? structuredClone(when) : rename(when), c)] } };
+  return tx(a === table ? structuredClone(when) : rename(when), c);
+}
+const locked = (c: C, a: string, table: string, l: LockTerm): N => ({ BoolExpr: { boolop: 'NOT_EXPR', args: [holds(c, a, table, l)] } });
+/**
+ * The probe of a locked row write (#1822): `SELECT CASE WHEN (<when>) IS NOT FALSE THEN '<name>' … END AS lock` over the written
+ * row as the caller sees it (the author's WHERE and the visibility terms; version and locks aside). The runner reads it only when
+ * the write changed no row, to tell a lock from the row conflict; a NULL `when` refused the write, so it counts as holding.
+ */
+function probe(c: C, rel: N, a: string, where: N | undefined, locks: readonly LockTerm[]): N {
+  const table = String(rel.relname).toLowerCase(), name = (v: string): N => ({ A_Const: { sval: { sval: v } } });
+  const cases = locks.map(l => ({ CaseWhen: { expr: { BooleanTest: { arg: holds(c, a, table, l), booltesttype: 'IS_NOT_FALSE' } }, result: name(l[0]) } }));
+  return { SelectStmt: { targetList: [res({ CaseExpr: { args: cases } }, 'lock')], fromClause: [{ RangeVar: { relname: rel.relname, ...(rel.alias ? { alias: rel.alias } : {}), inh: true, relpersistence: 'p', mantle: 'system' } }],
+    whereClause: and(where && structuredClone(where), visible(c.schemas[table]!, a, c, table)), limitOption: 'LIMIT_OPTION_DEFAULT', op: 'SETOP_NONE' } };
 }
 /** Where a Schema's visibility rule is rendered (`rowPolicy` spells it). `a` is the alias (or table) the predicate reads through. */
 function visible(s: SchemaDef, a: string, c: C, table?: string): N | undefined {
@@ -457,6 +472,7 @@ function update(n: N, c: C): N {
   // the partition is never SET, so the child's is the row's own
   const checked = refs(s, c, a, column => out.targetList.find((t: N) => String(t.ResTarget.name).toLowerCase() === column)?.ResTarget.val, column => col(a, column), true);
   out.targetList.push(...sets(w, c));
+  if (w.locks.length) c.probe = probe(c, n.relation, a, out.whereClause, w.locks);
   out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock), checked, ...w.locks.map(l => locked(c, a, String(n.relation.relname).toLowerCase(), l)));
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { UpdateStmt: out };
@@ -468,6 +484,7 @@ function del(n: N, c: C): N {
   const out = deep(n, c, 'DeleteStmt');
   c.sel.pop();
   const w = writePolicy(s, 'delete', { lock: c.lockVersion, trusted: c.mode === 'trusted' });
+  if (w.locks.length) c.probe = probe(c, n.relation, a, out.whereClause, w.locks);
   out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock), ...w.locks.map(l => locked(c, a, String(n.relation.relname).toLowerCase(), l)));
   out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
   return { DeleteStmt: out };
@@ -541,6 +558,26 @@ function insert(n0: N, c: C): N {
   return { InsertStmt: out };
 }
 
+/** A probe shares the statement's bind numbering; renumber it to the binds it reads alone. */
+function renumber(ast: N, binds: readonly BindSpec[]): { ast: N; binds: BindSpec[] } {
+  const used: BindSpec[] = [], at = new Map<number, number>();
+  const walk = (v: any): void => {
+    if (!v || typeof v !== 'object') return;
+    if (v.ParamRef) { const n = v.ParamRef.number; if (!at.has(n)) { used.push(binds[n - 1]!); at.set(n, used.length); } v.ParamRef.number = at.get(n); return; }
+    Object.values(v).forEach(walk);
+  };
+  walk(ast);
+  return { ast, binds: used };
+}
+
+/** A lock's `when` as the dialect spells it, for a runtime that prints its own WHERE (the Store, #1822). It binds nothing. */
+export function lockCondition(when: N, schemas: Schemas, lower: PolicyLowering): N {
+  const c: C = { schemas, inputs: {}, mode: 'trusted', lower, hooked: false, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [], ctes: [] };
+  const out = tx(structuredClone(when), c);
+  if (c.binds.length) throw new Refused('SQL_SHAPE', 'a lock binds no value');
+  return out;
+}
+
 // ---- entry point -------------------------------------------------------------------------------------
 export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
   const t = Object.keys(stmt)[0]!;
@@ -551,5 +588,5 @@ export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
   const hooked = !!schema && !!opts.returning?.has(`${schema}.${publish ? 'publish' : verb}`);
   const c: C = { ...opts, hooked, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [], ctes: [] };
   const ast = tx(stmt, c);
-  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, hooked, publish };
+  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, hooked, publish, ...(c.probe ? { probe: renumber(c.probe, c.binds) } : {}) };
 }

@@ -24,6 +24,7 @@ export { rowPreconditions } from "./admin/procedureFlow.js";
 export { appCatalog, entrySchema } from "./mcp/catalog.js";
 export type { AppRowAction } from "./mcp/catalog.js";
 export { compileProgram } from "./core/sql/compile.js";
+export { lockCondition } from "./core/sql/policy.js";
 export { pagedOf } from "./core/sql/run.js";
 export { parsePgSql } from "./spec/infrastructure/sql/PgQueryParser.js";
 export type { MantleDialect } from "./core/dialect.js";

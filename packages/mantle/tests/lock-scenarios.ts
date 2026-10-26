@@ -11,16 +11,25 @@ export const lockManifest = [
   proc("switch_revision", "UPDATE posts SET current_revision = input.rev WHERE id = input.id RETURNING id"),
   proc("edit_revision", "UPDATE post_revisions SET body = input.body WHERE id = input.id RETURNING id"),
   proc("prune_revision", "DELETE FROM post_revisions r WHERE r.id = input.id RETURNING id"),
+  // an owner-scoped Schema: another owner's row is invisible, so its refusal stays the row conflict
+  m("Schema", "notes", { title: "Notes", lifecycle: "operational", scope: "owner = auth.uid()", indexes: [["owner", "id"]], lock: [{ name: "pinned", on: ["update", "delete"], when: "pinned = 'yes'", message: "Unpin the note first." }], schema: { type: "object", required: ["owner"], properties: { owner: { type: "string" }, body: { type: "string" }, pinned: { type: "string" } } } }),
+  proc("add_note", "INSERT INTO notes (body, pinned) VALUES (input.body, input.rev) RETURNING id"),
+  proc("edit_note", "UPDATE notes SET body = input.body WHERE id = input.id RETURNING id"),
 ].join("\n---\n");
 
-export const member = userCaller({ id: "u" }), admin = userCaller({ id: "a", role: "admin" }, { adminRoles: ["admin"] }), system = { kind: "system", reason: "maintenance" } as const;
+export const member = userCaller({ id: "u" }), other = userCaller({ id: "o" }), admin = userCaller({ id: "a", role: "admin" }, { adminRoles: ["admin"] }), system = { kind: "system", reason: "maintenance" } as const;
 const equal = (actual: unknown, expected: unknown, what: string) => { if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`${what}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`); };
 /** A write's outcome: "ok", or the error's code and `kind`. */
 export const outcome = (run: () => PromiseLike<unknown>) => Promise.resolve().then(run).then(() => "ok", (e: { code?: string; fields?: { kind?: string } }) => e.fields?.kind ? `${e.code}:${e.fields.kind}` : e.code ?? String(e));
 
-type Procedures = Record<string, (db: any, caller: any, input: object) => Promise<unknown>>;
-/** Caller-mode SQL Procedures: the live revision is frozen for members and admins alike; a system caller and other revisions are not. */
-export async function verifyLockedProcedures(procedures: Procedures, db: unknown, locked = "CONFLICT:row") {
+type Procedures = Record<string, (db: any, caller: any, input: object) => Promise<any>>;
+type App = { procedures: Procedures; store: (db: any, caller: any) => any };
+const locked = "CONFLICT:lock";
+/**
+ * Caller-mode SQL Procedures and caller-bound Stores: the live revision is frozen for members and admins alike, and the refusal
+ * names the lock; a system caller and other revisions are not bound; a row the caller cannot see stays the row conflict.
+ */
+export async function verifyLock({ procedures, store }: App, db: unknown) {
   const call = (name: string, caller: unknown, input: object) => outcome(() => procedures[name]!(db, caller, { id: null, body: null, rev: null, ...input }));
   for (const id of ["r1", "r2"]) equal(await call("add_revision", member, { id, body: id }), "ok", `add ${id}`);
   equal(await call("add_post", member, { id: "p1", rev: "r1" }), "ok", "add the post");
@@ -33,4 +42,23 @@ export async function verifyLockedProcedures(procedures: Procedures, db: unknown
   equal(await call("switch_revision", admin, { id: "p1", rev: "r2" }), "ok", "switch revisions");
   equal(await call("prune_revision", member, { id: "r1" }), "ok", "prune the old revision");
   equal(await call("prune_revision", member, { id: "r2" }), locked, "the new live revision is frozen");
+  const note = (await procedures.add_note!(db, member, { id: null, body: "n", rev: "yes" })).results[0][0].id;
+  equal(await call("edit_note", member, { id: note, body: "x" }), locked, "an edit of one's own pinned note");
+  equal(await call("edit_note", other, { id: note, body: "x" }), "CONFLICT:row", "another owner's pinned note is invisible");
+
+  // Stores bound to a caller (`store(db, caller)`, a ref handler's `ctx.store`)
+  equal(await call("add_revision", member, { id: "r3", body: "r3" }), "ok", "add r3");
+  const revisions = (caller: unknown) => store(db, caller).collection("post_revisions"), r2 = await revisions(admin).findById("r2"), r3 = await revisions(admin).findById("r3");
+  for (const caller of [member, admin]) {
+    equal(await outcome(() => revisions(caller).update("r2", { body: "x" }, { lock: r2.version })), locked, "a Store update of the live revision");
+    equal(await outcome(() => revisions(caller).delete("r2", { lock: r2.version })), locked, "a Store delete of the live revision");
+  }
+  // a stale version on a locked row still names the lock: the lock is why it can never succeed
+  equal(await outcome(() => revisions(admin).update("r2", { body: "x" }, { lock: r2.version + 7 })), locked, "a stale Store update of the live revision");
+  equal(await outcome(() => revisions(admin).update("r3", { body: "x" }, { lock: r3.version + 7 })), "CONFLICT:row", "a stale Store update of an unlocked revision");
+  equal(await outcome(() => revisions(admin).update("r3", { body: "edited" }, { lock: r3.version })), "ok", "a Store update of another revision");
+  equal(await outcome(() => revisions(system).update("r2", { body: "fixed" }, { lock: r2.version })), "ok", "a system Store update of the live revision");
+  const notes = (caller: unknown) => store(db, caller).collection("notes"), mine = await notes(member).findById(note);
+  equal(await outcome(() => notes(member).delete(note, { lock: mine.version })), locked, "a Store delete of one's own pinned note");
+  equal(await outcome(() => notes(other).delete(note, { lock: mine.version })), "CONFLICT:row", "a Store delete of another owner's pinned note");
 }

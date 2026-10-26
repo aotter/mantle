@@ -96,6 +96,8 @@ export interface LoweredStatement {
   readonly returns?: true;
   /** A write's table, lower case (D1's unique-conflict op mapping). */
   readonly target?: string;
+  /** A row write a Schema lock guards: the read that tells a lock from the row conflict (#1822). */
+  readonly probe?: { readonly sql: string; readonly binds: LoweredStatement["binds"] };
 }
 
 /** A paged statement of a View under one request shape, printed. The page size is a bind (`limit`), so one statement serves every page size. */

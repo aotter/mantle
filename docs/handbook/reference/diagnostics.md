@@ -16,7 +16,10 @@ Bare queries preserve native errors except required conflict/uncertain-write cla
 
 A `CONFLICT` carries `kind`: `"row"` when a row statement changed no row (missing or not visible, a stale version, or a
 state its WHERE no longer allows; one message covers all three, so it never reveals whether the row exists), `"unique"`
-for a unique-index clash and `"check"` for a Schema check (with `schema` and `check`). Match `kind`, not the message.
+for a unique-index clash, `"check"` for a Schema check (with `schema` and `check`) and `"lock"` when a [Schema lock](schema.md#locks)
+holds the row (with `schema`, `verb`, `lock` and `message`, the lock's static text; the row is visible to the caller, so
+naming the lock reveals nothing new). Match `kind`, not the message. A `"lock"` refusal never succeeds on retry: change the
+state that locks the row first (for a live revision, switch the post to another revision).
 To recover from `"row"`, read the record again and decide from its current state: retry with its current version only when the change still applies, and never retry blindly. A Procedure can name a precise reason itself (a ref handler that reads the row first, or a RETURNING the caller checks).
 
 Unknown errors map to redacted `INTERNAL_ERROR` (500). A custom `ContractError` outside the core set must carry an explicit status. Media uses its selected `mediaError` contract. Never expose SQL errors, tokens or credentials.
