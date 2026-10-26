@@ -52,6 +52,18 @@ function adminCreateWarnings(plan: RuntimePlan): string[] {
       .map(([name]) => `Schema '${s.name}' field '${name}' is required and readOnly without a default, so Admin's generic create cannot fill it. Give it a default (Admin stores it on create), or create the records through a Procedure with uiSchema.collectionAction: ${s.name}.`)));
 }
 
+/** Admin's list search matches a Schema's `searchableFields` besides the entry id; name the field a Schema without any is listed by. */
+function adminSearchWarnings(plan: RuntimePlan): string[] {
+  return Object.values(plan.schemas).filter(s => !s.translates && !s.search?.length).flatMap(s => {
+    const properties = (s.schema.properties ?? {}) as Record<string, { type?: unknown; format?: unknown; "x-mantle-ref"?: unknown } | undefined>;
+    const primary = (s.uiSchema?.["list"] as { primaryField?: unknown } | undefined)?.primaryField;
+    // searchableFields takes string properties only, not a date or date-time (stored as a number); a reference lists its
+    // target's title, not the stored id people would type
+    const field = [primary, "title"].find((f): f is string => typeof f === "string" && [properties[f]?.type].flat().includes("string") && !["date", "date-time"].includes(String(properties[f]?.format)) && properties[f]?.["x-mantle-ref"] == null);
+    return field ? [`Schema '${s.name}' declares no searchableFields, so Admin's list search matches the entry id only and a search for its '${field}' finds nothing. Add searchableFields: [${field}] to search it.`] : [];
+  });
+}
+
 /** Warn about SQL's case folding without changing the authored output names. */
 function outputNameWarnings(plan: RuntimePlan): string[] {
   const warnings: string[] = [];
@@ -167,5 +179,5 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
   const gatewayFiles = generatedFiles({ "access-targets.ts": `import type { AccessTarget } from "@aotter/mantle/contracts";\nexport const targets: Readonly<Record<string, AccessTarget>> = ${JSON.stringify(accessTargets)};\n` });
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.admin ? adminIndexes(compiled.plan.schemas, !postgres) : []), ...(schema?.() ?? [])];
   const { "site-schema.sql": siteSql = "", ...files } = result.files;
-  return { ...result, warnings: [...missingMcpWarnings(compiled.plan), ...outputNameWarnings(compiled.plan), ...(request.admin ? adminCreateWarnings(compiled.plan) : []), ...(compiled.plan.access?.warnings ?? [])], files: { ...files, ...gatewayFiles, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
+  return { ...result, warnings: [...missingMcpWarnings(compiled.plan), ...outputNameWarnings(compiled.plan), ...(request.admin ? [...adminCreateWarnings(compiled.plan), ...adminSearchWarnings(compiled.plan)] : []), ...(compiled.plan.access?.warnings ?? [])], files: { ...files, ...gatewayFiles, ...generatedFiles({ "schema.sql": ddl.join(";\n\n") + ";\n" + siteSql }) } };
 }

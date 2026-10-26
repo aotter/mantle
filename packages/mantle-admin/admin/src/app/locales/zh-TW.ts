@@ -163,6 +163,8 @@ export default {
     "collection.moreLanguages": "{count} 個",
     "collection.schemaDetails": "Schema 說明",
     "collection.searchPlaceholder": "搜尋 ID 或可搜尋欄位...",
+    "collection.searchIdPlaceholder": "依 ID 搜尋...",
+    "collection.empty.searchIdOnly": "沒有符合「{search}」的資料。此列表只依 ID 搜尋；在 Schema 宣告 searchableFields 才能搜尋其他欄位。",
     "collection.search": "搜尋",
     "collection.filter.all": "全部",
     "collection.parentFilter": "上層 {name}",

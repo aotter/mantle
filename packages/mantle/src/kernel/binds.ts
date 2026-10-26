@@ -13,9 +13,9 @@ export type Recipe =
   /** A field-scoped Schema's scope column on an SQL INSERT: the Store's insert rule (autofill one value, refuse a value outside the caller's set). */
   | { readonly k: "scoped"; readonly column: string; readonly field: string; readonly type: "string" | "number"; readonly name?: string; readonly value?: string | number }
   | { readonly k: "input"; readonly name: string; /** Only a date-time, a date or JSON is converted, so only those carry a type. */ readonly type?: "timestamptz" | "date" | "json" };
-/** One printed statement and how to bind it. `row`: it must affect exactly one row. */
-export interface Step { readonly sql: string; readonly binds: readonly Recipe[]; readonly row?: boolean }
-export type Bound = { readonly sql: string; readonly binds: unknown[]; readonly row?: boolean };
+/** One printed statement and how to bind it. `row`: it must affect exactly one row; `"some"`: at least one (`handler.mustWrite`). */
+export interface Step { readonly sql: string; readonly binds: readonly Recipe[]; readonly row?: boolean | "some" }
+export type Bound = { readonly sql: string; readonly binds: unknown[]; readonly row?: boolean | "some" };
 
 /** The dialect functions the recipes in use call; generated code passes only those. */
 export type Values = Partial<Pick<Dialect, "now" | "cutoff" | "timestamp" | "date">> & {

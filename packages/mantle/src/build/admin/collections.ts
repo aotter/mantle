@@ -36,6 +36,8 @@ export function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
     mediaFields: [s, ...children].flatMap((x) => Object.entries(propsOf(x.schema)).flatMap(([name, p]) => (isMediaMcpHint(p[MCP_HINT_KEYWORD]) ? [{ name, hint: p[MCP_HINT_KEYWORD] }] : []))),
     // the plan lower-cases index columns; `names` maps them back to the declared spelling
     sortableFields: [...new Set(adminIndexColumns(s).map((f) => s.names[f] ?? f))],
+    // declared spelling; empty means the Admin search box matches the entry id only
+    searchableFields: (s.search ?? []).map((f) => s.names[f] ?? f),
     filter: filterField ? { field: filterField, values: enumOptions(props[filterField])?.map((o) => o.value) ?? [] } : null,
     list: { primaryField: (list["primaryField"] as string | undefined) ?? null, columns: (list["columns"] as string[] | undefined) ?? [] },
     nav: navField && navParent ? { standalone: true, parentField: navField, parentCollection: navParent.schema } : null,

@@ -38,6 +38,8 @@ export default {
     "oauth.apps.empty": "Aucun client MCP n’est connecté.",
     "oauth.apps.revoke": "Déconnecter",
     "collection.filter.all": "Tout",
+    "collection.searchIdPlaceholder": "Rechercher par ID...",
+    "collection.empty.searchIdOnly": "Aucune entrée ne correspond à « {search} ». Cette liste ne recherche que par ID ; déclarez searchableFields dans le Schema pour rechercher dans d’autres champs.",
     "nav.home": "Accueil",
     "nav.overview": "Vue d’ensemble",
     "nav.model": "Modèle de données",
