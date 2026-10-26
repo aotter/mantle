@@ -8,6 +8,7 @@ import { canEditEntry, EntryEditView } from "../src/features/content/entry-edit-
 import { OperationDiagnostic } from "../src/features/ops/interaction-dialog";
 import { entryEditorQueryOptions } from "../src/lib/queries";
 import { declaredLock, type EntryEditorPayload, type EntryLocks } from "../src/lib/types";
+import { ConfirmProvider } from "../src/ui/confirm-dialog";
 
 const message = "This revision is live. Create a new revision and switch to it.";
 /** The editor as an admin sees a cached payload: its notice and its action bar's buttons. */
@@ -21,9 +22,9 @@ function editor(lifecycle: "operational" | "publishing", locks?: EntryLocks, sta
     parentEntryId: null,
   } as unknown as EntryEditorPayload);
   return renderToStaticMarkup(
-    <PreferencesProvider initialLanguage="en"><QueryClientProvider client={client}><TooltipProvider><AdminRouterProvider>
+    <PreferencesProvider initialLanguage="en"><QueryClientProvider client={client}><TooltipProvider><AdminRouterProvider><ConfirmProvider>
       <EntryEditView collectionName="revisions" entryId="r1" />
-    </AdminRouterProvider></TooltipProvider></QueryClientProvider></PreferencesProvider>,
+    </ConfirmProvider></AdminRouterProvider></TooltipProvider></QueryClientProvider></PreferencesProvider>,
   );
 }
 const button = (html: string, label: string) => html.match(new RegExp(`<button[^>]*>(?:(?!</button>).)*${label}(?:(?!</button>).)*</button>`))?.[0];
