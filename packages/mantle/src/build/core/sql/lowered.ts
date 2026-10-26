@@ -24,9 +24,10 @@ const PROCEDURE_MODES = ["caller", "trusted"] as const;
 
 const returningClause = (ast: N): boolean => Boolean(ast[Object.keys(ast)[0]!]?.returningClause);
 
-const stmtOf = (c: Compiled, sql: string): LoweredStatement => {
+const stmtOf = (c: Compiled, sql: string, print?: (ast: N) => string): LoweredStatement => {
   const target = writeTarget(c.ast);
   return {
+    ...(c.probe && print ? { probe: { sql: print(c.probe.ast), binds: c.probe.binds } } : {}),
     sql, binds: c.binds, kind: c.kind,
     ...(c.schema ? { schema: c.schema } : {}), ...(c.verb ? { verb: c.verb } : {}),
     ...(c.hooked ? { hooked: true as const } : {}), ...(c.publish ? { publish: true as const } : {}),
@@ -65,7 +66,7 @@ export function lowerView(env: Env, p: Lowerable, mode: Mode, columns = schemaCo
 export function lowerProcedure(env: Env, p: Lowerable, mode: Mode, returning: ReadonlySet<string> | undefined, columns = schemaColumns(env.schemas), warn?: Warn, at = "", project?: Project): LoweredStatement[] | undefined {
   try {
     const print = printer(env.dialect);
-    return compileProgram(p.ir, { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "procedure", mode, returning, restrict: p.restrict }).map((c) => stmtOf(c, print(project?.(c.ast) ?? c.ast, env.schemas)));
+    return compileProgram(p.ir, { dialect: env.dialect, schemas: env.schemas, columns, inputs: p.inputs, kind: "procedure", mode, returning, restrict: p.restrict }).map((c) => stmtOf(c, print(project?.(c.ast) ?? c.ast, env.schemas), ast => print(ast, env.schemas)));
   } catch (e) {
     warn?.(`${at} (${mode}): ${message(e)}`);
     return undefined;

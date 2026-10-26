@@ -25,7 +25,7 @@ import {
 } from "@aotter/mantle-ui/kit";
 import type { AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { idempotencyFields } from "../ops/interaction-schema";
+import { idempotencyFields, parentRefScopes, parentScopeInteraction, type ParentScope } from "../ops/interaction-schema";
 
 const InteractionDialog = React.lazy(() => import("../ops/interaction-dialog").then(module => ({ default: module.InteractionDialog })));
 
@@ -248,11 +248,14 @@ function RowOperationDialog({ operation, row, ...rest }: {
 /** Collection-level operation buttons shared by all collection lists. */
 export function CollectionOperations({
   operations,
+  scope,
   language,
   canonical,
   onSuccess,
 }: {
   operations: readonly AdminOperation[];
+  /** The parent workbench a folded child list sits in; outside one, none. */
+  scope?: ParentScope;
   language: AdminLanguage;
   canonical: string | null;
   onSuccess: () => void;
@@ -272,6 +275,7 @@ export function CollectionOperations({
         <OperationDialog
           key={activeOperation.name}
           operation={activeOperation}
+          scope={scope}
           language={language}
           canonical={canonical}
           onClose={() => setActiveOperation(null)}
@@ -287,12 +291,15 @@ export function CollectionOperations({
  * (ADR-0029), from a row, a collection header or the Operations page.
  * Bindings and the version lock come only from the operation's declared
  * interaction for the row's collection; nothing is inferred from names.
- * Without one, the operation is an ordinary form.
+ * Without one, the operation is an ordinary form; from a folded child
+ * list in its parent's workbench, the input named like the child's
+ * `nav.parentField` is bound to the parent (`parentScopeInteraction`).
  */
 export function OperationDialog({
   operation,
   interaction,
   row,
+  scope,
   collection,
   language,
   canonical,
@@ -302,6 +309,7 @@ export function OperationDialog({
   operation: AdminOperation;
   interaction?: AdminOperationInteraction;
   row?: OperableRow;
+  scope?: ParentScope;
   collection?: Collection;
   language: AdminLanguage;
   canonical: string | null;
@@ -309,7 +317,8 @@ export function OperationDialog({
   onSuccess: () => void;
 }): React.ReactElement {
   const title = resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
-  const binding = row && interaction ? interaction : undefined;
+  const parent = row ? undefined : parentScopeInteraction(operation.input, scope);
+  const binding = row && interaction ? interaction : parent?.interaction;
   const listed = row ? rowValues(row) : undefined;
   // A bound field the page did not list (for example a unique key) is read
   // once before the dialog opens; that read is the row the person reviews.
@@ -320,6 +329,11 @@ export function OperationDialog({
     enabled: missing,
     staleTime: 0,
     gcTime: 0,
+  });
+  // the Schemas a bound parent's ref pickers narrow to (`parentRefScopes`)
+  const collections = useQuery<Collection[]>({
+    queryKey: ["collections"],
+    queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
   });
   const automatic = idempotencyFields(operation.input);
   const hidden = [
@@ -335,7 +349,7 @@ export function OperationDialog({
       </InteractionLoading>
     );
   }
-  const reviewed = entry.data ? { ...listed, ...entry.data.entry.data, id: entry.data.entry.id, version: entry.data.entry.version } : listed;
+  const reviewed = entry.data ? { ...listed, ...entry.data.entry.data, id: entry.data.entry.id, version: entry.data.entry.version } : listed ?? parent?.row;
   return (
     <React.Suspense fallback={<InteractionLoading language={language} onClose={onClose}><Skeleton className="h-40 w-full" /></InteractionLoading>}>
       <InteractionDialog
@@ -343,6 +357,7 @@ export function OperationDialog({
         operation={operation}
         hidden={hidden}
         automatic={automatic}
+        refScopes={parentRefScopes(operation.input, row ? binding : undefined, reviewed, collections.data)}
         language={language}
         canonical={canonical}
         sourceSchema={collection?.schema ?? entry.data?.collection.schema}

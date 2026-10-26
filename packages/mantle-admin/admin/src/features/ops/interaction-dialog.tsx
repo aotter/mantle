@@ -53,6 +53,8 @@ export function interactionLabels(language: AdminLanguage): InteractionLabels {
 }
 
 export function OperationDiagnostic({ diagnostic, language, summary = true }: { diagnostic: InteractionDiagnostic; language: AdminLanguage; summary?: boolean }): React.ReactNode {
+  // a Schema lock (#1822): the record is frozen by a rule, and its message says why; re-reading does not help
+  if (diagnostic.code === "CONFLICT" && diagnostic.kind === "lock") return t(language, "ops.lockConflict", { message: diagnostic.message });
   const key = diagnostic.code !== "CONFLICT" ? undefined
     : diagnostic.kind === "row" ? "ops.conditionConflict"
     : diagnostic.kind === "unique" ? "ops.uniqueConflict"
@@ -62,7 +64,7 @@ export function OperationDiagnostic({ diagnostic, language, summary = true }: { 
 }
 
 export { idempotencyFields, operationFormSchema } from "./interaction-schema";
-import { operationFormSchema } from "./interaction-schema";
+import { operationFormSchema, type RefScope } from "./interaction-schema";
 
 /**
  * One admin operation in a dialog, through the shared interaction
@@ -70,7 +72,7 @@ import { operationFormSchema } from "./interaction-schema";
  * conflicts and uncertain writes behave the same everywhere. The caller
  * decides how the controller reads and invokes.
  */
-export function InteractionDialog({ create, operation, hidden, automatic, language, canonical, sourceSchema, previewFields, onClose, onDone, onSucceeded, renderResult }: {
+export function InteractionDialog({ create, operation, hidden, automatic, refScopes, language, canonical, sourceSchema, previewFields, onClose, onDone, onSucceeded, renderResult }: {
   /** Called once when the dialog opens; a binding that cannot be met is shown, not thrown. */
   create: () => InteractionController;
   operation: AdminOperation;
@@ -78,6 +80,8 @@ export function InteractionDialog({ create, operation, hidden, automatic, langua
   hidden: readonly string[];
   /** Idempotency keys, renewed when a payload is refused or conflicts. */
   automatic: readonly string[];
+  /** Ref pickers listing only the bound parent's children (`parentRefScopes`). */
+  refScopes?: Readonly<Record<string, RefScope>>;
   language: AdminLanguage;
   canonical: string | null;
   sourceSchema?: JsonSchema;
@@ -124,6 +128,7 @@ export function InteractionDialog({ create, operation, hidden, automatic, langua
             operation={operation}
             hidden={hidden}
             automatic={automatic}
+            refScopes={refScopes}
             title={title}
             description={description}
             language={language}
@@ -144,11 +149,12 @@ export function InteractionDialog({ create, operation, hidden, automatic, langua
   );
 }
 
-function InteractionDialogPanel({ controller, operation, hidden, automatic, title, description, language, canonical, sourceSchema, previewFields, onClose, onDone, onSucceeded, renderResult, closeRef }: {
+function InteractionDialogPanel({ controller, operation, hidden, automatic, refScopes, title, description, language, canonical, sourceSchema, previewFields, onClose, onDone, onSucceeded, renderResult, closeRef }: {
   controller: InteractionController;
   operation: AdminOperation;
   hidden: readonly string[];
   automatic: readonly string[];
+  refScopes: Readonly<Record<string, RefScope>> | undefined;
   title: string;
   description: string | undefined;
   language: AdminLanguage;
@@ -230,6 +236,7 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, titl
           canonical={canonical}
           collectionName={operation.name}
           mediaPurposes={[]}
+          refScopes={refScopes}
         />
       ) : null}
     </OperationPanel>

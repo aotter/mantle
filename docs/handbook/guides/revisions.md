@@ -4,7 +4,8 @@ description: Correct published content without taking it offline - a publishing 
 # Edit published content without downtime
 
 Admin's record form edits a `publishing` row only while it is a draft, so correcting a published post through it means
-unpublish, edit, republish, and the page is gone in between. This page splits the post into a stable parent and its
+unpublish, edit, republish, and the page is gone in between. (`publishing: { liveEdits: true }` edits it in place instead,
+but every save is live at once, with no preview: see [lifecycle](../concepts/lifecycle-and-locales.md).) This page splits the post into a stable parent and its
 revisions, so the public page keeps showing one revision while an editor prepares the next, previews it, and switches
 to it in one atomic write. Everything is manifests, one ref handler and one app route; nothing depends on generated
 storage internals.
@@ -157,7 +158,8 @@ sidebar, since it needs an input; the admin MCP endpoint and the preview route s
 
 One SQL statement copies the current revision (or starts empty when the post has none). `target` puts a "New revision"
 button on the post's page in Admin with the post filled in; `collectionAction` also puts it in the revisions list
-header, where the editor picks the post. It runs as one statement on every target, D1 included.
+header: in the post's Post revisions tab the post is filled in (the input is named like `nav.parentField`), and in the
+standalone list the editor picks it. It runs as one statement on every target, D1 included.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
@@ -190,7 +192,8 @@ spec:
 ## Switch, and roll back
 
 The Procedure is bound to the post (`target` with `version: expectedVersion`), so Admin shows "Switch revision" on the
-post's page with the version the editor reviewed; `revision` is a picker over revisions.
+post's page with the version the editor reviewed; `revision` is a picker over that post's revisions (it folds
+under the post, so Admin lists only the bound post's children).
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2

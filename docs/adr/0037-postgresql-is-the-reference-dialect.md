@@ -133,3 +133,5 @@ amendment.
 4. A View reads an internal View; the reference to a View with an input, a public View or a cycle is refused.
 5. A `restrict` that refuses a program stops it at runtime with its diagnostic.
 6. A statement past `statement_timeout` fails with `RESOURCE_UNAVAILABLE`, and nothing is written.
+
+> **2026-10-26 amendment (#1822):** A Schema lock's `when` is compiled by the same front end and dialect `accepts` as a Schema check (the WHERE of a read of its own Schema), then held to the lock subset on every dialect (`lockShapeProblem`): no function, cast, input or write, so its meaning does not differ between PostgreSQL and SQLite/D1. Its `EXISTS` subqueries must be index-served (`LOCK_INDEX_MISSING`).

@@ -145,3 +145,5 @@ check, `applyPolicy` and print (asserted in `test/core/lowered-cold.test.ts`),
 boot fingerprint time, and `plan.json` size. `scripts/bench-cold-start.mjs`
 runs fresh processes for the lowered plan and for the same plan without
 `lowered`.
+
+> **2026-10-26 amendment (#1822):** A Schema lock lowers at `mantle generate` inside each caller-mode write it guards: the policy rewrite adds `NOT (<when>)` and the dialect prints it (an `EXISTS` sublink, which the existing lowering already handles) into the caller variant of every inline Procedure and of Admin's generic patch and delete, on SQLite, D1 and PostgreSQL alike. The trusted variants carry no lock term.
