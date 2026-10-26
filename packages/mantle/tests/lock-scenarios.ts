@@ -81,3 +81,21 @@ export async function verifyLock({ procedures, store }: App, db: unknown) {
   equal(await outcome(() => notes(member).delete(note, { lock: mine.version })), locked, "a Store delete of one's own pinned note");
   equal(await outcome(() => notes(other).delete(note, { lock: mine.version })), "CONFLICT:row", "a Store delete of another owner's pinned note");
 }
+
+/** #1822: a Store update keeps a published row publishable, for every caller, as `publish` itself checks required data. */
+export const liveManifest = m("Schema", "articles", { title: "Articles", lifecycle: "publishing", publishing: { liveEdits: true }, schema: { type: "object", required: ["title"], properties: { title: { type: "string" }, body: { type: "string" } } } });
+export async function verifyLiveEdits({ procedures, store }: App, db: unknown) {
+  const articles = (caller: unknown) => store(db, caller).collection("articles");
+  const draft = await articles(admin).insert({ title: "t", body: "b" });
+  // a draft may be incomplete
+  const cleared = await articles(admin).update(draft.id, { title: null }, { lock: draft.version });
+  const restored = await articles(admin).update(draft.id, { title: "t" }, { lock: cleared.version });
+  await procedures["articles.publish"]!(db, admin, { id: draft.id, expectedVersion: restored.version });
+  const live = await articles(admin).findById(draft.id);
+  equal(live.status, "published", "published");
+  for (const caller of [admin, system]) equal(await outcome(() => articles(caller).update(draft.id, { title: null }, { lock: live.version })), "INPUT_VALIDATION_FAILED", "clearing a required field of a published row");
+  const edited = await articles(admin).update(draft.id, { body: "edited" }, { lock: live.version });
+  equal([edited.status, edited.body, edited.published_at, edited.version], ["published", "edited", live.published_at, live.version + 1], "a live edit keeps published_at");
+  // a stale version on a publishable update stays the row conflict
+  equal(await outcome(() => articles(admin).update(draft.id, { body: "x" }, { lock: live.version })), "CONFLICT:row", "a stale live edit");
+}

@@ -48,8 +48,9 @@ Every entry read and write goes through `MantleStore` / `CallerStore` over the r
 
 > **Amendment (#1822, 2026-10-26): live edits and the draft-only rule.** Published protection for generic writes is a declared
 > choice. `Schema.spec.publishing: { liveEdits: true }` (only on `lifecycle: publishing`, else `SCHEMA_PUBLISHING_INVALID`) lets a
-> caller's generic patch (Admin's route, which REST, the Admin MCP App and WebMCP share) edit a published or archived row in
-> place: it goes live on commit, `published_at` is kept and `updated_at` moves. The name sits under a `publishing` key, beside
+> caller's generic patch (Admin's route, which REST, the Admin MCP App and WebMCP share) edit a published row in
+> place: it goes live on commit (archived rows keep the draft-only rule: live edits edit what is live, they never revive
+> archived content in place), `published_at` is kept and `updated_at` moves. The name sits under a `publishing` key, beside
 > `lifecycle`, so later publishing options have one home; `lifecycle` stays a plain mode. Without it (the default) nothing
 > changes, but the rule is modelled as an implicit lock named `publishing` (no declared lock name has a dot or can take it): a
 > patch of a non-draft and a delete of a published row are `CONFLICT` with `kind: "lock"` (`verb` `update` or `delete`), and the
@@ -58,8 +59,8 @@ Every entry read and write goes through `MantleStore` / `CallerStore` over the r
 > locks apply on top. A published row stays publishable on every path: Admin validates the merged row as `publish` does (its OCC
 > pins the row it read) and refuses with `INPUT_VALIDATION_FAILED`, and a Store update (`store(db, caller)`, `ctx.store`, any
 > caller, system included, as `publish` checks system callers too) carries `status <> 'published' OR <publish's required
-> columns> IS NOT NULL` in its WHERE, its probe answering `INPUT_VALIDATION_FAILED`. Caller-mode SQL Procedures are not covered:
-> an authored `UPDATE` of a published row is the author's statement.
+> columns> IS NOT NULL` in its WHERE, its probe answering `INPUT_VALIDATION_FAILED`. The Store and Admin are the only
+> generic paths: a SQL Procedure cannot write a publishing Schema at all, so the generated transitions are its only writes.
 
 ### 2. Row ops and set ops
 

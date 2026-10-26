@@ -316,7 +316,7 @@ Generated full/partial input checks validate creates, edits, operations and
 filters. Plain titled string `oneOf` choices use the same enum checks; general
 or constrained alternatives remain refused. Draft creates can be incomplete;
 publish checks required data. Publishing edits apply only to drafts unless the Schema sets
-`publishing: { liveEdits: true }`; a live edit of a published entry must still pass those publish checks
+`publishing: { liveEdits: true }`, which opens published (never archived) entries; a live edit of a published entry must still pass those publish checks
 (`INPUT_VALIDATION_FAILED`), keeps `published_at` and goes live on save. Read-only
 collections refuse generic creates, edits, deletes and transitions with 403 `AUTH_DENIED`
 ("This record is read-only; use its operations.") before any read or write, while

@@ -70,6 +70,10 @@ for(const target of ["bun-sqlite","bun-postgres"] as const){
    // the merged row must stay publishable
    expect(await patch("posts",edited,{title:null})).toMatchObject({status:400,code:"INPUT_VALIDATION_FAILED"});
    expect(await ask(at("posts",edited),"DELETE")).toMatchObject(implicit("posts","delete",UNPUBLISH));
+   // an archived post is not live: it stays draft-only, liveEdits or not
+   const archived=await move("posts",await create("posts",{title:"old"}),"archive");
+   expect(archived.locks).toEqual({update:true,delete:false,lock:"publishing",message:DRAFTS});
+   expect(await patch("posts",archived,{body:"x"})).toMatchObject(implicit("posts","update",DRAFTS));
    // a declared lock still applies, and binds transitions too
    const frozen=await patch("posts",edited,{title:"frozen"});
    expect(frozen.locks).toEqual({update:true,delete:true,lock:"frozen",message:"This post is frozen."});

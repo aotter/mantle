@@ -22,7 +22,7 @@ spec:
       body: { type: string }
 ```
 
-Admin then edits a published post with a "changes go live on save" notice. The save goes live on commit, `published_at` is kept and `updated_at` moves. The merged post must still pass `publish`'s checks, so emptying its title is refused with `INPUT_VALIDATION_FAILED`. Deleting it still requires unpublishing, and [declared locks](../reference/schema.md#locks) still apply. `publishing` is refused on an operational Schema, which already edits in place. To prepare changes to published content without exposing them, split it into a publishing parent and operational revisions instead ([edit published content without downtime](../guides/revisions.md)).
+Admin then edits a published post with a "changes go live on save" notice. The save goes live on commit, `published_at` is kept and `updated_at` moves. The merged post must still pass `publish`'s checks, so emptying its title is refused with `INPUT_VALIDATION_FAILED`. An archived post stays draft-only: restore it to edit it. Deleting a published post still requires unpublishing, and [declared locks](../reference/schema.md#locks) still apply. `publishing` is refused on an operational Schema, which already edits in place. To prepare changes to published content without exposing them, split it into a publishing parent and operational revisions instead ([edit published content without downtime](../guides/revisions.md)).
 
 Public Views see published rows only. Other reads expose drafts only to admin/system. This policy applies to joins and nested queries too.
 

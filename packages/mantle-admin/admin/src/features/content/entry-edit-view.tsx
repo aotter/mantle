@@ -179,7 +179,7 @@ export function EntryEditView({
   const locks = payload.entry.locks;
   const rowLocked = declaredLock(locks);
   const lockedHint = rowLocked ? t(language, "entryEdit.locked", { message: locks?.message ?? "" }) : undefined;
-  // `publishing.liveEdits`: a published entry edits in place and goes live on save
+  // `publishing.liveEdits`: a published entry edits in place and goes live on save (an archived one stays locked)
   const liveEdits = !isOperational && !isDraft && locks?.update === false;
   const canEdit = canEditEntry({
     admin: me.data?.admin,
@@ -307,7 +307,7 @@ export function EntryEditView({
             </Button>
           ) : null}
         </div>
-      ) : !isDraft && canManageContent && !(liveEdits && isArchived) ? (
+      ) : !isDraft && canManageContent ? (
         <p role={liveEdits ? "status" : undefined} className="-mt-4 text-sm text-muted-foreground">
           {t(language, liveEdits ? "entryEdit.liveEditHint" : isArchived ? "entryEdit.archivedHint" : "entryEdit.publishedHint")}
         </p>
@@ -635,8 +635,8 @@ export function editorHiddenFields(
 }
 
 /**
- * A publishing entry is edited only as a draft, unless its Schema opts into `liveEdits`: otherwise a published or archived one
- * is unpublished first, so no edit waits on a disabled Save. A row a declared Schema lock holds (`rowLocked`, #1822) is never
+ * A publishing entry is edited only as a draft, or published under `liveEdits`: otherwise a published or archived one is
+ * unpublished first, so no edit waits on a disabled Save. A row a declared Schema lock holds (`rowLocked`, #1822) is never
  * editable, whatever the unlock toggle says.
  */
 export function canEditEntry({

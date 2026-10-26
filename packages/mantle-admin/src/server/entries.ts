@@ -23,7 +23,7 @@ export interface EntrySchema<Database = unknown> {
     readonly name: string;
     readonly descriptor: Record<string, unknown>;
     readonly publishing: boolean;
-    /** `spec.publishing.liveEdits` (#1822): a generic patch edits a non-draft entry in place. */
+    /** `spec.publishing.liveEdits` (#1822): a generic patch edits a published entry in place. */
     readonly liveEdits?: boolean;
     readonly primary?: boolean;
     readonly readOnly: boolean;
@@ -50,16 +50,18 @@ const native = new Set(["id", "status", "version", "createdAt", "updatedAt", "au
 const ms = (value: unknown) => typeof value === "number" ? value / 1000 : value == null ? null : Date.parse(String(value));
 /**
  * The publishing rules as implicit locks (#1822), named `publishing` (a declared lock's name has no dot or such clash): without
- * `liveEdits` a generic patch edits drafts only, and a published entry is unpublished before deletion. They bind data writes
+ * `liveEdits` a generic patch edits drafts only (with it, published rows too; an archived row never), and a published entry is unpublished before deletion. They bind data writes
  * only, never transitions. Shown through `entry.locks` with the declared ones, a declared update lock first.
  */
 const PUBLISHING = "publishing", DRAFTS_ONLY = "Only drafts may be edited.", UNPUBLISH_FIRST = "Published entries must be unpublished before deletion.";
 const implicitLock = (schema: EntrySchema<any>, verb: "update" | "delete", message = verb === "update" ? DRAFTS_ONLY : UNPUBLISH_FIRST) =>
     new ContractError("CONFLICT", message, "admin/entries", {fields: {kind: "lock", schema: schema.name, verb, lock: PUBLISHING, message}});
+/** Whether a generic patch may edit this row: a draft, or a published row under `liveEdits` (an archived one is never live). */
+const editable = <Database>(schema: EntrySchema<Database>, row: Row) => !schema.publishing || row.status === "draft" || !!schema.liveEdits && row.status === "published";
 const locksOf = <Database>(schema: EntrySchema<Database>, raw: Row): EntryLocks | undefined => {
     const declared = entryLocks(raw);
     if (!schema.publishing) return declared;
-    const update = !schema.liveEdits && raw.status !== "draft", remove = raw.status === "published";
+    const update = !editable(schema, raw), remove = raw.status === "published";
     const first = declared?.update ? declared : update ? {lock: PUBLISHING, message: DRAFTS_ONLY} : declared?.delete ? declared : remove ? {lock: PUBLISHING, message: UNPUBLISH_FIRST} : {};
     return {update: update || !!declared?.update, delete: remove || !!declared?.delete, ...(first.lock ? {lock: first.lock, message: first.message!} : {})};
 };
@@ -256,7 +258,7 @@ export function entries<Env, DB>(schemas: readonly EntrySchema<DB>[], adapter: N
                 if (!exactVersion(lock))
                     fail("expectedVersion is required.");
                 const row = await current(schema, ctx, ctx.params.id!);
-                if (schema.publishing && !schema.liveEdits && row.status !== "draft")
+                if (!editable(schema, row))
                     throw implicitLock(schema, "update");
                 // Translation reads merge the parent's fields into data; an unchanged echo of one is a no-op, a changed one still fails as unknown.
                 const existing = entry(schema, row).data, data = Object.fromEntries(Object.entries(patch).filter(([key, value]) => Object.hasOwn(schema.fields, key) ? value !== null || existing[key] != null : !(Object.hasOwn(existing, key) && JSON.stringify(existing[key]) === JSON.stringify(value))));

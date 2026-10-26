@@ -77,6 +77,13 @@ describe("publishing entries and liveEdits (#1822)", () => {
     expect(button(html, "Unpublish")).not.toMatch(/disabled=""/);
   });
 
+  it("keeps an archived entry read-only under liveEdits, since the server locks it", () => {
+    const html = editor("publishing", { update: true, delete: false, lock: "publishing", message: "Only drafts may be edited." }, "archived");
+    expect(html).toContain("Archived entries are read-only.");
+    expect(html).not.toContain("go live");
+    expect(button(html, "Save")).toBeUndefined();
+  });
+
   it("lets canEditEntry open a non-draft only under liveEdits, and never past a declared lock", () => {
     const access = (o: Partial<Parameters<typeof canEditEntry>[0]>) => canEditEntry({ admin: true, isReadOnly: false, isOperational: false, isDraft: false, operationalEditUnlocked: false, ...o });
     expect(access({})).toBe(false);
