@@ -256,7 +256,7 @@ Schema reference; do not repeat them.
 | 0.1.x | 0.2.0 |
 |---|---|
 | builtin `create` | `handler: { sql: "INSERT INTO s (a, b) VALUES (input.a, input.b) RETURNING id" }` (on a `publishing` Schema the row starts as a draft, as before) |
-| builtin `update` (always version-checked, merges over the stored row) | `UPDATE s SET a = COALESCE(input.a, a), … WHERE id = input.id AND version = input.expectedVersion`. Keep both: without the version the lock is lost; without `COALESCE` an omitted optional field is cleared |
+| builtin `update` (always version-checked, merges over the stored row) | `UPDATE s SET a = COALESCE(input.a, a), … WHERE id = input.id AND version = input.expectedVersion`. Keep both: without the version the lock is lost; without `COALESCE` an omitted optional field is cleared. `COALESCE` also means `null` cannot clear a field; give clearing its own flag input ([clear flag](handbook/guides/sql-patterns.md#change-only-the-fields-given-coalesce), [leave out, replace or clear](handbook/guides/native-admin.md#leave-out-replace-or-clear)) |
 | builtin `upsert` with `match` | `INSERT … ON CONFLICT (<match columns>) DO UPDATE SET x = EXCLUDED.x`; the conflict columns are a unique index; on a scoped Schema the scope field may be named or left out, Store adds it |
 | builtin `delete` | `DELETE FROM s WHERE id = input.id AND version = input.expectedVersion` |
 | builtin `archive` | a `ref` handler: `ctx.store.write([{ update: "s", set: { status: "archived" }, where: { id }, lock: expectedVersion }])` (SQL cannot set `status`) |
