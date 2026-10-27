@@ -53,6 +53,7 @@ test("official SDK initializes, lists only surface tools, calls shared validatio
   const listed=(await call("tools/list")).data.result.tools; expect(listed.map((t:any)=>t.name)).toEqual(["items","add_item"]);expect(listed[0].inputSchema.additionalProperties).toBe(false);
   const denied=await call("tools/list",{},"/mcp/admin"); expect(denied.response.status).toBe(401); expect(denied.response.headers.get("www-authenticate")).toContain('scope="mcp"');
   const bad=await call("tools/call",{name:"add_item",arguments:{title:""}});expect(bad.data.result.isError).toBe(true);expect(JSON.parse(bad.data.result.content[0].text).diagnostics[0].code).toBe("INPUT_VALIDATION_FAILED");
+  const flood=await call("tools/call",{name:"add_item",arguments:{title:"x",rest:Array(10_000).fill(0)}});expect(flood.data.result.isError).toBe(true);expect(flood.data.result.content[0].text).toContain("more than the maximum of 10000 elements");
   const ok=await call("tools/call",{name:"add_item",arguments:{title:"Hello"}});expect(ok.data.result.isError).toBeUndefined();expect(ok.readOnly).toBe(false);
   const page=await call("tools/call",{name:"items",arguments:{limit:1}});expect(page.data.result.structuredContent.rows[0].title).toBe("Hello");expect(page.readOnly).toBe(true);
   caller=user;expect((await call("tools/list",{},"/mcp/admin")).data.result.tools.map((t:any)=>t.name)).toEqual(["admin_items"]);
