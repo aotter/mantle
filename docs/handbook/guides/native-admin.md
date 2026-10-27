@@ -153,7 +153,7 @@ refused View or collection from a missing one. Showing or hiding a component gra
 | Hook | Route | Surface |
 | --- | --- | --- |
 | `useView(name, input, { limit? })` -> `{ rows, status, hasMore, loadMore, loadingMore }` | `GET /views/{name}` | browser and MCP App |
-| `useOperation(name)` -> `{ run, pending }`; success refreshes Views, entries, entry editors and totals | `POST /operations/{name}` | browser and MCP App |
+| `useOperation(name, { refresh? })` -> `{ run, pending }`; success refreshes Views, entries, entry editors, totals and badges once, `refresh` narrowing the Views ([below](#scoped-refresh)) | `POST /operations/{name}` | browser and MCP App |
 | `useEntries(collection, { filter?, search?, limit? })` -> `{ items, status, hasMore, loadMore, loadingMore }` | `GET /entries` (one `filter_field`/`filter_value`) | browser only |
 | `useEntry(collection, id)` | `GET /entries/{id}` | browser only |
 | `useCollectionTotal(collection)` | `GET /collections/{name}/statistics`, its `total` | browser only |
@@ -165,6 +165,14 @@ page and appends it while `hasMore` is true. There are no page numbers and no "p
 options) starts again from the first page. A failed `loadMore()` leaves `status` at `error` with the rows already loaded kept, and
 calling `loadMore()` again retries. Admin's own lists work the same way, under a "Load more" button, and so does the MCP App, which
 shows the button only when the host has `serverTools` (it calls the View's tool again with the same input and the `cursor`).
+
+<a id="scoped-refresh"></a>By default an operation's success reads every shown View again, since Admin cannot know which a
+Procedure changed. A page with many Views (say one per expanded branch of a tree) can name the ones to read again:
+`useOperation("move", { refresh: ["children", { view: "children", input: { parent: id } }] })`. A name covers every input of
+that View; `{ view, input }` covers the one `useView(view, input)` (any `limit`); `refresh: []` reads no View again. The names and inputs are typed like `useView`'s.
+Views not named are marked stale rather than read again, so each reads again when it is next shown. Entries, open entries,
+totals and badges still refresh: the Procedure may write any collection, and skipping those would show stale records with no
+way to name them. Leave `refresh` out when unsure; a View you forget to name keeps showing its old rows until it is shown again.
 
 In an MCP host, `useView` and `useOperation` call the View's or operation's admin MCP tool (its name lowercased, kebab to snake) through the host (`tools/call`),
 under the caller's MCP authorization; the browser-only hooks read `unavailable` there, so declare the data an App needs as an
