@@ -65,11 +65,24 @@ test("the revisions guide in Admin: revisions fold under their post, and the pos
   expect((await ok(`/entries/${fromPanel.id}?collection=post_revisions`)).entry.data.post).toBe(hello.id);
   await ok(`/entries/${fromPanel.id}?collection=post_revisions`,"DELETE");
 
+  // current_revision is required: Admin refuses to publish a post without a revision, naming the field.
+  expect(await call(`/entries/${hello.id}/publish?collection=posts`,"POST",{expectedVersion:hello.version})).toMatchObject({status:400,body:{error:{code:"INPUT_VALIDATION_FAILED",path:"schemas/posts/admin/input/current_revision"}}});
+
   // Switch, then publish: the page is live.
   expect(await operation("switch-revision",{post:hello.id,revision:first.id,expectedVersion:hello.version})).toMatchObject({status:200});
   const draft=(await post(hello.id)).entry;
   expect(draft.data.current_revision).toBe(first.id);
   await ok(`/entries/${hello.id}/publish?collection=posts`,"POST",{expectedVersion:draft.version});
+  expect(page()).toEqual(["Version one."]);
+
+  // The live_revision lock: Admin knows the current revision is frozen before the edit, and its generic patch and delete
+  // refuse it with CONFLICT kind lock; the page is unchanged.
+  const message="This revision is live. Start a New revision from its post, edit and preview it, then Switch revision.";
+  const liveRevision=(await ok(`/entries/${first.id}?collection=post_revisions`)).entry;
+  expect(liveRevision.locks).toEqual({update:{lock:"live_revision",message},delete:{lock:"live_revision",message}});
+  const refused=await call(`/entries/${first.id}?collection=post_revisions`,"PATCH",{data:{body:"Edited live."},expectedVersion:liveRevision.version});
+  expect(refused).toMatchObject({status:409,body:{error:{code:"CONFLICT",kind:"lock",schema:"post_revisions",lock:"live_revision",message}}});
+  expect((await call(`/entries/${first.id}?collection=post_revisions`,"DELETE")).body.error).toMatchObject({code:"CONFLICT",kind:"lock",verb:"delete"});
   expect(page()).toEqual(["Version one."]);
 
   // The record form cannot edit the published post; the next revision goes through the post's operations.
@@ -78,6 +91,7 @@ test("the revisions guide in Admin: revisions fold under their post, and the pos
   const second=(await operation("new-revision",{post:hello.id})).body.output.results[0][0];
   const copy=(await ok(`/entries/${second.id}?collection=post_revisions`)).entry;
   expect(copy.data).toMatchObject({post:hello.id,title:"Hello",body:"Version one."});
+  expect(copy.locks).toEqual({update:false,delete:false}); // not live: the record form edits it
   await ok(`/entries/${second.id}?collection=post_revisions`,"PATCH",{data:{body:"Version two."},expectedVersion:copy.version});
   expect(page()).toEqual(["Version one."]);
   const foreign=(await operation("new-revision",{post:elsewhere.id})).body.output.results[0][0];
@@ -101,7 +115,8 @@ test("the revisions guide in Admin: revisions fold under their post, and the pos
   // Rollback, and pruning refuses the current revision.
   expect(await operation("switch-revision",{post:hello.id,revision:first.id,expectedVersion:live.version+1})).toMatchObject({status:200});
   expect(page()).toEqual(["Version one."]);
-  expect((await operation("prune-revision",{id:first.id})).status).toBe(409);
+  expect((await operation("prune-revision",{id:first.id})).body.error).toMatchObject({code:"CONFLICT",kind:"lock"});
+  expect((await ok(`/entries/${second.id}?collection=post_revisions`)).entry.locks.update).toBe(false); // switched away: editable again
   expect(await operation("prune-revision",{id:second.id})).toMatchObject({status:200});
   expect((await post(hello.id)).related.find((s:any)=>s.collection.name==="post_revisions").entries.map((e:any)=>e.id)).toEqual([first.id]);
  }finally{db.close();await rm(dir,{recursive:true,force:true});}

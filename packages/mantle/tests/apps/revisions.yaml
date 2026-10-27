@@ -8,10 +8,12 @@ spec:
   title: Posts
   lifecycle: publishing
   uniqueIndexes: [[slug]]
+  # Serves post_revisions' live_revision lock (generation proves it).
+  indexes: [[current_revision]]
   schema:
     type: object
     additionalProperties: false
-    required: [slug]
+    required: [slug, current_revision]
     properties:
       slug: { type: string, pattern: "^[a-z0-9-]+$", maxLength: 100 }
       # Written only by switch-revision: Admin's record form leaves it alone.
@@ -24,6 +26,11 @@ spec:
   title: Post revisions
   lifecycle: operational
   indexes: [[post, createdAt, id]]
+  lock:
+    - name: live_revision
+      on: [update, delete]
+      when: EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)
+      message: "This revision is live. Start a New revision from its post, edit and preview it, then Switch revision."
   uiSchema:
     nav: { parentField: post }
     list: { primaryField: title, columns: [note] }
@@ -137,7 +144,7 @@ kind: Procedure
 metadata: { name: prune-revision }
 spec:
   title: Delete revision
-  description: Delete a revision that no post shows.
+  description: Delete a revision that is not live.
   requires: { auth: { all: [ctx.admin] } }
   target: { schema: post_revisions, id: id }
   input:
@@ -149,10 +156,7 @@ spec:
   output: { type: object }
   handler:
     sql: |
-      DELETE FROM post_revisions
-        WHERE id = input.id
-          AND NOT EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)
-        RETURNING id
+      DELETE FROM post_revisions WHERE id = input.id RETURNING id
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
