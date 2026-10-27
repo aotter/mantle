@@ -5,6 +5,7 @@ export default {
 
     "common.reloadPage": "重新加载页面",
     "common.reloadPageHint": "请重新加载此页面后重试。未保存的更改可能会丢失。",
+    "entryEdit.leaveUnsaved": "有尚未保存的变更。要离开此页并放弃变更吗？",
     "ops.details": "详细信息",
     "ops.conditionConflict": "此记录已更改，或已不符合此操作的条件。请刷新后重试。",
     "ops.uniqueConflict": "已有一条记录使用相同的唯一值。",

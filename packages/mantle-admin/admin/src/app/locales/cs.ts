@@ -5,6 +5,7 @@ export default {
 
     "common.reloadPage": "Znovu načíst stránku",
     "common.reloadPageHint": "Zkuste stránku znovu načíst. Neuložené změny mohou být ztraceny.",
+    "entryEdit.leaveUnsaved": "Máte neuložené změny. Opustit tuto stránku a zahodit je?",
     "ops.details": "Podrobnosti",
     "ops.conditionConflict": "Záznam se změnil nebo již nesplňuje podmínku této akce. Obnovte stránku a zkuste to znovu.",
     "ops.uniqueConflict": "Záznam se stejnou jedinečnou hodnotou již existuje.",
