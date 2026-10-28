@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "พื้นที่ทำงาน {name}",
+    "entryEdit.workspaceHint": "บันทึกระเบียนนี้แล้วเปิดคอลเลกชันย่อยเพื่อดำเนินการต่อ",
+    "entryEdit.missingFields": "ช่องที่จำเป็นยังไม่ครบ: {fields}",
+    "entryEdit.readOnlyRequired": "ช่องแบบอ่านอย่างเดียวจะกำหนดผ่านการดำเนินการหรือระเบียนที่เกี่ยวข้อง ใช้การดำเนินการที่มีเพื่อกรอกให้ครบ",
     "oauth.consent.redirect": "กลับไปที่",
     "oauth.consent.scopes": "สิทธิ์การเข้าถึงที่ขอ",
     "oauth.consent.offline": "อนุญาตการเข้าถึงเบื้องหลังแม้หลังออกจากระบบเว็บไซต์นี้ คุณเพิกถอนสิทธิ์ได้ในแอปที่เชื่อมต่อ",

@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "مساحة عمل {name}",
+    "entryEdit.workspaceHint": "احفظ هذا السجل ثم افتح مجموعة فرعية للمتابعة.",
+    "entryEdit.missingFields": "حقول مطلوبة مفقودة: {fields}.",
+    "entryEdit.readOnlyRequired": "تُضبط حقول القراءة فقط عبر عملية أو سجل مرتبط. استخدم الإجراءات المتاحة لإكمالها.",
     "oauth.consent.redirect": "العودة إلى",
     "oauth.consent.scopes": "الوصول المطلوب",
     "oauth.consent.offline": "السماح بالوصول في الخلفية حتى بعد تسجيل الخروج من هذا الموقع. يمكنك إلغاء الوصول من التطبيقات المتصلة.",

@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "Ruang kerja {name}",
+    "entryEdit.workspaceHint": "Simpan rekaman ini, lalu buka koleksi anak untuk melanjutkan.",
+    "entryEdit.missingFields": "Kolom wajib belum diisi: {fields}.",
+    "entryEdit.readOnlyRequired": "Kolom hanya baca diatur melalui operasi atau rekaman terkait. Gunakan tindakan yang tersedia untuk melengkapinya.",
     "oauth.consent.redirect": "Kembali ke",
     "oauth.consent.scopes": "Akses yang diminta",
     "oauth.consent.offline": "Izinkan akses latar belakang, termasuk setelah keluar dari situs ini. Anda dapat mencabutnya di Aplikasi terhubung.",

@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "Arbeitsbereich: {name}",
+    "entryEdit.workspaceHint": "Speichern Sie diesen Datensatz und öffnen Sie dann eine untergeordnete Sammlung.",
+    "entryEdit.missingFields": "Fehlende Pflichtfelder: {fields}.",
+    "entryEdit.readOnlyRequired": "Schreibgeschützte Felder werden durch eine Operation oder einen verknüpften Datensatz gesetzt. Verwenden Sie die verfügbaren Aktionen.",
     "oauth.consent.redirect": "Zurück zu",
     "oauth.consent.scopes": "Angeforderter Zugriff",
     "oauth.consent.offline": "Hintergrundzugriff auch nach der Abmeldung von dieser Website erlauben. Der Zugriff kann unter Verbundene Apps widerrufen werden.",

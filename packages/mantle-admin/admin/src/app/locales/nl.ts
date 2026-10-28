@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "Werkruimte van {name}",
+    "entryEdit.workspaceHint": "Sla dit record op en open een onderliggende verzameling om verder te gaan.",
+    "entryEdit.missingFields": "Ontbrekende verplichte velden: {fields}.",
+    "entryEdit.readOnlyRequired": "Alleen-lezenvelden worden ingesteld via een bewerking of een gekoppeld record. Gebruik de beschikbare acties om ze in te vullen.",
     "oauth.consent.redirect": "Terug naar",
     "oauth.consent.scopes": "Gevraagde toegang",
     "oauth.consent.offline": "Sta achtergrondtoegang toe, ook na afmelden bij deze website. Je kunt de toegang intrekken bij Gekoppelde apps.",

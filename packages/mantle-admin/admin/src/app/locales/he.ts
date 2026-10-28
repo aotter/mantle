@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "סביבת העבודה של {name}",
+    "entryEdit.workspaceHint": "שמרו את הרשומה ואז פתחו אוסף משנה כדי להמשיך.",
+    "entryEdit.missingFields": "שדות חובה חסרים: {fields}.",
+    "entryEdit.readOnlyRequired": "שדות לקריאה בלבד מוגדרים באמצעות פעולה או רשומה קשורה. השתמשו בפעולות הזמינות להשלמתם.",
     "oauth.consent.redirect": "חזרה אל",
     "oauth.consent.scopes": "הרשאות מבוקשות",
     "oauth.consent.offline": "אפשר גישה ברקע גם לאחר היציאה מאתר זה. אפשר לבטל את הגישה באפליקציות המחוברות.",
