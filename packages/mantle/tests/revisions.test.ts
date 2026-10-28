@@ -5,6 +5,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { userCaller } from "../src/kernel/user-caller.js";
 import { generateOrThrow, link, loadFixtureSources, writeGenerated } from "./apps/link.js";
+import { verifyRevisionSeal } from "./revision-seal-scenarios.js";
+import { verifyOnLocalD1 } from "./apps/local-d1.js";
 
 // docs/handbook/guides/revisions.md: its manifests are apps/revisions.yaml, and its handler and preview route run here as written.
 const guidePath = resolve(import.meta.dir, "../../../docs/handbook/guides/revisions.md");
@@ -17,7 +19,7 @@ test("the guide's manifests are the revisions fixture", async () => {
 });
 
 /** Generates the fixture and writes the guide's handler (src/handlers.ts) and route (src/routes.ts) beside it. */
-async function app(target: "bun-sqlite" | "bun-postgres") {
+async function app(target: "bun-sqlite" | "bun-postgres" | "cloudflare-d1") {
   const guide = await readFile(guidePath, "utf8"), code = blocks(guide, "ts");
   const files = await generateOrThrow(target, await loadFixtureSources("revisions.yaml"));
   await mkdir(resolve(import.meta.dir, "apps/.generated"), { recursive: true });
@@ -75,7 +77,7 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
   expect(live.text).toContain(`<link rel="canonical" href="${origin}/posts/hello">`);
   expect(live.text).not.toContain("noindex");
 
-  // The live_revision lock freezes the current revision for every caller: an edit or delete is CONFLICT kind lock.
+  // The sealed_revision lock freezes every selected revision for every caller: an edit or delete is CONFLICT kind lock.
   expect(await code(() => fill(first.id, { body: "Edited live." }))).toBe("CONFLICT lock");
   expect(await code(async () => revisions.delete(first.id, { lock: (await revisions.findById(first.id))!.version }))).toBe("CONFLICT lock");
   expect(await page("hello")).toEqual(["Version one."]);
@@ -100,6 +102,8 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
   const stale = hello.version + 1;
   expect(stale).toBeLessThan(await version(hello.id));
   expect(await code(() => run("switch-revision", { post: hello.id, revision: second.id, expectedVersion: stale }))).toBe("CONFLICT row");
+  expect(Boolean((await revisions.findById(second.id))!.sealed)).toBe(true); // parent conflict leaves a safe, unused seal
+  expect(await code(() => fill(second.id, { body: "Changed after failed switch." }))).toBe("CONFLICT lock");
   const other = await posts.insert({ slug: "other" });
   const foreign = (await run("new-revision", { post: other.id })).results[0][0];
   await fill(foreign.id, { title: "Other", summary: "Another post.", body: "Not hello." });
@@ -119,11 +123,14 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
   await run("switch-revision", { post: hello.id, revision: first.id, expectedVersion: await version(hello.id) });
   expect(await page("hello")).toEqual(["Version one."]);
 
-  // The lock now holds the first revision, and no longer the second. Pruning refuses the current revision and deletes any other.
+  // Both selected revisions remain sealed. Pruning can only remove an unsealed draft.
   expect(await code(() => fill(first.id, { body: "Edited live." }))).toBe("CONFLICT lock");
   expect(await code(() => run("prune-revision", { id: first.id }))).toBe("CONFLICT lock");
-  expect(await code(() => run("prune-revision", { id: second.id }))).toBe("ok");
-  expect(await revisions.findById(second.id)).toBeNull();
+  expect(await code(() => run("prune-revision", { id: second.id }))).toBe("CONFLICT lock");
+  expect(await code(() => fill(second.id, { body: "Rewrite history." }))).toBe("CONFLICT lock");
+  const unused = (await run("new-revision", { post: hello.id })).results[0][0];
+  expect(await code(() => run("prune-revision", { id: unused.id }))).toBe("ok");
+  expect(await revisions.findById(unused.id)).toBeNull();
   expect(await page("hello")).toEqual(["Version one."]);
 
   // Unpublishing takes the page down; the preview still works for admins.
@@ -138,6 +145,7 @@ test("bun:sqlite: the revisions guide behaves as documented", async () => {
   try {
     db.exec(built.files["schema.sql"]!);
     await verifyRevisions(db, built);
+    await verifyRevisionSeal(built.generated, built.handlers, db);
   } finally { db.close(); await rm(built.dir, { recursive: true, force: true }); }
 });
 
@@ -147,5 +155,71 @@ test("bun:sqlite: the revisions guide behaves as documented", async () => {
     await db.unsafe(`CREATE SCHEMA ${schema}`); await db.unsafe(`SET search_path TO ${schema}`);
     await db.unsafe(built.files["schema.sql"]!);
     await verifyRevisions(db, built);
+    await verifyRevisionSeal(built.generated, built.handlers, db);
   } finally { await db.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`).catch(() => {}); await db.close(); await rm(built.dir, { recursive: true, force: true }); }
 }, 30000);
+
+(process.env.MANTLE_NEXT_BUN_PG_URL ? test : test.skip)("PostgreSQL: the same-row seal arbitrates writes whose snapshots precede the seal", async () => {
+  const built = await app("bun-postgres"), url = process.env.MANTLE_NEXT_BUN_PG_URL!;
+  const db = new SQL(url, { max: 1 }), competingDb = new SQL(url, { max: 1 }), gate = new SQL(url, { max: 1 });
+  const schema = "seal_" + crypto.randomUUID().replaceAll("-", ""), admin = userCaller({ id: "editor", role: "admin" });
+  const data = built.generated.store(db, admin, { handlers: built.handlers }), other = built.generated.store(competingDb, admin, { handlers: built.handlers });
+  try {
+    await db.unsafe(`CREATE SCHEMA ${schema}`);
+    for (const handle of [db, competingDb]) await handle.unsafe(`SET search_path TO ${schema}`);
+    await db.unsafe(built.files["schema.sql"]!);
+    const [{ pid: switchPid }] = await db.unsafe("SELECT pg_backend_pid() AS pid");
+    const [{ pid: editPid }] = await competingDb.unsafe("SELECT pg_backend_pid() AS pid");
+    for (const sealFirst of [false, true]) for (const mutation of ["blank", "delete"]) {
+      const slug = `race-${sealFirst}-${mutation}`, posts = data.collection("posts"), revisions = data.collection("post_revisions");
+      const run = (name: string, input: unknown) => data.procedures[name](input);
+      const post = await posts.insert({ slug }), first = (await run("new-revision", { post: post.id })).results[0][0];
+      await revisions.update(first.id, { title: "Title", summary: "Summary", body: "Old body" }, { lock: first.version });
+      await run("switch-revision", { post: post.id, revision: first.id, expectedVersion: post.version });
+      await run("posts.publish", { id: post.id, expectedVersion: (await posts.findById(post.id))!.version });
+      const next = (await run("new-revision", { post: post.id })).results[0][0];
+      const candidate = await revisions.update(next.id, { body: "New body" }, { lock: next.version });
+      const expectedVersion = (await posts.findById(post.id))!.version;
+      // Test-only trigger holds the first writer after WHERE admission and row locking. Every application write
+      // remains a normal caller Store/Procedure write; the second writer must recheck seal/OCC on the changed row.
+      await db.unsafe(`CREATE OR REPLACE FUNCTION pause_revision() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+        IF TG_OP = 'DELETE' THEN ${sealFirst ? "" : "PERFORM pg_advisory_xact_lock(1845021);"} RETURN OLD; END IF;
+        IF NEW.sealed = ${sealFirst ? "true" : "false"} THEN PERFORM pg_advisory_xact_lock(1845021); END IF; RETURN NEW; END $$`);
+      await db.unsafe("CREATE TRIGGER pause_revision BEFORE UPDATE OR DELETE ON post_revisions FOR EACH ROW EXECUTE FUNCTION pause_revision()");
+      await gate.unsafe("SELECT pg_advisory_lock(1845021)");
+      const waiting = async (kind: string, pid?: number) => {
+        for (let i = 0; i < 100; i++) {
+          const rows = await gate.unsafe("SELECT 1 FROM pg_locks WHERE locktype = $1 AND NOT granted AND ($2::integer IS NULL OR pid = $2::integer)", [kind, pid ?? null]);
+          if (rows.length) return;
+          await new Promise(done => setTimeout(done, 10));
+        }
+        throw Error(`No waiting ${kind} lock`);
+      };
+      const switching = () => code(() => run("switch-revision", { post: post.id, revision: next.id, expectedVersion }));
+      const changing = () => code(() => mutation === "blank"
+        ? other.collection("post_revisions").update(next.id, { title: "", summary: "", body: "" }, { lock: candidate.version })
+        : other.procedures["prune-revision"]({ id: next.id }));
+      const firstWrite = sealFirst ? switching() : changing();
+      await waiting("advisory");
+      const secondWrite = sealFirst ? changing() : switching();
+      await waiting("transactionid", sealFirst ? editPid : switchPid);
+      await gate.unsafe("SELECT pg_advisory_unlock(1845021)");
+      expect([await firstWrite, await secondWrite]).toEqual(["ok", sealFirst ? "CONFLICT lock" : "CONFLICT row"]);
+      expect((await built.generated.views["post-page"](db, { kind: "anonymous" }, { slug })).map((row: any) => row.body)).toEqual([sealFirst ? "New body" : "Old body"]);
+      await db.unsafe("DROP TRIGGER pause_revision ON post_revisions");
+    }
+  } finally {
+    await gate.unsafe("SELECT pg_advisory_unlock_all()").catch(() => {});
+    await competingDb.close(); await gate.close();
+    await db.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`).catch(() => {}); await db.close();
+    await rm(built.dir, { recursive: true, force: true });
+  }
+}, 30000);
+
+(process.env.MANTLE_NEXT_REST_D1 ? test : test.skip)("local D1: sealing arbitrates candidate edits and deletes without an interactive transaction", async () => {
+  const { unstable_splitSqlQuery } = await import("wrangler"), built = await app("cloudflare-d1");
+  try {
+    expect(await verifyOnLocalD1(built.dir, `import * as app from './generated/generated.ts';import {handlers} from './src/handlers.ts';import {verifyRevisionSeal} from ${JSON.stringify(resolve(import.meta.dir, "revision-seal-scenarios.ts"))};
+export default{async fetch(request:Request,env:{DB:any}){if(new URL(request.url).pathname==='/health')return new Response('ready');try{for(const sql of ${JSON.stringify(unstable_splitSqlQuery(built.files["schema.sql"]!))})await env.DB.prepare(sql).run();await verifyRevisionSeal(app,handlers,env.DB);return Response.json({ok:true});}catch(error){return Response.json({error:String(error),stack:(error as Error).stack},{status:500});}}};`, process.env.MANTLE_NEXT_REVISIONS_D1_PORT ?? "8991")).toEqual({ ok: true });
+  } finally { await rm(built.dir, { recursive: true, force: true }); }
+}, 90000);
