@@ -39,15 +39,18 @@ pnpm test                      # Admin MCP App check of the last build: needs Ch
 Wrangler has no option to skip the custom build for `wrangler types`. The Admin console is rebuilt only when the
 installed Admin packages change or the app has `src/admin.tsx`, so a repeated build mostly rebuilds the Worker.
 
-First run, after `pnpm install` and your manifests: `pnpm generate`, `pnpm types`, `pnpm check`, `pnpm db:init`, then
+First run, after `pnpm install` and your manifests: `pnpm generate`, `pnpm types`, `pnpm check`,
+`cp .dev.vars.example .dev.vars` (`pnpm dev` needs the secrets `wrangler.jsonc` requires), `pnpm db:init`, then
 `pnpm dev` or `pnpm smoke`. Right after `pnpm types`, `pnpm check` repeats its build; run it anyway, because it is the
 same check CI and hand-off use.
 
 Routine edit, with `pnpm dev` running:
 
-1. Edit `manifests/*.yaml`, then `pnpm generate`. Until you do, each change under `src/` prints one line,
-   `Generated output in generated is stale (...)`, and the dev server holds requests instead of running old or
-   stale code. Writing `generated/` rebuilds.
+1. Edit `manifests/*.yaml`, then `pnpm generate`. Wrangler does not watch `manifests/`, so the last build keeps
+   serving until something under `src/` or `generated/` changes. From the next change under `src/` until you
+   generate, each change prints one line, `Generated output in generated is stale (...)`, and the dev server holds
+   requests instead of running stale code. Writing `generated/` rebuilds. If you undo the manifest edit instead,
+   nothing rebuilds until the next change under `src/` or a restart of `pnpm dev`.
 2. `pnpm types` only when `generate` or you changed `wrangler.jsonc` (bindings, secrets, vars).
 3. Edits under `src/` rebuild by themselves.
 4. Before handing off: `pnpm check`, then `pnpm smoke`.

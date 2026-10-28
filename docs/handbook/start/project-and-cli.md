@@ -62,6 +62,7 @@ Commit it with the other generated files.
 Under `wrangler dev` (Wrangler sets `WRANGLER_COMMAND=dev`) the refusal is one line per change instead of a failed
 build: `mantle bundle` removes `<outdir>/worker` and exits 0, so Wrangler reports the entry missing and holds requests.
 Writing `generated/` rebuilds. Other commands, other errors and a build by hand still fail with a nonzero exit.
+To see that form while `wrangler dev` runs, run `pnpm build` (or `mantle bundle` by hand).
 The bundle also prints notes, never errors, for SQL in the app's own code against Better Auth's tables (read users
 through `userOf(caller)` or `readIdentity(auth)` instead) and for Better Auth roles beyond `admin` and `user`.
 
