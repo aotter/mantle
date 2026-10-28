@@ -14,7 +14,7 @@ import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { composeEntry, entryApiPath, entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
 import { Empty, Slot } from "../../app/slots";
-import type { InputProps } from "../../app/slot-props";
+import type { InputProps, InputStatus } from "../../app/slot-props";
 import type {
   AdminUser,
   EntryEditorCollection,
@@ -49,7 +49,7 @@ import { collectionSummaryKey } from "./collection-view";
 import { boundOperationsFor, RecordOperations, RowOperationsMenu } from "./row-operations";
 import { contentLocales, LocaleBadge, localeName } from "./locale-badge";
 import { RefPicker } from "./ref-picker";
-import { editEntryForm, followEntry, isEntryFormDirty, loadEntryForm, reannounceNewer, settleEntryForm, type EntryForm } from "./entry-form";
+import { editEntryForm, followEntry, hasEntryInputErrors, isEntryFormDirty, loadEntryForm, reannounceNewer, reportEntryInput, settleEntryForm, type EntryForm } from "./entry-form";
 
 const MarkdownEditor = React.lazy(() => import("../editor/markdown-editor").then((module) => ({ default: module.MarkdownEditor })));
 const HtmlEditor = React.lazy(() => import("../editor/html-editor").then((module) => ({ default: module.HtmlEditor })));
@@ -94,6 +94,9 @@ export function EntryEditView({
     (next: Record<string, unknown>) => setForm((current) => current && editEntryForm(current, next, latest)),
     [latest],
   );
+  const reportInput = React.useCallback((key: string, revision: number, status?: InputStatus) => {
+    setForm(current => current && current.inputRevision === revision ? reportEntryInput(current, key, status) : current);
+  }, []);
   const [operationalEditUnlocked, setOperationalEditUnlocked] = React.useState(false);
   React.useEffect(() => setOperationalEditUnlocked(false), [collectionName, entryId]);
   React.useEffect(() => {
@@ -200,7 +203,7 @@ export function EntryEditView({
   });
   // a live edit must keep the entry publishable: the server refuses one that drops required data
   const liveMissing = liveEdits && missingRequired;
-  const canSave = canEdit && dirty && !liveMissing;
+  const canSave = canEdit && dirty && !liveMissing && !hasEntryInputErrors(form);
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
   const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId, payload.parentEntryTitle);
@@ -227,7 +230,7 @@ export function EntryEditView({
         <NewerVersionNotice
           language={language}
           version={String(form.newer.version)}
-          onReload={() => setForm(loadEntryForm(payload.entry))}
+          onReload={() => setForm(current => loadEntryForm(payload.entry, current))}
           onKeepEditing={() => setForm((current) => current?.newer ? { ...current, newer: { ...current.newer, dismissed: true } } : current)}
         />
       ) : null}
@@ -371,6 +374,7 @@ export function EntryEditView({
               className={canEdit ? undefined : "pointer-events-none opacity-70"}
             >
               <SchemaFields
+                key={`${collectionName}:${entryId}:${form.inputRevision}`}
                 schema={payload.collection.schema}
                 uiSchema={payload.collection.uiSchema}
                 value={data}
@@ -381,7 +385,7 @@ export function EntryEditView({
                 collectionName={payload.collection.name}
                 mediaPurposes={mediaPurposes}
                 hiddenRootFields={hiddenFields}
-                inputSlots={{ schema: payload.collection.name, readOnly: !canEdit }}
+                inputSlots={{ schema: payload.collection.name, readOnly: !canEdit, inputs: form.inputs, revision: form.inputRevision, report: reportInput }}
               />
             </fieldset>
           </SectionCard>
@@ -601,7 +605,7 @@ export function SchemaFields({
   mediaPurposes: readonly MediaPurposePolicy[];
   hiddenRootFields?: readonly string[];
   /** A record form: its top-level fields go through the application's `input:<schema>.<field>` slots. */
-  inputSlots?: { schema: string; readOnly: boolean };
+  inputSlots?: { schema: string; readOnly: boolean; inputs?: EntryForm["inputs"]; revision?: number; report?: (key: string, revision: number, status?: InputStatus) => void };
   /** An operation form's top-level ref pickers narrowed to one parent's children, by input name. */
   refScopes?: Readonly<Record<string, { field: string; value: string }>>;
 }): React.ReactElement {
@@ -640,14 +644,45 @@ export function SchemaFields({
   const build = (field: FieldSlot): React.ReactNode => builtIn(field) ?? field.renderDefault({ value: field.value, setValue: field.setValue });
   // a record form's top-level fields: the application's `input:` components wrap whatever control the field has
   const renderField = (field: FieldSlot): React.ReactNode | undefined => !inputSlots || field.path.length !== path.length + 1 ? builtIn(field) : (
-    <Slot name={`input:${inputSlots.schema}.${field.name}`} Default={BuiltInInput}
-      props={{ value: field.value, onChange: field.setValue, readOnly: inputSlots.readOnly, property: field.schema as Record<string, unknown>, field, build }} />
+    <RecordInput field={field} build={build} slots={inputSlots} />
   );
   return (
     // a record form saves through the entry PATCH, which clears a column only on null and keeps a key left out
     <SharedSchemaFields schema={schema} uiSchema={uiSchema} value={value} path={path} onChange={onChange} language={language} clearToNull={inputSlots !== undefined}
       canonical={canonical} hiddenRootFields={hiddenRootFields} labels={labels} renderField={renderField} propertyLabel={(name, fieldSchema, _language, fieldCanonical) => propertyLabel(name, fieldSchema as JsonSchema, language, fieldCanonical)} />
   );
+}
+
+/** One root field owns its status even when its structured value contains arrays or nested objects. */
+function RecordInput({ field, build, slots }: {
+  field: FieldSlot;
+  build: (field: FieldSlot) => React.ReactNode;
+  slots: NonNullable<React.ComponentProps<typeof SchemaFields>["inputSlots"]>;
+}): React.ReactElement {
+  const key = React.useId();
+  const error = slots.readOnly ? undefined : slots.inputs?.[key]?.error || undefined;
+  const errorId = error ? `${key}-error` : undefined;
+  const active = React.useRef(true);
+  const report = slots.report;
+  const revision = slots.revision ?? 0;
+  React.useLayoutEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      // StrictMode replays descendant layout effects before this setup: keep their first report until a real unmount.
+      queueMicrotask(() => { if (!active.current) report?.(key, revision); });
+    };
+  }, [key, report, revision]);
+  const onStatusChange = React.useCallback((status?: InputStatus) => {
+    if (active.current) report?.(key, revision, status);
+    // A descendant's layout setup may run before ours during StrictMode replay; true unmounts stay inactive.
+    else queueMicrotask(() => { if (active.current) report?.(key, revision, status); });
+  }, [report, key, revision]);
+  return <div role="group" aria-label={field.label} aria-invalid={error ? true : undefined} aria-describedby={errorId}>
+    <Slot name={`input:${slots.schema}.${field.name}`} Default={BuiltInInput}
+      props={{ value: field.value, onChange: field.setValue, readOnly: slots.readOnly, property: field.schema as Record<string, unknown>, onStatusChange, error, errorId, field, build }} />
+    {error ? <p id={errorId} role="alert" className="text-sm text-destructive">{error}</p> : null}
+  </div>;
 }
 
 interface BuiltInInputProps extends InputProps {

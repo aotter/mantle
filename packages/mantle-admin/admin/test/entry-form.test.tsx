@@ -5,13 +5,70 @@ import { TooltipProvider } from "@aotter/mantle-ui/kit";
 import { PreferencesProvider } from "../src/app/preferences";
 import { AdminRouterProvider, createNavigator, guardLeaving, type AdminLocation } from "../src/app/router";
 import { ConfirmProvider } from "../src/ui/confirm-dialog";
-import { editEntryForm, followEntry, isEntryFormDirty, loadEntryForm, reannounceNewer, settleEntryForm, type EntryForm } from "../src/features/content/entry-form";
+import { editEntryForm, followEntry, hasEntryInputErrors, isEntryFormDirty, loadEntryForm, reannounceNewer, reportEntryInput, settleEntryForm, type EntryForm } from "../src/features/content/entry-form";
 import { EntryEditView, NewerVersionNotice } from "../src/features/content/entry-edit-view";
 import { entryEditorQueryOptions } from "../src/lib/queries";
 import type { EntryEditorPayload } from "../src/lib/types";
 
 const entry = (version: number, data: Record<string, unknown>) => ({ id: "e1", collection: "posts", version, data });
 const edit = (form: EntryForm, data: Record<string, unknown>): EntryForm => ({ ...form, data });
+
+describe("custom input validity and uncommitted drafts (#1847)", () => {
+  const loaded = loadEntryForm(entry(3, { title: "Hello", metadata: { items: [{ label: "A" }] } }));
+
+  it("blocks a different dirty field on a reported parse error without changing the last valid JSON", () => {
+    const typed = editEntryForm(loaded, { ...loaded.data, title: "Changed" }, undefined);
+    const invalid = reportEntryInput(typed, "metadata", { error: "Invalid JSON", dirty: true });
+    expect(hasEntryInputErrors(invalid)).toBe(true);
+    expect(isEntryFormDirty(invalid)).toBe(true);
+    expect(invalid.data.metadata).toEqual(loaded.data.metadata);
+    const valid = reportEntryInput(invalid, "metadata", {});
+    expect(hasEntryInputErrors(valid)).toBe(false);
+    expect(isEntryFormDirty(valid)).toBe(true); // the ordinary title edit still needs saving
+  });
+
+  it("distinguishes validity-only errors from dirty-only local drafts and removes only the unmounted field", () => {
+    const error = reportEntryInput(loaded, "metadata", { error: "Choose a value" });
+    expect(hasEntryInputErrors(error)).toBe(true);
+    expect(isEntryFormDirty(error)).toBe(false);
+    const pending = reportEntryInput(error, "other", { dirty: true });
+    const removed = reportEntryInput(pending, "metadata");
+    expect(hasEntryInputErrors(removed)).toBe(false);
+    expect(isEntryFormDirty(removed)).toBe(true);
+    expect(reportEntryInput(removed, "other").inputs).toEqual({});
+    expect(reportEntryInput(loaded, "absent")).toBe(loaded);
+  });
+
+  it("keeps local nested/array drafts through re-reads, and resets them on record/latest load", () => {
+    const local = reportEntryInput(loaded, "metadata", { error: "Incomplete item", dirty: true });
+    expect(followEntry(local, entry(3, loaded.data))).toBe(local);
+    const newer = followEntry(local, entry(4, { title: "Remote", metadata: { items: [] } }));
+    expect(newer.inputs).toEqual(local.inputs);
+    expect(newer.inputRevision).toBe(local.inputRevision);
+    const latest = loadEntryForm(entry(4, { title: "Remote", metadata: { items: [] } }), newer);
+    expect(latest.inputs).toEqual({});
+    expect(latest.inputRevision).toBeGreaterThan(newer.inputRevision);
+    expect(isEntryFormDirty(latest)).toBe(false);
+    const other = followEntry(local, { ...entry(3, loaded.data), id: "e2" });
+    expect(other.inputs).toEqual({});
+    expect(other.inputRevision).toBeGreaterThan(local.inputRevision);
+    // Even reloading the same server version remounts the input's local-only draft.
+    expect(loadEntryForm(loaded.base, local).inputRevision).toBeGreaterThan(local.inputRevision);
+  });
+
+  it("keeps a new local draft typed during a save, then clears it explicitly", () => {
+    const sent = { ...loaded.data, title: "Sent" };
+    const local = reportEntryInput(editEntryForm(loaded, sent, undefined), "metadata", { dirty: true, error: "Unfinished" });
+    const saved = settleEntryForm(local, sent, entry(4, sent));
+    expect(saved.inputs).toEqual(local.inputs);
+    expect(saved.inputRevision).toBe(local.inputRevision);
+    expect(saved.base.version).toBe(4);
+    expect(isEntryFormDirty(saved)).toBe(true);
+    const committed = settleEntryForm(reportEntryInput(saved, "metadata"), sent, entry(4, sent));
+    expect(committed.inputs).toEqual({});
+    expect(isEntryFormDirty(committed)).toBe(false);
+  });
+});
 
 describe("the record form against an editor re-read (#1790)", () => {
   const loaded = loadEntryForm(entry(3, { title: "Hello" }));
