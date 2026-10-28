@@ -39,7 +39,7 @@ catalog:
   # Shared toolchain — every package's devDeps.
   typescript: ^6.0.3
   '@types/node': ^26
-  vitest: ^5.0.1
+  vitest: ^5.0.4
 
 allowBuilds:
   esbuild: true
