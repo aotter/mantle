@@ -98,6 +98,14 @@ block, for every Schema repeats what the database and the generated types alread
    loop without nested BEGIN. SQLite queues driver work per Database around BEGIN IMMEDIATE/COMMIT/ROLLBACK; PostgreSQL
    uses native `begin`, serializable by default with an isolation override. Nested transactions are refused; no automatic retry.
 
+   > **Amendment (#1856, 2026-10-28):** Ref handler Stores and transaction Stores expose the existing `batch` operation.
+   > Standalone batches retain native Procedure atomicity; inside a Store transaction they use its native handle and
+   > create no nested transaction or savepoint. A rejected batch marks the outer Store transaction rollback-only, so
+   > catching its error cannot commit a partial batch or prior outer writes. The transaction rejects with the first
+   > batch failure even if its callback returns normally. Batch validation/build failures have the same rule. D1 still
+   > has no interactive transactions; its handlers use the ordinary atomic batch. Scope and Caller stay bound to the
+   > same Store, and lazy Writes must still belong to that Store and be submitted only once.
+
 ## Consequences
 
 - Each concern has one home; the Better Auth adapter keeps only Better Auth's own semantics (OR grouping, joins).

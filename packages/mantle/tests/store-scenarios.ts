@@ -344,9 +344,13 @@ async function verifyTransactions(env: StoreEnv, ok: () => void) {
   let escaped: any;
   const committed = await store.transaction(async (tx: any) => {
     escaped = tx;
-    assert.equal("batch" in tx, false);
+    assert.equal(typeof tx.batch, "function");
     const n = tx.collection("session_notes");
-    const row = await n.insert({ body: "tx-commit", expiresat: null });
+    const [row, second] = await tx.batch([
+      n.insert({ body: "tx-commit", expiresat: null }),
+      n.insert({ body: "tx-batch-commit", expiresat: null }),
+    ]);
+    assert.equal((await n.findById(second.id)).body, "tx-batch-commit");
     assert.equal((await n.findById(row.id)).body, "tx-commit");
     const view = await tx.views["purchase-totals"]({}); assert.ok(view.length);
     const output = await tx.procedures["create-session-note-pair"]({ body: "tx-procedure-commit", expiresAt: null });
@@ -358,6 +362,24 @@ async function verifyTransactions(env: StoreEnv, ok: () => void) {
   assert.equal(await notes.count({ body: "tx-procedure-commit" }), 2); ok();
   await assert.rejects(escaped.collection("session_notes").count(), /Transaction has ended/); ok();
   const rollbackBefore = await snapshot(), abort = new Error("callback failed");
+  // Catching a joined batch failure cannot commit its first write or earlier outer writes.
+  let batchFailure: unknown;
+  await assert.rejects(store.transaction(async (tx: any) => {
+    const n = tx.collection("session_notes");
+    await n.insert({ body: "before-failed-batch", expiresat: null });
+    try {
+      await tx.batch([n.insert({ body: "caught-batch-rollback", expiresat: null }), tx.collection("catalog_items").update(keep.id, { name: "stale" }, { lock: -1 })]);
+    } catch (error) { batchFailure = error; }
+    await tx.batch([n.insert({ body: "after-caught-batch", expiresat: null })]);
+    return "must not commit";
+  }), (error: unknown) => error === batchFailure && (error as any)?.code === "CONFLICT");
+  assert.deepEqual(await snapshot(), rollbackBefore); ok();
+  // Invalid Write ownership/reuse is a failed batch too, even before SQL executes.
+  await assert.rejects(store.transaction(async (tx: any) => {
+    await tx.collection("session_notes").insert({ body: "invalid-batch-rollback", expiresat: null });
+    try { await tx.batch([notes.insert({ body: "wrong-store", expiresat: null })]); } catch {}
+  }), /unused Writes/);
+  assert.deepEqual(await snapshot(), rollbackBefore); ok();
   await assert.rejects(store.transaction(async (tx: any) => {
     await tx.collection("catalog_items").update(keep.id, { name: "tx-rollback" }, { lock: now.version });
     await tx.collection("session_notes").insert({ body: "tx-rollback", expiresat: null });

@@ -89,22 +89,23 @@ test("bare PG writes on the Bun.SQL shape read a unique clash as CONFLICT and si
   {
     const module = await loadGenerated(generated.files["generated.ts"]!);
     // One statement, autocommit: no begin(), one round trip.
-    for (const [failure, expected] of [["none", undefined], ["zero", "CONFLICT"], ["23505", "CONFLICT"], ["23505-bun", "CONFLICT"], ["57014", "OUTCOME_UNKNOWN"], ["socket", "OUTCOME_UNKNOWN"]] as const) {
-      const error = failure === "socket" ? socket() : failure.startsWith("2") || failure.startsWith("5") ? server(failure.slice(0, 5), failure.endsWith("bun")) : undefined;
+    for (const [failure, expected] of [["none", undefined], ["zero", "CONFLICT"], ["23505", "CONFLICT"], ["23505-bun", "CONFLICT"], ["40001", "CONFLICT"], ["40001-bun", "CONFLICT"], ["40P01", "CONFLICT"], ["40P01-bun", "CONFLICT"], ["57014", "OUTCOME_UNKNOWN"], ["socket", "OUTCOME_UNKNOWN"]] as const) {
+      const error = failure === "socket" ? socket() : /^[245]/.test(failure) ? server(failure.slice(0, 5), failure.endsWith("bun")) : undefined;
       const calls: string[] = [];
       const db = { unsafe: async (text: string) => { calls.push(text); if (error) throw error; return Object.assign([], { count: failure === "zero" ? 0 : 1 }); }, begin: async () => { calls.push("BEGIN"); throw Error("unexpected begin"); } };
       let caught: any;
       try { await module.procedures["update-note"](db, caller, { id: "n1", title: "t", version: 1 }); } catch (e) { caught = e; }
       expect(calls.length).toBe(1); expect(calls[0]).toStartWith("UPDATE");
       if (expected === undefined) expect(caught).toBeUndefined();
-      else { expect(caught.code).toBe(expected); if (error) expect(caught.cause).toBe(error); }
+      else { expect(caught.code).toBe(expected); if (error) expect(caught.cause).toBe(error); if (failure.startsWith("4")) expect(caught.fields).toEqual({kind:"serialization"}); }
     }
     // Two statements: begin() owns the connection and ROLLBACK; only a failed COMMIT is uncertain.
-    for (const [failure, expected] of [["execute", "CONFLICT"], ["commit-40001", "native"], ["commit-57P01", "OUTCOME_UNKNOWN"], ["commit-socket", "OUTCOME_UNKNOWN"]] as const) {
+    for (const [failure, expected] of [["execute-23505", "CONFLICT"], ["execute-40001", "CONFLICT"], ["execute-40P01", "CONFLICT"], ["commit-40001", "CONFLICT"], ["commit-40P01", "CONFLICT"], ["commit-57P01", "OUTCOME_UNKNOWN"], ["commit-socket", "OUTCOME_UNKNOWN"]] as const) {
       for (const operation of ["procedure", "batch", "transaction"] as const) {
-        const error = failure === "execute" ? server("23505") : failure === "commit-socket" ? socket() : server(failure.slice(7));
+        const executing = failure.startsWith("execute-");
+        const error = failure === "commit-socket" ? socket() : server(failure.slice(failure.indexOf("-")+1), operation === "transaction");
         const calls: string[] = [];
-        const tx = { unsafe: async (text: string) => { calls.push(text); if (failure === "execute") throw error; return Object.assign([], { count: 1 }); } };
+        const tx = { unsafe: async (text: string) => { calls.push(text); if (executing) throw error; return Object.assign([], { count: 1 }); } };
         const db = { unsafe: async () => { throw Error("statements must run inside begin()"); }, begin: async (options: string, fn: (t: unknown) => Promise<unknown>) => {
           calls.push("BEGIN " + options);
           try { await fn(tx); } catch (e) { calls.push("ROLLBACK"); throw e; }
@@ -120,8 +121,9 @@ test("bare PG writes on the Bun.SQL shape read a unique clash as CONFLICT and si
           }
         } catch (e) { caught = e; }
         expect(calls[0]).toBe("BEGIN isolation level serializable");
-        if (expected === "native") expect(caught).toBe(error); else { expect(caught.code).toBe(expected); expect(caught.cause).toBe(error); }
-        expect(calls.at(-1)).toBe(failure === "execute" ? "ROLLBACK" : "COMMIT");
+        expect(caught.code).toBe(expected); expect(caught.cause).toBe(error);
+        if (/40001|40P01/.test(failure)) expect(caught.fields).toEqual({kind:"serialization"});
+        expect(calls.at(-1)).toBe(executing ? "ROLLBACK" : "COMMIT");
       }
     }
   }

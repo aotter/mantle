@@ -159,8 +159,12 @@ Writes are lazy thenables: await `collection.insert/update/delete(...)` to execu
 or pass unused Writes from the same Store to `store.batch([...])` for atomic results in input order;
 a stale lock, excluded row or unique clash rolls back the whole batch with `CONFLICT`.
 A batch step cannot use a previous step's result. D1 supports only batch.
-On bun:sqlite and PostgreSQL, `store.transaction(async tx => { ... })` binds `collection`, `views`
-and `procedures` to one transaction: resolve commits, throw rolls back; nested transactions and `tx.batch` are refused.
+On bun:sqlite and PostgreSQL, `store.transaction(async tx => { ... })` binds `collection`, `batch`, `views`
+and `procedures` to one transaction: resolve commits, throw rolls back; nested transactions are refused.
+`tx.batch` and a ref handler's `ctx.store.batch` join that same transaction, without a savepoint or another BEGIN.
+A rejected batch makes the whole outer transaction rollback-only: even if the callback catches the error and returns,
+its transaction rejects with the first batch failure and rolls back every write. This includes batch validation errors.
+Ref handlers can use `ctx.store.batch` on every target, including D1, without creating another Store.
 PostgreSQL defaults to serializable; `{ isolation: "read committed" }` selects another level. There is no automatic retry.
 SQLite uses BEGIN IMMEDIATE and queues all Store/generated driver calls on the same Database until COMMIT/ROLLBACK;
 Inside a transaction callback the outer Store or handle passed to a Mantle driver throws `INPUT_VALIDATION_FAILED`; use `tx`.
