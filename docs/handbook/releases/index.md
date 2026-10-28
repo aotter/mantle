@@ -26,6 +26,13 @@ Admin form and refresh fixes, the media picker for custom inputs and pages
 (`@aotter/mantle-admin/media`), `matchTarget` in `@aotter/mantle/describe`, and
 dependency updates for current advisories.
 
+Procedures gain `handler.steps`: a program written one statement per step, where
+`onNoRows: conflict` makes a set-op write that writes nothing a `CONFLICT` and
+rolls the whole program back ("create only if the parent exists"). Ref handlers
+and interactive transactions can use `store.batch` for atomic multi-writes, and
+`mantle bundle` under `wrangler dev` reports stale generated output in one line
+instead of a failed build.
+
 ### Upgrading to 0.2.1-alpha.1
 
 Pin `@aotter/mantle`, and any selected `@aotter/mantle-ui` and
@@ -42,9 +49,14 @@ review owned output. No DDL changes are required. Breaking changes:
   at generation; see [route precedence](../reference/trigger.md#route-precedence).
 - **Tooling:** the templates move to Wrangler 4.153.0 and
   `@cloudflare/workers-types` 5.20261027.1.
+- **PostgreSQL serialization failures:** SQLSTATE `40001` and `40P01` from a
+  definitive server refusal are now `CONFLICT` with `kind: "serialization"`
+  (409), instead of an unclassified driver error. Nothing is retried
+  automatically; read again before deciding to retry.
 - **Revisions recipe:** an application that copied the guide's
-  `switch-revision` handler should adopt the new version, which requires
-  `expectedRevisionVersion` from the preview.
+  `switch-revision` handler should adopt the new version. It requires
+  `expectedRevisionVersion` from the preview and seals and switches in one
+  `ctx.store.batch`.
 
 ## 0.2.0 (2026-10-19)
 
