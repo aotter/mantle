@@ -155,7 +155,12 @@ test("all four Store wiring points reject missing, extra and wrong handlers", as
       await writeGenerated(destination, await files(target), false);
       const consumer = resolve(destination, "consumer.ts");
       await writeFile(consumer, `import { type Handlers, procedures, store } from "./generated.js";
-const good: Handlers = { "app-note": async (ctx, input) => { await ctx.store.views["notes-list"]({}); return { title: input.title }; } };
+const good: Handlers = { "app-note": async (ctx, input) => {
+  await ctx.store.views["notes-list"]({});
+  const [row] = await ctx.store.batch([ctx.store.collection("notes").insert(input)]);
+  const title: string = row.title;
+  return { title };
+} };
 async function check(db: Parameters<typeof store>[0], caller: Parameters<typeof store>[1]) {
   const title: string = (await store(db, caller, { handlers: good }).procedures["app-note"]({ title: "t" })).title;
   // @ts-expect-error handlers required at wiring point
@@ -225,4 +230,74 @@ test("ctx.transaction makes a handler's writes atomic, joins an outer transactio
     expect(titles()).toEqual(["fail plain", "ok tx"]);
   } finally { db.close(); }
   expect((await files("cloudflare-d1"))["generated.ts"]).not.toContain("readonly transaction");
+});
+
+
+test("ctx.store.batch joins the caller transaction and a caught failure still rolls it back", async () => {
+  const generated = await files("bun-sqlite");
+  const app = await loadGenerated(generated["generated.ts"]!);
+  const db = new Database(":memory:");
+  let failure: unknown;
+  try {
+    db.exec(generated["schema.sql"]!);
+    const handlers = { "app-note": async ({ store, transaction }: any, input: { title: string }) => {
+      const write = async ({ store }: any) => {
+        const notes = store.collection("notes");
+        const [row] = await store.batch([
+          notes.insert(input),
+          input.title.startsWith("fail") ? notes.update("missing", input, { lock: 1 }) : notes.insert({ title: input.title + " second" }),
+        ]);
+        return { title: row.title };
+      };
+      return input.title.endsWith("joined") ? transaction(write) : write({ store });
+    } };
+    const data = app.store(db, caller, { handlers });
+    const titles = () => db.query("SELECT title FROM notes ORDER BY title").all().map((r: any) => r.title);
+    await expect(data.procedures["app-note"]({ title: "fail standalone" })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(titles()).toEqual([]);
+    expect(await data.procedures["app-note"]({ title: "ok standalone" })).toEqual({ title: "ok standalone" });
+    const before = titles();
+    for (const title of ["fail outer", "fail joined"]) {
+      const result = await data.transaction(async (tx: any) => {
+        await tx.collection("notes").insert({ title: "outer write" });
+        try { await tx.procedures["app-note"]({ title }); } catch (error) { failure = error; }
+        // A successful batch after the failure does not clear rollback-only state.
+        await tx.batch([tx.collection("notes").insert({ title: "after caught failure" })]);
+      }).catch((error: unknown) => error);
+      expect(failure).toMatchObject({ code: "CONFLICT" });
+      expect(result).toBe(failure);
+      expect(titles()).toEqual(before);
+    }
+    await data.transaction(async (tx: any) => {
+      expect(await tx.procedures["app-note"]({ title: "ok joined" })).toEqual({ title: "ok joined" });
+    });
+    expect(titles()).toEqual([...before, "ok joined", "ok joined second"].sort());
+  } finally { db.close(); }
+});
+
+test("a caught batch rejection with undefined still rejects and rolls back its outer transaction", async () => {
+  const generated = await files("bun-sqlite"), app = await loadGenerated(generated["generated.ts"]!);
+  const db = new Database(":memory:");
+  try {
+    db.exec(generated["schema.sql"]!);
+    // Fault only this fixture's native execution, retaining a real SQLite transaction underneath.
+    const handle = { exec: db.exec.bind(db), transaction: db.transaction.bind(db), query(sql: string) {
+      const statement = db.query(sql);
+      return { columnNames: statement.columnNames, run: statement.run.bind(statement), all(...values: any[]) {
+        if (values.includes("throw undefined")) throw undefined;
+        return statement.all(...values);
+      } };
+    } };
+    const data = app.store(handle, caller, { handlers: {} });
+    let caught = false;
+    const outcome = await data.transaction(async (tx: any) => {
+      const notes = tx.collection("notes");
+      await notes.insert({ title: "before" });
+      await tx.batch([notes.insert({ title: "throw undefined" })]).catch((error: unknown) => { caught = true; expect(error).toBeUndefined(); });
+      await tx.batch([notes.insert({ title: "after" })]);
+    }).then(() => ({ resolved: true }), (error: unknown) => ({ rejected: true, error }));
+    expect(caught).toBe(true);
+    expect(outcome).toEqual({ rejected: true, error: undefined });
+    expect(db.query("SELECT * FROM notes").all()).toEqual([]);
+  } finally { db.close(); }
 });

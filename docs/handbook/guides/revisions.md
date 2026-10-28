@@ -17,8 +17,8 @@ generated storage internals.
 ## When to use it
 
 Use it when a published page must stay up while its replacement is written and reviewed: articles, product copy, legal
-text, anything with inbound links or search traffic. It also gives a preview link of exactly what will go live, and
-rollback.
+text, anything with inbound links or search traffic. It also supports reviewing the content that a successful switch will select, and rollback. A preview URL may
+change while its revision is still editable; the custom Admin page freezes the reviewed content and binds its version.
 
 Without revisions, keep one `publishing` Schema. A personal blog whose admins correct typos can opt into
 `publishing: { liveEdits: true }`: Admin's record form then edits a published post in place, every save goes live on
@@ -40,9 +40,9 @@ content nobody minds being offline for a minute. Both are less to build than thi
   unpublished post shows nothing.
 - **`switch-revision`** is an admin-only ref Procedure. It checks the revision belongs to the post and is complete, then
   binds the revision version seen in preview and atomically seals the candidate and writes `current_revision`
-  through a caller-bound Store's `batch`, with OCC on both rows. Readers see the old revision until that parent write commits and the new one after. A
-  stale candidate or parent version is `CONFLICT`; PostgreSQL may instead abort an in-flight race with a native
-  serialization failure. It is a ref handler
+  through `ctx.store.batch`, with OCC on both rows. Readers see the old revision until that parent write commits and the new one after. A
+  stale candidate or parent version is `CONFLICT`; PostgreSQL serialization/deadlock aborts are also
+  `CONFLICT`, with `kind: "serialization"`. It is a ref handler
   because a SQL Procedure cannot write a `publishing` Schema.
 - **`new-revision`** copies the current revision into a new row to edit. **`prune-revision`** deletes a revision that is
   not sealed. **`revision-preview`** reads any revision for the preview route.
@@ -162,8 +162,10 @@ spec:
     required: [revision]
     properties:
       revision: { type: string }
+      # A new query identity for each explicit preview; it does not change the SQL result.
+      request: { type: string }
   sql: |
-    SELECT r.id, r.version, p.slug, r.title, r.summary, r.body, r.updated_at AS edited_at
+    SELECT r.id, r.version, r.sealed, p.id AS post, p.version AS post_version, p.current_revision, p.slug, r.title, r.summary, r.body, r.updated_at AS edited_at
     FROM post_revisions r JOIN posts p ON p.id = r.post
     WHERE r.id = input.revision
     ORDER BY r.id
@@ -242,11 +244,10 @@ minimum length, a reviewed flag) in the same place. A revision of another post, 
 
 ```ts
 import { ContractError } from "@aotter/mantle/contracts";
-import { store as createStore, type Handlers } from "../generated/generated.js";
+import type { Handlers } from "../generated/generated.js";
 
 export const handlers: Handlers = {
-  "switch-revision": async ({ db, caller }, { post, revision, expectedVersion, expectedRevisionVersion }) => {
-    const store = createStore(db, caller, { handlers });
+  "switch-revision": async ({ store }, { post, revision, expectedVersion, expectedRevisionVersion }) => {
     const next = await store.collection("post_revisions").findById(revision);
     if (!next || next.post !== post) throw new ContractError("INPUT_VALIDATION_FAILED", "That revision is not one of this post's revisions.", "procedures/switch-revision");
     if (next.version !== expectedRevisionVersion) throw new ContractError("CONFLICT", "The revision changed since preview. Preview it again before switching.", "procedures/switch-revision", { fields: { kind: "row" } });
@@ -265,16 +266,16 @@ export const handlers: Handlers = {
 The preview's revision `id` and `version` are the switch's `revision` and `expectedRevisionVersion`. The handler
 refuses a changed revision rather than silently publishing newer text. A same-row CAS seals the exact previewed
 content and the parent's CAS selects it in one `store.batch`: D1 uses its native atomic batch with row assertions;
-SQLite and PostgreSQL use their native transactions. Invoke this Procedure on the normal caller Store or through
-its routes, not inside `store.transaction`: the handler creates a caller-bound Store and owns its atomic batch.
-`ctx.store` has the transaction-safe handler subset, so it does not expose `batch`. A parent conflict rolls back the seal too, leaving the draft
+SQLite and PostgreSQL use their native transactions. Inside `store.transaction`, `ctx.store.batch` joins that same
+transaction; it does not open a nested transaction. A failed batch prevents the outer transaction from committing,
+even if application code catches the error. A parent conflict rolls back the seal too, leaving the draft
 editable. A revision edit or delete that wins first makes the seal fail and leaves the public page unchanged. Once
-the seal wins, caller updates and deletes fail, even if they started earlier. PostgreSQL may reject a competing
-batch with native SQLSTATE `40001` under its default serializable isolation; it commits neither write. Treat that
-as a failed switch too, re-read and preview again rather than automatically retrying.
+the seal wins, caller updates and deletes fail, even if they started earlier. PostgreSQL serialization/deadlock aborts become `CONFLICT` with
+`kind: "serialization"`; neither write commits. Re-read and preview again rather than automatically retrying.
+A lost connection during COMMIT can instead be `OUTCOME_UNKNOWN`: reconcile the stored state before another attempt.
 
-The generic Admin operation form binds the parent version and lets the editor enter the revision version shown by
-the preview; an application-owned preview UI can submit both revision values directly. Do not re-read and substitute
+The generic operation form remains available to tools, but the [custom Admin page below](#custom-admin-preview-and-switch)
+automatically submits both versions from one reviewed snapshot. Do not re-read and substitute
 a newer revision version on submit, or automatically retry a conflict: require another preview. A preview URL itself
 is mutable until the switch; the guarantee is that a successful switch selects the observed version. The recipe adds
 no separate Prepare step. A stale parent version needs an explicit retry with its fresh version and the same reviewed
@@ -355,18 +356,162 @@ spec: { source: { kind: mcp, surface: admin }, target: { procedure: prune-revisi
 An editor's flow:
 
 1. Create the post in Posts (a draft with its slug), then **New revision** on its page (or in its Post revisions tab,
-   with the post filled in) and write the revision in the record form. Open `/preview/<revision id>`, then
-   **Switch revision** with the previewed revision ID and version, then **Publish** the post. Publishing before the switch is refused, naming
+   with the post filled in) and write the revision in the record form. Use **Revisions** in the sidebar to select and preview it, then **Switch to reviewed revision**, then **Publish** the post. Publishing before the switch is refused, naming
    `current_revision`.
 2. To correct it later: open the live revision and Admin shows "This record is locked." with the lock's message, and
-   Save is disabled; so is the Delete button on its row in the Post revisions list. So: **New revision** (a copy of what is live), edit the copy, preview it, then **Switch
-   revision** with its previewed version; the picker lists only this post's revisions. The page shows the old text until the switch commits;
+   Save is disabled; so is the Delete button on its row in the Post revisions list. So: **New revision** (a copy of what is live), edit the copy, then use **Revisions** to preview and switch it; the picker lists only this post's revisions. The page shows the old text until the switch commits;
    then the copy is the frozen one and the old revision stays sealed for rollback.
-3. To roll back: **Switch revision** to the earlier one. **Delete revision** on unsealed drafts you no longer want; sealed history is retained.
+3. To roll back: select and preview the earlier one in **Revisions**, then **Switch to reviewed revision**. **Delete revision** on unsealed drafts you no longer want; sealed history is retained.
 
 A client that skips Admin's form gets the same answer: a patch or delete of a sealed revision through Admin's routes
 (the Admin MCP App and WebMCP use them), a SQL Procedure's `UPDATE` or `DELETE` of it over REST or MCP, or a ref
 handler's `ctx.store` update is `CONFLICT` with `kind: "lock"` and the lock's message.
+
+## Custom Admin preview and switch
+
+Use an application-owned page instead of asking editors to copy version numbers into the generic operation form.
+Generate with `--admin`, then add this `src/admin.tsx`. **Revisions** appears in the sidebar at `/admin/p/revisions`;
+the post's edit form also gets a link with that post selected. The post workspace remains the place to create a new
+revision, edit its draft and publish the post for the first time. Returning to this page does not discard a saved draft.
+
+Each **Preview selected revision** uses a new `request` UUID in the View input. This is an application query identity,
+not a stored field: `useView` caches by input and has no imperative refetch API, so remounting alone could reuse a cached
+preview while a fresh read is in flight. The View reads the revision content, its version, and the parent's version/current
+selection in one statement. The component freezes that result; related-operation refreshes cannot silently replace what was reviewed.
+Versions are converted only after a safe-integer check, including PostgreSQL's int8 text. The explicit switch submits
+those two versions unchanged. A conflict disables the old approval and requires another explicit preview; an uncertain
+outcome also requires reading and reviewing the current selection before another attempt. Nothing retries a write.
+
+```tsx
+// src/admin.tsx
+import * as React from "react";
+import { AdminLink, defineAdmin } from "@aotter/mantle-admin/app";
+import { admin, useEntries, useEntry, useOperation, useView } from "../generated/admin-client.js";
+
+type Review = { revision: string; post: string; current: string | null; slug: string | null;
+  title: string; summary: string; body: string; expectedVersion: number; expectedRevisionVersion: number };
+const version = (value: unknown): number => {
+  const n = Number(value);
+  if (!Number.isSafeInteger(n) || n < 1) throw Error("This version cannot be represented safely.");
+  return n;
+};
+
+function Preview({ input }: { input: { revision: string; request: string } }) {
+  const { rows, status } = useView("revision-preview", input);
+  const change = useOperation("switch-revision", { refresh: ["revision-preview"] });
+  const [review, setReview] = React.useState<Review>();
+  const [phase, setPhase] = React.useState<"loading" | "ready" | "switching" | "failed" | "done">("loading");
+  const [message, setMessage] = React.useState("");
+  React.useEffect(() => {
+    if (phase !== "loading" || status !== "ready") return;
+    const row = rows[0];
+    try {
+      if (!row) throw Error("This revision is unavailable.");
+      setReview({ revision: row.id, post: row.post, current: row.current_revision, slug: row.slug,
+        title: row.title, summary: row.summary, body: row.body,
+        expectedVersion: version(row.post_version), expectedRevisionVersion: version(row.version) });
+      setPhase("ready");
+    } catch (error) { setMessage(String(error)); setPhase("failed"); }
+  }, [rows, status, phase]);
+  const busy = React.useRef(false);
+  const switchRevision = async () => {
+    if (!review || !change.run || busy.current || phase !== "ready") return;
+    busy.current = true; setPhase("switching");
+    try {
+      await change.run({ post: review.post, revision: review.revision,
+        expectedVersion: review.expectedVersion, expectedRevisionVersion: review.expectedRevisionVersion });
+      setMessage("Revision selected. The post's publishing status is unchanged."); setPhase("done");
+    } catch (error) {
+      // This browser page inspects the failed HTTP response body; do not import Admin's internal client.
+      const response = error as { body?: { error?: { code?: string }; diagnostic?: { code?: string } } };
+      const code = response.body?.error?.code ?? response.body?.diagnostic?.code;
+      setMessage(code === "CONFLICT" ? "The post or revision changed. Preview again before switching."
+        : code === "INPUT_VALIDATION_FAILED" ? "The revision is incomplete. Edit it, then preview again."
+        : "Switch outcome is unconfirmed. Preview current state and review its selected revision before another attempt.");
+      setPhase("failed");
+    } finally { busy.current = false; }
+  };
+  return <section aria-label="Frozen revision preview">
+    {phase === "loading" && status === "loading" && <p>Loading preview…</p>}
+    {phase === "loading" && (status === "error" || status === "unavailable") && <p role="alert">Preview unavailable. Try another explicit preview.</p>}
+    {review && <>
+      <p>Reviewed revision {review.revision}, version {review.expectedRevisionVersion}; post version {review.expectedVersion}.</p>
+      <p>Selected when previewed: {review.current ?? "none"}.</p>
+      <article><h2>{review.title}</h2><p>{review.summary}</p>
+        {review.body.split(/\n{2,}/).map((text, i) => <p key={i}>{text}</p>)}</article>
+      <button type="button" disabled={phase !== "ready" || !change.run || review.current === review.revision}
+        onClick={() => void switchRevision()}>Switch to reviewed revision</button>
+      {review.slug && <a href={`/posts/${encodeURIComponent(review.slug)}`} target="_blank" rel="noreferrer">Open public page</a>}
+    </>}
+    {message && <p role={phase === "failed" ? "alert" : "status"}>{message}</p>}
+  </section>;
+}
+
+function PostRevisions({ post, current }: { post: string; current: string | null }) {
+  const list = useEntries("post_revisions", { filter: { field: "post", value: post } });
+  const [selected, setSelected] = React.useState("");
+  const [input, setInput] = React.useState<{ revision: string; request: string }>();
+  const draft = list.items.find(item => item.id === selected);
+  return <>
+    <AdminLink href={`/admin/c/posts/${encodeURIComponent(post)}?child=post_revisions`}>Open post workspace</AdminLink>
+    <label>Revision <select aria-label="Revision" value={selected} onChange={event => { setSelected(event.target.value); setInput(undefined); }}>
+      <option value="">Choose a revision</option>
+      {list.items.map(item => <option key={item.id} value={item.id}>{item.data.title || "Untitled"} · {new Date(item.updated_at).toLocaleString()} · {item.id.slice(0, 8)}
+        {item.id === current ? " — current" : item.data.sealed ? " — sealed history" : " — editable draft"}</option>)}
+    </select></label>
+    {list.status !== "ready" && <p>Revision list: {list.status}</p>}
+    {list.hasMore && <button type="button" disabled={list.loadingMore} onClick={list.loadMore}>More revisions</button>}
+    {draft && !draft.data.sealed && <AdminLink href={`/admin/c/post_revisions/${encodeURIComponent(selected)}/edit`}>Edit draft</AdminLink>}
+    <button type="button" disabled={!selected} onClick={() => setInput({ revision: selected, request: crypto.randomUUID() })}>Preview selected revision</button>
+    {input && <Preview key={input.request} input={input} />}
+  </>;
+}
+
+function SelectedPost({ id }: { id: string }) {
+  const { entry, status } = useEntry("posts", id);
+  return entry ? <><h2>Post: {entry.data.slug || entry.id}</h2>
+    <PostRevisions key={id} post={id} current={entry.data.current_revision ?? null} /></>
+    : <p>Post: {status}</p>;
+}
+
+function RevisionsPage() {
+  const posts = useEntries("posts");
+  const [id, setId] = React.useState(() => new URLSearchParams(window.location.search).get("post") ?? "");
+  return <><h1>Revisions</h1><label>Post <select aria-label="Post" value={id} onChange={event => setId(event.target.value)}>
+    <option value="">Choose a post</option>
+    {id && !posts.items.some(item => item.id === id) && <option value={id}>Selected post {id}</option>}
+    {posts.items.map(item => <option key={item.id} value={item.id}>{item.data.slug || item.id}</option>)}
+  </select></label>
+    {posts.status !== "ready" && <p>Post list: {posts.status}</p>}
+    {posts.hasMore && <button type="button" disabled={posts.loadingMore} onClick={posts.loadMore}>More posts</button>}
+    {id && <SelectedPost key={id} id={id} />}
+  </>;
+}
+
+export default defineAdmin(admin, {
+  pages: [{ path: "revisions", title: "Revisions", element: <RevisionsPage /> }],
+  components: { "record.actions:posts": ({ entry }) =>
+    <AdminLink href={`/admin/p/revisions?post=${encodeURIComponent(entry.id)}`}>Preview and switch revisions</AdminLink> },
+});
+```
+
+This page uses browser-only entry hooks and location state. Keep it out of the MCP App graph with a sibling
+`src/admin.mcp.tsx`; AI clients still have the same three authorized operations and their required version inputs.
+
+```tsx
+// src/admin.mcp.tsx
+import { defineAdmin } from "@aotter/mantle-admin/app";
+import { admin } from "../generated/admin-client.js";
+export default defineAdmin(admin);
+```
+
+Run `mantle bundle` as usual: it picks up these two entries. The example adds no Core workflow or nested transaction.
+The checked UI uses the same content fields as the public template below; put shared presentation in an application
+component if the real site has richer styling. For rollback, select a sealed historical revision, preview it and use the
+same switch button. The current revision cannot be switched to again from this page.
+
+`packages/mantle-admin/test/revisions-example.test.ts` generates and typechecks these exact entries;
+`revisions-browser.test.ts` drives their preview/switch/rollback and conflict recovery against actual native Admin routes.
 
 ## Preview route and the public page
 

@@ -27,7 +27,7 @@ catalogs:
 
 catalog:
   # Shared runtime deps — tracked via lockfile, bumped by dependabot.
-  zod: ^4.6.5
+  zod: ^4.6.7
   better-auth: 1.7.7
   '@better-auth/core': 1.7.7
   '@better-auth/utils': 0.4.2
@@ -39,7 +39,7 @@ catalog:
   # Shared toolchain — every package's devDeps.
   typescript: ^6.0.3
   '@types/node': ^26
-  vitest: ^5.0.1
+  vitest: ^5.0.4
 
 allowBuilds:
   esbuild: true

@@ -11,16 +11,18 @@ Bare queries preserve native errors except required conflict/uncertain-write cla
 | AUTH_DENIED | 403 | Predicate, role or session-origin refusal; a generic Admin write to a read-only Schema |
 | NOT_FOUND | 404 | Missing or excluded resource |
 | METHOD_NOT_ALLOWED | 405 | Path exists for another method |
-| CONFLICT | 409 | Unique clash, stale lock or failed row/state guard |
+| CONFLICT | 409 | Unique clash, stale lock, failed row/state guard or a PostgreSQL transaction race |
 | OUTCOME_UNKNOWN | 503 | Write may have committed; reconcile without automatic retry |
 
 A `CONFLICT` carries `kind`: `"row"` when a row statement, or a statement a Procedure lists in `handler.mustWrite`, changed no row (missing or not visible, a stale version, or a
 state its WHERE no longer allows; one message covers all three, so it never reveals whether the row exists), `"unique"`
-for a unique-index clash, `"check"` for a Schema check (with `schema` and `check`) and `"lock"` when a [Schema lock](schema.md#locks)
+for a unique-index clash, `"serialization"` for a definitive PostgreSQL serialization failure (`40001`) or deadlock (`40P01`), `"check"` for a Schema check (with `schema` and `check`) and `"lock"` when a [Schema lock](schema.md#locks)
 holds the row (with `schema`, `verb`, `lock` and `message`, the lock's static text; the row is visible to the caller, so
 naming the lock reveals nothing new). Match `kind`, not the message. A `"lock"` refusal never succeeds on retry: change the
 state that locks the row first (for a live revision, switch the post to another revision).
 To recover from `"row"`, read the record again and decide from its current state: retry with its current version only when the change still applies, and never retry blindly. A Procedure can name a precise reason itself (a ref handler that reads the row first, or a RETURNING the caller checks).
+
+A `"serialization"` conflict means PostgreSQL refused and rolled back the write, whether the refusal happened during a statement or COMMIT. The native error remains attached as the in-process `cause`, never exposed on the wire. Re-read the relevant state before deciding whether to retry; Mantle never retries automatically. A lost COMMIT response or missing server evidence stays `OUTCOME_UNKNOWN`, not `CONFLICT`.
 
 Unknown errors map to redacted `INTERNAL_ERROR` (500). A custom `ContractError` outside the core set must carry an explicit status. Media uses its selected `mediaError` contract. Never expose SQL errors, tokens or credentials.
 

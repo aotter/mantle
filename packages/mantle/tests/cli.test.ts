@@ -229,6 +229,32 @@ test.skipIf(!process.env.MANTLE_NATIVE_TESTS)("workspace consumer bin: plain Wra
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
 
+test("bundle refuses stale generated output: a failed build, or under wrangler dev one line and exit 0 without Worker output", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "next-cli-stale-"));
+  try {
+    const source = join(dir, "app.yaml");
+    await writeFile(source, await readFile(manifest, "utf8"));
+    execFileSync("node", [cli, "generate", "cloudflare-d1", "generated", source], { cwd: dir, encoding: "utf8" });
+    await mkdir(join(dir, "src"));
+    await writeFile(join(dir, "src/worker.ts"), 'import * as generated from "../generated/generated.js";\nexport default { fetch: () => new Response(String(Object.keys(generated))) };\n');
+    await mkdir(join(dir, "dist/worker"), { recursive: true });
+    await writeFile(join(dir, "dist/worker/worker.js"), "export default {};\n");
+    await writeFile(source, `${await readFile(source, "utf8")}\n# edited\n`);
+    const bundle = (env: NodeJS.ProcessEnv) => spawnSync("node", [cli, "bundle", "src/worker.ts", "dist"], { cwd: dir, encoding: "utf8", env: { ...process.env, WRANGLER_COMMAND: undefined, ...env } });
+    for (const command of [undefined, "types", "deploy"]) {
+      const failed = bundle({ WRANGLER_COMMAND: command });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr.trim()).toBe("Generated output in generated is stale (app.yaml changed). Run your generate script (mantle generate ...) and rebuild.");
+    }
+    expect(await readFile(join(dir, "dist/worker/worker.js"), "utf8")).toBe("export default {};\n");
+    const dev = bundle({ WRANGLER_COMMAND: "dev" });
+    expect(dev.status).toBe(0);
+    expect(dev.stdout).toBe("");
+    expect(dev.stderr.trim().split("\n")).toEqual([`Generated output in generated is stale (app.yaml changed). Run your generate script (mantle generate ...). ${join("dist", "worker")} is removed, so Wrangler reports its entry missing; a running wrangler dev holds requests and rebuilds when generated changes.`]);
+    expect((await readdir(dir)).includes("dist") && (await readdir(join(dir, "dist"))).includes("worker")).toBe(false);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
 test("generate no longer takes --admin-extensions, and a widget naming an extension contribution is refused",async()=>{
   const dir=await mkdtemp(join(tmpdir(),"next-cli-extensions-"));
   try{
