@@ -1,5 +1,5 @@
 ---
-description: Every Mantle release line — what 0.2.0 changes, and what each stable 0.1.x release contained.
+description: Every Mantle release line — what 0.2.x changes, and what each stable 0.1.x release contained.
 ---
 # Releases
 
@@ -14,6 +14,37 @@ From 0.2.0-alpha.7, Mantle publishes three packages together at one version:
 `@aotter/mantle` (native SDK, compiler and CLI), `@aotter/mantle-ui` (pure UI),
 and `@aotter/mantle-admin` (optional Admin server, SPA and MCP App).
 Pin every package you use to the same exact version and upgrade them together.
+
+## 0.2.1 — in preparation
+
+0.2.1 adds Schema locks: a manifest rule that refuses a row's update or delete
+for every caller path (REST, MCP, Admin and Procedures), with Admin showing the
+lock before an edit. `spec.publishing.liveEdits` lets an application edit a
+published row in place, and the [revisions guide](../guides/revisions.md) now
+freezes the live revision with a lock and switches it atomically. It also brings
+Admin form and refresh fixes, the media picker for custom inputs and pages
+(`@aotter/mantle-admin/media`), `matchTarget` in `@aotter/mantle/describe`, and
+dependency updates for current advisories.
+
+### Upgrading to 0.2.1-alpha.1
+
+Pin `@aotter/mantle`, and any selected `@aotter/mantle-ui` and
+`@aotter/mantle-admin`, to `0.2.1-alpha.1`, refresh the lockfile, regenerate and
+review owned output. No DDL changes are required. Breaking changes:
+
+- **PostgreSQL `version`:** Store results return `version` as a number, as on
+  SQLite and D1. Procedure results stay driver-native.
+- **Admin record form:** clearing an optional field sends `null`; generated
+  form types for optional fields are `T | null`.
+- **REST route precedence** is fixed and most-specific-first. Only overlapping
+  same-method http Triggers with the same parameter count can change winner.
+  `TRIGGER_PATH_INVALID` and `TRIGGER_PATH_COLLISION` refuse ambiguous paths
+  at generation; see [route precedence](../reference/trigger.md#route-precedence).
+- **Tooling:** the templates move to Wrangler 4.153.0 and
+  `@cloudflare/workers-types` 5.20261027.1.
+- **Revisions recipe:** an application that copied the guide's
+  `switch-revision` handler should adopt the new version, which requires
+  `expectedRevisionVersion` from the preview.
 
 ## 0.2.0 (2026-10-19)
 

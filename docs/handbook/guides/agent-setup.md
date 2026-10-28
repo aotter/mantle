@@ -13,20 +13,20 @@ carries.
 The Mantle plugin carries one OSS authoring skill, `mantle`, and local
 acceptance references. It does not configure a hosted-service connection.
 Install from the Git tag matching the exact SDK version you selected (currently
-`v0.2.0`). Pin the tag to keep instructions aligned with the application's
+`v0.2.1-alpha.1`). Pin the tag to keep instructions aligned with the application's
 SDK. A skill install does not upgrade the application's SDK.
 
 For Codex, pin the marketplace checkout:
 
 ```sh
-codex plugin marketplace add aotter/mantle --ref v0.2.0
+codex plugin marketplace add aotter/mantle --ref v0.2.1-alpha.1
 codex plugin add mantle@mantle
 ```
 
 For Claude Code, first clone the release into a directory you will keep:
 
 ```sh
-git clone --depth 1 --branch v0.2.0 https://github.com/aotter/mantle.git mantle-plugin
+git clone --depth 1 --branch v0.2.1-alpha.1 https://github.com/aotter/mantle.git mantle-plugin
 ```
 
 Then, in Claude Code, use that checkout's absolute path:
@@ -44,7 +44,7 @@ npx skills add aotter/mantle@mantle
 ```
 
 Without a version it follows `main`, the latest stable release. To match the
-application's SDK exactly, add its release tag: `npx skills add aotter/mantle#v0.2.0@mantle`.
+application's SDK exactly, add its release tag: `npx skills add aotter/mantle#v0.2.1-alpha.1@mantle`.
 
 When upgrading the SDK, update the marketplace ref or local tagged checkout and
 refresh/reinstall the plugin using the host's native workflow. Verify the loaded
@@ -56,14 +56,15 @@ project and copies no handbook.
 
 ## 2. Install the SDK, then read its own docs
 
-Use the version the project already pins. For a new project, install stable
-0.2.0 exactly:
+Use the version the project already pins. For a new project, install this
+handbook's version exactly. 0.2.1-alpha.1 is a prerelease; stable 0.2.0 remains the
+production line, and its own tagged handbook describes it.
 
 ```sh
-pnpm add --save-exact @aotter/mantle@0.2.0
+pnpm add --save-exact @aotter/mantle@0.2.1-alpha.1
 ```
 
-Add optional `@aotter/mantle-ui@0.2.0` and `@aotter/mantle-admin@0.2.0` only
+Add optional `@aotter/mantle-ui@0.2.1-alpha.1` and `@aotter/mantle-admin@0.2.1-alpha.1` only
 when the selected surfaces need them. Every selected `@aotter/mantle*` package
 stays at the same exact version. Read, from the application:
 
