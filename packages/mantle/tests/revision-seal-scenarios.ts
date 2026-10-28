@@ -37,3 +37,37 @@ export async function verifyRevisionSeal(app: any, handlers: any, db: unknown) {
     equal(await result(() => revisions.update(first.id, { sealed: false }, { lock: historical.version })), "CONFLICT:lock");
   }
 }
+
+/** The exact recipe's handler joins an outer transaction and cannot commit a caught failed batch. */
+export async function verifyRevisionTransaction(app: any, handlers: any, db: unknown) {
+  const caller = authenticatedAs({ id: "editor", role: "admin" });
+  const store = app.store(db, caller, { handlers });
+  const posts = store.collection("posts"), revisions = store.collection("post_revisions");
+  const post = await posts.insert({ slug: "transaction-" + crypto.randomUUID() });
+  const create = async () => {
+    const row = (await store.procedures["new-revision"]({ post: post.id })).results[0][0];
+    return revisions.update(row.id, { title: "Title", summary: "Summary", body: "Reviewed body" }, { lock: row.version });
+  };
+  const first = await create();
+  const input = { post: post.id, revision: first.id, expectedVersion: post.version, expectedRevisionVersion: first.version };
+  const sentinel = Error("outer abort");
+  try {
+    await store.transaction(async (tx: any) => {
+      await tx.procedures["switch-revision"](input);
+      equal(Boolean((await tx.collection("post_revisions").findById(first.id)).sealed), true);
+      throw sentinel;
+    });
+    throw Error("The outer transaction unexpectedly committed");
+  } catch (error) { if (error !== sentinel) throw error; }
+  equal((await posts.findById(post.id)).current_revision, null);
+  equal([Boolean((await revisions.findById(first.id)).sealed), (await revisions.findById(first.id)).version], [false, first.version]);
+  await store.transaction((tx: any) => tx.procedures["switch-revision"](input));
+  equal((await posts.findById(post.id)).current_revision, first.id);
+  const second = await create();
+  equal(await result(() => store.transaction(async (tx: any) => {
+    try { await tx.procedures["switch-revision"]({ ...input, revision: second.id, expectedRevisionVersion: second.version }); }
+    catch { /* Application recovery cannot turn the partially executed batch into a committed seal. */ }
+  })), "CONFLICT:row");
+  equal((await posts.findById(post.id)).current_revision, first.id);
+  equal([Boolean((await revisions.findById(second.id)).sealed), (await revisions.findById(second.id)).version], [false, second.version]);
+}

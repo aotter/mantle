@@ -1,4 +1,3 @@
-# The manifests of docs/handbook/guides/revisions.md, in the guide's order.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
@@ -87,8 +86,10 @@ spec:
     required: [revision]
     properties:
       revision: { type: string }
+      # A new query identity for each explicit preview; it does not change the SQL result.
+      request: { type: string }
   sql: |
-    SELECT r.id, r.version, p.slug, r.title, r.summary, r.body, r.updated_at AS edited_at
+    SELECT r.id, r.version, r.sealed, p.id AS post, p.version AS post_version, p.current_revision, p.slug, r.title, r.summary, r.body, r.updated_at AS edited_at
     FROM post_revisions r JOIN posts p ON p.id = r.post
     WHERE r.id = input.revision
     ORDER BY r.id

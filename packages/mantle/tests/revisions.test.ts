@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { userCaller } from "../src/kernel/user-caller.js";
 import { generateOrThrow, link, loadFixtureSources, writeGenerated } from "./apps/link.js";
-import { verifyRevisionSeal } from "./revision-seal-scenarios.js";
+import { verifyRevisionSeal, verifyRevisionTransaction } from "./revision-seal-scenarios.js";
 import { verifyOnLocalD1 } from "./apps/local-d1.js";
 
 // docs/handbook/guides/revisions.md: its manifests are apps/revisions.yaml, and its handler and preview route run here as written.
@@ -36,7 +36,7 @@ async function app(target: "bun-sqlite" | "bun-postgres" | "cloudflare-d1") {
   };
 }
 
-const code = (run: () => Promise<unknown>) => run().then(() => "ok", (e: { code?: string; errno?: string; fields?: { kind?: string } }) => e.errno === "40001" ? "SQLSTATE 40001" : e.fields?.kind ? `${e.code} ${e.fields.kind}` : e.code ?? String(e));
+const code = (run: () => Promise<unknown>) => run().then(() => "ok", (e: { code?: string; fields?: { kind?: string } }) => e.fields?.kind ? `${e.code} ${e.fields.kind}` : e.code ?? String(e));
 
 async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }: Awaited<ReturnType<typeof app>>) {
   const admin = userCaller({ id: "editor", role: "admin" }, { adminRoles: ["admin"] }), member = userCaller({ id: "member" }, {});
@@ -158,6 +158,7 @@ test("bun:sqlite: the revisions guide behaves as documented", async () => {
     db.exec(built.files["schema.sql"]!);
     await verifyRevisions(db, built);
     await verifyRevisionSeal(built.generated, built.handlers, db);
+    await verifyRevisionTransaction(built.generated, built.handlers, db);
   } finally { db.close(); await rm(built.dir, { recursive: true, force: true }); }
 });
 
@@ -168,6 +169,7 @@ test("bun:sqlite: the revisions guide behaves as documented", async () => {
     await db.unsafe(built.files["schema.sql"]!);
     await verifyRevisions(db, built);
     await verifyRevisionSeal(built.generated, built.handlers, db);
+    await verifyRevisionTransaction(built.generated, built.handlers, db);
   } finally { await db.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`).catch(() => {}); await db.close(); await rm(built.dir, { recursive: true, force: true }); }
 }, 30000);
 
@@ -221,7 +223,7 @@ test("bun:sqlite: the revisions guide behaves as documented", async () => {
       expect(await firstWrite).toBe("ok");
       const loser = await secondWrite;
       if (sealFirst) expect(loser).toBe("CONFLICT lock");
-      else expect(["CONFLICT row", "SQLSTATE 40001"]).toContain(loser);
+      else expect(["CONFLICT row", "CONFLICT serialization"]).toContain(loser);
       expect((await built.generated.views["post-page"](db, { kind: "anonymous" }, { slug })).map((row: any) => row.body)).toEqual([sealFirst ? "New body" : "Old body"]);
       if (!sealFirst && mutation === "blank") {
         const remaining = await revisions.findById(next.id);
