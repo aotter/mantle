@@ -85,9 +85,14 @@ Index each searched field as needed and inspect EXPLAIN for the workload. Case f
 
 Writes are lazy and execute once when awaited. Insert/update return native rows; delete returns void. Store rows carry `version` as a number on every target: PostgreSQL's int8 text is converted, and a value beyond `Number.MAX_SAFE_INTEGER` is `SQL_TYPE` rather than rounded. `update(id, set, { lock })` and `delete(id, { lock })` require the version the caller reviewed, as a number or an exact integer string. A stale lock, excluded row or unique clash is `CONFLICT`. `batch` atomically executes unused Writes from one Store in input order; a step cannot use a prior result.
 
-Interactive `transaction(async tx => …)` exists on bun:sqlite and PostgreSQL, with collections, Views and Procedures bound to the transaction. D1 supports batches only. PostgreSQL defaults to serializable, with an explicit isolation override; SQLite uses BEGIN IMMEDIATE. Use `tx` inside the callback, not the outer Store or handle. Nested transactions and `tx.batch` are refused; there is no automatic retry.
+Interactive `transaction(async tx => …)` exists on bun:sqlite and PostgreSQL, with collections, Views and Procedures bound to the transaction. D1 supports batches only. PostgreSQL defaults to serializable, with an explicit isolation override; SQLite uses BEGIN IMMEDIATE. Use `tx` inside the callback, not the outer Store or handle. Nested transactions are refused; there is no automatic retry. `tx.batch` joins the outer transaction, with no savepoint.
+A rejected batch marks the whole outer transaction rollback-only, including when its error is caught: the transaction
+rejects with the first batch failure and rolls back all its writes. This includes invalid/reused/foreign Writes and
+errors while building or executing the batch.
 
-Ref handlers receive `{ caller, db, store }` bound to the same Caller and transaction. Implement the generated `Handlers` interface and pass it to `store(db, caller, { handlers })`. Direct Procedure modules expose SQL Procedures; ref Procedures are reached through the bound Store or selected surfaces.
+Ref handlers receive `{ caller, db, store }` bound to the same Caller and transaction. `ctx.store.batch` is available
+on every target: a native atomic batch standalone, or part of the same outer transaction when one exists. Use it for
+known multi-writes rather than constructing another Store inside a handler. Implement the generated `Handlers` interface and pass it to `store(db, caller, { handlers })`. Direct Procedure modules expose SQL Procedures; ref Procedures are reached through the bound Store or selected surfaces.
 
 See [native execution](native-execution.md) for values and write outcomes and [migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations) before changing a Schema.
 
