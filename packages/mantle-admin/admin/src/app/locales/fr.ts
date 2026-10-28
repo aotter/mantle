@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "Espace de travail : {name}",
+    "entryEdit.workspaceHint": "Enregistrez cette fiche, puis ouvrez une collection enfant pour continuer.",
+    "entryEdit.missingFields": "Champs obligatoires manquants : {fields}.",
+    "entryEdit.readOnlyRequired": "Les champs en lecture seule se définissent par une opération ou une fiche liée. Utilisez les actions disponibles pour les compléter.",
     "oauth.consent.redirect": "Retour vers",
     "oauth.consent.scopes": "Accès demandé",
     "oauth.consent.offline": "Autoriser l’accès en arrière-plan, même après la déconnexion de ce site. Vous pouvez le révoquer dans Applications connectées.",

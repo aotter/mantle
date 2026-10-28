@@ -124,6 +124,52 @@ describe("the record form against an editor re-read (#1790)", () => {
   });
 });
 
+describe("a publishing parent with folded children (#1846)", () => {
+  function parentForm(related = true, readOnly = true, required = true) {
+    const client = new QueryClient();
+    client.setQueryData(["me"], { admin: true });
+    client.setQueryData(entryEditorQueryOptions("posts", "e1").queryKey, {
+      entry: { ...entry(3, { slug: "hello", current_revision: null }), status: "draft", locale: null },
+      collection: { name: "posts", title: "Posts", lifecycle: "publishing", schema: {
+        type: "object", required: required ? ["slug", "current_revision"] : [],
+        properties: { slug: { type: "string" }, current_revision: { type: "string", title: "Live edition", readOnly } },
+      } },
+      related: related ? [{
+        collection: { name: "post_revisions", title: "Post revisions", lifecycle: "operational", parent: { collection: "posts", parentField: "id", childField: "post" } },
+        relationship: { kind: "field", childField: "post", parentField: "id", parentValue: "e1" }, entries: [],
+      }] : [], parentEntryId: null,
+    } as unknown as EntryEditorPayload);
+    return renderToStaticMarkup(
+      <PreferencesProvider initialLanguage="en"><QueryClientProvider client={client}><TooltipProvider><AdminRouterProvider><ConfirmProvider>
+        <EntryEditView collectionName="posts" entryId="e1" />
+      </ConfirmProvider></AdminRouterProvider></TooltipProvider></QueryClientProvider></PreferencesProvider>,
+    );
+  }
+  it("links the new parent's form to its named workspace and folded children", () => {
+    const html = parentForm();
+    expect(html).toContain('href="/admin/c/posts/e1?child=post_revisions"');
+    expect(html).toContain("Open Post revisions");
+    expect(html).toContain("Posts workspace");
+    expect(html).not.toContain("Back to Posts");
+  });
+  it("names a missing publish requirement and explains its read-only operation path", () => {
+    const html = parentForm();
+    expect(html).toContain("Required fields missing: Live edition.");
+    expect(html).toContain("Read-only fields are set through an operation or a related record.");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*title="Required fields missing: Live edition\."/);
+  });
+  it("keeps ordinary collection navigation without children and skips operation advice for writable fields", () => {
+    const html = parentForm(false, false);
+    expect(html).toContain('href="/admin/c/posts"');
+    expect(html).toContain("Back to Posts");
+    expect(html).not.toContain("workspace");
+    expect(html).not.toContain("Read-only fields are set");
+  });
+  it("omits missing-field guidance once every requirement is present", () => {
+    expect(parentForm(true, true, false)).not.toContain("Required fields missing:");
+  });
+});
+
 /** A browser history, enough for the navigator: a traversal moves at once and reports the pop, as a `popstate` would. */
 function fakeBrowser(start: string) {
   const stack: { url: string; state: unknown }[] = [{ url: start, state: null }];

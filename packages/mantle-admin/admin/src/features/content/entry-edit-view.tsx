@@ -176,7 +176,11 @@ export function EntryEditView({
   const isReadOnly = payload.collection.schema.readOnly === true || unsupportedVersion;
   const isDraft = payload.entry.status === "draft";
   const isArchived = payload.entry.status === "archived";
-  const missingRequired = hasMissingRequired(data, payload.collection.schema);
+  const missingFields = missingRequiredFields(data, payload.collection.schema);
+  const missingRequired = missingFields.length > 0;
+  const missingRequiredHint = t(language, "entryEdit.missingFields", {
+    fields: missingFields.map((name) => propertyLabel(name, payload.collection.schema.properties?.[name], language, canonical)).join(", "),
+  });
   const canManageContent = me.data?.admin === true;
   // a declared Schema lock holds for this row (#1822): the server refuses its update, whoever asks, so no toggle unlocks the
   // form; the implicit `publishing` lock (drafts only) keeps the published/archived hint and never binds a transition
@@ -201,9 +205,10 @@ export function EntryEditView({
   const mediaPurposes = site.data?.media?.purposes ?? [];
   const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId, payload.parentEntryTitle);
   const translationSections = payload.related.filter((section) => section.relationship.kind === "translation");
-  const hasWorkbench = payload.related.some((section) =>
+  const foldedRelated = payload.related.filter((section) =>
     section.relationship.kind === "field" && isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
   );
+  const hasWorkbench = foldedRelated.length > 0;
   const inlineRelated = payload.related.filter((section) =>
     section.relationship.kind === "field" && !isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
   );
@@ -234,7 +239,7 @@ export function EntryEditView({
               className="inline-flex items-center gap-2 hover:underline"
             >
               <ArrowLeft className="size-3.5" aria-hidden />
-              {t(language, "entryEdit.back", { name: backTitle })}
+              {t(language, hasWorkbench ? "entryEdit.workspace" : "entryEdit.back", { name: backTitle })}
             </a>
             {parentLink ? (
               <>
@@ -272,6 +277,26 @@ export function EntryEditView({
           </>
         }
       />
+
+      {hasWorkbench ? (
+        <SectionCard>
+          <SectionTitle title={t(language, "entryEdit.workspace", { name: collectionTitle })} body={t(language, "entryEdit.workspaceHint")} />
+          <div className="flex flex-wrap gap-2">
+            {foldedRelated.map((section) => (
+              <a key={section.collection.name} href={`${backHref}?child=${encodeURIComponent(section.collection.name)}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                {t(language, "common.open")} {resolveLocalizedText(section.collection.title, language, canonical) ?? section.collection.name}
+              </a>
+            ))}
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {!isOperational && (isDraft || liveEdits) && missingRequired ? (
+        <div role="status" className="text-sm text-muted-foreground">
+          <p>{missingRequiredHint}</p>
+          {missingFields.some((name) => payload.collection.schema.properties?.[name]?.readOnly === true) ? <p>{t(language, "entryEdit.readOnlyRequired")}</p> : null}
+        </div>
+      ) : null}
 
       {translationSections.map((section) => (
         <TranslationTabs
@@ -401,7 +426,7 @@ export function EntryEditView({
             : dirty
             ? t(language, "common.unsavedChanges")
             : (isDraft || liveEdits) && !isOperational && missingRequired
-            ? t(language, "entryEdit.publishMissingRequired")
+            ? missingRequiredHint
             : save.isSuccess
             ? t(language, "common.saved")
             : undefined}
@@ -417,7 +442,7 @@ export function EntryEditView({
                 : dirty
                 ? t(language, "entryEdit.publishDisabledDirty")
                 : missingRequired
-                ? t(language, "entryEdit.publishMissingRequired")
+                ? missingRequiredHint
                 : t(language, "entryEdit.publishTooltip")}
             >
               <Send className="size-4" aria-hidden />
@@ -1059,7 +1084,11 @@ function parentAdminLink(
 export { entryTitle } from "../../lib/entry-title";
 
 export function hasMissingRequired(data: Record<string, unknown>, schema: JsonSchema): boolean {
-  return (schema.required ?? []).some((key) => {
+  return missingRequiredFields(data, schema).length > 0;
+}
+
+function missingRequiredFields(data: Record<string, unknown>, schema: JsonSchema): string[] {
+  return (schema.required ?? []).filter((key) => {
     const value = data[key];
     return value === undefined || value === null || value === "" ||
       (Array.isArray(value) && value.length === 0);

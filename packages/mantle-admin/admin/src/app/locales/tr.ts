@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "{name} çalışma alanı",
+    "entryEdit.workspaceHint": "Bu kaydı kaydedin, ardından devam etmek için bir alt koleksiyon açın.",
+    "entryEdit.missingFields": "Eksik zorunlu alanlar: {fields}.",
+    "entryEdit.readOnlyRequired": "Salt okunur alanlar bir işlem veya ilişkili kayıt üzerinden ayarlanır. Tamamlamak için kullanılabilir eylemleri kullanın.",
     "oauth.consent.redirect": "Dönüş adresi",
     "oauth.consent.scopes": "İstenen erişim",
     "oauth.consent.offline": "Bu siteden çıkış yaptıktan sonra da arka plan erişimine izin verin. Bağlı uygulamalardan erişimi iptal edebilirsiniz.",

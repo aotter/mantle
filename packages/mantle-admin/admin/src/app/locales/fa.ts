@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "فضای کاری {name}",
+    "entryEdit.workspaceHint": "این رکورد را ذخیره کنید، سپس برای ادامه یک مجموعه فرزند را باز کنید.",
+    "entryEdit.missingFields": "فیلدهای الزامی تکمیل نشده: {fields}.",
+    "entryEdit.readOnlyRequired": "فیلدهای فقط‌خواندنی از طریق عملیات یا رکورد مرتبط تنظیم می‌شوند. برای تکمیل آن‌ها از اقدامات موجود استفاده کنید.",
     "oauth.consent.redirect": "بازگشت به",
     "oauth.consent.scopes": "دسترسی درخواستی",
     "oauth.consent.offline": "دسترسی در پس‌زمینه حتی پس از خروج از این وب‌سایت مجاز است. می‌توانید آن را در برنامه‌های متصل لغو کنید.",

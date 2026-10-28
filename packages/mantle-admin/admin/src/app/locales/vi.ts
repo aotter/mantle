@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "Không gian làm việc {name}",
+    "entryEdit.workspaceHint": "Lưu bản ghi này rồi mở bộ sưu tập con để tiếp tục.",
+    "entryEdit.missingFields": "Các trường bắt buộc còn thiếu: {fields}.",
+    "entryEdit.readOnlyRequired": "Trường chỉ đọc được đặt qua thao tác hoặc bản ghi liên quan. Hãy dùng các hành động có sẵn để hoàn tất.",
     "oauth.consent.redirect": "Quay lại",
     "oauth.consent.scopes": "Quyền truy cập được yêu cầu",
     "oauth.consent.offline": "Cho phép truy cập nền, kể cả sau khi đăng xuất khỏi trang web này. Bạn có thể thu hồi quyền trong Ứng dụng đã kết nối.",
