@@ -38,7 +38,9 @@ the app entry (`--entry`) never imports, it warns and names the topic that shows
 4. `pnpm generate`, implement every handler it lists, `pnpm check`, then `pnpm smoke`.
 5. Before reporting the app or a feature done, run [role-only acceptance](../guides/agent-workflow-acceptance.md)
    (`mantle help agent-workflow-acceptance`). Scripted smoke is not acceptance. `pnpm accept` starts the app and hands
-   each role to a fresh evaluator as a URL that carries that role's session.
+   each role to a fresh evaluator as a URL that carries that role's session. After a repair, the guide's
+   [re-verification rule](../guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches) decides which roles
+   and surfaces run again.
 6. Once acceptance converges, follow the [performance skill](../../skills/performance/SKILL.md): it decides which of
    front end (Lighthouse), cold start and backend load apply, and holds each to a target before you report done.
 

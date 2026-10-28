@@ -25,7 +25,10 @@ visibility, OCC and restart persistence, not just a 200 response.
 Before reporting any new app or feature as done, follow the [independent
 acceptance guide](../../handbook/guides/agent-workflow-acceptance.md): write a
 private rubric, then give one fresh agent per role (`admin`, `user`) only its
-role and entry points, across every surface it uses. This is not limited to
+role and entry points, across every surface it uses. After a repair, re-run
+the scope its [re-verification
+rule](../../handbook/guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches)
+names and state which evidence you reused. This is not limited to
 MCP; if it was not run, say so explicitly and report the work as UNVERIFIED
 rather than done. Hand off with the guide's [layered
 report](../../handbook/guides/agent-workflow-acceptance.md#report-done-ness-in-layers):
