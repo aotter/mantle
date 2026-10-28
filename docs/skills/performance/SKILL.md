@@ -137,7 +137,10 @@ fast at a realistic volume, and no hot path scans a table that grows.
   [provision skill](../provision/SKILL.md) and needs the user's authorization.
 - After any repair, rerun the [local HTTP checks](../../handbook/guides/local-testing.md).
   A repair that changes what a user sees or can do is no longer only a
-  performance change: run acceptance again for that surface.
+  performance change: re-run acceptance for the scope the
+  [re-verification rule](../../handbook/guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches)
+  names. A changed View or Procedure widens it to every surface that reads or
+  writes that data; an index-only migration needs only the local HTTP checks.
 - Stop when every target is met, after three rounds, or when two rounds in a row
   bring no measurable gain.
 
