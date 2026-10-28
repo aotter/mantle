@@ -22,6 +22,12 @@ const paging = (schema: { properties?: object }) => ({ ...schema, properties: { 
  * ponytail: one fixed number; raise it or make it an option if hosts publish their limits.
  */
 const MCP_PAGE_BUDGET = 60_000;
+/**
+ * Array elements plus object members one `tools/call` may carry (the SDK's `maxToolInputElements`, GHSA-46jr-4wx8-v453).
+ * Refused before generated validation runs; the 1 MiB body limit still bounds everything else.
+ * ponytail: one fixed number; make it an option if an application's tool needs larger inputs.
+ */
+const MCP_INPUT_ELEMENTS = 10_000;
 /** The scopes a challenge asks for: the credential's, plus what the request needs. */
 const union = (scopes: readonly string[], extra: readonly string[]) => [...new Set([...scopes, ...extra])].join(" ");
 
@@ -167,7 +173,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
     const handler = createMcpHandler(() => {
       const schema = (value: unknown) => fromJsonSchema(value as Parameters<typeof fromJsonSchema>[0], { getValidator<T>(): import("@modelcontextprotocol/server").JsonSchemaValidator<T> { return (input: unknown) => ({ valid: true, data: input as T, errorMessage: undefined }); } });
       // Tools capability after construction: given to the constructor, the SDK installs its tools/call handler before the wrap below.
-      const server = new McpServer(serverInfo, options.instructions ? { instructions: options.instructions } : {});
+      const server = new McpServer(serverInfo, { maxToolInputElements: MCP_INPUT_ELEMENTS, ...(options.instructions ? { instructions: options.instructions } : {}) });
       server.server.registerCapabilities({ tools: { listChanged: false } });
       if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
       const appMeta = links ? registerApps(server, links, parsedBody, new Set(selected.map(tool => tool.name)), { env, request }) : undefined;

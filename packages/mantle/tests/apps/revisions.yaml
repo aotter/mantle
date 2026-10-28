@@ -1,0 +1,171 @@
+# The manifests of docs/handbook/guides/revisions.md, in the guide's order.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  lifecycle: publishing
+  uniqueIndexes: [[slug]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [slug, current_revision]
+    properties:
+      slug: { type: string, pattern: "^[a-z0-9-]+$", maxLength: 100 }
+      # Written only by switch-revision: Admin's record form leaves it alone.
+      current_revision: { type: string, x-mantle-ref: post_revisions, readOnly: true }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: post_revisions }
+spec:
+  title: Post revisions
+  lifecycle: operational
+  indexes: [[post, createdAt, id]]
+  lock:
+    - name: sealed_revision
+      on: [update, delete]
+      when: sealed = true
+      message: "This revision is sealed. Start a New revision from its post, edit and preview it, then Switch revision."
+  uiSchema:
+    nav: { parentField: post }
+    list: { primaryField: title, columns: [note] }
+    fields: { body: { widget: textarea } }
+  schema:
+    type: object
+    additionalProperties: false
+    required: [post, sealed, title, summary, body]
+    properties:
+      # Set once by new-revision; a revision never moves to another post.
+      post: { type: string, x-mantle-ref: posts, readOnly: true }
+      sealed: { type: boolean, readOnly: true }
+      title: { type: string }
+      summary: { type: string }
+      body: { type: string }
+      note: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: post-page }
+spec:
+  description: A published post with its current revision, by slug.
+  surface: public
+  input:
+    type: object
+    additionalProperties: false
+    required: [slug]
+    properties:
+      slug: { type: string }
+  sql: |
+    SELECT p.slug, r.title, r.summary, r.body, p.published_at, p.updated_at AS switched_at, r.updated_at AS edited_at
+    FROM posts p JOIN post_revisions r ON r.id = p.current_revision AND r.post = p.id
+    WHERE p.slug = input.slug
+    ORDER BY p.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: published-posts }
+spec:
+  description: Every published post with the title of its current revision, for the list page and the sitemap.
+  surface: public
+  sql: |
+    SELECT p.id, p.slug, r.title, r.summary
+    FROM posts p JOIN post_revisions r ON r.id = p.current_revision AND r.post = p.id
+    ORDER BY p.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: revision-preview }
+spec:
+  description: Any revision as its post's page would show it, for the preview route.
+  surface: admin
+  requires: { auth: { all: [ctx.admin] } }
+  uiSchema: { nav: { hidden: true } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [revision]
+    properties:
+      revision: { type: string }
+  sql: |
+    SELECT r.id, p.slug, r.title, r.summary, r.body, r.updated_at AS edited_at
+    FROM post_revisions r JOIN posts p ON p.id = r.post
+    WHERE r.id = input.revision
+    ORDER BY r.id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: new-revision }
+spec:
+  title: New revision
+  description: Start a new revision of this post from its current one; a post without one starts empty.
+  requires: { auth: { all: [ctx.admin] } }
+  target: { schema: posts, id: post }
+  uiSchema: { collectionAction: post_revisions }
+  input:
+    type: object
+    additionalProperties: false
+    required: [post]
+    properties:
+      post: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO post_revisions (post, sealed, title, summary, body, note)
+        SELECT p.id, false, COALESCE(r.title, ''), COALESCE(r.summary, ''), COALESCE(r.body, ''), CASE WHEN r.id IS NULL THEN 'First revision' ELSE 'Copied from the current revision' END
+        FROM posts p LEFT JOIN post_revisions r ON r.id = p.current_revision AND r.post = p.id
+        WHERE p.id = input.post
+        RETURNING id, version
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: switch-revision }
+spec:
+  title: Switch revision
+  description: Make one of this post's complete revisions the one its page shows. Also rolls back to an earlier revision.
+  requires: { auth: { all: [ctx.admin] } }
+  target: { schema: posts, id: post, version: expectedVersion }
+  input:
+    type: object
+    additionalProperties: false
+    required: [post, revision, expectedVersion]
+    properties:
+      post: { type: string }
+      revision: { type: string, x-mantle-ref: post_revisions }
+      expectedVersion: { type: integer }
+  output: { type: object }
+  handler: { ref: switch-revision }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: prune-revision }
+spec:
+  title: Delete revision
+  description: Delete an editable revision that has never been sealed.
+  requires: { auth: { all: [ctx.admin] } }
+  target: { schema: post_revisions, id: id }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id]
+    properties:
+      id: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      DELETE FROM post_revisions WHERE id = input.id RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: new-revision-admin }
+spec: { source: { kind: mcp, surface: admin }, target: { procedure: new-revision } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: switch-revision-admin }
+spec: { source: { kind: mcp, surface: admin }, target: { procedure: switch-revision } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: prune-revision-admin }
+spec: { source: { kind: mcp, surface: admin }, target: { procedure: prune-revision } }

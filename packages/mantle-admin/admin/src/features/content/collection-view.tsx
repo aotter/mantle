@@ -36,7 +36,7 @@ import type {
   SiteInfo,
   AdminOperation,
 } from "../../lib/types";
-import { PUBLISHING_STATUSES } from "../../lib/types";
+import { PUBLISHING_LOCK, PUBLISHING_STATUSES } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Checkbox } from "@aotter/mantle-ui/kit";
@@ -64,6 +64,7 @@ import {
   collectionOperationsFor,
   RowOperationsMenu,
 } from "./row-operations";
+import { workbenchParentScope } from "../ops/interaction-schema";
 import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
 import { DataCell } from "../../ui/data-cell";
 import { RefTitlesProvider } from "../../ui/ref-value";
@@ -244,6 +245,9 @@ function CollectionList({
   const titleColumnLabel = titleField
     ? propertyLabel(titleField, collection?.schema?.properties?.[titleField], language, canonical)
     : t(language, "collection.table.title");
+  // One refresh per write: a mutation here is refreshed by Admin's global MutationCache, and an operation
+  // dialog by InteractionDialog, so their callbacks only clear the selection. The bulk bar calls the API
+  // directly, outside any mutation, and so refreshes itself.
   const refreshEntries = React.useCallback(() => {
     clearSelection();
     void invalidateAfterWrite(queryClient);
@@ -255,12 +259,12 @@ function CollectionList({
         data: { title },
         expectedVersion: version,
       }),
-    onSuccess: refreshEntries,
+    onSuccess: clearSelection,
   });
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
       api.delete<{ removed: boolean }>(entryApiPath(collectionName, id)),
-    onSuccess: refreshEntries,
+    onSuccess: clearSelection,
   });
   // POST an empty draft and land in the schema-driven editor — no
   // modal, no pre-fill; the manifest form takes over from there.
@@ -320,9 +324,10 @@ function CollectionList({
       ) : null}
       <CollectionOperations
         operations={collectionOperations}
+        scope={workbenchParentScope(collection, scope)}
         language={language}
         canonical={canonical}
-        onSuccess={refreshEntries}
+        onSuccess={clearSelection}
       />
       <Slot name={`list.actions:${collectionName}`} Default={Empty} props={{ collection: collectionName, selection: [] }} />
     </div>
@@ -517,7 +522,7 @@ function CollectionList({
                   dataColumns={isOperationalCollection ? dataColumns : null}
                   primaryField={isOperationalCollection ? titleField : null}
                   boundOperations={boundOperations}
-                  onOperationSuccess={refreshEntries}
+                  onOperationSuccess={clearSelection}
                   selected={selected.has(row.id)}
                   onToggleSelect={(checked) => {
                     setSelected((prev) => {
@@ -932,7 +937,9 @@ function EntryRowDisplay({
   canDelete: boolean;
 }): React.ReactElement {
   const supportedVersion = typeof row.version === "number" && Number.isSafeInteger(row.version);
-  const canEdit = allowEdit && supportedVersion;
+  // a Schema lock holding for this row refuses its rename or delete (#1822); the button says why
+  const deleteLock = row.locks?.delete || undefined;
+  const canEdit = allowEdit && supportedVersion && !row.locks?.update;
   const canDelete = allowDelete && supportedVersion;
   const isOperational = dataColumns !== null;
   const itemName = renderTitleText(
@@ -1138,7 +1145,7 @@ function EntryRowDisplay({
             </Button>
           )}
           {canDelete ? (
-            <Button type="button" variant="ghost" size="icon-sm" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
+            <Button type="button" variant="ghost" size="icon-sm" title={deleteLock ? deleteLock.lock === PUBLISHING_LOCK ? t(language, "crud.unpublishToDelete") : t(language, "entryEdit.locked", { message: deleteLock.message }) : t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy || !!deleteLock} onClick={() => void remove()}>
               <Trash2 className="size-3.5" aria-hidden />
             </Button>
           ) : null}

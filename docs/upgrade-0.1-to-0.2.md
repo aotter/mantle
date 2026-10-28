@@ -1,26 +1,141 @@
 # Upgrading from 0.1.x to 0.2.0 (for AI agents)
 
-For **0.2.0-alpha.7 and later**, use the
-[native SDK migration](handbook/releases/index.md#native-sdk-migration-alpha7),
-[current CLI](handbook/start/project-and-cli.md) and
-[app shell](examples/app-shell/). The application owns routing,
-Auth, native handles and database migrations; the former `createMantle` runtime,
-host presets, boot-time convergence and CLI flags below have been replaced.
-Install the same exact version of `@aotter/mantle`, `@aotter/mantle-ui` and,
-when selecting Admin, `@aotter/mantle-admin`. Start with a new database for a
-0.1.x migration and preserve every authorization, scope and OCC requirement.
-The remainder describes the earlier alpha contract for historical reference.
+0.2.0 replaces 0.1.x's grammar, runtime and storage. There is no codemod, no
+migration tool and no in-place upgrade of a 0.1.x database: a coding agent
+rebuilds the project on 0.2.0 and plans a reviewed data move for it.
 
-No codemod, and no in-place upgrade of a 0.1.x database. A coding agent moves
-one project by hand with this guide. When it and
-[ADR-0032](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0032-store-centric-core-and-service-contract.md),
-[ADR-0033](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0033-storage-converges-to-the-plan.md),
-[ADR-0034](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0034-store-is-authored-as-sql.md),
-[ADR-0035](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0035-sql-dialects.md),
-[ADR-0036](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0036-host-and-dialect.md) or
-[ADR-0038](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0038-bun-native-host.md) disagree, the ADR wins.
+1. **Rebuild the project on 0.2.0** with the current handbook: the
+   [0.2.0 release notes](handbook/releases/index.md#upgrading-to-020) and the
+   [native SDK migration](handbook/releases/index.md#native-sdk-migration-alpha7),
+   the [CLI and generated ownership](handbook/start/project-and-cli.md), the
+   [app shell](examples/app-shell/) and the [Schema](handbook/reference/schema.md),
+   [View](handbook/reference/view.md) and [Procedure](handbook/reference/procedure.md)
+   references. The application owns routing, Auth, native handles and database
+   migrations. Install the same exact version of `@aotter/mantle`,
+   `@aotter/mantle-ui` and, when selecting Admin, `@aotter/mantle-admin`.
+   Preserve every authorization, scope and OCC requirement.
+2. **Move the data** into a new 0.2 database, as
+   [Moving data from 0.1.x](#moving-data-from-01x) describes.
 
-## Rules
+The [appendix](#appendix-earlier-02-alpha-contract-historical) maps 0.1.x
+manifests to an earlier 0.2 alpha. Its runtime, CLI, handler and data
+instructions are out of date; use it only to recognise what a 0.1.x construct
+meant, never as instructions.
+
+## Moving data from 0.1.x
+
+These facts come from the 0.1.4 and 0.2.0 sources. Before relying on one,
+check it against the application's own generated `schema.sql` and its 0.1.4
+export; where they disagree, trust them and stop to ask. Write the plan down
+for human review before it touches production data.
+
+- **Rehearse on a copy.** Load a copy of the export into a scratch 0.2
+  database, check the result through the app (Views, Admin, sign-in), and only
+  then run the reviewed load once into the fresh production database, before
+  it takes traffic.
+- **Never boot 0.2 against a 0.1.x database.** Apply the generated `schema.sql`
+  (it includes the site tables when the site module is selected) to an empty
+  database, then load rows into it.
+- **Keep data files out of the repository.** Exports, dumps and copies hold
+  user emails and content: keep them outside the working tree or ignored, and
+  never commit them.
+
+### Writing entries: the Store or SQL
+
+- **Through the SDK.** The generated `store(db, caller)`, or `ctx.store` in a
+  `ref` handler, with a trusted caller such as `{ kind: "system", reason }`
+  ([authorization](handbook/concepts/authorization.md)). It accepts no value
+  for `id`, `version`, `created_at`, `updated_at`, `author_id`, `status`,
+  `published_at` or the scope column, for any caller: it sets them itself, so new IDs, versions,
+  timestamps and authors replace the old ones. Publishing goes through the
+  generated `<schema>.publish` Procedure, which sets `published_at` to now
+  ([lifecycle](handbook/concepts/lifecycle-and-locales.md)). With new IDs,
+  remap every `x-mantle-ref`, every `translates.on` key and any ID embedded
+  in JSON; `x-mantle-ref` is not a foreign key, so a missed one dangles
+  quietly.
+- **Through SQL**, to keep IDs, history and authors: `INSERT` the rows with
+  every native column set, as
+  [reserved entry columns](handbook/reference/schema.md#reserved-entry-columns)
+  lists. This bypasses row policy, so review it like a migration.
+
+### Entry columns on D1
+
+| 0.1.4 | 0.2.0 |
+|---|---|
+| `_mantle_id` (UUID text) | `id` (text, unique) |
+| `_mantle_version` (an OCC counter) | `version` |
+| `_mantle_created_at`, `_mantle_updated_at` (epoch **milliseconds**) | `created_at`, `updated_at` (epoch **microseconds**: multiply by 1000). Set `updated_at`: it defaults to `0`, which Admin shows as 1970 |
+| `_mantle_author_id` | `author_id`, the Better Auth `user.id` |
+| `_mantle_status` (on every table) | `status` (`draft`, `published`, `archived`) on publishing Schemas only |
+| none | `published_at` (publishing Schemas): 0.1.4 has no source; choose a value for each published row, `NULL` otherwise |
+| the `scope` field | the same column, text, not null |
+| `date-time` field, ISO text | integer microseconds since the epoch |
+| `date` field, text | integer days since 1970-01-01 |
+| object field (JSON text) | 0.1.4 had no geo type; if you remodel a position as a `format: geo` field, it is two columns, `<field>_lat` and `<field>_lng` |
+
+- 0.2 tables on D1 are `STRICT`: a value of the wrong type fails the insert
+  instead of being stored.
+- A `numeric(p,s)` field is an integer scaled by 10^s on D1: rescale a 0.1.4
+  REAL value before loading it.
+- Schema `checks` run as `BEFORE INSERT` and `BEFORE UPDATE` triggers, so
+  loaded rows are checked.
+- Full-text search and geo index tables are maintained by triggers: insert
+  only into the Schema tables.
+
+### Better Auth
+
+0.1.4 used Better Auth 1.7.2 with hand-written DDL; 0.2.0 uses 1.7.7, with the
+tables `mantle generate --auth src/auth.ts` adds to `schema.sql`
+([auth](handbook/cloudflare/authentication.md)).
+
+- The 0.2 caller subject is the Better Auth `user.id`. Keep user IDs, so that
+  `author_id` and owner scopes still name the right people.
+- Copy `user` and `account` with explicit column lists on both sides; both
+  versions store dates as ISO text and booleans as 0/1 on D1. 0.1.4's
+  `account` has an `issuer` column and `UNIQUE(issuer, accountId)` that the
+  0.2 table may not have; compare the two DDLs before copying.
+- 0.1.4 roles `owner`, `editor` and `contributor` have no 0.2 meaning. The
+  admin layer is Better Auth's admin plugin `adminRoles` (default
+  `["admin"]`) and `adminUserIds`
+  ([authorization](handbook/reference/authorization.md)); decide each mapping
+  deliberately.
+- A 0.1.4 `githubLogin` column must be declared in `user.additionalFields`
+  to keep it.
+- Leave sessions, verification rows and OAuth tokens behind; users sign in
+  again. Mantle re-creates its OAuth resource rows from configuration
+  ([OAuth](handbook/guides/oauth.md)). Check `jwks`, OAuth clients and
+  consents against Better Auth 1.7.7 and your secrets and URLs before copying
+  any.
+- The admin MCP endpoint moved from `/mcp/staff` to `/mcp/admin`; update MCP
+  client URLs.
+
+### Media
+
+- `media_assets` has the same columns in 0.2, and its `created_at` stays in
+  epoch **milliseconds**. Copy the rows as they are.
+- Each variant keeps its stored `storageKey` and `publicUrl`, so 0.1.x objects
+  in the same bucket keep working while their prefixes stay served
+  ([media](handbook/cloudflare/media-r2.md)).
+- Do not carry over `pending_media_uploads`; an upload expires after 15
+  minutes.
+- `site_config` keeps its `key`/`value` columns; compare its keys with the
+  generated `site-seed.sql` before copying.
+
+## Appendix: earlier 0.2 alpha contract (historical)
+
+> **Historical, do not follow.** This appendix describes an earlier 0.2
+> alpha: `createMantle`, `runtime.store`, host presets, boot-time convergence
+> and CLI flags that 0.2.0 does not have. The current handbook and
+> [Moving data from 0.1.x](#moving-data-from-01x) replace it. Where it and
+> [ADR-0032](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0032-store-centric-core-and-service-contract.md),
+> [ADR-0033](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0033-storage-converges-to-the-plan.md),
+> [ADR-0034](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0034-store-is-authored-as-sql.md),
+> [ADR-0035](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0035-sql-dialects.md),
+> [ADR-0036](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0036-host-and-dialect.md) or
+> [ADR-0038](https://github.com/aotter/mantle/blob/v0.2.0-alpha.7/docs/adr/0038-bun-native-host.md)
+> disagreed, the ADR won.
+
+### Rules
 
 - Work on a branch. Keep the 0.1.x project running until the 0.2.0 one passes
   its checks.
@@ -32,10 +147,10 @@ one project by hand with this guide. When it and
   refused in 0.2.0 and stamps nothing, so each one becomes `scope` or an
   explicit value in the write (section 3).
 - Give the 0.2.0 service a new database; never boot it against the 0.1.x
-  one. Move data by export and import (section 5).
+  one. Move data as [Moving data from 0.1.x](#moving-data-from-01x) says.
 - `mantle generate --check` is the gate. Never hand-edit `.mantle/generated/`.
 
-## 1. Packages
+### 1. Packages
 
 | 0.1.x | 0.2.0 |
 |---|---|
@@ -46,7 +161,7 @@ Remove every old package and install `@aotter/mantle` at the exact target
 version. `mantle generate` names any other package it needs, with the install
 command; it never installs anything.
 
-## 2. `mantle.config.json`
+### 2. `mantle.config.json`
 
 0.1.4 had none; 0.1.5-alpha.1 wrote a `version: 1` one. Write version 2:
 
@@ -72,7 +187,7 @@ command; it never installs anything.
 - `host` and `dialect` are chosen on the first `mantle generate` (`--host`,
   `--dialect`); a rerun that asks for another is refused.
 
-## 3. Manifests
+### 3. Manifests
 
 Set `apiVersion: cms.mantle.aotter.net/v2` on every document; a v1 document
 is refused.
@@ -81,7 +196,7 @@ is refused.
 `created_at`, `updated_at`, `author_id`. (`ctx.store` JSON keeps the
 camelCase names.)
 
-### Schema
+#### Schema
 
 | 0.1.x | 0.2.0 |
 |---|---|
@@ -113,7 +228,7 @@ which also accepts leading, trailing and doubled hyphens. On a Schema field
 that must not have them, add a `checks` entry:
 `"slug NOT LIKE '-%' AND slug NOT LIKE '%-' AND slug NOT LIKE '%--%'"`.
 
-### View
+#### View
 
 A View is one SQL `SELECT` in `spec.sql`, with `input` for its parameters.
 The SQL is PostgreSQL syntax: it names declared Schemas (never
@@ -134,14 +249,14 @@ Schema reference; do not repeat them.
 | free-text search over `searchableFields` | `WHERE mantle.search(p, input.q) ORDER BY mantle.search_rank(p)`; an unqualified `search` is refused |
 | `page` / `show` on the wire | `limit` / `cursor`, `nextCursor` in the response |
 
-### Procedure
+#### Procedure
 
 0.1.x builtin ops are `create`, `update`, `upsert`, `delete` and `archive`.
 
 | 0.1.x | 0.2.0 |
 |---|---|
 | builtin `create` | `handler: { sql: "INSERT INTO s (a, b) VALUES (input.a, input.b) RETURNING id" }` (on a `publishing` Schema the row starts as a draft, as before) |
-| builtin `update` (always version-checked, merges over the stored row) | `UPDATE s SET a = COALESCE(input.a, a), … WHERE id = input.id AND version = input.expectedVersion`. Keep both: without the version the lock is lost; without `COALESCE` an omitted optional field is cleared |
+| builtin `update` (always version-checked, merges over the stored row) | `UPDATE s SET a = COALESCE(input.a, a), … WHERE id = input.id AND version = input.expectedVersion`. Keep both: without the version the lock is lost; without `COALESCE` an omitted optional field is cleared. `COALESCE` also means `null` cannot clear a field; give clearing its own flag input ([clear flag](handbook/guides/sql-patterns.md#change-only-the-fields-given-coalesce), [leave out, replace or clear](handbook/guides/native-admin.md#leave-out-replace-or-clear)) |
 | builtin `upsert` with `match` | `INSERT … ON CONFLICT (<match columns>) DO UPDATE SET x = EXCLUDED.x`; the conflict columns are a unique index; on a scoped Schema the scope field may be named or left out, Store adds it |
 | builtin `delete` | `DELETE FROM s WHERE id = input.id AND version = input.expectedVersion` |
 | builtin `archive` | a `ref` handler: `ctx.store.write([{ update: "s", set: { status: "archived" }, where: { id }, lock: expectedVersion }])` (SQL cannot set `status`) |
@@ -153,7 +268,7 @@ timestamps. On a scoped Schema an `INSERT` names no `id`. Several statements
 in one `sql` apply together or not at all. `requires.auth` and
 `requires.guard` are unchanged.
 
-### Trigger
+#### Trigger
 
 - `schedule` cron is POSIX: weekday 0 = Sunday. 0.1.x used Cloudflare's
   numbering (1 = Sunday), so subtract 1 from every weekday number, in ranges
@@ -164,7 +279,7 @@ in one `sql` apply together or not at all. `requires.auth` and
   `continue` now blocks the write), an after hook is best effort.
 - `http`, `mcp` and other `lifecycle` fields keep their shape.
 
-## 4. Handler code
+### 4. Handler code
 
 A `ref` handler is `(input, ctx) => output` in the service's `handlers` map.
 The generated types list exactly the plan's refs.
@@ -184,7 +299,7 @@ The generated types list exactly the plan's refs.
 `ctx.store` is scoped to the caller. `runtime.store` is not scoped; use it
 only in trusted host code.
 
-## 5. The Worker and the data
+### 5. The Worker and the data
 
 1. Move the old `src/`, `wrangler.jsonc` (or `.toml`) and `tsconfig.json`
    aside. `mantle generate` writes the preset (`src/*.ts`, `tsconfig.json`,
@@ -197,13 +312,10 @@ only in trusted host code.
 4. Admin MCP moves from `/mcp/staff` to `/mcp/admin`. Update MCP client URLs.
    It admits only the admin layer classified by Better Auth’s admin plugin
    `adminRoles` (default `["admin"]`), and requires the `mcp` scope for tokens.
-5. Import data into the new database through `runtime.store`. A scoped row
-   goes through `runtime.store.as(<its owner's caller>)`, so the scope field is
-   the owner. `status`, `created_at` and `author_id` cannot be imported:
-   publish with a second update that sets `status`, and accept new
-   timestamps and author.
+5. Data: this step described an alpha API that 0.2.0 does not have. Follow
+   [Moving data from 0.1.x](#moving-data-from-01x) instead.
 
-## 6. CLI
+### 6. CLI
 
 | 0.1.x | 0.2.0 |
 |---|---|
@@ -212,7 +324,7 @@ only in trusted host code.
 | `mantle generate --output`, `--namespace` | removed: output is always `.mantle/generated/` |
 | `mantle skills`, the `mantle-harness` bin | removed |
 
-## 7. Verify
+### 7. Verify
 
 1. `mantle generate` and `mantle generate --check` exit 0.
 2. The project typechecks against the generated `mantle.ts`.

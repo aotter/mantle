@@ -1,6 +1,6 @@
 import { describeApp } from "../domain/describe/index.js";
 /** Build-time assembly only. None of these imports enter generated applications. */
-import { compilePlan, viewOutputs, sqliteCompiler, postgresCompiler, d1Dialect, postgresDialect, lowerPlan, sqliteSchema, postgresSchema, type ManifestSourceSet, type LoweredStatement, type RuntimePlan, type SqlNode } from "../build/compiler.js";
+import { compilePlan, lockCondition, viewOutputs, sqliteCompiler, postgresCompiler, d1Dialect, postgresDialect, lowerPlan, sqliteSchema, postgresSchema, type ManifestSourceSet, type LoweredStatement, type RuntimePlan, type SqlNode } from "../build/compiler.js";
 import { wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { boundaryType, outputType } from "../domain/columns.js";
 import { castCursor, provePaging, type PagingProof } from "../domain/paging.js";
@@ -13,6 +13,12 @@ import { searchDiagnostics } from "../usecase/search.js";
 import { generate } from "../usecase/generate.js";
 import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/generation.js";
 import { generatedFiles } from "../domain/entry.js";
+
+/** Each Schema's locks with `when` lowered and printed once (#1822): the Store's guarded writes carry the same condition Core's do. */
+const coreLocks = (dialect: Pick<typeof d1Dialect, "print" | "lowering">, schemas: RuntimePlan["schemas"]) => Object.fromEntries(Object.entries(schemas).flatMap(([name, s]) => s.locks?.length ? [[name, s.locks.map(l => ({
+  name: l.name, on: l.on, message: l.message,
+  sql: dialect.print!({ SelectStmt: { targetList: [{ ResTarget: { val: lockCondition(l.when, schemas, dialect.lowering) } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } }, schemas).replace(/^SELECT /, ""),
+}))]] : []));
 
 /** Core's own new-entry-id lowering for a dialect, printed once as an SQL expression: the Store's inserts carry the same one its compiled INSERTs do. */
 export const coreNewId = (dialect: Pick<typeof d1Dialect, "print" | "lowering">, schemas: Parameters<NonNullable<typeof d1Dialect.print>>[1]): string =>
@@ -148,6 +154,7 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
     const plans = [lowered, wireLowered];
     for (const plan of plans) for (const [kind, all] of [["views", plan.views], ["procedures", plan.procedures]] as const) for (const [name, modes] of Object.entries(all)) {
       for (const statement of Object.values(modes).flat() as LoweredStatement[]) if (!seen.has(statement)) { seen.add(statement); castInputs(statement, `${kind}/${name}`, refusals);
+        if (statement.probe) castInputs(statement.probe as LoweredStatement, `${kind}/${name}`, refusals);
         if ("paged" in statement) for (const page of Object.values((statement as import("../build/compiler.js").LoweredView).paged)) {
           const inputPage = { ...statement, sql:page.sql };
           castInputs(inputPage, `${kind}/${name}`, refusals);
@@ -160,7 +167,7 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
   const adminReads=request.admin?await adminBindingsOf(compiled.plan,dialect,paging,wire,refusals):undefined;
   const {adminPages,adminEntries}=adminReads??{};
   const report = await describeApp(compiled.plan);
-  const result = generate({ description: report, target: request.target, admin:request.admin, adminPages, adminEntries, site: request.site, plan: compiled.plan, lowered, wireLowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), paging });
+  const result = generate({ description: report, target: request.target, admin:request.admin, adminPages, adminEntries, site: request.site, plan: compiled.plan, lowered, wireLowered, viewKeys, newId: coreNewId(dialect, compiled.plan.schemas), locks: coreLocks(dialect, compiled.plan.schemas), paging });
   if (refusals.length) {
     const diagnostics = result.ok ? [] : result.diagnostics.filter(d =>
       !searchProblems.some(p => p.path === d.path) ||

@@ -471,6 +471,14 @@ export function checkSchemaNavTargets(
   const declared = declaredParentField(schema);
   const target = nav?.parentCollection
     ?? (declared === undefined ? undefined : resolveMantleRef(schema.spec.schema.properties?.[declared])?.schema);
+  if (declared === undefined && target !== undefined && yieldsFold(schemasByName.get(target), schema.metadata.name)) {
+    return problem(
+      "/spec/uiSchema/nav/standalone",
+      true,
+      "standalone on a Schema with a required x-mantle-ref parent",
+      `Schema '${schema.metadata.name}' cannot declare nav.standalone: '${target}' folds under it by nav.parentField, so it has no parent to fold under.`,
+    );
+  }
   if (target !== undefined && !isFoldParent(schemasByName.get(target))) {
     return problem(
       declared === undefined ? "/spec/uiSchema/nav/standalone" : "/spec/uiSchema/nav/parentField",
@@ -517,22 +525,37 @@ function declaredParentField(schema: SchemaManifest): string | undefined {
   return typeof nav?.["parentField"] === "string" ? nav["parentField"] : undefined;
 }
 
+/** Whether `parent` declares nav.parentField onto `child`: that explicit fold decides the direction, so `child` does not also fold under `parent` by inference. */
+const yieldsFold = (parent: SchemaManifest | undefined, child: string): boolean =>
+  !!parent && declaresFoldUnder(parent.spec.schema, parent.spec.uiSchema, child);
+
+/** @internal Whether a Schema's declared nav.parentField references `name`; the Admin descriptor and the checker both drop such a Schema as an inferred parent of `name`. */
+export function declaresFoldUnder(body: JsonSchema, uiSchema: unknown, name: string): boolean {
+  const field = ((uiSchema as Record<string, Record<string, unknown> | undefined> | undefined)?.["nav"])?.["parentField"];
+  return typeof field === "string" && resolveMantleRef(body.properties?.[field])?.schema === name;
+}
+
 const isFoldParent = (s: SchemaManifest | undefined): boolean => !!s && !s.spec.translates;
 
 /** Required `id` references to existing non-translates Schemas, in declaration order (the Admin descriptor's default parent is the first). */
 function eligibleIdRefs(schema: SchemaManifest, schemasByName: ReadonlyMap<string, SchemaManifest>): string[] {
-  return requiredMantleRefFields(schema.spec.schema).filter((r) => isFoldParent(schemasByName.get(r.collection))).map((r) => r.field);
+  return requiredMantleRefFields(schema.spec.schema).filter((r) => inferredParent(schema, r.collection, schemasByName)).map((r) => r.field);
 }
+
+/** Whether `name` can be `schema`'s inferred fold parent: an existing non-translates Schema that does not explicitly fold under `schema`. */
+const inferredParent = (schema: SchemaManifest, name: string, schemasByName: ReadonlyMap<string, SchemaManifest>): boolean =>
+  isFoldParent(schemasByName.get(name)) && !yieldsFold(schemasByName.get(name), schema.metadata.name);
 
 /** The Schema a collection folds under, as the Admin descriptor resolves it. */
 function foldParentOf(schema: SchemaManifest | undefined, schemasByName: ReadonlyMap<string, SchemaManifest>): string | undefined {
   if (!schema || schema.spec.translates) return undefined;
-  const field = foldParentField(schema.spec.schema, declaredParentField(schema), (name) => isFoldParent(schemasByName.get(name)));
+  const field = foldParentField(schema.spec.schema, declaredParentField(schema), (name) => inferredParent(schema, name, schemasByName));
   return field === undefined ? undefined : resolveMantleRef(schema.spec.schema.properties?.[field])?.schema;
 }
 
 /** @internal The field a collection folds under its parent by, shared by the Admin descriptor and the cycle check:
- *  the declared nav.parentField, else the first required `id` reference, else the first required reference, each to a Schema `isParent` accepts. */
+ *  the declared nav.parentField, else the first required `id` reference, else the first required reference, each to a Schema `isParent` accepts
+ *  (callers reject a Schema whose own declared nav.parentField points back, see `declaresFoldUnder`). */
 export function foldParentField(body: JsonSchema, declared: string | undefined, isParent: (name: string) => boolean): string | undefined {
   const props = body.properties ?? {};
   const required = new Set(body.required ?? []);

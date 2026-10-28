@@ -205,3 +205,98 @@ describe("names that differ only by case", () => {
     expect(await codes(`${SCHEMA}---\n${SCHEMA.replace("name: notes", "name: Notes")}`)).toEqual(["SCHEMA_NAME_CASE_COLLISION"]);
   });
 });
+
+describe("Schema.spec.lock (#1822)", () => {
+  const LIVE = "EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)";
+  const lockSchemas = (when = LIVE, postsIndexes = "[[current_revision]]", lock?: string) => `apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  lifecycle: operational
+  indexes: ${postsIndexes}
+  schema: { type: object, properties: { title: { type: string }, current_revision: { type: string } } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: post_revisions }
+spec:
+  title: Revisions
+  lifecycle: operational
+  lock: ${lock ?? JSON.stringify([{ name: "live_revision", on: ["update", "delete"], when, message: "This revision is live." }])}
+  schema: { type: object, properties: { body: { type: string }, state: { type: string } } }
+`;
+  const result = async (text: string, dialect?: typeof pgCompile) => { const r = await compilePlan({ sources: [{ sourceId: "memory:lock", text }] }, dialect); return r.ok ? r : { ok: false as const, found: r.diagnostics.map((d) => `${d.code}: ${d.message}`) }; };
+
+  it.each([undefined, pgCompile])("compiles when into the plan as IR whose subqueries read stored rows (%s)", async (dialect) => {
+    const r = await result(lockSchemas(), dialect);
+    if (!r.ok) throw new Error(r.found.join("\n"));
+    const [lock] = r.plan.schemas.post_revisions!.locks!;
+    expect(lock).toMatchObject({ name: "live_revision", on: ["update", "delete"], message: "This revision is live.", when: { SubLink: { subLinkType: "EXISTS_SUBLINK" } } });
+    expect(JSON.stringify(lock!.when)).toContain('"mantle":"system"');
+    expect(r.plan.schemas.posts!.locks).toBeUndefined();
+  });
+
+  it("refuses a malformed lock entry with SCHEMA_LOCK_INVALID", async () => {
+    const entry = (patch: object) => JSON.stringify([{ name: "live", on: ["update"], when: "state = 'x'", message: "m", ...patch }]);
+    for (const [lock, why] of [
+      ["[]", /non-empty list/], [entry({ name: "has space" }), /name must be an identifier/],
+      [entry({ on: [] }), /on must be a non-empty list/], [entry({ on: ["create"] }), /on must be/], [entry({ on: ["update", "update"] }), /distinct/],
+      [entry({ when: 1 }), /when must be a non-empty string/], [entry({ message: "" }), /message must be a non-empty string/], [entry({ extra: 1 }), /is not supported/],
+      [JSON.stringify([{ name: "live", on: ["update"], when: "true", message: "m" }, { name: "Live", on: ["delete"], when: "true", message: "m" }]), /declared twice/],
+    ] as const) {
+      const r = await result(lockSchemas(undefined, undefined, lock));
+      expect(r.ok ? [] : r.found, lock).toEqual([expect.stringMatching(why)]);
+      if (!r.ok && !/is not supported/.test(String(why))) expect(r.found[0]).toMatch(/^SCHEMA_LOCK_INVALID/);
+    }
+  });
+
+  it("refuses SQL outside the lock subset", async () => {
+    for (const [when, why] of [
+      ["EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = id)", /qualify every column: 'id'/],
+      ["EXISTS (SELECT 1 FROM posts WHERE current_revision = post_revisions.id)", /qualify every column/],
+      ["EXISTS (SELECT 1 FROM post_revisions WHERE post_revisions.state = 'x')", /hides a name already in scope/],
+      ["state = auth.uid()", /calls no function/], ["state = now()", /calls no function/], ["state = input.x", /input.x is not a declared input/],
+      ["(SELECT count(*) FROM posts p) > 0", /SubLink is refused/], ["EXISTS (SELECT count(*) FROM posts p WHERE p.id = post_revisions.id)", /calls no function/],
+      ["EXISTS (SELECT 1 FROM posts p JOIN posts q ON q.id = p.id WHERE p.current_revision = post_revisions.id)", /no join/],
+      ["EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id LIMIT 1)", /LIMIT/],
+      ["missing = 'x'", /SQL_COLUMN|not a column/], ["EXISTS (SELECT 1 FROM nope n WHERE n.id = post_revisions.id)", /nope is not a declared Schema/],
+      ["state || 'x' = 'y'", /is refused/],
+      // a tail clause would land on the read and be dropped
+      ["state = 'x' ORDER BY state", /sortClause is refused/], ["state = 'x' GROUP BY state", /groupClause is refused/], ["state = 'x' LIMIT 1", /LIMIT needs an ORDER BY|limitCount is refused/],
+    ] as const) {
+      const r = await result(lockSchemas(when));
+      expect(r.ok ? [] : r.found, when).toEqual([expect.stringMatching(why)]);
+    }
+    // the subset: columns, comparisons, IN, AND/OR/NOT, IS [NOT] NULL, [NOT] EXISTS, nested EXISTS
+    for (const when of ["state = 'live' OR state IS NULL", "state IN ('a', 'b') AND NOT state <> 'c'", `NOT ${LIVE}`, "EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id AND EXISTS (SELECT 1 FROM post_revisions r2 WHERE r2.id = p.id))"])
+      expect((await result(lockSchemas(when))).ok, when).toBe(true);
+  });
+
+  it("gives the lock's relations reserved aliases and refuses authored _mantle aliases", async () => {
+    const r = await result(lockSchemas());
+    if (!r.ok) throw new Error(r.found.join("\n"));
+    expect(JSON.stringify(r.plan.schemas.post_revisions!.locks![0]!.when)).toContain('"fields":[{"String":{"sval":"_mantle_lock_0"}},{"String":{"sval":"current_revision"}}]');
+    for (const sql of ["DELETE FROM post_revisions _mantle_lock_0 WHERE _mantle_lock_0.id = input.text", "SELECT s.id FROM (SELECT id FROM posts) _mantle_x"]) {
+      const p = await result(lockSchemas() + "---\n" + (sql.startsWith("SELECT") ? view(sql) : procedure(sql)));
+      expect(p.ok ? [] : p.found, sql).toEqual([expect.stringMatching(/_mantle\w* is a reserved alias/)]);
+    }
+  });
+
+  it("proves each EXISTS is index-served, naming the index to declare", async () => {
+    const r = await result(lockSchemas(LIVE, "[]"));
+    expect(r.ok ? [] : r.found).toEqual(["LOCK_INDEX_MISSING: Schema 'post_revisions' lock 'live_revision': no index serves its EXISTS on 'posts', which every guarded write runs. Declare indexes: [[current_revision]] on Schema 'posts' (handbook: reference/schema.md#locks)."]);
+    expect((await result(lockSchemas(LIVE))).ok).toBe(true);
+    // a unique index or id serves it too; a literal equality counts; an index whose first column is not equated does not
+    expect((await result(lockSchemas(LIVE, "[]").replace("  indexes: []\n", "  indexes: []\n  uniqueIndexes: [[current_revision]]\n"))).ok).toBe(true);
+    expect((await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.id = post_revisions.body)", "[]"))).ok).toBe(true);
+    expect((await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.title = 'x' AND p.current_revision = post_revisions.id)", "[[title, current_revision]]"))).ok).toBe(true);
+    expect((await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)", "[[title, current_revision]]"))).ok).toBe(false);
+    // IN over constants is equality; OR is not index-proven
+    expect((await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.title IN ('a', 'b') AND p.current_revision > post_revisions.id)", "[[title]]"))).ok).toBe(true);
+    const or = await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id OR p.title = post_revisions.body)", "[[current_revision], [title]]"));
+    expect(or.ok ? [] : or.found).toEqual([expect.stringMatching(/^LOCK_INDEX_MISSING: .*OR is not index-proven: split it into separate locks/)]);
+    const none = await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.current_revision > post_revisions.id)", "[]"));
+    expect(none.ok ? [] : none.found).toEqual([expect.stringMatching(/^LOCK_INDEX_MISSING: .*Correlate the subquery to the locked row by an equality/)]);
+  });
+});

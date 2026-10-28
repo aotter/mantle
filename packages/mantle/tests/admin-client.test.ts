@@ -29,11 +29,13 @@ test("--admin emits generated/admin-client.ts: typed names and bound hooks, with
   // a row carries the names the browser route gives its columns (declared case), not the SQL output names a tool returns
   expect(client).toContain('type View0Row = Renamed<View0Wire, {"prioritylevel":"priorityLevel"}>;');
   expect(client).toContain('export const admin: AdminMeta<AppAdminTypes> = { rowNames: {"task-board":{"prioritylevel":"priorityLevel"}} };');
-  // an entry's data keeps declared names and has no scope field
-  expect(client).toContain('readonly "priorityLevel"?: number');
+  // an entry's data keeps declared names and has no scope field; a field the Schema does not require reads null when
+  // unset and is cleared with null, so a custom input can call onChange(null)
+  expect(client).toContain('readonly "title": string; readonly "priorityLevel"?: number | null; readonly "note"?: string | null;');
   expect(client).not.toContain('"owner"');
-  // a draft of a publishing collection is only partly validated: none of its fields is certain to be there
-  expect(client).toContain('readonly "posts": { readonly data: { readonly "title"?: string; readonly "body"?: string;  } }');
+  // a draft of a publishing collection is only partly validated: none of its fields is certain to be there, and a
+  // required one it lacks reads null too
+  expect(client).toContain('readonly "posts": { readonly data: { readonly "title"?: string | null; readonly "body"?: string | null;  } }');
   // an operation's input is what its route validates; its MCP tool is derived from its name, so no name list ships
   expect(client).toContain('readonly "mark-done": { readonly input: { readonly "entryId": string; readonly "expectedVersion": number;  }; readonly output: Output }');
   expect(client).not.toContain("mark_done");

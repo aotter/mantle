@@ -4,6 +4,7 @@ import type { UserFieldSpec } from "../../build/spec/domain/model/UserFields.js"
 import { canonical, hashDefinition } from "./target-hash.js";
 import { targetDefinitions, type TargetDefinition } from "./targets.js";
 export { targetHash } from "./target-hash.js";
+export { matchTarget, type TargetRequest } from "./match.js";
 
 export interface DescribeTarget {
   name: string;

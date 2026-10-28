@@ -1,7 +1,7 @@
 import type { GatewayOptions } from "@aotter/mantle/contracts";
 /** Optional Admin API: generated data and native calls, with one fresh admin session per request. */
 import { forwarded, deny, isAdmin, ContractError, checkOrigin, surfaceCaller, type Caller, type Target, type Authorize, type Gateway, type RequestContext } from "@aotter/mantle/contracts";
-import { nativeRest, body, type Route as RestRoute } from "@aotter/mantle/rest";
+import { nativeRest, body, ADMIN_API_BASE, canonicalPath, routeSource, type Route as RestRoute } from "@aotter/mantle/rest";
 import { userOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
 import { convert, type Conversions } from "@aotter/mantle/surface";
@@ -241,16 +241,9 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
         ...(options.routes ?? []),
     ];
     const table: RestRoute<Database, Handlers, Env>[] = routes.map(route => {
-        const keys: string[] = [];
-        const path = route.path.split("/").map(segment => {
-            const part = /^\{([a-zA-Z][\w]*)(\*)?\}$/.exec(segment);
-            if (part) {
-                keys.push(part[1]!);
-                return part[2] ? "(.*)" : "([^/]+)";
-            }
-            return encodeURIComponent(segment).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        }).join("/");
-        return { id: `admin:${route.method} ${route.path.replace(/\{([^}*]+)\*?\}/g, ":$1")}`, method: route.method, pattern: new RegExp("^/admin/api" + path + "/?$"), keys, bodyLimit: route.bodyLimit, rawBody: route.rawBody, handle: async (request, env, getDb, caller, params, _handlers, input) => {
+        // The pattern grammar describe's matchTarget compiles from the same ids.
+        const { source, keys } = routeSource(route.path, ADMIN_API_BASE, true);
+        return { id: `admin:${route.method} ${route.path.replace(/\{([^}*]+)\*?\}/g, ":$1")}`, method: route.method, pattern: new RegExp(source), keys, bodyLimit: route.bodyLimit, rawBody: route.rawBody, handle: async (request, env, getDb, caller, params, _handlers, input) => {
                 const result = await runRoute(route, { request, url: new URL(request.url), env, get db() { return getDb(); }, caller: caller as Admin, params, input, ...(options.authorize ? { authorize: (target: Target) => import("@aotter/mantle/authorization").then(m => m.authorized(options.authorize!, target, caller)) } : {}) });
                 if (!(result instanceof Response))
                     return result;
@@ -262,12 +255,14 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     });
     const serve = async (request: Request, env: Env, ctx?: RequestContext) => {
         const path = new URL(request.url).pathname;
-        if (path !== "/admin/api" && !path.startsWith("/admin/api/"))
+        if (path !== ADMIN_API_BASE && !path.startsWith(ADMIN_API_BASE + "/"))
             return;
         let caller: Caller | undefined;
         const access = options.gateway ? (await import("@aotter/mantle/host-access")).accessRequest(ctx, {...options, accessTargets: options.accessTargets ?? metadata.accessTargets}) : undefined;
-        const matched = table.find(r => r.method === request.method && r.pattern.test(path));
-        const targetId = matched?.id ?? `admin:${request.method} ${path.slice(10)}`;
+        // Matched as the dispatching router matches: on the canonical path, so equivalent escapes select one target.
+        const canonical = canonicalPath(path);
+        const matched = canonical === undefined ? undefined : table.find(r => r.method === request.method && r.pattern.test(canonical));
+        const targetId = matched?.id ?? `admin:${request.method} ${path.slice(ADMIN_API_BASE.length)}`;
         try {
             await access?.select(targetId);
             caller = forwarded(ctx, options.gateway)
@@ -280,11 +275,11 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 if (options.gateway) throw new ContractError("AUTH_DENIED", "Admin layer required.", "admin");
                 return Response.json({ error: { code: "AUTH_DENIED", message: "Admin needs a signed-in admin session.", path: "admin" }, minimumRole: "admin" }, { status: 403, headers: { "cache-control": "private, no-store" } });
             }
-            const operation = options.gateway ? /^\/admin\/api\/operations\/([^/]+)\/?$/.exec(path) : null;
+            const operation = options.gateway ? /^\/admin\/api\/operations\/([^/]+)\/?$/.exec(canonical ?? "") : null;
             const readOnly = ["GET", "HEAD", "OPTIONS"].includes(request.method) || request.method === "POST" && !!operation && operations.some(p => p.name === decodeURIComponent(operation[1]!) && p.readOnly === true);
             if (options.gateway) {
                 const { checkFresh } = await import("@aotter/mantle/host-caller");
-                const view = /\/views\/([^/]+)/.exec(path);
+                const view = /\/views\/([^/]+)/.exec(canonical ?? "");
                 const variant = operation ? `procedure:${decodeURIComponent(operation[1]!)}` : view ? `view:${decodeURIComponent(view[1]!)}` : undefined;
                 if (matched) await access?.check(readOnly, variant);
                 if (!matched) checkFresh(caller, readOnly, path);
@@ -302,7 +297,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 if (!matched) throw missing();
                 const route = routes[table.indexOf(matched)]!;
                 if (!route.prepare) throw new ContractError("DRY_RUN_UNSUPPORTED", "Opaque Admin work.", matched.id, {status:412});
-                const params = Object.fromEntries((matched.keys ?? []).map((key, i) => [key, decodeURIComponent(matched.pattern.exec(path)![i + 1]!)]));
+                const params = Object.fromEntries((matched.keys ?? []).map((key, i) => [key, decodeURIComponent(matched.pattern.exec(canonical!)![i + 1]!)]));
                 const input = ["GET", "HEAD", "OPTIONS"].includes(request.method) ? undefined : await body(request, route.bodyLimit);
                 const c: Context<Env, Database> = {request, url:new URL(request.url), env, get db(): Database { throw new Error("Dry run attempted database acquisition"); }, caller:caller as Admin, params, input, ...(options.authorize ? {authorize:(target:Target)=>import("@aotter/mantle/authorization").then(m=>m.authorized(options.authorize!,target,caller!))} : {})};
                 if (options.authorize && route.target) await checkTarget(route.target(c), caller);
@@ -322,7 +317,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     // the drain loads on an Admin request only (it is request-time code), never at Worker startup
     return async (request, env, ctx) => {
         const path = new URL(request.url).pathname;
-        return path === "/admin/api" || path.startsWith("/admin/api/") ? (await import("@aotter/mantle/host-caller")).draining(serve)(request, env, ctx) : undefined;
+        return path === ADMIN_API_BASE || path.startsWith(ADMIN_API_BASE + "/") ? (await import("@aotter/mantle/host-caller")).draining(serve)(request, env, ctx) : undefined;
     };
 }
 export { adminShell } from "./shell.js";
