@@ -142,7 +142,12 @@ fast at a realistic volume, and no hot path scans a table that grows.
   [provision skill](../provision/SKILL.md) and needs the user's authorization.
 - After any repair, rerun the [local HTTP checks](../../handbook/guides/local-testing.md).
   A repair that changes what a user sees or can do is no longer only a
-  performance change: run acceptance again for that surface.
+  performance change: re-run acceptance for the scope the
+  [re-verification rule](../../handbook/guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches)
+  names. A changed View or Procedure widens it to every surface that reads or
+  writes that data, and so does a `uniqueIndexes` entry. A non-unique
+  `indexes` entry and its migration keep the business rules: run `pnpm check`,
+  the local HTTP checks and your focused regressions, not acceptance.
 - Report app-added cost and SDK-existing cost separately. Built-in Admin has a
   recorded [baseline](../../handbook/guides/size-and-startup.md#native-admin-baselines)
   per SDK version; while the installed version and Admin entry are unchanged,

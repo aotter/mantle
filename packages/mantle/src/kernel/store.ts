@@ -122,11 +122,12 @@ export interface Write<T> extends PromiseLike<T> {
 export interface TransactionOptions { readonly isolation?: "serializable" | "repeatable read" | "read committed" | "read uncommitted" }
 export interface Store<T extends Record<string, Table>> {
   collection<K extends keyof T & string>(name: K): Collection<T[K]>;
+  /** Atomic unused Writes from this Store. Inside a transaction, joins it; any rejection makes the outer transaction rollback-only, even if caught. */
   batch<const W extends readonly Write<unknown>[]>(writes: W): Promise<{ -readonly [K in keyof W]: Awaited<W[K]> }>;
 }
 type Operations<H> = Record<string, Record<string, (db: H, caller: Caller, input: any, context: any) => Promise<any>>>;
 type BoundOperations<O> = { [K in keyof O]: { [N in keyof O[K]]: O[K][N] extends (db: any, caller: Caller, input: infer I, ...args: any[]) => infer R ? (input: I) => R : never } };
-type Tx<T extends Record<string, Table>, O> = Pick<Store<T>, "collection"> & BoundOperations<O>;
+type Tx<T extends Record<string, Table>, O> = Store<T> & BoundOperations<O>;
 type Interactive<T extends Record<string, Table>, O> = { transaction<R>(fn: (tx: Tx<T, O>) => Promise<R>, options?: TransactionOptions): Promise<R> };
 
 interface Policy { readonly sql: string; readonly recipes: readonly Recipe[]; readonly from: string; readonly projection: string; readonly terms: readonly Term[]; byId?: string; select?: string }
@@ -173,9 +174,9 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
     const preparedPolicy = { sql, recipes, from, projection, terms }; p.policy.set(trusted, preparedPolicy); return preparedPolicy;
   };
 
-  return ((db: H, caller: Caller, options?: object) => make(db, caller, false, options)) as never;
+  return ((db: H, caller: Caller, options?: object) => make(db, caller, undefined, options)) as never;
 
-  function make(db: H, caller: Caller, inTransaction = false, options?: object) {
+  function make(db: H, caller: Caller, transaction?: { failure?: { error: unknown } }, options?: object) {
     type Pending = { build: () => Bound; project: (rows: Row[]) => unknown; promise?: Promise<any>; claimed?: boolean };
     const pending = new WeakMap<Write<unknown>, Pending>();
     const write = (build: Pending["build"], project: Pending["project"], path: string): Write<unknown> => {
@@ -201,19 +202,30 @@ export function createStore<H, T extends Record<string, Table>, D extends Driver
           return fn && (cache[name] = (input: any) => fn(db, caller, input, options && { ...options, store }));
         } })];
       })),
-      ...(!inTransaction && { batch: async (writes: readonly Write<unknown>[]) => {
-        const states = writes.map(w => pending.get(w));
-        if (new Set(writes).size !== writes.length || states.some(s => !s || s.claimed)) throw new Error("Batch needs unused Writes from this Store.");
-        for (const s of states) s!.claimed = true;
-        const rows = writes.length ? await drv.procedure(db, states.map(s => s!.build()), "store/batch") : [];
-        return states.map((s, i) => s!.project(rows[i]!));
-      } }),
+      batch: async (writes: readonly Write<unknown>[]) => {
+        try {
+          const states = writes.map(w => pending.get(w));
+          if (new Set(writes).size !== writes.length || states.some(s => !s || s.claimed)) throw new Error("Batch needs unused Writes from this Store.");
+          for (const s of states) s!.claimed = true;
+          const rows = writes.length ? await drv.procedure(db, states.map(s => s!.build()), "store/batch") : [];
+          return states.map((s, i) => s!.project(rows[i]!));
+        } catch (error) {
+          // A failed batch joins the outer rollback; catching it must not commit earlier steps.
+          if (transaction) transaction.failure ??= { error };
+          throw error;
+        }
+      },
       ...(drv.transaction && { transaction: async (fn: (tx: any, db: H) => Promise<any>, txOptions?: TransactionOptions) => {
-        if (inTransaction) throw new Error("Nested transactions are not supported.");
-        return drv.transaction!(db, tx => fn(make(tx, caller, true, options), tx), txOptions);
+        if (transaction) throw new Error("Nested transactions are not supported.");
+        const state: { failure?: { error: unknown } } = {};
+        return drv.transaction!(db, async tx => {
+          const result = await fn(make(tx, caller, state, options), tx);
+          if (state.failure) throw state.failure.error;
+          return result;
+        }, txOptions);
       } }),
     };
-    if (inTransaction) transactionStores.add(store);
+    if (transaction) transactionStores.add(store);
     return store;
   }
 

@@ -25,7 +25,10 @@ visibility, OCC and restart persistence, not just a 200 response.
 Before reporting any new app or feature as done, follow the [independent
 acceptance guide](../../handbook/guides/agent-workflow-acceptance.md): write a
 private rubric, then give one fresh agent per role (`admin`, `user`) only its
-role and entry points, across every surface it uses. This is not limited to
+role and entry points, across every surface it uses. After a repair, re-run
+the scope its [re-verification
+rule](../../handbook/guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches)
+names and state which evidence you reused. This is not limited to
 MCP; if it was not run, say so explicitly and report the work as UNVERIFIED
 rather than done. Hand off with the guide's [layered
 report](../../handbook/guides/agent-workflow-acceptance.md#report-done-ness-in-layers):
@@ -87,6 +90,7 @@ Destructive changes and type changes need explicit data migration. Mantle drops 
 Writes use Store `insert` / `update` / `delete`, `batch`, `transaction`, or declared Procedures. Never use raw SQL writes: they bypass scope, TTL, publishing and system-column rules. For reads beyond an id lookup or simple AND filter (joins, aggregates, OR, reuse), declare an internal View so the SQL is reviewable and typed. Store `findById`, `find` and `first` remain suitable for handler lookups and embedding in an existing app. Ref handlers receive `ctx.store` bound to the same Caller and transaction.
 
 For published-content replacement with preview and rollback, follow `mantle help revisions`: Core supplies OCC, Schema locks and atomic `store.batch`; the recipe binds the previewed revision ID/version and atomically seals it while switching the parent. Applications own retention and review policy; Core does not mandate a preparation step. Keep the previewed version on submit and require another preview after a revision conflict.
+Use its custom Native Admin preview/switch page: freeze the reviewed content and both row versions, then submit them through the authorized operation. Do not make editors copy version numbers or silently replace the reviewed snapshot after a refresh; conflicts require another explicit preview.
 
 For simple creates/partial updates, prefer Store-backed ref Procedures; keep
 Procedure `requires`/generated input checks, use only allowed patch fields and
