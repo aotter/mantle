@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "{name}のワークスペース",
+    "entryEdit.workspaceHint": "このレコードを保存し、子コレクションを開いて続行してください。",
+    "entryEdit.missingFields": "未入力の必須項目：{fields}。",
+    "entryEdit.readOnlyRequired": "読み取り専用の項目は操作または関連レコードから設定します。利用可能な操作で入力してください。",
     "oauth.consent.redirect": "完了後の移動先",
     "oauth.consent.scopes": "要求されるアクセス権",
     "oauth.consent.offline": "このサイトからログアウトした後もバックグラウンドアクセスを許可します。接続済みアプリからいつでも取り消せます。",

@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "{name} 작업 공간",
+    "entryEdit.workspaceHint": "이 레코드를 저장한 다음 하위 컬렉션을 열어 계속하세요.",
+    "entryEdit.missingFields": "누락된 필수 필드: {fields}.",
+    "entryEdit.readOnlyRequired": "읽기 전용 필드는 작업 또는 관련 레코드에서 설정됩니다. 사용 가능한 작업으로 완료하세요.",
     "oauth.consent.redirect": "완료 후 이동 위치",
     "oauth.consent.scopes": "요청한 권한",
     "oauth.consent.offline": "이 웹사이트에서 로그아웃한 후에도 백그라운드 접근을 허용합니다. 연결된 앱에서 언제든지 권한을 취소할 수 있습니다.",

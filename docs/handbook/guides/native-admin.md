@@ -312,6 +312,8 @@ with every slot.
 In the browser Admin, a View column that reads a Schema field also goes through that field's `cell:` component, with the column's own
 `cell:view:` component outside it; the MCP App renders only `cell:view:`. The developer workspace (`/admin/dev`) is Admin's own tool and does not go through any slot. A record with folded child collections opens on a workbench at `/admin/c/<schema>/<id>`, which is not `RecordView`; the record form (and so `RecordView`, `record.aside:`, `record.actions:` and `input:`) is its `/edit` page. A `Shell` that does not call `renderDefault` has no status bar: the record form's Save and Publish bar then stays in the page.
 
+Creating a parent opens its field editor first. Save the parent fields, then use the named workspace link or the child-collection links above the form to continue in its workbench. Missing publish requirements name their fields; a read-only requirement must be set by an available operation or related record rather than typed into the form. Workspace links use the same unsaved-changes guard as other Admin navigation.
+
 While the record form has unsaved changes, leaving it asks first: Admin's own links, its in-app navigation and Back/Forward
 show a confirm dialog, and a reload, closing the tab or another site show the browser's own prompt (`beforeunload`). Save,
 "Load latest version" or confirming the leave clears it, and a `#hash` change on the same page never asks; a cancelled Back or

@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "Area di lavoro: {name}",
+    "entryEdit.workspaceHint": "Salva questo record, poi apri una raccolta figlia per continuare.",
+    "entryEdit.missingFields": "Campi obbligatori mancanti: {fields}.",
+    "entryEdit.readOnlyRequired": "I campi di sola lettura si impostano tramite un’operazione o un record collegato. Usa le azioni disponibili per completarli.",
     "oauth.consent.redirect": "Torna a",
     "oauth.consent.scopes": "Accesso richiesto",
     "oauth.consent.offline": "Consenti l’accesso in background anche dopo la disconnessione da questo sito. Puoi revocarlo nelle App collegate.",

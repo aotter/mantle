@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "Obszar roboczy: {name}",
+    "entryEdit.workspaceHint": "Zapisz ten rekord, a następnie otwórz kolekcję podrzędną, aby kontynuować.",
+    "entryEdit.missingFields": "Brakujące pola wymagane: {fields}.",
+    "entryEdit.readOnlyRequired": "Pola tylko do odczytu ustawia się przez operację lub powiązany rekord. Użyj dostępnych działań, aby je uzupełnić.",
     "oauth.consent.redirect": "Powrót do",
     "oauth.consent.scopes": "Żądany dostęp",
     "oauth.consent.offline": "Zezwól na dostęp w tle, także po wylogowaniu z tej witryny. Możesz go cofnąć w sekcji Połączone aplikacje.",

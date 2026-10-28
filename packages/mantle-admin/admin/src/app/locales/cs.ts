@@ -1,4 +1,8 @@
 export default {
+    "entryEdit.workspace": "Pracovní prostor: {name}",
+    "entryEdit.workspaceHint": "Uložte tento záznam a pokračujte otevřením podřízené kolekce.",
+    "entryEdit.missingFields": "Chybějící povinná pole: {fields}.",
+    "entryEdit.readOnlyRequired": "Pole jen pro čtení se nastavují operací nebo souvisejícím záznamem. Doplňte je pomocí dostupných akcí.",
     "oauth.consent.redirect": "Návrat na",
     "oauth.consent.scopes": "Požadovaný přístup",
     "oauth.consent.offline": "Povolit přístup na pozadí i po odhlášení z tohoto webu. Přístup můžete odvolat v části Připojené aplikace.",
