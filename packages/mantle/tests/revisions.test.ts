@@ -36,13 +36,16 @@ async function app(target: "bun-sqlite" | "bun-postgres" | "cloudflare-d1") {
   };
 }
 
-const code = (run: () => Promise<unknown>) => run().then(() => "ok", (e: { code?: string; fields?: { kind?: string } }) => e.fields?.kind ? `${e.code} ${e.fields.kind}` : e.code ?? String(e));
+const code = (run: () => Promise<unknown>) => run().then(() => "ok", (e: { code?: string; errno?: string; fields?: { kind?: string } }) => e.errno === "40001" ? "SQLSTATE 40001" : e.fields?.kind ? `${e.code} ${e.fields.kind}` : e.code ?? String(e));
 
 async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }: Awaited<ReturnType<typeof app>>) {
   const admin = userCaller({ id: "editor", role: "admin" }, { adminRoles: ["admin"] }), member = userCaller({ id: "member" }, {});
   const anonymous = { kind: "anonymous" } as const, origin = "https://blog.test";
   const data = generated.store(db, admin, { handlers }), posts = data.collection("posts"), revisions = data.collection("post_revisions");
-  const run = async (name: string, input: Record<string, unknown>) => data.procedures[name](input);
+  // Test convenience: calls that do not exercise a stale preview explicitly observe the candidate just before submit.
+  const run = async (name: string, input: Record<string, unknown>) => data.procedures[name](name === "switch-revision" ? {
+    expectedRevisionVersion: (await revisions.findById(input.revision))?.version ?? 1, ...input,
+  } : input);
   const page = async (slug: string) => (await generated.views["post-page"](db, anonymous, { slug })).map((row: any) => row.body);
   const get = async (path: string, caller: unknown = anonymous) => {
     const response = (await postRoutes(new Request(origin + path), db, origin, async () => caller))!;
@@ -57,7 +60,7 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
   expect(await revisions.findById(first.id)).toMatchObject({ post: hello.id, title: "", body: "" });
   expect(await code(() => run("switch-revision", { post: hello.id, revision: first.id, expectedVersion: hello.version }))).toBe("INPUT_VALIDATION_FAILED");
   await fill(first.id, { title: "Hello", summary: "The first post.", body: "Version one." });
-  expect(await code(() => generated.store(db, member, { handlers }).procedures["switch-revision"]({ post: hello.id, revision: first.id, expectedVersion: hello.version }))).toBe("AUTH_DENIED");
+  expect(await code(() => generated.store(db, member, { handlers }).procedures["switch-revision"]({ post: hello.id, revision: first.id, expectedVersion: hello.version, expectedRevisionVersion: 2 }))).toBe("AUTH_DENIED");
   const switched = await run("switch-revision", { post: hello.id, revision: first.id, expectedVersion: hello.version });
   expect(switched).toEqual({ id: hello.id, version: hello.version + 1, current_revision: first.id });
 
@@ -92,6 +95,7 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
   const preview = await get(`/preview/${second.id}`, admin);
   expect([preview.status, preview.robots]).toEqual([200, "noindex"]);
   expect(preview.text).toContain("Version two.");
+  expect(preview.text).toContain(`revision ${second.id}, version ${(await revisions.findById(second.id))!.version}`);
   expect(preview.text).toContain('<meta name="robots" content="noindex, nofollow">');
   expect(preview.text).toContain(`<link rel="canonical" href="${origin}/posts/hello">`);
   for (const caller of [anonymous, member]) expect((await get(`/preview/${second.id}`, caller)).status).toBe(404);
@@ -102,8 +106,12 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
   const stale = hello.version + 1;
   expect(stale).toBeLessThan(await version(hello.id));
   expect(await code(() => run("switch-revision", { post: hello.id, revision: second.id, expectedVersion: stale }))).toBe("CONFLICT row");
-  expect(Boolean((await revisions.findById(second.id))!.sealed)).toBe(true); // parent conflict leaves a safe, unused seal
-  expect(await code(() => fill(second.id, { body: "Changed after failed switch." }))).toBe("CONFLICT lock");
+  expect(Boolean((await revisions.findById(second.id))!.sealed)).toBe(false); // the batch rolls back the seal
+  const observed = (await revisions.findById(second.id))!.version, currentVersion = await version(hello.id);
+  await fill(second.id, { body: "Changed after preview." });
+  expect(await code(() => run("switch-revision", { post: hello.id, revision: second.id, expectedVersion: currentVersion, expectedRevisionVersion: observed }))).toBe("CONFLICT row");
+  expect(Boolean((await revisions.findById(second.id))!.sealed)).toBe(false);
+  await fill(second.id, { body: "Version two." });
   const other = await posts.insert({ slug: "other" });
   const foreign = (await run("new-revision", { post: other.id })).results[0][0];
   await fill(foreign.id, { title: "Other", summary: "Another post.", body: "Not hello." });
@@ -118,6 +126,10 @@ async function verifyRevisions(db: unknown, { generated, handlers, postRoutes }:
   expect(await posts.findById(hello.id)).toMatchObject({ status: "published", published_at: published, current_revision: second.id });
   expect((await get("/posts/hello")).text).toContain("Version two.");
   expect((await generated.views["published-posts"](db, anonymous, {})).map((row: any) => [row.slug, row.title])).toEqual([["hello", "Hello"]]);
+
+  const afterSwitchVersion = await version(hello.id);
+  // Even an immutable rollback target must match the explicitly observed version.
+  expect(await code(() => run("switch-revision", { post: hello.id, revision: first.id, expectedVersion: afterSwitchVersion, expectedRevisionVersion: 1 }))).toBe("CONFLICT row");
 
   // Rollback is a switch to an earlier revision.
   await run("switch-revision", { post: hello.id, revision: first.id, expectedVersion: await version(hello.id) });
@@ -172,7 +184,9 @@ test("bun:sqlite: the revisions guide behaves as documented", async () => {
     const [{ pid: editPid }] = await competingDb.unsafe("SELECT pg_backend_pid() AS pid");
     for (const sealFirst of [false, true]) for (const mutation of ["blank", "delete"]) {
       const slug = `race-${sealFirst}-${mutation}`, posts = data.collection("posts"), revisions = data.collection("post_revisions");
-      const run = (name: string, input: unknown) => data.procedures[name](input);
+      const run = async (name: string, input: any) => data.procedures[name](name === "switch-revision" ? {
+        expectedRevisionVersion: (await revisions.findById(input.revision))?.version ?? 1, ...input,
+      } : input);
       const post = await posts.insert({ slug }), first = (await run("new-revision", { post: post.id })).results[0][0];
       await revisions.update(first.id, { title: "Title", summary: "Summary", body: "Old body" }, { lock: first.version });
       await run("switch-revision", { post: post.id, revision: first.id, expectedVersion: post.version });
@@ -195,7 +209,7 @@ test("bun:sqlite: the revisions guide behaves as documented", async () => {
         }
         throw Error(`No waiting ${kind} lock`);
       };
-      const switching = () => code(() => run("switch-revision", { post: post.id, revision: next.id, expectedVersion }));
+      const switching = () => code(() => run("switch-revision", { post: post.id, revision: next.id, expectedVersion, expectedRevisionVersion: candidate.version }));
       const changing = () => code(() => mutation === "blank"
         ? other.collection("post_revisions").update(next.id, { title: "", summary: "", body: "" }, { lock: candidate.version })
         : other.procedures["prune-revision"]({ id: next.id }));
@@ -204,8 +218,15 @@ test("bun:sqlite: the revisions guide behaves as documented", async () => {
       const secondWrite = sealFirst ? changing() : switching();
       await waiting("transactionid", sealFirst ? editPid : switchPid);
       await gate.unsafe("SELECT pg_advisory_unlock(1845021)");
-      expect([await firstWrite, await secondWrite]).toEqual(["ok", sealFirst ? "CONFLICT lock" : "CONFLICT row"]);
+      expect(await firstWrite).toBe("ok");
+      const loser = await secondWrite;
+      if (sealFirst) expect(loser).toBe("CONFLICT lock");
+      else expect(["CONFLICT row", "SQLSTATE 40001"]).toContain(loser);
       expect((await built.generated.views["post-page"](db, { kind: "anonymous" }, { slug })).map((row: any) => row.body)).toEqual([sealFirst ? "New body" : "Old body"]);
+      if (!sealFirst && mutation === "blank") {
+        const remaining = await revisions.findById(next.id);
+        expect([Boolean(remaining.sealed), remaining.version]).toEqual([false, candidate.version + 1]);
+      }
       await db.unsafe("DROP TRIGGER pause_revision ON post_revisions");
     }
   } finally {
