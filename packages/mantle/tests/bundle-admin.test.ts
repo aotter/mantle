@@ -3,7 +3,7 @@ import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bundleApp } from "../src/infrastructure/bundle.js";
+import { StaleGeneratedError, bundleApp } from "../src/infrastructure/bundle.js";
 import { INPUTS_FILE, inputsFingerprint } from "../src/infrastructure/inputs.js";
 
 /** An app whose Worker may mount Admin, with a stand-in `@aotter/mantle-admin` whose buildAdmin records each call. */
@@ -223,5 +223,81 @@ test("mantle bundle keeps Admin's UI and hooks, which the generated Admin client
     // only the startup graph counts: a request-time import is its own module
     await worker('export const x = () => import("../admin-client.js");');
     await bundleApp(entry, dist);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
+test("stale generated output under wrangler dev: one line and no Worker output instead of a failed build", async () => {
+  const { dir, entry } = await app();
+  try {
+    const generated = join(dir, "generated"), manifest = join(dir, "app.yaml"), dist = join(dir, "dist");
+    await mkdir(generated);
+    await writeFile(manifest, "kind: Schema\n");
+    await writeFile(join(generated, "generated.ts"), "export const store = 1;\n");
+    await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "cloudflare-d1"));
+    await writeFile(entry, 'import { shell } from "@aotter/mantle-admin/server";\nimport { store } from "../generated/generated.js";\nexport default { fetch: () => new Response(shell + store) };\n');
+    await bundleApp(entry, dist, undefined, { watch: true });
+    expect(existsSync(join(dist, "worker/worker.js"))).toBe(true);
+    await writeFile(manifest, "kind: View\n");
+    // without a watcher (deploy, types, a build by hand) the build fails as before and writes nothing
+    await expect(bundleApp(entry, dist)).rejects.toBeInstanceOf(StaleGeneratedError);
+    await expect(bundleApp(entry, dist)).rejects.toThrow(/is stale \(\S*app\.yaml changed\)\. Run your generate script \(mantle generate \.\.\.\) and rebuild\./);
+    expect(existsSync(join(dist, "worker/worker.js"))).toBe(true);
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    let printed: unknown[][] = [];
+    try { await bundleApp(entry, dist, undefined, { watch: true }); printed = error.mock.calls; } finally { error.mockRestore(); }
+    expect(printed).toHaveLength(1);
+    expect(String(printed[0]![0])).toMatch(/is stale \(\S*app\.yaml changed\)\. Run your generate script \(mantle generate \.\.\.\)\. \S+ is removed, so Wrangler reports its entry missing; a running wrangler dev holds requests and rebuilds when \S*generated changes\.$/);
+    // refused: nothing old or stale is left for Wrangler to load; Admin's assets are untouched
+    expect(existsSync(join(dist, "worker"))).toBe(false);
+    expect(existsSync(join(dist, "client/admin/index.html"))).toBe(true);
+    // generating again rebuilds
+    await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "cloudflare-d1"));
+    await bundleApp(entry, dist, undefined, { watch: true });
+    expect(existsSync(join(dist, "worker/worker.js"))).toBe(true);
+    // any other failure still fails under a watcher
+    await writeFile(entry, 'import { missing } from "../generated/missing.js";\nexport default { fetch: () => new Response(missing) };\n');
+    await expect(bundleApp(entry, dist, undefined, { watch: true })).rejects.toThrow();
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
+test("stale generated output reached through a package under wrangler dev: one line and no Worker output", async () => {
+  const { dir, entry } = await app();
+  try {
+    // a workspace package that ships the app's generated output; the app imports it by name
+    const pkg = join(dir, "node_modules/app-generated"), generated = join(pkg, "generated"), manifest = join(dir, "app.yaml"), dist = join(dir, "dist");
+    await mkdir(generated, { recursive: true });
+    await writeFile(join(pkg, "package.json"), JSON.stringify({ name: "app-generated", version: "1.0.0", type: "module", exports: { ".": "./generated/generated.js" } }));
+    await writeFile(manifest, "kind: Schema\n");
+    await writeFile(join(generated, "generated.js"), "export const store = 1;\n");
+    await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "cloudflare-d1"));
+    await writeFile(entry, 'import { store } from "app-generated";\nexport default { fetch: () => new Response(String(store)) };\n');
+    await bundleApp(entry, dist, undefined, { watch: true });
+    expect(existsSync(join(dist, "worker/worker.js"))).toBe(true);
+    await writeFile(manifest, "kind: View\n");
+    await expect(bundleApp(entry, dist)).rejects.toBeInstanceOf(StaleGeneratedError);
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    let printed: unknown[][] = [];
+    try { await bundleApp(entry, dist, undefined, { watch: true }); printed = error.mock.calls; } finally { error.mockRestore(); }
+    expect(printed).toHaveLength(1);
+    expect(String(printed[0]![0])).toMatch(/is stale \(\S*app\.yaml changed\)\..* is removed, so Wrangler reports its entry missing/);
+    // the full build had already written the stale Worker; the refusal removes it
+    expect(existsSync(join(dist, "worker"))).toBe(false);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}, 30_000);
+
+test("under wrangler dev a stale refusal still rejects assets inside the Worker directory before removing anything", async () => {
+  const { dir, entry } = await app();
+  try {
+    const generated = join(dir, "generated"), manifest = join(dir, "app.yaml"), dist = join(dir, "dist"), assets = join(dist, "worker/client");
+    await mkdir(generated);
+    await writeFile(manifest, "kind: Schema\n");
+    await writeFile(join(generated, "generated.ts"), "export const store = 1;\n");
+    await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "cloudflare-d1"));
+    await writeFile(entry, 'import { store } from "../generated/generated.js";\nexport default { fetch: () => new Response(String(store)) };\n');
+    await writeFile(manifest, "kind: View\n");
+    await mkdir(assets, { recursive: true });
+    await writeFile(join(assets, "keep.txt"), "keep\n");
+    await expect(bundleApp(entry, dist, assets, { watch: true })).rejects.toThrow(/must not overlap the Worker directory/);
+    expect(existsSync(join(assets, "keep.txt"))).toBe(true);
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
