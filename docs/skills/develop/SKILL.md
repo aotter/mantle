@@ -82,6 +82,8 @@ Destructive changes and type changes need explicit data migration. Mantle drops 
 
 Writes use Store `insert` / `update` / `delete`, `batch`, `transaction`, or declared Procedures. Never use raw SQL writes: they bypass scope, TTL, publishing and system-column rules. For reads beyond an id lookup or simple AND filter (joins, aggregates, OR, reuse), declare an internal View so the SQL is reviewable and typed. Store `findById`, `find` and `first` remain suitable for handler lookups and embedding in an existing app. Ref handlers receive `ctx.store` bound to the same Caller and transaction.
 
+For published-content replacement with preview and rollback, follow `mantle help revisions`: Core supplies OCC, Schema locks and atomic `store.batch`; the recipe binds the previewed revision ID/version and atomically seals it while switching the parent. Applications own retention and review policy; Core does not mandate a preparation step. Keep the previewed version on submit and require another preview after a revision conflict.
+
 For simple creates/partial updates, prefer Store-backed ref Procedures; keep
 Procedure `requires`/generated input checks, use only allowed patch fields and
 return safe business fields with the actual returned ID/version. Preserve

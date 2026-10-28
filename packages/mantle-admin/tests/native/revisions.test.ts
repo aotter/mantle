@@ -25,7 +25,7 @@ test("the revisions guide in Admin: revisions fold under their post, and the pos
   const fetch=createAdmin(bindings.metadata,bindings.views,bindings.operations,{db:()=>db,caller:()=>admin,routes:entries(bindings.schemas,bindings.adapter)});
   const call=async(path:string,method="GET",input?:unknown)=>{const response=(await fetch(new Request("https://app.test/admin/api"+path,{method,headers:{origin:"https://app.test","content-type":"application/json"},body:input===undefined?undefined:JSON.stringify(input)}),{}))!;return {status:response.status,body:await response.json() as any};};
   const ok=async(path:string,method="GET",input?:unknown)=>{const result=await call(path,method,input);expect(result).toMatchObject({status:200});return result.body;};
-  const operation=(name:string,input:unknown)=>call(`/operations/${name}`,"POST",input);
+  const operation=async(name:string,input:any)=>call(`/operations/${name}`,"POST",name==="switch-revision"?{expectedRevisionVersion:(await ok(`/entries/${input.revision}?collection=post_revisions`)).entry.version,...input}:input);
   const post=async(id:string)=>(await ok(`/entries/${id}?collection=posts`));
   // What the public post-page View joins (tests/revisions.test.ts runs the View itself).
   const page=()=>db.query("SELECT r.body FROM posts p JOIN post_revisions r ON r.id = p.current_revision WHERE p.slug = 'hello' AND p.status = 'published'").all().map((r:any)=>r.body);

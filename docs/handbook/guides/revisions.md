@@ -6,8 +6,8 @@ description: Correct published content without taking it offline - a publishing 
 Admin's record form edits a `publishing` row only while it is a draft, so correcting a published post through it means
 unpublish, edit, republish, and the page is gone in between. This page splits the post into a stable parent and its
 revisions, so the public page keeps showing one revision while an editor prepares the next, previews it, and switches
-to it in one atomic parent write. A [Schema lock](../reference/schema.md#locks) permanently seals a selected revision
-before the switch, for every caller. Everything is manifests, one ref handler and one app route; nothing depends on
+to it with one atomic batch. A [Schema lock](../reference/schema.md#locks) permanently seals a selected revision
+together with the switch, for every caller. Everything is manifests, one ref handler and one app route; nothing depends on
 generated storage internals.
 
 `packages/mantle/tests/revisions.test.ts` runs these manifests, the handler and the route on bun:sqlite and PostgreSQL
@@ -39,9 +39,10 @@ content nobody minds being offline for a minute. Both are less to build than thi
 - **Public Views** read a post joined to its current revision. Public Views only see published rows, so a draft or
   unpublished post shows nothing.
 - **`switch-revision`** is an admin-only ref Procedure. It checks the revision belongs to the post and is complete, then
-  seals the candidate with its observed version, then writes `current_revision` through `ctx.store` with
-  `lock: expectedVersion`. Readers see the old revision until that parent write commits and the new one after. A
-  concurrent edit/delete of the candidate or change to the parent is `CONFLICT`. It is a ref handler
+  binds the revision version seen in preview and atomically seals the candidate and writes `current_revision`
+  through a caller-bound Store's `batch`, with OCC on both rows. Readers see the old revision until that parent write commits and the new one after. A
+  stale candidate or parent version is `CONFLICT`; PostgreSQL may instead abort an in-flight race with a native
+  serialization failure. It is a ref handler
   because a SQL Procedure cannot write a `publishing` Schema.
 - **`new-revision`** copies the current revision into a new row to edit. **`prune-revision`** deletes a revision that is
   not sealed. **`revision-preview`** reads any revision for the preview route.
@@ -162,7 +163,7 @@ spec:
     properties:
       revision: { type: string }
   sql: |
-    SELECT r.id, p.slug, r.title, r.summary, r.body, r.updated_at AS edited_at
+    SELECT r.id, r.version, p.slug, r.title, r.summary, r.body, r.updated_at AS edited_at
     FROM post_revisions r JOIN posts p ON p.id = r.post
     WHERE r.id = input.revision
     ORDER BY r.id
@@ -209,7 +210,7 @@ spec:
 ## Switch, and roll back
 
 The Procedure is bound to the post (`target` with `version: expectedVersion`), so Admin shows "Switch revision" on the
-post's page with the version the editor reviewed; `revision` is a picker over that post's revisions (it folds
+post's page with the parent version the editor reviewed; `expectedRevisionVersion` comes from the preview and `revision` is a picker over that post's revisions (it folds
 under the post, so Admin lists only the bound post's children).
 
 ```yaml
@@ -224,11 +225,12 @@ spec:
   input:
     type: object
     additionalProperties: false
-    required: [post, revision, expectedVersion]
+    required: [post, revision, expectedVersion, expectedRevisionVersion]
     properties:
       post: { type: string }
       revision: { type: string, x-mantle-ref: post_revisions }
       expectedVersion: { type: integer }
+      expectedRevisionVersion: { type: integer }
   output: { type: object }
   handler: { ref: switch-revision }
 ```
@@ -236,44 +238,52 @@ spec:
 The handler, in `src/handlers.ts`. "Complete" here means every text field is non-blank: an operational `required`
 field is NOT NULL but may be `''`, which `new-revision` writes for a post's first revision. Put your own checks (a
 minimum length, a reviewed flag) in the same place. A revision of another post, or a missing one, is
-`INPUT_VALIDATION_FAILED` (400); a stale `expectedVersion` is `CONFLICT` (409) from the Store's `lock`.
+`INPUT_VALIDATION_FAILED` (400); a stale parent or preview version is `CONFLICT` (409).
 
 ```ts
 import { ContractError } from "@aotter/mantle/contracts";
-import type { Handlers } from "../generated/generated.js";
+import { store as createStore, type Handlers } from "../generated/generated.js";
 
 export const handlers: Handlers = {
-  "switch-revision": async ({ store }, { post, revision, expectedVersion }) => {
+  "switch-revision": async ({ db, caller }, { post, revision, expectedVersion, expectedRevisionVersion }) => {
+    const store = createStore(db, caller, { handlers });
     const next = await store.collection("post_revisions").findById(revision);
     if (!next || next.post !== post) throw new ContractError("INPUT_VALIDATION_FAILED", "That revision is not one of this post's revisions.", "procedures/switch-revision");
+    if (next.version !== expectedRevisionVersion) throw new ContractError("CONFLICT", "The revision changed since preview. Preview it again before switching.", "procedures/switch-revision", { fields: { kind: "row" } });
     if (![next.title, next.summary, next.body].every(text => text.trim())) throw new ContractError("INPUT_VALIDATION_FAILED", "The revision is incomplete: it needs a title, a summary and a body.", "procedures/switch-revision");
-    // Seal the exact revision we validated. A concurrent edit/delete is CONFLICT; every caller write checks the
-    // same row's seal, including an UPDATE already waiting on that row in PostgreSQL READ COMMITTED.
-    // A sealed revision is immutable forever and can be selected again for rollback without another write.
-    if (!next.sealed) await store.collection("post_revisions").update(revision, { sealed: true }, { lock: next.version });
-    // Only this parent write changes the public page. A stale expectedVersion is CONFLICT.
-    // On that conflict the candidate remains sealed: retry the switch with a fresh parent version, or make a copy.
-    const row = await store.collection("posts").update(post, { current_revision: revision }, { lock: expectedVersion });
+    const parent = store.collection("posts").update(post, { current_revision: revision }, { lock: expectedVersion });
+    // A sealed revision is immutable; otherwise the revision CAS and parent CAS commit or roll back together.
+    const row = next.sealed ? await parent : (await store.batch([
+      store.collection("post_revisions").update(revision, { sealed: true }, { lock: expectedRevisionVersion }),
+      parent,
+    ]))[1]!;
     return { id: row.id, version: row.version, current_revision: row.current_revision };
   },
 };
 ```
 
-The seal and the parent switch are intentionally two writes, so the same handler works on D1 without an interactive
-transaction. The seal is the serialization point for the revision: an edit or delete that wins first makes the seal's
-version check fail, leaving the current public page unchanged; once the seal wins, caller updates and deletes fail,
-even if they started earlier. The parent's OCC check separately prevents two editors from silently replacing each
-other's selection. No application writes bypass the caller's Store or the Schema lock.
+The preview's revision `id` and `version` are the switch's `revision` and `expectedRevisionVersion`. The handler
+refuses a changed revision rather than silently publishing newer text. A same-row CAS seals the exact previewed
+content and the parent's CAS selects it in one `store.batch`: D1 uses its native atomic batch with row assertions;
+SQLite and PostgreSQL use their native transactions. Invoke this Procedure on the normal caller Store or through
+its routes, not inside `store.transaction`: the handler creates a caller-bound Store and owns its atomic batch.
+`ctx.store` has the transaction-safe handler subset, so it does not expose `batch`. A parent conflict rolls back the seal too, leaving the draft
+editable. A revision edit or delete that wins first makes the seal fail and leaves the public page unchanged. Once
+the seal wins, caller updates and deletes fail, even if they started earlier. PostgreSQL may reject a competing
+batch with native SQLSTATE `40001` under its default serializable isolation; it commits neither write. Treat that
+as a failed switch too, re-read and preview again rather than automatically retrying.
 
-A failed parent OCC check can leave an unused **sealed** revision. It stays a safe preview/rollback candidate; re-read
-the parent and switch again if that is still the intended choice, or start a new editable copy. A failure or unknown
-outcome is not success: reconcile the stored parent pointer and both versions before retrying. An unused seal does not
-change the public page. Sealed history cannot be pruned through caller paths; retain it, or use an explicitly reviewed
-system maintenance policy outside this editor workflow.
+The generic Admin operation form binds the parent version and lets the editor enter the revision version shown by
+the preview; an application-owned preview UI can submit both revision values directly. Do not re-read and substitute
+a newer revision version on submit, or automatically retry a conflict: require another preview. A preview URL itself
+is mutable until the switch; the guarantee is that a successful switch selects the observed version. The recipe adds
+no separate Prepare step. A stale parent version needs an explicit retry with its fresh version and the same reviewed
+revision version. On a failure or unknown outcome, reconcile the stored parent pointer and both versions before retrying.
 
-A transaction around the old read-and-switch handler alone is insufficient on PostgreSQL when other edits remain
-autocommit. The same-row seal avoids that mixed-isolation race without requiring every entry route to open a
-SERIALIZABLE transaction. This recipe deliberately trades mutable history for a safe multi-editor switch.
+A transaction around a read-and-switch handler alone is insufficient on PostgreSQL when other edits remain
+autocommit. The revision CAS participates in the atomic write, so the same-row seal avoids that mixed-isolation race.
+Sealed history stays immutable for safe rollback and cannot be pruned through caller paths; retain it, or use an
+explicitly reviewed system maintenance policy outside this editor workflow.
 
 **Upgrading an existing app:** generated `schema.sql` initializes an empty database; it is not a migration. Rehearse a
 native migration that adds and backfills `sealed` (true for every currently selected revision, and for historical
@@ -345,12 +355,12 @@ spec: { source: { kind: mcp, surface: admin }, target: { procedure: prune-revisi
 An editor's flow:
 
 1. Create the post in Posts (a draft with its slug), then **New revision** on its page (or in its Post revisions tab,
-   with the post filled in) and write the revision in the record form. **Switch revision** to it, open
-   `/preview/<revision id>`, then **Publish** the post. Publishing before the switch is refused, naming
+   with the post filled in) and write the revision in the record form. Open `/preview/<revision id>`, then
+   **Switch revision** with the previewed revision ID and version, then **Publish** the post. Publishing before the switch is refused, naming
    `current_revision`.
 2. To correct it later: open the live revision and Admin shows "This record is locked." with the lock's message, and
    Save is disabled; so is the Delete button on its row in the Post revisions list. So: **New revision** (a copy of what is live), edit the copy, preview it, then **Switch
-   revision**, whose picker lists only this post's revisions. The page shows the old text until the switch commits;
+   revision** with its previewed version; the picker lists only this post's revisions. The page shows the old text until the switch commits;
    then the copy is the frozen one and the old revision stays sealed for rollback.
 3. To roll back: **Switch revision** to the earlier one. **Delete revision** on unsealed drafts you no longer want; sealed history is retained.
 
@@ -374,14 +384,14 @@ const visitor: Caller = { kind: "anonymous" };
 const escape = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 /** The one template. The canonical URL is always the post's; a preview adds noindex and a banner. */
-export function postHtml(origin: string, post: { slug: string | null; title: string; summary: string; body: string }, preview: boolean): string {
+export function postHtml(origin: string, post: { slug: string | null; title: string; summary: string; body: string; id?: string; version?: unknown }, preview: boolean): string {
   const canonical = `${origin}/posts/${post.slug}`;
   const head = `<title>${escape(post.title)}</title><meta name="description" content="${escape(post.summary)}">`
     + `<link rel="canonical" href="${escape(canonical)}">`
     + (preview ? `<meta name="robots" content="noindex, nofollow">`
       : `<meta property="og:type" content="article"><meta property="og:url" content="${escape(canonical)}">`
         + `<meta property="og:title" content="${escape(post.title)}"><meta property="og:description" content="${escape(post.summary)}">`);
-  const body = (preview ? `<p role="status">Preview: this revision is not live.</p>` : "")
+  const body = (preview ? `<p role="status">Preview: revision ${escape(post.id)}, version ${escape(post.version)}. This revision may differ from the live page.</p>` : "")
     + `<article><h1>${escape(post.title)}</h1>${post.body.split(/\n{2,}/).map(text => `<p>${escape(text)}</p>`).join("")}</article>`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">${head}</head><body>${body}</body></html>`;
 }
