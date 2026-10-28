@@ -75,15 +75,19 @@ no regression in accessibility, SEO or best practices.
   ([size and startup](../../handbook/guides/size-and-startup.md)). On Workers the
   startup graph is the entry chunk `mantle bundle` writes under `<outdir>/worker`
   plus the chunks it imports statically ([outputs](../../handbook/start/project-and-cli.md#outputs));
-  anything behind a dynamic import is outside it. Report its compressed size
-  locally; measure the host's startup time only on
+  anything behind a dynamic import is outside it. Report its size locally as the
+  *Worker entry static graph*; measure the host's startup time only on
   a deployment the user has authorized, and keep it well under the host's limit
   (aim below 50 ms on Cloudflare).
-- **Pages:** each page's first load carries at most 100 KB of compressed
-  JavaScript, and only what the first paint and first interaction need. Move the
-  rest behind dynamic imports, on use or when the browser is idle. MCP App
-  entries are held to the same budget; they render inside a host, so Lighthouse
-  does not measure them.
+- **Pages:** each page's *first-load JavaScript* is at most 100 KB, and only
+  what the first paint and first interaction need. Move the rest behind dynamic
+  imports, on use or when the browser is idle. An MCP App the application
+  authors holds its JavaScript to the same budget; it renders inside a host, so
+  Lighthouse does not measure it. Report the whole *MCP App HTML document* as its
+  own number: it also holds CSS and markup, so never compare it with this budget.
+- Use the one definition of each metric in
+  [size metrics](../../handbook/guides/size-and-startup.md#size-metrics), with
+  its measurement. Where the SDK's own checks measure differently, that page says how.
 - An overrun is a finding to repair by splitting, not a budget to raise. Raise a
   budget only with the user's agreement and record why.
 
@@ -138,6 +142,13 @@ fast at a realistic volume, and no hot path scans a table that grows.
 - After any repair, rerun the [local HTTP checks](../../handbook/guides/local-testing.md).
   A repair that changes what a user sees or can do is no longer only a
   performance change: run acceptance again for that surface.
+- Report app-added cost and SDK-existing cost separately. Built-in Admin has a
+  recorded [baseline](../../handbook/guides/size-and-startup.md#native-admin-baselines)
+  per SDK version; while the installed version and Admin entry are unchanged,
+  reuse it instead of repeating that experiment each round. A target the SDK's
+  cost misses is still PARTIAL, with its owner named. Never relabel it PASS.
+- Do not patch vendor or SDK code, remove native Admin features or build a
+  general benchmark framework to meet a target.
 - Stop when every target is met, after three rounds, or when two rounds in a row
   bring no measurable gain.
 
