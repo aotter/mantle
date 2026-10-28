@@ -72,13 +72,24 @@ export const ownModules = async (entry: string): Promise<Metafile> =>
  * (default `<outdir>/client`) when the Worker serves it (`@aotter/mantle-admin/server`; `/mcp` and the other subpaths alone do not).
  * A server whose generated output records a `bun-*` target runs as TypeScript, so only its Admin is built.
  */
-export async function bundleApp(entry: string, outdir: string, assets = join(outdir, "client")): Promise<void> {
+export async function bundleApp(entry: string, outdir: string, assets = join(outdir, "client"), options: { watch?: boolean } = {}): Promise<void> {
   const source = realpathSync(entry);
   // what is cleaned lies under these two, so neither may be the working directory or hold the source
   assertCleanable("Bundle outdir", outdir, source);
   assertCleanable("The assets directory", assets, source);
   const own = await ownModules(entry);
-  if (generatedDirs(own).some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"))) {
+  let dirs: string[];
+  try { dirs = generatedDirs(own); }
+  catch (error) {
+    if (!options.watch || !(error instanceof StaleGeneratedError)) throw error;
+    // A watcher (wrangler dev) prints a failed build's whole process object on every change. Refuse with one line
+    // instead: remove the Worker output, so nothing old or stale can start, and say what to run.
+    const worker = join(outdir, "worker");
+    rmSync(worker, { recursive: true, force: true });
+    console.error(`${error.summary} Run your generate script (mantle generate ...). ${worker} is removed, so Wrangler reports its entry missing; a running wrangler dev holds requests and rebuilds when ${error.dir} changes.`);
+    return;
+  }
+  if (dirs.some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"))) {
     // Packages are external here, so only the app's own imports of the Admin server are seen; one reached through another package is not.
     if (Object.values(own.inputs).some(input => input.imports.some(imported => /^@aotter\/mantle-admin\/server(?:\/|$)/.test(imported.path)))) await bundleAdmin(source, outdir, join(assets, "admin"));
     else console.warn("note: no Admin built: the entry's own modules do not import @aotter/mantle-admin/server (an import through another package is not seen).");
@@ -136,12 +147,22 @@ function installed(manifest: string): Record<string, string | null> {
   return versions;
 }
 
+/** Generated output whose recorded inputs changed: a build refuses it until the app generates again. */
+export class StaleGeneratedError extends Error {
+  readonly summary: string;
+  constructor(readonly dir: string, reasons: string[]) {
+    const summary = `Generated output in ${dir} is stale (${reasons.join("; ")}).`;
+    super(`${summary} Run your generate script (mantle generate ...) and rebuild.`);
+    this.summary = summary;
+  }
+}
+
 /** The generated directories among a build's inputs, refusing stale ones. */
 function generatedDirs(metafile: Metafile): string[] {
   const dirs = [...new Set(Object.keys(metafile.inputs).map(input => resolve(input, "..")).filter(dir => existsSync(resolve(dir, INPUTS_FILE))))];
   for (const dir of dirs) {
-    const input = resolve(dir, "generated.ts"), stale = staleInputs(input);
-    if (stale.length) throw new Error(`Generated output in ${relative(process.cwd(), resolve(input, ".."))} is stale (${stale.join("; ")}). Run your generate script (mantle generate ...) and rebuild.`);
+    const stale = staleInputs(resolve(dir, "generated.ts"));
+    if (stale.length) throw new StaleGeneratedError(relative(process.cwd(), dir), stale);
   }
   return dirs;
 }
