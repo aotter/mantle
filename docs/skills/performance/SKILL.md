@@ -140,7 +140,9 @@ fast at a realistic volume, and no hot path scans a table that grows.
   performance change: re-run acceptance for the scope the
   [re-verification rule](../../handbook/guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches)
   names. A changed View or Procedure widens it to every surface that reads or
-  writes that data; an index-only migration needs only the local HTTP checks.
+  writes that data, and so does a `uniqueIndexes` entry. A non-unique
+  `indexes` entry and its migration keep the business rules: run `pnpm check`,
+  the local HTTP checks and your focused regressions, not acceptance.
 - Stop when every target is met, after three rounds, or when two rounds in a row
   bring no measurable gain.
 

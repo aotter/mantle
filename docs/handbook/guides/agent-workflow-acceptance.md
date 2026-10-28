@@ -164,24 +164,30 @@ what a role sees or can do returns here, scoped by the
 
 The first delivery always gets full acceptance: every role, every surface.
 After a repair, the change itself decides what runs again, not the finding
-that prompted it. Read the diff since the last accepted round and pick the
-widest row it matches:
+that prompted it. Rounds before convergence are not accepted, so diff against
+evidence, not rounds: for each item you want to reuse, diff the current
+revision against the revision it was observed at, and pick the widest row that
+diff matches. A chain of repairs adds up; a page-only repair followed by a
+handler repair has to re-run what the handler repair reaches.
 
 | The repair changes | Re-run with fresh evaluators | May reuse |
 | --- | --- | --- |
-| Only presentation: page or Admin layout, CSS, copy, client-side display | Blind acceptance of the affected UI, for each role that uses it | REST and MCP evidence from the same business-rule version |
-| A public contract: a tool or route description, input, output or error shape | That surface for each role that uses it, plus every UI that consumes it | Other surfaces at the same business-rule version |
+| Only presentation: page or Admin layout, CSS, copy, client-side display | Blind acceptance of the affected UI, for each role that uses it. A shared component or layout affects every page that renders it. | REST and MCP evidence from the same business-rule version |
+| A public contract: a tool or route description, input, output or error shape; the generated client or other `generated/` output it changes | That surface for each role that uses it, plus every UI that consumes it | Other surfaces at the same business-rule version |
 | Authentication, sessions, roles, `requires`, row or tenant scope | Every surface that the changed rule guards, for every affected role | Nothing those surfaces depend on |
-| A SQL Procedure or View, a migration that changes results, a handler's business rule | Every surface that reads or writes that data | Nothing those surfaces depend on |
+| A SQL Procedure or View, a `uniqueIndexes` entry, a check or lock, a migration that changes results, a handler's business rule | Every surface that reads or writes that data | Nothing those surfaces depend on |
 | A shared transport: the service entry, routing, the HTTP or MCP mount, a shared error envelope | Every surface on that transport | Nothing on that transport |
 
 The business-rule version is the revision of the manifests, SQL, migrations,
 handlers, authorization and service entry. A repair that changes none of
 them keeps that version, so evidence collected at it still stands for
-surfaces the repair did not reach. An index-only migration keeps it too; it
-still needs the author's regressions. A repair that changes any of them
+surfaces the repair did not reach. A repair that changes any of them
 starts a new business-rule version, and looking at the UI alone is not
-enough. When the diff is unclear, widen.
+enough. One exception: a repair that only adds or drops a non-unique Schema
+`indexes` entry and its migration keeps the version. It changes speed, not
+which rows a read returns or which writes are refused. A `uniqueIndexes`
+entry, a check or a lock does change which writes succeed, so it falls in the
+SQL row. When the diff is unclear, widen.
 
 Every row still runs the author's regressions on the new revision (layers 1
 and 2 of the [layered report](#report-done-ness-in-layers)): `pnpm check`,
@@ -193,7 +199,8 @@ repaired, what to check or what an earlier evaluator did. No previous
 answers, rubric or precomputed steps.
 
 For every rubric item that was not re-run, record the round and revision its
-evidence comes from and why the repair could not affect it. Never report a
+evidence comes from and why the changes since that revision could not affect
+it. Never report a
 reused item as observed in a later round.
 
 ## Hand each role to its evaluator

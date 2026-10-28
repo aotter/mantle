@@ -62,7 +62,7 @@ over the app. Resolve each `AGENT:` or name the ones you left. Generation only, 
 Before reporting any new app or feature as done, follow `mantle help agent-workflow-acceptance`: a private rubric,
 then one fresh agent per role given only its role and the URLs `pnpm accept` prints, at most three rounds. The first
 delivery covers every role and surface; after a repair, the guide's "Re-verify what a repair touches" rule decides what
-re-runs: a page-only repair re-runs the affected UI, while auth, scope, SQL Procedure or shared-transport changes widen
+re-runs: a page-only repair re-runs the affected UI, while auth, scope, SQL Procedure, unique index or shared-transport changes widen
 to every surface they reach. State the round and revision of any evidence you reuse. If it was
 not run, report the work as UNVERIFIED rather than done; if it could not run, BLOCKED. Report status per layer as that
 guide's "Report done-ness in layers" defines; a block from your environment (approval policy, missing browser,
