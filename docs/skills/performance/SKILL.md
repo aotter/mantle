@@ -82,9 +82,10 @@ no regression in accessibility, SEO or best practices.
 - **Pages:** each page's *first-load JavaScript* is at most 100 KB, and only
   what the first paint and first interaction need. Move the rest behind dynamic
   imports, on use or when the browser is idle. An MCP App the application
-  authors holds its JavaScript to the same budget; it renders inside a host, so
-  Lighthouse does not measure it. Report the whole *MCP App HTML document* as its
-  own number: it also holds CSS and markup, so never compare it with this budget.
+  authors holds its first-load JavaScript, the inline script text of its one
+  HTML file, to the same budget; it renders inside a host, so Lighthouse does
+  not measure it. Report the whole *MCP App HTML document* as its own number: it
+  also holds CSS and markup, so never compare it with this budget.
 - Use the one definition of each metric in
   [size metrics](../../handbook/guides/size-and-startup.md#size-metrics), with
   its measurement. Where the SDK's own checks measure differently, that page says how.
@@ -145,8 +146,10 @@ fast at a realistic volume, and no hot path scans a table that grows.
 - Report app-added cost and SDK-existing cost separately. Built-in Admin has a
   recorded [baseline](../../handbook/guides/size-and-startup.md#native-admin-baselines)
   per SDK version; while the installed version and Admin entry are unchanged,
-  reuse it instead of repeating that experiment each round. A target the SDK's
-  cost misses is still PARTIAL, with its owner named. Never relabel it PASS.
+  reuse it instead of repeating that experiment each round. Built-in Admin's
+  page and MCP App both miss the first-load budget; that is SDK-existing cost,
+  not the application's. A target the SDK's cost misses is still PARTIAL, with
+  its owner named. Never relabel it PASS.
 - Do not patch vendor or SDK code, remove native Admin features or build a
   general benchmark framework to meet a target.
 - Stop when every target is met, after three rounds, or when two rounds in a row
