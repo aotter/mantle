@@ -6,8 +6,9 @@ description: Correct published content without taking it offline - a publishing 
 Admin's record form edits a `publishing` row only while it is a draft, so correcting a published post through it means
 unpublish, edit, republish, and the page is gone in between. This page splits the post into a stable parent and its
 revisions, so the public page keeps showing one revision while an editor prepares the next, previews it, and switches
-to it in one atomic write. A [Schema lock](../reference/schema.md#locks) freezes the revision that is live, for every
-caller. Everything is manifests, one ref handler and one app route; nothing depends on generated storage internals.
+to it in one atomic parent write. A [Schema lock](../reference/schema.md#locks) permanently seals a selected revision
+before the switch, for every caller. Everything is manifests, one ref handler and one app route; nothing depends on
+generated storage internals.
 
 `packages/mantle/tests/revisions.test.ts` runs these manifests, the handler and the route on bun:sqlite and PostgreSQL
 (the yaml blocks below are its fixture, and the docs check generates them and typechecks the TypeScript), and
@@ -31,30 +32,32 @@ content nobody minds being offline for a minute. Both are less to build than thi
   plus `current_revision`, a reference to the revision the page shows. Its publishing status alone decides whether the
   URL is live.
 - **`post_revisions`** (operational) holds the content (`title`, `summary`, `body`) and a `post` reference.
-  `nav.parentField: post` folds them under their post in Admin. A revision edits in place until a post shows it; then
-  the `live_revision` lock refuses every update and delete of it, whoever asks (admins included): Admin's routes and the
-  MCP clients that use them, Procedures over REST or MCP, and caller-bound Stores. It stays frozen until the post
-  switches to another revision.
+  `nav.parentField: post` folds them under their post in Admin. A revision edits in place until it is selected for a
+  switch; then the `sealed_revision` lock permanently refuses every update and delete of it, whoever asks (admins
+  included): Admin's routes and the MCP clients that use them, Procedures over REST or MCP, and caller-bound Stores.
+  Historical revisions stay sealed so they remain safe rollback targets.
 - **Public Views** read a post joined to its current revision. Public Views only see published rows, so a draft or
   unpublished post shows nothing.
 - **`switch-revision`** is an admin-only ref Procedure. It checks the revision belongs to the post and is complete, then
-  writes `current_revision` through `ctx.store` with `lock: expectedVersion`. That is one row write: readers see the
-  old revision until it commits and the new one after, and a concurrent change is `CONFLICT`. It is a ref handler
+  seals the candidate with its observed version, then writes `current_revision` through `ctx.store` with
+  `lock: expectedVersion`. Readers see the old revision until that parent write commits and the new one after. A
+  concurrent edit/delete of the candidate or change to the parent is `CONFLICT`. It is a ref handler
   because a SQL Procedure cannot write a `publishing` Schema.
 - **`new-revision`** copies the current revision into a new row to edit. **`prune-revision`** deletes a revision that is
-  not live. **`revision-preview`** reads any revision for the preview route.
+  not sealed. **`revision-preview`** reads any revision for the preview route.
 
 ## Schemas
 
-`current_revision` and `post` are `readOnly`: Admin's record form shows them but never writes them, so only
-`switch-revision` moves a post to another revision, and a revision never moves to another post. snake_case field names
-keep the manifest name and the Store's storage name the same (`current_revision`, not `currentrevision`).
+`current_revision`, `post` and `sealed` are `readOnly`: Admin's record form shows them but never writes them, so only
+`switch-revision` moves a post to another revision and seals its candidate, and a revision never moves to another post.
+snake_case field names keep the manifest name and the Store's storage name the same (`current_revision`, not
+`currentrevision`).
 
-`current_revision` is `required`, so `publish` refuses a post without one (a draft may still lack it). The lock's
-`EXISTS` runs on every guarded write and every Admin read of a revision, so generation proves an index serves it:
-`indexes: [[current_revision]]` on `posts` (without it, `LOCK_INDEX_MISSING`). Inside the subquery the locked row is
-always qualified, `post_revisions.id`; the lock is evaluated against the stored rows, so a post the caller cannot see
-still locks its revision.
+`current_revision` is `required`, so `publish` refuses a post without one (a draft may still lack it). A new revision
+starts with `sealed: false`; `switch-revision` changes it to true with the revision version it validated. The lock is
+on the revision's own stored row, so the database checks it together with OCC when competing writers reach that row.
+Unlike an `EXISTS` check on another table's current pointer, it cannot admit an in-flight edit using an older parent
+snapshot. A same-row predicate selected by `id` needs no extra index.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
@@ -64,8 +67,6 @@ spec:
   title: Posts
   lifecycle: publishing
   uniqueIndexes: [[slug]]
-  # Serves post_revisions' live_revision lock (generation proves it).
-  indexes: [[current_revision]]
   schema:
     type: object
     additionalProperties: false
@@ -83,10 +84,10 @@ spec:
   lifecycle: operational
   indexes: [[post, createdAt, id]]
   lock:
-    - name: live_revision
+    - name: sealed_revision
       on: [update, delete]
-      when: EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)
-      message: "This revision is live. Start a New revision from its post, edit and preview it, then Switch revision."
+      when: sealed = true
+      message: "This revision is sealed. Start a New revision from its post, edit and preview it, then Switch revision."
   uiSchema:
     nav: { parentField: post }
     list: { primaryField: title, columns: [note] }
@@ -94,10 +95,11 @@ spec:
   schema:
     type: object
     additionalProperties: false
-    required: [post, title, summary, body]
+    required: [post, sealed, title, summary, body]
     properties:
       # Set once by new-revision; a revision never moves to another post.
       post: { type: string, x-mantle-ref: posts, readOnly: true }
+      sealed: { type: boolean, readOnly: true }
       title: { type: string }
       summary: { type: string }
       body: { type: string }
@@ -195,8 +197,8 @@ spec:
   output: { type: object }
   handler:
     sql: |
-      INSERT INTO post_revisions (post, title, summary, body, note)
-        SELECT p.id, COALESCE(r.title, ''), COALESCE(r.summary, ''), COALESCE(r.body, ''), CASE WHEN r.id IS NULL THEN 'First revision' ELSE 'Copied from the current revision' END
+      INSERT INTO post_revisions (post, sealed, title, summary, body, note)
+        SELECT p.id, false, COALESCE(r.title, ''), COALESCE(r.summary, ''), COALESCE(r.body, ''), CASE WHEN r.id IS NULL THEN 'First revision' ELSE 'Copied from the current revision' END
         FROM posts p LEFT JOIN post_revisions r ON r.id = p.current_revision AND r.post = p.id
         WHERE p.id = input.post
         RETURNING id, version
@@ -245,32 +247,51 @@ export const handlers: Handlers = {
     const next = await store.collection("post_revisions").findById(revision);
     if (!next || next.post !== post) throw new ContractError("INPUT_VALIDATION_FAILED", "That revision is not one of this post's revisions.", "procedures/switch-revision");
     if (![next.title, next.summary, next.body].every(text => text.trim())) throw new ContractError("INPUT_VALIDATION_FAILED", "The revision is incomplete: it needs a title, a summary and a body.", "procedures/switch-revision");
-    // One row write. A stale expectedVersion is CONFLICT, and status and published_at stay as they are.
+    // Seal the exact revision we validated. A concurrent edit/delete is CONFLICT; every caller write checks the
+    // same row's seal, including an UPDATE already waiting on that row in PostgreSQL READ COMMITTED.
+    // A sealed revision is immutable forever and can be selected again for rollback without another write.
+    if (!next.sealed) await store.collection("post_revisions").update(revision, { sealed: true }, { lock: next.version });
+    // Only this parent write changes the public page. A stale expectedVersion is CONFLICT.
+    // On that conflict the candidate remains sealed: retry the switch with a fresh parent version, or make a copy.
     const row = await store.collection("posts").update(post, { current_revision: revision }, { lock: expectedVersion });
     return { id: row.id, version: row.version, current_revision: row.current_revision };
   },
 };
 ```
 
-Once the switch commits, the lock freezes the new current revision: nobody can edit or delete it until the post
-switches away again. The handler's checks and its write are still two steps, not one transaction, and the lock only
-holds once the write has committed. A delete of the chosen revision, or an edit that blanks it, that commits between
-the handler's read and its write is allowed (the revision is not live yet). A deleted revision leaves the post with no
-page (404) until the next switch; a blanked one still joins, so the page renders an empty post. The same window runs
-the other way: under PostgreSQL READ COMMITTED, an edit of a revision that races the switch to it can still commit just
-after the switch, because its lock check did not see the new pointer yet. The switch Procedure is the serialization point; add your own checks there.
-Only admins can do any of this, so for most sites it is acceptable: switch again to recover. If several editors work
-on the same post at once, check the page after switching.
+The seal and the parent switch are intentionally two writes, so the same handler works on D1 without an interactive
+transaction. The seal is the serialization point for the revision: an edit or delete that wins first makes the seal's
+version check fail, leaving the current public page unchanged; once the seal wins, caller updates and deletes fail,
+even if they started earlier. The parent's OCC check separately prevents two editors from silently replacing each
+other's selection. No application writes bypass the caller's Store or the Schema lock.
+
+A failed parent OCC check can leave an unused **sealed** revision. It stays a safe preview/rollback candidate; re-read
+the parent and switch again if that is still the intended choice, or start a new editable copy. A failure or unknown
+outcome is not success: reconcile the stored parent pointer and both versions before retrying. An unused seal does not
+change the public page. Sealed history cannot be pruned through caller paths; retain it, or use an explicitly reviewed
+system maintenance policy outside this editor workflow.
+
+A transaction around the old read-and-switch handler alone is insufficient on PostgreSQL when other edits remain
+autocommit. The same-row seal avoids that mixed-isolation race without requiring every entry route to open a
+SERIALIZABLE transaction. This recipe deliberately trades mutable history for a safe multi-editor switch.
+
+**Upgrading an existing app:** generated `schema.sql` initializes an empty database; it is not a migration. Rehearse a
+native migration that adds and backfills `sealed` (true for every currently selected revision, and for historical
+revisions you retain as immutable rollback targets; false for editable drafts), then enforces NOT NULL. Coordinate
+the rollout so old switch handlers cannot select an unsealed revision while the new invariant is being installed.
+Pause editor writes or use an equivalent deployment boundary for the migration and handler change. Existing generic
+clients must adopt the new lock projection; the server still enforces the seal for stale clients. See
+[database ownership](../concepts/runtime-and-adapters.md#schema-installation-and-migrations).
 
 Rolling back is the same call with an earlier revision. Wire the handlers as every app does
 (`adminBindings({ handlers })`, `rest(...)`, `mcp(...)` options; see `mantle help native-admin`).
 
 ## Prune
 
-Old revisions are rows; keep them as history or delete them when you like. The Procedure is a plain `DELETE`: the
-`live_revision` lock adds its condition to the statement, so deleting the revision a post shows deletes nothing and is
+Unsealed drafts can be deleted; sealed content history stays immutable. The Procedure is a plain `DELETE`: the
+`sealed_revision` lock adds its condition to the statement, so deleting any sealed revision deletes nothing and is
 `CONFLICT` with `kind: "lock"` and the lock's message. Admin shows "Delete revision" on each revision. Its own Delete
-button on a revision's row (in the Post revisions list and tab) is disabled for the live revision, with the lock's
+button on a revision's row (in the Post revisions list and tab) is disabled for sealed revisions, with the lock's
 message, and the server refuses it the same way if it is sent anyway. The Procedure also gives AI clients on
 `/mcp/admin` a delete tool (below).
 
@@ -280,7 +301,7 @@ kind: Procedure
 metadata: { name: prune-revision }
 spec:
   title: Delete revision
-  description: Delete a revision that is not live.
+  description: Delete an editable revision that has never been sealed.
   requires: { auth: { all: [ctx.admin] } }
   target: { schema: post_revisions, id: id }
   input:
@@ -330,10 +351,10 @@ An editor's flow:
 2. To correct it later: open the live revision and Admin shows "This record is locked." with the lock's message, and
    Save is disabled; so is the Delete button on its row in the Post revisions list. So: **New revision** (a copy of what is live), edit the copy, preview it, then **Switch
    revision**, whose picker lists only this post's revisions. The page shows the old text until the switch commits;
-   then the copy is the frozen one and the old revision edits again.
-3. To roll back: **Switch revision** to the earlier one. **Delete revision** on revisions you no longer want.
+   then the copy is the frozen one and the old revision stays sealed for rollback.
+3. To roll back: **Switch revision** to the earlier one. **Delete revision** on unsealed drafts you no longer want; sealed history is retained.
 
-A client that skips Admin's form gets the same answer: a patch or delete of the live revision through Admin's routes
+A client that skips Admin's form gets the same answer: a patch or delete of a sealed revision through Admin's routes
 (the Admin MCP App and WebMCP use them), a SQL Procedure's `UPDATE` or `DELETE` of it over REST or MCP, or a ref
 handler's `ctx.store` update is `CONFLICT` with `kind: "lock"` and the lock's message.
 

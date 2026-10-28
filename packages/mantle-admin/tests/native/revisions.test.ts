@@ -44,8 +44,8 @@ test("the revisions guide in Admin: revisions fold under their post, and the pos
   const first=(await operation("new-revision",{post:hello.id})).body.output.results[0][0];
   const firstEntry=(await ok(`/entries/${first.id}?collection=post_revisions`)).entry;
   const elsewhere=(await ok("/entries","POST",{collection:"posts",data:{slug:"elsewhere"}})).entry;
-  const edited=(await ok(`/entries/${first.id}?collection=post_revisions`,"PATCH",{data:{title:"Hello",summary:"The first post.",body:"Version one.",post:elsewhere.id},expectedVersion:firstEntry.version})).entry;
-  expect(edited.data).toMatchObject({post:hello.id,title:"Hello"}); // readOnly: the record form cannot move a revision
+  const edited=(await ok(`/entries/${first.id}?collection=post_revisions`,"PATCH",{data:{title:"Hello",summary:"The first post.",body:"Version one.",post:elsewhere.id,sealed:true},expectedVersion:firstEntry.version})).entry;
+  expect(edited.data).toMatchObject({post:hello.id,title:"Hello",sealed:false}); // readOnly: the record form cannot move a revision
   const workbench=await post(hello.id);
   expect(workbench.related.find((s:any)=>s.collection.name==="post_revisions").entries.map((e:any)=>e.id)).toEqual([first.id]);
   expect((await ok(`/entries?collection=post_revisions&scope_field=post&scope_value=${hello.id}`)).items.map((e:any)=>e.id)).toEqual([first.id]);
@@ -75,13 +75,13 @@ test("the revisions guide in Admin: revisions fold under their post, and the pos
   await ok(`/entries/${hello.id}/publish?collection=posts`,"POST",{expectedVersion:draft.version});
   expect(page()).toEqual(["Version one."]);
 
-  // The live_revision lock: Admin knows the current revision is frozen before the edit, and its generic patch and delete
+  // The sealed_revision lock: Admin knows the current revision is frozen before the edit, and its generic patch and delete
   // refuse it with CONFLICT kind lock; the page is unchanged.
-  const message="This revision is live. Start a New revision from its post, edit and preview it, then Switch revision.";
+  const message="This revision is sealed. Start a New revision from its post, edit and preview it, then Switch revision.";
   const liveRevision=(await ok(`/entries/${first.id}?collection=post_revisions`)).entry;
-  expect(liveRevision.locks).toEqual({update:{lock:"live_revision",message},delete:{lock:"live_revision",message}});
+  expect(liveRevision.locks).toEqual({update:{lock:"sealed_revision",message},delete:{lock:"sealed_revision",message}});
   const refused=await call(`/entries/${first.id}?collection=post_revisions`,"PATCH",{data:{body:"Edited live."},expectedVersion:liveRevision.version});
-  expect(refused).toMatchObject({status:409,body:{error:{code:"CONFLICT",kind:"lock",schema:"post_revisions",lock:"live_revision",message}}});
+  expect(refused).toMatchObject({status:409,body:{error:{code:"CONFLICT",kind:"lock",schema:"post_revisions",lock:"sealed_revision",message}}});
   expect((await call(`/entries/${first.id}?collection=post_revisions`,"DELETE")).body.error).toMatchObject({code:"CONFLICT",kind:"lock",verb:"delete"});
   expect(page()).toEqual(["Version one."]);
 
@@ -116,8 +116,10 @@ test("the revisions guide in Admin: revisions fold under their post, and the pos
   expect(await operation("switch-revision",{post:hello.id,revision:first.id,expectedVersion:live.version+1})).toMatchObject({status:200});
   expect(page()).toEqual(["Version one."]);
   expect((await operation("prune-revision",{id:first.id})).body.error).toMatchObject({code:"CONFLICT",kind:"lock"});
-  expect((await ok(`/entries/${second.id}?collection=post_revisions`)).entry.locks.update).toBe(false); // switched away: editable again
-  expect(await operation("prune-revision",{id:second.id})).toMatchObject({status:200});
-  expect((await post(hello.id)).related.find((s:any)=>s.collection.name==="post_revisions").entries.map((e:any)=>e.id)).toEqual([first.id]);
+  expect((await ok(`/entries/${second.id}?collection=post_revisions`)).entry.locks.update).toMatchObject({lock:"sealed_revision"}); // history stays sealed
+  expect(await operation("prune-revision",{id:second.id})).toMatchObject({status:409});
+  const unused=(await operation("new-revision",{post:hello.id})).body.output.results[0][0];
+  expect(await operation("prune-revision",{id:unused.id})).toMatchObject({status:200});
+  expect((await post(hello.id)).related.find((s:any)=>s.collection.name==="post_revisions").entries.map((e:any)=>e.id).sort()).toEqual([first.id,second.id].sort());
  }finally{db.close();await rm(dir,{recursive:true,force:true});}
 },30000);
