@@ -90,8 +90,8 @@ export function lowerPlan(plan: Body, dialect: MantleDialect, options: LoweringO
   const procedures = Object.entries(plan.procedures).flatMap(([name, proc]) => {
     if (!("sql" in proc.handler)) return [];
     const { inputs } = proc, ir = proc.handler.sql.stmts;
-    const must = proc.handler.mustWrite ?? [];
-    const lowered = Object.fromEntries(PROCEDURE_MODES.flatMap((mode) => { const x = lowerProcedure(env, { inputs, ir, restrict: proc.restrict }, proc.trustedOnly ? "trusted" : mode, returning, columns, warn, `plan#/procedures/${name}`, options.project && (ast => options.project!(ast, "procedure", name))); return x ? [[mode, x.map((s, i) => (must.includes(i + 1) ? { ...s, mustWrite: true as const } : s))]] : []; }));
+    const steps = proc.handler.steps ?? [];
+    const lowered = Object.fromEntries(PROCEDURE_MODES.flatMap((mode) => { const x = lowerProcedure(env, { inputs, ir, restrict: proc.restrict }, proc.trustedOnly ? "trusted" : mode, returning, columns, warn, `plan#/procedures/${name}`, options.project && (ast => options.project!(ast, "procedure", name))); return x ? [[mode, x.map((s, i) => (steps[i]?.onNoRows ? { ...s, onNoRows: steps[i]!.onNoRows } : s))]] : []; }));
     return Object.keys(lowered).length ? [[name, lowered]] : [];
   });
   return { lowered: { mantle: MANTLE_VERSION, dialect: { name: dialect.name, version: dialect.version, key: dialect.lowerKey ?? "" }, views: Object.fromEntries(views), procedures: Object.fromEntries(procedures) }, warnings };

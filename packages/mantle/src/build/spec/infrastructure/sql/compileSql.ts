@@ -38,6 +38,14 @@ export async function relationNames(sql: string): Promise<Set<string>> {
   return names;
 }
 
+/** How many statements a source holds (a Procedure step must hold one, #1874), or why it does not parse. */
+export async function statementCount(sql: string): Promise<number | SqlDiagnostic> {
+  try { return (await parsePgSql(sql)).stmts.length; } catch (e) {
+    if (e instanceof SqlRefusal) return toDiagnostic(e, sql);
+    throw e;
+  }
+}
+
 export type CompileSqlResult = { readonly ok: true; readonly plan: SqlPlan; /** Compile-only dependency source; never sealed into a RuntimePlan. */ readonly reference?: SqlNode } | { readonly ok: false; readonly diagnostic: SqlDiagnostic };
 
 /** UTF-8 byte offset (what libpg-query reports) to offset, 1-based line and column, and the token there. */

@@ -419,12 +419,35 @@ export interface HandlerRefBinding {
 }
 
 /** One or more write statements (`INSERT`, `UPDATE`, `DELETE`), applied as
- *  one batch. Reads `input.<name>`, `auth.uid()`, `auth.role()`, `now()`. */
+ *  one batch. Reads `input.<name>`, `auth.uid()`, `auth.role()`, `now()`.
+ *  Authored as `sql` (the program) or as `steps`, one statement each; the parser
+ *  joins steps into `sql`, so everything that reads the program reads `sql`. */
 export interface HandlerSqlBinding {
   readonly sql: string;
-  /** Statement numbers, counting from 1, of set-op writes that must write at least one row, else
-   *  `CONFLICT` kind "row" and the whole program rolls back (ADR-0034 decision 4, #1775). */
-  readonly mustWrite?: readonly number[];
+  /** Present when authored as `handler.steps` (ADR-0034 decision 4, #1874): statement i of the program is step i. */
+  readonly steps?: readonly HandlerStep[];
+}
+
+/** One statement of a `steps` program. `onNoRows: conflict`: a set-op write that writes no row is
+ *  `CONFLICT` kind "row" and the whole program rolls back. */
+export interface HandlerStep {
+  readonly sql: string;
+  readonly onNoRows?: "conflict";
+}
+export const HANDLER_STEP_KEYS = ["sql", "onNoRows"] as const;
+
+/** The program `steps` compile as: the statements in order, each on its own lines. `lines[i]` is the 0-based line step i starts
+ *  on, so a diagnostic in the program points back into its step. A step's own trailing `;` is dropped; after a step ending in a
+ *  `--` comment the separator goes on the next line, where the comment cannot swallow it. */
+export function stepProgram(steps: readonly HandlerStep[]): { readonly sql: string; readonly lines: readonly number[] } {
+  let sql = "";
+  const lines: number[] = [];
+  for (const [i, step] of steps.entries()) {
+    lines.push(sql.split("\n").length - 1);
+    const text = step.sql.trimEnd().replace(/;$/, "").trimEnd();
+    sql += i === steps.length - 1 ? text : `${text}${/--[^\n]*$/.test(text) ? "\n;" : ";"}\n`;
+  }
+  return { sql, lines };
 }
 
 /** Closed predicate vocabulary. `ctx.user` and `ctx.auth` are bare
