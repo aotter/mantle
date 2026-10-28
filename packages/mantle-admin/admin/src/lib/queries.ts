@@ -61,10 +61,11 @@ export function entriesQuerySearchParams(args: EntriesQueryArgs, cursor?: string
  * A cursor-paged list as one infinite query: the cursor is the page param, not state, so an invalidation
  * (`invalidateAfterWrite`) refetches every page loaded, and a page in flight never lands in another list.
  */
-export function pagedQueryOptions<Page extends { next_cursor: string | null }>(queryKey: readonly unknown[], load: (cursor: string | undefined) => Promise<Page>) {
+export function pagedQueryOptions<Page extends { next_cursor: string | null }>(queryKey: readonly unknown[], load: (cursor: string | undefined, signal: AbortSignal) => Promise<Page>) {
   return infiniteQueryOptions({
     queryKey,
-    queryFn: ({ pageParam }) => load(pageParam),
+    // the signal aborts a page whose refetch was cancelled (a newer invalidation, an unmount)
+    queryFn: ({ pageParam, signal }) => load(pageParam, signal),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.next_cursor ?? undefined,
   });
@@ -76,13 +77,13 @@ export function entriesQueryOptions(args: EntriesQueryArgs) {
     args.filterField ?? "no-filter", args.filterValue ?? "no-value",
     args.scopeField ?? "no-scope-field", args.scopeValue ?? "no-scope-value",
     args.sortField, args.sortDirection,
-  ], (cursor) => api.get<ListEntriesResult>(`/entries?${entriesQuerySearchParams(args, cursor)}`));
+  ], (cursor, signal) => api.get<ListEntriesResult>(`/entries?${entriesQuerySearchParams(args, cursor)}`, { signal }));
 }
 
 export function entryEditorQueryOptions(collectionName: string, entryId: string) {
   return {
     queryKey: ["entry-editor", collectionName, entryId] as const,
-    queryFn: async () => composeEntry(await api.get<EntryDocument>(entryApiPath(collectionName, entryId))),
+    queryFn: async ({ signal }: { signal: AbortSignal }) => composeEntry(await api.get<EntryDocument>(entryApiPath(collectionName, entryId), { signal })),
   };
 }
 

@@ -31,7 +31,8 @@ export function WebMcpControl(): React.ReactElement | null {
         if (name === "admin_get_context") return { path: location.pathname + location.search, tools };
         if (name === "admin_navigate") {
           const path = adminPath(input.path);
-          navigate(path);
+          // the person can choose to stay on a page with unsaved changes
+          if (!await navigate(path)) throw new Error("Navigation cancelled: the page has unsaved changes and the person chose to stay.");
           return { path };
         }
         const { result, output } = await callAdminTool(name, input, signal);

@@ -360,8 +360,9 @@ Malformed persisted JSON becomes a redacted internal failure. The conversion
 adds no database operations and does not mutate native query rows.
 
 Bare Views, Store rows, native SQL Procedure `{ results }` and application-owned
-ref outputs retain their native contracts. Use the generated `rest()` / `mcp()`
-module for this client wire contract; do not duplicate JSON/boolean decoding in
+ref outputs retain their native contracts, except that a Store row's `version` is a
+number on every target, so a ref handler returning it outputs the same type
+everywhere. Use the generated `rest()` / `mcp()` module for this client wire contract; do not duplicate JSON/boolean decoding in
 application route handlers or decode PostgreSQL JSON strings a second time.
 
 Declared integer columns (including a selected system `version`) on every target

@@ -85,7 +85,8 @@ storage representations. Bound optional fields become explicit required values,
 with null representing absence; D1 cannot bind undefined. Native output keys are
 SQL names rather than a post-query camel-case projection. PG uses the driver's
 default type parsers (including Date and int8 strings); custom application parser
-configuration changes application-owned behavior. Procedures expose raw
+configuration changes application-owned behavior. The Store alone converts a row's
+`version` to a number ([typed queries](typed-queries.md)). Procedures expose raw
 `{ results }`, not a claim of validated authored output.
 
 The application resolves a verified Caller once at its entry, using its selected

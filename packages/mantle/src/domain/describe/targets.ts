@@ -4,6 +4,7 @@ import { mcpToolNameSegment, mcpTools } from "../../build/spec/domain/service/Mc
 import { resolveLocalizedText, type JsonSchema, type AuthorizationRequirements, type ProcedureMcpAnnotations } from "../../build/spec/domain/model/ManifestGrammar.js";
 import { canonical } from "../../build/spec/domain/service/PlanFingerprint.js";
 import { mediaDefinitions, publishingInput, publishingTransitions } from "../generated-tools.js";
+import { pathTemplate } from "../../kernel/route-pattern.js";
 
 export interface TargetDefinition {
   id: string;
@@ -102,7 +103,6 @@ function inspectBehavior(plan: RuntimePlan, ir: unknown, opaque: boolean, requir
 }
 
 const objectInput: JsonSchema = { type: "object", properties: {} };
-const pathTemplate = (path: string) => path.replace(/\{([^}]+)\}/g, ":$1");
 
 /** Built-in Admin API templates, relative to the configured Admin API base. */
 export const adminRoutes = [

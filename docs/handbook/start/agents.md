@@ -39,6 +39,8 @@ the app entry (`--entry`) never imports, it warns and names the topic that shows
 5. Before reporting the app or a feature done, run [role-only acceptance](../guides/agent-workflow-acceptance.md)
    (`mantle help agent-workflow-acceptance`). Scripted smoke is not acceptance. `pnpm accept` starts the app and hands
    each role to a fresh evaluator as a URL that carries that role's session.
+6. Once acceptance converges, follow the [performance skill](../../skills/performance/SKILL.md): it decides which of
+   front end (Lighthouse), cold start and backend load apply, and holds each to a target before you report done.
 
 The first verified sign-in with `ADMIN_EMAIL` becomes the admin. Further administrators are added in Admin:
 **More → Administrators** invites by email, and **More → Members** grants Admin to an existing member.

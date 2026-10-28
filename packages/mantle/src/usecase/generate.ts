@@ -73,9 +73,13 @@ export function generate(input: GenerateInput): GenerateResult {
   const values = new Set<string>();
   /** A statement as a constant: its text and how to bind it. */
   const step = (s: LoweredStatement, path: string, fields: readonly string[], row = false) => {
-    const recipes = recipesOf(s, fields, message => refuse(path, message));
-    for (const r of recipes) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && r.type) values.add(r.type === "date" ? "date" : "timestamp"); }
-    return `{ sql: ${q(s.sql)}, binds: ${q(recipes)}${row ? ", row: true" : ""} }`;
+    // a row op must change exactly one row; a `mustWrite` set op at least one (#1775)
+    const recipes = recipesOf(s, fields, message => refuse(path, message)), probe = row && s.probe ? recipesOf(s.probe, fields, message => refuse(path, message)) : [];
+    for (const r of [...recipes, ...probe]) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && r.type) values.add(r.type === "date" ? "date" : "timestamp"); }
+    // #1822: the lock probe the driver reads when this row write changes no row
+    const locks = Object.fromEntries((plan.schemas[s.schema ?? ""]?.locks ?? []).filter(l => l.on.includes(s.verb as "update")).map(l => [l.name, l.message]));
+    const lock = row && s.probe ? `, lock: ${q({ sql: s.probe.sql, binds: probe, schema: plan.schemas[s.schema!]!.name, verb: s.verb, locks })}` : "";
+    return `{ sql: ${q(s.sql)}, binds: ${q(recipes)}${row ? ", row: true" : s.mustWrite ? ', row: "some"' : ""}${lock} }`;
   };
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [], refProcedures: string[] = [];
   const entries: Record<string, string> = {};
@@ -125,8 +129,8 @@ export function generate(input: GenerateInput): GenerateResult {
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input`, `export type { Output } from "${base}contracts";\n`);
   }
   emitTtl(plan, isSqlite, declarations, procedures, entries, refuse);
-  emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
-  const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers);
+  emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse, input.locks);
+  const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers, input.locks);
   const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target, input.description), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, input.description, refuse, !!site), ...emitAdminDescriptors({plan,admin},diagnostics), ...emitAdminBindings(input,refuse), ...(admin ? emitAdminClient(plan, typeOf) : {}), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";

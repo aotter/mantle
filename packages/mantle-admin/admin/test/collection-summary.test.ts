@@ -85,6 +85,12 @@ describe("canEditEntry", () => {
     expect(access({ isReadOnly: true, operationalEditUnlocked: true })).toBe(false);
   });
 
+  it("never lets the unlock toggle override a Schema lock (#1822)", () => {
+    expect(access({ operationalEditUnlocked: true, rowLocked: true })).toBe(false);
+    expect(access({ isOperational: false, rowLocked: true })).toBe(false);
+    expect(access({ operationalEditUnlocked: true, rowLocked: false })).toBe(true);
+  });
+
   it("allows admin publishing edits but never grants a member access", () => {
     expect(access({ isOperational: false })).toBe(true);
     expect(access({ admin: false, isOperational: false })).toBe(false);

@@ -1,7 +1,7 @@
 /** Bun.SQL's PostgreSQL shape (`Postgres`); postgres.js satisfies it as it is. */
 import type { Bound } from "../binds.js";
 import type { TransactionOptions } from "../store.js";
-import { conflict, ContractError, schemaCheckFailed, type Postgres, type PostgresResult, type Row, type Unsafe } from "../contracts.js";
+import { conflict, ContractError, lockConflict, schemaCheckFailed, type Postgres, type PostgresResult, type Row, type Unsafe } from "../contracts.js";
 import { context, guard } from "./transaction-context.js";
 
 const transactions = new WeakSet<Postgres>();
@@ -33,7 +33,8 @@ export function postgresOutcome(error: unknown, path: string): unknown {
 }
 
 /**
- * One statement is atomic on its own (a row statement touches at most one row, so a failed count check changes nothing)
+ * One statement is atomic on its own (a row statement touches at most one row, and a `"some"` one fails only when it wrote
+ * none, so a failed count check changes nothing)
  * and runs in autocommit. Several run in `begin(serializable)`: a failure before the callback returns was rolled back;
  * only a failed COMMIT can leave the outcome unknown.
  */
@@ -42,7 +43,7 @@ export async function procedure(db: Postgres, steps: readonly Bound[], path: str
     const results: Row[][] = [];
     for (const s of steps) {
       const { rows, changes } = await run(handle, s.sql, s.binds).catch(error => { throw sqlstate(error) === "23505" ? conflict(path, true, error) : sqlstate(error) === "23514" ? check(path, error) : error; });
-      if (s.row && changes !== 1) throw conflict(path, false);
+      if (s.row && (changes < 1 || changes > 1 && s.row !== "some")) throw s.row === true && s.lock ? lockConflict(path, s.lock, (await run(handle, s.lock.sql, s.lock.binds)).rows) : conflict(path, false);
       results.push(rows);
     }
     return results;

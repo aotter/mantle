@@ -1,5 +1,5 @@
 /** Pure collection metadata, shared by Admin and the deployment compiler. */
-import { MCP_HINT_KEYWORD, NATIVE_NOT_NULL, requiredMantleRefFields, foldParentField, isMediaMcpHint, enumOptions, notNullColumns, resolveMantleRef, type JsonSchema, type PlanSchema } from "../spec/domain/index.js";
+import { MCP_HINT_KEYWORD, NATIVE_NOT_NULL, requiredMantleRefFields, foldParentField, declaresFoldUnder, isMediaMcpHint, enumOptions, notNullColumns, resolveMantleRef, type JsonSchema, type PlanSchema } from "../spec/domain/index.js";
 
 type Props = Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 export const propsOf = (s: JsonSchema) => (s.properties ?? {}) as Props;
@@ -13,7 +13,8 @@ export function adminIndexColumns(s: PlanSchema): string[] {
 
 /** @internal What the SPA lists and edits for one Schema; a translation's parent is the entry sharing its `on`. */
 export function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
-  const names = new Set(schemas.filter((x) => !x.translates).map((x) => x.name));
+  // an explicit nav.parentField decides the fold direction: a Schema declared to fold under this one is not also its inferred parent
+  const names = new Set(schemas.filter((x) => !x.translates && !declaresFoldUnder(x.schema, x.uiSchema, s.name)).map((x) => x.name));
   const props = propsOf(s.schema);
   const ui = (s.uiSchema ?? {}) as Record<string, Record<string, unknown> | undefined>;
   const list = ui["list"] ?? {};
@@ -36,6 +37,8 @@ export function collectionOf(s: PlanSchema, schemas: readonly PlanSchema[]) {
     mediaFields: [s, ...children].flatMap((x) => Object.entries(propsOf(x.schema)).flatMap(([name, p]) => (isMediaMcpHint(p[MCP_HINT_KEYWORD]) ? [{ name, hint: p[MCP_HINT_KEYWORD] }] : []))),
     // the plan lower-cases index columns; `names` maps them back to the declared spelling
     sortableFields: [...new Set(adminIndexColumns(s).map((f) => s.names[f] ?? f))],
+    // declared spelling; empty means the Admin search box matches the entry id only
+    searchableFields: (s.search ?? []).map((f) => s.names[f] ?? f),
     filter: filterField ? { field: filterField, values: enumOptions(props[filterField])?.map((o) => o.value) ?? [] } : null,
     list: { primaryField: (list["primaryField"] as string | undefined) ?? null, columns: (list["columns"] as string[] | undefined) ?? [] },
     nav: navField && navParent ? { standalone: true, parentField: navField, parentCollection: navParent.schema } : null,

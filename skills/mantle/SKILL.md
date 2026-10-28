@@ -38,6 +38,7 @@ lacks a guide named here, record the missing guidance and keep that version's co
 - Read `node_modules/@aotter/mantle/docs/skills/update/SKILL.md` to upgrade Mantle, including from 0.1.x.
 - Read `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` only for an authorized production deployment.
 - Read `node_modules/@aotter/mantle/docs/skills/media-gc/SKILL.md` only to audit or remove stale uncommitted media uploads.
+- Read `node_modules/@aotter/mantle/docs/skills/performance/SKILL.md` after acceptance converges, or when a page, first request or query is slow.
 
 ## New application
 
@@ -50,7 +51,7 @@ includes:
 - Real business rules in SQL Procedures (`mantle help sql-patterns`), not in handler code around separate writes.
 - For visitor pages, everything in `mantle help public-pages` (SEO, AEO, sitemap, robots, `llms.txt`), styled.
 - Local HTTP checks (`mantle help local-testing`), then independent acceptance with `pnpm accept`
-  (`mantle help agent-workflow-acceptance`).
+  (`mantle help agent-workflow-acceptance`), then the installed `docs/skills/performance/SKILL.md`.
 
 Take patterns from `mantle help examples` into the app's own manifests and `src/`; do not copy an example directory
 over the app. Resolve each `AGENT:` or name the ones you left. Generation only, inside an app you already have: skip
@@ -60,7 +61,15 @@ over the app. Resolve each `AGENT:` or name the ones you left. Generation only, 
 
 Before reporting any new app or feature as done, follow `mantle help agent-workflow-acceptance`: a private rubric,
 then one fresh agent per role given only its role and the URLs `pnpm accept` prints, at most three rounds. If it was
-not run, report the work as UNVERIFIED rather than done; if it could not run, BLOCKED.
+not run, report the work as UNVERIFIED rather than done; if it could not run, BLOCKED. Report status per layer as that
+guide's "Report done-ness in layers" defines; a block from your environment (approval policy, missing browser,
+network) is BLOCKED on its layer, not a product failure, and does not discard the other layers.
+
+Once acceptance is CONVERGED, read the installed `docs/skills/performance/SKILL.md`: it decides which of front end,
+cold start and backend load apply, and runs them before you report done. This is the one exception to installed docs
+winning: if the installed package predates that skill, read
+[the 0.2.1 copy](https://github.com/aotter/mantle/blob/v0.2.1/docs/skills/performance/SKILL.md) and the pages it links
+from the installed docs with `mantle help <topic>`.
 
 ## Deployment
 
@@ -72,5 +81,7 @@ host's native workflow. Local project creation alone is not deployment authoriza
 Preserve the user's manifests, `src/` files, identity, package versions and provider resources. Run the project's
 generate command with `--check` and its own tests before and after a change.
 
-Report the project path, the exact Mantle version, what you changed, the checks you ran with their results, the
-independent acceptance verdict (CONVERGED / BLOCKED / UNVERIFIED), and anything left for the user.
+Report the project path, the exact Mantle version, what you changed, the four-layer status with each layer's checks
+and results (the independent acceptance verdict, CONVERGED / BLOCKED / UNVERIFIED, is layer 3), the performance verdict
+(PASS / PARTIAL / SKIPPED) with its before and after numbers, and anything left for the user, including what would
+unblock a BLOCKED layer.

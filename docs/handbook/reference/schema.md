@@ -1,6 +1,6 @@
 # Schema
 
-A Schema declares one table and its typed Store collection. Required keys are title and an object JSON Schema. Optional keys include lifecycle, scope, TTL, indexes, uniqueIndexes, checks, searchableFields, localized, translates and uiSchema. Unknown keys fail validation.
+A Schema declares one table and its typed Store collection. Required keys are title and an object JSON Schema. Optional keys include lifecycle, scope, lock, TTL, indexes, uniqueIndexes, checks, searchableFields, localized, translates and uiSchema. Unknown keys fail validation.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
@@ -46,9 +46,56 @@ Generated types constrain Store fields and writes; Store does not interpret a JS
 
 ## Row rules
 
-Schemas default to operational. Publishing opts into draft/published/archived and generated admin/system transitions. Store cannot assign system columns or scope; generated policy fills them. See [lifecycle and locales](../concepts/lifecycle-and-locales.md).
+Schemas default to operational. Publishing opts into draft/published/archived and generated admin/system transitions. Store cannot assign system columns or scope; generated policy fills them. `publishing: { liveEdits: true }` (only with `lifecycle: publishing`) lets Admin's generic patch edit a published entry in place; without it, generic patches edit drafts only, an implicit lock named `publishing` that never binds the transitions. No update clears a field `publish` requires from a published row (`INPUT_VALIDATION_FAILED`): a Store update that sets one to null is refused, while Admin's live edit validates the whole merged entry as `publish` does. See [lifecycle and locales](../concepts/lifecycle-and-locales.md).
 
 Owner and field columns prefix every unique index in that order. User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
+
+### Locks
+
+`lock` freezes a row while a condition on it holds. It is a data-state invariant, not an authorization rule: it binds every caller, admins included.
+
+```yaml
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  lifecycle: publishing
+  indexes: [[current_revision]]
+  schema:
+    type: object
+    properties:
+      slug: { type: string }
+      current_revision: { type: string, x-mantle-ref: post_revisions }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: post_revisions }
+spec:
+  title: Post revisions
+  lifecycle: operational
+  lock:
+    - name: live_revision
+      on: [update, delete]
+      when: EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)
+      message: "This revision is live. Create a new revision and switch to it."
+  schema:
+    type: object
+    required: [post, body]
+    properties:
+      post: { type: string, x-mantle-ref: posts }
+      body: { type: string }
+```
+
+- `when` true means locked. It reads the existing row only (like RLS `USING`); new rows stay with `checks`. `on` lists `update` and/or `delete`; names are unique per Schema.
+- A caller's update or delete of the Schema gets `AND NOT (<when>)` in its WHERE, beside scope and the version check, so the write stays one atomic statement. Several locks are ANDed. A NULL `when` refuses the write: a lock fails closed. So `when: body = 'keep'` also locks a row whose `body` is NULL; write `body IS NOT NULL AND body = 'keep'` to lock only the rows that hold the value. An `ON CONFLICT DO UPDATE` carries the `update` locks too, as a set op: an upsert whose conflicting row is locked leaves it unchanged and returns no row for it, like `DO NOTHING`; use a row-classified `UPDATE` to get `CONFLICT` `kind: "lock"`.
+- It applies to every caller-facing write: Admin's generic patch and delete (which the Admin MCP App and WebMCP reach through the same routes), caller-mode SQL Procedures' `UPDATE`/`DELETE` of the locked Schema (over REST, MCP or a direct call), the generated publishing transitions (`<schema>.publish` / `.unpublish` / `.archive`, which carry the `update` locks) and Stores bound to a caller (`store(db, caller)`, a ref handler's `ctx.store`). Only a trusted write (the system caller, a system Store, the TTL sweep) bypasses it: the maintenance escape hatch, visible in code review.
+- A refused write is `CONFLICT` with `kind: "lock"` and `{ schema, verb, lock, message }` ([diagnostics](diagnostics.md)). When the write changed no row, one read of the row as the caller sees it classifies the failure: a missing or invisible row stays `kind: "row"`.
+- `when` allows the Schema's own columns, constants, comparisons (`=`, `<>`, `<`, `>`, `<=`, `>=`, `IN (…)`), `AND`/`OR`/`NOT`, `IS [NOT] NULL` and `[NOT] EXISTS (SELECT … FROM <declared Schema> [alias] WHERE …)`. It calls no function (`now()`, `auth.*`, aggregates, windows) and reads no `input.*`, so it holds the same for every caller and request. Inside a subquery every column is qualified: `p.current_revision` for the subquery's Schema, `post_revisions.id` for the locked row (an unqualified `id` would silently read `posts.id`). A subquery reads one Schema, without join, `WITH`, `GROUP BY`, `ORDER BY`, `LIMIT` or `DISTINCT`, and its alias may not hide the locked Schema's name. `when` is one expression: a trailing `ORDER BY`, `GROUP BY` or `LIMIT` is refused. The compiler gives each subquery relation a reserved `_mantle_lock_<n>` alias, so the alias of a write the lock guards can never capture its references (relation aliases starting with `_mantle` are refused in authored SQL).
+- Subqueries read the stored rows, without the reader's scope, publishing filter or TTL: a referencing row the caller cannot see still locks.
+- **Concurrency.** The lock is a predicate on the write's database snapshot, not a lock on every row its subquery reads. On PostgreSQL READ COMMITTED, a concurrent change in another Schema can make a cross-row `EXISTS` condition true after an UPDATE has already passed that check. For a publication guarantee across editors, the [revisions recipe](../guides/revisions.md) first CAS-seals the revision's own row and locks on that stored seal; its parent pointer changes only after sealing succeeds. A transaction around the pointer change alone does not serialize unrelated autocommit edits.
+- Admin knows before the edit: its editor and list reads evaluate each lock per row, and each entry carries `locks: { update, delete }` (per verb, the holding lock's `{ lock, message }` or `false`), so Save, Delete and transitions are disabled with the message ([native Admin](../guides/native-admin.md)). On a publishing Schema the draft-only rule shows there too, as the implicit lock `publishing`, after any declared lock on the same verb. The write's WHERE remains the authority.
+- **Index rule.** Locks are index-proven reads, like [paged Views](#index-prefixes-for-paged-views): every guarded write runs them. Each `EXISTS` needs an equality (`=` to the locked row's column, an outer subquery's column or a literal, or `IN (<literals>)`) among its top-level `AND` terms on the first column of a declared index, unique index or `id` of its Schema. The example needs `indexes: [[current_revision]]` on `posts`; otherwise generation fails with `LOCK_INDEX_MISSING`, naming the index to declare. A condition on the locked row's own columns needs no index. An `OR` of correlations is not index-proven: split it into separate locks.
 
 `localized` and `translates: { parent, on }` declare a translation child. Parent visibility and publication are retained, with matching scope where needed. Locale values stay plain strings.
 
@@ -70,7 +117,7 @@ Declaring both indexes does not make one View bounded for every caller. System (
 
 Publishing fields may be NULL in drafts even when required, so they cannot be View paging keys. Store accepts `published_at` ordering, but View paging rejects it. Use `ORDER BY id`, or keep the business date in an operational Schema as an indexed, required non-null field. See [View paging](view.md#results-and-paging).
 
-`checks` are restricted SQL expressions over the table's columns, emitted in initial DDL. Native databases enforce them; bare database errors are not automatically mapped to input-validation failures. Searchable fields must be plain string fields. SQLite/D1 emit FTS5 trigram tables and maintenance triggers; PostgreSQL uses ILIKE. Short SQLite terms use LIKE. Store search additionally matches exact id and combines with row policy.
+`checks` are restricted SQL expressions over the table's columns, emitted in initial DDL. Native databases enforce them; bare database errors are not automatically mapped to input-validation failures. `searchableFields` defaults to none: Store and Admin list search then match the exact id only, and Admin's search box says so. Name the fields people search by, such as the list `primaryField` or a `title`; with Admin selected, `mantle generate` warns when a Schema has no `searchableFields` but has such a field that could be one (a plain string, not a date, date-time or reference). Searchable fields must be plain string fields. SQLite/D1 emit FTS5 trigram tables and maintenance triggers; PostgreSQL uses ILIKE. Short SQLite terms use LIKE. Store search additionally matches exact id and combines with row policy.
 
 The runtime never creates, alters or checks tables. Initial DDL is for an empty database. Changed fields, checks, indexes and search DDL require [agent-owned native migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations), including explicit data migration for destructive/type changes. Mantle drops nothing.
 
@@ -80,7 +127,7 @@ A property marked `readOnly: true` in the JSON Schema is server-maintained (a co
 
 `default` does not make a column NOT NULL; `required` does (in an `operational` Schema). For a server-maintained value that is never NULL, list it in both, `required: [name, total]` with `total: {type: integer, readOnly: true, default: 0}`: initial DDL declares `total` NOT NULL, Store and View row types read it as `number` rather than `number | null`, Admin's create still fills the default when the client omits it, and the Store's insert type requires server code to pass it. Without `required` the column stays nullable, and an INSERT that omits it stores NULL. Adding `required` to an existing table is a [migration](../concepts/runtime-and-adapters.md#schema-installation-and-migrations): backfill NULLs, then add NOT NULL.
 
-`fields.<name>.widget` selects a built-in control (`textarea`); `list.primaryField`, `list.columns` and enum `filterField` select list presentation (operational Schemas only; a publishing Schema's list shows its title field and status); `nav.parentField` chooses the parent a child folds under (required when two or more required `id` references exist) and `nav.standalone` lists the child in the sidebar; `nav.group/order/hidden` place it in the sidebar ([sidebar](../guides/native-admin.md#sidebar)). `list.columns` must not repeat `list.primaryField` or itself (`SCHEMA_UI_INVALID`). Generation validates these against declared fields/indexes. Components that render a field, cell or record aside are not manifest references: they live in `defineAdmin` ([customising Admin](../guides/native-admin.md#customising-admin)), and a manifest that still names one (`widget: <extension>/<contribution>`, `widget` `options`, `list.cells`, `panels`) is refused. JSON Schema root `schema.readOnly: true` disables generic Admin writes, not declared Procedures; `uiSchema.readOnly` is rejected with `SCHEMA_UI_INVALID`. `x-mantle-ref` relates a field to another Schema id or single-field unique field. It is not a foreign key: the database does not check that the referenced row exists, and deleting that row leaves the reference dangling. Check existence in the write (a JOIN or `EXISTS` in the Procedure) and guard deletes with `NOT EXISTS` ([SQL patterns](../guides/sql-patterns.md)).
+`fields.<name>.widget` selects a built-in control (`textarea`); `list.primaryField`, `list.columns` and enum `filterField` select list presentation (operational Schemas only; a publishing Schema's list shows its title field and status); `nav.parentField` chooses the parent a child folds under (required when two or more required `id` references exist) and `nav.standalone` lists the child in the sidebar; `nav.group/order/hidden` place it in the sidebar ([sidebar](../guides/native-admin.md#sidebar)). `list.columns` must not repeat `list.primaryField` or itself (`SCHEMA_UI_INVALID`). Generation validates these against declared fields/indexes. Components that render a field, cell or record aside are not manifest references: they live in `defineAdmin` ([customising Admin](../guides/native-admin.md#customising-admin)), and a manifest that still names one (`widget: <extension>/<contribution>`, `widget` `options`, `list.cells`, `panels`) is refused. JSON Schema root `schema.readOnly: true` disables generic Admin writes, not declared Procedures; `uiSchema.readOnly` is rejected with `SCHEMA_UI_INVALID`. `x-mantle-ref` relates a field to another Schema id or single-field unique field. It is not a foreign key: the database does not check that the referenced row exists, and deleting that row leaves the reference dangling. Check existence in the write (a JOIN or `EXISTS` in the Procedure, with `handler.mustWrite` when a missing parent must be a 409) and guard deletes with `NOT EXISTS` ([SQL patterns](../guides/sql-patterns.md)).
 
 See [Admin](../guides/admin-ui.md) and [diagnostics](diagnostics.md).
 
@@ -94,7 +141,7 @@ For inserts, one allowed partition autofills a missing value; multiple values re
 
 #### References to a scoped Schema
 
-A non-null `x-mantle-ref` value that points to a scoped Schema (field or owner scope) must name a row of that Schema the caller can read, matched on `id` or on the object form's `field`, and that row must have the same value as the child for every scope field the two share (`ADR-0034`: a reference between scoped Schemas stays inside one owner or partition). A Store insert or update, a Procedure `INSERT … VALUES`, `UPDATE … SET` or `DO UPDATE SET`, and native Admin's generic create and patch check it in the same statement; a missing, unreadable or other-partition parent behaves like a missing row: a single-row statement returns HTTP 409 (`CONFLICT`), and an `ON CONFLICT` insert or a set update writes nothing for that row. A caller holding several values or `{ all: true }` can still not point a child in one partition at a parent in another. `INSERT … SELECT` that writes such a reference runs only for system callers. A caller's `UPDATE … SET` or `DO UPDATE SET` of such a reference takes no subquery, which could read the parent's columns as its own. Trusted writes (system callers, `runtime.store`) are not checked, like the other row rules. NULL is always allowed; deleting a parent does not touch its children.
+A non-null `x-mantle-ref` value that points to a scoped Schema (field or owner scope) must name a row of that Schema the caller can read, matched on `id` or on the object form's `field`, and that row must have the same value as the child for every scope field the two share (`ADR-0034`: a reference between scoped Schemas stays inside one owner or partition). A Store insert or update, a Procedure `INSERT … VALUES`, `UPDATE … SET` or `DO UPDATE SET`, and native Admin's generic create and patch check it in the same statement; a missing, unreadable or other-partition parent behaves like a missing row: a single-row statement returns HTTP 409 (`CONFLICT`), and an `ON CONFLICT` insert or a set update writes nothing for that row. A caller holding several values or `{ all: true }` can still not point a child in one partition at a parent in another. `INSERT … SELECT` that writes such a reference runs only for system callers. A caller's `UPDATE … SET` or `DO UPDATE SET` of such a reference takes no subquery, which could read the parent's columns as its own. Trusted writes (`store(db, caller)` or a ref handler's `ctx.store` with a system caller, `{ kind: "system", reason }`) are not checked, like the other row rules. NULL is always allowed; deleting a parent does not touch its children.
 
 ## Reserved entry columns
 
@@ -106,5 +153,22 @@ the publishing lifecycle; `version` backs `expectedVersion`; `author_id` is the 
 `restrict: { <schema>: "author_id = auth.uid()" }`.
 
 A seed or other SQL that inserts rows outside Mantle (`wrangler d1 execute --file seed.sql`) sets the native columns
-itself: `id` (text, unique) and `created_at` (integer microseconds since the Unix epoch, e.g. `1767225600000000`);
-`updated_at` and `version` have defaults. Procedures and the Store fill them for you.
+itself. Procedures and the Store fill every one of them for you; prefer them for fixtures. The Store accepts no
+value for these columns or the scope column, for any caller: it sets them itself, so SQL is also the only way to keep
+their existing values.
+
+| Column | SQLite and D1 | PostgreSQL | If the SQL omits it |
+|---|---|---|---|
+| `id` | text, unique | text, unique | the insert fails |
+| `version` | integer, `1` for a new row | `int8` | `1` |
+| `created_at` | integer microseconds since the Unix epoch (`1767225600000000` is 2026-01-01T00:00:00Z) | `timestamptz` | the insert fails |
+| `updated_at` | integer microseconds, like `created_at` | `timestamptz` | SQLite and D1 store `0`, which Admin shows as 1970-01-01; PostgreSQL stores `now()` |
+| `author_id` | the creator's Better Auth user id, or `NULL` | the same | `NULL`: `restrict: { <schema>: "author_id = auth.uid()" }` shows the row to no member |
+| `status` (publishing) | `'draft'`, `'published'` or `'archived'` | the same | `'draft'` |
+| `published_at` (publishing) | integer microseconds when `status` is `'published'`, otherwise `NULL` | `timestamptz` or `NULL` | `NULL` |
+| scope column (owner or field scope) | the field the `scope` names (`owner` in `owner = auth.uid()`), text, not null | the same | the insert fails |
+
+Units differ by table: entry timestamps (`created_at`, `updated_at`, `published_at` and declared `date-time` fields)
+are microseconds on SQLite and D1, while the optional media library's `media_assets.created_at` is epoch
+**milliseconds** on every dialect ([media](../cloudflare/media-r2.md)). A declared `date` field is integer days since
+1970-01-01 on SQLite and D1. [Seed data](../guides/local-testing.md#seed-data) shows a complete seed for each dialect.

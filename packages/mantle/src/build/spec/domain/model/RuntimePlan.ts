@@ -3,7 +3,7 @@
  * Every SQL source is already IR here, so no Worker parses SQL. Pure types and constants.
  */
 import type { AuthorizationRequirements, JsonSchema, LocalizedText, ProcedureMcpAnnotations, ProcedureTarget, TriggerSource } from "./ManifestGrammar.js";
-import type { SqlNode, SqlPlan } from "./SqlIr.js";
+import type { SqlLock, SqlNode, SqlPlan } from "./SqlIr.js";
 import type { UserScope, UserFieldSpec } from "./UserFields.js";
 
 export const RUNTIME_PLAN_VERSION = 6 as const;
@@ -22,6 +22,8 @@ export interface PlanSchema {
   readonly ttl?: string;
   readonly ttlSeconds?: number;
   readonly publishing?: boolean;
+  /** `spec.publishing.liveEdits` (#1822): a caller's generic patch may edit a non-draft row in place. */
+  readonly liveEdits?: true;
   /** column -> Mantle type: text integer real bool json timestamptz date numeric(p,s) geo */
   readonly fields: Readonly<Record<string, string>>;
   /** lower-cased column -> the name the JSON Schema declares */
@@ -30,6 +32,8 @@ export interface PlanSchema {
   readonly schema: JsonSchema;
   /** Boolean expressions over the row's own columns, as IR. */
   readonly checks?: readonly SqlNode[];
+  /** `spec.lock` (#1822): each `when` as IR, its subqueries reading stored rows. A caller's update or delete gets `AND NOT (when)`. */
+  readonly locks?: readonly SqlLock[];
   /** A translation publishes only once the parent entry that shares `on` is published (ADR-0010). Names as declared. */
   readonly translates?: { readonly parent: string; readonly on: string };
   readonly search?: readonly string[];
@@ -71,7 +75,7 @@ export interface PlanProcedure {
   readonly target?: ProcedureTarget;
   readonly mcp?: ProcedureMcpAnnotations;
   /** An inline handler carries its SQL as authored (`source`), which Admin shows; the IR is what runs. */
-  readonly handler: { readonly ref: string } | { readonly sql: SqlPlan; readonly source: string };
+  readonly handler: { readonly ref: string } | { readonly sql: SqlPlan; readonly source: string; readonly mustWrite?: readonly number[] };
 }
 
 export interface PlanTrigger {
@@ -86,6 +90,8 @@ export interface LoweredStatement {
   readonly kind: "read" | "row" | "set";
   readonly schema?: string;
   readonly verb?: "insert" | "update" | "delete";
+  /** A set op the Procedure names in `handler.mustWrite`: writing no row is CONFLICT (#1775). Omitted when false. */
+  readonly mustWrite?: true;
   /** Omitted when false. */
   readonly hooked?: true;
   /** Omitted when false. */
@@ -94,6 +100,8 @@ export interface LoweredStatement {
   readonly returns?: true;
   /** A write's table, lower case (D1's unique-conflict op mapping). */
   readonly target?: string;
+  /** A row write a Schema lock guards: the read that tells a lock from the row conflict (#1822). */
+  readonly probe?: { readonly sql: string; readonly binds: LoweredStatement["binds"] };
 }
 
 /** A paged statement of a View under one request shape, printed. The page size is a bind (`limit`), so one statement serves every page size. */

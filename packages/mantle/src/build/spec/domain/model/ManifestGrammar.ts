@@ -245,11 +245,30 @@ export interface SchemaManifestSpec {
    *  editable in place, and have no publish/unpublish transitions — the
    *  admin hides the content-lifecycle chrome for them. */
   readonly lifecycle?: LifecycleMode;
+  /** `lifecycle: publishing` options (#1822). `liveEdits: true` lets a caller's generic patch edit a published row in place (an
+   *  archived one stays draft-only); a published row must still pass `publish`'s checks. Default: generic patches edit drafts only. */
+  readonly publishing?: { readonly liveEdits?: boolean };
   /** Logical expiry policy. Physical removal requires an explicit sweep. */
   readonly ttl?: { readonly field: string; readonly expireAfterSeconds: number };
   /** The Schema's row template (ADR-0046 amendment): AND-joined `column = auth.uid()` /
    *  `column IN auth.user('field')` terms, enforced on every read and write of the Schema. */
   readonly scope?: string;
+  /** Data-state invariants (#1822): while a lock's `when` holds for the existing row, a caller's update or delete of it is
+   *  refused, whatever the caller's role. Only a trusted (system) write bypasses it. */
+  readonly lock?: readonly SchemaLock[];
+}
+
+export const LOCK_VERBS = ["update", "delete"] as const;
+export type LockVerb = (typeof LOCK_VERBS)[number];
+export interface SchemaLock {
+  /** Unique within the Schema; named by the `kind: "lock"` conflict. */
+  readonly name: string;
+  readonly on: readonly LockVerb[];
+  /** A SQL boolean over the existing row: its columns, comparisons, AND/OR/NOT, IS [NOT] NULL and [NOT] EXISTS over declared
+   *  Schemas. True (or NULL) means locked. */
+  readonly when: string;
+  /** Static text the refusal carries. */
+  readonly message: string;
 }
 
 export interface TranslatesBinding {
@@ -403,6 +422,9 @@ export interface HandlerRefBinding {
  *  one batch. Reads `input.<name>`, `auth.uid()`, `auth.role()`, `now()`. */
 export interface HandlerSqlBinding {
   readonly sql: string;
+  /** Statement numbers, counting from 1, of set-op writes that must write at least one row, else
+   *  `CONFLICT` kind "row" and the whole program rolls back (ADR-0034 decision 4, #1775). */
+  readonly mustWrite?: readonly number[];
 }
 
 /** Closed predicate vocabulary. `ctx.user` and `ctx.auth` are bare

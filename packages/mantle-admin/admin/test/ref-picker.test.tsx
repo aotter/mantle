@@ -98,6 +98,24 @@ describe("relation picker for x-mantle-ref fields", () => {
   });
 });
 
+describe("a ref picker in an operation bound to the parent (#1825)", () => {
+  it("lists only the bound parent's children through the folded list's scope; other fields list the whole target", async () => {
+    const seen = stubEntries(() => ({ status: 200, body: { items: [row("c1", "Acme Corp")], next_cursor: null } }));
+    const scope = { field: "accountId", value: "a1" };
+    const client = new QueryClient();
+    client.setQueryData(["collections"], [customers]);
+    await client.prefetchQuery(refOptionsQueryOptions("customers", "", scope));
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <SchemaFields schema={schema} value={{}} path={[]} onChange={() => {}} language="en" canonical={null} collectionName="move-customer" mediaPurposes={[]} refScopes={{ customerId: scope }} />
+      </QueryClientProvider>,
+    );
+    expect(seen).toEqual(["/admin/api/entries?collection=customers&limit=20&sort=updatedAt&direction=desc&scope_field=accountId&scope_value=a1"]);
+    expect(html).toContain('data-ref-picker="customers"');
+    expect(refOptionsQueryOptions("customers", "").queryKey).toEqual(["entries", "ref-options", "customers", ""]);
+  });
+});
+
 describe("operation result details", () => {
   it.each([null, undefined, {}, { results: [] }, { results: [[], []] }])("shows no Details block for an empty result %#", (output) => {
     expect(isEmptyOperationOutput(output)).toBe(true);

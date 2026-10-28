@@ -111,7 +111,9 @@ dist-tag DELETE only added failure and re-run state, and Actions
    git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
 
-   Pin consumer skill/plugin installation examples to the release's Git tag;
+   Keep the unversioned skill install (`npx skills add aotter/mantle@mantle`) as
+   the default command; pin its tagged form (`aotter/mantle#v<version>@mantle`)
+   and plugin installation examples to the release's Git tag;
    follow the client syntax in [agent setup](handbook/guides/agent-setup.md).
    Alpha releases stay on `develop`, so unqualified installs from `main` can
    return an incompatible older skill. Update the root README, agent setup,
@@ -131,6 +133,16 @@ dist-tag DELETE only added failure and re-run state, and Actions
    runnable examples, workflow skills and plugin skill): no workspace
    dependencies, secrets or local state. ADRs and the reference-service source
    stay in the repository; packaged links to them must use a versioned URL.
+   Run `pnpm check:init-audit` (`scripts/check-init-audit.mjs`; needs the
+   network and `pnpm build`): it runs `mantle init` into a temp directory, points
+   its `@aotter/mantle*` pins at freshly packed tarballs, resolves every other
+   pin from the public registry and fails on any high or critical
+   `npm audit` advisory, dev dependencies included. The controller runs the
+   same gate before it tags. On failure, bump the
+   `docs/examples/app-shell/package.json` pins (Wrangler together with a
+   `@cloudflare/workers-types` that satisfies its peer range), align
+   `docs/examples/reference-service` and the SDK's own Wrangler devDependency,
+   and run `pnpm install` so `pnpm-lock.yaml` follows.
    Run the maintainer release skill's
    [startup and request-cost checkpoint](../.agents/skills/mantle-release/SKILL.md#startup-and-request-cost-checkpoint)
    when its auth/kernel/generator trigger applies and before every alpha or beta.

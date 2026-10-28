@@ -92,7 +92,7 @@ wrote through the app's own Views with HTTP Triggers (`mantle help trigger`).
 | --- | --- |
 | `POST /entries` | Body `{ collection, data }`; creates an entry. |
 | `GET /entries/{id}?collection=<schema>` | Reads an entry and its current `entry.version`. |
-| `PATCH /entries/{id}?collection=<schema>` | Body `{ data, expectedVersion }`; sends the observed version, not the next one. Publishing entries must be drafts. |
+| `PATCH /entries/{id}?collection=<schema>` | Body `{ data, expectedVersion }`; sends the observed version, not the next one. A key left out of `data` keeps its value and `null` clears it ([leave out, replace or clear](#leave-out-replace-or-clear)). Publishing entries must be drafts unless the Schema sets `publishing: { liveEdits: true }`; a [lock](../reference/schema.md#locks) that holds refuses it with 409 `kind: "lock"`. |
 | `POST /entries/{id}/publish?collection=<schema>` | Body `{ expectedVersion }`; validates required data before publishing. |
 | `POST /entries/{id}/unpublish?collection=<schema>` | Body `{ expectedVersion }`; returns the entry to draft. |
 | `POST /operations/{name}` | Body is the Procedure's input; runs an Admin operation (a Procedure with `requires: ctx.admin` or a `target`). Returns `{ ok: true, output }`, where `output` is what REST and MCP return (`{ results }` for a SQL Procedure). |
@@ -107,7 +107,15 @@ wrote through the app's own Views with HTTP Triggers (`mantle help trigger`).
 
 Entry create/read/patch/transitions return
 `{ collection, entry, parentEntryId, parentEntryTitle, related }`; the entry has
-`{ id, collection, locale, status, version, data, created_at, updated_at }`.
+`{ id, collection, locale, status, version, data, created_at, updated_at }`. On a Schema with
+[locks](../reference/schema.md#locks), each entry of the editor payload and of `GET /entries` also has
+`locks: { update, delete }`: per verb, `{ lock, message }` of the first lock that holds for your generic write of that row,
+or `false`. Admin disables Save, rename, Delete and transitions on such a row and shows the
+message; the operational "Unlock editing" toggle does not override it. The write itself stays the authority: a refusal is
+409 `CONFLICT` with `kind: "lock"`. Every publishing entry has `locks` too: the draft-only rule (without `liveEdits`) and
+"unpublish before deleting" are the implicit lock `lock: "publishing"`, named only when no declared lock holds for that verb.
+It binds data writes only, so Publish, Unpublish and Archive stay available; with `liveEdits` a published entry's form is
+enabled with a "changes go live on save" notice, and Save waits until its required fields are filled.
 Transitions accept `{}` to use the current version; tests should send the
 observed `expectedVersion` to catch stale writes. Generic writes reject native
 columns inside `data`. See [publishing](../concepts/lifecycle-and-locales.md).
@@ -145,7 +153,7 @@ refused View or collection from a missing one. Showing or hiding a component gra
 | Hook | Route | Surface |
 | --- | --- | --- |
 | `useView(name, input, { limit? })` -> `{ rows, status, hasMore, loadMore, loadingMore }` | `GET /views/{name}` | browser and MCP App |
-| `useOperation(name)` -> `{ run, pending }`; success refreshes Views, entries, entry editors and totals | `POST /operations/{name}` | browser and MCP App |
+| `useOperation(name, { refresh? })` -> `{ run, pending }`; success refreshes every mounted View (each input, each loaded page), entries, entry editors, totals and badges once, `refresh` narrowing the Views ([below](#scoped-refresh)) | `POST /operations/{name}` | browser and MCP App |
 | `useEntries(collection, { filter?, search?, limit? })` -> `{ items, status, hasMore, loadMore, loadingMore }` | `GET /entries` (one `filter_field`/`filter_value`) | browser only |
 | `useEntry(collection, id)` | `GET /entries/{id}` | browser only |
 | `useCollectionTotal(collection)` | `GET /collections/{name}/statistics`, its `total` | browser only |
@@ -157,6 +165,18 @@ page and appends it while `hasMore` is true. There are no page numbers and no "p
 options) starts again from the first page. A failed `loadMore()` leaves `status` at `error` with the rows already loaded kept, and
 calling `loadMore()` again retries. Admin's own lists work the same way, under a "Load more" button, and so does the MCP App, which
 shows the button only when the host has `serverTools` (it calls the View's tool again with the same input and the `cursor`).
+
+<a id="scoped-refresh"></a>By default an operation's success reads every shown View again, since Admin cannot know which a
+Procedure changed: every mounted `useView`, for each input it is mounted with, and for each page it has loaded, one request
+per page (a View with five loaded pages makes five requests). To keep that cheap, unmount what is collapsed (a closed
+branch of a tree reads nothing, and reads again only when it is next shown), keep `limit` small so that fewer pages
+accumulate, and prefer one wider View over many narrow ones. A page with many Views (say one per expanded branch of a
+tree) can also name the ones to read again:
+`useOperation("move", { refresh: ["children", { view: "children", input: { parent: id } }] })`. A name covers every input of
+that View; `{ view, input }` covers the one `useView(view, input)` (any `limit`); `refresh: []` reads no View again. The names and inputs are typed like `useView`'s.
+Views not named are marked stale rather than read again, so each reads again when it is next shown. Entries, open entries,
+totals and badges still refresh: the Procedure may write any collection, and skipping those would show stale records with no
+way to name them. Leave `refresh` out when unsure; a View you forget to name keeps showing its old rows until it is shown again.
 
 In an MCP host, `useView` and `useOperation` call the View's or operation's admin MCP tool (its name lowercased, kebab to snake) through the host (`tools/call`),
 under the caller's MCP authorization; the browser-only hooks read `unavailable` there, so declare the data an App needs as an
@@ -216,10 +236,87 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 | `input:<schema>.<field>` | browser | `value`, `onChange`, `readOnly`, `property`, `surface` |
 
 `record.aside:` and `record.actions:` render beside Admin's own side cards and actions, which they do not replace. A
-record form's top-level fields go through `input:`; a View's parameters and a Procedure's inputs do not. A read-only field
-(a bound or `readOnly` property) has no `input:` component, and `readOnly` tells yours that the caller cannot edit the
-record. In the browser Admin, a View column that reads a Schema field also goes through that field's `cell:` component, with the column's own
+record form's top-level fields go through `input:`; a View's parameters and a Procedure's inputs do not. A field the Schema
+does not require is `T | null` in the generated types, and so is every field of a publishing collection, whose draft may lack a
+required one: it reads `null` when unset, and `onChange(null)` clears it (Save sends `null`, which the entry PATCH stores as
+NULL; a field left out keeps its value). The built-in controls clear the same way, and an emptied required field is `null` too:
+an operational record refuses it with a validation error, and a draft keeps it empty until Publish, which refuses it. A read-only field
+(a bound or `readOnly` property) never reaches the slot: it has no `input:` component and shows its value read-only.
+
+`readOnly` is one flag for the whole form, not for the field: it is `true` whenever this caller cannot edit this record now,
+which is when any of these holds:
+
+- the caller is not an admin, which includes the moment while `/me` is still loading, so expect it to start `true`;
+- the collection is read-only (`readOnly: true` at the root of its Schema), or the entry's version is outside the safe integer range;
+- an operational record has not been unlocked with "Unlock editing";
+- a publishing entry is not a draft: published without `publishing: { liveEdits: true }`, or archived, which stays read-only
+  even with `liveEdits`. With `liveEdits` a published entry's form is editable and `readOnly` is `false`;
+- a declared [Schema lock](../reference/schema.md#locks) holds the row for `update` (`entry.locks.update`). No toggle overrides
+  it. The form shows the lock's message, unless the collection is read-only, whose read-only hint shows instead.
+
+The built-in form wraps the fields in a `<fieldset disabled>` that also blocks the pointer. That disables native form controls
+inside it, but not a custom element that is focusable on its own (a `contenteditable`, a `tabIndex` element, a third-party
+widget's buttons): it can still take keyboard focus and call `onChange`. Honour `readOnly` in your component. The Save button
+stays disabled either way, so such a change is never sent.
+
+There is no validation channel from an `input:` component to the form yet (aotter/mantle#1792): a component that knows its value
+is invalid (unparseable JSON, an incomplete nested object) cannot mark the field or disable Save. The server's generated checks
+run on Save, and a refusal shows as one error above the form. Keep an invalid value out of `onChange`, or show your own message
+beside the control.
+
+At runtime the component also receives `field` and `build`, which the built-in control uses to render itself. They are internal,
+not part of `InputProps`, and may change in any release: do not read them. Pass the props you were given to `renderDefault`, as
+with every slot.
+
+In the browser Admin, a View column that reads a Schema field also goes through that field's `cell:` component, with the column's own
 `cell:view:` component outside it; the MCP App renders only `cell:view:`. The developer workspace (`/admin/dev`) is Admin's own tool and does not go through any slot. A record with folded child collections opens on a workbench at `/admin/c/<schema>/<id>`, which is not `RecordView`; the record form (and so `RecordView`, `record.aside:`, `record.actions:` and `input:`) is its `/edit` page. A `Shell` that does not call `renderDefault` has no status bar: the record form's Save and Publish bar then stays in the page.
+
+While the record form has unsaved changes, leaving it asks first: Admin's own links, its in-app navigation and Back/Forward
+show a confirm dialog, and a reload, closing the tab or another site show the browser's own prompt (`beforeunload`). Save,
+"Load latest version" or confirming the leave clears it, and a `#hash` change on the same page never asks; a cancelled Back or
+Forward leaves the browser history as it was; there is nothing to configure or opt out of. Custom pages and
+operation forms have no such guard. An `input:` component's own state counts once it calls `onChange`: a value it keeps
+to itself (a half-typed JSON draft) is not unsaved for the guard.
+
+### Media fields
+
+A string field with `x-mantle-ref: media_assets` holds the id of an asset in the media library (`media_assets`), never a
+URL. The record form renders a built-in control for it: a thumbnail of the asset, the id in a text box, **Pick**, which opens
+the library in a dialog, and **Upload**, which uploads an image and fills the id. It works at the top level and in the
+properties of nested objects, including objects inside an array:
+
+```yaml
+properties:
+  cover: { type: string, x-mantle-ref: media_assets }
+  gallery:
+    type: array
+    items:
+      type: object
+      properties:
+        image: { type: string, x-mantle-ref: media_assets }
+        caption: { type: string }
+```
+
+An array of bare ids (`items: { type: string, x-mantle-ref: media_assets }`) gets a plain text box per item; wrap the id
+in an object, as above, to get the picker. The control needs the media library mounted (`site` and `media` in `admin()`,
+see [media on R2](../cloudflare/media-r2.md)). Upload chooses a media purpose from the site's purposes by the collection
+and field names, and is disabled when the site declares none. Procedure and View input forms render the same control with
+Upload disabled, so an operation's media input is picked from the library.
+
+Only a top-level field goes through `input:`. To add to the built-in control, wrap it with `renderDefault`:
+
+```tsx
+"input:products.cover": (props) => (
+  <div>
+    {props.renderDefault(props)}
+    <p className="text-xs text-muted-foreground">Use a 1200 x 630 image; it is also the social card.</p>
+  </div>
+),
+```
+
+The picker and the upload are not public API: `@aotter/mantle-admin/app` and `/hooks` export no picker, media list or
+upload function. A component that replaces the control instead of wrapping it builds its own picker on an admin View or
+Procedure, or keeps `renderDefault` for the picking.
 
 `plugins` are fragments of `components`, applied in order: each one's `renderDefault` is the plugin before it, the first
 plugin's is the built-in component, and the application's own `components` are outermost. A plugin is
@@ -303,7 +400,9 @@ returns its one row on one page and has no cursor.
 Generated full/partial input checks validate creates, edits, operations and
 filters. Plain titled string `oneOf` choices use the same enum checks; general
 or constrained alternatives remain refused. Draft creates can be incomplete;
-publish checks required data. Publishing edits apply only to drafts. Read-only
+publish checks required data. Publishing edits apply only to drafts unless the Schema sets
+`publishing: { liveEdits: true }`, which opens published (never archived) entries; a live edit of a published entry must still pass those publish checks
+(`INPUT_VALIDATION_FAILED`), keeps `published_at` and goes live on save. Read-only
 collections refuse generic creates, edits, deletes and transitions with 403 `AUTH_DENIED`
 ("This record is read-only; use its operations.") before any read or write, while
 their declared Procedures can still run.
@@ -312,7 +411,7 @@ Writes use compiler-printed native Procedure frames, bind recipes and only the
 supplied field fragments. They do not update omitted columns or run a schema
 interpreter. PATCH retains its visible-row read and exact OCC check; the mutation
 returns its row. Missing/excluded rows are 404; stale locks or failed state guards
-are 409. Safe versions are numbers; exact native int64 strings can be bound
+are 409 (a [lock](../reference/schema.md#locks) that holds is `kind: "lock"`). Safe versions are numbers; exact native int64 strings can be bound
 without rounding, while unsafe numbers are rejected. The console keeps versions
 outside its supported safe range read-only rather than casting them to numbers.
 Full cross-target int64 output parity remains incomplete; bare driver values
@@ -330,6 +429,24 @@ retry automatically or turn it into a success by reading afterward. Core
 from `@aotter/mantle/media`; other custom ContractErrors must carry an explicit
 status, otherwise the boundary returns a redacted 500. Do not leak native
 error messages, tokens or credentials to clients.
+
+### Leave out, replace or clear
+
+Each write path reads a field it is given differently. Pick the one whose rule fits the edit:
+
+| Write path | Field left out | A value | `null` |
+| --- | --- | --- | --- |
+| Admin create (`POST /entries`) | unset, or the Schema's default | sets it | dropped, the same as leaving it out, so the default applies |
+| Admin patch (`PATCH /entries/{id}`, the record form's Save) | keeps the stored value | replaces it | clears it to NULL; a required operational field refuses it, and so does a live edit (`liveEdits`) of a field `publish` requires (`INPUT_VALIDATION_FAILED`) |
+| Store `update` (a ref handler's `ctx.store`) | keeps the stored value | replaces it | clears it to NULL; on a published row a field `publish` requires is refused (`INPUT_VALIDATION_FAILED`) |
+| SQL Procedure (`input.x`) | binds NULL, so `SET note = input.note` clears it | replaces it | binds NULL too, where the input's schema accepts `null` |
+| `ref` handler input | the key is absent | present | present, as `null`, where the input's schema accepts it |
+
+A SQL Procedure cannot tell a field left out from one cleared, since both bind NULL. For a partial update, keep the stored
+value with `COALESCE(input.note, note)`, and give clearing its own input, such as `clearNote: true` with
+`CASE WHEN input.clearNote THEN NULL ELSE COALESCE(input.note, note) END`
+([SQL patterns](sql-patterns.md#change-only-the-fields-given-coalesce)). A ref handler sees the difference: test with
+`Object.hasOwn(input, "note")`, and pass only the keys present to `store.collection(...).update`.
 
 ## Statistics
 
@@ -386,7 +503,12 @@ In the entry editor and every operation form (including a `collectionAction` cre
 `x-mantle-ref` to another Admin collection is a searchable picker: it lists the target through the same `/entries` route
 (20 records per search, read as the caller), shows each record's title and stores the referenced value (`id`, or the
 ref's unique field). A target the caller cannot list (403/404) or that is not an Admin collection keeps the plain text
-input. The picker is a convenience; the server still validates the value. CSV exports use `/entries/export` and
+input. In an operation bound to a row (`target`), a picker whose Schema folds under that row's collection
+(`nav.parentField`) lists only that row's children, filtered by `<parentField> = <the bound row's value>` as the folded
+child list is: `switch-revision`'s `revision` on a post lists that post's revisions. There is no way to pick another
+parent's child there: an operation that needs one binds to that other row instead, or is not bound (`collectionAction`
+or the Operations page), where the picker lists the whole target. The picker is a convenience; the
+server still validates the value. CSV exports use `/entries/export` and
 `/views/{name}/export`; native browser downloads stream paged server output.
 A failure after headers aborts the stream, so a download can fail after partial
 bytes have arrived. Existing databases need an app-owned migration for the
@@ -433,7 +555,10 @@ tabs. The parent is the reference named by `Schema.spec.uiSchema.nav.parentField
 the first required unique-field reference. A Schema with two or more required `id` references to
 existing Schemas (translations excluded) and no `parentField`, with or without `standalone`, is refused by `mantle generate` with `SCHEMA_UI_INVALID`; the diagnostic lists the
 candidates and the `nav: { parentField: <field> }` line that keeps the first one that is not a parent cycle. This applies to every build, with or without Admin, so a join table with two required `id` references needs it too. `parentField` is
-refused on a translation child and when its parent chain leads back to the Schema. Choosing the
+refused on a translation child and when its parent chain leads back to the Schema. An explicit
+`parentField` decides the fold direction: a required reference from that parent back to the child
+(a post's required `current_revision`) is not an inferred fold and does not count as a cycle,
+while two `parentField`s pointing at each other are still refused. Choosing the
 parent changes Admin navigation only: storage and authorization are unchanged.
 
 Set `nav.standalone: true` to put a child with a required `id` reference at the top level instead;
@@ -541,6 +666,15 @@ row id, and optional `version` names the input bound to its reviewed OCC version
 Names such as `approve` never determine placement. An operation without a row
 target or collection action appears on the Operations page, whose sidebar link
 appears whenever such operations exist.
+
+A collection action of a folded child (one with a parent; see above) also shows in that child's panel of the parent's
+workbench. Run from there, the input named exactly like the child's `nav.parentField` (the child's field holding the
+parent's value) is filled with this parent's value and locked: the form hides it and the dialog lists it under the
+bound values, like a row operation's `id`. The name is the rule because it is unambiguous (one input at most, the same
+name as the column the action writes). The value takes the input's type (a numeric parent key binds a number); an
+input with that name whose `x-mantle-ref` names another Schema or key, or whose type cannot hold the parent's value, is
+left to the person, and so is every input outside a workbench. With `nav.parentField: post`, `new-revision { post }` placed with
+`collectionAction: post_revisions` runs on the open post.
 
 A record's page shows its row operations as labeled buttons in the header (more than three: two buttons and a
 "More actions" menu); list rows keep them in an "Actions for …" menu.
