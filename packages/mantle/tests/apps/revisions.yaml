@@ -1,6 +1,4 @@
-# The manifests of docs/handbook/guides/revisions.md, in the guide's order: tests/revisions.test.ts checks that the guide's
-# yaml blocks equal this file and runs them on bun:sqlite and PostgreSQL; the Admin route test in
-# packages/mantle-admin/tests/native/revisions.test.ts reads it too.
+# The manifests of docs/handbook/guides/revisions.md, in the guide's order.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
@@ -8,8 +6,6 @@ spec:
   title: Posts
   lifecycle: publishing
   uniqueIndexes: [[slug]]
-  # Serves post_revisions' live_revision lock (generation proves it).
-  indexes: [[current_revision]]
   schema:
     type: object
     additionalProperties: false
@@ -27,10 +23,10 @@ spec:
   lifecycle: operational
   indexes: [[post, createdAt, id]]
   lock:
-    - name: live_revision
+    - name: sealed_revision
       on: [update, delete]
-      when: EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)
-      message: "This revision is live. Start a New revision from its post, edit and preview it, then Switch revision."
+      when: sealed = true
+      message: "This revision is sealed. Start a New revision from its post, edit and preview it, then Switch revision."
   uiSchema:
     nav: { parentField: post }
     list: { primaryField: title, columns: [note] }
@@ -38,10 +34,11 @@ spec:
   schema:
     type: object
     additionalProperties: false
-    required: [post, title, summary, body]
+    required: [post, sealed, title, summary, body]
     properties:
       # Set once by new-revision; a revision never moves to another post.
       post: { type: string, x-mantle-ref: posts, readOnly: true }
+      sealed: { type: boolean, readOnly: true }
       title: { type: string }
       summary: { type: string }
       body: { type: string }
@@ -114,8 +111,8 @@ spec:
   output: { type: object }
   handler:
     sql: |
-      INSERT INTO post_revisions (post, title, summary, body, note)
-        SELECT p.id, COALESCE(r.title, ''), COALESCE(r.summary, ''), COALESCE(r.body, ''), CASE WHEN r.id IS NULL THEN 'First revision' ELSE 'Copied from the current revision' END
+      INSERT INTO post_revisions (post, sealed, title, summary, body, note)
+        SELECT p.id, false, COALESCE(r.title, ''), COALESCE(r.summary, ''), COALESCE(r.body, ''), CASE WHEN r.id IS NULL THEN 'First revision' ELSE 'Copied from the current revision' END
         FROM posts p LEFT JOIN post_revisions r ON r.id = p.current_revision AND r.post = p.id
         WHERE p.id = input.post
         RETURNING id, version
@@ -144,7 +141,7 @@ kind: Procedure
 metadata: { name: prune-revision }
 spec:
   title: Delete revision
-  description: Delete a revision that is not live.
+  description: Delete an editable revision that has never been sealed.
   requires: { auth: { all: [ctx.admin] } }
   target: { schema: post_revisions, id: id }
   input:
