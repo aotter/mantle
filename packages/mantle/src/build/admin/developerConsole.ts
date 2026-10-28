@@ -57,7 +57,7 @@ export function developerConsole(plan: RuntimePlan) {
   const procedures = Object.entries(plan.procedures).sort(([a], [b]) => a.localeCompare(b)).map(([name, p]) => ({
     name, title: p.title ?? null, description: p.description ?? null, audience: procedureAudience(name), input: p.input, output: p.output,
     authorization: p.requires?.auth?.all ?? [], guard: p.requires?.guard?.procedure ?? null, handler: handlerOf(p.handler),
-    manifest: { ...p, handler: "ref" in p.handler ? p.handler : { source: p.handler.source, ...(p.handler.mustWrite ? { mustWrite: p.handler.mustWrite } : {}) } },
+    manifest: { ...p, handler: "ref" in p.handler ? p.handler : p.handler.steps ? { steps: p.handler.steps } : { source: p.handler.source } },
   }));
   const triggers = Object.entries(plan.triggers).sort(([a], [b]) => a.localeCompare(b)).map(([name, t]) => ({
     name, target: t.procedure, source: t.source, manifest: t,

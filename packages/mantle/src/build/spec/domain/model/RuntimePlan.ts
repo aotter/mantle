@@ -2,7 +2,7 @@
  * The sealed plan (ADR-0032 decision 5, ADR-0034): what the CLI compiles from the manifests and Core executes.
  * Every SQL source is already IR here, so no Worker parses SQL. Pure types and constants.
  */
-import type { AuthorizationRequirements, JsonSchema, LocalizedText, ProcedureMcpAnnotations, ProcedureTarget, TriggerSource } from "./ManifestGrammar.js";
+import type { AuthorizationRequirements, HandlerStep, JsonSchema, LocalizedText, ProcedureMcpAnnotations, ProcedureTarget, TriggerSource } from "./ManifestGrammar.js";
 import type { SqlLock, SqlNode, SqlPlan } from "./SqlIr.js";
 import type { UserScope, UserFieldSpec } from "./UserFields.js";
 
@@ -74,8 +74,9 @@ export interface PlanProcedure {
   readonly requires?: AuthorizationRequirements;
   readonly target?: ProcedureTarget;
   readonly mcp?: ProcedureMcpAnnotations;
-  /** An inline handler carries its SQL as authored (`source`), which Admin shows; the IR is what runs. */
-  readonly handler: { readonly ref: string } | { readonly sql: SqlPlan; readonly source: string; readonly mustWrite?: readonly number[] };
+  /** An inline handler carries its SQL (`source`: as authored, or its `steps` joined), which Admin shows; the IR is what runs.
+   *  `steps` is the authored form when the handler was written as steps (#1874): statement i is step i. */
+  readonly handler: { readonly ref: string } | { readonly sql: SqlPlan; readonly source: string; readonly steps?: readonly HandlerStep[] };
 }
 
 export interface PlanTrigger {
@@ -90,8 +91,8 @@ export interface LoweredStatement {
   readonly kind: "read" | "row" | "set";
   readonly schema?: string;
   readonly verb?: "insert" | "update" | "delete";
-  /** A set op the Procedure names in `handler.mustWrite`: writing no row is CONFLICT (#1775). Omitted when false. */
-  readonly mustWrite?: true;
+  /** A set op whose step says `onNoRows: conflict`: writing no row is CONFLICT (#1874). Omitted otherwise. */
+  readonly onNoRows?: "conflict";
   /** Omitted when false. */
   readonly hooked?: true;
   /** Omitted when false. */

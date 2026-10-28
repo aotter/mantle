@@ -211,13 +211,13 @@ spec:
         RETURNING id
 ```
 
-## Create only if the parent exists: mustWrite
+## Create only if the parent exists: onNoRows
 
 `place-order` above writes no order for an unknown or discontinued product and still succeeds: its result is
 `results[0] = []`, and the caller must look. That is right when "nothing to do" is a normal outcome. When writing no
-row means the request failed, say so: `handler.mustWrite` lists the statements, counting from 1, that must write at
-least one row. One that writes none fails the call with `CONFLICT` (409) kind `"row"`, as a row-classified statement
-does, and the whole program rolls back, including statements that ran before it.
+row means the request failed, say so: write the handler as `steps`, one statement each, and give the statement that
+must write `onNoRows: conflict`. A step marked so that writes no row fails the call with `CONFLICT` (409) kind
+`"row"`, as a row-classified statement does, and the whole program rolls back, including steps that ran before it.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
@@ -235,22 +235,27 @@ spec:
       qty: { type: integer, minimum: 1 }
   output: { type: object }
   handler:
-    sql: |
-      INSERT INTO orders (productId, qty, total, orderStatus)
-        SELECT p.id, input.qty, input.qty * p.price, 'pending_approval'
-        FROM products p WHERE p.id = input.productId AND p.active
-        RETURNING id
-    mustWrite: [1]
+    steps:
+      - sql: |
+          INSERT INTO orders (productId, qty, total, orderStatus)
+            SELECT p.id, input.qty, input.qty * p.price, 'pending_approval'
+            FROM products p WHERE p.id = input.productId AND p.active
+            RETURNING id
+        onNoRows: conflict
 ```
 
+`steps` is the same program as `sql`, one statement per step, run in order in the same batch with the same checks:
+`handler: { sql }` and `handler: { steps }` are alternatives, and a step without `onNoRows` behaves exactly as that
+statement does in `sql`. A further step, such as `place-order`'s conditional reservation, is another list item
+(`- sql: UPDATE products SET reserved = …`) without `onNoRows` when writing nothing is fine.
+
 `WHERE EXISTS (SELECT 1 FROM products WHERE id = input.productId)` after a `SELECT` of input values works the same
-way when the new row needs nothing from the parent. Use `mustWrite` for a set op only: an `INSERT … SELECT`, an
+way when the new row needs nothing from the parent. Use `onNoRows` on a set op only: an `INSERT … SELECT`, an
 `INSERT … ON CONFLICT`, or an UPDATE or DELETE that does not pin `id`. A one-row `INSERT … VALUES` or a
-`WHERE id = input.id` statement already must change exactly one row, and generation refuses it in the list, as it
-refuses a number past the last statement. The check is "at least one", so a statement that writes several rows
-(`json_each(input.items)`, an UPDATE over a set) passes; give an array input `minItems: 1` when an empty one is a
-mistake. Leave a statement out of the list when writing nothing is fine, like `place-order`'s conditional reservation.
-A ref handler throws its own `ContractError` instead.
+`WHERE id = input.id` statement already must change exactly one row, and generation refuses `onNoRows` on it. The
+check is "at least one", so a statement that writes several rows (`json_each(input.items)`, an UPDATE over a set)
+passes; give an array input `minItems: 1` when an empty one is a mistake. A ref handler throws its own
+`ContractError` instead.
 
 ## A row with its children in one read
 
