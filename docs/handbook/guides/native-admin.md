@@ -233,7 +233,7 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 | `list.actions:<schema>` | browser | `collection`, `selection` (empty in the toolbar, the selected ids in the bulk bar) |
 | `cell:<schema>.<field>` | browser | `value`, `row` (the list's columns only, `null` when empty), `property`, `surface` |
 | `cell:view:<view>.<column>` | both | `value`, `row`, `property`, `surface` |
-| `input:<schema>.<field>` | browser | `value`, `onChange`, `readOnly`, `property`, `surface` |
+| `input:<schema>.<field>` | browser | `value`, `onChange`, `readOnly`, `property`, `surface`, optional `onStatusChange`, `error`, `errorId` |
 
 `record.aside:` and `record.actions:` render beside Admin's own side cards and actions, which they do not replace. A
 record form's top-level fields go through `input:`; a View's parameters and a Procedure's inputs do not. A field the Schema
@@ -259,10 +259,51 @@ inside it, but not a custom element that is focusable on its own (a `contentedit
 widget's buttons): it can still take keyboard focus and call `onChange`. Honour `readOnly` in your component. The Save button
 stays disabled either way, so such a change is never sent.
 
-There is no validation channel from an `input:` component to the form yet (aotter/mantle#1792): a component that knows its value
-is invalid (unparseable JSON, an incomplete nested object) cannot mark the field or disable Save. The server's generated checks
-run on Save, and a refusal shows as one error above the form. Keep an invalid value out of `onChange`, or show your own message
-beside the control.
+A custom input can report validation and uncommitted local text with the optional
+`onStatusChange({ error, dirty })` callback. Each call replaces that mounted root field's report:
+`error` is a message (or `null`), and `dirty` says the control holds unsaved text outside `onChange`.
+An error disables Save even if another field changes; a dirty local draft uses the record's existing
+navigation and `beforeunload` guard. These are independent: a valid but uncommitted draft can be dirty,
+and a validity error need not claim a change. Pass `{}` or call with no argument to clear both.
+
+Admin renders the error as an alert beside the input and passes back `error` and `errorId`.
+Connect your control with `aria-invalid` and `aria-describedby`, and respect `readOnly`:
+
+```tsx
+import * as React from "react";
+import type { InputProps } from "@aotter/mantle-admin/app";
+
+function JsonInput({ value, onChange, onStatusChange, error, errorId, readOnly }: InputProps<unknown>) {
+  const [text, setText] = React.useState(() => JSON.stringify(value));
+  return <textarea value={text} readOnly={readOnly} aria-invalid={Boolean(error)} aria-describedby={errorId}
+    onChange={event => {
+      const next = event.target.value;
+      setText(next);
+      try {
+        const parsed = JSON.parse(next);
+        onChange(parsed);
+        onStatusChange?.({}); // the form now owns the valid draft and protects it until Save
+      } catch {
+        onStatusChange?.({ error: "Enter valid JSON", dirty: true });
+      }
+    }} />;
+}
+```
+
+Do not emit invalid text through `onChange` merely to mark the form dirty. If valid text stays local
+until an explicit Apply action, keep reporting `{ dirty: true }` until Apply calls `onChange`.
+The server's generated checks remain authoritative: a parsed value the component does not validate
+can still be refused on Save, with the error above the form.
+
+Reports belong to mounted **root** `input:<schema>.<field>` slots, including an object or array as
+one structured value; there are no per-array-index input slots. A report clears when that field
+unmounts. Another record, a clean newer server version, an explicit **Load latest version**,
+or a completed Save resets the inputs and their local state. A row becoming locked/read-only
+preserves its local draft and dirty navigation protection; the reported error is hidden until it
+becomes editable again. Reports never override `readOnly` or enable Save on a locked row. A related
+re-read preserves a dirty local draft. A draft typed while Save is in flight is kept. A custom
+component that conditionally hides its own editor while its field stays mounted should clear its
+report when discarding that editor's draft. Procedure input forms do not use these record slots.
 
 At runtime the component also receives `field` and `build`, which the built-in control uses to render itself. They are internal,
 not part of `InputProps`, and may change in any release: do not read them. Pass the props you were given to `renderDefault`, as
@@ -275,8 +316,8 @@ While the record form has unsaved changes, leaving it asks first: Admin's own li
 show a confirm dialog, and a reload, closing the tab or another site show the browser's own prompt (`beforeunload`). Save,
 "Load latest version" or confirming the leave clears it, and a `#hash` change on the same page never asks; a cancelled Back or
 Forward leaves the browser history as it was; there is nothing to configure or opt out of. Custom pages and
-operation forms have no such guard. An `input:` component's own state counts once it calls `onChange`: a value it keeps
-to itself (a half-typed JSON draft) is not unsaved for the guard.
+operation forms have no such guard. An `input:` component's own state counts when it calls `onChange`
+or reports `onStatusChange({ dirty: true })`; unreported local state is outside the form's guard.
 
 ### Media fields
 

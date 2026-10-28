@@ -60,6 +60,21 @@ authorizes.
    per-field inputs. Plugins are `defineAdmin` fragments applied
    in order as a `renderDefault` chain. Slot names and props are versioned
    with the package.
+   - **Custom input status (#1847).** Record root-field `InputProps` adds optional
+     `onStatusChange({ error?, dirty? })`, `error` and `errorId`. A report replaces
+     the mounted field's previous report; no argument clears it. The existing
+     record form owns these reports, disables Save on any applicable error,
+     renders an alert with a stable id, and includes local `dirty` drafts in its
+     existing navigation guard. Custom controls connect their ARIA attributes
+     to `error`/`errorId`; generated server checks remain the authority.
+     Reports use mounted root-field identity, never nested object names or
+     array indices. Removing the field clears its report. A row becoming
+     read-only preserves local drafts and their leave protection, hides the
+     error until editable again, and never permits Save. Loading another
+     record/latest version, a clean newer version or a successful Save resets
+     the local controls; re-reads preserve dirty
+     drafts, including ones typed while Save was in flight. Existing inputs
+     need not use the optional channel. Procedure forms are unaffected.
 4. **Data.** Hooks (`useView`, `useEntries`, `useEntry`, `useOperation`,
    `useCollectionTotal`, `useMe`, `useBadges`) call only caller-authorized
    `/admin/api` routes in the browser (decision 8 covers MCP hosts), each of

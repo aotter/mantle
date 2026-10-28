@@ -129,3 +129,139 @@ it("recovers a failed lazy editor chunk only on explicit reload and rechecks aut
     expect(entryReads).toBe(reads); expect(writes).toEqual([]);
   } finally { await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
 }, 120_000);
+
+it("custom inputs report invalid local drafts, preserve them across locks and clear status on reload/unmount", async () => {
+  const root = await mkdtemp(join(tmpdir(), "mantle-input-status-"));
+  const { buildAdmin } = await import("../dist/build/index.js");
+  const dist = join(root, "admin"), entryFile = join(root, "entry.tsx");
+  await writeFile(entryFile, `
+import * as React from "react";
+import { defineAdmin } from ${JSON.stringify(resolve(import.meta.dirname, "../dist/admin-app/index.js"))};
+import { useOperation } from ${JSON.stringify(resolve(import.meta.dirname, "../dist/admin-app/hooks.js"))};
+function JsonInput({value, onChange, readOnly, onStatusChange, error, errorId}) {
+  const [text, setText] = React.useState(JSON.stringify(value));
+  React.useLayoutEffect(() => {
+    window.lastStatusCallback = onStatusChange;
+    if (new URLSearchParams(window.location.search).has("initial-invalid")) onStatusChange?.({error: "Initial invalid JSON", dirty: true});
+    return () => onStatusChange?.();
+  }, [onStatusChange]);
+  return <textarea aria-label="Custom JSON" readOnly={readOnly} aria-invalid={Boolean(error)} aria-describedby={errorId} value={text} onChange={event => {
+    const next = event.target.value; setText(next);
+    try { const parsed = JSON.parse(next); onChange(parsed); onStatusChange?.({}); }
+    catch { onStatusChange?.({error: "Enter valid JSON", dirty: true}); }
+  }}/>;
+}
+function Actions() { const refresh = useOperation("refresh"); return <button onClick={() => refresh.run?.({})}>Refresh record</button>; }
+export default defineAdmin({}, { components: { "input:notes.metadata": props => <JsonInput {...props}/>, "record.actions:notes": Actions } });
+`);
+  await buildAdmin({ entry: entryFile, outDir: dist });
+  let version = 1, locked = false, hideMetadata = false;
+  let data = { title: "Original", metadata: { items: [{ label: "A" }] } };
+  const patches: unknown[] = [];
+  const collection = () => ({ name: "notes", title: "Notes", description: null, lifecycle: "publishing", localized: false, hasTranslations: false, exportFields: ["title"], translates: null, uiSchema: {}, list: { primaryField: "title", columns: [] }, schema: { type: "object", properties: { title: { type: "string", title: "Title" }, ...(!hideMetadata ? { metadata: { type: "object", title: "Metadata", properties: { items: { type: "array", items: { type: "object", properties: { label: { type: "string" } } } } } } } : {}) }, required: ["title"] } });
+  const document = (id = "r1") => ({ collection: collection(), entry: { id, collection: "notes", locale: null, status: "draft", version, data, updated_at: 0, locks: { update: locked ? { lock: "test", message: "Frozen" } : false, delete: false } }, related: [], parentEntryId: null });
+  const server = createServer(async (request, response) => {
+    const url = new URL(request.url!, "http://localhost");
+    if (url.pathname.startsWith("/admin/api/") || url.pathname === "/api/auth/methods") {
+      response.setHeader("content-type", "application/json");
+      if (request.method === "PATCH") {
+        let raw = ""; for await (const chunk of request) raw += chunk;
+        const patch = JSON.parse(raw); patches.push(patch);
+        if (!Array.isArray(patch.data.metadata?.items)) {
+          response.statusCode = 400; response.end(JSON.stringify({ error: { code: "INPUT_VALIDATION_FAILED", message: "items is required" } })); return;
+        }
+        data = patch.data; version++; response.end(JSON.stringify(document())); return;
+      }
+      const fixed: Record<string, unknown> = {
+        "/admin/api/me": { role: "admin", admin: true, login: "fixture", image: null },
+        "/admin/api/site": { brand: "Fixture", icons: [], locales: ["en"], canonicalLocale: "en" },
+        "/admin/api/collections": { collections: [collection()], allCollections: { notes: collection() } },
+        "/admin/api/operations": { operations: [] }, "/admin/api/views-manifest": { views: [] },
+        "/admin/api/webmcp": { tools: [], routes: {} }, "/api/auth/methods": { methods: [{ kind: "email-otp" }] },
+        "/admin/api/entries/r1": document(), "/admin/api/entries/r2": document("r2"),
+        "/admin/api/operations/refresh": { ok: true, output: {} },
+      };
+      response.end(JSON.stringify(fixed[url.pathname] ?? {})); return;
+    }
+    try {
+      const path = url.pathname.slice("/admin/".length);
+      if (/^[\w/-]+\.(?:js|css|svg)$/.test(path)) {
+        response.setHeader("content-type", path.endsWith(".js") ? "text/javascript" : path.endsWith(".css") ? "text/css" : "image/svg+xml");
+        response.end(await readFile(resolve(dist, path))); return;
+      }
+      response.setHeader("content-type", "text/html"); response.end(await readFile(join(dist, "index.html")));
+    } catch { response.statusCode = 404; response.end(); }
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  try {
+    const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    await page.addInitScript(() => localStorage.setItem("cms.preference.language", "en"));
+    await page.goto(origin + "/admin/c/notes/r1");
+    const json = page.getByRole("textbox", { name: "Custom JSON", exact: true });
+    const save = page.getByRole("button", { name: "Save changes", exact: true });
+    await json.fill("{ malformed");
+    const error = page.getByRole("alert").filter({ hasText: "Enter valid JSON" }); await error.waitFor();
+    expect(await json.getAttribute("aria-invalid")).toBe("true");
+    expect(await json.getAttribute("aria-describedby")).toBe(await error.getAttribute("id"));
+    await page.getByRole("textbox", { name: "Title", exact: true }).fill("Other edit");
+    expect(await save.isEnabled()).toBe(false); expect(patches).toEqual([]);
+    await page.getByRole("link", { name: "Home", exact: true }).click(); await page.getByRole("alertdialog").waitFor();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    expect(await json.inputValue()).toBe("{ malformed");
+    // A nested array stays owned by this root field through an unrelated re-read.
+    await page.getByRole("button", { name: "Refresh record", exact: true }).click();
+    expect(await json.inputValue()).toBe("{ malformed"); expect(await save.isEnabled()).toBe(false);
+    version++;
+    await page.getByRole("button", { name: "Refresh record", exact: true }).click();
+    await page.getByRole("button", { name: "Load latest version", exact: true }).click();
+    expect(await json.inputValue()).toBe(JSON.stringify(data.metadata)); expect(await error.count()).toBe(0);
+    await json.fill("{}"); expect(await save.isEnabled()).toBe(true); // no local error: server remains authoritative
+    await save.click(); await page.getByText("items is required", { exact: false }).waitFor(); expect(patches).toHaveLength(1);
+    expect(data.metadata.items).toEqual([{ label: "A" }]);
+    await json.fill(JSON.stringify(data.metadata));
+    await json.fill("{ malformed again"); hideMetadata = true;
+    await page.getByRole("button", { name: "Refresh record", exact: true }).click();
+    await json.waitFor({ state: "detached" }); expect(await error.count()).toBe(0);
+    await page.getByRole("link", { name: "Home", exact: true }).click();
+    await page.waitForURL(origin + "/admin"); expect(await page.getByRole("alertdialog").count()).toBe(0);
+    hideMetadata = false;
+    await page.goto(origin + "/admin/c/notes/r2"); await json.fill("{ local draft"); locked = true;
+    await page.getByRole("button", { name: "Refresh record", exact: true }).click();
+    await page.getByText("This record is locked. Frozen", { exact: false }).waitFor();
+    expect(await error.count()).toBe(0); expect(await save.isEnabled()).toBe(false);
+    locked = false;
+    await page.getByRole("button", { name: "Refresh record", exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('fieldset')?.disabled);
+    expect(await json.inputValue()).toBe("{ local draft");
+    await error.waitFor(); expect(await save.isEnabled()).toBe(false);
+    version++;
+    await page.getByRole("button", { name: "Refresh record", exact: true }).click();
+    await page.getByRole("button", { name: "Load latest version", exact: true }).click();
+    expect(await json.inputValue()).toBe(JSON.stringify(data.metadata)); expect(await error.count()).toBe(0);
+    await page.getByRole("link", { name: "Home", exact: true }).click(); await page.waitForURL(origin + "/admin");
+    expect(await page.getByRole("alertdialog").count()).toBe(0);
+    // Production builds do not replay effects. Exercise the real Admin StrictMode mount through its Vite dev plugin too.
+    const { adminVitePlugin } = await import("../dist/build/index.js");
+    const { createServer: createViteServer } = await import("vite");
+    const dev = await createViteServer({ configFile: false, logLevel: "silent", plugins: await adminVitePlugin({ entry: entryFile, target: origin }), server: { port: 0, host: "127.0.0.1" } });
+    try {
+      await dev.listen();
+      const devOrigin = `http://127.0.0.1:${(dev.httpServer!.address() as { port: number }).port}`;
+      await page.goto(devOrigin + "/admin/c/notes/r1?initial-invalid");
+      const initialError = page.getByRole("alert").filter({ hasText: "Initial invalid JSON" });
+      await initialError.waitFor();
+      expect(await save.isEnabled()).toBe(false);
+      await page.getByRole("link", { name: "Home", exact: true }).click(); await page.getByRole("alertdialog").waitFor();
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+      hideMetadata = true;
+      await page.getByRole("button", { name: "Refresh record", exact: true }).click();
+      await json.waitFor({ state: "detached" });
+      await page.evaluate(() => (window as unknown as { lastStatusCallback?: (status: unknown) => void }).lastStatusCallback?.({ error: "Stale async error", dirty: true }));
+      expect(await initialError.count()).toBe(0);
+      await page.getByRole("link", { name: "Home", exact: true }).click(); await page.waitForURL(devOrigin + "/admin");
+      expect(await page.getByRole("alertdialog").count()).toBe(0);
+    } finally { await dev.close(); }
+  } finally { await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
+}, 120_000);
