@@ -60,5 +60,6 @@ An integer `CAST` of anything but a literal is refused (`SQL_TYPE`): SQLite trun
 
 Two write rules come from Mantle, not the dialect ([Procedure](procedure.md)). A row-classified `UPDATE`/`DELETE`
 (`WHERE id = input.id …`) must change exactly one row, otherwise `CONFLICT`. A set form (`WHERE id IN (SELECT …)`,
-`INSERT … SELECT`) may change none, so write a conditional write that may do nothing in that form. Scope, version,
+`INSERT … SELECT`) may change none, so write a conditional write that may do nothing in that form; a Procedure step with
+`onNoRows: conflict` turns "none" into `CONFLICT`. Scope, version,
 timestamps and author columns are assigned by Mantle, never by your SQL.

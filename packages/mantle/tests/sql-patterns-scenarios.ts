@@ -68,7 +68,7 @@ export async function verifySqlPatterns(app: App, query: Query, pg: boolean) {
   const latest = await send("/api/views/latest-order-per-product", undefined);
   equal(latest.body.rows.map((row: any) => [row.productId, row.id]), [["desk", over.body.results[0][0].id], ["pen", small.body.results[0][0].id]], "the latest order per product");
 
-  // mustWrite: an INSERT ... SELECT that finds no live product writes nothing and is 409 kind "row", where place-order returns [].
+  // onNoRows: conflict: an INSERT ... SELECT that finds no live product writes nothing and is 409 kind "row", where place-order returns [].
   const orders = async () => Number((await query("SELECT count(*) AS n FROM orders"))[0]!.n), before = await orders();
   for (const productId of ["no-such-product", tape]) {
     const refused = await send("/api/orders/request", { productId, qty: 1 }, "user");

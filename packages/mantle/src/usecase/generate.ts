@@ -73,13 +73,13 @@ export function generate(input: GenerateInput): GenerateResult {
   const values = new Set<string>();
   /** A statement as a constant: its text and how to bind it. */
   const step = (s: LoweredStatement, path: string, fields: readonly string[], row = false) => {
-    // a row op must change exactly one row; a `mustWrite` set op at least one (#1775)
+    // a row op must change exactly one row; a set op whose step says `onNoRows: conflict` at least one (#1874)
     const recipes = recipesOf(s, fields, message => refuse(path, message)), probe = row && s.probe ? recipesOf(s.probe, fields, message => refuse(path, message)) : [];
     for (const r of [...recipes, ...probe]) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && r.type) values.add(r.type === "date" ? "date" : "timestamp"); }
     // #1822: the lock probe the driver reads when this row write changes no row
     const locks = Object.fromEntries((plan.schemas[s.schema ?? ""]?.locks ?? []).filter(l => l.on.includes(s.verb as "update")).map(l => [l.name, l.message]));
     const lock = row && s.probe ? `, lock: ${q({ sql: s.probe.sql, binds: probe, schema: plan.schemas[s.schema!]!.name, verb: s.verb, locks })}` : "";
-    return `{ sql: ${q(s.sql)}, binds: ${q(recipes)}${row ? ", row: true" : s.mustWrite ? ', row: "some"' : ""}${lock} }`;
+    return `{ sql: ${q(s.sql)}, binds: ${q(recipes)}${row ? ", row: true" : s.onNoRows ? ', row: "some"' : ""}${lock} }`;
   };
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [], refProcedures: string[] = [];
   const entries: Record<string, string> = {};

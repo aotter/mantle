@@ -1,10 +1,10 @@
 /**
  * `compilePlan` (ADR-0034 decision 3): manifest sources in, the plan's IR out. Every View `sql` and
- * every Procedure `handler.sql` goes through `compileSql` with a context built from the Schema
+ * every Procedure `handler.sql` (or its `steps`, joined) goes through `compileSql` with a context built from the Schema
  * declarations. Like `compileSql`, only the CLI and the plugin's helper scripts import this.
  */
 import { validateDiagnostic, type Diagnostic, type SourceLocation } from "../../kernel/diagnostic.js";
-import type { JsonSchema, ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
+import { stepProgram, type JsonSchema, type ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
 import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type PlanSchema, type PlanTrigger, type PlanView, type RuntimePlan } from "../../domain/model/RuntimePlan.js";
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { refChecks } from "../../domain/service/SqlRowPolicy.js";
@@ -14,7 +14,7 @@ import { AGGREGATES, NATIVE_COLUMNS, NATIVE_NOT_NULL, notNullColumns, viewCacheP
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 import * as d1 from "../../../d1/compile/index.js";
-import { compileSql, relationNames, type SqlDialect } from "./compileSql.js";
+import { compileSql, relationNames, statementCount, type SqlDialect } from "./compileSql.js";
 import { parseRowTemplate, type UserFieldSpec } from "../../domain/model/UserFields.js";
 import { registerUserField } from "../../domain/service/UserReferences.js";
 import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
@@ -224,10 +224,13 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     refs[ref] = { refusal: why ? `${ref} is ${why}: FROM reads only an internal View without input or requires` : `${ref} did not compile` };
   }
   const ctxOf = (kind: SqlContext["kind"], input: JsonSchema | undefined, isPublic = false): SqlContext => ({ schemas, inputs: typesOf(input), kind, public: isPublic, views: refs });
-  const compile = async (kind: SqlContext["kind"], sql: string, input: JsonSchema | undefined, source: SourceLocation, pointer: string, isPublic = false) => {
+  /** `steps`: the line each step starts on in `sql` (stepProgram), so a refusal points into the step that holds it. */
+  const compile = async (kind: SqlContext["kind"], sql: string, input: JsonSchema | undefined, source: SourceLocation, pointer: string, isPublic = false, steps?: readonly number[]) => {
     const res = await compileSql(sql, ctxOf(kind, input, isPublic), dialect);
     if (res.ok) return res;
-    diagnostics.push(toDiagnostic(res.diagnostic, source, pointer));
+    const d = res.diagnostic, step = steps && d.line !== undefined ? steps.findLastIndex((start) => start < d.line!) : -1;
+    if (steps) diagnostics.push(step < 0 ? toDiagnostic(d, source, "/spec/handler/steps") : toDiagnostic({ ...d, line: d.line! - steps[step]! }, source, `/spec/handler/steps/${step}/sql`));
+    else diagnostics.push(toDiagnostic(d, source, pointer));
   };
 
   // a check is compiled as the WHERE of a read of its own Schema, so its columns resolve against that Schema
@@ -357,21 +360,31 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
   for (const { manifest: p, source } of linked.procedures) {
     const common = { ...(p.spec.title ? { title: p.spec.title } : {}), ...(p.spec.description ? { description: p.spec.description } : {}), ...(p.spec.uiSchema ? { uiSchema: p.spec.uiSchema } : {}), input: p.spec.input, output: p.spec.output, inputs: typesOf(p.spec.input), ...(p.spec.requires ? { requires: p.spec.requires } : {}), ...(p.spec.mcp ? { mcp: p.spec.mcp } : {}) };
     if ("ref" in p.spec.handler) { procedures[p.metadata.name] = { ...common, ...(p.spec.target ? { target: p.spec.target } : {}), handler: { ref: p.spec.handler.ref } }; continue; }
-    const plan = (await compile("procedure", p.spec.handler.sql, p.spec.input, source, "/spec/handler/sql"))?.plan;
+    // #1874: `steps` compile as the program they join to (same batch, same checks), once each step is one statement
+    const { sql, steps } = p.spec.handler;
+    let single = true;
+    for (const [i, step] of (steps ?? []).entries()) {
+      const n = await statementCount(step.sql);
+      if (n === 1) continue;
+      single = false;
+      diagnostics.push(toDiagnostic(typeof n === "number" ? { code: "SQL_SHAPE", message: `Procedure '${p.metadata.name}' handler.steps[${i}] must be exactly one statement; it has ${n || "none"}. Write each statement as its own step` } : n, source, `/spec/handler/steps/${i}/sql`));
+    }
+    const plan = single ? (await compile("procedure", sql, p.spec.input, source, "/spec/handler/sql", false, steps && stepProgram(steps).lines))?.plan : undefined;
     const target = p.spec.target ?? (plan ? inferTarget(p, plan.stmts) : undefined);
     for (const stmt of plan?.stmts ?? []) {
       const write = stmt.UpdateStmt ?? stmt.InsertStmt, columns = write ? protectedColumns(schemas[write.relation.relname]!) : [];
       const sets = stmt.UpdateStmt?.targetList ?? stmt.InsertStmt?.onConflictClause?.targetList ?? [];
       if (sets.some((set: SqlNode) => columns.includes(set.ResTarget.name.toLowerCase()))) diagnostics.push(validateDiagnostic({code:'USER_FIELD_POSITION',severity:'error',path:`procedures/${p.metadata.name}/handler/sql`,message:'The scoped column is never writable through SET.'}));
     }
-    // #1775: mustWrite turns a set op into one that must write a row; a row op already must change exactly one
-    const mustWrite = p.spec.handler.mustWrite;
-    for (const [i, n] of (plan ? mustWrite ?? [] : []).entries()) {
-      const stmt = plan!.stmts[n - 1], at = `/spec/handler/mustWrite/${i}`;
-      const problem = !stmt ? `names statement ${n}, but the program has ${plan!.stmts.length}` : classify(stmt) === "row" ? `names statement ${n}, a row op (one-row INSERT … VALUES, or UPDATE/DELETE with WHERE id = …), which already must change exactly one row; list only set ops` : undefined;
-      if (problem) diagnostics.push(validateDiagnostic({ code: "SQL_SHAPE", severity: "error", path: `${source.sourceId}#/${source.documentIndex}${at}`, source: { ...source, path: at }, value: n, message: `Procedure '${p.metadata.name}' handler.mustWrite ${problem}.` }));
+    // #1874: onNoRows turns a set-op write into one that must write a row; a row op already must change exactly one. (A step
+    // that is a read never gets here: a Procedure statement is a write.)
+    for (const [i, step] of (plan ? steps ?? [] : []).entries()) {
+      if (!step.onNoRows || classify(plan!.stmts[i]!) !== "row") continue;
+      const at = `/spec/handler/steps/${i}/onNoRows`;
+      diagnostics.push(validateDiagnostic({ code: "SQL_SHAPE", severity: "error", path: `${source.sourceId}#/${source.documentIndex}${at}`, source: { ...source, path: at }, value: step.onNoRows,
+        message: `Procedure '${p.metadata.name}' handler.steps[${i}].onNoRows applies to a set-op write; this step is a row op (one-row INSERT … VALUES, or UPDATE/DELETE with WHERE id = …), which already must change exactly one row.` }));
     }
-    if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), handler: { sql: plan, source: p.spec.handler.sql, ...(mustWrite ? { mustWrite } : {}) } };
+    if (plan) procedures[p.metadata.name] = { ...common, ...(target ? { target } : {}), handler: { sql: plan, source: sql, ...(steps ? { steps } : {}) } };
   }
   if (diagnostics.length) return { ok: false, diagnostics };
   // `restrict`: extra row terms a target puts on the Schemas its SQL reads. Same grammar as `scope`; AND-ed, so it never widens.

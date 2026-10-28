@@ -161,12 +161,13 @@ spec:
       qty: { type: integer, minimum: 1 }
   output: { type: object }
   handler:
-    sql: |
-      INSERT INTO orders (productId, qty, total, orderStatus)
-        SELECT p.id, input.qty, input.qty * p.price, 'pending_approval'
-        FROM products p WHERE p.id = input.productId AND p.active
-        RETURNING id
-    mustWrite: [1]
+    steps:
+      - sql: |
+          INSERT INTO orders (productId, qty, total, orderStatus)
+            SELECT p.id, input.qty, input.qty * p.price, 'pending_approval'
+            FROM products p WHERE p.id = input.productId AND p.active
+            RETURNING id
+        onNoRows: conflict
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
