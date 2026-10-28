@@ -35,6 +35,10 @@ tools. Once acceptance converges, follow the [performance skill](../performance/
 For native Admin, read the [current guide](../../handbook/guides/native-admin.md):
 the app builds Admin with `mantle bundle`. To customise pages, slots, hooks or
 MCP-host-safe components, follow [Customising Admin](../../handbook/guides/native-admin.md#customising-admin).
+Custom structured inputs and browser pages can use the optional
+`@aotter/mantle-admin/media` controlled `MediaPicker`: pass `readOnly` and an exact
+`uploadPurpose` (omit for selection only), apply `onSelect` to the local draft,
+and keep its import out of the MCP App entry. See the native Admin media example.
 Keep matching SDK, Admin and UI versions. Ref handlers retain caller-bound
 `ctx.store`; generic Admin reads use shared generated View templates and writes
 use native Procedure fragments.

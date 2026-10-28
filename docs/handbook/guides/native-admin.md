@@ -357,9 +357,39 @@ Only a top-level field goes through `input:`. To add to the built-in control, wr
 ),
 ```
 
-The picker and the upload are not public API: `@aotter/mantle-admin/app` and `/hooks` export no picker, media list or
-upload function. A component that replaces the control instead of wrapping it builds its own picker on an admin View or
-Procedure, or keeps `renderDefault` for the picking.
+For a custom structured input or custom page, import the browser-only picker from the optional
+`@aotter/mantle-admin/media` entry. It runs inside `<MantleAdmin>` and uses the same caller-authorized media library and
+upload routes. Keep the picker import in the browser entry; when also building an MCP App, use a sibling
+`admin.mcp.tsx` without it ([separate entries](mcp-apps.md#customising-admin-for-mcp-hosts)). The host build rejects browser
+media routes. There is no public raw media HTTP client or upload function.
+
+```tsx
+import * as React from "react";
+import { MediaPicker } from "@aotter/mantle-admin/media";
+
+type Card = { image?: string; caption?: string };
+
+function CardImage({ value, onChange, readOnly }: { value: Card; onChange: (value: Card) => void; readOnly: boolean }) {
+  const [open, setOpen] = React.useState(false);
+  return <>
+    <button type="button" disabled={readOnly} onClick={() => setOpen(true)}>Choose image</button>
+    <MediaPicker open={open} onOpenChange={setOpen} readOnly={readOnly} uploadPurpose="post-cover"
+      onSelect={asset => onChange({ ...value, image: asset.id })} />
+  </>;
+}
+```
+
+`onSelect` receives only `{ id, primaryUrl: string | null }` after an explicit selection and closes the dialog via
+`onOpenChange(false)`. Cancel never calls `onSelect` or clears a value. The application owns the structured value and
+Save; selection only updates its local draft. Pass the input's `readOnly`, and key a reused custom input by its record
+identity so an open picker does not follow navigation to another record.
+
+`uploadPurpose` is an exact site media purpose, not an asset filter: existing assets remain selectable across purposes.
+Omit it for selection only; an unknown purpose disables upload, and the upload helper refuses unknown explicit purposes
+rather than choosing another policy. Upload uses the existing raster image variants and server permission checks.
+Uploads commit to the library independently of selection: closing, cancelling, becoming read-only or unmounting never
+selects a late upload and never deletes an already committed asset. Search stays in the dialog and preserves the page's
+draft. Applications that do not import `/media` do not load this optional component.
 
 `plugins` are fragments of `components`, applied in order: each one's `renderDefault` is the plugin before it, the first
 plugin's is the built-in component, and the application's own `components` are outermost. A plugin is

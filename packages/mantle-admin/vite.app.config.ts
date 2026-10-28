@@ -22,7 +22,7 @@ export default defineConfig({
     emptyOutDir: true,
     copyPublicDir: false,
     lib: {
-      entry: { index: resolve(admin, "app/index.ts"), hooks: resolve(admin, "app/hooks.ts"), mount: resolve(admin, "app/mount.tsx"), "mcp-mount": resolve(admin, "mcp-app/mount.tsx"), "mcp-app": resolve(admin, "app/mcp-index.ts"), "default-entry": resolve(admin, "default-entry.tsx") },
+      entry: { index: resolve(admin, "app/index.ts"), hooks: resolve(admin, "app/hooks.ts"), media: resolve(admin, "app/media.tsx"), mount: resolve(admin, "app/mount.tsx"), "mcp-mount": resolve(admin, "mcp-app/mount.tsx"), "mcp-app": resolve(admin, "app/mcp-index.ts"), "default-entry": resolve(admin, "default-entry.tsx") },
       formats: ["es"],
       fileName: (_format, name) => `${name}.js`,
     },

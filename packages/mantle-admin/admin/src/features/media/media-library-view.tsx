@@ -66,6 +66,8 @@ export function MediaBrowser({
   emptyIcon,
   onPick,
   showSearch = false,
+  onSearch,
+  preferredPurpose,
 }: {
   language: AdminLanguage;
   purposes: readonly MediaPurposePolicy[];
@@ -73,6 +75,8 @@ export function MediaBrowser({
   emptyIcon: LucideIcon;
   onPick?: (item: MediaLibraryItem) => void;
   showSearch?: boolean;
+  onSearch?: (search: string) => void;
+  preferredPurpose?: string;
 }): React.ReactElement {
   const queryClient = useQueryClient();
   const page1 = useInfiniteQuery(pagedQueryOptions(["media", searchTerm], (cursor) => {
@@ -105,7 +109,7 @@ export function MediaBrowser({
       // and the operator should see how many failed rather than a single
       // opaque error hiding partial success (#F4).
       const results = await Promise.allSettled(
-        list.map((file) => uploadMediaAsset({ file, purposes, language })),
+        list.map((file) => uploadMediaAsset({ file, purposes, preferredPurpose, language })),
       );
       const succeeded = results.filter((r) => r.status === "fulfilled").length;
       const failures = results.filter(
@@ -135,7 +139,7 @@ export function MediaBrowser({
 
   return (
     <>
-      {showSearch ? <MediaSearch searchTerm={searchTerm} language={language} /> : null}
+      {showSearch ? <MediaSearch searchTerm={searchTerm} language={language} onSearch={onSearch} /> : null}
       <div
         onDragOver={(e) => {
           if (!canUpload) return;
@@ -321,7 +325,7 @@ function MediaTile({
         {onPick ? (
           <button
             type="button"
-            className="absolute inset-0 flex items-end justify-center bg-black/0 p-2 opacity-0 transition hover:bg-black/40 hover:opacity-100"
+            className="absolute inset-0 flex items-end justify-center bg-black/0 p-2 opacity-0 transition hover:bg-black/40 hover:opacity-100 focus-visible:bg-black/40 focus-visible:opacity-100"
             onClick={() => onPick(item)}
           >
             <span className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
@@ -419,9 +423,11 @@ function MediaTile({
 function MediaSearch({
   searchTerm,
   language,
+  onSearch,
 }: {
   searchTerm: string;
   language: AdminLanguage;
+  onSearch?: (search: string) => void;
 }): React.ReactElement {
   const { navigate } = useAdminRouter();
   const [draft, setDraft] = React.useState(searchTerm);
@@ -433,6 +439,7 @@ function MediaSearch({
       onSubmit={(e) => {
         e.preventDefault();
         const next = draft.trim();
+        if (onSearch) { onSearch(next); return; }
         const p = new URLSearchParams();
         if (next) p.set("search", next);
         const suffix = p.toString();
@@ -448,6 +455,7 @@ function MediaSearch({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={t(language, "media.searchPlaceholder")}
+          aria-label={t(language, "media.searchPlaceholder")}
         />
       </label>
     </form>

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/lib/api";
 import type { MediaPurposePolicy } from "../src/lib/types";
+import { selectPurpose } from "../src/features/media/media-upload";
 import { isMediaNotConfigured } from "../src/features/media/media-library-view";
 
 describe("media setup state", () => {
@@ -182,4 +183,18 @@ describe("uploadMediaAsset", () => {
     })).rejects.toThrow(/image\/webp upload failed/);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+});
+
+// An explicit purpose is a policy choice, never a hint that can silently select a different policy.
+it("refuses unknown explicit upload purposes before preparing an image or sending requests", async () => {
+  const purposes = [{ name: "content", required: ["image/png"], maxBytes: { "image/png": 1000 } }];
+  expect(selectPurpose(purposes)?.name).toBe("content");
+  expect(selectPurpose(purposes, "unknown")).toBeNull();
+  expect(selectPurpose(purposes, "")).toBeNull();
+  const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  try {
+    const { uploadMediaAsset } = await import("../src/features/media/media-upload");
+    await expect(uploadMediaAsset({ file: new File(["image"], "x.png", { type: "image/png" }), purposes, preferredPurpose: "unknown" })).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  } finally { vi.unstubAllGlobals(); }
 });
