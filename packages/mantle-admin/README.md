@@ -179,3 +179,12 @@ actual built shell, framing rules, field rendering and conflict
 handling. Writes that may have committed are never retried automatically;
 conflict re-reads preserve the person's draft. Native login and Store tests
 require the selected SDK and Admin server integration, in addition to the SPA.
+
+### Custom media selection
+
+`@aotter/mantle-admin/media` exports the browser-only controlled `MediaPicker` and
+`MediaSelection` / `MediaPickerProps` types. Use it inside `<MantleAdmin>` in a custom
+input or page. It reuses the current caller's media library, local search and raster
+uploads; omit `uploadPurpose` for selection only. See the
+[native Admin guide](https://github.com/aotter/mantle/blob/develop/docs/handbook/guides/native-admin.md#media-fields)
+for the structured draft example and cancellation contract.

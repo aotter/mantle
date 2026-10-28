@@ -6,6 +6,28 @@ import { describe, expect, it } from "vitest";
 const pkg = resolve(import.meta.dirname, "..");
 
 describe("@aotter/mantle-admin/app", () => {
+  it("publishes media as an optional entry with isolated public types, outside the default static graph", async () => {
+    const target = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")).exports["./media"];
+    expect(target).toEqual({ types: "./dist/admin-app/media.d.ts", import: "./dist/admin-app/media.js" });
+    expect(Object.keys(await import(resolve(pkg, target.import)))).toEqual(["MediaPicker"]);
+    const types = readFileSync(resolve(pkg, target.types), "utf8");
+    expect(types).toContain("interface MediaSelection");
+    expect(types).not.toMatch(/hooks-context|lib\/types|features\//);
+    const visited = new Set<string>();
+    const visit = (file: string): void => {
+      if (visited.has(file)) return;
+      visited.add(file);
+      const code = readFileSync(file, "utf8");
+      expect(code).not.toContain("admin/src/app/media.tsx");
+      const source = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+      for (const node of source.statements) if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text.startsWith(".")) {
+        visit(resolve(file, "..", node.moduleSpecifier.text));
+      }
+    };
+    visit(resolve(pkg, "dist/admin-app/index.js"));
+    expect([...visited].some(file => file.endsWith("/media.js"))).toBe(false);
+  });
+
   it("no longer exports the extension mechanism", () => {
     const exports = Object.keys(JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")).exports);
     expect(exports).not.toContain("./extension");
@@ -38,10 +60,16 @@ describe("@aotter/mantle-admin/app", () => {
     expect(target).toEqual({ types: "./dist/admin-app/hooks.d.ts", import: "./dist/admin-app/hooks.js" });
     const hooks = await import(resolve(pkg, target.import));
     expect(Object.keys(hooks).sort()).toEqual(["AdminUnavailableError", "createAdminHooks", "mcpAppTransport", "useAdminSurface", "useBadges", "useCollectionTotal", "useEntries", "useEntry", "useHost", "useMe", "useOpenLink", "useOperation", "useView"]);
-    const context = (file: string) => /from"?\s*"\.\/(transport-[\w-]+\.js)"/.exec(readFileSync(resolve(pkg, "dist/admin-app", file), "utf8"))?.[1];
-    const root = readFileSync(resolve(pkg, "dist/admin-app/index.js"), "utf8").match(/from\s*"\.\/(admin-root-[\w-]+\.js)"/)![1]!;
-    expect(context("hooks.js")).toBeDefined();
-    expect(context(root)).toBe(context("hooks.js"));
+    const context = (file: string, visited = new Set<string>()): string[] => {
+      if (visited.has(file)) return [];
+      visited.add(file);
+      const code = readFileSync(resolve(pkg, "dist/admin-app", file), "utf8");
+      const dependencies = [...code.matchAll(/from\s*"\.\/([\w-]+\.js)"/g)].map(match => match[1]!);
+      return [...new Set(dependencies.flatMap(next => next.startsWith("hooks-context-") ? [next] : context(next, visited)))];
+    };
+    expect(context("hooks.js")).toHaveLength(1);
+    expect(context("index.js")).toEqual(context("hooks.js"));
+    expect(context("media.js")).toEqual(context("hooks.js"));
   });
 
   it("ships no prebuilt SPA: the application builds Admin", () => {
@@ -114,6 +142,12 @@ describe("@aotter/mantle-admin/app", () => {
       'defineAdmin(typed, { components: { "input:requests.status": ({ surface }) => surface === "mcp-app" ? null : "browser" } });',
       '// @ts-expect-error a browser slot has no `surface`',
       'defineAdmin(typed, { components: { Sidebar: ({ surface }) => String(surface) } });',
+      'import { MediaPicker, type MediaPickerProps, type MediaSelection } from "@aotter/mantle-admin/media";',
+      'const selected: MediaSelection = { id: "asset", primaryUrl: null };',
+      'export const picker: MediaPickerProps = { open: false, onOpenChange: () => {}, onSelect: asset => { const id: string = asset.id; void id; }, uploadPurpose: "card", readOnly: false };',
+      'export const pickerElement = MediaPicker(picker);',
+      '// @ts-expect-error the picker does not expose an internal library row',
+      'selected.variants;',
       "interface NavTypes extends Types {",
       '  readonly navGroups: "approvals" | "billing";',
       "}",
