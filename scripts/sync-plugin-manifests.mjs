@@ -4,7 +4,7 @@
 //
 //   node scripts/sync-plugin-manifests.mjs          write
 //   node scripts/sync-plugin-manifests.mjs --check  fail when stale
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,10 +26,13 @@ const shared = {
   keywords: ["mantle", "cms", "agent-skills", "marketplace", "sdk"],
 };
 const version = shared.version;
+// The package skills (docs/skills/*) beside the default skills/ directory, so
+// `npx skills add aotter/mantle@<name>` finds each one by name (ADR-0032).
+const packageSkills = readdirSync(join(repoRoot, "docs/skills")).sort().map((name) => `./docs/skills/${name}`);
 const policy = { installation: "AVAILABLE" };
 
 const manifests = {
-  ".claude-plugin/plugin.json": shared,
+  ".claude-plugin/plugin.json": { ...shared, skills: packageSkills },
   ".claude-plugin/marketplace.json": {
     name: shared.name,
     owner: shared.author,

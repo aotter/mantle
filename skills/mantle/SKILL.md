@@ -40,6 +40,11 @@ lacks a guide named here, record the missing guidance and keep that version's co
 - Read `node_modules/@aotter/mantle/docs/skills/media-gc/SKILL.md` only to audit or remove stale uncommitted media uploads.
 - Read `node_modules/@aotter/mantle/docs/skills/performance/SKILL.md` after acceptance converges, or when a page, first request or query is slow.
 
+`mantle help skills/<name>` prints the same skill. Each one also installs by name from GitHub
+(`npx skills add aotter/mantle@<name>`), including when the installed package predates it. A skill read from GitHub
+gives direction for the SDK versions its `applies_to` names; every concrete contract comes from `mantle help` on the
+installed version.
+
 ## New application
 
 Node must be 22.22 or newer. Stable 0.2.0 is available as `@aotter/mantle@0.2.0`; pin selected Mantle packages to that exact version. Create it with `npx @aotter/mantle@<exact version> init <directory>`, then follow
@@ -70,10 +75,7 @@ network) is BLOCKED on its layer, not a product failure, and does not discard th
 
 For every role and surface acceptance reports CONVERGED, read the installed `docs/skills/performance/SKILL.md`: it
 decides which of front end, cold start and backend load apply, and runs them before you report done. Report BLOCKED or
-UNVERIFIED parts as they are; never optimize them. This is the one exception to installed docs
-winning: if the installed package predates that skill, read
-[the 0.2.1 copy](https://github.com/aotter/mantle/blob/v0.2.1/docs/skills/performance/SKILL.md) and the pages it links
-from the installed docs with `mantle help <topic>`.
+UNVERIFIED parts as they are; never optimize them.
 
 ## Deployment
 

@@ -1,5 +1,5 @@
 ---
-description: Install the Mantle agent plugin or its one skill, hand off to the installed package's own docs, and diagnose missing or stale instructions.
+description: Install the Mantle agent plugin or its skills, hand off to the installed package's own docs, and diagnose missing or stale instructions.
 ---
 # Install and verify agent instructions
 
@@ -10,8 +10,9 @@ carries.
 
 ## 1. Install the `mantle` skill
 
-The Mantle plugin carries one OSS authoring skill, `mantle`, and local
-acceptance references. It does not configure a hosted-service connection.
+The Mantle plugin carries the OSS authoring skill, `mantle` (Claude Code's
+plugin manifest also lists the workflow skills), and local acceptance
+references. It does not configure a hosted-service connection.
 Install from the Git tag matching the exact SDK version you selected (currently
 `v0.2.1-alpha.2`). Pin the tag to keep instructions aligned with the application's
 SDK. A skill install does not upgrade the application's SDK.
@@ -37,11 +38,14 @@ Then, in Claude Code, use that checkout's absolute path:
 ```
 
 Cursor and GitHub Copilot use their plugin manifests from the same tagged
-checkout. Without a plugin host, install only the consumer skill by name:
+checkout. Without a plugin host, install the consumer skills by name:
 
 ```sh
 npx skills add aotter/mantle@mantle
 ```
+
+Each workflow skill in section 2 installs the same way, for example
+`npx skills add aotter/mantle@performance`.
 
 Without a version it follows `main`, the latest stable release. To match the
 application's SDK exactly, add its release tag: `npx skills add aotter/mantle#v0.2.1-alpha.2@mantle`.
@@ -75,8 +79,11 @@ node_modules/@aotter/mantle/docs/handbook/reference/features.md
 node_modules/@aotter/mantle/docs/skills/<workflow>/SKILL.md
 ```
 
-These ship in the npm tarball and match the installed code. Prefer them over
-the skill's GitHub copy and over any online handbook.
+These ship in the npm tarball and match the installed code;
+`mantle help skills/develop` prints one. Prefer them over any online
+handbook. A workflow skill installed from GitHub gives direction for the SDK versions its
+`applies_to` names; the `mantle help <topic>` pages it names read this
+installed version, which decides every concrete contract.
 
 | Package skill | Read it when |
 |---|---|

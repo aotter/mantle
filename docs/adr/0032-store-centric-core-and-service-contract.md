@@ -418,3 +418,14 @@ list manifest tools; its native media operations remain REST-backed.
   deployment. Hosted-service MCP connections, packers and lifecycle instructions
   are distributed separately; earlier Cloud-helper distribution text is historical.
   Generic platform adapters and SDK contracts remain public.
+- **2026-10-29, consumer skills install by name; contracts come from the installed SDK (#1817).**
+  Amends decision 13's "one `mantle` skill" and its two separate distributions.
+  Every consumer skill installs from GitHub by name (`npx skills add aotter/mantle@<name>`):
+  `.claude-plugin/plugin.json` lists `docs/skills/*` beside the plugin's `skills/mantle`,
+  with no second copy. The npm package still ships them under `docs/skills/`, so
+  `mantle help skills/<name>` works offline. Skills name handbook pages as
+  `mantle help <topic>`, never as relative links, and state the SDK versions they
+  apply to in `metadata.applies_to`: direction comes from GitHub, every concrete
+  contract from `mantle help` on the installed version. `provision` and `media-gc`
+  stay opt-in through their front matter. `check-skills` enforces links, topics
+  and `applies_to`; this replaces #1815's fallback to an online copy.

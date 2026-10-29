@@ -13,19 +13,19 @@ metadata:
 
 ## Workflow
 
-Read the installed SDK README, then follow the version-matched [project and CLI
-workflow](../../handbook/start/project-and-cli.md) before editing.
+Read the installed SDK README, then follow the version-matched project and CLI
+workflow (`mantle help start/project-and-cli`) before editing.
 
 Deploy/create resources only within the user's authorization; reuse configured
 host resources. Apply reviewed and rehearsed migrations before routing traffic;
 imports/first requests perform no DDL or schema checks. Keep auth dynamic, production
 secrets in the host store, trusted HTTPS origin and verified bootstrap rule,
 production email and selected media wiring. Configure Admin ASSETS worker-first
-as in [Workers assets and secrets](../../handbook/cloudflare/service-entry.md#workers-assets-and-secrets). Hyperdrive caching stays off; PG settings are deployment-owned.
-Keep the Workers [public-fetch flags](../../handbook/cloudflare/deploy-and-operate.md#public-fetch-routing),
+as in Workers assets and secrets (`mantle help cloudflare/service-entry`). Hyperdrive caching stays off; PG settings are deployment-owned.
+Keep the Workers public-fetch flags (`mantle help cloudflare/deploy-and-operate`, "Public fetch routing"),
 including environment overrides; verify deployed MCP with a real OAuth bearer
 (`initialize` and `tools/list`), not only a browser session cookie.
-For MCP Apps, also follow [deployed host acceptance](../../handbook/guides/mcp-apps.md#verify-a-deployed-app-in-chatgpt):
+For MCP Apps, also follow deployed host acceptance (`mantle help guides/mcp-apps`, "Keep old conversations working after an upgrade"):
 compare the current resource URI and visibly verify a newly invoked render tool.
 Archive deployed Admin pages using the guide's `previous` recipe and carry them
 through clean builds. Test the same old conversation after changing the UI build,
@@ -36,9 +36,9 @@ Bun uses native Database/SQL, an app server and scheduler. Verify admin sign-in
 (role admin), denied access, public reads, a persisted write, MCP and selected UI.
 Report artifact/resources/checks and keep rollback artifacts.
 
-For ChatGPT Sites, follow [Mantle on ChatGPT Sites](../../handbook/cloudflare/chatgpt-sites.md).
+For ChatGPT Sites, follow Mantle on ChatGPT Sites (`mantle help cloudflare/chatgpt-sites`).
 
-The app builds Admin with `mantle bundle`; serve it as [Native
-Admin](../../handbook/guides/native-admin.md) describes. Verify both member and
+The app builds Admin with `mantle bundle`; serve it as Native
+Admin (`mantle help guides/native-admin`) describes. Verify both member and
 admin OTP/UI flows. Deployment of an authorized application does not authorize
 SDK publication; a workspace preview remains a preview.

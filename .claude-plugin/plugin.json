@@ -14,5 +14,13 @@
     "agent-skills",
     "marketplace",
     "sdk"
+  ],
+  "skills": [
+    "./docs/skills/develop",
+    "./docs/skills/integrate",
+    "./docs/skills/media-gc",
+    "./docs/skills/performance",
+    "./docs/skills/provision",
+    "./docs/skills/update"
   ]
 }

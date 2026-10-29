@@ -18,7 +18,7 @@ targets and rules below are what stay fixed.
 ## When to run
 
 - **After acceptance.** Run for every role and surface that
-  [independent acceptance](../../handbook/guides/agent-workflow-acceptance.md)
+  independent acceptance (`mantle help guides/agent-workflow-acceptance`)
   reports CONVERGED for a new application or a feature, before reporting done.
   Never optimize behavior that has not been accepted: report each BLOCKED or
   UNVERIFIED role or surface as it is, with what it needs, and leave it out of
@@ -53,7 +53,7 @@ no regression in accessibility, SEO or best practices.
   (no compression or HTTP/2, a cold cache) and say which is which.
 - Measure pages behind sign-in (member pages, Admin) through the role's session
   URL that `pnpm accept` prints
-  ([hand each role](../../handbook/guides/agent-workflow-acceptance.md#hand-each-role-to-its-evaluator)),
+  (hand each role: `mantle help guides/agent-workflow-acceptance`, "Hand each role to its evaluator"),
   never by weakening sign-in.
 - Find the actual bottleneck before changing anything; a trace beats a guess.
 - Repair in this order: what blocks the first paint (render-blocking styles and
@@ -65,7 +65,7 @@ no regression in accessibility, SEO or best practices.
   without it. Never detect the measuring tool to serve it a different page.
 - After every change, prove nothing else moved: the page looks the same, links,
   forms and in-page anchors still work, and the
-  [public-page checks](../../handbook/guides/public-pages.md#check-before-you-report-done)
+  public-page checks (`mantle help guides/public-pages`, "Check before you report done")
   still pass without JavaScript.
 
 ## Cold start
@@ -74,9 +74,9 @@ no regression in accessibility, SEO or best practices.
 
 - **Worker:** its startup graph imports only what every request needs; auth, MCP,
   Admin and rarely used routes load on the request that uses them
-  ([size and startup](../../handbook/guides/size-and-startup.md)). On Workers the
+  (size and startup: `mantle help guides/size-and-startup`). On Workers the
   startup graph is the entry chunk `mantle bundle` writes under `<outdir>/worker`
-  plus the chunks it imports statically ([outputs](../../handbook/start/project-and-cli.md#outputs));
+  plus the chunks it imports statically (outputs: `mantle help start/project-and-cli`);
   anything behind a dynamic import is outside it. Report its size locally as the
   *Worker entry static graph*; measure the host's startup time only on
   a deployment the user has authorized, and keep it well under the host's limit
@@ -89,7 +89,7 @@ no regression in accessibility, SEO or best practices.
   not measure it. Report the whole *MCP App HTML document* as its own number: it
   also holds CSS and markup, so never compare it with this budget.
 - Use the one definition of each metric in
-  [size metrics](../../handbook/guides/size-and-startup.md#size-metrics), with
+  size metrics (`mantle help guides/size-and-startup`), with
   its measurement. Where the SDK's own checks measure differently, that page says how.
 - An overrun is a finding to repair by splitting, not a budget to raise. Raise a
   budget only with the user's agreement and record why.
@@ -104,12 +104,12 @@ fast at a realistic volume, and no hot path scans a table that grows.
   text where fields allow it, and more than one page of results everywhere. Size
   the largest tables at 100,000 rows or 10 times the expected first-year volume,
   whichever is larger. Seed with SQL straight into that database, setting the
-  native columns as [reserved entry columns](../../handbook/reference/schema.md#reserved-entry-columns)
+  native columns as reserved entry columns (`mantle help reference/schema`)
   describes: it is test data, not an application write.
 - **Load:** call every View and Procedure through the same callers and surfaces
   the application uses, as each role. The app's local test harness already
   starts it on a fresh database, signs each role in and calls routes and MCP
-  tools as that role ([local HTTP checks](../../handbook/guides/local-testing.md#what-smoke-covers)).
+  tools as that role (local HTTP checks: `mantle help guides/local-testing`, "What smoke covers").
   Record typical and slow-tail latency and
   rows read, then run concurrent writers wherever contention matters. A business
   rule that breaks under concurrency (oversell, double approval, lost update) is
@@ -121,15 +121,15 @@ fast at a realistic volume, and no hot path scans a table that grows.
      query module under `generated/` against the seeded database; a full scan of a
      growing table is a finding.
   2. Add the index that serves it in the Schema's `indexes`
-     ([indexes](../../handbook/reference/schema.md#indexes-checks-and-search))
-     together with a native migration ([database changes](../develop/SKILL.md#database-changes)).
+     (indexes: `mantle help reference/schema`, "Indexes, checks and search")
+     together with a native migration (database changes: `mantle help skills/develop`).
      Index only what a measured query uses; every index costs writes. Paged Views
-     and [Schema locks](../../handbook/reference/schema.md#locks) are index-proven
+     and Schema locks (`mantle help reference/schema`, "Locks") are index-proven
      already: generation refuses one no index serves.
   3. Move complex reads (joins, aggregates, OR, reuse) into an
-     [internal View](../../handbook/guides/typed-queries.md#declare-an-internal-view),
-     page with keysets ([results and paging](../../handbook/reference/view.md#results-and-paging)),
-     and replace exact totals on hot paths ([search and totals](../../handbook/reference/view.md#search-and-totals)).
+     internal View (`mantle help guides/typed-queries`, "Declare an internal View"),
+     page with keysets (results and paging: `mantle help reference/view`),
+     and replace exact totals on hot paths (search and totals: `mantle help reference/view`).
   4. Re-measure reads and writes after each repair.
 
 ## Rules
@@ -141,17 +141,17 @@ fast at a realistic volume, and no hot path scans a table that grows.
 - Do not lower a target, shrink the seeded data or drop a slow case to pass.
   Report what is left instead.
 - Work locally. Deploying or measuring a deployment follows the
-  [provision skill](../provision/SKILL.md) and needs the user's authorization.
-- After any repair, rerun the [local HTTP checks](../../handbook/guides/local-testing.md).
+  provision skill (`mantle help skills/provision`) and needs the user's authorization.
+- After any repair, rerun the local HTTP checks (`mantle help guides/local-testing`).
   A repair that changes what a user sees or can do is no longer only a
   performance change: re-run acceptance for the scope the
-  [re-verification rule](../../handbook/guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches)
+  re-verification rule (`mantle help guides/agent-workflow-acceptance`, "Re-verify what a repair touches")
   names. A changed View or Procedure widens it to every surface that reads or
   writes that data, and so does a `uniqueIndexes` entry. A non-unique
   `indexes` entry and its migration keep the business rules: run `pnpm check`,
   the local HTTP checks and your focused regressions, not acceptance.
 - Report app-added cost and SDK-existing cost separately. Built-in Admin has a
-  recorded [baseline](../../handbook/guides/size-and-startup.md#native-admin-baselines)
+  recorded baseline (`mantle help guides/size-and-startup`, "Native Admin baselines")
   per SDK version; while the installed version and Admin entry are unchanged,
   reuse it instead of repeating that experiment each round. Built-in Admin's
   page and MCP App both miss the first-load budget; that is SDK-existing cost,

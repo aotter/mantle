@@ -12,32 +12,32 @@ metadata:
 
 ## Workflow
 
-Read the installed SDK README, then follow the version-matched [project and CLI
-workflow](../../handbook/start/project-and-cli.md) before editing.
+Read the installed SDK README, then follow the version-matched project and CLI
+workflow (`mantle help start/project-and-cli`) before editing.
 
-Use the native Store/query/surface entries and app-owned fetch from the [service
-composition guide](../../handbook/cloudflare/service-entry.md).
-Pair every HTTP Trigger with an MCP Trigger by default; see [Trigger](../../handbook/reference/trigger.md)
+Use the native Store/query/surface entries and app-owned fetch from the service
+composition guide (`mantle help cloudflare/service-entry`).
+Pair every HTTP Trigger with an MCP Trigger by default; see `mantle help reference/trigger`
 for the generate warning and deliberate asymmetry exception.
 Keep optional modules out of unused entry imports and auth dynamically loaded.
 Run actual public/member/admin HTTP, MCP and UI scenarios; verify stored state,
 visibility, OCC and restart persistence, not just a 200 response.
-Before reporting any new app or feature as done, follow the [independent
-acceptance guide](../../handbook/guides/agent-workflow-acceptance.md): write a
+Before reporting any new app or feature as done, follow the independent
+acceptance guide (`mantle help guides/agent-workflow-acceptance`): write a
 private rubric, then give one fresh agent per role (`admin`, `user`) only its
 role and entry points, across every surface it uses. After a repair, re-run
-the scope its [re-verification
-rule](../../handbook/guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches)
+the scope its re-verification
+rule (`mantle help guides/agent-workflow-acceptance`, "Re-verify what a repair touches")
 names and state which evidence you reused. This is not limited to
 MCP; if it was not run, say so explicitly and report the work as UNVERIFIED
-rather than done. Hand off with the guide's [layered
-report](../../handbook/guides/agent-workflow-acceptance.md#report-done-ness-in-layers):
+rather than done. Hand off with the guide's layered
+report (`mantle help guides/agent-workflow-acceptance`, "Report done-ness in layers"):
 an environment block is BLOCKED on its layer, never a product failure. For MCP workflows, also run the guide's design audit before implementing
-tools. For every role and surface acceptance reports CONVERGED, follow the [performance skill](../performance/SKILL.md) before reporting done; report BLOCKED or UNVERIFIED parts as they are.
+tools. For every role and surface acceptance reports CONVERGED, follow the performance skill (`mantle help skills/performance`) before reporting done; report BLOCKED or UNVERIFIED parts as they are.
 
-For native Admin, read the [current guide](../../handbook/guides/native-admin.md):
+For native Admin, read the current guide (`mantle help guides/native-admin`):
 the app builds Admin with `mantle bundle`. To customise pages, slots, hooks or
-MCP-host-safe components, follow [Customising Admin](../../handbook/guides/native-admin.md#customising-admin).
+MCP-host-safe components, follow Customising Admin (`mantle help guides/native-admin`).
 Custom structured inputs and browser pages can use the optional
 `@aotter/mantle-admin/media` controlled `MediaPicker`: pass `readOnly` and an exact
 `uploadPurpose` (omit for selection only), apply `onSelect` to the local draft,
@@ -48,8 +48,8 @@ use native Procedure fragments.
 Check actual member/Admin OTP, private scope/TTL/translation visibility, paging,
 statistics, safe/exact OCC and no automatic retry after unknown 503 outcomes.
 
-For application-owned MCP App entries and host checks, follow the [MCP Apps
-guide](../../handbook/guides/mcp-apps.md).
+For application-owned MCP App entries and host checks, follow the MCP Apps
+guide (`mantle help guides/mcp-apps`).
 
 Build a custom frontend with `App` from `@modelcontextprotocol/ext-apps`: register
 `ontoolinput`/`ontoolresult` before `connect()`, and use `callServerTool` for
@@ -58,7 +58,7 @@ client; importing its types while writing a second `postMessage` bridge is
 insufficient.
 
 For Admin UI upgrades, follow the installed handbook's
-[retained-page recipe](../../handbook/guides/mcp-apps.md#keep-old-conversations-working-after-an-upgrade).
+retained-page recipe (`mantle help guides/mcp-apps`, "Keep old conversations working after an upgrade").
 Keep deployed snapshots in source/artifact storage and pass `previous` to
 `adminMcpApps`; verify old conversations after a changed UI build without host
 tool refresh, reconnection or cache clearing. Keep tool contracts compatible
@@ -97,4 +97,4 @@ Procedure `requires`/generated input checks, use only allowed patch fields and
 return safe business fields with the actual returned ID/version. Preserve
 omitted fields and document null semantics. Retain SQL for atomic conditional
 or related writes; D1 batches cannot consume an earlier result. Follow the
-[Store write guidance](../../handbook/guides/typed-queries.md#prefer-store-backed-ref-procedures-for-simple-writes).
+Store write guidance (`mantle help guides/typed-queries`, "Prefer Store-backed ref Procedures for simple writes").

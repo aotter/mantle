@@ -12,12 +12,13 @@ metadata:
 
 ## Workflow
 
-Read the installed SDK README, then follow the version-matched [project and CLI
-workflow](../../handbook/start/project-and-cli.md) before editing.
+Read the installed SDK README, then follow the version-matched project and CLI
+workflow (`mantle help start/project-and-cli`) before editing.
 
-For 0.1.x, follow [Upgrade 0.1 to 0.2](../../upgrade-0.1-to-0.2.md). Mantle
+For 0.1.x, follow the installed upgrade guide,
+`node_modules/@aotter/mantle/docs/upgrade-0.1-to-0.2.md`. Mantle
 ships no migration tool: plan the data move from
-[Moving data from 0.1.x](../../upgrade-0.1-to-0.2.md#moving-data-from-01x),
+its "Moving data from 0.1.x" section,
 verify each fact against the generated `schema.sql` and the 0.1.4 export, and
 have the plan reviewed. Give the 0.2 service a new database, rehearse the load
 on a copy, never boot 0.2 against a 0.1.x database, and keep exports out of the
@@ -34,7 +35,7 @@ data-preserving schema/auth/role migrations on a copy. Initial schema.sql never
 authorizes rebuilding production tables. Verify auth/Admin/MCP/REST, locks and
 persistence before authorized cutover.
 
-Follow [Customising Admin](../../handbook/guides/native-admin.md#customising-admin)
+Follow Customising Admin (`mantle help guides/native-admin`)
 for the current application-built Admin; old UI subpaths have no compatibility
 aliases. Pin only actually published versions, or explicitly use a matching
 workspace preview. Recheck member and Admin OTP, all affected native routes,
