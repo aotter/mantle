@@ -5,11 +5,11 @@ migration tool and no in-place upgrade of a 0.1.x database: a coding agent
 rebuilds the project on 0.2.0 and plans a reviewed data move for it.
 
 1. **Rebuild the project on 0.2.0** with the current handbook: the
-   [0.2.0 release notes](handbook/releases/index.md#upgrading-to-020) and the
-   [native SDK migration](handbook/releases/index.md#native-sdk-migration-alpha7),
-   the [CLI and generated ownership](handbook/start/project-and-cli.md), the
-   [app shell](examples/app-shell/) and the [Schema](handbook/reference/schema.md),
-   [View](handbook/reference/view.md) and [Procedure](handbook/reference/procedure.md)
+   [0.2.0 release notes](index.md#upgrading-to-020) and the
+   [native SDK migration](index.md#native-sdk-migration-alpha7),
+   the [CLI and generated ownership](../start/project-and-cli.md), the
+   [app shell](../../examples/app-shell/) and the [Schema](../reference/schema.md),
+   [View](../reference/view.md) and [Procedure](../reference/procedure.md)
    references. The application owns routing, Auth, native handles and database
    migrations. Install the same exact version of `@aotter/mantle`,
    `@aotter/mantle-ui` and, when selecting Admin, `@aotter/mantle-admin`.
@@ -44,18 +44,18 @@ for human review before it touches production data.
 
 - **Through the SDK.** The generated `store(db, caller)`, or `ctx.store` in a
   `ref` handler, with a trusted caller such as `{ kind: "system", reason }`
-  ([authorization](handbook/concepts/authorization.md)). It accepts no value
+  ([authorization](../concepts/authorization.md)). It accepts no value
   for `id`, `version`, `created_at`, `updated_at`, `author_id`, `status`,
   `published_at` or the scope column, for any caller: it sets them itself, so new IDs, versions,
   timestamps and authors replace the old ones. Publishing goes through the
   generated `<schema>.publish` Procedure, which sets `published_at` to now
-  ([lifecycle](handbook/concepts/lifecycle-and-locales.md)). With new IDs,
+  ([lifecycle](../concepts/lifecycle-and-locales.md)). With new IDs,
   remap every `x-mantle-ref`, every `translates.on` key and any ID embedded
   in JSON; `x-mantle-ref` is not a foreign key, so a missed one dangles
   quietly.
 - **Through SQL**, to keep IDs, history and authors: `INSERT` the rows with
   every native column set, as
-  [reserved entry columns](handbook/reference/schema.md#reserved-entry-columns)
+  [reserved entry columns](../reference/schema.md#reserved-entry-columns)
   lists. This bypasses row policy, so review it like a migration.
 
 ### Entry columns on D1
@@ -86,7 +86,7 @@ for human review before it touches production data.
 
 0.1.4 used Better Auth 1.7.2 with hand-written DDL; 0.2.0 uses 1.7.7, with the
 tables `mantle generate --auth src/auth.ts` adds to `schema.sql`
-([auth](handbook/cloudflare/authentication.md)).
+([auth](../cloudflare/authentication.md)).
 
 - The 0.2 caller subject is the Better Auth `user.id`. Keep user IDs, so that
   `author_id` and owner scopes still name the right people.
@@ -97,13 +97,13 @@ tables `mantle generate --auth src/auth.ts` adds to `schema.sql`
 - 0.1.4 roles `owner`, `editor` and `contributor` have no 0.2 meaning. The
   admin layer is Better Auth's admin plugin `adminRoles` (default
   `["admin"]`) and `adminUserIds`
-  ([authorization](handbook/reference/authorization.md)); decide each mapping
+  ([authorization](../reference/authorization.md)); decide each mapping
   deliberately.
 - A 0.1.4 `githubLogin` column must be declared in `user.additionalFields`
   to keep it.
 - Leave sessions, verification rows and OAuth tokens behind; users sign in
   again. Mantle re-creates its OAuth resource rows from configuration
-  ([OAuth](handbook/guides/oauth.md)). Check `jwks`, OAuth clients and
+  ([OAuth](../guides/oauth.md)). Check `jwks`, OAuth clients and
   consents against Better Auth 1.7.7 and your secrets and URLs before copying
   any.
 - The admin MCP endpoint moved from `/mcp/staff` to `/mcp/admin`; update MCP
@@ -115,7 +115,7 @@ tables `mantle generate --auth src/auth.ts` adds to `schema.sql`
   epoch **milliseconds**. Copy the rows as they are.
 - Each variant keeps its stored `storageKey` and `publicUrl`, so 0.1.x objects
   in the same bucket keep working while their prefixes stay served
-  ([media](handbook/cloudflare/media-r2.md)).
+  ([media](../cloudflare/media-r2.md)).
 - Do not carry over `pending_media_uploads`; an upload expires after 15
   minutes.
 - `site_config` keeps its `key`/`value` columns; compare its keys with the
@@ -256,7 +256,7 @@ Schema reference; do not repeat them.
 | 0.1.x | 0.2.0 |
 |---|---|
 | builtin `create` | `handler: { sql: "INSERT INTO s (a, b) VALUES (input.a, input.b) RETURNING id" }` (on a `publishing` Schema the row starts as a draft, as before) |
-| builtin `update` (always version-checked, merges over the stored row) | `UPDATE s SET a = COALESCE(input.a, a), … WHERE id = input.id AND version = input.expectedVersion`. Keep both: without the version the lock is lost; without `COALESCE` an omitted optional field is cleared. `COALESCE` also means `null` cannot clear a field; give clearing its own flag input ([clear flag](handbook/guides/sql-patterns.md#change-only-the-fields-given-coalesce), [leave out, replace or clear](handbook/guides/native-admin.md#leave-out-replace-or-clear)) |
+| builtin `update` (always version-checked, merges over the stored row) | `UPDATE s SET a = COALESCE(input.a, a), … WHERE id = input.id AND version = input.expectedVersion`. Keep both: without the version the lock is lost; without `COALESCE` an omitted optional field is cleared. `COALESCE` also means `null` cannot clear a field; give clearing its own flag input ([clear flag](../guides/sql-patterns.md#change-only-the-fields-given-coalesce), [leave out, replace or clear](../guides/native-admin.md#leave-out-replace-or-clear)) |
 | builtin `upsert` with `match` | `INSERT … ON CONFLICT (<match columns>) DO UPDATE SET x = EXCLUDED.x`; the conflict columns are a unique index; on a scoped Schema the scope field may be named or left out, Store adds it |
 | builtin `delete` | `DELETE FROM s WHERE id = input.id AND version = input.expectedVersion` |
 | builtin `archive` | a `ref` handler: `ctx.store.write([{ update: "s", set: { status: "archived" }, where: { id }, lock: expectedVersion }])` (SQL cannot set `status`) |

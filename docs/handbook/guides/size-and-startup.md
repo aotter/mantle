@@ -10,7 +10,7 @@ Cloudflare startup_time_ms needs an actual upload/deployment; offline dry runs d
 
 ## Size metrics
 
-Three metrics, one definition each. The [performance skill](../../skills/performance/SKILL.md)
+Three metrics, one definition each. The [performance pass](performance.md)
 and the SDK's own checks use these names. Measure the production build that
 `mantle bundle` writes, never a dev server.
 
@@ -25,7 +25,7 @@ report it.
 | MCP App HTML document | The whole built App document as served: its inline JavaScript, CSS and markup in one file. | raw bytes and gzip of the file |
 | Worker entry static graph | The Worker entry (Wrangler's `main`, such as `dist/worker/worker.js`) plus every chunk it imports statically, recursively. A dynamic `import()` is not followed. | gzip per file; raw bytes beside it |
 
-The 100 KB budget in the performance skill is first-load JavaScript. It applies to
+The 100 KB budget in the [performance pass](performance.md) is first-load JavaScript. It applies to
 an MCP App too: `mantle bundle` builds the App as one HTML file with its
 JavaScript inline, so its first-load JavaScript is its inline script text. The
 MCP App HTML document also holds CSS and markup, so do not compare the document

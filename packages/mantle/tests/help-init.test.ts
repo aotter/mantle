@@ -18,7 +18,7 @@ test("every command and help topic that help names exists", () => {
     // Release notes are history and may name retired commands; "has no `mantle x`" names an absent one on purpose.
     const text = help(topic.name).split("\n").filter(line => !/\bno `mantle /.test(line)).join("\n");
     for (const [, command] of text.matchAll(/`mantle ([a-z][\w-]*)/g)) expect(COMMANDS, `${topic.name} names mantle ${command}`).toContain(command!);
-    for (const [, name] of text.matchAll(/mantle help ([\w/-]+)/g)) if (name !== "topics") expect(() => help(name), `${topic.name} names mantle help ${name}`).not.toThrow();
+    for (const [, name] of text.matchAll(/mantle help ([\w./-]*[\w/-])/g)) if (name !== "topics") expect(() => help(name), `${topic.name} names mantle help ${name}`).not.toThrow();
   }
 });
 

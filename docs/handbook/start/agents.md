@@ -7,12 +7,14 @@ description: "The entry point `mantle help` prints first: choose a complete app 
 Topics are the handbook paths below (for example `guides/native-admin`) or their last segment when unique (`native-admin`).
 The installed package's `docs/` is the source of every topic, so the text always matches the installed version.
 
+Node 22.22 or newer. Pin every `@aotter/mantle*` package to one exact version.
+
 ## Choose how much Mantle owns
 
 | You want | Do |
 | --- | --- |
 | A complete application | `mantle init [directory]`, then follow its `README.md`. It writes the app shell once: Better Auth email OTP with `admin` and `user`, the Admin console, MCP for both roles, REST, and a member `/sign-in` page. Existing files stop it; `--dry-run` lists what it would write. |
-| Only typed SQL and bindings inside an app you already have | Skip `init`. Write manifests and run `mantle generate <target> <output-directory> <manifest>...`; see `mantle help project-and-cli` and `mantle help typed-queries`. |
+| Only typed SQL and bindings inside an app you already have | Skip `init`. Write manifests and run `mantle generate <target> <output-directory> <manifest>...`; see `mantle help project-and-cli` and [adopting Mantle in an existing app](../guides/typed-queries.md#adopt-mantle-in-an-existing-application). |
 
 `init` writes the `cloudflare-d1` shell, the default target. `bun-sqlite`, `bun-postgres` and `cloudflare-postgres`
 generate the same bindings; their app entry is yours (`mantle help service-entry`).
@@ -41,10 +43,19 @@ the app entry (`--entry`) never imports, it warns and names the topic that shows
    each role to a fresh evaluator as a URL that carries that role's session. After a repair, the guide's
    [re-verification rule](../guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches) decides which roles
    and surfaces run again.
-6. For every role and surface acceptance reports CONVERGED, follow the [performance skill](../../skills/performance/SKILL.md):
+6. For every role and surface acceptance reports CONVERGED, run the [performance pass](../guides/performance.md):
    it decides which of front end (Lighthouse), cold start and backend load apply, and holds each to a target before you
    report done. BLOCKED or UNVERIFIED parts are reported as they are, never optimized.
 
 The first verified sign-in with `ADMIN_EMAIL` becomes the admin. Further administrators are added in Admin:
 **More → Administrators** invites by email, and **More → Members** grants Admin to an existing member.
 [Authentication](../cloudflare/authentication.md#identity-helpers) documents the same operations as an API.
+
+## Other tasks
+
+| Task | Read |
+| --- | --- |
+| Upgrade Mantle | [Upgrade an application](../releases/index.md#upgrade-an-application) |
+| Deploy, only when the user asks | [Deploy and operate](../cloudflare/deploy-and-operate.md) |
+| A slow page, first request or query | [Performance pass](../guides/performance.md) |
+| Stale media uploads, only when the user asks | [Clean up stale uploads](../cloudflare/media-r2.md#clean-up-stale-uploads) |

@@ -147,7 +147,7 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
   it("returns manifest diagnostics before compiling; a 0.1.x manifest names the upgrade guide", async () => {
     const res = await compile(SCHEMA.replace("/v2", "/v1"));
     if (res.ok) throw new Error("accepted");
-    expect(res.diagnostics[0]?.message).toContain("upgrade-0.1-to-0.2.md");
+    expect(res.diagnostics[0]?.message).toContain("mantle help upgrade-0.1-to-0.2");
   });
 
   it("refuses a uiSchema.list.searchFields or filterFields name the View's SELECT does not output (ADR-0032 decision 5)", async () => {

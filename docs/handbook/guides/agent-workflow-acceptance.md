@@ -155,7 +155,7 @@ acceptance as BLOCKED and report the scripted checks on their own
 an independent result. Do not deploy or publish merely to obtain acceptance.
 
 Acceptance proves the behavior, not its speed. For every role and surface a
-round reports CONVERGED, the [performance skill](../../skills/performance/SKILL.md)
+round reports CONVERGED, the [performance pass](performance.md)
 decides which performance checks apply and holds them to their targets. BLOCKED
 or UNVERIFIED parts are reported as they are, never optimized. A performance
 repair that changes what a role sees or can do returns here, scoped by the

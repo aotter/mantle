@@ -5,6 +5,22 @@ description: Install schema explicitly, migrate before deploying, and operate a 
 
 Run the same generation command with `--check`, typecheck the application and test its selected routes before deploying. Keep generated TypeScript, SQL and Wrangler edits committed; keep bundle `dist/` untracked. The app owns the database, auth secrets, trusted origin and assets.
 
+Deploy only when the user asks; creating a project locally is not authorization. Confirm the exact account and reuse the
+resources it already has before creating any. For ChatGPT Sites, follow [Mantle on ChatGPT Sites](chatgpt-sites.md).
+
+## Production checklist
+
+1. Migrations are reviewed, rehearsed on a copy and applied before traffic reaches the new code
+   ([install and change schemas](#install-and-change-schemas)).
+2. Secrets live in the host's secret store, never in source, chat or logs: the auth secret, the trusted HTTPS
+   `PUBLIC_ORIGIN`, the `ADMIN_EMAIL` bootstrap rule and the production email sender ([authentication](authentication.md)).
+3. Admin assets are served Worker-first ([Workers assets and secrets](service-entry.md#workers-assets-and-secrets)) and
+   both [public-fetch flags](#public-fetch-routing) stay in every environment.
+4. After deploying, verify on the deployed host: admin sign-in gets role `admin`, a member is denied Admin, public and
+   protected reads, a persisted write, a stale OCC write refused, and MCP `initialize` and `tools/list` with a real OAuth
+   bearer.
+5. Keep the previous build and the migration rollback until the release is verified.
+
 ## Public fetch routing
 
 Workers use `compatibility_flags: ["nodejs_compat", "global_fetch_strictly_public"]`.
@@ -28,13 +44,7 @@ checks do not verify production public-hostname routing.
 
 ## Install and change schemas
 
-The runtime never creates, alters or checks tables. Boot and requests run no DDL, introspection or schema checks.
-
-For the first install, apply generated `schema.sql`, including selected auth/site DDL, to an empty database. Apply selected seed SQL explicitly.
-
-For every later schema change, the application's coding agent diffs the regenerated `schema.sql`, writes a migration with the host's native tool (`wrangler d1 migrations` or the app's PostgreSQL migration tool), rehearses it on a copy, and applies it before deploying the new code.
-
-Destructive changes and type changes need explicit data migration. Mantle drops nothing. Initial `schema.sql` is not an upgrade script.
+The rules are in [schema installation and migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations): the runtime runs no DDL, the initial `schema.sql` is only for an empty database, and every later change is a reviewed migration rehearsed on a copy and applied before the new code deploys.
 
 For D1, create a migration with `pnpm exec wrangler d1 migrations create <database> <name>`, review its SQL, then rehearse `pnpm exec wrangler d1 migrations apply <database> --local` against copied data. Apply the reviewed migrations to the target before `wrangler deploy`. Initial DDL may be placed in the first migration for a new database.
 
@@ -79,4 +89,6 @@ Auth configuration and production email delivery are app-owned; follow [authenti
 
 Scheduling is app-owned. Wire generated system-only TTL sweeps into `scheduled()` and configure Wrangler crons explicitly. Bound each invocation and retain a cursor if work remains; see [TTL maintenance](../guides/native-execution.md#ttl-maintenance). Expired rows remain stored and hold unique keys until removed.
 
-After deployment, verify public and protected reads, member/admin sign-in, a persisted write, stale OCC and selected MCP/Admin/web routes. An `OUTCOME_UNKNOWN` write may have committed; reconcile before deciding what to do next and never retry automatically.
+An `OUTCOME_UNKNOWN` write may have committed; reconcile before deciding what to do next and never retry automatically. For MCP Apps, verify a newly invoked render tool on the deployed host and keep old
+conversations working with the [retained-page recipe](../guides/mcp-apps.md#keep-old-conversations-working-after-an-upgrade).
+Deploying an application never publishes or bumps the SDK.

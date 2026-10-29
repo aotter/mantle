@@ -15,6 +15,23 @@ From 0.2.0-alpha.7, Mantle publishes three packages together at one version:
 and `@aotter/mantle-admin` (optional Admin server, SPA and MCP App).
 Pin every package you use to the same exact version and upgrade them together.
 
+## Upgrade an application
+
+1. Pin every Mantle package to the same exact published version; never follow a dist-tag. Read every release section
+   between your version and the target, including its breaking changes.
+2. Regenerate with the project's own command and review the emitted TypeScript, SQL and policy diffs. A schema change
+   needs a data-preserving migration written with the host's tool and rehearsed on a copy
+   ([Install and change schemas](../cloudflare/deploy-and-operate.md#install-and-change-schemas)); the initial
+   `schema.sql` never rebuilds production tables.
+3. Keep users, sessions, content and application code. Follow [Customising Admin](../guides/native-admin.md#customising-admin)
+   for the application-built Admin; old UI subpaths have no aliases.
+4. Re-run the project's checks, member and Admin OTP, affected REST/MCP/Admin routes, private-field visibility, OCC and
+   unknown outcomes, then [acceptance](../guides/agent-workflow-acceptance.md) before an authorized cutover. Updating a
+   dependency never publishes a package.
+
+From 0.1.x, follow [Upgrade 0.1 to 0.2](upgrade-0.1-to-0.2.md) instead: a new database, a reviewed and rehearsed data
+move, and never booting 0.2 against a 0.1.x database.
+
 ## 0.2.1 — in preparation
 
 0.2.1 adds Schema locks: a manifest rule that refuses a row's update or delete
@@ -32,6 +49,22 @@ rolls the whole program back ("create only if the parent exists"). Ref handlers
 and interactive transactions can use `store.batch` for atomic multi-writes, and
 `mantle bundle` under `wrangler dev` reports stale generated output in one line
 instead of a failed build.
+
+### Upgrading to 0.2.1-alpha.3
+
+- **Agent guidance has one home, the handbook.** The package no longer ships `docs/skills/`, so the `mantle help
+  skills/<name>` topics are gone. Their guidance is now in handbook pages:
+  [performance pass](../guides/performance.md),
+  [deploy and operate](../cloudflare/deploy-and-operate.md),
+  [cleaning up stale uploads](../cloudflare/media-r2.md#clean-up-stale-uploads),
+  [upgrading an application](#upgrade-an-application) and
+  [adoption in an existing app](../guides/typed-queries.md#adopt-mantle-in-an-existing-application).
+  `mantle help` reaches all of them from the entry page.
+- **The `mantle` skill no longer depends on the SDK version.** It routes to `mantle help`, so
+  `npx skills add aotter/mantle@mantle` no longer needs a release tag. A skill installed from an earlier tag still
+  names `docs/skills/` paths; reinstall it.
+- **Docs moves.** The 0.1 → 0.2 upgrade guide is now the topic `mantle help upgrade-0.1-to-0.2`. The package README is
+  an index of topics.
 
 ### Upgrading to 0.2.1-alpha.2
 
@@ -99,7 +132,7 @@ and deployment; selected REST, MCP, public pages, publishing, translations and
 media compose around the generated operations.
 
 This is a breaking upgrade from 0.1.x: follow the [0.1-to-0.2 migration
-guide](../../upgrade-0.1-to-0.2.md), use a new 0.2 database and explicitly move
+guide](upgrade-0.1-to-0.2.md), use a new 0.2 database and explicitly move
 data. From alpha.11, pin the three selected packages to 0.2.0, regenerate and
 review owned output; the stable version commit changes release metadata and
 documentation rather than adding another runtime API.
@@ -216,7 +249,7 @@ the native migration above supersede their runtime and CLI instructions.
 
 0.2.0 replaces 0.1.x's grammar and composition; no stable 0.1.5 was released
 (`0.1.5-alpha.1` was a prerelease). It breaks every consumer, and
-`docs/upgrade-0.1-to-0.2.md` in the package is the guide for moving a project
+`mantle help upgrade-0.1-to-0.2` is the guide for moving a project
 by hand.
 
 - **Manifests are `cms.mantle.aotter.net/v2`.** Views are one SQL `SELECT` and

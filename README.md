@@ -143,11 +143,9 @@ npx skills add aotter/mantle@mantle
 ```
 
 Ask your agent to follow the installed skill and describe what you want to build.
-Without a version the skill follows `main`, the latest stable release. To match
-your application's SDK exactly, add its release tag:
-`npx skills add aotter/mantle#v0.2.1-alpha.2@mantle`. `main` can lag an alpha release on `develop`.
-See the [agent setup guide](docs/handbook/guides/agent-setup.md) for supported
-editors, plugins, and project instructions.
+The skill holds no version-specific rules: it sends the agent to `mantle help`, the
+docs inside the `@aotter/mantle` version your application installs. See the
+[agent setup guide](docs/handbook/guides/agent-setup.md) for plugins and editors.
 
 ### Build it yourself
 
@@ -190,7 +188,7 @@ PostgreSQL and SQLite are the two built-in dialects. Manifest SQL uses the
 compiler's PostgreSQL syntax and is rendered for the selected target.
 PostgreSQL uses Bun.SQL on Bun and postgres.js on Workers; other native handles
 need an application-owned adapter. Upgrading from 0.1.x:
-[the upgrade guide](docs/upgrade-0.1-to-0.2.md); an existing PostgreSQL
+[the upgrade guide](docs/handbook/releases/upgrade-0.1-to-0.2.md); an existing PostgreSQL
 service also reads [the release notes](docs/handbook/releases/index.md).
 
 <details>
@@ -270,7 +268,7 @@ install. After that, migrations belong to the application and its native tool.
 - [Manifest feature reference](docs/handbook/reference/features.md) — capabilities and their authoring fields.
 - [SDK and package API](packages/mantle/README.md) — installation, typed bindings, and optional modules.
 - [Examples](docs/examples/README.md) — whole services, and the runnable reference service.
-- [Upgrading from 0.1.x](docs/upgrade-0.1-to-0.2.md) — for a coding agent doing the move.
+- [Upgrading from 0.1.x](docs/handbook/releases/upgrade-0.1-to-0.2.md) — for a coding agent doing the move.
 - [Releases](https://github.com/aotter/mantle/releases) — changes and upgrade notes.
 
 ## Contributing

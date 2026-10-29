@@ -69,7 +69,7 @@ function checkCoreCloudflareFree() {
 }
 
 /**
- * packages/mantle/README.md: every folder of src is one subpath and reaches only the folders it needs, and a heavy library belongs to the one
+ * Every folder of src is one subpath and reaches only the folders it needs, and a heavy library belongs to the one
  * folder that is its integration (ADR-0032 decision 13, enforced per module now that there is one package): a folder that is not
  * `auth` may not import Better Auth, one that is not `mcp` may not import the MCP SDK, and so on.
  */

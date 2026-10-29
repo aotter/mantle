@@ -111,16 +111,10 @@ dist-tag DELETE only added failure and re-run state, and Actions
    git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
 
-   Keep the unversioned skill install (`npx skills add aotter/mantle@mantle`) as
-   the default command; pin its tagged form (`aotter/mantle#v<version>@mantle`)
-   and plugin installation examples to the release's Git tag;
-   follow the client syntax in [agent setup](handbook/guides/agent-setup.md).
-   Alpha releases stay on `develop`, so unqualified installs from `main` can
-   return an incompatible older skill. Update the root README, agent setup,
-   skills README and versioned reference-service links together. Keep plugin
-   descriptions version-neutral; the installed npm package remains the API
-   authority. The new tag becomes installable only after the controller creates
-   it. Do not create it manually or promote `main` just to deliver alpha skills.
+   The consumer skill and installation docs are version-neutral (`skills/README.md`):
+   they route to `mantle help`, so a release changes no skill or install command.
+   Update the versioned reference-service links. The new tag exists only after the
+   controller creates it; do not create it manually.
 
 3. Review API compatibility and migration instructions for actual consumers.
    Frozen legacy consumers stay on their pinned version; do not make them
