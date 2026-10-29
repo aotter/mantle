@@ -24,7 +24,7 @@ if (/\]\((?!https?:)/.test(text)) failures.push(`${where}: relative links do not
 // Every topic the skill names must resolve the way `mantle help` resolves it: a handbook path or its unique last segment.
 const handbook = join(root, "docs", "handbook");
 const pages = readdirSync(handbook, { recursive: true }).filter((path) => path.endsWith(".md")).map((path) => path.replaceAll("\\", "/").slice(0, -3));
-for (const [, topic] of text.matchAll(/mantle help ([a-z0-9/-]+)/g)) {
+for (const [, topic] of text.matchAll(/mantle help ([a-z0-9./-]*[a-z0-9/-])/g)) {
   if (topic === "topics" || pages.includes(topic)) continue;
   if (pages.filter((page) => page.split("/").at(-1) === topic).length !== 1) failures.push(`${where}: mantle help ${topic} is not a topic`);
 }
