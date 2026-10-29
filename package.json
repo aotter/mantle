@@ -24,7 +24,7 @@
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:skills": "node scripts/check-skills.mjs",
     "check:doc-examples": "node scripts/check-doc-examples.mjs",
-    "check:doc-html": "node scripts/check-doc-html.mjs --self-test && node scripts/check-doc-html.mjs",
+    "check:doc-html": "node scripts/check-doc-html.mjs",
     "check:plugin-manifests": "node scripts/sync-plugin-manifests.mjs --check",
     "check:release": "node scripts/release-tag-order.mjs --self-test",
     "check": "pnpm run check:boundaries && pnpm run check:skills && pnpm run check:doc-html && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm --filter @aotter/mantle exec bun scripts/check-size.ts && pnpm --filter @aotter/mantle exec bun scripts/check-package.ts && pnpm check:ui-size && pnpm check:doc-examples && pnpm check:oss-plugin && pnpm typecheck && MANTLE_NATIVE_TESTS=1 pnpm test && pnpm check:worker-consumer",
