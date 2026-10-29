@@ -5,10 +5,19 @@ An explicit target is required; use the generation target because hashes
 include the dialect. The command writes no project files. `--diff <old.json>` prints a JSON
 array of changes against a saved report.
 
-`describeApp(plan)` and `diffApp(a, b)` are exported by
-`@aotter/mantle/describe`. The `AppDescription` TypeScript type is the contract.
-`targetHash(plan, id)` is also exported by `@aotter/mantle/target-hash`.
-These exports use no Node APIs and load no SQL parser.
+This command's output is the supported way to get a description outside the
+CLI. Run it in Node.js or Bun, for example in a deploy step, from the
+committed manifests, and give the saved JSON to whatever needs it. A Worker
+cannot compile manifests that contain SQL, because the SQL parser's WASM needs
+the whole isolate memory (ADR-0034); do not import compiler files from `dist`.
+
+```sh
+mantle describe cloudflare-d1 manifests/*.yaml > describe.json
+```
+
+`@aotter/mantle/describe` exports `matchTarget` and the `AppDescription`,
+`DescribeTarget` and `TargetRequest` types; `AppDescription` is the contract.
+It loads no compiler, SQL parser or Node API.
 
 The schemaVersion 1 report contains:
 
@@ -55,8 +64,9 @@ imports no application, opens no database and makes no network call, so a
 gateway can compute `props.mantle.target` and `targetHash` before forwarding.
 
 ```ts
-import { matchTarget } from "@aotter/mantle/describe";
-const url = new URL(request.url);
+import { matchTarget, type AppDescription } from "@aotter/mantle/describe";
+import saved from "./describe.json";
+const describe = saved as AppDescription, url = new URL(request.url);
 matchTarget(describe, { surface: "rest", method: request.method, path: url.pathname });   // rest:GET /api/views/orders
 matchTarget(describe, { surface: "admin", method: request.method, path: url.pathname });  // admin:GET /entries/:id
 matchTarget(describe, { surface: "mcp", tool: params.name, path: url.pathname });         // view:orders, admin:tool:<name>

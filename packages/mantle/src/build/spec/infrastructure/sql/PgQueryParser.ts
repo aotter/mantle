@@ -18,7 +18,9 @@ export interface ParsedSql {
 
 /** Parse PostgreSQL-syntax text. A parse failure is an `SQL_SYNTAX` refusal at the parser's cursor. */
 export async function parsePgSql(sql: string): Promise<ParsedSql> {
-  const { parse } = await import("libpg-query");
+  const { loadModule, parse } = await import("libpg-query");
+  // A runtime that cannot load the parser (a Worker: 128 MiB minimum WASM memory, ADR-0034) is an error, not SQL_SYNTAX.
+  await loadModule().catch(cause => { throw new Error("The SQL parser (libpg-query WASM, 128 MiB minimum memory) cannot load in this runtime; compile SQL manifests with Node.js or Bun.", { cause }); });
   let tree;
   try {
     tree = await parse(sql);

@@ -7,4 +7,4 @@ await build({entryPoints:["src/build/compiler.ts"],outdir:"dist/build",bundle:tr
 
 // Independent, platform-neutral opt-in report and hash entries.
 for (const file of files("dist/domain/describe")) if (file.endsWith(".js")) rmSync(file);
-await build({entryPoints:["src/domain/describe/index.ts", "src/domain/describe/target-hash.ts"],outdir:"dist/domain/describe",bundle:true,splitting:true,format:"esm",platform:"neutral",minifyWhitespace:true,minifySyntax:true,treeShaking:true,target:"es2022"});
+await build({entryPoints:["src/domain/describe/index.ts", "src/domain/describe/public.ts"],outdir:"dist/domain/describe",bundle:true,splitting:true,format:"esm",platform:"neutral",minifyWhitespace:true,minifySyntax:true,treeShaking:true,target:"es2022"});

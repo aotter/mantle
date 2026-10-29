@@ -367,3 +367,14 @@ test("a Procedure Trigger does not expose a View with the same name", async () =
   expect(m.triggers).toEqual([]);
   expect(report.targets.some(t => t._meta.id === "rest:GET /api/views/rename-order")).toBe(false);
 });
+
+test("@aotter/mantle/describe exports only matchTarget and statically loads no compiler, parser or YAML", async () => {
+  const { readFileSync } = await import("node:fs"), { dirname, join } = await import("node:path");
+  const entry = join(import.meta.dir, "../dist/domain/describe/public.js");
+  expect(Object.keys(await import(entry))).toEqual(["matchTarget"]);
+  const seen = new Set<string>(), visit = (file: string): string => seen.has(file) ? "" : (seen.add(file), (() => {
+    const text = readFileSync(file, "utf8");
+    return text + [...text.matchAll(/from\s*"(\.[^"]+)"/g)].map(([, path]) => visit(join(dirname(file), path!))).join("");
+  })());
+  expect(visit(entry)).not.toMatch(/libpg-query|from\s*"yaml"|build\/compiler|import\(/);
+});
