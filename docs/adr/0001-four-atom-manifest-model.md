@@ -419,7 +419,7 @@ question. The 4-atom contract holds; an envelope-around-atoms
 is structural noise.
 
 **(d) Make Trigger optional with a default of "auto-mount the
-Procedure at /api/p/<name>"**.
+Procedure at `/api/p/<name>`"**.
 Rejected: hides the binding decision from the author, breaks
 the PG-1:1 mapping (Procedures are not externally exposed by
 themselves), and creates a third way to bind (this default +

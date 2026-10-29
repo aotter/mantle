@@ -317,7 +317,7 @@ Use ordinary Markdown; no new receipt schema or framework is required:
 - Findings ledger with P0–P3, owner, disposition, minimal repair and
   regression commands/results.
 - Coverage of each rubric item (evaluator-observed in this round,
-  evaluator-observed and reused from round <n> at <revision> with the reason,
+  evaluator-observed and reused from round `<n>` at `<revision>` with the reason,
   author regression only, or UNVERIFIED); the final CONVERGED / BLOCKED / UNVERIFIED verdict and rounds
   used, which is layer 3 of the [layered report](#report-done-ness-in-layers).
   Retain every failed report.
