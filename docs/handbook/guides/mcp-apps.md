@@ -33,6 +33,46 @@ passed through as the resource's `_meta.ui`. `domain` is the dedicated sandbox
 origin for hosts that serve each App from its own origin; use the form that
 host documents.
 
+### Tool metadata and result `_meta`
+
+A hand-built kernel `Tool` may set `meta`, merged into its `_meta` in
+`tools/list` with what App links produce: the top level shallowly, `ui` one key
+deep. Use it for keys such as `ui.visibility`, `ui.resourceUri` with
+`openai/outputTemplate`, or `openai/fileParams`. A value that contradicts an App
+link (another `ui.resourceUri` than the `renders` resource, or a visibility other
+than `["app"]` on an `appOnly` tool) fails when `mcp()` is constructed.
+`meta: { ui: { visibility: ["app"] } }` hides any tool, a Procedure included,
+from clients that declare no MCP Apps support, as `appOnly` does for Views. It
+is a listing hint only: `tools/call` still runs every identity, scope, `check`
+and `authorize` decision, so an App-only write is authorized like any other.
+
+A `run` may return `withResultMeta(data, meta)` from `@aotter/mantle/mcp`. The
+result's text and `structuredContent` are built from `data` exactly as before;
+`meta` goes only into the result `_meta`, beside `net.aotter.mantle/tool`, which
+it cannot replace. Hosts give result `_meta` to the App, not the model, so a
+signed upload URL belongs there:
+
+```ts
+import { withResultMeta, type Tool } from '@aotter/mantle/mcp';
+
+declare function signUpload(caller: unknown): Promise<{ id: string; url: string; headers: Record<string, string> }>;
+
+const uploadTarget: Tool<unknown> = {
+  name: 'upload_target', surface: 'public', description: 'Prepare an upload.', closed: true,
+  meta: { ui: { visibility: ['app'] } },
+  inputSchema: { type: 'object', additionalProperties: false }, validate: raw => raw as Record<string, unknown>,
+  run: async (_db, caller) => {
+    const upload = await signUpload(caller);
+    return withResultMeta({ id: upload.id }, { uploadUrl: upload.url, requiredHeaders: upload.headers });
+  },
+};
+```
+
+`callTool` and `callToolLazy` return the wrapper itself, `{ data, _meta }`.
+A caller that forwards a result to a model, such as an application's own agent,
+must forward only `data` and drop `_meta`, or the signed URL leaks through that
+path. A thrown error still produces the standard diagnostics result.
+
 ## Package and application ownership
 
 Core (`@aotter/mantle`) owns tools, resources, endpoint links and server authorization,

@@ -111,7 +111,7 @@ for (const [name, resources, fragment] of [
   refused(() => handle({ public: resources.map(r => ({ resources: [r] })) }), fragment);
 });
 
-test("App-only is for Views: a Procedure cannot be hidden from the model", async () => {
+test("appOnly is for Views: a Procedure is hidden only through its own meta.ui.visibility", async () => {
   const write: Tool<null> = { name: "public_write", surface: "public", description: "write", inputSchema: { type: "object" }, validate: raw => raw as Record<string, unknown>, run: async () => ({}) };
   refused(() => mcp<unknown, null>([...tools, write], { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [{ ...resource("ui://app/a"), appOnly: ["public_write"] }] } } }), "must be a View");
 });
@@ -326,4 +326,34 @@ test("authorize filters identity, scopes, checks and application refusals from l
   expect(JSON.parse((await call(independent, "resources/read", { uri: "ui://app/filtered" })).result.contents[0].text)).toEqual(names);
   const denied = await call(filtered, "tools/call", { name: "scoped", arguments: {} });
   expect(denied.error.code).toBe("AUTH_DENIED");
+});
+
+test("meta.ui.visibility hides a Procedure from clients without MCP Apps; tools/call stays authorized like any tool", async () => {
+  let runs = 0, allow = true, caller: any = { kind: "anonymous" };
+  const write: Tool<null> = { name: "public_write", surface: "public", description: "write", closed: true, meta: { ui: { visibility: ["app"] } }, inputSchema: { type: "object" }, validate: raw => raw as Record<string, unknown>, run: async () => { runs++; return {}; } };
+  const api = mcp<unknown, null>([...tools, write], { db: () => null, caller: () => caller, authorize: target => allow || target.name !== "public_write" });
+  const post = () => api(new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "public_write", arguments: {}, _meta: meta } }) }), {});
+  caller = fixtureCaller({ kind: "user", subject: "u", role: null, admin: false, scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null });
+  expect((await call(api, "tools/list", {}, "public", false)).result.tools.map((t: any) => t.name)).toEqual(["public_rows", "public_details"]);
+  const listed = (await call(api, "tools/list")).result.tools;
+  expect(listed.map((t: any) => t.name)).toEqual(["public_rows", "public_details", "public_write"]);
+  expect(listed[2]._meta).toEqual({ ui: { visibility: ["app"] } });
+  expect((await call(api, "tools/call", { name: "public_write", arguments: {} })).result.isError).toBeUndefined();
+  allow = false;
+  expect((await post())!.status).toBe(403);
+  caller = { kind: "anonymous" };
+  expect((await post())!.status).toBe(401);
+  expect(runs).toBe(1);
+});
+
+test("a tool's meta merges with its App links and may not contradict them", async () => {
+  const own = (name: string, meta: Record<string, unknown>) => tools.map(tool => tool.name === name ? { ...tool, meta } : tool);
+  const card = { ui: { resourceUri: "ui://my-app/rows", prefersBorder: true }, "openai/outputTemplate": "ui://my-app/rows", "openai/fileParams": ["image"] };
+  const api = mcp<unknown, null>(own("public_rows", card), { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [resource("ui://my-app/rows", ["public_rows"])] } } });
+  expect((await call(api, "tools/list")).result.tools[0]._meta).toEqual({ ui: { resourceUri: "ui://my-app/rows", prefersBorder: true }, "ui/resourceUri": "ui://my-app/rows", "openai/outputTemplate": "ui://my-app/rows", "openai/fileParams": ["image"] });
+  const apps = (meta: Record<string, unknown>, app: Partial<McpAppResource>) => () => mcp<unknown, null>(own("public_rows", meta), { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [{ ...resource("ui://my-app/rows"), ...app }] } } });
+  refused(apps({ ui: { resourceUri: "ui://other/card" } }, { renders: ["public_rows"] }), "contradicts");
+  refused(apps({ "openai/outputTemplate": "ui://other/card" }, { renders: ["public_rows"] }), "contradicts");
+  refused(apps({ ui: { visibility: ["model", "app"] } }, { appOnly: ["public_rows"] }), "contradicts");
+  apps({ ui: { visibility: ["app"] } }, { appOnly: ["public_rows"] })();
 });
