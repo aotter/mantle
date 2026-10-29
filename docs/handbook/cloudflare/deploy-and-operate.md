@@ -8,6 +8,19 @@ Run the same generation command with `--check`, typecheck the application and te
 Deploy only when the user asks; creating a project locally is not authorization. Confirm the exact account and reuse the
 resources it already has before creating any. For ChatGPT Sites, follow [Mantle on ChatGPT Sites](chatgpt-sites.md).
 
+## Production checklist
+
+1. Migrations are reviewed, rehearsed on a copy and applied before traffic reaches the new code
+   ([install and change schemas](#install-and-change-schemas)).
+2. Secrets live in the host's secret store, never in source, chat or logs: the auth secret, the trusted HTTPS
+   `PUBLIC_ORIGIN`, the `ADMIN_EMAIL` bootstrap rule and the production email sender ([authentication](authentication.md)).
+3. Admin assets are served Worker-first ([Workers assets and secrets](service-entry.md#workers-assets-and-secrets)) and
+   both [public-fetch flags](#public-fetch-routing) stay in every environment.
+4. After deploying, verify on the deployed host: admin sign-in gets role `admin`, a member is denied Admin, public and
+   protected reads, a persisted write, a stale OCC write refused, and MCP `initialize` and `tools/list` with a real OAuth
+   bearer.
+5. Keep the previous build and the migration rollback until the release is verified.
+
 ## Public fetch routing
 
 Workers use `compatibility_flags: ["nodejs_compat", "global_fetch_strictly_public"]`.
@@ -76,7 +89,6 @@ Auth configuration and production email delivery are app-owned; follow [authenti
 
 Scheduling is app-owned. Wire generated system-only TTL sweeps into `scheduled()` and configure Wrangler crons explicitly. Bound each invocation and retain a cursor if work remains; see [TTL maintenance](../guides/native-execution.md#ttl-maintenance). Expired rows remain stored and hold unique keys until removed.
 
-After deployment, verify public and protected reads, member/admin sign-in, a persisted write, stale OCC and selected MCP/Admin/web routes. An `OUTCOME_UNKNOWN` write may have committed; reconcile before deciding what to do next and never retry automatically. Keep the previous build and migration rollback artifacts
-until the release is verified. For MCP Apps, verify a newly invoked render tool on the deployed host and keep old
+An `OUTCOME_UNKNOWN` write may have committed; reconcile before deciding what to do next and never retry automatically. For MCP Apps, verify a newly invoked render tool on the deployed host and keep old
 conversations working with the [retained-page recipe](../guides/mcp-apps.md#keep-old-conversations-working-after-an-upgrade).
 Deploying an application never publishes or bumps the SDK.

@@ -13,8 +13,8 @@ its docs one topic at a time.
 
 1. **Start with `mantle help`.** In a project run `npx mantle help`; before one exists, `npx @aotter/mantle@<exact
    version> help`. It prints the entry page (how to choose, build and accept); `mantle help <topic>` prints one page and
-   ends with the commands for the pages it links. `mantle help topics` lists them all. Follow it rather than this file,
-   an SDK checkout or an online copy.
+   ends with the commands for the pages it links. `mantle help topics` lists them all. For a new app, do every step of its
+   "Build from a product brief". Follow it rather than this file, an SDK checkout or an online copy.
 2. **Work in the user's application.** Read its `package.json` and lockfile for the exact Mantle version and keep using
    that version's docs until the user asks to upgrade (`mantle help releases/index`). Preserve existing code, identity,
    versions and resources.
