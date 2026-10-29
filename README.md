@@ -145,7 +145,7 @@ npx skills add aotter/mantle@mantle
 Ask your agent to follow the installed skill and describe what you want to build.
 Without a version the skill follows `main`, the latest stable release. To match
 your application's SDK exactly, add its release tag:
-`npx skills add aotter/mantle#v0.2.1-alpha.1@mantle`. `main` can lag an alpha release on `develop`.
+`npx skills add aotter/mantle#v0.2.1-alpha.2@mantle`. `main` can lag an alpha release on `develop`.
 See the [agent setup guide](docs/handbook/guides/agent-setup.md) for supported
 editors, plugins, and project instructions.
 

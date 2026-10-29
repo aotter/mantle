@@ -33,6 +33,37 @@ and interactive transactions can use `store.batch` for atomic multi-writes, and
 `mantle bundle` under `wrangler dev` reports stale generated output in one line
 instead of a failed build.
 
+### Upgrading to 0.2.1-alpha.2
+
+Pin the selected packages to `0.2.1-alpha.2` and regenerate. Breaking change:
+
+- **`@aotter/mantle/describe`** keeps only `matchTarget` and the
+  `AppDescription`, `DescribeTarget` and `TargetRequest` types. `describeApp`,
+  `diffApp` and the `@aotter/mantle/target-hash` subpath are removed.
+  **`mantle describe` output is the supported way to get a description outside
+  the CLI:** run `mantle describe <target> manifests/*.yaml > describe.json` in
+  Node.js or Bun (for example in a deploy step) and give the JSON to
+  `matchTarget`. Do not import compiler files from `dist`; a Worker cannot
+  compile manifests that contain SQL ([describe](../reference/describe.md)).
+  Use `mantle describe --diff` instead of `diffApp`, and `_meta.targetHash`
+  instead of `targetHash()`.
+
+Hand-built MCP tools gain three opt-in capabilities; without them the output
+is unchanged ([MCP Apps](../guides/mcp-apps.md), [surface](../reference/surface.md)):
+
+- `Tool.meta` merges into the tool's listed `_meta`. `ui.visibility: ["app"]`
+  can now hide a Procedure from clients without MCP Apps; it is a listing hint,
+  and calls are authorized as before.
+- `withResultMeta(data, meta)` returns `meta` only in the result `_meta`, so a
+  value such as a signed upload URL stays out of `content`. `callTool` returns
+  `{ data, _meta }`; drop `_meta` before forwarding a result to a model.
+- `toolsPageSize` pages `tools/list` with an opaque `nextCursor`.
+
+Also: generation reports a SQL parser that cannot load in the current runtime
+as such, instead of `SQL_SYNTAX`, and the handbook renders under Vue-based
+site generators (bare `<placeholder>` text is now quoted, and `pnpm check`
+fails on any that return).
+
 ### Upgrading to 0.2.1-alpha.1
 
 Pin `@aotter/mantle`, and any selected `@aotter/mantle-ui` and
