@@ -34,6 +34,7 @@ const union = (scopes: readonly string[], extra: readonly string[]) => [...new S
 /** The handler for `/mcp` (public tools) and `/mcp/admin` (tools for `admin` roles); other paths are undefined. */
 export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, apps: Partial<Record<string, ReturnType<typeof linkSurface>>> = {}, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
   const allowed = options.allowedOrigins ?? [];
+  if (options.toolsPageSize !== undefined && !(Number.isInteger(options.toolsPageSize) && options.toolsPageSize > 0)) throw new TypeError("mcp: toolsPageSize must be a positive integer.");
   return draining(async (request, env, ctx) => {
     const access = options.gateway ? (await import("./host-access.js")).accessRequest(ctx, options) : undefined;
     let resolved: Caller | undefined;
@@ -176,17 +177,25 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       const server = new McpServer(serverInfo, { maxToolInputElements: MCP_INPUT_ELEMENTS, ...(options.instructions ? { instructions: options.instructions } : {}) });
       server.server.registerCapabilities({ tools: { listChanged: false } });
       if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
-      const appMeta = links ? registerApps(server, links, parsedBody, new Set(selected.map(tool => tool.name)), { env, request }) : undefined;
+      const enabled = clientUiSupport(parsedBody) !== "unsupported";
+      const appMeta = links ? registerApps(server, links, enabled, new Set(selected.map(tool => tool.name)), { env, request }) : undefined;
       // A host's stale copy names a tool this catalogue lacks: say so, with the catalogue version, instead of the SDK's bare "not found".
       // Wrapped where the SDK stores it, so transport and request validation still answer first.
       const registered = new Set<string>(), set = server.server.setRequestHandler.bind(server.server) as (method: string, handler: unknown) => void;
+      const size = options.toolsPageSize;
       server.server.setRequestHandler = ((method: string, handler: unknown) => set(method, method === "tools/call" && typeof handler === "function" ? (request: { params: { name: string } }, context: unknown) => {
         if (!registered.has(request.params.name)) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `No tool named ${JSON.stringify(request.params.name)} exists in the current catalogue (catalogue version ${serverInfo.version}).`);
         return handler(request, context);
+      } : method === "tools/list" && size && typeof handler === "function" ? async (request: { params?: { cursor?: string } }, context: unknown) => {
+        // The cursor names the catalogue version, so a page of another catalogue is refused instead of skipping or repeating tools.
+        const { tools } = await handler(request, context) as { tools: unknown[] }, cursor = request.params?.cursor, start = cursor === undefined ? 0 : Number(cursor.split(":")[1]);
+        if (cursor !== undefined && !(start > 0 && start % size === 0 && start < tools.length && cursor === `${version}:${start}`)) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tools/list cursor; list again from the first page (catalogue version ${serverInfo.version}).`);
+        return { tools: tools.slice(start, start + size), ...(start + size < tools.length ? { nextCursor: `${version}:${start + size}` } : {}) };
       } : handler)) as typeof server.server.setRequestHandler;
       for (const tool of selected) {
-        const meta = appMeta?.(tool.name);
-        if (meta === false) continue;
+        const linked = appMeta?.(tool.name), own = tool.meta, visibility = (own?.ui as { visibility?: unknown } | undefined)?.visibility;
+        if (linked === false || !enabled && Array.isArray(visibility) && !visibility.includes("model")) continue;
+        const meta = linked && own ? { ...linked, ...own, ui: { ...linked.ui, ...own.ui as object } } : linked ?? own;
         registered.add(tool.name);
         // Not part of structured output: the version, and on failure the current input contract.
         const about = (contract: boolean) => { const text = [tool.version && `tool version ${tool.version}`, contract && `input schema ${JSON.stringify(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema)}`].filter(Boolean).join("; "); return text ? [{ type: "text" as const, text }] : []; };
@@ -198,8 +207,12 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         try {
           if (host) tool.check?.(caller);
           if (tool.run && (!host || !tool.readOnly)) checkOrigin(request, caller);
-          let db: Database | undefined;
-          const run = (input: Record<string, unknown>) => callTool(tool, input, () => db ??= options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
+          let db: Database | undefined, resultMeta: Readonly<Record<string, unknown>> | undefined;
+          const run = async (input: Record<string, unknown>) => {
+            const out = await callTool(tool, input, () => db ??= options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
+            // withResultMeta: the data is the result, the meta reaches only the result `_meta`.
+            return isRecord(out) && Symbol.for("net.aotter.mantle/result") in out ? (resultMeta = out._meta as typeof resultMeta, out.data) : out;
+          };
           let data = await run(raw as Record<string, unknown>);
           // A page is cut before the first row that overflows the budget: the same page re-runs with the limit that fits, so the cursor is the View's own.
           // Data can change between reads, so the re-run is measured again. A View without an order is one page and refuses a smaller limit: it stays whole.
@@ -216,7 +229,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
           }
           if (host) access?.finish();
           const text = JSON.stringify(data), notice = tool.page && text.length > MCP_PAGE_BUDGET;
-          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text }, ...about(false), ...(notice ? [{ type: "text" as const, text: `This page is larger than the ${MCP_PAGE_BUDGET}-character page size budget (a single row over it, or a View without an order, is returned whole), so a host may truncate it. Continue with nextCursor, if any.` }] : [])], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
+          return { ...(meta || resultMeta ? { _meta: { ...resultMeta, "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text }, ...about(false), ...(notice ? [{ type: "text" as const, text: `This page is larger than the ${MCP_PAGE_BUDGET}-character page size budget (a single row over it, or a View without an order, is returned whole), so a host may truncate it. Continue with nextCursor, if any.` }] : [])], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {
           if (host) access?.finish(error);
           const diagnostic = host ? (await (await import("./host-caller.js")).hostFailure(error, caller, `mcp ${tool.name}`).json() as {error: ReturnType<typeof surfaceError>["error"]}).error : surfaceError(error, `mcp ${tool.name}`).error;
@@ -273,8 +286,7 @@ function appMeta(r: McpAppResource, csp: McpAppCsp | undefined = r.csp): { ui: R
 }
 
 /** Registration uses the official SDK; HTML loaders run only on resources/read. */
-function registerApps(server: import("@modelcontextprotocol/server").McpServer, links: ReturnType<typeof linkSurface>["links"], message: unknown, tools: ReadonlySet<string>, request: Pick<McpAppRender, "env" | "request">) {
-  const enabled = clientUiSupport(message) !== "unsupported";
+function registerApps(server: import("@modelcontextprotocol/server").McpServer, links: ReturnType<typeof linkSurface>["links"], enabled: boolean, tools: ReadonlySet<string>, request: Pick<McpAppRender, "env" | "request">) {
   if (enabled) for (const resource of links.resources) {
     const meta = appMeta(resource);
     server.registerResource(resource.name, resource.uri, { mimeType: RESOURCE_MIME_TYPE, title: resource.title, description: resource.description, ...(meta ? { _meta: meta } : {}) }, async () => {

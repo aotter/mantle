@@ -350,3 +350,50 @@ test("An anonymous closed surface challenges from initialize; an open tool or a 
  const listed=await post(mixed,'tools/list');expect(listed!.status).toBe(200);
  expect(((await listed!.text()).match(/"name":"(\w+)"/g)??[]).join()).toBe('"name":"open"');
 });
+
+test("Tool.meta lists visibility, App template and file params; withResultMeta keeps its meta out of content",async()=>{
+ const {mcp,withResultMeta,callTool}=await import('../src/kernel/mcp.js');
+ const secret='https://upload.test/put?signature=SECRET';
+ const tool=(name:string,extra:any={})=>({name,surface:'public',description:name,inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>({ok:true}),...extra});
+ const tools=[
+  tool('model',{meta:{ui:{visibility:['model']},'openai/fileParams':['image']}}),
+  tool('both',{meta:{ui:{visibility:['model','app']}}}),
+  tool('app',{meta:{ui:{visibility:['app']}}}),
+  tool('card',{meta:{ui:{resourceUri:'ui://app/card'},'openai/outputTemplate':'ui://app/card'}}),
+  tool('sign',{meta:{ui:{visibility:['app']}},run:async()=>withResultMeta({id:'u1'},{uploadUrl:secret,requiredHeaders:{'content-type':'image/png'},'net.aotter.mantle/tool':'other'})}),
+  tool('fail',{run:async()=>{throw new Error('boom');}}),
+  tool('plain'),
+ ];
+ const handle=mcp(tools,{db:()=>({}),caller:()=>({kind:'anonymous'})});
+ const ui={'io.modelcontextprotocol/clientCapabilities':{extensions:{'io.modelcontextprotocol/ui':{mimeTypes:['text/html;profile=mcp-app']}}}};
+ const call=async(method:string,params:any={},api:any=handle)=>{const response=await api(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});const body=await response.text();return JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);};
+ const listed=(await call('tools/list',{_meta:ui})).result.tools,meta=Object.fromEntries(listed.map((t:any)=>[t.name,t._meta]));
+ expect(meta).toEqual({model:{ui:{visibility:['model']},'openai/fileParams':['image']},both:{ui:{visibility:['model','app']}},app:{ui:{visibility:['app']}},card:{ui:{resourceUri:'ui://app/card'},'openai/outputTemplate':'ui://app/card'},sign:{ui:{visibility:['app']}},fail:undefined,plain:undefined});
+ expect((await call('tools/list',{_meta:{'io.modelcontextprotocol/clientCapabilities':{}}})).result.tools.map((t:any)=>t.name)).toEqual(['model','both','card','fail','plain']);
+ const signed=(await call('tools/call',{name:'sign',arguments:{},_meta:ui})).result;
+ expect(signed.content).toEqual([{type:'text',text:'{"id":"u1"}'}]);expect(signed.structuredContent).toEqual({id:'u1'});
+ expect(signed._meta).toEqual({uploadUrl:secret,requiredHeaders:{'content-type':'image/png'},'net.aotter.mantle/tool':'sign'});
+ expect(JSON.stringify({...signed,_meta:undefined})).not.toContain('SECRET');
+ const failed=(await call('tools/call',{name:'fail',arguments:{}})).result;
+ expect(Object.keys(failed).sort()).toEqual(['content','isError','structuredContent']);expect(failed.structuredContent.diagnostics[0].code).toBe('INTERNAL_ERROR');
+ expect((await call('tools/call',{name:'plain',arguments:{}})).result).toEqual({content:[{type:'text',text:'{"ok":true}'}],structuredContent:{ok:true}});
+ const direct:any=await callTool(tools[4] as any,{},{},{kind:'anonymous'},undefined as never);
+ expect(direct.data).toEqual({id:'u1'});expect(direct._meta.uploadUrl).toBe(secret);expect(JSON.stringify(direct.data)).not.toContain('SECRET');
+});
+
+test("tools/list pages with toolsPageSize and an opaque cursor bound to the catalogue; the default is one page",async()=>{
+ const {mcp}=await import('../src/kernel/mcp.js');
+ const table=(names:string[])=>names.map(name=>({name,surface:'public',description:name,inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>({})}));
+ const options={db:()=>({}),caller:()=>({kind:'anonymous'}) as const};
+ const call=async(api:any,params:any={})=>{const response=await api(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params})}),{});const body=await response.text();return JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);};
+ const whole=(await call(mcp(table(['a','b','c','d','e']),options))).result;expect(whole.tools.length).toBe(5);expect(whole.nextCursor).toBeUndefined();
+ const paged=mcp(table(['a','b','c','d','e']),{...options,toolsPageSize:2}),names:string[][]=[];
+ let cursor:string|undefined;
+ do { const page=(await call(paged,cursor?{cursor}:{})).result;names.push(page.tools.map((t:any)=>t.name));cursor=page.nextCursor; } while(cursor);
+ expect(names).toEqual([['a','b'],['c','d'],['e']]);
+ const first=(await call(paged)).result.nextCursor;
+ expect((await call(paged,{cursor:first})).result.tools.map((t:any)=>t.name)).toEqual(['c','d']);
+ for(const bad of ['nope',first.replace(/:\d+$/,':3'),first.replace(/:\d+$/,':6')]) expect((await call(paged,{cursor:bad})).error.code).toBe(-32602);
+ expect((await call(mcp(table(['a','b','c','x']),{...options,toolsPageSize:2}),{cursor:first})).error.code).toBe(-32602);
+ for(const size of [0,-1,1.5]) await expect(call(mcp(table(['a']),{...options,toolsPageSize:size}))).rejects.toThrow('toolsPageSize must be a positive integer');
+});
