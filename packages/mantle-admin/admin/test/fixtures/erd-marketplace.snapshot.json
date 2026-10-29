@@ -1,0 +1,2028 @@
+{
+ "dataModel": {
+  "schemas": [
+   {
+    "name": "audit_log",
+    "title": "Audit log",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "action"
+     ],
+     "properties": {
+      "action": {
+       "type": "string"
+      },
+      "detail": {
+       "type": "string"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [],
+    "indexes": [
+     [
+      "created_at",
+      "id"
+     ]
+    ],
+    "searchableFields": [],
+    "manifest": {
+     "name": "audit_log",
+     "title": "Audit log",
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "action"
+      ],
+      "properties": {
+       "action": {
+        "type": "string"
+       },
+       "detail": {
+        "type": "string"
+       }
+      }
+     },
+     "fields": {
+      "action": "text",
+      "detail": "text"
+     },
+     "names": {
+      "action": "action",
+      "detail": "detail"
+     },
+     "indexes": [
+      [
+       "created_at",
+       "id"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "categories",
+    "title": "Categories",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "slug",
+      "name"
+     ],
+     "properties": {
+      "slug": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "parentId": {
+       "type": "string",
+       "x-mantle-ref": "categories"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "slug"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [],
+    "manifest": {
+     "name": "categories",
+     "title": "Categories",
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "slug",
+       "name"
+      ],
+      "properties": {
+       "slug": {
+        "type": "string"
+       },
+       "name": {
+        "type": "string"
+       },
+       "parentId": {
+        "type": "string",
+        "x-mantle-ref": "categories"
+       }
+      }
+     },
+     "fields": {
+      "slug": "text",
+      "name": "text",
+      "parentid": "text"
+     },
+     "names": {
+      "slug": "slug",
+      "name": "name",
+      "parentid": "parentId"
+     },
+     "unique": [
+      [
+       "slug"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "coupons",
+    "title": "Coupons",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "code",
+      "percentOff"
+     ],
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "percentOff": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 90
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "code"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [],
+    "manifest": {
+     "name": "coupons",
+     "title": "Coupons",
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "code",
+       "percentOff"
+      ],
+      "properties": {
+       "code": {
+        "type": "string"
+       },
+       "percentOff": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 90
+       }
+      }
+     },
+     "fields": {
+      "code": "text",
+      "percentoff": "integer"
+     },
+     "names": {
+      "code": "code",
+      "percentoff": "percentOff"
+     },
+     "unique": [
+      [
+       "code"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "members",
+    "title": "Members",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "email",
+      "displayName"
+     ],
+     "properties": {
+      "email": {
+       "type": "string",
+       "format": "email"
+      },
+      "displayName": {
+       "type": "string"
+      },
+      "tier": {
+       "type": "string",
+       "enum": [
+        "basic",
+        "plus"
+       ]
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "email"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [
+     "email",
+     "displayname"
+    ],
+    "manifest": {
+     "name": "members",
+     "title": "Members",
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "email",
+       "displayName"
+      ],
+      "properties": {
+       "email": {
+        "type": "string",
+        "format": "email"
+       },
+       "displayName": {
+        "type": "string"
+       },
+       "tier": {
+        "type": "string",
+        "enum": [
+         "basic",
+         "plus"
+        ]
+       }
+      }
+     },
+     "fields": {
+      "email": "text",
+      "displayname": "text",
+      "tier": "text"
+     },
+     "names": {
+      "email": "email",
+      "displayname": "displayName",
+      "tier": "tier"
+     },
+     "search": [
+      "email",
+      "displayname"
+     ],
+     "unique": [
+      [
+       "email"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "order_lines",
+    "title": "Order lines",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "orderId",
+      "productId",
+      "qty",
+      "unitPrice"
+     ],
+     "properties": {
+      "orderId": {
+       "type": "string",
+       "x-mantle-ref": "orders"
+      },
+      "productId": {
+       "type": "string",
+       "x-mantle-ref": "products"
+      },
+      "qty": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "unitPrice": {
+       "type": "integer"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "orderid",
+      "productid"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [],
+    "manifest": {
+     "name": "order_lines",
+     "title": "Order lines",
+     "uiSchema": {
+      "nav": {
+       "parentField": "orderId"
+      }
+     },
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "orderId",
+       "productId",
+       "qty",
+       "unitPrice"
+      ],
+      "properties": {
+       "orderId": {
+        "type": "string",
+        "x-mantle-ref": "orders"
+       },
+       "productId": {
+        "type": "string",
+        "x-mantle-ref": "products"
+       },
+       "qty": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "unitPrice": {
+        "type": "integer"
+       }
+      }
+     },
+     "fields": {
+      "orderid": "text",
+      "productid": "text",
+      "qty": "integer",
+      "unitprice": "integer"
+     },
+     "names": {
+      "orderid": "orderId",
+      "productid": "productId",
+      "qty": "qty",
+      "unitprice": "unitPrice"
+     },
+     "unique": [
+      [
+       "orderid",
+       "productid"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "orders",
+    "title": "Orders",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "owner",
+      "orderNumber",
+      "orderStatus",
+      "total"
+     ],
+     "properties": {
+      "owner": {
+       "type": "string"
+      },
+      "orderNumber": {
+       "type": "string"
+      },
+      "orderStatus": {
+       "type": "string",
+       "enum": [
+        "cart",
+        "placed",
+        "paid",
+        "shipped",
+        "cancelled"
+       ]
+      },
+      "total": {
+       "type": "integer"
+      },
+      "couponId": {
+       "type": "string",
+       "x-mantle-ref": "coupons"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [],
+    "indexes": [
+     [
+      "owner",
+      "created_at",
+      "id"
+     ],
+     [
+      "orderstatus",
+      "created_at",
+      "id"
+     ]
+    ],
+    "searchableFields": [
+     "ordernumber"
+    ],
+    "manifest": {
+     "name": "orders",
+     "title": "Orders",
+     "scope": "owner",
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "owner",
+       "orderNumber",
+       "orderStatus",
+       "total"
+      ],
+      "properties": {
+       "owner": {
+        "type": "string"
+       },
+       "orderNumber": {
+        "type": "string"
+       },
+       "orderStatus": {
+        "type": "string",
+        "enum": [
+         "cart",
+         "placed",
+         "paid",
+         "shipped",
+         "cancelled"
+        ]
+       },
+       "total": {
+        "type": "integer"
+       },
+       "couponId": {
+        "type": "string",
+        "x-mantle-ref": "coupons"
+       }
+      }
+     },
+     "fields": {
+      "owner": "text",
+      "ordernumber": "text",
+      "orderstatus": "text",
+      "total": "integer",
+      "couponid": "text"
+     },
+     "names": {
+      "owner": "owner",
+      "ordernumber": "orderNumber",
+      "orderstatus": "orderStatus",
+      "total": "total",
+      "couponid": "couponId"
+     },
+     "search": [
+      "ordernumber"
+     ],
+     "indexes": [
+      [
+       "owner",
+       "created_at",
+       "id"
+      ],
+      [
+       "orderstatus",
+       "created_at",
+       "id"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "payments",
+    "title": "Payments",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "orderId",
+      "providerRef",
+      "amount"
+     ],
+     "properties": {
+      "orderId": {
+       "type": "string",
+       "x-mantle-ref": "orders"
+      },
+      "providerRef": {
+       "type": "string"
+      },
+      "amount": {
+       "type": "integer"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "orderid"
+     ],
+     [
+      "providerref"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [],
+    "manifest": {
+     "name": "payments",
+     "title": "Payments",
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "orderId",
+       "providerRef",
+       "amount"
+      ],
+      "properties": {
+       "orderId": {
+        "type": "string",
+        "x-mantle-ref": "orders"
+       },
+       "providerRef": {
+        "type": "string"
+       },
+       "amount": {
+        "type": "integer"
+       }
+      }
+     },
+     "fields": {
+      "orderid": "text",
+      "providerref": "text",
+      "amount": "integer"
+     },
+     "names": {
+      "orderid": "orderId",
+      "providerref": "providerRef",
+      "amount": "amount"
+     },
+     "unique": [
+      [
+       "orderid"
+      ],
+      [
+       "providerref"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "product_tags",
+    "title": "Product tags",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "productId",
+      "tagId"
+     ],
+     "properties": {
+      "productId": {
+       "type": "string",
+       "x-mantle-ref": "products"
+      },
+      "tagId": {
+       "type": "string",
+       "x-mantle-ref": "tags"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "productid",
+      "tagid"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [],
+    "manifest": {
+     "name": "product_tags",
+     "title": "Product tags",
+     "uiSchema": {
+      "nav": {
+       "parentField": "productId"
+      }
+     },
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "productId",
+       "tagId"
+      ],
+      "properties": {
+       "productId": {
+        "type": "string",
+        "x-mantle-ref": "products"
+       },
+       "tagId": {
+        "type": "string",
+        "x-mantle-ref": "tags"
+       }
+      }
+     },
+     "fields": {
+      "productid": "text",
+      "tagid": "text"
+     },
+     "names": {
+      "productid": "productId",
+      "tagid": "tagId"
+     },
+     "unique": [
+      [
+       "productid",
+       "tagid"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "product_translations",
+    "title": "Product translations",
+    "lifecycle": "publishing",
+    "localized": true,
+    "translates": {
+     "parent": "products",
+     "on": "slug"
+    },
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "slug",
+      "locale",
+      "title"
+     ],
+     "properties": {
+      "slug": {
+       "type": "string"
+      },
+      "locale": {
+       "type": "string"
+      },
+      "title": {
+       "type": "string"
+      },
+      "description": {
+       "type": "string"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "slug",
+      "locale"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [],
+    "manifest": {
+     "name": "product_translations",
+     "title": "Product translations",
+     "localized": true,
+     "publishing": true,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "slug",
+       "locale",
+       "title"
+      ],
+      "properties": {
+       "slug": {
+        "type": "string"
+       },
+       "locale": {
+        "type": "string"
+       },
+       "title": {
+        "type": "string"
+       },
+       "description": {
+        "type": "string"
+       }
+      }
+     },
+     "translates": {
+      "parent": "products",
+      "on": "slug"
+     },
+     "fields": {
+      "slug": "text",
+      "locale": "text",
+      "title": "text",
+      "description": "text"
+     },
+     "names": {
+      "slug": "slug",
+      "locale": "locale",
+      "title": "title",
+      "description": "description"
+     },
+     "unique": [
+      [
+       "slug",
+       "locale"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "products",
+    "title": "Products",
+    "lifecycle": "publishing",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "slug",
+      "title",
+      "price",
+      "sellerId",
+      "categoryId"
+     ],
+     "properties": {
+      "slug": {
+       "type": "string"
+      },
+      "title": {
+       "type": "string"
+      },
+      "price": {
+       "type": "integer"
+      },
+      "sellerId": {
+       "type": "string",
+       "x-mantle-ref": "sellers"
+      },
+      "categoryId": {
+       "type": "string",
+       "x-mantle-ref": "categories"
+      },
+      "description": {
+       "type": "string"
+      }
+     }
+    },
+    "checks": [
+     {
+      "kind": "expression",
+      "label": ">",
+      "children": [
+       {
+        "kind": "value",
+        "label": "price",
+        "children": [],
+        "column": {
+         "name": "price"
+        }
+       },
+       {
+        "kind": "value",
+        "label": "0",
+        "children": []
+       }
+      ]
+     }
+    ],
+    "uniqueIndexes": [
+     [
+      "slug"
+     ]
+    ],
+    "indexes": [
+     [
+      "categoryid",
+      "created_at",
+      "id"
+     ]
+    ],
+    "searchableFields": [
+     "title",
+     "slug"
+    ],
+    "manifest": {
+     "name": "products",
+     "title": "Products",
+     "uiSchema": {
+      "nav": {
+       "parentField": "sellerId"
+      }
+     },
+     "publishing": true,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "slug",
+       "title",
+       "price",
+       "sellerId",
+       "categoryId"
+      ],
+      "properties": {
+       "slug": {
+        "type": "string"
+       },
+       "title": {
+        "type": "string"
+       },
+       "price": {
+        "type": "integer"
+       },
+       "sellerId": {
+        "type": "string",
+        "x-mantle-ref": "sellers"
+       },
+       "categoryId": {
+        "type": "string",
+        "x-mantle-ref": "categories"
+       },
+       "description": {
+        "type": "string"
+       }
+      }
+     },
+     "fields": {
+      "slug": "text",
+      "title": "text",
+      "price": "integer",
+      "sellerid": "text",
+      "categoryid": "text",
+      "description": "text"
+     },
+     "names": {
+      "slug": "slug",
+      "title": "title",
+      "price": "price",
+      "sellerid": "sellerId",
+      "categoryid": "categoryId",
+      "description": "description"
+     },
+     "search": [
+      "title",
+      "slug"
+     ],
+     "unique": [
+      [
+       "slug"
+      ]
+     ],
+     "indexes": [
+      [
+       "categoryid",
+       "created_at",
+       "id"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "profiles",
+    "title": "Member profiles",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "memberId"
+     ],
+     "properties": {
+      "memberId": {
+       "type": "string",
+       "x-mantle-ref": "members"
+      },
+      "bio": {
+       "type": "string"
+      },
+      "avatarUrl": {
+       "type": "string"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "memberid"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [],
+    "manifest": {
+     "name": "profiles",
+     "title": "Member profiles",
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "memberId"
+      ],
+      "properties": {
+       "memberId": {
+        "type": "string",
+        "x-mantle-ref": "members"
+       },
+       "bio": {
+        "type": "string"
+       },
+       "avatarUrl": {
+        "type": "string"
+       }
+      }
+     },
+     "fields": {
+      "memberid": "text",
+      "bio": "text",
+      "avatarurl": "text"
+     },
+     "names": {
+      "memberid": "memberId",
+      "bio": "bio",
+      "avatarurl": "avatarUrl"
+     },
+     "unique": [
+      [
+       "memberid"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "reviews",
+    "title": "Reviews",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "productId",
+      "memberId",
+      "stars"
+     ],
+     "properties": {
+      "productId": {
+       "type": "string",
+       "x-mantle-ref": "products"
+      },
+      "memberId": {
+       "type": "string",
+       "x-mantle-ref": "members"
+      },
+      "stars": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 5
+      },
+      "body": {
+       "type": "string"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "productid",
+      "memberid"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [
+     "body"
+    ],
+    "manifest": {
+     "name": "reviews",
+     "title": "Reviews",
+     "uiSchema": {
+      "nav": {
+       "parentField": "productId"
+      }
+     },
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "productId",
+       "memberId",
+       "stars"
+      ],
+      "properties": {
+       "productId": {
+        "type": "string",
+        "x-mantle-ref": "products"
+       },
+       "memberId": {
+        "type": "string",
+        "x-mantle-ref": "members"
+       },
+       "stars": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5
+       },
+       "body": {
+        "type": "string"
+       }
+      }
+     },
+     "fields": {
+      "productid": "text",
+      "memberid": "text",
+      "stars": "integer",
+      "body": "text"
+     },
+     "names": {
+      "productid": "productId",
+      "memberid": "memberId",
+      "stars": "stars",
+      "body": "body"
+     },
+     "search": [
+      "body"
+     ],
+     "unique": [
+      [
+       "productid",
+       "memberid"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "sellers",
+    "title": "Sellers",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "memberId",
+      "storeName"
+     ],
+     "properties": {
+      "memberId": {
+       "type": "string",
+       "x-mantle-ref": "members"
+      },
+      "storeName": {
+       "type": "string"
+      },
+      "rating": {
+       "type": "number"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "memberid"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [
+     "storename"
+    ],
+    "manifest": {
+     "name": "sellers",
+     "title": "Sellers",
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "memberId",
+       "storeName"
+      ],
+      "properties": {
+       "memberId": {
+        "type": "string",
+        "x-mantle-ref": "members"
+       },
+       "storeName": {
+        "type": "string"
+       },
+       "rating": {
+        "type": "number"
+       }
+      }
+     },
+     "fields": {
+      "memberid": "text",
+      "storename": "text",
+      "rating": "real"
+     },
+     "names": {
+      "memberid": "memberId",
+      "storename": "storeName",
+      "rating": "rating"
+     },
+     "search": [
+      "storename"
+     ],
+     "unique": [
+      [
+       "memberid"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "settings",
+    "title": "Store settings",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "key",
+      "value"
+     ],
+     "properties": {
+      "key": {
+       "type": "string"
+      },
+      "value": {
+       "type": "string"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "key"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [],
+    "manifest": {
+     "name": "settings",
+     "title": "Store settings",
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "key",
+       "value"
+      ],
+      "properties": {
+       "key": {
+        "type": "string"
+       },
+       "value": {
+        "type": "string"
+       }
+      }
+     },
+     "fields": {
+      "key": "text",
+      "value": "text"
+     },
+     "names": {
+      "key": "key",
+      "value": "value"
+     },
+     "unique": [
+      [
+       "key"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "shipments",
+    "title": "Shipments",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "orderId",
+      "warehouseId",
+      "carrier"
+     ],
+     "properties": {
+      "orderId": {
+       "type": "string",
+       "x-mantle-ref": "orders"
+      },
+      "warehouseId": {
+       "type": "string",
+       "x-mantle-ref": "warehouses"
+      },
+      "carrier": {
+       "type": "string"
+      },
+      "trackingCode": {
+       "type": "string"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [],
+    "indexes": [
+     [
+      "orderid",
+      "created_at",
+      "id"
+     ]
+    ],
+    "searchableFields": [],
+    "manifest": {
+     "name": "shipments",
+     "title": "Shipments",
+     "uiSchema": {
+      "nav": {
+       "parentField": "orderId"
+      }
+     },
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "orderId",
+       "warehouseId",
+       "carrier"
+      ],
+      "properties": {
+       "orderId": {
+        "type": "string",
+        "x-mantle-ref": "orders"
+       },
+       "warehouseId": {
+        "type": "string",
+        "x-mantle-ref": "warehouses"
+       },
+       "carrier": {
+        "type": "string"
+       },
+       "trackingCode": {
+        "type": "string"
+       }
+      }
+     },
+     "fields": {
+      "orderid": "text",
+      "warehouseid": "text",
+      "carrier": "text",
+      "trackingcode": "text"
+     },
+     "names": {
+      "orderid": "orderId",
+      "warehouseid": "warehouseId",
+      "carrier": "carrier",
+      "trackingcode": "trackingCode"
+     },
+     "indexes": [
+      [
+       "orderid",
+       "created_at",
+       "id"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "stock",
+    "title": "Stock",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "productId",
+      "warehouseId",
+      "onHand"
+     ],
+     "properties": {
+      "productId": {
+       "type": "string",
+       "x-mantle-ref": "products"
+      },
+      "warehouseId": {
+       "type": "string",
+       "x-mantle-ref": "warehouses"
+      },
+      "onHand": {
+       "type": "integer"
+      }
+     }
+    },
+    "checks": [
+     {
+      "kind": "expression",
+      "label": ">=",
+      "children": [
+       {
+        "kind": "value",
+        "label": "onhand",
+        "children": [],
+        "column": {
+         "name": "onhand"
+        }
+       },
+       {
+        "kind": "value",
+        "label": "0",
+        "children": []
+       }
+      ]
+     }
+    ],
+    "uniqueIndexes": [
+     [
+      "productid",
+      "warehouseid"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [],
+    "manifest": {
+     "name": "stock",
+     "title": "Stock",
+     "uiSchema": {
+      "nav": {
+       "parentField": "productId"
+      }
+     },
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "productId",
+       "warehouseId",
+       "onHand"
+      ],
+      "properties": {
+       "productId": {
+        "type": "string",
+        "x-mantle-ref": "products"
+       },
+       "warehouseId": {
+        "type": "string",
+        "x-mantle-ref": "warehouses"
+       },
+       "onHand": {
+        "type": "integer"
+       }
+      }
+     },
+     "fields": {
+      "productid": "text",
+      "warehouseid": "text",
+      "onhand": "integer"
+     },
+     "names": {
+      "productid": "productId",
+      "warehouseid": "warehouseId",
+      "onhand": "onHand"
+     },
+     "unique": [
+      [
+       "productid",
+       "warehouseid"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "tags",
+    "title": "Tags",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "label"
+     ],
+     "properties": {
+      "label": {
+       "type": "string"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "label"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [],
+    "manifest": {
+     "name": "tags",
+     "title": "Tags",
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "label"
+      ],
+      "properties": {
+       "label": {
+        "type": "string"
+       }
+      }
+     },
+     "fields": {
+      "label": "text"
+     },
+     "names": {
+      "label": "label"
+     },
+     "unique": [
+      [
+       "label"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "warehouses",
+    "title": "Warehouses",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "code",
+      "city"
+     ],
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "city": {
+       "type": "string"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "code"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [],
+    "manifest": {
+     "name": "warehouses",
+     "title": "Warehouses",
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "code",
+       "city"
+      ],
+      "properties": {
+       "code": {
+        "type": "string"
+       },
+       "city": {
+        "type": "string"
+       }
+      }
+     },
+     "fields": {
+      "code": "text",
+      "city": "text"
+     },
+     "names": {
+      "code": "code",
+      "city": "city"
+     },
+     "unique": [
+      [
+       "code"
+      ]
+     ]
+    }
+   }
+  ],
+  "views": []
+ },
+ "logic": {
+  "triggers": [],
+  "procedures": []
+ },
+ "interfaces": {
+  "http": [],
+  "callable": [
+   {
+    "kind": "procedure",
+    "name": "publish_products",
+    "target": "products.publish",
+    "surface": "admin",
+    "audience": "admin",
+    "title": null,
+    "description": "publish an entry in products.",
+    "input": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "expectedVersion": {
+       "type": "integer",
+       "minimum": 1
+      }
+     },
+     "required": [
+      "id",
+      "expectedVersion"
+     ],
+     "additionalProperties": false
+    },
+    "output": null,
+    "trigger": null
+   },
+   {
+    "kind": "procedure",
+    "name": "unpublish_products",
+    "target": "products.unpublish",
+    "surface": "admin",
+    "audience": "admin",
+    "title": null,
+    "description": "unpublish an entry in products.",
+    "input": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "expectedVersion": {
+       "type": "integer",
+       "minimum": 1
+      }
+     },
+     "required": [
+      "id",
+      "expectedVersion"
+     ],
+     "additionalProperties": false
+    },
+    "output": null,
+    "trigger": null
+   },
+   {
+    "kind": "procedure",
+    "name": "archive_products",
+    "target": "products.archive",
+    "surface": "admin",
+    "audience": "admin",
+    "title": null,
+    "description": "archive an entry in products.",
+    "input": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "expectedVersion": {
+       "type": "integer",
+       "minimum": 1
+      }
+     },
+     "required": [
+      "id",
+      "expectedVersion"
+     ],
+     "additionalProperties": false
+    },
+    "output": null,
+    "trigger": null
+   },
+   {
+    "kind": "procedure",
+    "name": "publish_product_translations",
+    "target": "product_translations.publish",
+    "surface": "admin",
+    "audience": "admin",
+    "title": null,
+    "description": "publish an entry in product_translations.",
+    "input": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "expectedVersion": {
+       "type": "integer",
+       "minimum": 1
+      }
+     },
+     "required": [
+      "id",
+      "expectedVersion"
+     ],
+     "additionalProperties": false
+    },
+    "output": null,
+    "trigger": null
+   },
+   {
+    "kind": "procedure",
+    "name": "unpublish_product_translations",
+    "target": "product_translations.unpublish",
+    "surface": "admin",
+    "audience": "admin",
+    "title": null,
+    "description": "unpublish an entry in product_translations.",
+    "input": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "expectedVersion": {
+       "type": "integer",
+       "minimum": 1
+      }
+     },
+     "required": [
+      "id",
+      "expectedVersion"
+     ],
+     "additionalProperties": false
+    },
+    "output": null,
+    "trigger": null
+   },
+   {
+    "kind": "procedure",
+    "name": "archive_product_translations",
+    "target": "product_translations.archive",
+    "surface": "admin",
+    "audience": "admin",
+    "title": null,
+    "description": "archive an entry in product_translations.",
+    "input": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "expectedVersion": {
+       "type": "integer",
+       "minimum": 1
+      }
+     },
+     "required": [
+      "id",
+      "expectedVersion"
+     ],
+     "additionalProperties": false
+    },
+    "output": null,
+    "trigger": null
+   }
+  ]
+ },
+ "graph": {
+  "atoms": [
+   {
+    "id": "Schema:audit_log",
+    "kind": "Schema",
+    "name": "audit_log",
+    "title": "Audit log"
+   },
+   {
+    "id": "Schema:categories",
+    "kind": "Schema",
+    "name": "categories",
+    "title": "Categories"
+   },
+   {
+    "id": "Schema:coupons",
+    "kind": "Schema",
+    "name": "coupons",
+    "title": "Coupons"
+   },
+   {
+    "id": "Schema:members",
+    "kind": "Schema",
+    "name": "members",
+    "title": "Members"
+   },
+   {
+    "id": "Schema:order_lines",
+    "kind": "Schema",
+    "name": "order_lines",
+    "title": "Order lines"
+   },
+   {
+    "id": "Schema:orders",
+    "kind": "Schema",
+    "name": "orders",
+    "title": "Orders"
+   },
+   {
+    "id": "Schema:payments",
+    "kind": "Schema",
+    "name": "payments",
+    "title": "Payments"
+   },
+   {
+    "id": "Schema:product_tags",
+    "kind": "Schema",
+    "name": "product_tags",
+    "title": "Product tags"
+   },
+   {
+    "id": "Schema:product_translations",
+    "kind": "Schema",
+    "name": "product_translations",
+    "title": "Product translations"
+   },
+   {
+    "id": "Schema:products",
+    "kind": "Schema",
+    "name": "products",
+    "title": "Products"
+   },
+   {
+    "id": "Schema:profiles",
+    "kind": "Schema",
+    "name": "profiles",
+    "title": "Member profiles"
+   },
+   {
+    "id": "Schema:reviews",
+    "kind": "Schema",
+    "name": "reviews",
+    "title": "Reviews"
+   },
+   {
+    "id": "Schema:sellers",
+    "kind": "Schema",
+    "name": "sellers",
+    "title": "Sellers"
+   },
+   {
+    "id": "Schema:settings",
+    "kind": "Schema",
+    "name": "settings",
+    "title": "Store settings"
+   },
+   {
+    "id": "Schema:shipments",
+    "kind": "Schema",
+    "name": "shipments",
+    "title": "Shipments"
+   },
+   {
+    "id": "Schema:stock",
+    "kind": "Schema",
+    "name": "stock",
+    "title": "Stock"
+   },
+   {
+    "id": "Schema:tags",
+    "kind": "Schema",
+    "name": "tags",
+    "title": "Tags"
+   },
+   {
+    "id": "Schema:warehouses",
+    "kind": "Schema",
+    "name": "warehouses",
+    "title": "Warehouses"
+   }
+  ],
+  "relations": [
+   {
+    "id": "Schema:categories:field:parentId:categories",
+    "kind": "schema-reference",
+    "sourceId": "Schema:categories",
+    "targetId": "Schema:categories",
+    "pointer": "/spec/schema/properties/parentId/x-mantle-ref",
+    "value": "categories"
+   },
+   {
+    "id": "Schema:order_lines:field:orderId:orders",
+    "kind": "schema-reference",
+    "sourceId": "Schema:order_lines",
+    "targetId": "Schema:orders",
+    "pointer": "/spec/schema/properties/orderId/x-mantle-ref",
+    "value": "orders"
+   },
+   {
+    "id": "Schema:order_lines:field:productId:products",
+    "kind": "schema-reference",
+    "sourceId": "Schema:order_lines",
+    "targetId": "Schema:products",
+    "pointer": "/spec/schema/properties/productId/x-mantle-ref",
+    "value": "products"
+   },
+   {
+    "id": "Schema:orders:field:couponId:coupons",
+    "kind": "schema-reference",
+    "sourceId": "Schema:orders",
+    "targetId": "Schema:coupons",
+    "pointer": "/spec/schema/properties/couponId/x-mantle-ref",
+    "value": "coupons"
+   },
+   {
+    "id": "Schema:payments:field:orderId:orders",
+    "kind": "schema-reference",
+    "sourceId": "Schema:payments",
+    "targetId": "Schema:orders",
+    "pointer": "/spec/schema/properties/orderId/x-mantle-ref",
+    "value": "orders"
+   },
+   {
+    "id": "Schema:product_tags:field:productId:products",
+    "kind": "schema-reference",
+    "sourceId": "Schema:product_tags",
+    "targetId": "Schema:products",
+    "pointer": "/spec/schema/properties/productId/x-mantle-ref",
+    "value": "products"
+   },
+   {
+    "id": "Schema:product_tags:field:tagId:tags",
+    "kind": "schema-reference",
+    "sourceId": "Schema:product_tags",
+    "targetId": "Schema:tags",
+    "pointer": "/spec/schema/properties/tagId/x-mantle-ref",
+    "value": "tags"
+   },
+   {
+    "id": "Schema:product_translations:translates:products",
+    "kind": "translation-parent",
+    "sourceId": "Schema:product_translations",
+    "targetId": "Schema:products",
+    "pointer": "/spec/translates/parent",
+    "value": "products"
+   },
+   {
+    "id": "Schema:products:field:categoryId:categories",
+    "kind": "schema-reference",
+    "sourceId": "Schema:products",
+    "targetId": "Schema:categories",
+    "pointer": "/spec/schema/properties/categoryId/x-mantle-ref",
+    "value": "categories"
+   },
+   {
+    "id": "Schema:products:field:sellerId:sellers",
+    "kind": "schema-reference",
+    "sourceId": "Schema:products",
+    "targetId": "Schema:sellers",
+    "pointer": "/spec/schema/properties/sellerId/x-mantle-ref",
+    "value": "sellers"
+   },
+   {
+    "id": "Schema:profiles:field:memberId:members",
+    "kind": "schema-reference",
+    "sourceId": "Schema:profiles",
+    "targetId": "Schema:members",
+    "pointer": "/spec/schema/properties/memberId/x-mantle-ref",
+    "value": "members"
+   },
+   {
+    "id": "Schema:reviews:field:memberId:members",
+    "kind": "schema-reference",
+    "sourceId": "Schema:reviews",
+    "targetId": "Schema:members",
+    "pointer": "/spec/schema/properties/memberId/x-mantle-ref",
+    "value": "members"
+   },
+   {
+    "id": "Schema:reviews:field:productId:products",
+    "kind": "schema-reference",
+    "sourceId": "Schema:reviews",
+    "targetId": "Schema:products",
+    "pointer": "/spec/schema/properties/productId/x-mantle-ref",
+    "value": "products"
+   },
+   {
+    "id": "Schema:sellers:field:memberId:members",
+    "kind": "schema-reference",
+    "sourceId": "Schema:sellers",
+    "targetId": "Schema:members",
+    "pointer": "/spec/schema/properties/memberId/x-mantle-ref",
+    "value": "members"
+   },
+   {
+    "id": "Schema:shipments:field:orderId:orders",
+    "kind": "schema-reference",
+    "sourceId": "Schema:shipments",
+    "targetId": "Schema:orders",
+    "pointer": "/spec/schema/properties/orderId/x-mantle-ref",
+    "value": "orders"
+   },
+   {
+    "id": "Schema:shipments:field:warehouseId:warehouses",
+    "kind": "schema-reference",
+    "sourceId": "Schema:shipments",
+    "targetId": "Schema:warehouses",
+    "pointer": "/spec/schema/properties/warehouseId/x-mantle-ref",
+    "value": "warehouses"
+   },
+   {
+    "id": "Schema:stock:field:productId:products",
+    "kind": "schema-reference",
+    "sourceId": "Schema:stock",
+    "targetId": "Schema:products",
+    "pointer": "/spec/schema/properties/productId/x-mantle-ref",
+    "value": "products"
+   },
+   {
+    "id": "Schema:stock:field:warehouseId:warehouses",
+    "kind": "schema-reference",
+    "sourceId": "Schema:stock",
+    "targetId": "Schema:warehouses",
+    "pointer": "/spec/schema/properties/warehouseId/x-mantle-ref",
+    "value": "warehouses"
+   }
+  ]
+ },
+ "operations": {
+  "schedules": [],
+  "ttlPolicies": [],
+  "observationAvailability": "unavailable",
+  "runs": [],
+  "latestRuns": []
+ }
+}
