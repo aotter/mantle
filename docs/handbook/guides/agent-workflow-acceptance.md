@@ -85,6 +85,18 @@ rounds below before claiming the user-facing work is done. Keep the author's
 capability map and worked call sequence out of the fresh agent's prompt: an MCP
 evaluator must discover the workflow from public tool descriptions and results.
 
+## Propose the run first
+
+Before the first round, stop and give the user the plan, then wait for a go-ahead:
+
+- each evaluator you will start: its role (`admin`, `user`, a visitor), the surfaces it uses (Admin, member pages,
+  REST, MCP, visitor pages) and the goals it is asked to finish, in the user's words;
+- the round limit (at most three) and what triggers a re-run;
+- anything the environment needs, such as a browser for a visitor or member page, so a missing one is settled now
+  rather than reported as BLOCKED later.
+
+Keep the rubric itself private: the plan names goals, never the checks an evaluator is graded on.
+
 ## Run role-only acceptance rounds until they converge
 
 The evaluator gets a role, not a task list. It works out what that role needs
@@ -300,6 +312,20 @@ reported, layer by layer; it is not done:
 | 3. Acceptance: user | verified: CONVERGED in round <n> | member pages in round <n>; MCP reused from round <m> at <revision> (page-only repair) |
 | 4. External platform | not applicable: no deployment or external host requested | |
 ```
+
+## Summarise for the user
+
+Lead the handoff with what acceptance found and fixed, so the user sees the value of the rounds:
+
+```markdown
+| Evaluator (role, surfaces) | Rounds | Found | Fixed in | Final |
+| --- | --- | --- | --- | --- |
+| admin: Admin, admin MCP | 2 | P1: approving a stale event overwrote a newer edit | `approve-event` checks the version | CONVERGED |
+| user: member pages, MCP | 1 | none | | CONVERGED |
+| visitor: public pages | 1 | P2: no link back from an event to the list | `src/routes.ts` | CONVERGED |
+```
+
+Name each finding by its effect on the user, not the code, then give the layered status below.
 
 ## Record evidence in the existing issue or handoff
 
