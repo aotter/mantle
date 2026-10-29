@@ -111,7 +111,7 @@ for (const [name, resources, fragment] of [
   refused(() => handle({ public: resources.map(r => ({ resources: [r] })) }), fragment);
 });
 
-test("App-only is for Views: a Procedure cannot be hidden from the model", async () => {
+test("appOnly is for Views: a Procedure is hidden only through its own meta.ui.visibility", async () => {
   const write: Tool<null> = { name: "public_write", surface: "public", description: "write", inputSchema: { type: "object" }, validate: raw => raw as Record<string, unknown>, run: async () => ({}) };
   refused(() => mcp<unknown, null>([...tools, write], { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [{ ...resource("ui://app/a"), appOnly: ["public_write"] }] } } }), "must be a View");
 });

@@ -34,6 +34,7 @@ const union = (scopes: readonly string[], extra: readonly string[]) => [...new S
 /** The handler for `/mcp` (public tools) and `/mcp/admin` (tools for `admin` roles); other paths are undefined. */
 export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, apps: Partial<Record<string, ReturnType<typeof linkSurface>>> = {}, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
   const allowed = options.allowedOrigins ?? [];
+  if (options.toolsPageSize !== undefined && !(Number.isInteger(options.toolsPageSize) && options.toolsPageSize > 0)) throw new TypeError("mcp: toolsPageSize must be a positive integer.");
   return draining(async (request, env, ctx) => {
     const access = options.gateway ? (await import("./host-access.js")).accessRequest(ctx, options) : undefined;
     let resolved: Caller | undefined;

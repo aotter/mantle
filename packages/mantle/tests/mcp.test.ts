@@ -395,4 +395,5 @@ test("tools/list pages with toolsPageSize and an opaque cursor bound to the cata
  expect((await call(paged,{cursor:first})).result.tools.map((t:any)=>t.name)).toEqual(['c','d']);
  for(const bad of ['nope',first.replace(/:\d+$/,':3'),first.replace(/:\d+$/,':6')]) expect((await call(paged,{cursor:bad})).error.code).toBe(-32602);
  expect((await call(mcp(table(['a','b','c','x']),{...options,toolsPageSize:2}),{cursor:first})).error.code).toBe(-32602);
+ for(const size of [0,-1,1.5]) await expect(call(mcp(table(['a']),{...options,toolsPageSize:size}))).rejects.toThrow('toolsPageSize must be a positive integer');
 });
