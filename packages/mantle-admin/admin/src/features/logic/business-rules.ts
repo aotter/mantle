@@ -6,6 +6,10 @@ import { enumOptions, moneyMinorHint } from '@aotter/mantle-ui';
 export interface BusinessRule {
   kind: 'operation' | 'case';
   statement: number;
+  /** Row rule of an operation: `row` must affect exactly one row, `set` zero or more, `read` returns rows. */
+  mode?: 'read' | 'row' | 'set';
+  /** Schema checks a write must keep; a violation rolls the batch back. */
+  checks?: string[];
   title: string;
   body: string;
   summary: string;
@@ -29,7 +33,7 @@ export function businessRules(atom: DeveloperAtom, schemas: readonly DeveloperSc
       const key = Object.keys(fields).find((key) => key.toLowerCase() === name.toLowerCase());
       return key === undefined ? undefined : fields[key];
     };
-    const fieldTitle = (name: string) => resolveLocalizedText(fieldSchema(name)?.title ?? null, language) || name;
+    const fieldTitle = (name: string) => resolveLocalizedText(fieldSchema(name)?.title ?? null, language) || Object.keys(fields).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
     const unknown = zh ? '此條件尚無業務翻譯，請查看程式依據' : 'Business wording unavailable; inspect source';
     // Each SELECT has its own relation scope. Aliases may shadow outer aliases.
     type Scope = Map<string, DeveloperSchemaModel | undefined>;
@@ -149,7 +153,7 @@ ${children.join('\n')}`;
     const conditions = where?.children[0] ? expr(where.children[0]) : '';
     const assignments = outputs.map((o) => `${fieldTitle(o.label)} ← ${o.children[0]?.kind === 'case' ? zh ? '依下方規則決定' : 'Chosen by the rule below' : expr(o.children[0] ?? o, o.label, assignmentScope)}`);
     const checks = (model?.checks ?? []).map((c) => expr(c, undefined, new Map(model ? [[model.name.toLowerCase(), model]] : [])));
-    const rules: BusinessRule[] = [{ kind: 'operation', statement: statement.index, summary, conditions, assignments, title: `${operation} ${name || (zh ? '資料' : 'data')}`, body: [conditions, assignments.join('\n'), checks.length ? `${zh ? '資料限制（不成立時整批不保存；空值依 SQL 規則）' : 'Data constraints (failure rolls back the batch)'}：\n${checks.join('\n')}` : '', statement.mode === 'row' ? (zh ? '必須符合一筆資料；否則整批不寫入' : 'Exactly one affected row; otherwise the batch rolls back') : statement.mode === 'set' ? (zh ? '可能符合多筆；零筆符合時仍繼續' : 'May affect multiple rows; zero matches still continues') : ''].filter(Boolean).join('\n') }];
+    const rules: BusinessRule[] = [{ kind: 'operation', statement: statement.index, mode: statement.mode, checks, summary, conditions, assignments, title: `${operation} ${name || (zh ? '資料' : 'data')}`, body: [conditions, assignments.join('\n'), checks.length ? `${zh ? '資料限制（不成立時整批不保存；空值依 SQL 規則）' : 'Data constraints (failure rolls back the batch)'}：\n${checks.join('\n')}` : '', statement.mode === 'row' ? (zh ? '必須符合一筆資料；否則整批不寫入' : 'Exactly one affected row; otherwise the batch rolls back') : statement.mode === 'set' ? (zh ? '可能符合多筆；零筆符合時仍繼續' : 'May affect multiple rows; zero matches still continues') : ''].filter(Boolean).join('\n') }];
     if (model && statement.mode === 'row' && statement.operation === 'UPDATE' && filter) {
       const predicates = (n: SqlLogicNode): SqlLogicNode[] => n.kind === 'predicate' && n.label.startsWith('AND ·') ? n.children.flatMap(predicates) : [n];
       rules[0]!.transitions = outputs.flatMap((output) => {

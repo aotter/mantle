@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { businessRules } from './business-rules';
+import { businessRules, type BusinessRule } from './business-rules';
 import { businessFlow } from './business-flow';
 import type { DeveloperAtom, DeveloperSchemaModel, SqlLogicNode } from '../../lib/types';
 
@@ -13,16 +13,16 @@ it('derives business names and boundaries from arbitrary manifest fields without
   expect(rules[1]!.body).toContain('數量 小於 7');
   expect(rules[1]!.body).toContain('保留');
   expect(rules[1]!.body).toContain('放行');
-  const flow = businessFlow(atom.id, atom.title as string, rules, true);
-  expect(flow.nodes.filter((n) => n.data.kind === 'condition').map((n) => n.data.title)).toEqual(['數量 小於 7']);
-  expect(flow.nodes.filter((n) => n.data.kind === 'result').map((n) => n.data.title)).toEqual(['保留', '放行']);
-  expect(flow.edges.filter((e) => e.sourceHandle === 'no').map((e) => e.label)).toEqual(['未成立／未知']);
-  expect(flow.edges.filter((e) => e.target.includes(':operation:')).every((e) => e.style?.strokeDasharray)).toBe(true);
-  expect(flow.nodes.every((n) => n.parentId === atom.id)).toBe(true);
-  const results = flow.nodes.filter((n) => n.data.kind === 'result');
-  expect(results[0]!.position.y).toBeLessThan(results[1]!.position.y);
-  const multi = businessFlow(atom.id, '任意規則', [rules[0]!, { ...rules[1]!, branches: [...rules[1]!.branches!, { condition: '數量 等於 9', value: '放行' }] }], true);
-  expect(multi.edges.some((e) => e.source.endsWith(':condition:0') && e.sourceHandle === 'no' && e.target.endsWith(':condition:1'))).toBe(true);
+  const flow = businessFlow(atom.id, rules, true);
+  const caseCards = flow.nodes.filter((node) => node.type === 'logicCase').map((node) => (node.data as { rule: BusinessRule }).rule);
+  expect(caseCards.map((rule) => rule.branches!.map((branch) => branch.condition))).toEqual([['數量 小於 7']]);
+  expect(caseCards.map((rule) => [...rule.branches!.map((branch) => branch.value), rule.otherwise])).toEqual([['保留', '放行']]);
+  // The CASE feeds its statement through a dashed value edge; a row rule can roll the batch back.
+  expect(flow.edges.filter((e) => e.source.includes(':case:')).every((e) => e.target.includes(':operation:') && e.style?.strokeDasharray)).toBe(true);
+  expect(flow.edges.some((e) => e.target === `Rule:${atom.id}:rollback`)).toBe(true);
+  expect(flow.nodes.filter((node) => node.type === 'logicStep' || node.type === 'logicCase').every((node) => node.parentId === `Rule:${atom.id}:tx`)).toBe(true);
+  const multi = businessFlow(atom.id, [rules[0]!, { ...rules[1]!, branches: [...rules[1]!.branches!, { condition: '數量 等於 9', value: '放行' }] }], true);
+  expect(multi.nodes.filter((node) => node.type === 'logicCase').map((node) => (node.data as { rule: BusinessRule }).rule.branches!.length)).toEqual([2]);
   expect(rules[1]!.body).not.toMatch(/主管|新臺幣|核准/);
   expect(businessRules(atom, [], 'zh-TW')[1]!.body).not.toContain('保留');
   expect(businessRules({ ...atom, handler: { kind: 'ref', ref: 'opaque' } }, schemas, 'zh-TW')).toEqual([]);
@@ -46,9 +46,9 @@ it('renders CASE assigned by INSERT VALUES and INSERT SELECT using positional co
     expect(rules.map(rule => rule.title)).toEqual(['新增 請購單', '決定「審核狀態」']);
     expect(rules[1]!.branches).toEqual([{ condition: '本次輸入「請購金額」 大於 10000', value: '待審核' }]);
     expect(rules[1]!.otherwise).toBe('已核准');
-    const flow = businessFlow(atom.id, '提交', rules, true);
-    expect(flow.nodes.filter(node => node.data.kind === 'condition')).toHaveLength(1);
-    expect(flow.nodes.filter(node => node.data.kind === 'result').map(node => node.data.title)).toEqual(['待審核', '已核准']);
+    const flow = businessFlow(atom.id, rules, true);
+    const cases = flow.nodes.filter(node => node.type === 'logicCase').map(node => (node.data as { rule: BusinessRule }).rule);
+    expect(cases.map(rule => [...rule.branches!.map(branch => branch.value), rule.otherwise])).toEqual([['待審核', '已核准']]);
     if (source.label === 'SELECT') {
       const left = decision.children[0]!.children[0]!.children[0]!.children[0]!;
       left.label = 'r.totalamount'; left.column = { name: 'totalamount', relation: 'r' };
