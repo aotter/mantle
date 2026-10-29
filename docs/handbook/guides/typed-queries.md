@@ -11,6 +11,18 @@ description: Choose Store for writes and simple lookups; declare internal Views 
 
 Never write raw SQL to Mantle collections: it bypasses scope, TTL, publishing and system-column rules. The Store applies row rules but does not check a View's or Procedure's `requires`; authorize your handler before using it.
 
+## Adopt Mantle in an existing application
+
+Keep the application's router, database handle, identity and frontend; declare only the Schemas and operations you
+adopt and import their `views/<encoded-name>.ts` or `procedures/<encoded-name>.ts`. Bun.SQL and postgres.js fit
+directly; node-postgres needs an [adapter](postgres-adapters.md). Resolve one verified Caller per request, with the
+shared cookie-session origin check on writes ([authentication](../cloudflare/authentication.md)). No Admin, auth or
+surface module is required for direct queries.
+
+Existing tables need an explicit migration into the declared storage shape, including system columns and constraints;
+never apply the initial `schema.sql` over an occupied database. Rehearse the migration on a copy, keep a rollback, and
+test scope, TTL, publication, OCC and persisted state with the application's own identity and tests.
+
 ## Declare an internal View
 
 Save this as `manifests/tickets.yaml`:

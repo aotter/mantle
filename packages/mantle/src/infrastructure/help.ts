@@ -22,11 +22,9 @@ export function topics(root = docsRoot()): Topic[] {
   const unlisted = (readdirSync(resolve(root, "handbook"), { recursive: true }) as string[]).filter(path => path.endsWith(".md")).sort()
     .map(path => resolve(root, "handbook", path)).filter(file => !listed.has(file))
     .map(file => ({ name: relative(resolve(root, "handbook"), file).replaceAll("\\", "/").slice(0, -3), title: readFileSync(file, "utf8").match(/^# (.+)$/m)?.[1] ?? basename(file), file, group: "More pages" }));
-  const skills = (existsSync(resolve(root, "skills")) ? readdirSync(resolve(root, "skills")) : []).filter(name => existsSync(resolve(root, "skills", name, "SKILL.md")))
-    .map(name => ({ name: `skills/${name}`, title: `Package skill: ${name}`, file: resolve(root, "skills", name, "SKILL.md"), group: "Package skills" }));
   const examples = resolve(root, "examples");
   const shipped = readdirSync(examples, { withFileTypes: true }).filter(entry => entry.isDirectory() && existsSync(resolve(examples, entry.name, "README.md")));
-  return [...pages, ...unlisted, ...skills, { name: "examples", title: "Examples and how to combine them", file: resolve(examples, "README.md"), group: "Examples" },
+  return [...pages, ...unlisted, { name: "examples", title: "Examples and how to combine them", file: resolve(examples, "README.md"), group: "Examples" },
     ...shipped.map(entry => ({ name: `examples/${entry.name}`, title: `Example: ${entry.name}`, file: resolve(examples, entry.name, "README.md"), group: "Examples" }))];
 }
 

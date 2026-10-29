@@ -418,3 +418,9 @@ list manifest tools; its native media operations remain REST-backed.
   deployment. Hosted-service MCP connections, packers and lifecycle instructions
   are distributed separately; earlier Cloud-helper distribution text is historical.
   Generic platform adapters and SDK contracts remain public.
+
+- **2026-10-29, one consumer skill, no package skills (#1886).** Decision 13's two skill distributions are reduced to
+  one: the plugin's `mantle` skill, which routes to `mantle help` and holds no contract, version or workflow detail. The
+  package skills under `docs/skills/` are removed; their content lives once in the handbook that `mantle help` prints
+  (performance, deploy, media clean-up, upgrade, adoption in an existing app). The skill no longer needs to match the
+  SDK version, so installation examples are version-neutral. `scripts/check-skills.mjs` enforces the single skill.

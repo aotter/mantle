@@ -1,97 +1,55 @@
 ---
-description: Install the Mantle agent plugin or its one skill, hand off to the installed package's own docs, and diagnose missing or stale instructions.
+description: Install the Mantle agent skill, hand off to the installed package's `mantle help`, and diagnose missing or stale instructions.
 ---
 # Install and verify agent instructions
 
-Two separate things are installed: the agent's `mantle` skill and the
-application's `@aotter/mantle` package. Installing one does not install the
-other, and the installed package is always the authority for the version it
-carries.
+Two separate things are installed: the agent's `mantle` skill and the application's `@aotter/mantle` package. The skill
+holds no contract and does not depend on the SDK version: it sends the agent to `mantle help`, which prints the docs
+shipped inside the installed package. So the skill can come from the latest repository while the application pins any
+version.
 
 ## 1. Install the `mantle` skill
 
-The Mantle plugin carries one OSS authoring skill, `mantle`, and local
-acceptance references. It does not configure a hosted-service connection.
-Install from the Git tag matching the exact SDK version you selected (currently
-`v0.2.1-alpha.2`). Pin the tag to keep instructions aligned with the application's
-SDK. A skill install does not upgrade the application's SDK.
-
-For Codex, pin the marketplace checkout:
-
-```sh
-codex plugin marketplace add aotter/mantle --ref v0.2.1-alpha.2
-codex plugin add mantle@mantle
-```
-
-For Claude Code, first clone the release into a directory you will keep:
-
-```sh
-git clone --depth 1 --branch v0.2.1-alpha.2 https://github.com/aotter/mantle.git mantle-plugin
-```
-
-Then, in Claude Code, use that checkout's absolute path:
-
-```text
-/plugin marketplace add /absolute/path/to/mantle-plugin
-/plugin install mantle@mantle
-```
-
-Cursor and GitHub Copilot use their plugin manifests from the same tagged
-checkout. Without a plugin host, install only the consumer skill by name:
+Any agent that reads skills:
 
 ```sh
 npx skills add aotter/mantle@mantle
 ```
 
-Without a version it follows `main`, the latest stable release. To match the
-application's SDK exactly, add its release tag: `npx skills add aotter/mantle#v0.2.1-alpha.2@mantle`.
-
-When upgrading the SDK, update the marketplace ref or local tagged checkout and
-refresh/reinstall the plugin using the host's native workflow. Verify the loaded
-manifest version and skill source. Do not reset a checkout containing local edits.
-
-Read the path the installer prints (for project-local Codex,
-`.agents/skills/mantle/SKILL.md`). The skill installs no SDK, creates no
-project and copies no handbook.
-
-## 2. Install the SDK, then read its own docs
-
-Use the version the project already pins. For a new project, install this
-handbook's version exactly. 0.2.1-alpha.2 is a prerelease; stable 0.2.0 remains the
-production line, and its own tagged handbook describes it.
+The explicit name excludes the repository's maintainer skills. As a plugin, which carries the same one skill and no
+hosted-service connection:
 
 ```sh
-pnpm add --save-exact @aotter/mantle@0.2.1-alpha.2
+codex plugin marketplace add aotter/mantle
+codex plugin add mantle@mantle
 ```
-
-Add optional `@aotter/mantle-ui@0.2.1-alpha.2` and `@aotter/mantle-admin@0.2.1-alpha.2` only
-when the selected surfaces need them. Every selected `@aotter/mantle*` package
-stays at the same exact version. Read, from the application:
 
 ```text
-node_modules/@aotter/mantle/README.md
-node_modules/@aotter/mantle/docs/handbook/start/overview.md
-node_modules/@aotter/mantle/docs/handbook/reference/features.md
-node_modules/@aotter/mantle/docs/skills/<workflow>/SKILL.md
+/plugin marketplace add aotter/mantle
+/plugin install mantle@mantle
 ```
 
-These ship in the npm tarball and match the installed code. Prefer them over
-the skill's GitHub copy and over any online handbook.
+Cursor and GitHub Copilot read their plugin manifests from the same repository. The skill installs no SDK, creates no
+project and copies no handbook.
 
-| Package skill | Read it when |
-|---|---|
-| `docs/skills/develop/SKILL.md` | changing manifests, handlers, the service or its surfaces |
-| `docs/skills/integrate/SKILL.md` | adding Mantle to an existing application |
-| `docs/skills/update/SKILL.md` | upgrading `@aotter/mantle`, including from 0.1.x |
-| `docs/skills/provision/SKILL.md` | deploying, with production sign-in |
-| `docs/skills/media-gc/SKILL.md` | auditing or removing stale R2 uploads |
-| `docs/skills/performance/SKILL.md` | after acceptance converges, or when a page, first request or query is slow |
+## 2. Install the SDK and read its docs
 
-0.2.0 has no `mantle skills` command: nothing is copied into the project.
-An agent reads these files from `node_modules` when the task calls for them.
+Use the version the project already pins. For a new project, pick one exact version from
+[Releases](../releases/index.md) (only plain `X.Y.Z` versions are for production) and pin every selected
+`@aotter/mantle*` package to it:
+
+```sh
+pnpm add --save-exact @aotter/mantle@<version>
+npx mantle help
+```
+
+`mantle help` prints the installed version's entry page; prefer it over any online copy of this handbook.
 
 ## 3. Verify the application
 
-Run the app's exact generation command with `--check`, typecheck, implement every printed handler and typecheck again. Test actual routes and persisted state. With selected Admin, mount `entries(bindings.schemas, bindings.adapter)` and serve assets separately. Verify member/admin OTP, row visibility and OCC. Installing a skill proves none of these flows.
+Run the app's exact generation command with `--check`, typecheck, implement every printed handler and typecheck again.
+Test actual routes and persisted state, then run acceptance as the entry page describes. Installing a skill proves none
+of these flows.
 
-If packaged docs are missing, reinstall the SDK version pinned by the app. If a feature differs from an online page, read the installed docs rather than assuming compatibility.
+If `mantle help` reports missing docs, reinstall the SDK version the app pins. If a feature differs from an online page,
+the installed docs win.

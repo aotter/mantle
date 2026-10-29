@@ -86,7 +86,9 @@ source/origin guard is not a protocol implementation.
 
 Applications own domain components and build entries. A frontend MCP App uses its
 own React entry, official ext-apps and optionally mantle-ui, registered through
-Core's generic resources. It needs no Admin package or Admin session. See the
+Core's generic resources. It needs no Admin package or Admin session. Build it
+with `App` from `@modelcontextprotocol/ext-apps`: register `ontoolinput`/`ontoolresult` before `connect()` and use
+`callServerTool` for host-proxied calls; never write a second `postMessage` bridge beside the official client. See the
 [standalone frontend example](../../examples/frontend-mcp-app/README.md) for a
 small owner-scoped example. `public` names the frontend endpoint, not anonymous
 access: use the application's verified Caller and generated authorization rules.

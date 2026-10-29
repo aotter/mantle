@@ -73,3 +73,34 @@ reconciliation and retry id.
 Admin's `media` option takes a `MediaStorage` value, so build it where `env` is available (for example once per
 Worker in the fetch handler). Uploads use presigned S3 PUT URLs: `wrangler dev --local` has an R2 binding but no S3
 endpoint, so test the upload flow against a real bucket; local tests can cover everything up to the signed URL.
+
+## Clean up stale uploads
+
+An upload that was created but never committed leaves objects under `uploads/`. Cleaning them up is an operator task:
+audit by default, and delete only the exact objects the user approves for that exact account and bucket. Create no
+Worker, Cron Trigger, lifecycle rule, table or script for it, and never create, request or store credentials.
+
+**Layout.** `POST /admin/api/media/uploads` issues presigned PUT URLs (15 minutes) for
+`uploads/<purpose>/<group>/<role>.<ext>`. Commit copies each checked object to `committed/<group>/<attempt>/<role>.<ext>`
+with `committedAt` metadata and removes the upload keys after the database commit; a rejected group also removes them.
+An old upload key may be leftover cleanup from a successful or uncertain commit, so it is not evidence that the media row
+is absent. Objects outside `uploads/` are never candidates; attempt copies under `committed/` are reconciled with live
+database references separately, under their own authorization.
+
+**Preflight.** Resolve the bucket `r2MediaStorage` uses and the purposes in `siteDefaults.media.purposes` from
+`wrangler.jsonc` and the app entry. Confirm the exact account and bucket with the user; when either is ambiguous, ask,
+never match by name. Stop when the app passes no `r2MediaStorage`, declares no purpose, or the connected account lacks
+List/Delete Objects access.
+
+**Audit.** For each declared purpose, page through `uploads/<purpose>/` until the listing is not truncated. A candidate
+is more than 24 hours old, has no `committedAt`, and matches
+`uploads/<purpose>/<group>/(primary|alternate|fallback).(png|jpg|webp|avif|gif|bin)` with a declared purpose and a
+`<group>` of letters, digits, `_` or `-`. Skip everything else (committed, unknown prefix, malformed, ambiguous) and
+delete single variants, never a whole group. Report the account, bucket, prefixes, UTC cutoff, candidate object and
+group counts, bytes, skipped count, and a SHA-256 digest of the sorted `key + etag` set; print no keys, group ids,
+filenames, URLs or secrets. A page truncated without a cursor stops the run: never delete from a partial audit.
+
+**Apply.** After explicit confirmation of the account, bucket, cutoff, count, bytes and digest, re-run the audit with the
+same cutoff and stop if anything changed. Delete exact keys, at most 1,000 per request, and never send a `prefix`: an
+empty prefix can empty the bucket. Do not retry failed keys automatically. Re-list each prefix and report whether the run
+was audit-only or applied, the before/after counts and bytes, and redacted error codes.
