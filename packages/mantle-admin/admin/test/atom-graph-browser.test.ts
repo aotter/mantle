@@ -57,25 +57,26 @@ it("fits the whole system wiring graph on narrow and short canvases", async () =
   };
   try {
     const cases = [
-      { graph: wideSystemGraph(), audiences: 5, viewport: { width: 375, height: 812 } },
-      { graph: tallSystemGraph(), audiences: 1, viewport: { width: 740, height: 360 } },
+      { graph: wideSystemGraph(), columns: 4, viewport: { width: 375, height: 812 } },
+      { graph: tallSystemGraph(), columns: 3, viewport: { width: 740, height: 360 } },
       // needs a zoom far below any fixed floor (#1666 review: 431 of 1002 nodes outside at 0.02)
-      { graph: tallSystemGraph(500), audiences: 1, viewport: { width: 740, height: 360 }, zoomIn: false },
+      { graph: tallSystemGraph(500), columns: 3, viewport: { width: 740, height: 360 }, zoomIn: false },
     ];
-    for (const { graph, audiences, viewport, zoomIn = true } of cases) {
+    for (const { graph, columns, viewport, zoomIn = true } of cases) {
       snapshot = { dataModel: { schemas: [], views: [] }, logic: { triggers: [], procedures: [] }, interfaces: { http: [], callable: [] }, graph };
       const page = await browser.newPage({ viewport });
       page.setDefaultTimeout(15_000);
       await page.goto(`${origin}/admin/dev`);
       await page.locator(".react-flow__node").first().waitFor();
-      const nodes = graph.atoms.length + audiences; // atoms plus one group node per audience
+      const nodes = graph.atoms.length + columns; // atoms plus one header per column
       expect(await settled(page), `initial ${viewport.width}x${viewport.height}`).toMatchObject({ nodes, outside: 0 });
       await page.locator(".react-flow__controls-fitview").click();
       expect(await settled(page), `Fit View ${viewport.width}x${viewport.height}`).toMatchObject({ nodes, outside: 0 });
       await page.locator(".react-flow__controls-button").last().click(); // automatic layout
       expect(await settled(page), `layout ${viewport.width}x${viewport.height}`).toMatchObject({ nodes, outside: 0 });
       if (zoomIn) {
-        for (let i = 0; i < 12; i += 1) await page.locator(".react-flow__controls-zoomin").click();
+        // up to 12 steps; the compact wiring cards can reach the maximum zoom sooner, which disables the button
+        for (let i = 0; i < 12 && await page.locator(".react-flow__controls-zoomin").isEnabled(); i += 1) await page.locator(".react-flow__controls-zoomin").click();
         expect((await settled(page)).zoom).toBeGreaterThanOrEqual(0.25);
       }
       await page.close();

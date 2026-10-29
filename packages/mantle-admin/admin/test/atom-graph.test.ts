@@ -110,7 +110,7 @@ describe("flattenSchemaFields", () => {
 });
 
 describe("layoutComponents", () => {
-  it("places read and command surfaces before procedures and schemas", () => {
+  it("places entry points, Procedures, Schemas and Views in columns left to right", () => {
     const graph: DeveloperConsoleSnapshot["graph"] = {
       atoms: [
         { id: "Trigger:start", kind: "Trigger", name: "start", title: null },
@@ -126,12 +126,12 @@ describe("layoutComponents", () => {
 
     const positions = layoutComponents(graph);
     expect(positions.size).toBe(4);
-    expect(positions.get("Trigger:start")!.y).toBeLessThan(positions.get("Procedure:run")!.y);
-    expect(positions.get("Procedure:run")!.y).toBeLessThan(positions.get("Schema:records")!.y);
-    expect(positions.get("View:standalone")!.y).toBeLessThan(positions.get("Schema:records")!.y);
+    expect(positions.get("Trigger:start")!.x).toBeLessThan(positions.get("Procedure:run")!.x);
+    expect(positions.get("Procedure:run")!.x).toBeLessThan(positions.get("Schema:records")!.x);
+    expect(positions.get("Schema:records")!.x).toBeLessThan(positions.get("View:standalone")!.x);
   });
 
-  it("keeps independent chains vertically aligned", () => {
+  it("keeps each chain on one row", () => {
     const graph: DeveloperConsoleSnapshot["graph"] = {
       atoms: [
         { id: "Trigger:first", kind: "Trigger", name: "first", title: null },
@@ -150,27 +150,21 @@ describe("layoutComponents", () => {
     };
 
     const positions = layoutComponents(graph);
-    expect(positions.get("Procedure:first")!.x).toBe(positions.get("Trigger:first")!.x);
-    expect(positions.get("Schema:first")!.x).toBe(positions.get("Procedure:first")!.x);
-    expect(positions.get("Procedure:second")!.x).toBe(positions.get("Trigger:second")!.x);
-    expect(positions.get("Schema:second")!.x).toBe(positions.get("Procedure:second")!.x);
+    expect(positions.get("Procedure:first")!.y).toBe(positions.get("Trigger:first")!.y);
+    expect(positions.get("Schema:first")!.y).toBe(positions.get("Procedure:first")!.y);
+    expect(positions.get("Procedure:second")!.y).toBe(positions.get("Trigger:second")!.y);
+    expect(positions.get("Schema:second")!.y).toBe(positions.get("Procedure:second")!.y);
   });
 
-  it("packs a wide graph, internal Procedures included, inside the audience surface span (#1666)", () => {
+  it("lays out a wide graph, internal Procedures included, without overlaps and one column per kind (#1666)", () => {
     const graph = wideSystemGraph();
     const positions = layoutComponents(graph);
     const rects = graph.atoms.map(({ id, kind }) => ({ id, kind, ...positions.get(id)! }));
     expect(rects.every(({ x, y }) => Number.isFinite(x) && Number.isFinite(y))).toBe(true);
     for (const a of rects) for (const b of rects) {
-      if (a.id < b.id) expect(Math.abs(a.x - b.x) < 220 && Math.abs(a.y - b.y) < 88, `${a.id} overlaps ${b.id}`).toBe(false);
+      if (a.id < b.id) expect(Math.abs(a.x - b.x) < 220 && Math.abs(a.y - b.y) < 44, `${a.id} overlaps ${b.id}`).toBe(false);
     }
-    const surface = rects.filter(({ kind }) => kind === "Trigger" || kind === "View");
-    const left = Math.min(...surface.map(({ x }) => x)) - 16;
-    const right = Math.max(Math.max(...surface.map(({ x }) => x + 220)) + 16, left + 7 * 244 - 24);
-    for (const { id, x } of rects.filter(({ kind }) => kind === "Procedure" || kind === "Schema")) {
-      expect(x, id).toBeGreaterThanOrEqual(left);
-      expect(x + 220, id).toBeLessThanOrEqual(right);
-    }
+    for (const kind of ["Trigger", "Procedure", "Schema", "View"] as const) expect(new Set(rects.filter((rect) => rect.kind === kind).map(({ x }) => x)).size, kind).toBe(1);
   });
 
   it("traces a schema through its command upstream", () => {

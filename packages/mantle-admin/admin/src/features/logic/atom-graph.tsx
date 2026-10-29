@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Database, Info, LayoutGrid, Workflow, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Database, Eye, Info, LayoutGrid, Workflow, X, Zap } from "lucide-react";
 import {
   BaseEdge,
   Background,
@@ -7,9 +7,12 @@ import {
   ControlButton,
   Controls,
   EdgeLabelRenderer,
+  Handle,
+  MiniMap,
   MarkerType,
   Position,
   ReactFlow,
+  getBezierPath,
   getSmoothStepPath,
   type Edge,
   type EdgeProps,
@@ -51,21 +54,13 @@ export const atomKindTone = {
   Trigger: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
 } as const;
 
-const atomKindNodeTone = {
-  Schema: "!border-blue-400/70 [&.selected]:!border-blue-500 [&.selected]:!ring-2 [&.selected]:!ring-blue-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(59,130,246,0.65)] dark:[&.selected]:!border-blue-300 dark:[&.selected]:!ring-blue-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(96,165,250,0.8)]",
-  View: "!border-violet-400/70 [&.selected]:!border-violet-500 [&.selected]:!ring-2 [&.selected]:!ring-violet-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(139,92,246,0.65)] dark:[&.selected]:!border-violet-300 dark:[&.selected]:!ring-violet-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(167,139,250,0.8)]",
-  Procedure: "!border-amber-400/70 [&.selected]:!border-amber-500 [&.selected]:!ring-2 [&.selected]:!ring-amber-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(245,158,11,0.65)] dark:[&.selected]:!border-amber-300 dark:[&.selected]:!ring-amber-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(251,191,36,0.8)]",
-  Trigger: "!border-rose-400/70 [&.selected]:!border-rose-500 [&.selected]:!ring-2 [&.selected]:!ring-rose-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(244,63,94,0.65)] dark:[&.selected]:!border-rose-300 dark:[&.selected]:!ring-rose-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(251,113,133,0.8)]",
-} as const;
-
 const audiences = ["public", "members", "admin", "system", "api-clients"] as const satisfies readonly DeveloperAudience[];
 
 export type ManifestGraphEdge = Edge<{ kind: DeveloperRelationKind; label: string; opacity: number }, "manifest">;
 type FocusSlice = { startId: string; nodeIds: Set<string>; relationIds: Set<string> };
-type AudienceGroupGraphNode = Node<{ audience: DeveloperAudience; count: number; language: AdminLanguage }, "audience">;
 
-export const manifestEdgeTypes = { manifest: ManifestEdge } satisfies EdgeTypes;
-const nodeTypes = { audience: AudienceGroupNode, businessStep: BusinessStepNode } satisfies NodeTypes;
+export const manifestEdgeTypes = { manifest: ManifestEdge, wire: WireEdge } satisfies EdgeTypes;
+const nodeTypes = { atom: AtomNode, column: ColumnNode, businessStep: BusinessStepNode } satisfies NodeTypes;
 export const graphCanvasClassName = "bg-background [--graph-inactive-filter:none] [--graph-inactive-opacity:0.16] dark:[--graph-inactive-filter:brightness(0.42)_saturate(0.2)] dark:[--graph-inactive-opacity:1]";
 
 export function GraphControls({ onRelayout }: { onRelayout: () => void }): React.ReactElement {
@@ -127,17 +122,6 @@ function AudienceBadge({ language, audience, prominent = false }: { language: Ad
         <TooltipContent>{description}</TooltipContent>
       </Tooltip>
     </span>
-  );
-}
-
-function AudienceGroupNode({ data }: NodeProps<AudienceGroupGraphNode>): React.ReactElement {
-  return (
-    <section className="pointer-events-none h-full w-full overflow-hidden rounded-2xl border-2 border-blue-200 bg-blue-50 text-slate-950 shadow-sm dark:border-slate-600 dark:bg-[#111d35] dark:text-slate-50">
-      <header className="flex h-12 items-center justify-between border-b border-blue-200 bg-blue-100 px-4 dark:border-slate-600 dark:bg-[#172845]">
-        <AudienceBadge language={data.language} audience={data.audience} prominent />
-        <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 font-mono text-sm font-bold text-slate-700 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">{data.count}</span>
-      </header>
-    </section>
   );
 }
 
@@ -343,7 +327,7 @@ export function AtomGraph({
     >
       <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--border)" />
       <GraphControls onRelayout={relayout} />
-
+      {business ? null : <MiniMap pannable zoomable position="bottom-left" className="!mb-3 !ml-14 hidden overflow-hidden rounded-lg border shadow-md sm:block" style={{ width: 160, height: 110 }} nodeColor={(node) => node.type === "atom" ? wiringKindColor[(node.data as { atom: DeveloperAtom }).atom.kind] : "transparent"} />}
     </ReactFlow>
     </div>
       {selected && showDetails ? <div ref={hudRef} onKeyDown={(event) => { if (event.key === "Escape" && hudRef.current?.contains(event.target as HTMLElement)) setShowDetails(false); }} className="absolute inset-y-0 right-0 z-20 w-[min(24rem,calc(100%-1rem))] border-l bg-background shadow-xl md:relative md:w-[24rem] md:max-w-[50%] md:shrink-0 md:shadow-none"><GraphHud key={selected.id} atom={selected} schemas={schemas} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={() => setShowDetails(false)} onSelect={moveAlongTrace} onOpen={onOpen} /></div> : null}
@@ -356,17 +340,16 @@ function layoutGraph(
   graph: DeveloperConsoleSnapshot["graph"],
   language: AdminLanguage,
 ): { nodes: Node[]; edges: Edge[] } {
-  const { positions, groups } = layoutTopDown(graph);
-
+  const { positions, columns } = layoutColumns(graph);
+  const column = new Map(graph.atoms.map(({ id, kind }) => [id, wiringColumn[kind]]));
   return {
     nodes: [
-      ...groups.map((group) => ({
-        id: `Audience:${group.audience}`,
-        type: "audience",
-        position: { x: group.x, y: group.y },
-        data: { audience: group.audience, count: group.count, language },
-        className: "pointer-events-none !border-0 !bg-transparent !p-0 !shadow-none",
-        style: { width: group.width, height: group.height },
+      ...columns.map(({ kind, x, count }) => ({
+        id: `Column:${kind}`,
+        type: "column",
+        position: { x, y: -56 },
+        data: { label: t(language, `developer.wiring.column.${kind.toLowerCase() as "trigger" | "procedure" | "schema" | "view"}`), count },
+        style: { width: wiringNode.width, height: 32 },
         selectable: false,
         draggable: false,
         connectable: false,
@@ -374,47 +357,78 @@ function layoutGraph(
         zIndex: -1,
       } satisfies Node)),
       ...graph.atoms.map((atom) => {
-      const position = positions.get(atom.id) ?? { x: 0, y: 0 };
-      const target = graph.relations.find((r) => r.kind === 'trigger-target' && r.sourceId === atom.id);
-      const targetAtom = target ? graph.atoms.find((a) => a.id === target.targetId) : undefined;
-      const targetTitle = targetAtom ? resolveLocalizedText(targetAtom.title, language) || targetAtom.name : null;
-      const title = resolveLocalizedText(atom.title, language) || (atom.kind === 'Trigger' && targetTitle ? `${targetTitle} · ${atom.transport?.toUpperCase() ?? atomKindLabel(language, atom.kind)}` : null);
-      return {
-        id: atom.id,
-        position,
-        sourcePosition: Position.Bottom,
-        targetPosition: Position.Top,
-        data: {
-          label: (
-            <div className="min-w-0 space-y-1 text-start">
-              <div className="flex items-center gap-1.5">
-                <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atomKindLabel(language, atom.kind)}</span>
-                {atom.transport ? <span className="inline-flex rounded border bg-muted px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{atom.transport}</span> : null}
-              </div>
-              <div className="truncate text-sm font-semibold">{title || atom.name}</div>
-              {atom.description ? <div className="line-clamp-1 text-xs text-foreground/80">{resolveLocalizedText(atom.description, language)}</div> : null}
-            </div>
-          ),
-        },
-        ariaLabel: `${atomKindLabel(language, atom.kind)} ${atom.name}`,
-        className: cn(
-          "!h-[88px] !w-[220px] !cursor-grab !rounded-xl !border-2 !bg-card !px-3 !py-2 !text-card-foreground !shadow-sm transition-[border-color,box-shadow,filter] hover:brightness-110 active:!cursor-grabbing dark:!bg-card",
-          atomKindNodeTone[atom.kind],
-        ),
-      } satisfies Node;
-    }),
+        const target = graph.relations.find((relation) => relation.kind === "trigger-target" && relation.sourceId === atom.id);
+        const targetAtom = target ? graph.atoms.find(({ id }) => id === target.targetId) : undefined;
+        const targetTitle = targetAtom ? resolveLocalizedText(targetAtom.title, language) || targetAtom.name : null;
+        const title = resolveLocalizedText(atom.title, language) || (atom.kind === "Trigger" && targetTitle ? targetTitle : null) || atom.name;
+        return {
+          id: atom.id,
+          type: "atom",
+          position: positions.get(atom.id) ?? { x: 0, y: 0 },
+          data: { atom, title, language },
+          style: { width: wiringNode.width, height: wiringNode.height },
+          ariaLabel: `${atomKindLabel(language, atom.kind)} ${atom.name}`,
+        } satisfies Node;
+      }),
     ],
-    edges: graph.relations.map((relation) => ({
-      id: relation.id,
-      source: relation.sourceId,
-      target: relation.targetId,
-      type: "manifest",
-      data: { kind: relation.kind, label: relationLabel(language, relation.kind), opacity: 0 },
-      ariaLabel: `${relationLabel(language, relation.kind)}: ${relation.sourceId} to ${relation.targetId}`,
-      markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: "var(--muted-foreground)" },
-      style: { opacity: relationOpacity(relation.kind), stroke: "var(--muted-foreground)", strokeWidth: relationOpacity(relation.kind) > 0.2 ? 1.5 : 1 },
-    } satisfies Edge)),
+    // Edges leave a node on the side that faces the other end: right to left along the columns, left to right for a
+    // View reading the Schema column before it, and right to right within one column.
+    edges: graph.relations.map((relation) => {
+      const from = column.get(relation.sourceId) ?? 0, to = column.get(relation.targetId) ?? 0;
+      const reads = relation.kind === "view-source" || relation.kind === "schema-reference" || relation.kind === "translation-parent";
+      return {
+        id: relation.id,
+        source: relation.sourceId,
+        target: relation.targetId,
+        sourceHandle: from > to ? "l" : "r",
+        targetHandle: from < to ? "l" : "r",
+        type: "wire",
+        data: { kind: relation.kind, label: relationLabel(language, relation.kind), opacity: 1 },
+        ariaLabel: `${relationLabel(language, relation.kind)}: ${relation.sourceId} to ${relation.targetId}`,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: "var(--muted-foreground)" },
+        style: { opacity: relationOpacity(relation.kind), stroke: "var(--muted-foreground)", strokeWidth: 1.25, ...(reads && { strokeDasharray: "5 4" }) },
+      } satisfies Edge;
+    }),
   };
+}
+
+const wiringNode = { width: 220, height: 44 };
+const wiringColumn = { Trigger: 0, Procedure: 1, Schema: 2, View: 3 } as const satisfies Record<DeveloperAtom["kind"], number>;
+const wiringKindAccent = { Trigger: "bg-rose-500", Procedure: "bg-amber-500", Schema: "bg-blue-500", View: "bg-violet-500" } as const;
+const wiringKindIcon = { Trigger: Zap, Procedure: Workflow, Schema: Database, View: Eye } as const;
+const wiringKindColor = { Trigger: "#f43f5e", Procedure: "#f59e0b", Schema: "#3b82f6", View: "#8b5cf6" } as const;
+
+type AtomGraphNode = Node<{ atom: DeveloperAtom; title: string; language: AdminLanguage }, "atom">;
+type ColumnGraphNode = Node<{ label: string; count: number }, "column">;
+
+/** One compact card per atom: a kind accent and icon, one line of title, and the one badge that tells entries apart. */
+function AtomNode({ data, selected }: NodeProps<AtomGraphNode>): React.ReactElement {
+  const { atom, title, language } = data;
+  const Icon = wiringKindIcon[atom.kind];
+  const sides = (["l", "r"] as const).flatMap((side) => (["source", "target"] as const).map((type) => (
+    <Handle key={type + side} id={side} type={type} position={side === "l" ? Position.Left : Position.Right} isConnectable={false} className="!size-1 !min-h-0 !min-w-0 !border-0 !bg-transparent" />
+  )));
+  return (
+    <div title={`${atomKindLabel(language, atom.kind)} · ${atom.name}`} className={cn("flex h-full items-center gap-2 overflow-hidden rounded-lg border bg-card pe-2 text-card-foreground shadow-sm transition-[box-shadow,border-color]", selected ? "border-foreground/60 ring-2 ring-ring/40" : "border-border hover:border-foreground/30")}>
+      {sides}
+      <span className={cn("h-full w-1 shrink-0", wiringKindAccent[atom.kind])} aria-hidden />
+      <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
+      {atom.transport ? <span className="shrink-0 rounded bg-muted px-1 py-px font-mono text-[9px] font-semibold uppercase text-muted-foreground">{atom.transport}</span> : null}
+      {atom.audience && atom.audience !== "public" ? <span className="shrink-0 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{audienceLabel(language, atom.audience)}</span> : null}
+    </div>
+  );
+}
+
+function ColumnNode({ data }: NodeProps<ColumnGraphNode>): React.ReactElement {
+  return <div className="pointer-events-none flex h-full items-end justify-between border-b px-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><span>{data.label}</span><span className="font-mono">{data.count}</span></div>;
+}
+
+function WireEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, markerEnd, style }: EdgeProps<ManifestGraphEdge>): React.ReactElement {
+  const [path] = sourcePosition === targetPosition
+    ? getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offset: 28, borderRadius: 12 })
+    : getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  return <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />;
 }
 
 export function ManifestEdge({ id, data, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, markerEnd, style }: EdgeProps<ManifestGraphEdge>): React.ReactElement {
@@ -446,67 +460,51 @@ function fitZoomFloor(nodes: readonly Node[], canvas: { width: number; height: n
 }
 
 export function layoutComponents(graph: DeveloperConsoleSnapshot["graph"]): Map<string, { x: number; y: number }> {
-  return layoutTopDown(graph).positions;
+  return layoutColumns(graph).positions;
 }
 
-type AudienceGroup = { audience: DeveloperAudience; x: number; y: number; width: number; height: number; count: number };
-
-// One coordinate space for every atom: audience surfaces are laid out as grids, then Procedures and
-// Schemas are packed in rows under the median of their already placed sources. Atoms without a placed
-// source go after the anchored ones, and every row stays inside the surface span (#1666).
-function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: Map<string, { x: number; y: number }>; groups: AudienceGroup[] } {
-  const nodeWidth = 220;
-  const nodeHeight = 88;
-  const gap = 24;
-  const groupPadding = 16;
-  const groupHeader = 48;
-  const groupColumns = 4;
-  const left = 72;
-
-  const positions = new Map<string, { x: number; y: number }>();
-  const groups: AudienceGroup[] = [];
-  const relationTarget = new Map(graph.relations.filter(({ kind }) => kind === "trigger-target" || kind === "view-source").map(({ sourceId, targetId }) => [sourceId, targetId]));
-  let groupX = left;
-  audiences.forEach((audience) => {
-    const atoms = graph.atoms.filter((atom) => (atom.kind === "Trigger" || atom.kind === "View") && (atom.audience ?? "public") === audience).sort((a, b) => `${relationTarget.get(a.id) ?? ""}:${a.id}`.localeCompare(`${relationTarget.get(b.id) ?? ""}:${b.id}`));
-    if (!atoms.length) return;
-    const columns = Math.min(groupColumns, atoms.length);
-    const rows = Math.ceil(atoms.length / groupColumns);
-    const width = groupPadding * 2 + columns * nodeWidth + (columns - 1) * gap;
-    const height = groupHeader + groupPadding + rows * nodeHeight + (rows - 1) * gap + groupPadding;
-    groups.push({ audience, x: groupX, y: 48, width, height, count: atoms.length });
-    atoms.forEach((atom, index) => positions.set(atom.id, { x: groupX + groupPadding + index % groupColumns * (nodeWidth + gap), y: 48 + groupHeader + groupPadding + Math.floor(index / groupColumns) * (nodeHeight + gap) }));
-    groupX += width + 32;
+// Fixed columns left to right: entry points, Procedures, Schemas, Views (#1890 follow-up). Within a column a node sits
+// at the mean height of its already placed neighbours, packed without overlap in that order; a second sweep re-aligns
+// the entry points to their Procedures and the rest follows.
+function layoutColumns(graph: DeveloperConsoleSnapshot["graph"]): { positions: Map<string, { x: number; y: number }>; columns: Array<{ kind: DeveloperAtom["kind"]; x: number; count: number }> } {
+  const slot = wiringNode.height + 12;
+  const columnGap = 140;
+  const kinds = (Object.keys(wiringColumn) as Array<DeveloperAtom["kind"]>).filter((kind) => graph.atoms.some((atom) => atom.kind === kind));
+  const x = (kind: DeveloperAtom["kind"]): number => kinds.indexOf(kind) * (wiringNode.width + columnGap);
+  const neighbours = new Map<string, string[]>();
+  graph.relations.forEach(({ sourceId, targetId }) => {
+    if (sourceId === targetId) return;
+    (neighbours.get(sourceId) ?? neighbours.set(sourceId, []).get(sourceId)!).push(targetId);
+    (neighbours.get(targetId) ?? neighbours.set(targetId, []).get(targetId)!).push(sourceId);
   });
-
-  const surfaceBottom = Math.max(...groups.map(({ y, height }) => y + height), 200);
-  const preferredX = (atom: DeveloperAtom, kinds: readonly DeveloperRelationKind[]): number | null => {
-    const related = graph.relations.filter(({ targetId, kind }) => targetId === atom.id && kinds.includes(kind)).map(({ sourceId }) => positions.get(sourceId)).filter((position): position is { x: number; y: number } => Boolean(position)).map(({ x }) => x + nodeWidth / 2).sort((a, b) => a - b);
-    if (!related.length) return null;
-    const middle = Math.floor(related.length / 2);
-    return related.length % 2 ? related[middle]! : (related[middle - 1]! + related[middle]!) / 2;
+  const audience = (atom: DeveloperAtom): number => audiences.indexOf(atom.audience ?? "public");
+  const positions = new Map<string, { x: number; y: number }>();
+  const kindOf = new Map(graph.atoms.map((atom) => [atom.id, atom.kind]));
+  // `from` lists neighbour kinds in order of preference: the first kind with a placed neighbour decides the height.
+  const place = (kind: DeveloperAtom["kind"], ...from: Array<DeveloperAtom["kind"]>): void => {
+    const wanted = graph.atoms.filter((atom) => atom.kind === kind).map((atom) => {
+      for (const other of from) {
+        const ys = (neighbours.get(atom.id) ?? []).filter((id) => kindOf.get(id) === other).map((id) => positions.get(id)?.y).filter((y): y is number => y !== undefined);
+        if (ys.length) return { atom, y: ys.reduce((sum, y) => sum + y, 0) / ys.length };
+      }
+      return { atom, y: null };
+    }).sort((a, b) => (a.y ?? Infinity) - (b.y ?? Infinity) || audience(a.atom) - audience(b.atom) || a.atom.name.localeCompare(b.atom.name));
+    let next = 0;
+    wanted.forEach(({ atom, y }) => {
+      const top = Math.max(y ?? next, next);
+      positions.set(atom.id, { x: x(kind), y: top });
+      next = top + slot;
+    });
   };
-  const bandColumns = 7;
-  const slot = nodeWidth + gap;
-  const right = Math.max(groupX - 32, left + bandColumns * slot - gap);
-  const pack = (atoms: DeveloperAtom[], y: number, kinds: readonly DeveloperRelationKind[]): number => {
-    const ordered = atoms.map((atom) => ({ atom, preferred: preferredX(atom, kinds) })).sort((a, b) => (a.preferred ?? Infinity) - (b.preferred ?? Infinity) || a.atom.id.localeCompare(b.atom.id));
-    const rows = Math.ceil(ordered.length / bandColumns);
-    for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-      const row = ordered.slice(rowIndex * bandColumns, (rowIndex + 1) * bandColumns);
-      let x = left - slot;
-      row.forEach(({ atom, preferred }, index) => {
-        // as close to the preferred x as the left neighbour allows, but leaving room for the rest of the row
-        x = Math.min(Math.max((preferred ?? left) - nodeWidth / 2, x + slot), right - nodeWidth - (row.length - 1 - index) * slot);
-        positions.set(atom.id, { x, y: y + rowIndex * (nodeHeight + gap) });
-      });
-    }
-    return rows * (nodeHeight + gap);
-  };
-  const procedureY = surfaceBottom + 64;
-  const procedureHeight = pack(graph.atoms.filter(({ kind }) => kind === "Procedure"), procedureY, ["trigger-target"]);
-  pack(graph.atoms.filter(({ kind }) => kind === "Schema"), procedureY + procedureHeight + 48, ["procedure-schema", "view-source"]);
-  return { positions, groups };
+  place("Trigger");
+  place("Procedure", "Trigger");
+  place("Schema", "Procedure");
+  place("View", "Schema");
+  place("Procedure", "Trigger", "Schema");
+  place("Schema", "Procedure");
+  place("View", "Schema");
+  place("Trigger", "Procedure", "Schema");
+  return { positions, columns: kinds.map((kind) => ({ kind, x: x(kind), count: graph.atoms.filter((atom) => atom.kind === kind).length })) };
 }
 
 export function focusSlice(graph: DeveloperConsoleSnapshot["graph"], selectedId: string): FocusSlice {
