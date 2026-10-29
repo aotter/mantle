@@ -24,7 +24,7 @@ on a copy, never boot 0.2 against a 0.1.x database, and keep exports out of the
 repository. The guide's appendix is historical; do not follow it. Between 0.2
 versions, apply reviewed migrations rehearsed on a copy.
 
-For the stable 0.2 line, pin every selected Mantle package to `0.2.0`; to try the 0.2.1 prerelease, pin all of them to `0.2.1-alpha.1` and read its release notes. Do not upgrade an existing application by following a moving dist-tag.
+For the stable 0.2 line, pin every selected Mantle package to `0.2.0`; to try the 0.2.1 prerelease, pin all of them to `0.2.1-alpha.2` and read its release notes. Do not upgrade an existing application by following a moving dist-tag.
 
 Pin exact target SDK/peer versions and read its release notes and Admin build
 instructions. Core-to-native replaces app imports/wiring; it is not
