@@ -112,7 +112,7 @@ its layered report ("Report done-ness in layers"): smoke and `pnpm test` are lay
 
 ### Independent acceptance
 
-`pnpm accept` (optionally `pnpm accept --fixtures fixtures.mjs --user member@example.test`; with npm, `npm run accept -- --fixtures …`) starts the app on a fresh local D1,
+`pnpm accept` (optionally `pnpm accept --fixtures fixtures.mjs --user member@example.test`, and `--open` to open the signed-in admin's Developer UI in your browser; with npm, `npm run accept -- --fixtures …`) starts the app on a fresh local D1,
 signs the admin in, runs your fixtures module, signs the user in and prints one local URL per role:
 
 ```text

@@ -38,10 +38,11 @@ the app entry (`--entry`) never imports, it warns and names the topic that shows
      canonical and Open Graph tags, JSON-LD and an answer block on detail pages, Markdown alternates, `/sitemap.xml`,
      `/robots.txt` and `/llms.txt`. A brief that names a site, shop or catalogue for visitors includes all of them.
 4. `pnpm generate`, implement every handler it lists, `pnpm check`, then `pnpm smoke`.
-5. **Show the user the wiring.** As soon as the manifests generate, start `pnpm dev`, sign in at `/admin` as
-   `ADMIN_EMAIL` with the one-time code `pnpm dev` prints to its log, and give the user that URL and how to read the code.
-   Point them at the Developer UI (`/admin/dev`): the Schemas, Views, Procedures and Triggers and how they connect, with
-   each surface's routes and tools. Keep building while they look; `pnpm dev` rebuilds on every change.
+5. **Show the user the wiring.** As soon as the manifests generate, run `pnpm accept --open`: it starts the app,
+   signs the admin in without a one-time code and opens the Developer UI (`/admin/dev`) in the user's browser, showing
+   the Schemas, Views, Procedures and Triggers and how they connect, with each surface's routes and tools. Tell the user
+   what they are looking at. Keep building while they look; the app rebuilds on every change. Without a browser on the
+   machine, give the user the admin URL it prints.
 6. **Stop and ask before acceptance.** Propose the [acceptance plan](../guides/agent-workflow-acceptance.md#propose-the-run-first)
    and wait for the user's go-ahead. Then run [role-only acceptance](../guides/agent-workflow-acceptance.md)
    (`mantle help agent-workflow-acceptance`). Scripted smoke is not acceptance. `pnpm accept` starts the app and hands
