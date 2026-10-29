@@ -35,7 +35,7 @@ export interface McpAppResource {
   readonly domain?: string;
   /** Tool names whose results this resource renders. */
   readonly renders?: readonly string[];
-  /** Views only this App may call (`visibility: ["app"]`); a client without MCP Apps does not see them. A Procedure cannot be hidden from the model. */
+  /** Views only this App may call (`visibility: ["app"]`); a client without MCP Apps does not see them. To hide a Procedure, give its tool `meta: { ui: { visibility: ["app"] } }`. */
   readonly appOnly?: readonly string[];
 }
 
@@ -50,7 +50,7 @@ export type McpAppsSource = McpApps | ((context: Pick<McpAppRender, "env" | "req
 export const resourcesOf = (apps: McpApps | readonly McpApps[]): McpApps => ({ resources: (Array.isArray(apps) ? apps : [apps]).flatMap(app => app.resources) });
 
 /** Static contributors are checked at construction; resolved factories are checked per request. A request-bound tool table defers tool-link checks until its first request. */
-export function linkApps(apps: McpApps | readonly McpApps[], tools?: ReadonlySet<string>, views?: ReadonlySet<string>) {
+export function linkApps(apps: McpApps | readonly McpApps[], tools?: ReadonlyMap<string, Readonly<Record<string, any>> | undefined>, views?: ReadonlySet<string>) {
   const resources = resourcesOf(apps).resources as McpAppResource[];
   const uris = new Set<string>(), names = new Set<string>(), renders = new Map<string, string>(), appOnly = new Set<string>();
   const refuse = (message: string): never => { throw new ContractError("MCP_APP_CONFLICT", message, "mcp:apps", { status: 500 }); };
@@ -64,17 +64,22 @@ export function linkApps(apps: McpApps | readonly McpApps[], tools?: ReadonlySet
       if (renders.has(tool) && renders.get(tool) !== resource.uri) refuse(`Tool '${tool}' is claimed by two MCP App resources.`);
       renders.set(tool, resource.uri);
     }
-    // an App acts for the user without the model seeing the call, so only a read may be hidden from the model
+    // appOnly stays for Views; a tool's own `meta.ui.visibility` may hide a Procedure (a listing hint, not authorization)
     for (const tool of resource.appOnly ?? []) {
       if (views && !views.has(tool)) refuse(`App-only tool '${tool}' must be a View this endpoint serves.`);
       appOnly.add(tool);
     }
   }
+  // A tool's own `meta` merges with what its App links produce, and may not contradict them.
+  for (const [tool, uri] of renders) {
+    const meta = tools?.get(tool) ?? {}, ui = meta.ui ?? {};
+    if ([ui.resourceUri, meta["ui/resourceUri"], meta["openai/outputTemplate"]].some(value => value && value !== uri) || appOnly.has(tool) && ui.visibility && `${ui.visibility}` !== "app") refuse(`Tool '${tool}' meta contradicts its MCP App links.`);
+  }
   return { resources, renders, appOnly };
 }
 
 /** One endpoint's Apps bound to its tool table; `previous` is reused while the table's names are unchanged. */
-export function linkSurface(apps: McpApps | readonly McpApps[], selected: readonly { name: string; page?: unknown }[], previous?: { key: string; links: ReturnType<typeof linkApps> }) {
-  const key = JSON.stringify(selected.map(tool => [tool.name, !!tool.page] as const).sort(([a], [b]) => a.localeCompare(b)));
-  return previous?.key === key ? previous : { key, links: linkApps(apps, new Set(selected.map(tool => tool.name)), new Set(selected.filter(tool => tool.page).map(tool => tool.name))) };
+export function linkSurface(apps: McpApps | readonly McpApps[], selected: readonly { name: string; page?: unknown; meta?: Readonly<Record<string, unknown>> }[], previous?: { key: string; links: ReturnType<typeof linkApps> }) {
+  const key = JSON.stringify(selected.map(tool => [tool.name, !!tool.page, tool.meta] as const).sort(([a], [b]) => a.localeCompare(b)));
+  return previous?.key === key ? previous : { key, links: linkApps(apps, new Map(selected.map(tool => [tool.name, tool.meta])), new Set(selected.filter(tool => tool.page).map(tool => tool.name))) };
 }
