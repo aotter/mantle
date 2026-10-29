@@ -41,8 +41,9 @@ the app entry (`--entry`) never imports, it warns and names the topic that shows
    each role to a fresh evaluator as a URL that carries that role's session. After a repair, the guide's
    [re-verification rule](../guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches) decides which roles
    and surfaces run again.
-6. Once acceptance converges, follow the [performance skill](../../skills/performance/SKILL.md): it decides which of
-   front end (Lighthouse), cold start and backend load apply, and holds each to a target before you report done.
+6. For every role and surface acceptance reports CONVERGED, follow the [performance skill](../../skills/performance/SKILL.md):
+   it decides which of front end (Lighthouse), cold start and backend load apply, and holds each to a target before you
+   report done. BLOCKED or UNVERIFIED parts are reported as they are, never optimized.
 
 The first verified sign-in with `ADMIN_EMAIL` becomes the admin. Further administrators are added in Admin:
 **More → Administrators** invites by email, and **More → Members** grants Admin to an existing member.

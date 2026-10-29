@@ -154,10 +154,11 @@ acceptance as BLOCKED and report the scripted checks on their own
 [layers](#report-done-ness-in-layers). Do not invent
 an independent result. Do not deploy or publish merely to obtain acceptance.
 
-Acceptance proves the behavior, not its speed. Once a round converges, the
-[performance skill](../../skills/performance/SKILL.md) decides which performance
-checks apply and holds them to their targets; a performance repair that changes
-what a role sees or can do returns here, scoped by the
+Acceptance proves the behavior, not its speed. For every role and surface a
+round reports CONVERGED, the [performance skill](../../skills/performance/SKILL.md)
+decides which performance checks apply and holds them to their targets. BLOCKED
+or UNVERIFIED parts are reported as they are, never optimized. A performance
+repair that changes what a role sees or can do returns here, scoped by the
 [re-verification rule](#re-verify-what-a-repair-touches).
 
 ## Re-verify what a repair touches

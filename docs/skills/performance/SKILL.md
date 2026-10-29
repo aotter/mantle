@@ -1,6 +1,6 @@
 ---
 name: performance
-description: Make an accepted Mantle 0.2 application fast — Lighthouse for app-authored pages, Worker cold start and first-load budgets, and backend reads and writes under realistic data volume with indexes and internal Views. Use right after independent acceptance converges, or when a user reports a slow page, first request or query.
+description: Make an accepted Mantle 0.2 application fast — Lighthouse for app-authored pages, Worker cold start and first-load budgets, and backend reads and writes under realistic data volume with indexes and internal Views. Use for every role and surface independent acceptance reports CONVERGED, or when a user reports a slow page, first request or query.
 metadata:
   source: "@aotter/mantle"
   sourcePath: docs/skills/performance/SKILL.md
@@ -17,10 +17,12 @@ targets and rules below are what stay fixed.
 
 ## When to run
 
-- **After acceptance.** Once [independent acceptance](../../handbook/guides/agent-workflow-acceptance.md)
-  reports CONVERGED for a new application or a feature, continue here before
-  reporting done. Never optimize behavior that has not been accepted: after
-  BLOCKED or UNVERIFIED, report that and stop.
+- **After acceptance.** Run for every role and surface that
+  [independent acceptance](../../handbook/guides/agent-workflow-acceptance.md)
+  reports CONVERGED for a new application or a feature, before reporting done.
+  Never optimize behavior that has not been accepted: report each BLOCKED or
+  UNVERIFIED role or surface as it is, with what it needs, and leave it out of
+  the pass. Stop without running only when no part is CONVERGED.
 - **On request.** When a user reports a slow page, slow first request or slow
   query, run only the part that covers it, then check the others it could affect.
 
@@ -163,7 +165,8 @@ fast at a realistic volume, and no hot path scans a table that grows.
 ## Report
 
 For each part: run or skipped (with the reason), the environment, before and
-after numbers as ranges, what changed and what is left. Close with one verdict
+after numbers as ranges, what changed and what is left. Name the roles and
+surfaces left out because acceptance did not converge on them. Close with one verdict
 beside the acceptance verdict: **PASS** (every target that applies is met),
 **PARTIAL** (improved, with the targets still missed and why) or **SKIPPED**
 (nothing applied).

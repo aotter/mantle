@@ -18,7 +18,7 @@ distributions (ADR-0032 decision 13):
 | [`update`](../docs/skills/update/SKILL.md) | Upgrade `@aotter/mantle`, including from 0.1.x. |
 | [`provision`](../docs/skills/provision/SKILL.md) | Ship to Cloudflare Workers or ChatGPT Sites with production sign-in. |
 | [`media-gc`](../docs/skills/media-gc/SKILL.md) | Audit or remove stale, uncommitted R2 uploads. |
-| [`performance`](../docs/skills/performance/SKILL.md) | Make an accepted app fast: Lighthouse, cold start, backend load, indexes and Views. Runs after acceptance converges. |
+| [`performance`](../docs/skills/performance/SKILL.md) | Make an accepted app fast: Lighthouse, cold start, backend load, indexes and Views. Runs on every role and surface acceptance reports CONVERGED. |
 
 ## Install
 

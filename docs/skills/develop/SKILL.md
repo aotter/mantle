@@ -33,7 +33,7 @@ MCP; if it was not run, say so explicitly and report the work as UNVERIFIED
 rather than done. Hand off with the guide's [layered
 report](../../handbook/guides/agent-workflow-acceptance.md#report-done-ness-in-layers):
 an environment block is BLOCKED on its layer, never a product failure. For MCP workflows, also run the guide's design audit before implementing
-tools. Once acceptance converges, follow the [performance skill](../performance/SKILL.md) before reporting done.
+tools. For every role and surface acceptance reports CONVERGED, follow the [performance skill](../performance/SKILL.md) before reporting done; report BLOCKED or UNVERIFIED parts as they are.
 
 For native Admin, read the [current guide](../../handbook/guides/native-admin.md):
 the app builds Admin with `mantle bundle`. To customise pages, slots, hooks or
