@@ -68,8 +68,9 @@ not run, report the work as UNVERIFIED rather than done; if it could not run, BL
 guide's "Report done-ness in layers" defines; a block from your environment (approval policy, missing browser,
 network) is BLOCKED on its layer, not a product failure, and does not discard the other layers.
 
-Once acceptance is CONVERGED, read the installed `docs/skills/performance/SKILL.md`: it decides which of front end,
-cold start and backend load apply, and runs them before you report done. This is the one exception to installed docs
+For every role and surface acceptance reports CONVERGED, read the installed `docs/skills/performance/SKILL.md`: it
+decides which of front end, cold start and backend load apply, and runs them before you report done. Report BLOCKED or
+UNVERIFIED parts as they are; never optimize them. This is the one exception to installed docs
 winning: if the installed package predates that skill, read
 [the 0.2.1 copy](https://github.com/aotter/mantle/blob/v0.2.1/docs/skills/performance/SKILL.md) and the pages it links
 from the installed docs with `mantle help <topic>`.
