@@ -1,6 +1,6 @@
 # Supported declarations
 
-The native 0.2.0 SDK compiles the closed v2 grammar for four targets. Generation diagnostics, rather than historical APIs or release plans, define the checked-out implementation. Existing integrations require explicit app wiring and data migration; initial schema.sql is for an empty database.
+The native 0.2 SDK compiles the closed v2 grammar for four targets. Generation diagnostics, rather than historical APIs or release plans, define the checked-out implementation. Existing integrations require explicit app wiring and data migration; initial schema.sql is for an empty database.
 
 ## Supported
 

@@ -40,7 +40,7 @@ module the entry never imports.
 | `cloudflare-d1` | sqlite | D1 binding/session |
 | `cloudflare-postgres` | postgres | postgres.js, usually with Hyperdrive |
 
-Other handles may adapt to the same [structural driver contracts](../guides/adapter-guide.md). Dialects are exactly postgres and sqlite in 0.2.0.
+Other handles may adapt to the same [structural driver contracts](../guides/adapter-guide.md). Dialects are exactly postgres and sqlite in 0.2.
 
 | Option | Meaning |
 | --- | --- |

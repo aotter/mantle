@@ -614,7 +614,7 @@ key's path. The `UI_EXTENSION_*` diagnostics no longer exist.
 
 The compiler derives display/filter metadata from Schema `uiSchema`, searchable fields from `searchableFields`, and sortable fields from indexes plus required/non-null fields and selected system columns. It emits per-collection quoted fragments, row policies and bind recipes; Admin uses one shared `nativeEntryPage` implementation, not Store `find`, `search` or `count` for these lists.
 
-Requests select only generated fields and append only supplied predicates. Absent filters are omitted, rather than expressed as `(? IS NULL OR …)`. Sorts and scalar values are checked before the route acquires its DB handle. In 0.2.0 there is no generated Cartesian set of filter variants or variant cap: runtime SQL shapes depend on selected filters, bounded IN lists, search, cursor and order. Only sortable fields are checked for indexes; there is no per-filter-combination index proof. Inspect EXPLAIN for the actual workload.
+Requests select only generated fields and append only supplied predicates. Absent filters are omitted, rather than expressed as `(? IS NULL OR …)`. Sorts and scalar values are checked before the route acquires its DB handle. In 0.2 there is no generated Cartesian set of filter variants or variant cap: runtime SQL shapes depend on selected filters, bounded IN lists, search, cursor and order. Only sortable fields are checked for indexes; there is no per-filter-combination index proof. Inspect EXPLAIN for the actual workload.
 
 Store keeps `find({ search })`, `first({ search })` and `count(where?)`. See [Store search and count costs](typed-queries.md#store-reads-and-writes): Admin shares the dialect search, and a View does not make PostgreSQL ILIKE faster.
 

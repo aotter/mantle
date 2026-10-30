@@ -32,123 +32,116 @@ Pin every package you use to the same exact version and upgrade them together.
 From 0.1.x, follow [Upgrade 0.1 to 0.2](upgrade-0.1-to-0.2.md) instead: a new database, a reviewed and rehearsed data
 move, and never booting 0.2 against a 0.1.x database.
 
-## 0.2.1 — in preparation
+## 0.2.1 (2026-10-30)
 
-0.2.1 adds Schema locks: a manifest rule that refuses a row's update or delete
-for every caller path (REST, MCP, Admin and Procedures), with Admin showing the
-lock before an edit. `spec.publishing.liveEdits` lets an application edit a
-published row in place, and the [revisions guide](../guides/revisions.md) now
-freezes the live revision with a lock and switches it atomically. It also brings
-Admin form and refresh fixes, the media picker for custom inputs and pages
-(`@aotter/mantle-admin/media`), `matchTarget` in `@aotter/mantle/describe`, and
-dependency updates for current advisories.
+0.2.1 adds **Schema locks**: a manifest rule that refuses a row's update or delete on every caller path (REST, MCP,
+Admin and Procedures), and Admin shows the lock before an edit. `spec.publishing.liveEdits` lets an application edit a
+published row in place. The [revisions guide](../guides/revisions.md) now freezes the live revision with a lock and
+switches it atomically.
 
-Procedures gain `handler.steps`: a program written one statement per step, where
-`onNoRows: conflict` makes a set-op write that writes nothing a `CONFLICT` and
-rolls the whole program back ("create only if the parent exists"). Ref handlers
-and interactive transactions can use `store.batch` for atomic multi-writes, and
-`mantle bundle` under `wrangler dev` reports stale generated output in one line
-instead of a failed build.
+Procedures gain `handler.steps`, a program written one statement per step. With `onNoRows: conflict`, a set-op write
+that writes nothing becomes a `CONFLICT` and rolls the whole program back ("create only if the parent exists"). Ref
+handlers and interactive transactions can use `store.batch` for atomic multi-writes. Hand-built MCP tools can attach
+listing and result metadata and page `tools/list`.
 
-### Upgrading to 0.2.1-alpha.4
+For agents and for the people working with them:
 
-- **The agent asks once, up front.** The two stops of alpha.3 are gone: users read a stop in the middle of the run as
-  its end. After the first brief, the agent replies with one plan in the user's language and business terms. The plan
-  covers what each kind of user can do and the rules the app enforces, who will try the app, how much sample data and
-  what counts as fast enough, and the questions the brief leaves open, each with a default answer. After one go-ahead
-  the agent builds, opens the Developer UI and the browser itself, runs acceptance and the performance pass, and
-  reports at the end ([Build from a product brief](../start/agents.md#build-from-a-product-brief)). No code changes.
+- `mantle help` is the single source of guidance, and the `mantle` skill no longer depends on the SDK version.
+- An agent building from a brief first replies with one plan, written in business terms, and asks what the brief
+  leaves open. After one go-ahead, it builds, shows the Developer UI, runs acceptance and a performance pass, and
+  reports what each found and changed.
+- The Developer UI draws a real ER diagram, a columned system wiring graph and one Procedure logic graph.
 
-### Upgrading to 0.2.1-alpha.3
+Generated Workers and the Admin start smaller.
 
-- **Agent guidance has one home, the handbook.** The package no longer ships `docs/skills/`, so the `mantle help
-  skills/<name>` topics are gone. Their guidance is now in handbook pages:
-  [performance pass](../guides/performance.md),
-  [deploy and operate](../cloudflare/deploy-and-operate.md),
-  [cleaning up stale uploads](../cloudflare/media-r2.md#clean-up-stale-uploads),
-  [upgrading an application](#upgrade-an-application) and
-  [adoption in an existing app](../guides/typed-queries.md#adopt-mantle-in-an-existing-application).
-  `mantle help` reaches all of them from the entry page.
-- **The `mantle` skill no longer depends on the SDK version.** It routes to `mantle help`, so
-  `npx skills add aotter/mantle@mantle` no longer needs a release tag. A skill installed from an earlier tag still
-  names `docs/skills/` paths; reinstall it.
-- **Docs moves.** The 0.1 → 0.2 upgrade guide is now the topic `mantle help upgrade-0.1-to-0.2`. The package README is
-  an index of topics.
-- **The agent workflow checks in with the user.** Once the manifests generate, `pnpm accept --open` opens the Developer
-  UI (`/admin/dev`) so the user can see the wiring. The agent then stops twice with a plan: before acceptance and
-  before the performance pass. It finishes with an acceptance summary and a before → after performance summary
-  ([agents](../start/agents.md)).
+[GitHub release](https://github.com/aotter/mantle/releases/tag/v0.2.1) is the complete change history. Known
+follow-ups:
 
-Regenerate to pick up the rest of this release. No manifest or API changes:
+- mounting an adopter MCP server behind Mantle's caller gate ([#1843](https://github.com/aotter/mantle/issues/1843));
+- tool-catalogue change notifications ([#1810](https://github.com/aotter/mantle/issues/1810));
+- the Admin MCP App, which is still above its 480 KB size reference. About 40% of it is the official MCP SDK and zod,
+  which ADR-0029 requires.
 
-- **Developer UI diagrams.**
-  - The data model is a real ER diagram: keys, types and crow's-foot cardinality, with three display modes.
-  - System wiring is laid out in columns, with a minimap.
+### Upgrading from 0.2.0
+
+Pin every selected `@aotter/mantle`, `@aotter/mantle-ui` and `@aotter/mantle-admin` dependency to `0.2.1`, refresh the
+lockfile, regenerate, and review the owned output. No DDL changes are required.
+
+Breaking changes:
+
+- **`@aotter/mantle/describe`** keeps only `matchTarget` and the `AppDescription`, `DescribeTarget` and
+  `TargetRequest` types. `describeApp`, `diffApp` and the `@aotter/mantle/target-hash` subpath are removed.
+  - Get a description outside the CLI with `mantle describe <target> manifests/*.yaml > describe.json`, run in Node.js
+    or Bun (for example in a deploy step), and give the JSON to `matchTarget`. Do not import compiler files from
+    `dist`: a Worker cannot compile manifests that contain SQL ([describe](../reference/describe.md)).
+  - Use `mantle describe --diff` instead of `diffApp`, and `_meta.targetHash` instead of `targetHash()`.
+- **PostgreSQL `version`:** Store results return `version` as a number, as on SQLite and D1. Procedure results stay
+  driver-native.
+- **PostgreSQL serialization failures:** SQLSTATE `40001` and `40P01` from a definitive server refusal are now
+  `CONFLICT` with `kind: "serialization"` (409), instead of an unclassified driver error. Nothing is retried
+  automatically; read again before deciding to retry.
+- **Admin record form:** clearing an optional field sends `null`, and generated form types for optional fields are
+  `T | null`.
+- **REST route precedence** is fixed and most-specific-first. Only overlapping same-method http Triggers with the same
+  parameter count can change which one wins. `TRIGGER_PATH_INVALID` and `TRIGGER_PATH_COLLISION` refuse ambiguous
+  paths at generation; see [route precedence](../reference/trigger.md#route-precedence).
+- **Agent guidance moved into the handbook.** The package no longer ships `docs/skills/`, so the `mantle help
+  skills/<name>` topics are gone. Their guidance now lives in these pages, and `mantle help` reaches all of them from
+  its entry page:
+  - [performance pass](../guides/performance.md);
+  - [deploy and operate](../cloudflare/deploy-and-operate.md);
+  - [cleaning up stale uploads](../cloudflare/media-r2.md#clean-up-stale-uploads);
+  - [upgrading an application](#upgrade-an-application);
+  - [adoption in an existing app](../guides/typed-queries.md#adopt-mantle-in-an-existing-application).
+
+  The 0.1 → 0.2 upgrade guide is the topic `mantle help upgrade-0.1-to-0.2`. A `mantle` skill installed from an
+  earlier tag still names `docs/skills/` paths; reinstall it with `npx skills add aotter/mantle@mantle`.
+- **Revisions recipe:** an application that copied the guide's `switch-revision` handler should adopt the new version.
+  It requires `expectedRevisionVersion` from the preview, and seals and switches in one `ctx.store.batch`.
+- **Tooling:** the templates move to Wrangler 4.153.0 and `@cloudflare/workers-types` 5.20261027.1.
+
+New, opt-in:
+
+- **Schema locks and live edits:** see [revisions](../guides/revisions.md).
+- **`handler.steps` and `onNoRows: conflict`.** Ref handlers and interactive transactions can also use
+  `store.batch` for atomic multi-writes.
+- **Hand-built MCP tools** ([MCP Apps](../guides/mcp-apps.md), [surface](../reference/surface.md)):
+  - `Tool.meta` merges into the tool's listed `_meta`. `ui.visibility: ["app"]` can hide a Procedure from clients
+    without MCP Apps; it is a listing hint, and calls are authorized as before.
+  - `withResultMeta(data, meta)` returns `meta` only in the result `_meta`, so a value such as a signed upload URL stays
+    out of `content`. `callTool` returns `{ data, _meta }`; drop `_meta` before forwarding a result to a model.
+  - `toolsPageSize` pages `tools/list` with an opaque `nextCursor`.
+- **Admin media picker** for custom inputs and pages: `@aotter/mantle-admin/media`.
+
+Picked up by regenerating, with no manifest or API change:
+
+- **Agent workflow** ([Build from a product brief](../start/agents.md#build-from-a-product-brief)). The agent works
+  in four phases:
+  1. Before anything else, it replies with one plain-language plan: what each kind of user can do, the rules the app
+     enforces, who will try it, how much sample data, and what counts as fast enough. The plan ends with the open
+     questions, each with a default answer.
+  2. After one go-ahead, it builds and opens the Developer UI (`pnpm accept --open`) in the user's browser.
+  3. It runs role-only acceptance and the performance pass without stopping.
+  4. It ends with an acceptance summary and a before → after performance summary.
+- **Developer UI diagrams:**
+  - The data model is an ER diagram with keys, types and crow's-foot cardinality, in three display modes, with a
+    minimap.
+  - System wiring is laid out in columns, also with a minimap.
   - A Procedure's logic is one graph, the same in the wiring side panel and on the Procedure page: a transaction box,
     CASE as ordered branch rows, and COMMIT and ROLLBACK ends. The SQL syntax trees stay available, folded, on the
     Procedure page.
-  - Their wording is translated in every Admin language that has translations.
-- **Smaller startup.**
-  - Generated Workers emit a repeated SQL statement once. REST loads a Procedure on its first request, the way views and
-    MCP already did. The reference D1 Worker's startup is about 20% smaller.
-  - Admin loads sign-in, OAuth consent and the collection list on demand.
-  - The Admin MCP App uses native select and popover controls.
-
-### Upgrading to 0.2.1-alpha.2
-
-Pin the selected packages to `0.2.1-alpha.2` and regenerate. Breaking change:
-
-- **`@aotter/mantle/describe`** keeps only `matchTarget` and the
-  `AppDescription`, `DescribeTarget` and `TargetRequest` types. `describeApp`,
-  `diffApp` and the `@aotter/mantle/target-hash` subpath are removed.
-  **`mantle describe` output is the supported way to get a description outside
-  the CLI:** run `mantle describe <target> manifests/*.yaml > describe.json` in
-  Node.js or Bun (for example in a deploy step) and give the JSON to
-  `matchTarget`. Do not import compiler files from `dist`; a Worker cannot
-  compile manifests that contain SQL ([describe](../reference/describe.md)).
-  Use `mantle describe --diff` instead of `diffApp`, and `_meta.targetHash`
-  instead of `targetHash()`.
-
-Hand-built MCP tools gain three opt-in capabilities; without them the output
-is unchanged ([MCP Apps](../guides/mcp-apps.md), [surface](../reference/surface.md)):
-
-- `Tool.meta` merges into the tool's listed `_meta`. `ui.visibility: ["app"]`
-  can now hide a Procedure from clients without MCP Apps; it is a listing hint,
-  and calls are authorized as before.
-- `withResultMeta(data, meta)` returns `meta` only in the result `_meta`, so a
-  value such as a signed upload URL stays out of `content`. `callTool` returns
-  `{ data, _meta }`; drop `_meta` before forwarding a result to a model.
-- `toolsPageSize` pages `tools/list` with an opaque `nextCursor`.
-
-Also: generation reports a SQL parser that cannot load in the current runtime
-as such, instead of `SQL_SYNTAX`, and the handbook renders under Vue-based
-site generators (bare `<placeholder>` text is now quoted, and `pnpm check`
-fails on any that return).
-
-### Upgrading to 0.2.1-alpha.1
-
-Pin `@aotter/mantle`, and any selected `@aotter/mantle-ui` and
-`@aotter/mantle-admin`, to `0.2.1-alpha.1`, refresh the lockfile, regenerate and
-review owned output. No DDL changes are required. Breaking changes:
-
-- **PostgreSQL `version`:** Store results return `version` as a number, as on
-  SQLite and D1. Procedure results stay driver-native.
-- **Admin record form:** clearing an optional field sends `null`; generated
-  form types for optional fields are `T | null`.
-- **REST route precedence** is fixed and most-specific-first. Only overlapping
-  same-method http Triggers with the same parameter count can change winner.
-  `TRIGGER_PATH_INVALID` and `TRIGGER_PATH_COLLISION` refuse ambiguous paths
-  at generation; see [route precedence](../reference/trigger.md#route-precedence).
-- **Tooling:** the templates move to Wrangler 4.153.0 and
-  `@cloudflare/workers-types` 5.20261027.1.
-- **PostgreSQL serialization failures:** SQLSTATE `40001` and `40P01` from a
-  definitive server refusal are now `CONFLICT` with `kind: "serialization"`
-  (409), instead of an unclassified driver error. Nothing is retried
-  automatically; read again before deciding to retry.
-- **Revisions recipe:** an application that copied the guide's
-  `switch-revision` handler should adopt the new version. It requires
-  `expectedRevisionVersion` from the preview and seals and switches in one
-  `ctx.store.batch`.
+  - All of their wording is translated in every Admin language that has translations.
+- **Smaller startup:**
+  - Generated Workers emit a repeated SQL statement once, and REST loads a Procedure on its first request. A generated
+    D1 Worker's startup is about 20% smaller.
+  - Admin loads sign-in, OAuth consent and the collection list on demand, and the Admin MCP App uses native select and
+    popover controls.
+- **Fixes:**
+  - Admin forms and refresh;
+  - `mantle bundle` under `wrangler dev` reports stale generated output in one line, instead of a failed build;
+  - generation reports a SQL parser that cannot load in the current runtime as such, instead of `SQL_SYNTAX`;
+  - the handbook renders under Vue-based site generators;
+  - dependency updates for current advisories.
 
 ## 0.2.0 (2026-10-19)
 

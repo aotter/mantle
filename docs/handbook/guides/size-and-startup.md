@@ -128,7 +128,7 @@ dependencies, so they hold only for the version and commit named.
 
 | SDK | Source | Admin page first-load JavaScript | MCP App first-load JavaScript | MCP App HTML document |
 |---|---|---|---|---|
-| 0.2.1 | `develop` at `6dafb812`, before the release | 212,102 B gzip in 5 files (211,338 B without `theme.js`) | 193,535 B gzip, inline | 694,170 B raw / 200,457 B gzip |
+| 0.2.1 | `develop` at `1294c672` | 195,827 B gzip in 13 files (195,069 B without `theme.js`) | 167,516 B gzip, inline | 612,324 B raw / 174,501 B gzip |
 
 Neither the built-in Admin page nor its MCP App meets the 100 KB first-load
 budget. Both misses are SDK cost, not your application's: report them as

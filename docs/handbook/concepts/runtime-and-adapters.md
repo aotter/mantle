@@ -21,7 +21,7 @@ The driver layer is open: handles are structural contracts, not a registration A
 
 Users may supply anything that executes the emitted SQL, including WASM SQLite persisted to IndexedDB, at their own risk. Mantle promises behavior only on supported drivers: bun:sqlite, D1, Bun.SQL and postgres.js. A structural match alone does not prove transaction, result or error semantics.
 
-The dialect layer is closed in 0.2.0: exactly `postgres` and `sqlite`, selected by the generation target. SQL is rendered at generation time. A third engine requires forking the compiler and Store runtime; it is not a dialect plugin.
+The dialect layer is closed in 0.2: exactly `postgres` and `sqlite`, selected by the generation target. SQL is rendered at generation time. A third engine requires forking the compiler and Store runtime; it is not a dialect plugin.
 
 ## Store and queries
 
