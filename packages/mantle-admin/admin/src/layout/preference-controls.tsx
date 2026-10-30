@@ -148,7 +148,7 @@ export function ThemeToggle(): React.ReactElement {
   );
 }
 
-function themeOptions(language: AdminLanguage): ReadonlyArray<{
+export function themeOptions(language: AdminLanguage): ReadonlyArray<{
   value: AdminTheme;
   label: string;
   icon: LucideIcon;

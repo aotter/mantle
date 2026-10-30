@@ -13,17 +13,15 @@ import type { AdminToolCatalog } from "../lib/admin-tools";
 import { useAdminLocation, useAdminRouter } from "./router";
 import { useProjectNav } from "./project-nav";
 import { landingUrl } from "../layout/authenticated-layout";
-import {
-  AccessDeniedView,
-  ConnectedAppsPage,
-  ConnectedAppsView,
-  GateError,
-  GateLoading,
-  OAuthConsentView,
-  SignInView,
-} from "../features/auth/auth-views";
+import { AccessDeniedView, GateError, GateLoading } from "../features/auth/gate-views";
+// signed-out and OAuth pages: not on a signed-in user's first paint (input-otp, the sign-in flow, connected apps)
+const auth = () => import("../features/auth/auth-views");
+const SignInView = React.lazy(() => auth().then(module => ({ default: module.SignInView })));
+const OAuthConsentView = React.lazy(() => auth().then(module => ({ default: module.OAuthConsentView })));
+const ConnectedAppsPage = React.lazy(() => auth().then(module => ({ default: module.ConnectedAppsPage })));
+const ConnectedAppsView = React.lazy(() => auth().then(module => ({ default: module.ConnectedAppsView })));
 import { HomeView } from "../features/console/home-view";
-import { CollectionView } from "../features/content/collection-view";
+const CollectionView = React.lazy(() => import("../features/content/collection-view").then(module => ({ default: module.CollectionView })));
 import { Slot } from "./slots";
 import type { CollectionListProps, RecordViewProps } from "./slot-props";
 import { hasFoldedChildCollections } from "../lib/collection-nav";
@@ -62,10 +60,10 @@ export function AdminApp({ preview = false }: { preview?: boolean } = {}): React
     return <PreviewAccountNotice />;
   }
 
-  if (CONSENT_PATHS.includes(location.pathname)) return <OAuthConsentView />;
+  if (CONSENT_PATHS.includes(location.pathname)) return <React.Suspense fallback={<GateLoading />}><OAuthConsentView /></React.Suspense>;
 
   if (location.pathname === "/admin/sign-in") {
-    return <SignInView />;
+    return <React.Suspense fallback={<GateLoading />}><SignInView /></React.Suspense>;
   }
 
   return <Gate path={location.pathname} search={location.search} preview={preview} />;
@@ -119,7 +117,7 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   if (is401) return preview ? <GateError error={me.error} /> : <GateLoading />;
 
   if (me.isError && me.error instanceof ApiError && me.error.status === 403) {
-    if (path === "/admin/connected-apps") return <ConnectedAppsPage />;
+    if (path === "/admin/connected-apps") return <React.Suspense fallback={<GateLoading />}><ConnectedAppsPage /></React.Suspense>;
     const body = (me.error.body ?? {}) as { login?: string | null };
     return <AccessDeniedView login={body.login ?? null} />;
   }

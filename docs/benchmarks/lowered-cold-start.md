@@ -1,7 +1,9 @@
 # Generate-time lowering: cold-start measurements
 
-Issue #1433, [ADR-0044](../adr/0044-generate-time-lowering.md). Reproduce with
-`scripts/bench-cold-start.mjs`; it is not part of `pnpm check`.
+Issue #1433, [ADR-0044](../adr/0044-generate-time-lowering.md). Historical: the
+plan runtime these runs booted is gone (applications now run generated native
+code), and so is the benchmark script. `pnpm check:startup` measures the startup
+bytes of a generated Worker today.
 
 ## Protocol
 

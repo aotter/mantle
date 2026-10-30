@@ -1,9 +1,8 @@
 import { infiniteQueryOptions } from "@tanstack/react-query";
 import { api } from "./api";
-import { queryClient } from "../app/query-client";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
 import { foldedChildScopeValue, isFoldedFieldChild } from "./collection-nav";
-import type { CollectionsMetadata, EntryDocument, AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, AdminOperation, ViewManifestInfo } from "./types";
+import type { EntryDocument, AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, AdminOperation, ViewManifestInfo } from "./types";
 import { AUTH_BASE } from "./auth";
 
 export const COLLECTION_PAGE_SIZE = 50;
@@ -85,14 +84,6 @@ export function entryEditorQueryOptions(collectionName: string, entryId: string)
     queryKey: ["entry-editor", collectionName, entryId] as const,
     queryFn: async ({ signal }: { signal: AbortSignal }) => composeEntry(await api.get<EntryDocument>(entryApiPath(collectionName, entryId), { signal })),
   };
-}
-
-export function collectionMetadata(): Promise<CollectionsMetadata> {
-  return queryClient.fetchQuery({
-    queryKey: ["collection-metadata"],
-    queryFn: () => api.get<CollectionsMetadata>("/collections"),
-    staleTime: Infinity,
-  });
 }
 
 /** The native server returns the complete editor projection on reads and writes. */

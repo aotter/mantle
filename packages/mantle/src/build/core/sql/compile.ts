@@ -5,7 +5,7 @@
 import { PG_GRAMMAR, type SchemaColumns, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
 import { runtimeDiagnostic, DiagnosticError } from "../../spec/kernel/index.js";
 import type { MantleDialect, StorageSchema } from "../dialect.js";
-import { applyPolicy, type BindSpec, type Compiled, type Mode, type PolicyOpts } from "./policy.js";
+import { applyPolicy, type Compiled, type Mode, type PolicyOpts } from "./policy.js";
 import type { RelationPosition } from "./positions.js";
 
 export type { Compiled, Mode } from "./policy.js";

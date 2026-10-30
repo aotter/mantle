@@ -6,12 +6,13 @@ beforeAll(() => Promise.all([loadLanguage("zh-TW"), loadLanguage("ja")]));
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { prerender } from "react-dom/static";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AdminApp } from "../src/app/admin-app";
 import { AdminRouterProvider } from "../src/app/router";
 import { ApiError } from "../src/lib/api";
+import { AccessDeniedView } from "../src/features/auth/gate-views";
 import {
-  AccessDeniedView,
   safeReturnPath,
   signedOAuthQuery,
   SignInButton,
@@ -88,25 +89,25 @@ describe("sign-in", () => {
     client.setQueryData(["oauth-consents"], [{ id: "grant-1", clientId: "client-1", clientName: "My agent", scopes: ["mcp"] }]);
     const render = (pathname: string) => {
       vi.stubGlobal("window", { location: { pathname, search: "" } });
-      return renderToStaticMarkup(createElement(QueryClientProvider, { client },
+      return renderAll(createElement(QueryClientProvider, { client },
         createElement(PreferencesProvider, { initialLanguage: readInitialLanguage() },
           createElement(AdminRouterProvider, null, createElement(AdminApp))),
       ));
     };
-    expect(render("/admin/connected-apps")).toContain("My agent");
-    expect(render("/admin/connected-apps")).toContain('action="/oauth/consents/revoke"');
-    expect(render("/admin/settings")).not.toContain("My agent");
-    expect(render("/admin/settings")).toContain('href="/admin/connected-apps"');
+    expect(await render("/admin/connected-apps")).toContain("My agent");
+    expect(await render("/admin/connected-apps")).toContain('action="/oauth/consents/revoke"');
+    expect(await render("/admin/settings")).not.toContain("My agent");
+    expect(await render("/admin/settings")).toContain('href="/admin/connected-apps"');
     client.clear();
   });
 
-  it("renders the consent page at Admin's own path, for oauthProvider.consentPage, and at Core's", () => {
+  it("renders the consent page at Admin's own path, for oauthProvider.consentPage, and at Core's", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } });
     const search = "?client_id=c1&sig=s";
     client.setQueryData(["oauth-consent", search], { clientName: "Cursor", redirectUri: "https://www.cursor.com/cb?code=not-for-display", scopes: ["mcp", "offline_access"], oauthQuery: "client_id=c1&sig=s" });
     for (const pathname of ["/admin/oauth/consent", "/oauth/consent"]) {
       vi.stubGlobal("window", { location: { pathname, search } });
-      const html = renderToStaticMarkup(createElement(QueryClientProvider, { client },
+      const html = await renderAll(createElement(QueryClientProvider, { client },
         createElement(PreferencesProvider, { initialLanguage: readInitialLanguage() }, createElement(AdminRouterProvider, null, createElement(AdminApp)))));
       expect(html, pathname).toContain("Cursor");
       expect(html, pathname).toContain('action="/oauth/consent"');
@@ -225,3 +226,8 @@ describe("SignInFlow step machine", () => {
   });
 
 });
+
+/** Sign-in, consent and connected apps load on demand: render after every lazy page resolves. */
+async function renderAll(element: React.ReactElement): Promise<string> {
+  return new Response((await prerender(element)).prelude).text();
+}

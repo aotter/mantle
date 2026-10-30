@@ -1,1 +1,1 @@
-export { NATIVE_TIMESTAMP, renderDataValue, withNativeSchema } from "@aotter/mantle-ui";
+export { renderDataValue, withNativeSchema } from "@aotter/mantle-ui";

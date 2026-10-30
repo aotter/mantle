@@ -1,5 +1,5 @@
 /** Opt-in lifecycle: one atomic, version-guarded statement per transition, with Core's row rules. */
-import { rowPolicy, type JsonSchema, type RuntimePlan } from "../build/compiler.js";
+import { rowPolicy, type RuntimePlan } from "../build/compiler.js";
 import { dialect as sqlite } from "../kernel/dialect/sqlite.js";
 import { dialect as postgres } from "../kernel/dialect/postgres.js";
 import { renderTerm, type Lock } from "../kernel/store.js";

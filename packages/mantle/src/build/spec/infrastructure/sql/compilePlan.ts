@@ -462,7 +462,7 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
     if (sets.size > 1) warnings.push(`USER_SCOPE_JOIN_DROPS: View '${name}' joins Schemas scoped by different fields (${[...sets].join(" / ")}); rows outside any caller set are dropped.`);
   }
   // A Schema that references a field-scoped Schema must carry that Schema's terms, or it would expose rows the referenced scope hides.
-  for (const [name, schema] of Object.entries(schemas)) for (const [field, property] of Object.entries(schema.schema?.properties ?? {})) {
+  for (const schema of Object.values(schemas)) for (const [field, property] of Object.entries(schema.schema?.properties ?? {})) {
     const raw = (property as Record<string, unknown>)["x-mantle-ref"], ref = typeof raw === "string" ? raw : (raw as { schema?: string } | undefined)?.schema;
     const target = ref ? schemas[ref.toLowerCase()] : undefined;
     for (const term of target ? target.userScopes ?? [] : []) if (!(schema.userScopes ?? []).some(u => u.field === term.field))
