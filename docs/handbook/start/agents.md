@@ -25,12 +25,18 @@ the app entry (`--entry`) never imports, it warns and names the topic that shows
 
 ## Build from a product brief
 
-**Plan once, then run to the end.** Before writing anything, reply with one plan and wait for the user's go-ahead:
+**Plan once, then run to the end.** Before writing anything, reply with one plan and wait for the user's go-ahead.
+Write it in the user's language and in business terms: no Schema, SQL, route, tool or package names.
 
-- the app: the roles and surfaces, and the Schemas, Views, Procedures and Triggers you expect;
-- the [acceptance run](../guides/agent-workflow-acceptance.md#plan-the-run);
-- the [performance pass](../guides/performance.md#plan-the-pass);
-- anything that needs the user, such as a browser or a deployment.
+- **What the app does:** what each kind of user can do, and the business rules it enforces. For example: "a full event
+  puts new sign-ups on a waiting list, and a cancellation moves the first person on it in".
+- **How you will check it works:** who will try the app and what each of them tries to get done
+  ([acceptance](../guides/agent-workflow-acceptance.md#plan-the-run)).
+- **How you will check it is fast:** how much sample data, and what "fast enough" means for each page
+  ([performance](../guides/performance.md#plan-the-pass)).
+- **What you need from the user,** such as a browser or a deployment.
+- **Questions:** every rule the brief leaves open, such as limits, deadlines, who may see or change what, and what
+  happens on a cancellation. Give each one the answer you will assume if the user does not reply.
 
 After the go-ahead, do every step below without stopping, and end with the report in the last step. Stop again only
 for what the plan did not cover and needs the user: a credential, a deployment, a destructive action or a change of

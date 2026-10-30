@@ -88,7 +88,8 @@ evaluator must discover the workflow from public tool descriptions and results.
 ## Plan the run
 
 The plan the user approves before the build ([Build from a product brief](../start/agents.md#build-from-a-product-brief))
-names, for acceptance:
+says in plain words who tries the app and what they try to get done. Behind it, the run
+fixes:
 
 - each evaluator you will start: its role (`admin`, `user`, a visitor), the surfaces it uses (Admin, member pages,
   REST, MCP, visitor pages) and the goals it is asked to finish, in the user's words;

@@ -38,7 +38,8 @@ stylesheet or entry import affects every page. Re-measure what a repair can reac
 ## Plan the pass
 
 The plan the user approves before the build ([Build from a product brief](../start/agents.md#build-from-a-product-brief))
-names, for performance:
+says in plain words how much sample data there is and what "fast enough" means for each page.
+Behind it, the pass fixes:
 
 - the parts that run and the parts skipped, each with its reason (the table above);
 - the test data for backend parts: rows per table (for example 1,000,000 RSVPs across 5,000 events and 20,000
