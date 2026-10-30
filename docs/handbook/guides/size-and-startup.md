@@ -23,7 +23,7 @@ report it.
 |---|---|---|
 | First-load JavaScript | Every script a page's HTML loads: `<script src>` files and inline `<script>` text, classic or `type="module"`, plus every file they import statically, recursively. A dynamic `import()` is not followed. CSS, fonts, images and scripts from another origin do not count. | gzip per file |
 | MCP App HTML document | The whole built App document as served: its inline JavaScript, CSS and markup in one file. | raw bytes and gzip of the file |
-| Worker entry static graph | The Worker entry (Wrangler's `main`, such as `dist/worker/worker.js`) plus every chunk it imports statically, recursively. A dynamic `import()` is not followed. | gzip per file; raw bytes beside it |
+| Worker entry static graph | The Worker entry (Wrangler's `main`, `dist/worker/index.js` in an app from `mantle init`) plus every chunk it imports statically, recursively. A dynamic `import()` is not followed. | gzip per file; raw bytes beside it |
 
 The 100 KB budget in the [performance pass](performance.md) is first-load JavaScript. It applies to
 an MCP App too: `mantle bundle` builds the App as one HTML file with its
@@ -91,7 +91,7 @@ node first-load.mjs dist/client/admin/mcp-app.html
 Worker entry static graph: pass Wrangler's `main`.
 
 ```sh
-node first-load.mjs dist/worker/worker.js
+node first-load.mjs dist/worker/index.js
 ```
 
 MCP App HTML document:

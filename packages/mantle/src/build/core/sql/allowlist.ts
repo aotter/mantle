@@ -419,7 +419,8 @@ const check: Record<string, Checker> = {
       return;
     }
     if (!ctx.p.funcs.has(f)) no('SQL_FUNCTION', `function ${f} is not on the allowlist`, at);
-    if (n.over && (ctx.kind !== 'view' || !ctx.p.window.has(f))) no('SQL_FUNCTION', `window function ${f} is refused here`, at);
+    if (n.over && ctx.kind !== 'view') no('SQL_FUNCTION', `window function ${f} is accepted only in a View; in a Procedure, rank with a correlated count(*) subquery`, at);
+    if (n.over && !ctx.p.window.has(f)) no('SQL_FUNCTION', `window function ${f} is not on the allowlist`, at);
     if (!n.over && WINDOW_ONLY.has(f)) no('SQL_FUNCTION', `${f}() is a window function: it needs OVER (...)`, at);
     if ((f === 'lag' || f === 'lead') && n.args?.[1] && n.args[1].A_Const?.ival === undefined) no('SQL_FUNCTION', `${f}'s offset is an integer literal`, at);
     if ((n.agg_filter || n.agg_order) && !ctx.p.agg.has(f)) no('SQL_FUNCTION', `FILTER and ORDER BY belong to an aggregate, and ${f} is not one`, at);

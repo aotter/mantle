@@ -16,8 +16,8 @@ pnpm types && pnpm check       # each builds once (see Which steps build)
 cp .dev.vars.example .dev.vars
 pnpm db:init                   # optional seed.sql for static reference data, then pnpm db:seed (see Seed data)
 pnpm dev                       # builds, rebuilds on change; one-time codes print to this log
-pnpm smoke                     # builds; your smoke.mjs on smoke-kit.mjs (see Files you edit)
-pnpm accept                    # builds; hands each role to a fresh evaluator (see Independent acceptance)
+pnpm smoke                     # builds; runs smoke.mjs, which you write on smoke-kit.mjs (init does not create it)
+pnpm accept                    # builds; prints a signed-in URL per role for fresh evaluators (see Independent acceptance)
 pnpm test                      # Admin MCP App check of the last build: needs Chrome (npx playwright-core install chromium, or MANTLE_TEST_CHROMIUM=<executable>)
 ```
 
