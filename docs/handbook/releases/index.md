@@ -50,6 +50,15 @@ and interactive transactions can use `store.batch` for atomic multi-writes, and
 `mantle bundle` under `wrangler dev` reports stale generated output in one line
 instead of a failed build.
 
+### Upgrading to 0.2.1-alpha.4
+
+- **The agent asks once, up front.** The two stops of alpha.3 are gone: users read a stop in the middle of the run as
+  its end. After the first brief, the agent replies with one plan in the user's language and business terms. The plan
+  covers what each kind of user can do and the rules the app enforces, who will try the app, how much sample data and
+  what counts as fast enough, and the questions the brief leaves open, each with a default answer. After one go-ahead
+  the agent builds, opens the Developer UI and the browser itself, runs acceptance and the performance pass, and
+  reports at the end ([Build from a product brief](../start/agents.md#build-from-a-product-brief)). No code changes.
+
 ### Upgrading to 0.2.1-alpha.3
 
 - **Agent guidance has one home, the handbook.** The package no longer ships `docs/skills/`, so the `mantle help
