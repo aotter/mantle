@@ -1,5 +1,5 @@
 // Independent acceptance setup (mantle help agent-workflow-acceptance): hands each role to a fresh evaluator without a credential.
-//   node accept.mjs [--fixtures fixtures.mjs] [--user member@example.test]
+//   node accept.mjs [--fixtures fixtures.mjs] [--user member@example.test] [--open]
 //     Starts the app on a fresh local D1 (schema.sql, then seed.sql), signs the admin in with email OTP, runs the optional
 //     fixtures module (default export async ({ call, mcp, signIn, sql, sessions, user }) => {...}: realistic records through
 //     the app's own REST/MCP as real users, e.g. other members' orders and more than one page), signs the user in, then
@@ -7,8 +7,11 @@
 //     (a visitor gets the app's own origin):
 //     MCP at <proxy>/mcp (user) or <proxy>/mcp/admin (admin), Admin at <proxy>/admin, pages and REST at <proxy>/.
 //     The proxy refuses /api/auth/* so the evaluator cannot sign out, sign in or mint credentials. Ctrl-C stops everything.
+//     --open also opens the signed-in admin's Developer UI (<admin proxy>/admin/dev) in the default browser, so a person
+//     sees the app's wiring without a one-time code; the app keeps rebuilding on every change under src/ and generated/.
 //   node accept.mjs mcp <endpoint> [tool [json-arguments]]
 //     A minimal MCP client for an evaluator without one: lists the tools, or calls one and prints the raw result.
+import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { Readable } from "node:stream";
 import { parseArgs } from "node:util";
@@ -19,7 +22,7 @@ if (process.argv[2] === "mcp") await client(process.argv[3], process.argv[4], pr
 else await setup();
 
 async function setup() {
-  const { values } = parseArgs({ args: process.argv.slice(2).filter(arg => arg !== "--"), options: { fixtures: { type: "string" }, user: { type: "string", default: "member@example.test" } } });
+  const { values } = parseArgs({ args: process.argv.slice(2).filter(arg => arg !== "--"), options: { fixtures: { type: "string" }, user: { type: "string", default: "member@example.test" }, open: { type: "boolean" } } });
   const { startApp } = await import("./smoke-kit.mjs");
   const app = await startApp();
   const stop = async () => { await app.stop(); process.exit(0); };
@@ -33,6 +36,7 @@ async function setup() {
     const lines = [`visitor (anonymous): ${app.origin}`];
     for (const [role, cookie] of Object.entries(sessions)) {
       const url = await proxy(app.origin, cookie);
+      if (role === "admin" && values.open) browse(`${url}/admin/dev`);
       lines.push(`${role} (${role === "admin" ? app.owner : values.user}): ${url}  MCP ${url}/mcp${role === "admin" ? "/admin" : ""}${role === "admin" ? `  Admin ${url}/admin` : ""}`);
     }
     console.log(lines.join("\n") + "\nReady. Ctrl-C stops the app and deletes its data.");
@@ -41,6 +45,12 @@ async function setup() {
     await app.stop();
     throw error;
   }
+}
+
+/** Opens a URL in the default browser; without one (CI, a container) the printed URL is all there is. */
+function browse(url) {
+  const [command, ...args] = process.platform === "darwin" ? ["open"] : process.platform === "win32" ? ["cmd", "/c", "start", ""] : ["xdg-open"];
+  spawn(command, [...args, url], { stdio: "ignore", detached: true }).on("error", () => console.log(`Open ${url} in a browser.`)).unref();
 }
 
 /** A local origin that forwards to the app with one role's session; sliding Set-Cookie updates stay inside the proxy. */

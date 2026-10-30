@@ -35,6 +35,16 @@ skipped part with its reason.
 A change in one part can move another: an added index slows writes, a shared
 stylesheet or entry import affects every page. Re-measure what a repair can reach.
 
+## Propose the pass first
+
+Before measuring, stop and give the user the plan, then wait for a go-ahead:
+
+- the parts that run and the parts skipped, each with its reason (the table above);
+- the test data for backend parts: rows per table (for example 1,000,000 RSVPs across 5,000 events and 20,000
+  members), its shape (owners, states, text length) and that it goes only into an isolated local database;
+- the target for each part and the stop rule below;
+- anything that needs the user, such as a deployment to measure real cold start.
+
 ## Front end
 
 **Target:** the highest Lighthouse performance score the page allows, with a
@@ -154,6 +164,21 @@ fast at a realistic volume, and no hot path scans a table that grows.
   general benchmark framework to meet a target.
 - Stop when every target is met, after three rounds, or when two rounds in a row
   bring no measurable gain.
+
+## Summarise for the user
+
+Report each change with the number it moved, so the gain is visible:
+
+```markdown
+| Part | Change | Before | After |
+| --- | --- | --- | --- |
+| Backend read: `event-roster`, 1,000,000 RSVPs | index `[eventId, created_at]` + keyset paging | p95 1,840 ms | p95 38 ms |
+| Front end: `/events/{slug}` (mobile) | inline critical CSS, sized images | Lighthouse 71 | 94 |
+| Cold start: Worker entry | auth and Admin behind dynamic imports | 212 KB gzip startup graph | 61 KB |
+```
+
+Give the data volume beside every backend number, the device and throttling beside every Lighthouse score, and say
+where a target is still missed and why.
 
 ## Report
 

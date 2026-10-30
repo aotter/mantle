@@ -38,14 +38,23 @@ the app entry (`--entry`) never imports, it warns and names the topic that shows
      canonical and Open Graph tags, JSON-LD and an answer block on detail pages, Markdown alternates, `/sitemap.xml`,
      `/robots.txt` and `/llms.txt`. A brief that names a site, shop or catalogue for visitors includes all of them.
 4. `pnpm generate`, implement every handler it lists, `pnpm check`, then `pnpm smoke`.
-5. Before reporting the app or a feature done, run [role-only acceptance](../guides/agent-workflow-acceptance.md)
+5. **Show the user the wiring.** As soon as the manifests generate, run `pnpm accept --open`: it starts the app,
+   signs the admin in without a one-time code and opens the Developer UI (`/admin/dev`) in the user's browser, showing
+   the Schemas, Views, Procedures and Triggers and how they connect, with each surface's routes and tools. Tell the user
+   what they are looking at. Keep building while they look; the app rebuilds on every change. Without a browser on the
+   machine, give the user the admin URL it prints.
+6. **Stop and ask before acceptance.** Propose the [acceptance plan](../guides/agent-workflow-acceptance.md#propose-the-run-first)
+   and wait for the user's go-ahead. Then run [role-only acceptance](../guides/agent-workflow-acceptance.md)
    (`mantle help agent-workflow-acceptance`). Scripted smoke is not acceptance. `pnpm accept` starts the app and hands
    each role to a fresh evaluator as a URL that carries that role's session. After a repair, the guide's
    [re-verification rule](../guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches) decides which roles
    and surfaces run again.
-6. For every role and surface acceptance reports CONVERGED, run the [performance pass](../guides/performance.md):
-   it decides which of front end (Lighthouse), cold start and backend load apply, and holds each to a target before you
-   report done. BLOCKED or UNVERIFIED parts are reported as they are, never optimized.
+7. **Stop and ask before the performance pass.** For every role and surface acceptance reports CONVERGED, propose the
+   [performance plan](../guides/performance.md#propose-the-pass-first) (which parts run, how much test data, which
+   targets) and wait for the go-ahead; then run the [performance pass](../guides/performance.md). BLOCKED or UNVERIFIED
+   parts are reported as they are, never optimized. A declined step is reported as not run, never as done.
+8. **Report what changed, not only that it passed:** the [acceptance summary](../guides/agent-workflow-acceptance.md#summarise-for-the-user)
+   and the [performance summary](../guides/performance.md#summarise-for-the-user), then the layered status.
 
 The first verified sign-in with `ADMIN_EMAIL` becomes the admin. Further administrators are added in Admin:
 **More → Administrators** invites by email, and **More → Members** grants Admin to an existing member.
