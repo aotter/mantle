@@ -34,7 +34,8 @@ Write it in the user's language and in business terms: no Schema, SQL, route, to
   ([acceptance](../guides/agent-workflow-acceptance.md#plan-the-run)).
 - **How you will check it is fast:** how much sample data, and what "fast enough" means for each page
   ([performance](../guides/performance.md#plan-the-pass)).
-- **What you need from the user,** such as a browser or a deployment.
+- **What you will do on the user's machine,** such as starting the app and opening the browser for them and for the
+  testers. Say it; do not ask. Ask only for what you cannot do yourself, such as a deployment or a credential.
 - **Questions:** every rule the brief leaves open, such as limits, deadlines, who may see or change what, and what
   happens on a cancellation. Give each one the answer you will assume if the user does not reply.
 

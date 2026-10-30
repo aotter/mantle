@@ -94,8 +94,8 @@ fixes:
 - each evaluator you will start: its role (`admin`, `user`, a visitor), the surfaces it uses (Admin, member pages,
   REST, MCP, visitor pages) and the goals it is asked to finish, in the user's words;
 - the round limit (at most three) and what triggers a re-run;
-- anything the environment needs, such as a browser for a visitor or member page, so a missing one is settled now
-  rather than reported as BLOCKED later.
+- what the environment needs, such as a browser for a visitor or member page. Provide it yourself (install a headless
+  browser if none is there); only what you cannot provide goes to the user now, rather than reported as BLOCKED later.
 
 Keep the rubric itself private: the plan names goals, never the checks an evaluator is graded on.
 
