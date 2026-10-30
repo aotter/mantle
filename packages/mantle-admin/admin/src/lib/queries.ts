@@ -60,11 +60,12 @@ export function entriesQuerySearchParams(args: EntriesQueryArgs, cursor?: string
  * A cursor-paged list as one infinite query: the cursor is the page param, not state, so an invalidation
  * (`invalidateAfterWrite`) refetches every page loaded, and a page in flight never lands in another list.
  */
-export function pagedQueryOptions<Page extends { next_cursor: string | null }>(queryKey: readonly unknown[], load: (cursor: string | undefined, signal: AbortSignal) => Promise<Page>) {
+export function pagedQueryOptions<Page extends { next_cursor: string | null }>(queryKey: readonly unknown[], load: (cursor: string | undefined) => Promise<Page>) {
   return infiniteQueryOptions({
     queryKey,
-    // the signal aborts a page whose refetch was cancelled (a newer invalidation, an unmount)
-    queryFn: ({ pageParam, signal }) => load(pageParam, signal),
+    // No AbortSignal: a query that reads it is cancelled when its last observer unmounts, so a page that remounts
+    // while loading would fetch twice. A superseded refetch's result is discarded either way.
+    queryFn: ({ pageParam }) => load(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.next_cursor ?? undefined,
   });
@@ -76,13 +77,13 @@ export function entriesQueryOptions(args: EntriesQueryArgs) {
     args.filterField ?? "no-filter", args.filterValue ?? "no-value",
     args.scopeField ?? "no-scope-field", args.scopeValue ?? "no-scope-value",
     args.sortField, args.sortDirection,
-  ], (cursor, signal) => api.get<ListEntriesResult>(`/entries?${entriesQuerySearchParams(args, cursor)}`, { signal }));
+  ], (cursor) => api.get<ListEntriesResult>(`/entries?${entriesQuerySearchParams(args, cursor)}`));
 }
 
 export function entryEditorQueryOptions(collectionName: string, entryId: string) {
   return {
     queryKey: ["entry-editor", collectionName, entryId] as const,
-    queryFn: async ({ signal }: { signal: AbortSignal }) => composeEntry(await api.get<EntryDocument>(entryApiPath(collectionName, entryId), { signal })),
+    queryFn: async () => composeEntry(await api.get<EntryDocument>(entryApiPath(collectionName, entryId))),
   };
 }
 

@@ -264,7 +264,7 @@ describe("data hooks", () => {
       expect(second.read()).toMatchObject({ rows: [], status: "loading" });
       await client.getQueryCache().findAll({ queryKey: ["view", "pending", "hook", "browser", { q: 2 }] })[0]!.fetch();
       expect(second.read()).toMatchObject({ rows: [{ id: "2-1" }], hasMore: true });
-      expect(view.mock.calls[view.mock.calls.length - 1]![2]).toEqual({ limit: undefined, cursor: undefined, signal: expect.any(AbortSignal) });
+      expect(view.mock.calls[view.mock.calls.length - 1]![2]).toEqual({ limit: undefined, cursor: undefined });
       client.clear();
     });
 
@@ -286,7 +286,7 @@ describe("data hooks", () => {
       const r = reader(client, transportOf({ entries }), () => useEntries("requests", { search: "pay", limit: 1 }));
       (await r.first("entries")).loadMore();
       expect((await r.until(state => state.items!.length === 2))).toMatchObject({ items: [{ id: "1" }, { id: "2" }], hasMore: false });
-      expect(entries.mock.calls.map(([, options]) => options)).toEqual([{ search: "pay", limit: 1, cursor: undefined, signal: expect.any(AbortSignal) }, { search: "pay", limit: 1, cursor: "c2", signal: expect.any(AbortSignal) }]);
+      expect(entries.mock.calls.map(([, options]) => options)).toEqual([{ search: "pay", limit: 1, cursor: undefined }, { search: "pay", limit: 1, cursor: "c2" }]);
       const app = reader(fresh(), mcpAppTransport({ call: async () => result({}), host: host() }), () => useEntries("requests"));
       expect(await app.first("entries")).toMatchObject({ items: [], status: "unavailable", hasMore: false });
       client.clear();
@@ -408,26 +408,16 @@ describe("data hooks", () => {
       queryClient.clear();
     });
 
-    it("hand the query's signal to the View read, which a superseding refetch aborts", async () => {
+    it("read without the query's signal: a page that remounts while loading fetches once", async () => {
       const client = new QueryClient();
-      const signals: AbortSignal[] = [];
-      const view = vi.fn(async (_name: string, _input: object, page: { signal?: AbortSignal }) => {
-        signals.push(page.signal!);
-        await new Promise(resolve => setTimeout(resolve, 5));
-        return { status: "ok", data: { rows: [] } } as const;
-      });
+      const view = vi.fn(async (_name: string, _input: object, _page: object) => { await new Promise(resolve => setTimeout(resolve, 5)); return { status: "ok", data: { rows: [] } } as const; });
       mount(client, transportOf({ view }), () => useView("pending", {}));
+      // React Query cancels a query that reads its signal when its last observer goes, and the next one refetches it
+      for (const stop of activate(client)) stop();
       const unsubscribe = activate(client);
       await settled(client);
-      expect(signals[0]).toBeInstanceOf(AbortSignal);
-      expect(signals[0]!.aborted).toBe(false);
-      // a refetch started while another is in flight cancels it: that one's request is aborted
-      void client.invalidateQueries({ queryKey: ["view"] });
-      void client.invalidateQueries({ queryKey: ["view"] });
-      await settled(client);
-      expect(signals).toHaveLength(3);
-      expect(signals[1]!.aborted).toBe(true);
-      expect(signals[2]!.aborted).toBe(false);
+      expect(view).toHaveBeenCalledTimes(1);
+      expect(view.mock.calls[0]![2]).not.toHaveProperty("signal");
       for (const stop of unsubscribe) stop();
       client.clear();
     });

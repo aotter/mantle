@@ -31,7 +31,7 @@ export function CollectionStatisticsCard({ collection, canonical, statistics = t
   };
   const query = useQuery({
     queryKey: ["collection-statistics", collection.name, preferences.range],
-    queryFn: ({ signal }) => api.get<CollectionStatistics>(`/collections/${encodeURIComponent(collection.name)}/statistics?range=${preferences.range}`, { signal }),
+    queryFn: () => api.get<CollectionStatistics>(`/collections/${encodeURIComponent(collection.name)}/statistics?range=${preferences.range}`),
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchInterval: 60_000,

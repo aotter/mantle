@@ -68,7 +68,8 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
   }, 180_000);
 
   it("answers a wildcard origin the App declared for what it loads, and refuses the others", async () => {
-    const cell = 'useEffect(() => { const i = new Image(); i.src = "https://" + ["a", "cdn", "example", "test"].join(".") + "/x.png"; const j = new Image(); j.src = "https://" + ["other", "example", "test"].join(".") + "/y.png"; }, []);';
+    // the hosts are built at runtime (Math.random is never folded), so the build's static scan cannot see them
+    const cell = 'useEffect(() => { const dot = Math.random() < 2 ? "." : ""; const i = new Image(); i.src = "https://" + ["a", "cdn", "example", "test"].join(dot) + "/x.png"; const j = new Image(); j.src = "https://" + ["other", "example", "test"].join(dot) + "/y.png"; }, []);';
     const message = await attempt(await build("wildcard", cell, ', mcp: { csp: { resourceDomains: ["https://*.cdn.example.test"] } }'));
     expect(message).toContain("https://other.example.test/y.png");
     expect(message).not.toContain("a.cdn.example.test/x.png");

@@ -224,7 +224,7 @@ const implementation = {
     const query = useInfiniteQuery({
       queryKey: ["view", name, "hook", transport.surface, input, options.limit],
       initialPageParam: undefined as string | undefined,
-      queryFn: ({ pageParam, signal }) => transport.view(name, input as Row, { limit: options.limit, cursor: pageParam, signal }, rowNames),
+      queryFn: ({ pageParam }) => transport.view(name, input as Row, { limit: options.limit, cursor: pageParam }, rowNames),
       getNextPageParam: nextPage,
     });
     const { list, ...state } = useAccumulated(query, page => page.rows);
@@ -235,7 +235,7 @@ const implementation = {
     const query = useInfiniteQuery({
       queryKey: ["entries", collection, "hook", transport.surface, options],
       initialPageParam: undefined as string | undefined,
-      queryFn: ({ pageParam, signal }) => transport.entries(collection, { ...options, cursor: pageParam, signal }),
+      queryFn: ({ pageParam }) => transport.entries(collection, { ...options, cursor: pageParam }),
       getNextPageParam: nextPage,
     });
     const { list, ...state } = useAccumulated(query, page => page.items);
@@ -243,7 +243,7 @@ const implementation = {
   },
   useEntry(collection: string, id: string): EntryState<object> {
     const { transport } = useAdminContext();
-    const query = useQuery({ queryKey: ["entry-editor", collection, id, "hook", transport.surface], queryFn: ({ signal }) => transport.entry(collection, id, { signal }) });
+    const query = useQuery({ queryKey: ["entry-editor", collection, id, "hook", transport.surface], queryFn: () => transport.entry(collection, id) });
     return { entry: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
   },
   useOperation(name: string, options: { readonly refresh?: readonly ViewRefresh[] } = {}): OperationState<object, unknown> {
@@ -266,21 +266,21 @@ const implementation = {
   },
   useCollectionTotal(collection: string): TotalState {
     const { transport } = useAdminContext();
-    const query = useQuery({ queryKey: ["collection-statistics", collection, "total", transport.surface], queryFn: ({ signal }) => transport.total(collection, { signal }) });
+    const query = useQuery({ queryKey: ["collection-statistics", collection, "total", transport.surface], queryFn: () => transport.total(collection) });
     return { total: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
   },
   useMe(): MeState {
     const { transport } = useAdminContext();
-    const query = useQuery({ queryKey: ["me", "hook", transport.surface], queryFn: ({ signal }) => transport.me({ signal }) });
+    const query = useQuery({ queryKey: ["me", "hook", transport.surface], queryFn: () => transport.me() });
     return { me: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
   },
   useBadges(refs: readonly { readonly view: string; readonly field: string }[]): readonly BadgeState[] {
     const { transport } = useAdminContext();
-    const me = useQuery({ queryKey: ["me", "hook", transport.surface], queryFn: ({ signal }) => transport.me({ signal }) });
+    const me = useQuery({ queryKey: ["me", "hook", transport.surface], queryFn: () => transport.me() });
     const names = [...new Set(refs.map(ref => ref.view))].slice(0, MAX_BADGE_VIEWS);
     // the user is in the key: another identity never reads this one's counts
     const userId = me.data?.status === "ok" ? me.data.data.userId : undefined;
-    const query = useQuery({ queryKey: ["badges", userId, transport.surface, names], queryFn: ({ signal }) => transport.badges(names, { signal }), enabled: names.length > 0 && userId !== undefined });
+    const query = useQuery({ queryKey: ["badges", userId, transport.surface, names], queryFn: () => transport.badges(names), enabled: names.length > 0 && userId !== undefined });
     return refs.map((ref): BadgeState => {
       if (!names.includes(ref.view)) return { count: undefined, status: "unavailable" };
       if (me.isError || query.isError) return { count: undefined, status: "error" };
