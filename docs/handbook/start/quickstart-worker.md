@@ -3,7 +3,7 @@ description: Generate a small native D1 service and mount an application-owned W
 ---
 # Quickstart: a service on Workers
 
-Create an application outside the SDK checkout. Install stable `@aotter/mantle@0.2.0` exactly, TypeScript, Wrangler and Cloudflare Worker types; `node_modules/@aotter/mantle/docs/examples/app-shell/package.json` lists the versions this release is tested with. Read that installed version's handbook; this page describes the native 0.2.0 contract.
+Create an application outside the SDK checkout. Install one exact `@aotter/mantle` version ([Releases](../releases/index.md)), TypeScript, Wrangler and Cloudflare Worker types; `node_modules/@aotter/mantle/docs/examples/app-shell/package.json` lists the versions this release is tested with. Read that installed version's handbook; this page describes the native 0.2 contract.
 
 Save `manifests/tickets.yaml`:
 

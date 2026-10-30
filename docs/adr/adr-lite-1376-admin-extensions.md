@@ -60,11 +60,40 @@ authorizes.
    per-field inputs. Plugins are `defineAdmin` fragments applied
    in order as a `renderDefault` chain. Slot names and props are versioned
    with the package.
+   - **Custom input status (#1847).** Record root-field `InputProps` adds optional
+     `onStatusChange({ error?, dirty? })`, `error` and `errorId`. A report replaces
+     the mounted field's previous report; no argument clears it. The existing
+     record form owns these reports, disables Save on any applicable error,
+     renders an alert with a stable id, and includes local `dirty` drafts in its
+     existing navigation guard. Custom controls connect their ARIA attributes
+     to `error`/`errorId`; generated server checks remain the authority.
+     Reports use mounted root-field identity, never nested object names or
+     array indices. Removing the field clears its report. A row becoming
+     read-only preserves local drafts and their leave protection, hides the
+     error until editable again, and never permits Save. Loading another
+     record/latest version, a clean newer version or a successful Save resets
+     the local controls; re-reads preserve dirty
+     drafts, including ones typed while Save was in flight. Existing inputs
+     need not use the optional channel. Procedure forms are unaffected.
 4. **Data.** Hooks (`useView`, `useEntries`, `useEntry`, `useOperation`,
    `useCollectionTotal`, `useMe`, `useBadges`) call only caller-authorized
    `/admin/api` routes in the browser (decision 8 covers MCP hosts), each of
    which checks the caller, and share Admin's query cache. Generated types bind
    names, inputs and rows. Refusals read as unavailable.
+   - **Schema locks (#1822).** When a Schema declares `spec.lock`, each entry
+     the editor and list routes return (`useEntry`, `useEntries`) carries
+     `locks: { update, delete }`: per verb, `{ lock, message }` of the first
+     lock that holds for the caller's generic write of that row, read by the
+     same `when` (NULL holds) in the read's projection, or `false`. A trusted
+     caller reads both as `false`. Every publishing entry carries `locks` too:
+     its draft-only and unpublish-before-delete rules are the implicit lock
+     `publishing`, after a declared lock on the same verb, and bind data
+     writes only, never transitions. An entry has no `locks` field when its
+     Schema is operational without locks, or when the read did not evaluate
+     the declared locks (related entries and reference titles). It is advisory: the write's own WHERE
+     decides, and a refusal is `CONFLICT` `kind: "lock"`. Default components
+     disable Save, rename, Delete and transitions and show the message; the
+     operational unlock toggle never overrides it.
 5. **The manifest keeps data semantics;** only component references
    (`<extension>/<contribution>` widgets, `list.cells`, `panels`) are
    removed.

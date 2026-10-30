@@ -91,7 +91,7 @@ Invalid presented bearer credentials fail rather than becoming anonymous. Fresh 
 
 ## Build: keep Better Auth out of startup
 
-Use the [Workers build instructions](../../../packages/mantle/README.md#workers-build).
+Generation configures `mantle bundle` as the Workers build ([outputs](../start/project-and-cli.md#outputs)).
 The metafile startup guard rejects static Better Auth imports; keep auth behind
 `authLoader(() => import(...))`.
 

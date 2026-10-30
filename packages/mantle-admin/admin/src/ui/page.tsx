@@ -135,7 +135,9 @@ export function OperationErrorBox({ error }: { error: unknown }): React.ReactEle
     const field = /\/input\/([^/]+)$/.exec(refusal.path ?? "")?.[1], message = (error as ApiError).message;
     return (
       <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-        {t(language, "ops.error.refused", { message: field ? `${field}: ${message}` : message })}
+        {refusal.code === "CONFLICT" && refusal.kind === "lock"
+          ? t(language, "ops.lockConflict", { message })
+          : t(language, "ops.error.refused", { message: field ? `${field}: ${message}` : message })}
       </div>
     );
   }

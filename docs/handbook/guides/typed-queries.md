@@ -11,6 +11,18 @@ description: Choose Store for writes and simple lookups; declare internal Views 
 
 Never write raw SQL to Mantle collections: it bypasses scope, TTL, publishing and system-column rules. The Store applies row rules but does not check a View's or Procedure's `requires`; authorize your handler before using it.
 
+## Adopt Mantle in an existing application
+
+Keep the application's router, database handle, identity and frontend; declare only the Schemas and operations you
+adopt and import their `views/<encoded-name>.ts` or `procedures/<encoded-name>.ts`. Bun.SQL and postgres.js fit
+directly; node-postgres needs an [adapter](postgres-adapters.md). Resolve one verified Caller per request, with the
+shared cookie-session origin check on writes ([authentication](../cloudflare/authentication.md)). No Admin, auth or
+surface module is required for direct queries.
+
+Existing tables need an explicit migration into the declared storage shape, including system columns and constraints;
+never apply the initial `schema.sql` over an occupied database. Rehearse the migration on a copy, keep a rollback, and
+test scope, TTL, publication, OCC and persisted state with the application's own identity and tests.
+
 ## Declare an internal View
 
 Save this as `manifests/tickets.yaml`:
@@ -83,11 +95,16 @@ CREATE INDEX articles_title_trgm ON articles USING gin (title gin_trgm_ops);
 
 Index each searched field as needed and inspect EXPLAIN for the workload. Case folding follows the engine.
 
-Writes are lazy and execute once when awaited. Insert/update return native rows; delete returns void. `update(id, set, { lock })` and `delete(id, { lock })` require the version the caller reviewed. A stale lock, excluded row or unique clash is `CONFLICT`. `batch` atomically executes unused Writes from one Store in input order; a step cannot use a prior result.
+Writes are lazy and execute once when awaited. Insert/update return native rows; delete returns void. Store rows carry `version` as a number on every target: PostgreSQL's int8 text is converted, and a value beyond `Number.MAX_SAFE_INTEGER` is `SQL_TYPE` rather than rounded. `update(id, set, { lock })` and `delete(id, { lock })` require the version the caller reviewed, as a number or an exact integer string. A stale lock, excluded row or unique clash is `CONFLICT`. A definitive PostgreSQL serialization failure (`40001`) or deadlock (`40P01`) is also `CONFLICT`, with `kind: "serialization"` and the native error as `cause`; the write was rolled back. This includes a server refusal at COMMIT. A missing/uncertain response remains `OUTCOME_UNKNOWN`. Re-read before deciding whether to retry; there is no automatic retry. `batch` atomically executes unused Writes from one Store in input order; a step cannot use a prior result.
 
-Interactive `transaction(async tx => …)` exists on bun:sqlite and PostgreSQL, with collections, Views and Procedures bound to the transaction. D1 supports batches only. PostgreSQL defaults to serializable, with an explicit isolation override; SQLite uses BEGIN IMMEDIATE. Use `tx` inside the callback, not the outer Store or handle. Nested transactions and `tx.batch` are refused; there is no automatic retry.
+Interactive `transaction(async tx => …)` exists on bun:sqlite and PostgreSQL, with collections, Views and Procedures bound to the transaction. D1 supports batches only. PostgreSQL defaults to serializable, with an explicit isolation override; SQLite uses BEGIN IMMEDIATE. Use `tx` inside the callback, not the outer Store or handle. Nested transactions are refused; there is no automatic retry. `tx.batch` joins the outer transaction, with no savepoint.
+A rejected batch marks the whole outer transaction rollback-only, including when its error is caught: the transaction
+rejects with the first batch failure and rolls back all its writes. This includes invalid/reused/foreign Writes and
+errors while building or executing the batch.
 
-Ref handlers receive `{ caller, db, store }` bound to the same Caller and transaction. Implement the generated `Handlers` interface and pass it to `store(db, caller, { handlers })`. Direct Procedure modules expose SQL Procedures; ref Procedures are reached through the bound Store or selected surfaces.
+Ref handlers receive `{ caller, db, store }` bound to the same Caller and transaction. `ctx.store.batch` is available
+on every target: a native atomic batch standalone, or part of the same outer transaction when one exists. Use it for
+known multi-writes rather than constructing another Store inside a handler. Implement the generated `Handlers` interface and pass it to `store(db, caller, { handlers })`. Direct Procedure modules expose SQL Procedures; ref Procedures are reached through the bound Store or selected surfaces.
 
 See [native execution](native-execution.md) for values and write outcomes and [migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations) before changing a Schema.
 

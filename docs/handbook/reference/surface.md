@@ -215,6 +215,16 @@ by declared identity, scope and `check` requirements. Without `authorize`, the
 complete endpoint catalogue is not a permission-filtered catalogue. Operation
 validation, guards and credential checks still apply to calls.
 
+`toolsPageSize` pages `tools/list`: each page holds at most that many tools and
+carries an opaque `nextCursor` while more remain; pass it back as `cursor`. A
+cursor is valid only for the catalogue version that issued it; an unknown or
+stale cursor is answered with JSON-RPC error `-32602`, and the client lists
+again from the first page. Without the option, one page lists every tool and
+carries no `nextCursor`.
+
+A hand-built tool's `meta` and a `run` returning `withResultMeta(data, meta)`
+add listed and result `_meta`; see [MCP Apps](../guides/mcp-apps.md#tool-metadata-and-result-_meta).
+
 The app resolves bearer tokens with `resolveCaller(request, auth, { audience:
 new URL('/mcp', request.url).href })` (both surfaces use `<origin>/mcp`). The app
 must also mount Better Auth's `/.well-known/oauth-protected-resource/mcp`
@@ -360,8 +370,9 @@ Malformed persisted JSON becomes a redacted internal failure. The conversion
 adds no database operations and does not mutate native query rows.
 
 Bare Views, Store rows, native SQL Procedure `{ results }` and application-owned
-ref outputs retain their native contracts. Use the generated `rest()` / `mcp()`
-module for this client wire contract; do not duplicate JSON/boolean decoding in
+ref outputs retain their native contracts, except that a Store row's `version` is a
+number on every target, so a ref handler returning it outputs the same type
+everywhere. Use the generated `rest()` / `mcp()` module for this client wire contract; do not duplicate JSON/boolean decoding in
 application route handlers or decode PostgreSQL JSON strings a second time.
 
 Declared integer columns (including a selected system `version`) on every target

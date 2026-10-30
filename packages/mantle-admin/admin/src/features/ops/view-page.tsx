@@ -39,6 +39,7 @@ interface ViewQueryResult {
 export async function fetchView(
   name: string,
   params: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<ViewQueryResult> {
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -49,6 +50,7 @@ export async function fetchView(
   const res = await fetch(`/admin/api/views/${encodeURIComponent(name)}${suffix ? `?${suffix}` : ""}`, {
     credentials: "same-origin",
     headers: { Accept: "application/json" },
+    ...(signal ? { signal } : {}),
   });
   const body = (await res.json().catch(() => null)) as ViewQueryResult | { error?: { message?: string } } | null;
   if (!res.ok || !body || !("rows" in body)) throw new Error(body && "error" in body && body.error?.message ? body.error.message : `${res.status} ${res.statusText}`);

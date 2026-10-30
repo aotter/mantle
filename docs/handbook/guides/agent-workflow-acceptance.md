@@ -8,10 +8,13 @@ author's replay remain useful; they do not establish independent acceptance. A
 fresh context is not enough if the author still chooses a workflow that mirrors
 the implementation. Every acceptance round gives the evaluator only a
 role and the entry points that role uses; it derives realistic tasks itself
-and the author scores them against a private rubric.
+and the author scores them against a private rubric. The first delivery gets
+full acceptance; after a repair, the change decides what
+[re-runs](#re-verify-what-a-repair-touches).
 If independent acceptance is not run, report `UNVERIFIED`; if a fresh evaluator
 or authorized test transport is unavailable, report `BLOCKED`; neither outcome
-is done.
+is done. Either way, report the evidence you do have in the
+[layered handoff](#report-done-ness-in-layers).
 
 Use the surface the intended user actually uses: a real browser session for
 Admin and application pages; for REST, an HTTP client plus the public API
@@ -82,6 +85,20 @@ rounds below before claiming the user-facing work is done. Keep the author's
 capability map and worked call sequence out of the fresh agent's prompt: an MCP
 evaluator must discover the workflow from public tool descriptions and results.
 
+## Plan the run
+
+The plan the user approves before the build ([Build from a product brief](../start/agents.md#build-from-a-product-brief))
+says in plain words who tries the app and what they try to get done. Behind it, the run
+fixes:
+
+- each evaluator you will start: its role (`admin`, `user`, a visitor), the surfaces it uses (Admin, member pages,
+  REST, MCP, visitor pages) and the goals it is asked to finish, in the user's words;
+- the round limit (at most three) and what triggers a re-run;
+- what the environment needs, such as a browser for a visitor or member page. Provide it yourself (install a headless
+  browser if none is there); only what you cannot provide goes to the user now, rather than reported as BLOCKED later.
+
+Keep the rubric itself private: the plan names goals, never the checks an evaluator is graded on.
+
 ## Run role-only acceptance rounds until they converge
 
 The evaluator gets a role, not a task list. It works out what that role needs
@@ -110,7 +127,9 @@ the evidence.
    (at least once after a first look, again after its first attempts), executes
    it, and reports PASS/FAIL/BLOCKED per goal with readbacks, rejected writes,
    recovery attempts and interaction counts. Zero findings is a valid result.
-4. **One fresh agent per role, every surface.** For the default two roles, run
+4. **One fresh agent per role, every surface.** In the first round, and in any
+   round the [re-verification rule](#re-verify-what-a-repair-touches) widens
+   to all of them, cover every role and surface. For the default two roles, run
    an `admin` evaluator and a `user` evaluator in the same round on shared live
    data, in the brief's natural order. Between them they cover every surface
    the app exposes to each role: Admin for `admin`, pages for visitors and
@@ -124,28 +143,80 @@ the evidence.
    discoverable), P2 (friction) or P3 (suggestion), with evidence and the
    smallest repair. Separate a violated explicit requirement, a demonstrated
    defect and a newly inferred product wish; a wish is not permission to grow
-   the product.
-6. **Repair outside the evaluator's context, then start over.** The author keeps
-   the findings ledger, makes the smallest in-scope repair, adds focused
-   regressions (authorization, OCC, atomicity), and freezes a new revision.
-   The next round uses new agents and new fixtures and passes them nothing
-   from earlier rounds.
-7. **Converge or stop.** A round converges when it has no P0 or P1 and the
-   evaluators' observed results cover every rubric item visible to their roles;
-   items outside any role's view (another caller's isolation, hidden state)
-   need author regressions, reported under that label. Run at most three
+   the product. A goal the evaluator's own environment stopped (its tool
+   approval, sandbox or network, not an app refusal) is not a finding: record
+   it as an [environment block](#report-done-ness-in-layers) and rerun that
+   role once it is lifted.
+6. **Repair outside the evaluator's context, then re-verify what it touches.**
+   The author keeps the findings ledger, makes the smallest in-scope repair,
+   adds focused regressions (authorization, OCC, atomicity), and freezes a new
+   revision. The next round re-runs the roles and surfaces the
+   [re-verification rule](#re-verify-what-a-repair-touches) names, with new
+   agents and new fixtures, and passes them nothing from earlier rounds.
+7. **Converge or stop.** A round converges when it has no P0 or P1 and
+   evaluator-observed results cover every rubric item visible to their roles:
+   from this round, or reused from an earlier round under the
+   re-verification rule. Items outside any role's view (another caller's
+   isolation, hidden state) need author regressions, reported under that
+   label. Run at most three
    rounds. If the third still has a P0 or P1 or an uncovered rubric item, report
    BLOCKED with the remaining ledger, not acceptance. Setup cleans fixtures in
    `finally` after every round, including aborted ones.
 
 If a fresh agent or authorized test transport is unavailable, record independent
-acceptance as BLOCKED and report the scripted checks separately. Do not invent
+acceptance as BLOCKED and report the scripted checks on their own
+[layers](#report-done-ness-in-layers). Do not invent
 an independent result. Do not deploy or publish merely to obtain acceptance.
 
-Acceptance proves the behavior, not its speed. Once a round converges, the
-[performance skill](../../skills/performance/SKILL.md) decides which performance
-checks apply and holds them to their targets; a performance repair that changes
-what a role sees or can do returns here for that surface.
+Acceptance proves the behavior, not its speed. For every role and surface a
+round reports CONVERGED, the [performance pass](performance.md)
+decides which performance checks apply and holds them to their targets. BLOCKED
+or UNVERIFIED parts are reported as they are, never optimized. A performance
+repair that changes what a role sees or can do returns here, scoped by the
+[re-verification rule](#re-verify-what-a-repair-touches).
+
+## Re-verify what a repair touches
+
+The first delivery always gets full acceptance: every role, every surface.
+After a repair, the change itself decides what runs again, not the finding
+that prompted it. Rounds before convergence are not accepted, so diff against
+evidence, not rounds: for each item you want to reuse, diff the current
+revision against the revision it was observed at, and pick the widest row that
+diff matches. A chain of repairs adds up; a page-only repair followed by a
+handler repair has to re-run what the handler repair reaches.
+
+| The repair changes | Re-run with fresh evaluators | May reuse |
+| --- | --- | --- |
+| Only presentation: page or Admin layout, CSS, copy, client-side display | Blind acceptance of the affected UI, for each role that uses it. A shared component or layout affects every page that renders it. | REST and MCP evidence from the same business-rule version |
+| A public contract: a tool or route description, input, output or error shape; the generated client or other `generated/` output it changes | That surface for each role that uses it, plus every UI that consumes it | Other surfaces at the same business-rule version |
+| Authentication, sessions, roles, `requires`, row or tenant scope | Every surface that the changed rule guards, for every affected role | Nothing those surfaces depend on |
+| A SQL Procedure or View, a `uniqueIndexes` entry, a check or lock, a migration that changes results, a handler's business rule | Every surface that reads or writes that data | Nothing those surfaces depend on |
+| A shared transport: the service entry, routing, the HTTP or MCP mount, a shared error envelope | Every surface on that transport | Nothing on that transport |
+
+The business-rule version is the revision of the manifests, SQL, migrations,
+handlers, authorization and service entry. A repair that changes none of
+them keeps that version, so evidence collected at it still stands for
+surfaces the repair did not reach. A repair that changes any of them
+starts a new business-rule version, and looking at the UI alone is not
+enough. One exception: a repair that only adds or drops a non-unique Schema
+`indexes` entry and its migration keeps the version. It changes speed, not
+which rows a read returns or which writes are refused. A `uniqueIndexes`
+entry, a check or a lock does change which writes succeed, so it falls in the
+SQL row. When the diff is unclear, widen.
+
+Every row still runs the author's regressions on the new revision (layers 1
+and 2 of the [layered report](#report-done-ness-in-layers)): `pnpm check`,
+`pnpm smoke`, `pnpm test` and the focused regressions for the repair.
+
+A re-run evaluator is as fresh as the first: a new agent, new fixtures, only
+its role and the entry points under re-test. Do not tell it what was
+repaired, what to check or what an earlier evaluator did. No previous
+answers, rubric or precomputed steps.
+
+For every rubric item that was not re-run, record the round and revision its
+evidence comes from and why the changes since that revision could not affect
+it. Never report a
+reused item as observed in a later round.
 
 ## Hand each role to its evaluator
 
@@ -190,7 +261,8 @@ Fill this in per role. It names the role and the doors, never the jobs:
 > first look at the interface and again after your first attempts. Then do the
 > work and report each goal as PASS/FAIL/BLOCKED with what you read back,
 > what was refused, what it cost you, and the smallest change that would have
-> helped. Report what you covered and what you could not reach; finding nothing
+> helped. For BLOCKED, say whether the service refused you or your own tools
+> or permissions stopped you. Report what you covered and what you could not reach; finding nothing
 > wrong is acceptable.
 
 The author separately verifies isolation between callers, stale-version
@@ -199,6 +271,64 @@ through authorized test fixtures. Do not grant the evaluator extra authority
 just to observe hidden state. Keep author regressions distinct from what the
 fresh agent actually observed.
 
+## Report done-ness in layers
+
+Report a handoff in four layers, in this order, each for the exact commit. Each
+layer proves something the others do not; a passing layer neither replaces nor
+is invalidated by another layer's result.
+
+| Layer | What it proves | Evidence |
+| --- | --- | --- |
+| 1. Generation and types | Manifests compile, `generated/` is current, the app typechecks and builds. No handler runs. | `pnpm check` (includes `generate --check`), `pnpm build` |
+| 2. Business rules and permissions | Handlers on a fresh local D1 over HTTP: each operation at its edges, refusals, caller isolation, visitor pages, MCP discovery, the Admin MCP App loading. Author's evidence. | `pnpm smoke`, `pnpm test`; [Local HTTP checks](local-testing.md) |
+| 3. Independent acceptance, per role | A fresh agent given only its role and entry points finds and finishes that role's work on each surface it uses. | Per role: the [rounds](#run-role-only-acceptance-rounds-until-they-converge) verdict and surfaces covered, naming the round and revision of any [reused](#re-verify-what-a-repair-touches) evidence |
+| 4. External platform | A real MCP host connects over OAuth; the production origin serves the deployed app. Local cookie sessions prove neither. | Host and version, identity, origin, observed result |
+
+Give each layer, and each role on layer 3, one status:
+
+- **verified**: the evidence above, with its command or host and result.
+- **failed**: the product is wrong. Name the failing check or finding.
+- **BLOCKED**: the layer could not run. Give the reason, what refused or is
+  missing, and what would unblock it.
+- **not applicable**: with the reason. Layer 4 is not applicable unless the
+  requested work includes an external host connection or a deployment.
+
+A layer nobody attempted is UNVERIFIED, as above. A block from the execution
+environment (an agent's approval policy refusing fictional writes, no browser,
+no network, a sandbox) is BLOCKED on that layer only. It is never a failed
+layer or a product finding, and it does not invalidate the evidence on other
+layers. Do not work around it by widening the evaluator's authority, faking a
+result or deploying; ask whoever controls the environment and rerun only that
+layer on the same revision.
+
+The work is done only when layers 1 to 3 are verified for every role and
+surface, and layer 4 is verified or not applicable. Partial evidence is still
+reported, layer by layer; it is not done:
+
+```markdown
+| Layer | Status | Evidence |
+| --- | --- | --- |
+| 1. Generation and types | verified | `pnpm check`, `pnpm build` at <commit> |
+| 2. Business rules and permissions | verified | `pnpm smoke` (<n> checks), `pnpm test` |
+| 3. Acceptance: admin | BLOCKED: evaluator's approval policy refused to create fictional records; needs <permission> | round 1 stopped at goal <n> |
+| 3. Acceptance: user | verified: CONVERGED in round <n> | member pages in round <n>; MCP reused from round <m> at <revision> (page-only repair) |
+| 4. External platform | not applicable: no deployment or external host requested | |
+```
+
+## Summarise for the user
+
+Lead the handoff with what acceptance found and fixed, so the user sees the value of the rounds:
+
+```markdown
+| Evaluator (role, surfaces) | Rounds | Found | Fixed in | Final |
+| --- | --- | --- | --- | --- |
+| admin: Admin, admin MCP | 2 | P1: approving a stale event overwrote a newer edit | `approve-event` checks the version | CONVERGED |
+| user: member pages, MCP | 1 | none | | CONVERGED |
+| visitor: public pages | 1 | P2: no link back from an event to the list | `src/routes.ts` | CONVERGED |
+```
+
+Name each finding by its effect on the user, not the code, then give the layered status below.
+
 ## Record evidence in the existing issue or handoff
 
 Use ordinary Markdown; no new receipt schema or framework is required:
@@ -206,16 +336,20 @@ Use ordinary Markdown; no new receipt schema or framework is required:
 - Original brief, the private rubric, roles, environment, per-round budgets
   and round cap.
 - Setup assistance and what each agent could access; identify distinct rounds.
-- Per round: revision, each evaluator's derived goals (first list and
+- Per round: revision, business-rule version, the roles and surfaces re-run
+  and why (the [re-verification rule](#re-verify-what-a-repair-touches) row),
+  each evaluator's derived goals (first list and
   refinements) and criteria, the gaps between them and the rubric, per-goal
   PASS/FAIL/BLOCKED, actual readbacks and interaction references,
   request/page/tool counts
   and negative/recovery attempts, with their differing scope stated.
 - Findings ledger with P0–P3, owner, disposition, minimal repair and
   regression commands/results.
-- Coverage of each rubric item (evaluator-observed, author regression only, or
-  UNVERIFIED); the final CONVERGED / BLOCKED / UNVERIFIED verdict and rounds
-  used. Retain every failed report.
+- Coverage of each rubric item (evaluator-observed in this round,
+  evaluator-observed and reused from round `<n>` at `<revision>` with the reason,
+  author regression only, or UNVERIFIED); the final CONVERGED / BLOCKED / UNVERIFIED verdict and rounds
+  used, which is layer 3 of the [layered report](#report-done-ness-in-layers).
+  Retain every failed report.
 - Fixture cleanup result and every remaining limitation.
 
 Keep credentials, raw auth logs, full resource HTML and private operational

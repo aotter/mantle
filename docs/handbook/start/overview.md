@@ -1,5 +1,5 @@
 ---
-description: The native 0.2.0 handbook and its three package boundaries.
+description: The native 0.2 handbook and its three package boundaries.
 ---
 # Mantle handbook
 

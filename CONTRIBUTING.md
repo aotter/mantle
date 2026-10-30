@@ -54,8 +54,9 @@ audiences or copy maintainer policy into shipped skills.
 - Compiler code stays build-time only. `src/kernel` and `src/auth` do not import
   `build`, `domain`, `usecase`, `infrastructure`, Admin, or another SDK.
 - Generated operations call only the selected native driver and dialect. Bare
-  query output preserves native driver values; selected HTTP/MCP/Admin boundaries
-  own static declared-column transport conversion, including exact stored int64 text.
+  query output preserves native driver values, except that Store rows return
+  `version` as a number; selected HTTP/MCP/Admin boundaries own static
+  declared-column transport conversion, including exact stored int64 text.
 - Auth, REST, MCP, web, site/media and Admin remain selected capabilities.
   Better Auth and the MCP SDK load on a matching request, outside Worker startup.
   The application writes `auth.ts` and resolves Caller; Mantle does not wrap Auth.

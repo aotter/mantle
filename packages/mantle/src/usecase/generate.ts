@@ -71,11 +71,18 @@ export function generate(input: GenerateInput): GenerateResult {
   };
   // The dialect functions the bind recipes call, so a bundle carries only those (`binds` takes this object).
   const values = new Set<string>();
+  // Repeated SQL texts and bind recipes are emitted once as module constants (see `unpool`).
+  const pool = new Map<string, string>();
+  const pooled = (text: string) => { let id = pool.get(text); if (!id) pool.set(text, id = `\u0000_p${pool.size}\u0000`); return id; };
   /** A statement as a constant: its text and how to bind it. */
   const step = (s: LoweredStatement, path: string, fields: readonly string[], row = false) => {
-    const recipes = recipesOf(s, fields, message => refuse(path, message));
-    for (const r of recipes) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && r.type) values.add(r.type === "date" ? "date" : "timestamp"); }
-    return `{ sql: ${q(s.sql)}, binds: ${q(recipes)}${row ? ", row: true" : ""} }`;
+    // a row op must change exactly one row; a set op whose step says `onNoRows: conflict` at least one (#1874)
+    const recipes = recipesOf(s, fields, message => refuse(path, message)), probe = row && s.probe ? recipesOf(s.probe, fields, message => refuse(path, message)) : [];
+    for (const r of [...recipes, ...probe]) { if (r.k === "now" || r.k === "cutoff") values.add(r.k); else if (r.k === "input" && r.type) values.add(r.type === "date" ? "date" : "timestamp"); }
+    // #1822: the lock probe the driver reads when this row write changes no row
+    const locks = Object.fromEntries((plan.schemas[s.schema ?? ""]?.locks ?? []).filter(l => l.on.includes(s.verb as "update")).map(l => [l.name, l.message]));
+    const lock = row && s.probe ? `, lock: ${q({ sql: s.probe.sql, binds: probe, schema: plan.schemas[s.schema!]!.name, verb: s.verb, locks })}` : "";
+    return `{ sql: ${pooled(q(s.sql))}, binds: ${pooled(q(recipes))}${row ? ", row: true" : s.onNoRows ? ', row: "some"' : ""}${lock} }`;
   };
   const declarations: string[] = [], views: string[] = [], procedures: string[] = [], refProcedures: string[] = [];
   const entries: Record<string, string> = {};
@@ -118,30 +125,38 @@ export function generate(input: GenerateInput): GenerateResult {
     const same = steps(modes.caller) === steps(modes.trusted);
     declarations.push(`export type Procedure${index}Input = ${queryInputType(procedure.input, [...modes.caller, ...modes.trusted])};`,
       `const ${fn}Caller = ${steps(modes.caller)};`, ...(same ? [] : [`const ${fn}Trusted = ${steps(modes.trusted)};`]),
-      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`, ...(modes.caller.some(s => s.kind !== "read") ? [`  if ("authenticatedAs" in caller && caller.authenticatedAs === "snapshot") (await import("@aotter/mantle/host-caller")).checkFresh(caller, false, ${q(path)});`] : []), ...auth(procedure.requires, path), ...(user.used ? ['  USER.modeOf(caller);'] : []), ...(procedure.trustedOnly ? [`  deny(caller, USER.modeOf(caller) === "trusted", ${q(path)});`] : []),
+      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`, ...(modes.caller.some(s => s.kind !== "read") ? [`  await _fresh(caller, ${q(path)});`] : []), ...auth(procedure.requires, path), ...(user.used ? ['  USER.modeOf(caller);'] : []), ...(procedure.trustedOnly ? [`  deny(caller, USER.modeOf(caller) === "trusted", ${q(path)});`] : []),
       `  return { results: await DRIVER.procedure(db, bound(D, ${user.used ? "USER.scopedAll(" : ""}${same ? "" : `${user.used ? 'USER.modeOf(caller) === "trusted"' : 'caller.kind === "system"'} ? ${fn}Trusted : `}${fn}Caller${user.used ? ", caller)" : ""}, caller, raw), ${q(path)}) };`, "}");
     procedures.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry("procedure", name, `Procedure${index}Input as Input`, `export type { Output } from "${base}contracts";\n`);
   }
   emitTtl(plan, isSqlite, declarations, procedures, entries, refuse);
-  emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse);
-  const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers);
+  emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse, input.locks);
+  const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers, input.locks);
   const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target, input.description), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, input.description, refuse, !!site), ...emitAdminDescriptors({plan,admin},diagnostics), ...emitAdminBindings(input,refuse), ...(admin ? emitAdminClient(plan, typeOf) : {}), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";
-  const code = [...(Object.keys(plan.access?.userFields ?? {}).length ? [`export const userFields = ${q(plan.access!.userFields)} as const;`] : []), ...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [
+  const code = [...(declarations.some(d => d.includes("  await _fresh(caller, ")) ? ['const _fresh = (caller: Caller, path: string) => "authenticatedAs" in caller && caller.authenticatedAs === "snapshot" ? import("@aotter/mantle/host-caller").then(m => m.checkFresh(caller, false, path)) : undefined;'] : []), ...(Object.keys(plan.access?.userFields ?? {}).length ? [`export const userFields = ${q(plan.access!.userFields)} as const;`] : []), ...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [
     `export type Tables = ${stores.tables};`, `const RULES = ${stores.rules} as const;`,
     ...(hasHandlers ? [`const storeProcedures = { ${[...procedures, ...refProcedures].join(", ")} };`] : []),
     `const initStore = () => createStore<Database, Tables, typeof DRIVER, { views: typeof views; procedures: typeof ${storeProcedures} }${hasHandlers ? ", { handlers: Handlers }" : ""}>(${user.used ? "{...DIALECT.dialect, ...USER_VALUES}" : "DIALECT.dialect"}, DRIVER, RULES, ${stores.facts}, { views, procedures: ${storeProcedures} });`,
     `let makeStore: ReturnType<typeof initStore>;`,
     `export function store${hasHandlers ? "<const H extends Handlers>" : ""}(db: Database, caller: Caller${hasHandlers ? ", options: { handlers: H & Record<Exclude<keyof H, keyof Handlers>, never> }" : ", _options?: { handlers?: Handlers }"}): ReturnType<typeof makeStore> { return (makeStore ??= initStore())(db, caller${hasHandlers ? ", options" : ""}); }`,
   ] : [])].join("\n");
+  function unpool(text: string): string[] {
+    const shared: string[] = [];
+    for (const [value, token] of pool) {
+      if (text.split(token).length > 2) { const id = token.slice(1, -1); shared.push(`const ${id} = ${value} as const;`); text = text.replaceAll(token, id); }
+      else text = text.replace(token, () => value);
+    }
+    return [...shared, text];
+  }
   const dialect = `${base}dialect/${isSqlite ? "sqlite" : "postgres"}`;
   const contracts = [...(target.endsWith("postgres") ? ["type Postgres as Database", ...(views.length ? ["type Unsafe"] : [])] : []), "type Caller", ...(hasHandlers ? ["ContractError"] : []), ...(/^  deny\(/m.test(code) ? ["deny", ...(/\bisAdmin\(/.test(code) ? ["isAdmin"] : []), ...(/\bisUser\(/.test(code) ? ["isUser"] : [])] : []), ...(procedures.length ? ["type Output"] : [])];
   const dbType = isSqlite ? databaseImport(target) : "";
   return { ok: true, refProcedures: refNames, files: generatedFiles({ ...surfaces, ...entries, "generated.ts": ["// Generated native application SQL. No runtime plan or interpreter.", user.code, dbType, `import { ${contracts.join(", ")} } from "${base}contracts";`,
     ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []), `import * as DRIVER from "${base}driver/${driver}";`, ...((names => names.length ? [`import { ${names.join(", ")} } from "${base}store";`] : [])([...(stores ? ["createStore"] : []), ...(hasHandlers && target !== "cloudflare-d1" ? ["handlerTransaction"] : [])])),
     `import { ${procedures.length ? "binds, bound" : "binds"} } from "${base}binds";`,
-    `const D = { ${[...values].sort().map(v => `${v}: DIALECT.${v}`).concat(user.values ? [user.values] : []).join(", ")} };`, code].filter(Boolean).join("\n") + "\n" }) };
+    `const D = { ${[...values].sort().map(v => `${v}: DIALECT.${v}`).concat(user.values ? [user.values] : []).join(", ")} };`, ...unpool(code)].filter(Boolean).join("\n") + "\n" }) };
 }

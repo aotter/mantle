@@ -1,7 +1,7 @@
 /** Bun.SQL's PostgreSQL shape (`Postgres`); postgres.js satisfies it as it is. */
 import type { Bound } from "../binds.js";
 import type { TransactionOptions } from "../store.js";
-import { conflict, ContractError, schemaCheckFailed, type Postgres, type PostgresResult, type Row, type Unsafe } from "../contracts.js";
+import { conflict, ContractError, lockConflict, schemaCheckFailed, type Postgres, type PostgresResult, type Row, type Unsafe } from "../contracts.js";
 import { context, guard } from "./transaction-context.js";
 
 const transactions = new WeakSet<Postgres>();
@@ -22,18 +22,25 @@ export function definitive(error: unknown): boolean {
   const state = sqlstate(error);
   return typeof state === "string" && /^[0-9A-Z]{5}$/.test(state) && typeof (error as { severity?: unknown })?.severity === "string" && !/^(08|28|53|57|58|XX)/.test(state);
 }
+/** These server refusals aborted the write, unlike an interrupted or unacknowledged COMMIT. */
+function serialization(error: unknown, path: string): ContractError | undefined {
+  const state = sqlstate(error);
+  if ((state === "40001" || state === "40P01") && definitive(error))
+    return new ContractError("CONFLICT", "A concurrent transaction prevented this write. Read again before deciding whether to retry.", path, { cause: error, fields: { kind: "serialization" } });
+}
 /**
  * The error to throw when a PostgreSQL write fails where it may already have committed (autocommit, or COMMIT).
  * A server ErrorResponse (SQLSTATE + severity) outside connection/resource classes rolled back; anything else, such as a
  * lost socket, is OUTCOME_UNKNOWN.
  */
 export function postgresOutcome(error: unknown, path: string): unknown {
-  if (definitive(error)) return error;
+  if (definitive(error)) return serialization(error, path) ?? error;
   return new ContractError("OUTCOME_UNKNOWN", "The write outcome is unknown; reconcile before retrying.", path, { cause: error });
 }
 
 /**
- * One statement is atomic on its own (a row statement touches at most one row, so a failed count check changes nothing)
+ * One statement is atomic on its own (a row statement touches at most one row, and a `"some"` one fails only when it wrote
+ * none, so a failed count check changes nothing)
  * and runs in autocommit. Several run in `begin(serializable)`: a failure before the callback returns was rolled back;
  * only a failed COMMIT can leave the outcome unknown.
  */
@@ -41,8 +48,8 @@ export async function procedure(db: Postgres, steps: readonly Bound[], path: str
   const execute = async (handle: Unsafe) => {
     const results: Row[][] = [];
     for (const s of steps) {
-      const { rows, changes } = await run(handle, s.sql, s.binds).catch(error => { throw sqlstate(error) === "23505" ? conflict(path, true, error) : sqlstate(error) === "23514" ? check(path, error) : error; });
-      if (s.row && changes !== 1) throw conflict(path, false);
+      const { rows, changes } = await run(handle, s.sql, s.binds).catch(error => { throw sqlstate(error) === "23505" ? conflict(path, true, error) : sqlstate(error) === "23514" ? check(path, error) : serialization(error, path) ?? error; });
+      if (s.row && (changes < 1 || changes > 1 && s.row !== "some")) throw s.row === true && s.lock ? lockConflict(path, s.lock, (await run(handle, s.lock.sql, s.lock.binds)).rows) : conflict(path, false);
       results.push(rows);
     }
     return results;
@@ -76,6 +83,6 @@ export async function transaction<T>(db: Postgres, fn: (tx: Postgres) => Promise
       try { const result = await context.run(state, () => fn(tx)); committing = true; return result; }
       finally { active = false; }
     });
-  } catch (error) { throw error instanceof ContractError || !committing ? error : postgresOutcome(error, path); }
+  } catch (error) { throw serialization(error, path) ?? (error instanceof ContractError || !committing ? error : postgresOutcome(error, path)); }
   finally { state.outer = undefined; state.handle = undefined; }
 }

@@ -1,6 +1,6 @@
 /** View.spec and Procedure.spec: input, cache, handler binding, and the `requires` authorization predicate. */
 import type { DiagnosticCode } from "../../kernel/diagnostic.js";
-import { PROCEDURE_MCP_ANNOTATION_KEYS, PROCEDURE_TARGET_KEYS, VIEW_INPUT_RESERVED, type AuthPredicate, type JsonSchema, type ProcedureManifest, type ViewManifest } from "../model/ManifestGrammar.js";
+import { HANDLER_STEP_KEYS, PROCEDURE_MCP_ANNOTATION_KEYS, PROCEDURE_TARGET_KEYS, VIEW_INPUT_RESERVED, stepProgram, type AuthPredicate, type HandlerStep, type JsonSchema, type ProcedureManifest, type ViewManifest } from "../model/ManifestGrammar.js";
 import { ManifestParseError, V01_VIEW_SURFACES, rejectUnknownKeys, validateLocalizedText } from "./ManifestFieldChecks.js";
 import { checkFormUiSchema, checkViewAdminUi } from "./SchemaAdminUiChecker.js";
 import { validateJsonSchema } from "./SchemaSpecChecks.js";
@@ -154,7 +154,10 @@ export function validateProcedureSpec(m: ProcedureManifest, idx: number): Proced
   if ("requires" in s && s["requires"] != null) {
     validateRequires(s["requires"], idx, "Procedure");
   }
-  return m;
+  // #1874: `steps` is the program written one statement at a time; everything after parsing reads the joined `sql`
+  if (!("steps" in handler)) return m;
+  const steps = handler["steps"] as HandlerStep[];
+  return { ...m, spec: { ...m.spec, handler: { sql: stepProgram(steps).sql, steps } } };
 }
 
 /** Shape only; graph validation checks the Schema and input properties. */
@@ -183,14 +186,44 @@ function validateProcedureTargetShape(target: unknown, idx: number): void {
 }
 
 function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
+  // The numbered form never shipped in a stable release (#1775); it was replaced before 0.2.1 (#1874).
+  if ("mustWrite" in h) {
+    throw new ManifestParseError(
+      "Procedure.spec.handler.mustWrite was replaced by handler.steps[].onNoRows: conflict (#1874). Write the program as steps, one statement each, and mark the set op that must write: handler: { steps: [{ sql: \"INSERT INTO … SELECT … WHERE …\", onNoRows: conflict }, { sql: \"UPDATE …\" }] }",
+      idx,
+      "/spec/handler/mustWrite",
+    );
+  }
   const keys = Object.keys(h);
   const key = keys.length === 1 ? keys[0]! : undefined;
-  if (key !== "ref" && key !== "sql") {
+  if (key !== "ref" && key !== "sql" && key !== "steps") {
     throw new ManifestParseError(
-      `Procedure.spec.handler must have exactly one key, \`ref\` or \`sql\`; got ${JSON.stringify(keys)}`,
+      `Procedure.spec.handler must have exactly one key, \`sql\`, \`steps\` or \`ref\`; got ${JSON.stringify(keys)}`,
       idx,
       "/spec/handler",
     );
+  }
+  // #1874: one statement per step (compilePlan counts them, and checks onNoRows names a set-op write)
+  if (key === "steps") {
+    const steps = h["steps"];
+    if (!Array.isArray(steps) || steps.length === 0) {
+      throw new ManifestParseError("Procedure.spec.handler.steps must be a non-empty list of steps, each { sql, onNoRows? }", idx, "/spec/handler/steps");
+    }
+    for (const [i, step] of steps.entries()) {
+      const at = `/spec/handler/steps/${i}`;
+      if (typeof step !== "object" || step === null || Array.isArray(step)) {
+        throw new ManifestParseError(`Procedure.spec.handler.steps[${i}] must be an object { sql, onNoRows? }`, idx, at);
+      }
+      rejectUnknownKeys(step as Record<string, unknown>, HANDLER_STEP_KEYS, idx, at);
+      const { sql, onNoRows } = step as Record<string, unknown>;
+      if (typeof sql !== "string" || sql.trim().length === 0) {
+        throw new ManifestParseError(`Procedure.spec.handler.steps[${i}].sql is required (one statement)`, idx, `${at}/sql`);
+      }
+      if (onNoRows !== undefined && onNoRows !== "conflict") {
+        throw new ManifestParseError(`Procedure.spec.handler.steps[${i}].onNoRows must be \`conflict\`; got ${JSON.stringify(onNoRows)}`, idx, `${at}/onNoRows`);
+      }
+    }
+    return;
   }
   // For `sql` only the SQL compiler (compilePlan) reads the statements; here it just has to be present.
   if (typeof h[key] !== "string" || (h[key] as string).trim().length === 0) {

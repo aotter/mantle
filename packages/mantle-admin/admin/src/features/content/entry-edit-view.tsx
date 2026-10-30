@@ -1,4 +1,4 @@
-import { useAdminRouter } from "../../app/router";
+import { useAdminRouter, useLeaveGuard } from "../../app/router";
 import { SchemaFields as SharedSchemaFields, type FieldLabels, type FieldSlot } from "@aotter/mantle-ui/kit";
 export { stringFieldWidget } from "@aotter/mantle-ui/kit";
 import * as React from "react";
@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Globe, Images, ImagePlus, LockKeyhole, Plus, RotateCcw, Save, Send } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { api } from "../../lib/api";
+import { api, ApiError, refusalOf } from "../../lib/api";
 import { entryTitle } from "../../lib/entry-title";
 import { isFoldedFieldChild } from "../../lib/collection-nav";
 import { enumOptions } from "../../lib/enum-options";
@@ -14,7 +14,7 @@ import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { composeEntry, entryApiPath, entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
 import { Empty, Slot } from "../../app/slots";
-import type { InputProps } from "../../app/slot-props";
+import type { InputProps, InputStatus } from "../../app/slot-props";
 import type {
   AdminUser,
   EntryEditorCollection,
@@ -27,13 +27,14 @@ import type {
   SiteInfo,
   AdminOperation,
 } from "../../lib/types";
-import { mantleRefOf } from "../../lib/types";
+import { declaredLock, mantleRefOf } from "../../lib/types";
 import { Button, buttonVariants } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 import { CollapsibleDescription, ErrorBox, FormActionBar, OperationErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { useConfirm } from "../../ui/confirm-dialog";
 import { StatusBadge } from "../../ui/status-badge";
 import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
 import { MediaBrowser } from "../media/media-library-view";
@@ -48,9 +49,13 @@ import { collectionSummaryKey } from "./collection-view";
 import { boundOperationsFor, RecordOperations, RowOperationsMenu } from "./row-operations";
 import { contentLocales, LocaleBadge, localeName } from "./locale-badge";
 import { RefPicker } from "./ref-picker";
+import { editEntryForm, followEntry, hasEntryInputErrors, isEntryFormDirty, loadEntryForm, reannounceNewer, reportEntryInput, settleEntryForm, type EntryForm } from "./entry-form";
 
 const MarkdownEditor = React.lazy(() => import("../editor/markdown-editor").then((module) => ({ default: module.MarkdownEditor })));
 const HtmlEditor = React.lazy(() => import("../editor/html-editor").then((module) => ({ default: module.HtmlEditor })));
+
+/** An operation dialog refreshes every Admin read itself; a second invalidation here would refetch the entry twice. */
+const noRefresh = (): void => {};
 
 export function EntryEditView({
   collectionName,
@@ -78,39 +83,62 @@ export function EntryEditView({
     () => boundOperationsFor(operationsQuery.data, collectionName),
     [operationsQuery.data, collectionName],
   );
-  const [data, setData] = React.useState<Record<string, unknown> | null>(null);
+  // the form against the entry it was loaded from: a re-read keeps unsaved edits (#1790)
+  const [form, setForm] = React.useState<EntryForm | null>(() => query.data ? loadEntryForm(query.data.entry) : null);
+  const data = form?.data ?? null;
+  // unsaved edits: leaving asks first; Save, "Load latest version" or confirming the leave clears it (#1792)
+  const confirm = useConfirm();
+  useLeaveGuard(form ? isEntryFormDirty(form) : false, () => confirm({ description: t(language, "entryEdit.leaveUnsaved") }));
+  const latest = query.data?.entry;
+  const setData = React.useCallback(
+    (next: Record<string, unknown>) => setForm((current) => current && editEntryForm(current, next, latest)),
+    [latest],
+  );
+  const reportInput = React.useCallback((key: string, revision: number, status?: InputStatus) => {
+    setForm(current => current && current.inputRevision === revision ? reportEntryInput(current, key, status) : current);
+  }, []);
   const [operationalEditUnlocked, setOperationalEditUnlocked] = React.useState(false);
   React.useEffect(() => setOperationalEditUnlocked(false), [collectionName, entryId]);
   React.useEffect(() => {
-    if (query.data) setData(query.data.entry.data);
+    const entry = query.data?.entry;
+    if (entry) setForm((current) => followEntry(current, entry));
   }, [query.data]);
   const [relatedError, setRelatedError] = React.useState<unknown>();
   const syncPayload = React.useCallback(
-    async (document: EntryDocument) => {
+    async (document: EntryDocument, sent: Record<string, unknown> = document.entry.data) => {
       setRelatedError(undefined);
-      setData(document.entry.data);
+      setForm((current) => settleEntryForm(current, sent, document.entry));
       queryClient.setQueryData(queryOptions.queryKey, { ...document, parentEntryId: null, related: [] });
       try { queryClient.setQueryData(queryOptions.queryKey, await composeEntry(document)); }
       catch (error) { setRelatedError(error); }
     },
     [queryClient, queryOptions.queryKey],
   );
+  // a CONFLICT re-reads the entry, so the newer version's notice (and its reload action) shows
+  const onWriteError = React.useCallback((error: unknown) => {
+    if (!(error instanceof ApiError) || refusalOf(error.body)?.code !== "CONFLICT") return;
+    setForm(reannounceNewer);
+    void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey });
+  }, [queryClient, queryOptions.queryKey]);
 
   const save = useMutation({
     mutationFn: (nextData: Record<string, unknown>) =>
       api.patch<EntryDocument>(entryApiPath(collectionName, entryId), {
         data: nextData,
-        expectedVersion: query.data?.entry.version,
+        expectedVersion: form?.base.version,
       }),
-    onSuccess: syncPayload,
+    onSuccess: (document, sent) => syncPayload(document, sent),
+    onError: onWriteError,
   });
   const publish = useMutation({
-    mutationFn: () => api.post<EntryDocument>(entryApiPath(collectionName, entryId, "/publish"), { expectedVersion: query.data?.entry.version }),
-    onSuccess: syncPayload,
+    mutationFn: () => api.post<EntryDocument>(entryApiPath(collectionName, entryId, "/publish"), { expectedVersion: form?.base.version }),
+    onSuccess: (document) => syncPayload(document),
+    onError: onWriteError,
   });
   const unpublish = useMutation({
-    mutationFn: () => api.post<EntryDocument>(entryApiPath(collectionName, entryId, "/unpublish"), { expectedVersion: query.data?.entry.version }),
-    onSuccess: syncPayload,
+    mutationFn: () => api.post<EntryDocument>(entryApiPath(collectionName, entryId, "/unpublish"), { expectedVersion: form?.base.version }),
+    onSuccess: (document) => syncPayload(document),
+    onError: onWriteError,
   });
   const createTranslation = useMutation({
     mutationFn: ({ section, locale }: { section: RelatedEntrySection; locale: string }) =>
@@ -128,7 +156,7 @@ export function EntryEditView({
 
   if (query.isLoading) return <EntryEditSkeleton />;
   if (query.isError) return <ErrorBox error={query.error} />;
-  if (!query.data || !data) return <ErrorBox error={new Error(t(language, "common.unknownError"))} />;
+  if (!query.data || !form || !data) return <ErrorBox error={new Error(t(language, "common.unknownError"))} />;
 
   const payload = query.data;
   const canonical = site.data?.canonicalLocale ?? null;
@@ -142,7 +170,7 @@ export function EntryEditView({
   const backCollection = payload.collection.translates?.parent ?? collectionName;
   const backTitle = payload.collection.translates?.parent ?? collectionTitle;
   const collectionDescription = resolveLocalizedText(payload.collection.description, language, canonical);
-  const dirty = JSON.stringify(data) !== JSON.stringify(payload.entry.data);
+  const dirty = isEntryFormDirty(form);
   // Operational records (lifecycle: operational) have no content workflow:
   // no publish/unpublish controls, and they save in place regardless
   // of the stored status.
@@ -151,23 +179,39 @@ export function EntryEditView({
   const isReadOnly = payload.collection.schema.readOnly === true || unsupportedVersion;
   const isDraft = payload.entry.status === "draft";
   const isArchived = payload.entry.status === "archived";
-  const missingRequired = hasMissingRequired(data, payload.collection.schema);
+  const missingFields = missingRequiredFields(data, payload.collection.schema);
+  const missingRequired = missingFields.length > 0;
+  const missingRequiredHint = t(language, "entryEdit.missingFields", {
+    fields: missingFields.map((name) => propertyLabel(name, payload.collection.schema.properties?.[name], language, canonical)).join(", "),
+  });
   const canManageContent = me.data?.admin === true;
+  // a declared Schema lock holds for this row (#1822): the server refuses its update, whoever asks, so no toggle unlocks the
+  // form; the implicit `publishing` lock (drafts only) keeps the published/archived hint and never binds a transition
+  const locks = payload.entry.locks;
+  const rowLocked = declaredLock(locks);
+  const lockedHint = rowLocked && locks?.update ? t(language, "entryEdit.locked", { message: locks.update.message }) : undefined;
+  // `publishing.liveEdits`: a published entry edits in place and goes live on save (an archived one stays locked)
+  const liveEdits = !isOperational && !isDraft && locks?.update === false;
   const canEdit = canEditEntry({
     admin: me.data?.admin,
     isReadOnly,
     isOperational,
     isDraft,
     operationalEditUnlocked,
+    rowLocked,
+    liveEdits,
   });
-  const canSave = canEdit && dirty;
+  // a live edit must keep the entry publishable: the server refuses one that drops required data
+  const liveMissing = liveEdits && missingRequired;
+  const canSave = canEdit && dirty && !liveMissing && !hasEntryInputErrors(form);
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
   const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId, payload.parentEntryTitle);
   const translationSections = payload.related.filter((section) => section.relationship.kind === "translation");
-  const hasWorkbench = payload.related.some((section) =>
+  const foldedRelated = payload.related.filter((section) =>
     section.relationship.kind === "field" && isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
   );
+  const hasWorkbench = foldedRelated.length > 0;
   const inlineRelated = payload.related.filter((section) =>
     section.relationship.kind === "field" && !isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
   );
@@ -182,6 +226,14 @@ export function EntryEditView({
     <div className="flex min-h-full flex-col gap-6">
       {unsupportedVersion ? <p role="status">{t(language, "entryEdit.unsupportedVersion")}</p> : null}
       {relatedError ? <ErrorBox error={relatedError} /> : null}
+      {form.newer && !form.newer.dismissed ? (
+        <NewerVersionNotice
+          language={language}
+          version={String(form.newer.version)}
+          onReload={() => setForm(current => loadEntryForm(payload.entry, current))}
+          onKeepEditing={() => setForm((current) => current?.newer ? { ...current, newer: { ...current.newer, dismissed: true } } : current)}
+        />
+      ) : null}
       <PageHeader
         eyebrow={
           <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -190,7 +242,7 @@ export function EntryEditView({
               className="inline-flex items-center gap-2 hover:underline"
             >
               <ArrowLeft className="size-3.5" aria-hidden />
-              {t(language, "entryEdit.back", { name: backTitle })}
+              {t(language, hasWorkbench ? "entryEdit.workspace" : "entryEdit.back", { name: backTitle })}
             </a>
             {parentLink ? (
               <>
@@ -222,11 +274,32 @@ export function EntryEditView({
               operations={boundOperations}
               language={language}
               canonical={canonical}
-              onSuccess={() => void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })}
+              // the operation dialog already refreshed this entry with every other Admin read
+              onSuccess={noRefresh}
             />
           </>
         }
       />
+
+      {hasWorkbench ? (
+        <SectionCard>
+          <SectionTitle title={t(language, "entryEdit.workspace", { name: collectionTitle })} body={t(language, "entryEdit.workspaceHint")} />
+          <div className="flex flex-wrap gap-2">
+            {foldedRelated.map((section) => (
+              <a key={section.collection.name} href={`${backHref}?child=${encodeURIComponent(section.collection.name)}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                {t(language, "common.open")} {resolveLocalizedText(section.collection.title, language, canonical) ?? section.collection.name}
+              </a>
+            ))}
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {!isOperational && (isDraft || liveEdits) && missingRequired ? (
+        <div role="status" className="text-sm text-muted-foreground">
+          <p>{missingRequiredHint}</p>
+          {missingFields.some((name) => payload.collection.schema.properties?.[name]?.readOnly === true) ? <p>{t(language, "entryEdit.readOnlyRequired")}</p> : null}
+        </div>
+      ) : null}
 
       {translationSections.map((section) => (
         <TranslationTabs
@@ -248,6 +321,11 @@ export function EntryEditView({
         <p className="-mt-4 text-sm text-muted-foreground">
           {t(language, "entryEdit.readOnlyHint")}
         </p>
+      ) : rowLocked ? (
+        <p role="status" className="-mt-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <LockKeyhole className="size-4" aria-hidden />
+          {lockedHint}
+        </p>
       ) : isOperational ? (
         <div className="-mt-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <p>{t(language, "entryEdit.operationalHint")}</p>
@@ -264,8 +342,8 @@ export function EntryEditView({
           ) : null}
         </div>
       ) : !isDraft && canManageContent ? (
-        <p className="-mt-4 text-sm text-muted-foreground">
-          {t(language, isArchived ? "entryEdit.archivedHint" : "entryEdit.publishedHint")}
+        <p role={liveEdits ? "status" : undefined} className="-mt-4 text-sm text-muted-foreground">
+          {t(language, liveEdits ? "entryEdit.liveEditHint" : isArchived ? "entryEdit.archivedHint" : "entryEdit.publishedHint")}
         </p>
       ) : null}
 
@@ -296,6 +374,7 @@ export function EntryEditView({
               className={canEdit ? undefined : "pointer-events-none opacity-70"}
             >
               <SchemaFields
+                key={`${collectionName}:${entryId}:${form.inputRevision}`}
                 schema={payload.collection.schema}
                 uiSchema={payload.collection.uiSchema}
                 value={data}
@@ -306,7 +385,7 @@ export function EntryEditView({
                 collectionName={payload.collection.name}
                 mediaPurposes={mediaPurposes}
                 hiddenRootFields={hiddenFields}
-                inputSlots={{ schema: payload.collection.name, readOnly: !canEdit }}
+                inputSlots={{ schema: payload.collection.name, readOnly: !canEdit, inputs: form.inputs, revision: form.inputRevision, report: reportInput }}
               />
             </fieldset>
           </SectionCard>
@@ -318,7 +397,7 @@ export function EntryEditView({
               language={language}
               canonical={canonical}
               operations={operationsQuery.data}
-              onOperationSuccess={() => void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })}
+              onOperationSuccess={noRefresh}
             />
           ) : null}
         </div>
@@ -340,7 +419,7 @@ export function EntryEditView({
         </div>
       </div>
 
-      {canEdit || (canManageContent && !isOperational && !isReadOnly) ? (
+      {canEdit || (canManageContent && !isReadOnly && (!isOperational || rowLocked)) ? (
         <FormActionBar
           status={save.isPending
             ? t(language, "crud.saving")
@@ -350,8 +429,8 @@ export function EntryEditView({
             ? t(language, isArchived ? "entryEdit.restoring" : "entryEdit.unpublishing")
             : dirty
             ? t(language, "common.unsavedChanges")
-            : isDraft && !isOperational && missingRequired
-            ? t(language, "entryEdit.publishMissingRequired")
+            : (isDraft || liveEdits) && !isOperational && missingRequired
+            ? missingRequiredHint
             : save.isSuccess
             ? t(language, "common.saved")
             : undefined}
@@ -361,11 +440,13 @@ export function EntryEditView({
               type="button"
               variant="secondary"
               onClick={() => publish.mutate()}
-              disabled={actionPending || dirty || missingRequired}
-              title={dirty
+              disabled={actionPending || dirty || missingRequired || rowLocked}
+              title={rowLocked
+                ? lockedHint
+                : dirty
                 ? t(language, "entryEdit.publishDisabledDirty")
                 : missingRequired
-                ? t(language, "entryEdit.publishMissingRequired")
+                ? missingRequiredHint
                 : t(language, "entryEdit.publishTooltip")}
             >
               <Send className="size-4" aria-hidden />
@@ -376,8 +457,8 @@ export function EntryEditView({
               type="button"
               variant="secondary"
               onClick={() => unpublish.mutate()}
-              disabled={actionPending}
-              title={t(language, isArchived ? "entryEdit.restoreTooltip" : "entryEdit.unpublishTooltip")}
+              disabled={actionPending || rowLocked}
+              title={rowLocked ? lockedHint : t(language, isArchived ? "entryEdit.restoreTooltip" : "entryEdit.unpublishTooltip")}
             >
               <RotateCcw className="size-4" aria-hidden />
               {unpublish.isPending
@@ -385,12 +466,12 @@ export function EntryEditView({
                 : t(language, isArchived ? "entryEdit.restore" : "entryEdit.unpublish")}
             </Button>
           ))}
-          {canEdit ? (
+          {canEdit || rowLocked ? (
             <Button
               type="button"
               onClick={() => save.mutate(data)}
               disabled={actionPending || !canSave}
-              title={t(language, "entryEdit.saveTooltip")}
+              title={lockedHint ?? t(language, liveMissing ? "entryEdit.liveMissingRequired" : "entryEdit.saveTooltip")}
             >
               <Save className="size-4" aria-hidden />
               {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
@@ -398,6 +479,24 @@ export function EntryEditView({
           ) : null}
         </FormActionBar>
       ) : null}
+    </div>
+  );
+}
+
+/** A newer version arrived while the form had unsaved edits: the edits stay until the person loads the latest version. */
+export function NewerVersionNotice({ language, version, onReload, onKeepEditing }: {
+  language: AdminLanguage;
+  version: string;
+  onReload: () => void;
+  onKeepEditing: () => void;
+}): React.ReactElement {
+  return (
+    <div data-slot="operation-status" data-phase="changedSinceRead" role="status" className="rounded-md border bg-muted p-3 text-sm">
+      <p>{t(language, "entryEdit.changedSinceRead", { version })}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onReload}>{t(language, "interaction.reread")}</Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onKeepEditing}>{t(language, "entryEdit.keepEditing")}</Button>
+      </div>
     </div>
   );
 }
@@ -493,6 +592,7 @@ export function SchemaFields({
   mediaPurposes,
   hiddenRootFields = [],
   inputSlots,
+  refScopes,
 }: {
   schema: JsonSchema;
   uiSchema?: Record<string, unknown> | null;
@@ -505,12 +605,15 @@ export function SchemaFields({
   mediaPurposes: readonly MediaPurposePolicy[];
   hiddenRootFields?: readonly string[];
   /** A record form: its top-level fields go through the application's `input:<schema>.<field>` slots. */
-  inputSlots?: { schema: string; readOnly: boolean };
+  inputSlots?: { schema: string; readOnly: boolean; inputs?: EntryForm["inputs"]; revision?: number; report?: (key: string, revision: number, status?: InputStatus) => void };
+  /** An operation form's top-level ref pickers narrowed to one parent's children, by input name. */
+  refScopes?: Readonly<Record<string, { field: string; value: string }>>;
 }): React.ReactElement {
   const labels: FieldLabels = {
     emptyOption: t(language, "entryEdit.emptyOption"),
     clearOption: t(language, "entryEdit.clearOption"),
     chooseOption: t(language, "entryEdit.chooseOption"),
+    clear: t(language, "entryEdit.clear"),
     boolean: t(language, "entryEdit.boolean"),
     dateTimeSelect: t(language, "entryEdit.dateTime.select"),
     dateTimeTime: t(language, "entryEdit.dateTime.time"),
@@ -522,27 +625,64 @@ export function SchemaFields({
     // only where a plain text control would go: an enum, a number, an object or a boolean keeps its own control
     if (fieldSchema.enum || enumOptions(fieldSchema) || ["boolean", "number", "integer", "object"].includes(schemaType(fieldSchema))) return undefined;
     if (isMediaAssetRef(fieldSchema)) {
-      return <MediaAssetField value={field.value} path={[...field.path]} collectionName={collectionName} mediaPurposes={mediaPurposes} language={language} onChange={field.setValue} />;
+      return <MediaAssetField value={field.value} path={[...field.path]} collectionName={collectionName} mediaPurposes={mediaPurposes} language={language} onChange={field.setValue} cleared={field.cleared} />;
     }
     const ref = mantleRefOf(fieldSchema);
     if (ref && ref.schema !== "media_assets" && schemaType(fieldSchema) === "string") {
-      return <RefPicker target={ref} value={field.value} onChange={field.setValue} label={field.label} language={language} canonical={canonical} fallback={() => field.renderDefault()} />;
+      // a reference is an id or cleared, never "": a required one has no clear button unless null is one of its values
+      const scope = field.path.length === path.length + 1 ? refScopes?.[field.name] : undefined;
+      return <RefPicker target={ref} scope={scope} value={field.value} onChange={field.setValue} onClear={field.clearable ? () => field.setValue(field.cleared) : undefined}
+        label={field.label} language={language} canonical={canonical} fallback={() => field.renderDefault()} />;
     }
     const text = stringForInput(field.value);
-    if (field.widget === "markdown") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><MarkdownEditor value={text} onChange={field.setValue} /></React.Suspense>;
-    if (field.widget === "html") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><HtmlEditor value={text} onChange={field.setValue} /></React.Suspense>;
+    // emptied rich text clears like the plain text control: null where the field clears to null, else ""
+    const setText = (next: string) => field.setValue(next === "" ? (field.cleared === null ? null : "") : next);
+    if (field.widget === "markdown") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><MarkdownEditor value={text} onChange={setText} /></React.Suspense>;
+    if (field.widget === "html") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><HtmlEditor value={text} onChange={setText} /></React.Suspense>;
     return undefined;
   };
   const build = (field: FieldSlot): React.ReactNode => builtIn(field) ?? field.renderDefault({ value: field.value, setValue: field.setValue });
   // a record form's top-level fields: the application's `input:` components wrap whatever control the field has
   const renderField = (field: FieldSlot): React.ReactNode | undefined => !inputSlots || field.path.length !== path.length + 1 ? builtIn(field) : (
-    <Slot name={`input:${inputSlots.schema}.${field.name}`} Default={BuiltInInput}
-      props={{ value: field.value, onChange: field.setValue, readOnly: inputSlots.readOnly, property: field.schema as Record<string, unknown>, field, build }} />
+    <RecordInput field={field} build={build} slots={inputSlots} />
   );
   return (
-    <SharedSchemaFields schema={schema} uiSchema={uiSchema} value={value} path={path} onChange={onChange} language={language}
+    // a record form saves through the entry PATCH, which clears a column only on null and keeps a key left out
+    <SharedSchemaFields schema={schema} uiSchema={uiSchema} value={value} path={path} onChange={onChange} language={language} clearToNull={inputSlots !== undefined}
       canonical={canonical} hiddenRootFields={hiddenRootFields} labels={labels} renderField={renderField} propertyLabel={(name, fieldSchema, _language, fieldCanonical) => propertyLabel(name, fieldSchema as JsonSchema, language, fieldCanonical)} />
   );
+}
+
+/** One root field owns its status even when its structured value contains arrays or nested objects. */
+function RecordInput({ field, build, slots }: {
+  field: FieldSlot;
+  build: (field: FieldSlot) => React.ReactNode;
+  slots: NonNullable<React.ComponentProps<typeof SchemaFields>["inputSlots"]>;
+}): React.ReactElement {
+  const key = React.useId();
+  const error = slots.readOnly ? undefined : slots.inputs?.[key]?.error || undefined;
+  const errorId = error ? `${key}-error` : undefined;
+  const active = React.useRef(true);
+  const report = slots.report;
+  const revision = slots.revision ?? 0;
+  React.useLayoutEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      // StrictMode replays descendant layout effects before this setup: keep their first report until a real unmount.
+      queueMicrotask(() => { if (!active.current) report?.(key, revision); });
+    };
+  }, [key, report, revision]);
+  const onStatusChange = React.useCallback((status?: InputStatus) => {
+    if (active.current) report?.(key, revision, status);
+    // A descendant's layout setup may run before ours during StrictMode replay; true unmounts stay inactive.
+    else queueMicrotask(() => { if (active.current) report?.(key, revision, status); });
+  }, [report, key, revision]);
+  return <div role="group" aria-label={field.label} aria-invalid={error ? true : undefined} aria-describedby={errorId}>
+    <Slot name={`input:${slots.schema}.${field.name}`} Default={BuiltInInput}
+      props={{ value: field.value, onChange: field.setValue, readOnly: slots.readOnly, property: field.schema as Record<string, unknown>, onStatusChange, error, errorId, field, build }} />
+    {error ? <p id={errorId} role="alert" className="text-sm text-destructive">{error}</p> : null}
+  </div>;
 }
 
 interface BuiltInInputProps extends InputProps {
@@ -564,21 +704,29 @@ export function editorHiddenFields(
   ];
 }
 
-/** A publishing entry is edited only as a draft: a published or archived one is unpublished first, so no edit waits on a disabled Save. */
+/**
+ * A publishing entry is edited only as a draft, or published under `liveEdits`: otherwise a published or archived one is
+ * unpublished first, so no edit waits on a disabled Save. A row a declared Schema lock holds (`rowLocked`, #1822) is never
+ * editable, whatever the unlock toggle says.
+ */
 export function canEditEntry({
   admin,
   isReadOnly,
   isOperational,
   isDraft,
   operationalEditUnlocked,
+  rowLocked = false,
+  liveEdits = false,
 }: {
   admin: boolean | undefined;
   isReadOnly: boolean;
   isOperational: boolean;
   isDraft: boolean;
   operationalEditUnlocked: boolean;
+  rowLocked?: boolean;
+  liveEdits?: boolean;
 }): boolean {
-  return admin === true && !isReadOnly && (isOperational ? operationalEditUnlocked : isDraft);
+  return admin === true && !isReadOnly && !rowLocked && (isOperational ? operationalEditUnlocked : isDraft || liveEdits);
 }
 
 function MediaAssetField({
@@ -588,6 +736,7 @@ function MediaAssetField({
   mediaPurposes,
   language,
   onChange,
+  cleared,
 }: {
   value: unknown;
   path: string[];
@@ -595,6 +744,9 @@ function MediaAssetField({
   mediaPurposes: readonly MediaPurposePolicy[];
   language: AdminLanguage;
   onChange: (value: unknown) => void;
+  /** What an emptied id writes: an asset id is never "", and in a record form a required one is null too, so Save
+   *  cannot quietly keep the old id. */
+  cleared: null | undefined;
 }): React.ReactElement {
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = React.useState(false);
@@ -639,7 +791,7 @@ function MediaAssetField({
         <Input
           className="min-w-0 flex-1"
           value={stringForInput(value)}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => onChange(event.target.value === "" ? cleared : event.target.value)}
         />
         <Button
           type="button"
@@ -967,7 +1119,11 @@ function parentAdminLink(
 export { entryTitle } from "../../lib/entry-title";
 
 export function hasMissingRequired(data: Record<string, unknown>, schema: JsonSchema): boolean {
-  return (schema.required ?? []).some((key) => {
+  return missingRequiredFields(data, schema).length > 0;
+}
+
+function missingRequiredFields(data: Record<string, unknown>, schema: JsonSchema): string[] {
+  return (schema.required ?? []).filter((key) => {
     const value = data[key];
     return value === undefined || value === null || value === "" ||
       (Array.isArray(value) && value.length === 0);

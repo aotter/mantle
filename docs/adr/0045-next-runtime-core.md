@@ -85,6 +85,11 @@ block, for every Schema repeats what the database and the generated types alread
    - **A unique clash is `CONFLICT`.** Each driver's `procedure()` maps the engine's unique-index violation to
      `ContractError("CONFLICT")` (`conflict` in `kernel/contracts.ts`) with the native error as `cause`, as Core does. This also changes generated Procedures,
      which used to rethrow it natively.
+
+   > **Amendment (#1826, 2026-10-26):** Store rows return `version` as a number on every dialect. PostgreSQL's int8 arrives
+   > as text (or bigint), so the runtime converts that one key where it deletes `_rid` and the scope column, and the generated row
+   > type is `number`. A value past `Number.MAX_SAFE_INTEGER` is `SQL_TYPE`, never rounded into a lock; `lock` still accepts an
+   > exact int8 string. Other row values stay driver-native, as do Procedure `{ results }`.
 6. **The Store does not check `requires`.** As in 0.2, `requires` gates Views and Procedures; a custom handler runs
    after its Procedure's gate. The Store applies row rules only.
 7. **Store transactions reuse Procedure atomicity.** Lazy single-execution Writes await individually or batch as row steps
@@ -92,6 +97,14 @@ block, for every Schema repeats what the database and the generated types alread
    Only SQLite and PostgreSQL expose interactive transactions; transaction handles mark Procedures to run the same statement
    loop without nested BEGIN. SQLite queues driver work per Database around BEGIN IMMEDIATE/COMMIT/ROLLBACK; PostgreSQL
    uses native `begin`, serializable by default with an isolation override. Nested transactions are refused; no automatic retry.
+
+   > **Amendment (#1856, 2026-10-28):** Ref handler Stores and transaction Stores expose the existing `batch` operation.
+   > Standalone batches retain native Procedure atomicity; inside a Store transaction they use its native handle and
+   > create no nested transaction or savepoint. A rejected batch marks the outer Store transaction rollback-only, so
+   > catching its error cannot commit a partial batch or prior outer writes. The transaction rejects with the first
+   > batch failure even if its callback returns normally. Batch validation/build failures have the same rule. D1 still
+   > has no interactive transactions; its handlers use the ordinary atomic batch. Scope and Caller stay bound to the
+   > same Store, and lazy Writes must still belong to that Store and be submitted only once.
 
 ## Consequences
 

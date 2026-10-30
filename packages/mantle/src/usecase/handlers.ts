@@ -12,7 +12,7 @@ export function emitHandlers(
   // An empty contract keeps app wiring (`handlers: Handlers = {}`) identical whether or not any ref Procedure exists.
   if (!refs.length) { declarations.push("export interface Handlers {}"); return []; }
   declarations.push(
-    'export type HandlerStore = Pick<ReturnType<typeof makeStore>, "collection" | "views" | "procedures">;',
+    'export type HandlerStore = Pick<ReturnType<typeof makeStore>, "collection" | "batch" | "views" | "procedures">;',
     // D1 has no interactive transactions, so its handlers get no `transaction`: using one there fails typecheck.
     `export interface HandlerContext { readonly caller: Caller; readonly db: Database; readonly store: HandlerStore;${interactive ? " readonly transaction: <R>(fn: (ctx: { readonly store: HandlerStore; readonly db: Database }) => Promise<R>) => Promise<R>;" : ""} }`,
     "export interface Handlers {",

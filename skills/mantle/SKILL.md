@@ -1,84 +1,25 @@
 ---
 name: mantle
-description: Create, continue, test or deploy a Mantle application using installed @aotter/mantle docs, including manifests, SQL Views and Procedures, MCP tools, app-built Admin, mantle generate and Mantle upgrades.
+description: Create, continue, upgrade, test, speed up or deploy a Mantle application (@aotter/mantle manifests, SQL Views and Procedures, MCP, REST, Admin, mantle generate). Every contract comes from the installed version's `mantle help`.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/mantle/SKILL.md
-  applies_to: mantle 0.2
-  projection: plugin
-  projectionReason: The plugin's authoring entry skill is installed from the repository; workflow documentation comes from the installed SDK package.
 ---
 
 # Mantle
 
-The Mantle plugin's one skill. It installs no SDK and creates nothing by
-itself. Once a project has `@aotter/mantle`, the installed package is the
-authority: `node_modules/@aotter/mantle/README.md` and
-`node_modules/@aotter/mantle/docs/`. Prefer them over this file, the SDK
-checkout, or any online copy.
+This skill only routes; it holds no contract. The installed `@aotter/mantle` is the authority, and `mantle help` prints
+its docs one topic at a time.
 
-## Start with `mantle help`
-
-Run `mantle help` first (in a project: `npx mantle help`; before one exists:
-`npx @aotter/mantle@<exact version> help`). It prints the installed version's
-entry page and every topic; `mantle help <topic>` prints one page with the next
-and linked topics as commands. Follow it rather than browsing the SDK checkout
-or an online copy.
-
-## Find the project and its version
-
-Work in the user's application, outside the SDK checkout. Read package.json, the lockfile, installed SDK README and node_modules/@aotter/mantle/docs/. Those files define the exact version's contract. Preserve existing identity, handles, routes and resources.
-For existing older applications, use their installed docs until the user requests an upgrade; if an older version
-lacks a guide named here, record the missing guidance and keep that version's contract.
-
-## Choose the installed package skill
-
-- Read `node_modules/@aotter/mantle/docs/skills/develop/SKILL.md` to change an existing project's manifests, SQL, handlers, service entry or surfaces.
-- Read `node_modules/@aotter/mantle/docs/skills/integrate/SKILL.md` to add Mantle to an application with existing code, users or data.
-- Read `node_modules/@aotter/mantle/docs/skills/update/SKILL.md` to upgrade Mantle, including from 0.1.x.
-- Read `node_modules/@aotter/mantle/docs/skills/provision/SKILL.md` only for an authorized production deployment.
-- Read `node_modules/@aotter/mantle/docs/skills/media-gc/SKILL.md` only to audit or remove stale uncommitted media uploads.
-- Read `node_modules/@aotter/mantle/docs/skills/performance/SKILL.md` after acceptance converges, or when a page, first request or query is slow.
-
-## New application
-
-Node must be 22.22 or newer. Stable 0.2.0 is available as `@aotter/mantle@0.2.0`; pin selected Mantle packages to that exact version. Create it with `npx @aotter/mantle@<exact version> init <directory>`, then follow
-`mantle help` ("Build from a product brief") and the app's `README.md`. Without the user listing them, a complete app
-includes:
-
-- Email OTP sign-in, the two roles `admin` and `user`, Admin for `admin`, MCP for both roles (`/mcp`, `/mcp/admin`)
-  and REST: the shell already wires them; keep them.
-- Real business rules in SQL Procedures (`mantle help sql-patterns`), not in handler code around separate writes.
-- For visitor pages, everything in `mantle help public-pages` (SEO, AEO, sitemap, robots, `llms.txt`), styled.
-- Local HTTP checks (`mantle help local-testing`), then independent acceptance with `pnpm accept`
-  (`mantle help agent-workflow-acceptance`), then the installed `docs/skills/performance/SKILL.md`.
-
-Take patterns from `mantle help examples` into the app's own manifests and `src/`; do not copy an example directory
-over the app. Resolve each `AGENT:` or name the ones you left. Generation only, inside an app you already have: skip
-`init` and use `mantle generate` (`mantle help project-and-cli`).
-
-## Accept before reporting done
-
-Before reporting any new app or feature as done, follow `mantle help agent-workflow-acceptance`: a private rubric,
-then one fresh agent per role given only its role and the URLs `pnpm accept` prints, at most three rounds. If it was
-not run, report the work as UNVERIFIED rather than done; if it could not run, BLOCKED.
-
-Once acceptance is CONVERGED, read the installed `docs/skills/performance/SKILL.md`: it decides which of front end,
-cold start and backend load apply, and runs them before you report done. This is the one exception to installed docs
-winning: if the installed package predates that skill, read
-[the copy on `main`](https://github.com/aotter/mantle/blob/main/docs/skills/performance/SKILL.md) and the pages it links
-from the installed docs with `mantle help <topic>`.
-
-## Deployment
-
-Deploy only when the user requests it, following the installed `docs/skills/provision/SKILL.md` and the selected
-host's native workflow. Local project creation alone is not deployment authorization.
-
-## Existing project and handoff
-
-Preserve the user's manifests, `src/` files, identity, package versions and provider resources. Run the project's
-generate command with `--check` and its own tests before and after a change.
-
-Report the project path, the exact Mantle version, what you changed, the checks you ran with their results, the
-independent acceptance verdict (CONVERGED / BLOCKED / UNVERIFIED), the performance verdict (PASS / PARTIAL /
-SKIPPED) with its before and after numbers, and anything left for the user.
+1. **Start with `mantle help`.** In a project run `npx mantle help`; before one exists, `npx @aotter/mantle@<exact
+   version> help`. It prints the entry page (how to choose, build and accept); `mantle help <topic>` prints one page and
+   ends with the commands for the pages it links. `mantle help topics` lists them all. For a new app, do every step of its
+   "Build from a product brief". Follow it rather than this file, an SDK checkout or an online copy.
+2. **Work in the user's application.** Read its `package.json` and lockfile for the exact Mantle version and keep using
+   that version's docs until the user asks to upgrade (`mantle help releases/index`). Preserve existing code, identity,
+   versions and resources.
+3. **Plan once, then run to the end.** For a new app, first reply with the entry page's plan, in plain business terms
+   and with the questions the brief leaves open, and wait for one go-ahead. Then build, show the Developer UI, accept
+   and measure without stopping. Never report done without acceptance and performance; end with what each found and
+   changed, and each layer as CONVERGED, BLOCKED or UNVERIFIED.
+4. **Deploy, delete remote data or publish nothing unless the user asks for that exact action.**

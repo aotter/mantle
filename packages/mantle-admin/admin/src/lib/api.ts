@@ -17,8 +17,8 @@ export class ApiError extends Error {
 }
 
 /** The server's refusal in a response body: Admin's routes answer `{ error }`, an operation's result `{ diagnostic }`. */
-export function refusalOf(body: unknown): { code?: string; message?: string; path?: string } | undefined {
-  const b = body as { error?: { code?: string; message?: string; path?: string }; diagnostic?: { code?: string; message?: string; path?: string } } | null;
+export function refusalOf(body: unknown): { code?: string; message?: string; path?: string; kind?: string } | undefined {
+  const b = body as { error?: { code?: string; message?: string; path?: string; kind?: string }; diagnostic?: { code?: string; message?: string; path?: string; kind?: string } } | null;
   return b?.error ?? b?.diagnostic ?? undefined;
 }
 
@@ -42,9 +42,10 @@ async function request<T>(path: string, init?: RequestInit, input?: unknown): Pr
   if (!res.ok) {
     // the server's refusal says what is wrong; the status line is the fallback
     const error = new ApiError(statusLine(res, body), res.status, body);
-    const code = refusalOf(body)?.code;
+    const { code, kind } = refusalOf(body) ?? {};
     const entry = path.match(/^(\/entries\/[^/?]+)(?:\/(?:publish|unpublish|archive))?(\?[^#]*)?$/);
-    if (init?.method && entry && (code === "CONFLICT" || code === "OUTCOME_UNKNOWN")) {
+    // a Schema lock's refusal is its own explanation: no version moved (#1822)
+    if (init?.method && entry && (code === "CONFLICT" && kind !== "lock" || code === "OUTCOME_UNKNOWN")) {
       try {
         const latest = await request<EntryEditorPayload>(entry[1]! + (entry[2] ?? ""), {signal:AbortSignal.timeout(10_000)});
         const expected = (input as {expectedVersion?: unknown} | undefined)?.expectedVersion;

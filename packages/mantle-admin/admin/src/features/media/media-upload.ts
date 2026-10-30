@@ -78,9 +78,8 @@ export function selectPurpose(
   purposes: readonly MediaPurposePolicy[],
   preferredPurpose?: string,
 ): MediaPurposePolicy | null {
-  if (preferredPurpose) {
-    const exact = purposes.find((purpose) => purpose.name === preferredPurpose);
-    if (exact) return exact;
+  if (preferredPurpose !== undefined) {
+    return purposes.find((purpose) => purpose.name === preferredPurpose) ?? null;
   }
   const content = purposes.find((purpose) => purpose.name === "content");
   return content ?? purposes[0] ?? null;

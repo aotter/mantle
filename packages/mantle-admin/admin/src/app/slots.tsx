@@ -75,11 +75,6 @@ export function useViewCellNames(tool: string, column: string): readonly string[
   }), [layers, tool, column]);
 }
 
-/** Where this component renders. Branching on it is allowed; both branches must render. */
-export function useSurface(): AdminSurface {
-  return React.useContext(SurfaceContext)?.surface ?? "browser";
-}
-
 const isWeb = (url: string): boolean => /^https?:\/\//i.test(url);
 
 /**

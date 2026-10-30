@@ -50,7 +50,8 @@ try {
   } else if (command === "bundle") {
     const [entry, outdir] = positionals;
     if (!entry || !outdir || positionals.length !== 2 || values.admin || values.site || values.auth || values.wrangler || values.check) throw new Error(usage);
-    await (await import("./bundle.js")).bundleApp(entry, outdir, values.assets);
+    // Wrangler names the command running a custom build; under `wrangler dev` it reruns on every watched change.
+    await (await import("./bundle.js")).bundleApp(entry, outdir, values.assets, { watch: process.env.WRANGLER_COMMAND === "dev" });
   } else {
     const [target, destination, ...paths] = positionals;
     if (!target || !targets.includes(target as Target) || !destination || !paths.length) throw new Error(usage);

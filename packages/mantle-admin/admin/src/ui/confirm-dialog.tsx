@@ -30,7 +30,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }): Re
   const [pending, setPending] = React.useState<PendingConfirm | null>(null);
   const confirm = React.useCallback(
     (options: ConfirmOptions) =>
-      new Promise<boolean>((resolve) => setPending({ ...options, resolve })),
+      new Promise<boolean>((resolve) => setPending((previous) => {
+        // a newer question replaces one still open, which reads as cancelled
+        previous?.resolve(false);
+        return { ...options, resolve };
+      })),
     [],
   );
   const settle = (result: boolean): void => {

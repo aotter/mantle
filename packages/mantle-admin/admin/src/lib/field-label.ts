@@ -3,7 +3,7 @@ import { t } from "../app/i18n";
 import type { AdminLanguage } from "../app/preferences";
 import type { JsonSchema } from "./types";
 
-export { fieldLabel, propertyDescription } from "@aotter/mantle-ui";
+export { fieldLabel } from "@aotter/mantle-ui";
 
 /** A field's title, the entry's own timestamps in the console's language, else the name humanized. */
 export function propertyLabel(

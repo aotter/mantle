@@ -1,26 +1,21 @@
 ---
-name: performance
-description: Make an accepted Mantle 0.2 application fast — Lighthouse for app-authored pages, Worker cold start and first-load budgets, and backend reads and writes under realistic data volume with indexes and internal Views. Use right after independent acceptance converges, or when a user reports a slow page, first request or query.
-metadata:
-  source: "@aotter/mantle"
-  sourcePath: docs/skills/performance/SKILL.md
-  applies_to: mantle 0.2
-  projection: package
+description: "After acceptance converges, or when something is slow: front end, cold start and backend load, each held to a target."
 ---
+# Performance pass
 
-# Mantle Performance
-
-This skill sets direction: when to run, what to aim for, in what order and when
+This page sets direction: when to run, what to aim for, in what order and when
 to stop. It names no tools or commands. Choose the measurement and repair
 methods that fit the application, its host and the tools available to you; the
 targets and rules below are what stay fixed.
 
 ## When to run
 
-- **After acceptance.** Once [independent acceptance](../../handbook/guides/agent-workflow-acceptance.md)
-  reports CONVERGED for a new application or a feature, continue here before
-  reporting done. Never optimize behavior that has not been accepted: after
-  BLOCKED or UNVERIFIED, report that and stop.
+- **After acceptance.** Run for every role and surface that
+  [independent acceptance](agent-workflow-acceptance.md)
+  reports CONVERGED for a new application or a feature, before reporting done.
+  Never optimize behavior that has not been accepted: report each BLOCKED or
+  UNVERIFIED role or surface as it is, with what it needs, and leave it out of
+  the pass. Stop without running only when no part is CONVERGED.
 - **On request.** When a user reports a slow page, slow first request or slow
   query, run only the part that covers it, then check the others it could affect.
 
@@ -40,6 +35,18 @@ skipped part with its reason.
 A change in one part can move another: an added index slows writes, a shared
 stylesheet or entry import affects every page. Re-measure what a repair can reach.
 
+## Plan the pass
+
+The plan the user approves before the build ([Build from a product brief](../start/agents.md#build-from-a-product-brief))
+says in plain words how much sample data there is and what "fast enough" means for each page.
+Behind it, the pass fixes:
+
+- the parts that run and the parts skipped, each with its reason (the table above);
+- the test data for backend parts: rows per table (for example 1,000,000 RSVPs across 5,000 events and 20,000
+  members), its shape (owners, states, text length) and that it goes only into an isolated local database;
+- the target for each part and the stop rule below;
+- anything that needs the user, such as a deployment to measure real cold start.
+
 ## Front end
 
 **Target:** the highest Lighthouse performance score the page allows, with a
@@ -51,7 +58,7 @@ no regression in accessibility, SEO or best practices.
   (no compression or HTTP/2, a cold cache) and say which is which.
 - Measure pages behind sign-in (member pages, Admin) through the role's session
   URL that `pnpm accept` prints
-  ([hand each role](../../handbook/guides/agent-workflow-acceptance.md#hand-each-role-to-its-evaluator)),
+  ([hand each role](agent-workflow-acceptance.md#hand-each-role-to-its-evaluator)),
   never by weakening sign-in.
 - Find the actual bottleneck before changing anything; a trace beats a guess.
 - Repair in this order: what blocks the first paint (render-blocking styles and
@@ -63,7 +70,7 @@ no regression in accessibility, SEO or best practices.
   without it. Never detect the measuring tool to serve it a different page.
 - After every change, prove nothing else moved: the page looks the same, links,
   forms and in-page anchors still work, and the
-  [public-page checks](../../handbook/guides/public-pages.md#check-before-you-report-done)
+  [public-page checks](public-pages.md#check-before-you-report-done)
   still pass without JavaScript.
 
 ## Cold start
@@ -72,18 +79,23 @@ no regression in accessibility, SEO or best practices.
 
 - **Worker:** its startup graph imports only what every request needs; auth, MCP,
   Admin and rarely used routes load on the request that uses them
-  ([size and startup](../../handbook/guides/size-and-startup.md)). On Workers the
+  ([size and startup](size-and-startup.md)). On Workers the
   startup graph is the entry chunk `mantle bundle` writes under `<outdir>/worker`
-  plus the chunks it imports statically ([outputs](../../handbook/start/project-and-cli.md#outputs));
-  anything behind a dynamic import is outside it. Report its compressed size
-  locally; measure the host's startup time only on
+  plus the chunks it imports statically ([outputs](../start/project-and-cli.md#outputs));
+  anything behind a dynamic import is outside it. Report its size locally as the
+  *Worker entry static graph*; measure the host's startup time only on
   a deployment the user has authorized, and keep it well under the host's limit
   (aim below 50 ms on Cloudflare).
-- **Pages:** each page's first load carries at most 100 KB of compressed
-  JavaScript, and only what the first paint and first interaction need. Move the
-  rest behind dynamic imports, on use or when the browser is idle. MCP App
-  entries are held to the same budget; they render inside a host, so Lighthouse
-  does not measure them.
+- **Pages:** each page's *first-load JavaScript* is at most 100 KB, and only
+  what the first paint and first interaction need. Move the rest behind dynamic
+  imports, on use or when the browser is idle. An MCP App the application
+  authors holds its first-load JavaScript, the inline script text of its one
+  HTML file, to the same budget; it renders inside a host, so Lighthouse does
+  not measure it. Report the whole *MCP App HTML document* as its own number: it
+  also holds CSS and markup, so never compare it with this budget.
+- Use the one definition of each metric in
+  [size metrics](size-and-startup.md#size-metrics), with
+  its measurement. Where the SDK's own checks measure differently, that page says how.
 - An overrun is a finding to repair by splitting, not a budget to raise. Raise a
   budget only with the user's agreement and record why.
 
@@ -97,12 +109,12 @@ fast at a realistic volume, and no hot path scans a table that grows.
   text where fields allow it, and more than one page of results everywhere. Size
   the largest tables at 100,000 rows or 10 times the expected first-year volume,
   whichever is larger. Seed with SQL straight into that database, setting the
-  native columns as [reserved entry columns](../../handbook/reference/schema.md#reserved-entry-columns)
+  native columns as [reserved entry columns](../reference/schema.md#reserved-entry-columns)
   describes: it is test data, not an application write.
 - **Load:** call every View and Procedure through the same callers and surfaces
   the application uses, as each role. The app's local test harness already
   starts it on a fresh database, signs each role in and calls routes and MCP
-  tools as that role ([local HTTP checks](../../handbook/guides/local-testing.md#what-smoke-covers)).
+  tools as that role ([local HTTP checks](local-testing.md#what-smoke-covers)).
   Record typical and slow-tail latency and
   rows read, then run concurrent writers wherever contention matters. A business
   rule that breaks under concurrency (oversell, double approval, lost update) is
@@ -114,13 +126,15 @@ fast at a realistic volume, and no hot path scans a table that grows.
      query module under `generated/` against the seeded database; a full scan of a
      growing table is a finding.
   2. Add the index that serves it in the Schema's `indexes`
-     ([indexes](../../handbook/reference/schema.md#indexes-checks-and-search))
-     together with a native migration ([database changes](../develop/SKILL.md#database-changes)).
-     Index only what a measured query uses; every index costs writes.
+     ([indexes](../reference/schema.md#indexes-checks-and-search))
+     together with a native migration ([database changes](../cloudflare/deploy-and-operate.md#install-and-change-schemas)).
+     Index only what a measured query uses; every index costs writes. Paged Views
+     and [Schema locks](../reference/schema.md#locks) are index-proven
+     already: generation refuses one no index serves.
   3. Move complex reads (joins, aggregates, OR, reuse) into an
-     [internal View](../../handbook/guides/typed-queries.md#declare-an-internal-view),
-     page with keysets ([results and paging](../../handbook/reference/view.md#results-and-paging)),
-     and replace exact totals on hot paths ([search and totals](../../handbook/reference/view.md#search-and-totals)).
+     [internal View](typed-queries.md#declare-an-internal-view),
+     page with keysets ([results and paging](../reference/view.md#results-and-paging)),
+     and replace exact totals on hot paths ([search and totals](../reference/view.md#search-and-totals)).
   4. Re-measure reads and writes after each repair.
 
 ## Rules
@@ -132,17 +146,47 @@ fast at a realistic volume, and no hot path scans a table that grows.
 - Do not lower a target, shrink the seeded data or drop a slow case to pass.
   Report what is left instead.
 - Work locally. Deploying or measuring a deployment follows the
-  [provision skill](../provision/SKILL.md) and needs the user's authorization.
-- After any repair, rerun the [local HTTP checks](../../handbook/guides/local-testing.md).
+  [deploy guide](../cloudflare/deploy-and-operate.md) and needs the user's authorization.
+- After any repair, rerun the [local HTTP checks](local-testing.md).
   A repair that changes what a user sees or can do is no longer only a
-  performance change: run acceptance again for that surface.
+  performance change: re-run acceptance for the scope the
+  [re-verification rule](agent-workflow-acceptance.md#re-verify-what-a-repair-touches)
+  names. A changed View or Procedure widens it to every surface that reads or
+  writes that data, and so does a `uniqueIndexes` entry. A non-unique
+  `indexes` entry and its migration keep the business rules: run `pnpm check`,
+  the local HTTP checks and your focused regressions, not acceptance.
+- Report app-added cost and SDK-existing cost separately. Built-in Admin has a
+  recorded [baseline](size-and-startup.md#native-admin-baselines)
+  per SDK version; while the installed version and Admin entry are unchanged,
+  reuse it instead of repeating that experiment each round. Built-in Admin's
+  page and MCP App both miss the first-load budget; that is SDK-existing cost,
+  not the application's. A target the SDK's cost misses is still PARTIAL, with
+  its owner named. Never relabel it PASS.
+- Do not patch vendor or SDK code, remove native Admin features or build a
+  general benchmark framework to meet a target.
 - Stop when every target is met, after three rounds, or when two rounds in a row
   bring no measurable gain.
+
+## Summarise for the user
+
+Report each change with the number it moved, so the gain is visible:
+
+```markdown
+| Part | Change | Before | After |
+| --- | --- | --- | --- |
+| Backend read: `event-roster`, 1,000,000 RSVPs | index `[eventId, created_at]` + keyset paging | p95 1,840 ms | p95 38 ms |
+| Front end: `/events/{slug}` (mobile) | inline critical CSS, sized images | Lighthouse 71 | 94 |
+| Cold start: Worker entry | auth and Admin behind dynamic imports | 212 KB gzip startup graph | 61 KB |
+```
+
+Give the data volume beside every backend number, the device and throttling beside every Lighthouse score, and say
+where a target is still missed and why.
 
 ## Report
 
 For each part: run or skipped (with the reason), the environment, before and
-after numbers as ranges, what changed and what is left. Close with one verdict
+after numbers as ranges, what changed and what is left. Name the roles and
+surfaces left out because acceptance did not converge on them. Close with one verdict
 beside the acceptance verdict: **PASS** (every target that applies is met),
 **PARTIAL** (improved, with the targets still missed and why) or **SKIPPED**
 (nothing applied).

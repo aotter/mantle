@@ -125,6 +125,12 @@ export interface CellProps<Value = unknown, Row = Readonly<Record<string, unknow
   readonly property: Readonly<Record<string, unknown>> | undefined;
 }
 
+/** A custom input's current validation and local draft, independent of the value last emitted through `onChange`. */
+export interface InputStatus {
+  readonly error?: string | null;
+  readonly dirty?: boolean;
+}
+
 /** `input:<schema>.<field>`: the control of one field in the record form. Surface: browser. This is not a Procedure action input. */
 export interface InputProps<Value = unknown> {
   readonly value: Value;
@@ -132,4 +138,9 @@ export interface InputProps<Value = unknown> {
   /** The form cannot be edited by this caller. */
   readonly readOnly: boolean;
   readonly property: Readonly<Record<string, unknown>>;
+  /** Replace this mounted input's status; omit it (or pass {}) to clear. This never grants edit access. */
+  readonly onStatusChange?: (status?: InputStatus) => void;
+  /** The reported error, rendered by Admin; link your control to errorId and set aria-invalid when present. */
+  readonly error?: string;
+  readonly errorId?: string;
 }

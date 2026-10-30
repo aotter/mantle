@@ -9,13 +9,9 @@
 
 ## For AI agents
 
-**Consumers** (authoring or embedding a Mantle application): start with the
-install skill, then the CLI and handbook. Install the skill pinned to the release you use, as
-[agent setup](docs/handbook/guides/agent-setup.md) shows: an unpinned install follows `main`.
-
-Follow [`skills/mantle/SKILL.md`](skills/mantle/SKILL.md). After
-`@aotter/mantle` is installed, its task skills and the handbook live under
-`node_modules/@aotter/mantle/docs/`. Interview for identity and surfaces before
+**Consumers** (authoring or embedding a Mantle application): install the
+[`mantle` skill](docs/handbook/guides/agent-setup.md), then follow `npx mantle help`,
+which prints the installed version's handbook. Interview for identity and surfaces before
 writing files. Authoring docs and the CLI are how you learn Mantle; a deployed
 `/mcp` catalog is the live app's Manifest → RuntimePlan verbs, not a second
 getting-started guide.

@@ -21,8 +21,7 @@ OFFSET, arbitrary functions/relations, DDL and transaction control are not a rea
 `mantle.search(<alias>, <text>)` matches the Schema's declared `searchableFields`, and `mantle.search_rank(<alias>)`
 orders by relevance; qualify both with `mantle.`. An optional search reads
 `WHERE p.active AND (input.q IS NULL OR mantle.search(p, input.q))`, and a ranked one
-`WHERE mantle.search(p, input.q) ORDER BY mantle.search_rank(p), p.id` (see `examples/reference-service` `catalog.yaml`
-for cursor paging over the rank).
+`WHERE mantle.search(p, input.q) ORDER BY mantle.search_rank(p), p.id`; page it with a cursor over the rank and the id.
 
 Views using `mantle.search`, Store search and Admin list search share the dialect search: SQLite/D1 use FTS for queries of 3 or more characters (shorter queries use LIKE); PostgreSQL uses ILIKE over the declared fields and scans by default. A View does not make PostgreSQL search faster. For large PostgreSQL tables, the application's agent adds trigram indexes in a migration, which ILIKE then uses with no code change:
 

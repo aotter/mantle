@@ -12,14 +12,48 @@ cd my-app
 pnpm install
 # add manifests/*.yaml (mantle help four-atoms; patterns: mantle help examples)
 pnpm generate          # writes generated/ and lists any `handler: { ref }` to implement in src/handlers.ts
-pnpm types && pnpm check
+pnpm types && pnpm check       # each builds once (see Which steps build)
 cp .dev.vars.example .dev.vars
-pnpm db:init                   # add seed.sql and run pnpm db:seed for fixtures
-pnpm dev                       # one-time codes print to this log
-pnpm smoke                     # your smoke.mjs on smoke-kit.mjs (see Files you edit)
-pnpm accept                    # hand each role to a fresh evaluator (see Independent acceptance)
-pnpm test                      # Admin MCP App check: needs Chrome (npx playwright-core install chromium, or MANTLE_TEST_CHROMIUM=<executable>)
+pnpm db:init                   # optional seed.sql for static reference data, then pnpm db:seed (see Seed data)
+pnpm dev                       # builds, rebuilds on change; one-time codes print to this log
+pnpm smoke                     # builds; runs smoke.mjs, which you write on smoke-kit.mjs (init does not create it)
+pnpm accept                    # builds; prints a signed-in URL per role for fresh evaluators (see Independent acceptance)
+pnpm test                      # Admin MCP App check of the last build: needs Chrome (npx playwright-core install chromium, or MANTLE_TEST_CHROMIUM=<executable>)
 ```
+
+### Which steps build
+
+`wrangler.jsonc` sets `mantle bundle src/index.ts dist` as Wrangler's custom build. These steps run it (marked
+**builds**); the others do not:
+
+| Step | Builds? |
+|---|---|
+| `pnpm generate`, `pnpm db:init`, `pnpm db:seed` | no |
+| `pnpm test` | no; it tests the last build |
+| `pnpm types` (`wrangler types`) | **builds**: Wrangler reads the built entry's exports for Durable Object and service binding types |
+| `pnpm check` | **builds** once, in `wrangler types --check`; `generate --check` and `tsc` do not |
+| `pnpm build` | **builds** |
+| `pnpm dev` | **builds** at start, then again on every change under `src/` or `generated/` |
+| `pnpm smoke`, `pnpm accept` | **build** once each: both start `wrangler dev` |
+
+Wrangler has no option to skip the custom build for `wrangler types`. The Admin console is rebuilt only when the
+installed Admin packages change or the app has `src/admin.tsx`, so a repeated build mostly rebuilds the Worker.
+
+First run, after `pnpm install` and your manifests: `pnpm generate`, `pnpm types`, `pnpm check`,
+`cp .dev.vars.example .dev.vars` (`pnpm dev` needs the secrets `wrangler.jsonc` requires), `pnpm db:init`, then
+`pnpm dev` or `pnpm smoke`. Right after `pnpm types`, `pnpm check` repeats its build; run it anyway, because it is the
+same check CI and hand-off use.
+
+Routine edit, with `pnpm dev` running:
+
+1. Edit `manifests/*.yaml`, then `pnpm generate`. Wrangler does not watch `manifests/`, so the last build keeps
+   serving until something under `src/` or `generated/` changes. From the next change under `src/` until you
+   generate, each change prints one line, `Generated output in generated is stale (...)`, and the dev server holds
+   requests instead of running stale code. Writing `generated/` rebuilds. If you undo the manifest edit instead,
+   nothing rebuilds until the next change under `src/` or a restart of `pnpm dev`.
+2. `pnpm types` only when `generate` or you changed `wrangler.jsonc` (bindings, secrets, vars).
+3. Edits under `src/` rebuild by themselves.
+4. Before handing off: `pnpm check`, then `pnpm smoke`.
 
 npm works too (`npm install`, `npm run …`). `package.json` pins `@better-auth/core` and `@better-auth/utils` even though
 the shell does not import them: they are the exact versions the SDK's Better Auth peers require, and without them a fresh
@@ -47,6 +81,19 @@ HTTP-only Procedures will keep generating with a warning.
 
 Search for `AGENT:` to find what an app must fill in.
 
+## Seed data
+
+Create test records through the app: your `smoke.mjs` or an `accept.mjs` fixtures module calls the app's own REST, MCP
+or Admin operations as a signed-in user, so Mantle fills `id`, `version`, `created_at`, `updated_at`, `author_id`
+and the publishing `status`/`published_at`. Keep `seed.sql` for static reference data no surface writes; native SQL
+must set those columns itself, timestamps as integer microseconds on D1. An omitted `updated_at` stores `0`, which
+Admin shows as 1970. `mantle help local-testing` (Seed data) has a complete seed:
+
+```sql
+INSERT INTO categories (id, version, created_at, updated_at, name) VALUES
+  ('books', 1, 1767225600000000, 1767225600000000, 'Books');
+```
+
 ## Local testing notes
 
 - Better Auth allows 3 OTP requests per minute per client IP. `smoke-kit.mjs` gives each user its own
@@ -60,11 +107,12 @@ Search for `AGENT:` to find what an app must fill in.
 `mantle help local-testing` lists what the smoke covers: every Procedure at its edges, each caller's isolation,
 visitor pages without JavaScript, MCP discovery and Admin's MCP App.
 Scripted smoke is not independent acceptance; before reporting a user-facing
-deliverable done, follow the independent acceptance guide: `mantle help agent-workflow-acceptance`.
+deliverable done, follow the independent acceptance guide: `mantle help agent-workflow-acceptance`. Hand off with
+its layered report ("Report done-ness in layers"): smoke and `pnpm test` are layer 2, `pnpm accept` rounds layer 3.
 
 ### Independent acceptance
 
-`pnpm accept` (optionally `pnpm accept --fixtures fixtures.mjs --user member@example.test`; with npm, `npm run accept -- --fixtures …`) starts the app on a fresh local D1,
+`pnpm accept` (optionally `pnpm accept --fixtures fixtures.mjs --user member@example.test`, and `--open` to open the signed-in admin's Developer UI in your browser; with npm, `npm run accept -- --fixtures …`) starts the app on a fresh local D1,
 signs the admin in, runs your fixtures module, signs the user in and prints one local URL per role:
 
 ```text
@@ -115,7 +163,7 @@ and compares exact names without calling business tools. JSON/SSE protocol failu
 unexpected/missing tools and repeated/excessive pagination fail; it never obtains credentials or mounts routes.
 
 This local cookie test does not prove OAuth Bearer or an external client's connection. Test those separately
-with supplied credentials and record their results. For each declared interface, the existing handoff/README/test
-report must say verified (command, identity and result), intentionally not exposed, or deferred/unverified with a
-reason. WebMCP-only applications remain valid; an interrupted preview must retain the remote acceptance item
+with supplied credentials and record their results as layer 4 of the layered report. For each declared interface,
+the existing handoff/README/test report must say verified (command, identity and result), intentionally not exposed,
+or deferred/unverified with a reason. WebMCP-only applications remain valid; an interrupted preview must retain the remote acceptance item
 as deferred rather than silently claiming completion.

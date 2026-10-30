@@ -245,11 +245,30 @@ export interface SchemaManifestSpec {
    *  editable in place, and have no publish/unpublish transitions — the
    *  admin hides the content-lifecycle chrome for them. */
   readonly lifecycle?: LifecycleMode;
+  /** `lifecycle: publishing` options (#1822). `liveEdits: true` lets a caller's generic patch edit a published row in place (an
+   *  archived one stays draft-only); a published row must still pass `publish`'s checks. Default: generic patches edit drafts only. */
+  readonly publishing?: { readonly liveEdits?: boolean };
   /** Logical expiry policy. Physical removal requires an explicit sweep. */
   readonly ttl?: { readonly field: string; readonly expireAfterSeconds: number };
   /** The Schema's row template (ADR-0046 amendment): AND-joined `column = auth.uid()` /
    *  `column IN auth.user('field')` terms, enforced on every read and write of the Schema. */
   readonly scope?: string;
+  /** Data-state invariants (#1822): while a lock's `when` holds for the existing row, a caller's update or delete of it is
+   *  refused, whatever the caller's role. Only a trusted (system) write bypasses it. */
+  readonly lock?: readonly SchemaLock[];
+}
+
+export const LOCK_VERBS = ["update", "delete"] as const;
+export type LockVerb = (typeof LOCK_VERBS)[number];
+export interface SchemaLock {
+  /** Unique within the Schema; named by the `kind: "lock"` conflict. */
+  readonly name: string;
+  readonly on: readonly LockVerb[];
+  /** A SQL boolean over the existing row: its columns, comparisons, AND/OR/NOT, IS [NOT] NULL and [NOT] EXISTS over declared
+   *  Schemas. True (or NULL) means locked. */
+  readonly when: string;
+  /** Static text the refusal carries. */
+  readonly message: string;
 }
 
 export interface TranslatesBinding {
@@ -400,9 +419,35 @@ export interface HandlerRefBinding {
 }
 
 /** One or more write statements (`INSERT`, `UPDATE`, `DELETE`), applied as
- *  one batch. Reads `input.<name>`, `auth.uid()`, `auth.role()`, `now()`. */
+ *  one batch. Reads `input.<name>`, `auth.uid()`, `auth.role()`, `now()`.
+ *  Authored as `sql` (the program) or as `steps`, one statement each; the parser
+ *  joins steps into `sql`, so everything that reads the program reads `sql`. */
 export interface HandlerSqlBinding {
   readonly sql: string;
+  /** Present when authored as `handler.steps` (ADR-0034 decision 4, #1874): statement i of the program is step i. */
+  readonly steps?: readonly HandlerStep[];
+}
+
+/** One statement of a `steps` program. `onNoRows: conflict`: a set-op write that writes no row is
+ *  `CONFLICT` kind "row" and the whole program rolls back. */
+export interface HandlerStep {
+  readonly sql: string;
+  readonly onNoRows?: "conflict";
+}
+export const HANDLER_STEP_KEYS = ["sql", "onNoRows"] as const;
+
+/** The program `steps` compile as: the statements in order, each on its own lines. `lines[i]` is the 0-based line step i starts
+ *  on, so a diagnostic in the program points back into its step. A step's own trailing `;` is dropped; after a step ending in a
+ *  `--` comment the separator goes on the next line, where the comment cannot swallow it. */
+export function stepProgram(steps: readonly HandlerStep[]): { readonly sql: string; readonly lines: readonly number[] } {
+  let sql = "";
+  const lines: number[] = [];
+  for (const [i, step] of steps.entries()) {
+    lines.push(sql.split("\n").length - 1);
+    const text = step.sql.trimEnd().replace(/;$/, "").trimEnd();
+    sql += i === steps.length - 1 ? text : `${text}${/--[^\n]*$/.test(text) ? "\n;" : ";"}\n`;
+  }
+  return { sql, lines };
 }
 
 /** Closed predicate vocabulary. `ctx.user` and `ctx.auth` are bare

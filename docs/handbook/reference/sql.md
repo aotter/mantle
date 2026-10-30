@@ -19,7 +19,7 @@ worked examples see [SQL patterns](../guides/sql-patterns.md).
 | Predicates | `=`, `<>`, `!=`, `<`, `>`, `<=`, `>=`, `AND`, `OR`, `NOT`, `IS [NOT] NULL`, `IS [NOT] DISTINCT FROM`, `[NOT] BETWEEN`, `IN (list)`, `IN (subquery)`, `LIKE`, `[NOT] EXISTS (subquery)` |
 | Expressions | `+ - * / %`, `\|\|`, `->>` (JSON field), `CASE`, `COALESCE`, `NULLIF`, scalar subqueries, `CAST(… AS text \| int4 \| int8 \| float8 \| bool \| timestamptz \| date \| numeric \| interval)` |
 | Aggregates | `count`, `sum`, `min`, `max`, `avg` |
-| Windows | `row_number()`, `rank()`, `sum()`, `count()` with `OVER (PARTITION BY … ORDER BY …)` and the default frame |
+| Windows (Views only) | `row_number()`, `rank()`, `sum()`, `count()` with `OVER (PARTITION BY … ORDER BY …)` and the default frame. A Procedure refuses them; rank there with a correlated `count(*)` subquery |
 | Scalar functions | `lower`, `upper`, `length`, `abs`, `round`, `substr`, `replace`, `trim`, `ltrim`, `rtrim`, `instr` |
 | Time | `now()`, `date_trunc('hour' \| 'day' \| 'week' \| 'month' \| 'year', …)`, `extract(year \| month \| day \| dow \| hour FROM …)` |
 | Mantle | `auth.uid()`, `input.<name>`, `mantle.search`, `mantle.search_rank`, `mantle.near`, `mantle.distance` ([features](features.md)) |
@@ -60,5 +60,6 @@ An integer `CAST` of anything but a literal is refused (`SQL_TYPE`): SQLite trun
 
 Two write rules come from Mantle, not the dialect ([Procedure](procedure.md)). A row-classified `UPDATE`/`DELETE`
 (`WHERE id = input.id …`) must change exactly one row, otherwise `CONFLICT`. A set form (`WHERE id IN (SELECT …)`,
-`INSERT … SELECT`) may change none, so write a conditional write that may do nothing in that form. Scope, version,
+`INSERT … SELECT`) may change none, so write a conditional write that may do nothing in that form; a Procedure step with
+`onNoRows: conflict` turns "none" into `CONFLICT`. Scope, version,
 timestamps and author columns are assigned by Mantle, never by your SQL.

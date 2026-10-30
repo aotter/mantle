@@ -1,0 +1,33 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: notes}
+spec:
+  title: Notes
+  lifecycle: operational
+  schema: {type: object, required: [title], properties: {title: {type: string}}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: change}
+spec:
+  requires: {auth: {all: [ctx.admin]}}
+  input:
+    type: object
+    required: [id, title, version]
+    additionalProperties: false
+    properties: {id: {type: string}, title: {type: string}, version: {type: integer}}
+  output: {type: object}
+  handler:
+    sql: |
+      INSERT INTO notes (title) VALUES ('marker');
+      UPDATE notes SET title = input.title WHERE id = input.id AND version = input.version RETURNING id;
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: change-http}
+spec: {source: {kind: http, method: POST, path: /api/change}, target: {procedure: change}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: change-mcp}
+spec: {source: {kind: mcp, surface: admin}, target: {procedure: change}}

@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteD
 import type { AdminBadge, AdminTypes } from "./define-admin";
 import { useAdminContext } from "./hooks-context";
 import { MAX_BADGE_VIEWS, createMcpAppTransport } from "./transport";
-import { invalidateAfterWrite } from "../lib/after-write";
+import { invalidateAfterWrite, type ViewRefresh } from "../lib/after-write";
 
 export { useOpenLink } from "./slots";
 
@@ -70,6 +70,11 @@ export interface McpToolResult {
   readonly isError?: boolean;
 }
 
+/** A read's `signal`, from the query that asked for it. */
+export interface ReadOptions {
+  readonly signal?: AbortSignal | undefined;
+}
+
 /** How a surface reads and writes: `/admin/api` in the browser, `tools/call` through an MCP host. The hooks do not know which. */
 export interface AdminTransport {
   readonly surface: AdminSurface;
@@ -77,13 +82,14 @@ export interface AdminTransport {
   readonly host: AdminHost | null;
   /** Whether this surface can write: an MCP host without server tools is read-only. */
   readonly writable: boolean;
-  view(name: string, input: Row, page: { readonly limit?: number | undefined; readonly cursor?: string | undefined }, rowNames?: { readonly [column: string]: string }): Promise<Reply<{ readonly rows: readonly Row[]; readonly nextCursor?: string }>>;
-  entries(collection: string, options: { readonly filter?: { readonly field: string; readonly value: string } | undefined; readonly search?: string | undefined; readonly limit?: number | undefined; readonly cursor?: string | undefined }): Promise<Reply<{ readonly items: readonly AdminEntry<Row>[]; readonly nextCursor?: string }>>;
-  entry(collection: string, id: string): Promise<Reply<AdminEntry<Row>>>;
-  total(collection: string): Promise<Reply<number>>;
-  me(): Promise<Reply<AdminMe>>;
+  /** Each read takes the query's `signal`: a cancelled refetch (a newer write's, an unmount) stops its request where the surface can. */
+  view(name: string, input: Row, page: { readonly limit?: number | undefined; readonly cursor?: string | undefined; readonly signal?: AbortSignal | undefined }, rowNames?: { readonly [column: string]: string }): Promise<Reply<{ readonly rows: readonly Row[]; readonly nextCursor?: string }>>;
+  entries(collection: string, options: { readonly filter?: { readonly field: string; readonly value: string } | undefined; readonly search?: string | undefined; readonly limit?: number | undefined; readonly cursor?: string | undefined; readonly signal?: AbortSignal | undefined }): Promise<Reply<{ readonly items: readonly AdminEntry<Row>[]; readonly nextCursor?: string }>>;
+  entry(collection: string, id: string, read?: ReadOptions): Promise<Reply<AdminEntry<Row>>>;
+  total(collection: string, read?: ReadOptions): Promise<Reply<number>>;
+  me(read?: ReadOptions): Promise<Reply<AdminMe>>;
   /** One read of up to `MAX_BADGE_VIEWS` Views' first rows, each as the caller: a refused or missing View is `unavailable`, one that could not answer is `error`. */
-  badges(names: readonly string[]): Promise<Reply<{ readonly [name: string]: BadgeAnswer }>>;
+  badges(names: readonly string[], read?: ReadOptions): Promise<Reply<{ readonly [name: string]: BadgeAnswer }>>;
   run(name: string, input: Row): Promise<Reply<unknown>>;
 }
 
@@ -144,6 +150,17 @@ export interface MeState {
   readonly me: AdminMe | undefined;
   readonly status: ReadStatus;
 }
+/** A View `useOperation` reads again after a success: by name (every input), or one `useView` input of it. */
+export type OperationRefresh<T extends AdminTypes> = {
+  readonly [N in keyof T["views"] & string]: N | { readonly view: N; readonly input: T["views"][N]["input"] };
+}[keyof T["views"] & string];
+export interface OperationOptions<T extends AdminTypes> {
+  /**
+   * Read only these Views again after a success, instead of every View (#1794). Other Views are marked stale and read again
+   * when next shown; entries, open entries, totals and badges refresh as always. Leave it out to refresh every View.
+   */
+  readonly refresh?: readonly OperationRefresh<T>[];
+}
 export interface OperationState<I, O> {
   /** Undefined where the surface cannot write. Rejects with `AdminUnavailableError` when refused or missing. */
   readonly run: ((input: I) => Promise<O>) | undefined;
@@ -165,8 +182,11 @@ export interface AdminHooks<T extends AdminTypes> {
   useEntries<N extends keyof T["collections"] & string>(collection: N, options?: EntriesOptions<T["collections"][N]["data"]>): EntriesState<T["collections"][N]["data"]>;
   /** `GET /admin/api/entries/{id}`. Browser only. */
   useEntry<N extends keyof T["collections"] & string>(collection: N, id: string): EntryState<T["collections"][N]["data"]>;
-  /** `POST /admin/api/operations/{name}`, or the operation's admin MCP tool in a host. A success refreshes Views, entries and totals. */
-  useOperation<N extends keyof T["operations"] & string>(name: N): OperationState<T["operations"][N]["input"], T["operations"][N]["output"]>;
+  /**
+   * `POST /admin/api/operations/{name}`, or the operation's admin MCP tool in a host. A success refreshes Views, entries and
+   * totals, once; `refresh` narrows the Views read again to the ones named.
+   */
+  useOperation<N extends keyof T["operations"] & string>(name: N, options?: OperationOptions<T>): OperationState<T["operations"][N]["input"], T["operations"][N]["output"]>;
   /** The `total` of `GET /admin/api/collections/{name}/statistics`. Browser only. */
   useCollectionTotal(collection: keyof T["collections"] & string): TotalState;
   /** `GET /admin/api/me`. Browser only. */
@@ -226,17 +246,21 @@ const implementation = {
     const query = useQuery({ queryKey: ["entry-editor", collection, id, "hook", transport.surface], queryFn: () => transport.entry(collection, id) });
     return { entry: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
   },
-  useOperation(name: string): OperationState<object, unknown> {
+  useOperation(name: string, options: { readonly refresh?: readonly ViewRefresh[] } = {}): OperationState<object, unknown> {
     const { transport } = useAdminContext();
     const client = useQueryClient();
+    const { refresh } = options;
     const mutation = useMutation({
       mutationFn: async (input: object): Promise<unknown> => {
         const reply = await transport.run(name, input as Row);
         if (reply.status === "unavailable") throw new AdminUnavailableError();
         return reply.data;
       },
-      // the shared cache: what Admin shows and what the application's own components read both refetch
-      onSuccess: () => { void invalidateAfterWrite(client); },
+      // the shared cache: what Admin shows and what the application's own components read both refetch. The hook
+      // refreshes on whichever client it runs under (an MCP App's has no global handler), so Admin's global
+      // `MutationCache` handler skips it: one refetch per write, not a second one cancelling the first.
+      onSuccess: () => { void invalidateAfterWrite(client, refresh); },
+      meta: { invalidates: false },
     });
     return { run: transport.writable ? mutation.mutateAsync : undefined, pending: mutation.isPending };
   },

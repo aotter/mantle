@@ -22,6 +22,8 @@ under `secrets.required`, run `pnpm exec wrangler types --include-runtime=false`
 add `worker-configuration.d.ts` to `tsconfig.json` and commit it.
 `@cloudflare/workers-types` still supplies runtime types. Rerun after every binding
 change; `wrangler types --include-runtime=false --check` fails on drift.
+Both run the custom build (`mantle bundle`), because Wrangler reads the built entry's exports
+for Durable Object and service binding types; Wrangler has no option to skip it.
 Once `secrets.required` is set, `wrangler dev` loads only those keys from
 `.dev.vars`/`.env`, so declare every secret the app reads.
 

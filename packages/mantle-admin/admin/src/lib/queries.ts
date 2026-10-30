@@ -1,9 +1,8 @@
 import { infiniteQueryOptions } from "@tanstack/react-query";
 import { api } from "./api";
-import { queryClient } from "../app/query-client";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
 import { foldedChildScopeValue, isFoldedFieldChild } from "./collection-nav";
-import type { CollectionsMetadata, EntryDocument, AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, AdminOperation, ViewManifestInfo } from "./types";
+import type { EntryDocument, AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, AdminOperation, ViewManifestInfo } from "./types";
 import { AUTH_BASE } from "./auth";
 
 export const COLLECTION_PAGE_SIZE = 50;
@@ -64,6 +63,8 @@ export function entriesQuerySearchParams(args: EntriesQueryArgs, cursor?: string
 export function pagedQueryOptions<Page extends { next_cursor: string | null }>(queryKey: readonly unknown[], load: (cursor: string | undefined) => Promise<Page>) {
   return infiniteQueryOptions({
     queryKey,
+    // No AbortSignal: a query that reads it is cancelled when its last observer unmounts, so a page that remounts
+    // while loading would fetch twice. A superseded refetch's result is discarded either way.
     queryFn: ({ pageParam }) => load(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.next_cursor ?? undefined,
@@ -84,14 +85,6 @@ export function entryEditorQueryOptions(collectionName: string, entryId: string)
     queryKey: ["entry-editor", collectionName, entryId] as const,
     queryFn: async () => composeEntry(await api.get<EntryDocument>(entryApiPath(collectionName, entryId))),
   };
-}
-
-export function collectionMetadata(): Promise<CollectionsMetadata> {
-  return queryClient.fetchQuery({
-    queryKey: ["collection-metadata"],
-    queryFn: () => api.get<CollectionsMetadata>("/collections"),
-    staleTime: Infinity,
-  });
 }
 
 /** The native server returns the complete editor projection on reads and writes. */

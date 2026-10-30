@@ -27,6 +27,8 @@ export interface Options<Env, Database> extends GatewayOptions {
   allowedOrigins?: readonly string[];
   onObservation?: (event: McpObservation) => void | Promise<void>;
   onRefusal?: (event: CallerRefusal) => void | Promise<void>;
+  /** Tools per `tools/list` page: the result carries `nextCursor` while more remain. Unset, one page lists every tool. */
+  toolsPageSize?: number;
 }
 export interface CallerRefusal { readonly at: number; readonly status: 401 | 403; readonly reason: "origin" | "credential"; }
 export type McpObservation =
@@ -62,7 +64,21 @@ export interface Tool<Database, Handlers = never> {
   readonly path?: string;
   readonly page?: (db: Database, caller: Caller, input: never, paging: Paging) => Promise<unknown>;
   readonly run?: (db: Database, caller: Caller, input: never, handlers: Handlers) => Promise<unknown>;
+  /**
+   * Merged into this tool's `_meta` in `tools/list` (top level shallow, `ui` one level deep) with what its App links produce;
+   * a contradicting value fails at `mcp(...)`. `ui.visibility: ["app"]` hides the tool from clients without MCP Apps.
+   * It is a listing hint and grants or removes no execution authority.
+   */
+  readonly meta?: Readonly<Record<string, unknown>>;
 }
+
+/** What `withResultMeta` returns: `data` is the tool result as usual, `_meta` goes only to the `tools/call` result `_meta`. */
+export interface ResultWithMeta<T> { readonly data: T; readonly _meta: Readonly<Record<string, unknown>> }
+/**
+ * Returned from a tool's `run`: MCP sends `data` exactly as an unwrapped return, and `meta` only in the result `_meta`
+ * (beside `net.aotter.mantle/tool`, which it cannot replace). `callTool` returns the wrapper itself; drop `_meta` before forwarding to a model.
+ */
+export const withResultMeta = <T>(data: T, meta: Readonly<Record<string, unknown>>): ResultWithMeta<T> => ({ [Symbol.for("net.aotter.mantle/result")]: true, data, _meta: meta }) as ResultWithMeta<T>;
 
 /** Request-bound tool tables keep native environment bindings outside the cached App catalogue. */
 export type Tools<Env, Database, Handlers = never> = readonly Tool<Database, Handlers>[] | ((request: Request, env: Env) => readonly Tool<Database, Handlers>[] | Promise<readonly Tool<Database, Handlers>[]>);

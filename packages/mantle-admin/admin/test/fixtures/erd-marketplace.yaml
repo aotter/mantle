@@ -1,0 +1,309 @@
+# ER diagram fixture (#1890): a marketplace using every relation shape the Developer UI draws.
+# Regenerate erd-marketplace.snapshot.json from it: mantle generate cloudflare-d1 <out> erd-marketplace.yaml --admin, then
+# JSON-dump the `developerConsole` export of <out>/admin-developer-console.ts.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: members }
+spec:
+  title: Members
+  lifecycle: operational
+  uniqueIndexes: [[email]]
+  searchableFields: [email, displayName]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [email, displayName]
+    properties:
+      email: { type: string, format: email }
+      displayName: { type: string }
+      tier: { type: string, enum: [basic, plus] }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: profiles }
+spec:
+  title: Member profiles
+  lifecycle: operational
+  uniqueIndexes: [[memberId]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [memberId]
+    properties:
+      memberId: { type: string, x-mantle-ref: members }
+      bio: { type: string }
+      avatarUrl: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: categories }
+spec:
+  title: Categories
+  lifecycle: operational
+  uniqueIndexes: [[slug]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [slug, name]
+    properties:
+      slug: { type: string }
+      name: { type: string }
+      parentId: { type: string, x-mantle-ref: categories }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: sellers }
+spec:
+  title: Sellers
+  lifecycle: operational
+  uniqueIndexes: [[memberId]]
+  searchableFields: [storeName]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [memberId, storeName]
+    properties:
+      memberId: { type: string, x-mantle-ref: members }
+      storeName: { type: string }
+      rating: { type: number }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: products }
+spec:
+  title: Products
+  uiSchema: { nav: { parentField: sellerId } }
+  lifecycle: publishing
+  uniqueIndexes: [[slug]]
+  indexes: [[categoryId, createdAt, id]]
+  searchableFields: [title, slug]
+  checks: ["price > 0"]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [slug, title, price, sellerId, categoryId]
+    properties:
+      slug: { type: string }
+      title: { type: string }
+      price: { type: integer }
+      sellerId: { type: string, x-mantle-ref: sellers }
+      categoryId: { type: string, x-mantle-ref: categories }
+      description: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: product_translations }
+spec:
+  title: Product translations
+  lifecycle: publishing
+  localized: true
+  translates: { parent: products, on: slug }
+  uniqueIndexes: [[slug, locale]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [slug, locale, title]
+    properties:
+      slug: { type: string }
+      locale: { type: string }
+      title: { type: string }
+      description: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: tags }
+spec:
+  title: Tags
+  lifecycle: operational
+  uniqueIndexes: [[label]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [label]
+    properties:
+      label: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: product_tags }
+spec:
+  title: Product tags
+  uiSchema: { nav: { parentField: productId } }
+  lifecycle: operational
+  uniqueIndexes: [[productId, tagId]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [productId, tagId]
+    properties:
+      productId: { type: string, x-mantle-ref: products }
+      tagId: { type: string, x-mantle-ref: tags }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: warehouses }
+spec:
+  title: Warehouses
+  lifecycle: operational
+  uniqueIndexes: [[code]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [code, city]
+    properties:
+      code: { type: string }
+      city: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: stock }
+spec:
+  title: Stock
+  uiSchema: { nav: { parentField: productId } }
+  lifecycle: operational
+  uniqueIndexes: [[productId, warehouseId]]
+  checks: ["onHand >= 0"]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [productId, warehouseId, onHand]
+    properties:
+      productId: { type: string, x-mantle-ref: products }
+      warehouseId: { type: string, x-mantle-ref: warehouses }
+      onHand: { type: integer }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  lifecycle: operational
+  scope: "owner = auth.uid()"
+  indexes: [[owner, createdAt, id], [orderStatus, createdAt, id]]
+  searchableFields: [orderNumber]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [owner, orderNumber, orderStatus, total]
+    properties:
+      owner: { type: string }
+      orderNumber: { type: string }
+      orderStatus: { type: string, enum: [cart, placed, paid, shipped, cancelled] }
+      total: { type: integer }
+      couponId: { type: string, x-mantle-ref: coupons }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: order_lines }
+spec:
+  title: Order lines
+  uiSchema: { nav: { parentField: orderId } }
+  lifecycle: operational
+  uniqueIndexes: [[orderId, productId]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [orderId, productId, qty, unitPrice]
+    properties:
+      orderId: { type: string, x-mantle-ref: orders }
+      productId: { type: string, x-mantle-ref: products }
+      qty: { type: integer, minimum: 1 }
+      unitPrice: { type: integer }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: coupons }
+spec:
+  title: Coupons
+  lifecycle: operational
+  uniqueIndexes: [[code]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [code, percentOff]
+    properties:
+      code: { type: string }
+      percentOff: { type: integer, minimum: 1, maximum: 90 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: payments }
+spec:
+  title: Payments
+  lifecycle: operational
+  uniqueIndexes: [[orderId], [providerRef]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [orderId, providerRef, amount]
+    properties:
+      orderId: { type: string, x-mantle-ref: orders }
+      providerRef: { type: string }
+      amount: { type: integer }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: shipments }
+spec:
+  title: Shipments
+  uiSchema: { nav: { parentField: orderId } }
+  lifecycle: operational
+  indexes: [[orderId, createdAt, id]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [orderId, warehouseId, carrier]
+    properties:
+      orderId: { type: string, x-mantle-ref: orders }
+      warehouseId: { type: string, x-mantle-ref: warehouses }
+      carrier: { type: string }
+      trackingCode: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: reviews }
+spec:
+  title: Reviews
+  uiSchema: { nav: { parentField: productId } }
+  lifecycle: operational
+  uniqueIndexes: [[productId, memberId]]
+  searchableFields: [body]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [productId, memberId, stars]
+    properties:
+      productId: { type: string, x-mantle-ref: products }
+      memberId: { type: string, x-mantle-ref: members }
+      stars: { type: integer, minimum: 1, maximum: 5 }
+      body: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: audit_log }
+spec:
+  title: Audit log
+  lifecycle: operational
+  indexes: [[createdAt, id]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [action]
+    properties:
+      action: { type: string }
+      detail: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: settings }
+spec:
+  title: Store settings
+  lifecycle: operational
+  uniqueIndexes: [[key]]
+  schema:
+    type: object
+    additionalProperties: false
+    required: [key, value]
+    properties:
+      key: { type: string }
+      value: { type: string }

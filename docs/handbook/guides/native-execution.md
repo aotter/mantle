@@ -46,7 +46,7 @@ transport conversion or runtime schema interpreter.
 Declared authorization, ownership/TTL SQL policy, explicit OCC and atomic writes
 remain required. Generate them as the native application would implement them.
 Transaction rollback and uncertain COMMIT handling must still preserve data-loss
-protection and client disposal responsibility; native errors are rethrown (one exception, below), and
+protection and client disposal responsibility; native errors are rethrown (with the contract exceptions below), and
 redaction before they reach HTTP users belongs to the application boundary through `wire` / `surfaceFailure`. Removing generic error
 normalization does not authorize dropping transaction outcome evidence.
 
@@ -57,12 +57,12 @@ unique `id =`), so a failed count check after autocommit has changed nothing.
 On PG it runs at the server's default isolation, not SERIALIZABLE: a concurrent
 OCC loser re-evaluates its `version =` predicate, matches zero rows and returns
 `CONFLICT` instead of SQLSTATE 40001. A server ErrorResponse (SQLSTATE and
-severity) is a known rollback and is rethrown natively, except a unique violation (23505, SQLite's `UNIQUE constraint failed`), which, in a generated Procedure or a Store write, is `ContractError("CONFLICT")` with the native error as `cause` on every target, and except connection,
+severity) is a known rollback and is rethrown natively, except a unique violation (23505, SQLite's `UNIQUE constraint failed`), which, in a generated Procedure or a Store write, is `ContractError("CONFLICT")` with the native error as `cause` on every target, and serialization/deadlock refusals (`40001` / `40P01`) with a definitive server response, which are `CONFLICT` with `kind: "serialization"` and the native `cause`, and except connection,
 resource and shutdown classes (08, 28, 53, 57, 58, XX), which, like any failure
 without a server response (lost socket), are `OUTCOME_UNKNOWN`. SQLSTATE is
 `errno` on Bun.SQL and `code` on postgres.js. Multi-statement Procedures run in
 `begin("isolation level serializable", ...)`: a failure before the callback
-returns was rolled back by `begin`; only a failed COMMIT is classified as above.
+returns was rolled back by `begin`; only a failed COMMIT is classified as above. The same serialization/deadlock mapping applies to Store batches and interactive transactions, including a definitive refusal at COMMIT. No write is retried automatically; re-read before deciding whether it still applies.
 
 **Date-time wire form:** a View output that is a declared `date-time` column
 (including `created_at`/`updated_at`) returns the handbook's wire form, an ISO
@@ -85,7 +85,8 @@ storage representations. Bound optional fields become explicit required values,
 with null representing absence; D1 cannot bind undefined. Native output keys are
 SQL names rather than a post-query camel-case projection. PG uses the driver's
 default type parsers (including Date and int8 strings); custom application parser
-configuration changes application-owned behavior. Procedures expose raw
+configuration changes application-owned behavior. The Store alone converts a row's
+`version` to a number ([typed queries](typed-queries.md)). Procedures expose raw
 `{ results }`, not a claim of validated authored output.
 
 The application resolves a verified Caller once at its entry, using its selected

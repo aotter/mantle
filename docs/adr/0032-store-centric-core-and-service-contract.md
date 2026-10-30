@@ -46,6 +46,24 @@ Every entry read and write goes through `MantleStore` / `CallerStore` over the r
 
 > **Amendment (ADR-0034):** `conflict.opIndex` is exact: count and guard checks inside the batch name their statement.
 
+> **Amendment (#1822, 2026-10-26): live edits and the draft-only rule.** Published protection for generic writes is a declared
+> choice. `Schema.spec.publishing: { liveEdits: true }` (only on `lifecycle: publishing`, else `SCHEMA_PUBLISHING_INVALID`) lets a
+> caller's generic patch (Admin's route, which REST, the Admin MCP App and WebMCP share) edit a published row in
+> place: it goes live on commit (archived rows keep the draft-only rule: live edits edit what is live, they never revive
+> archived content in place), `published_at` is kept and `updated_at` moves. The name sits under a `publishing` key, beside
+> `lifecycle`, so later publishing options have one home; `lifecycle` stays a plain mode. Without it (the default) nothing
+> changes, but the rule is modelled as an implicit lock named `publishing` (no declared lock name has a dot or can take it): a
+> patch of a non-draft and a delete of a published row are `CONFLICT` with `kind: "lock"` (`verb` `update` or `delete`), and the
+> Admin payload's `entry.locks` shows them before the edit. The implicit lock binds data writes only, never the publish,
+> unpublish and archive transitions; deleting a published row still requires unpublishing, with or without `liveEdits`; declared
+> locks apply on top. No write clears data `publish` requires from a published row. Admin's live edit validates the whole
+> merged row as `publish` does (the form shows the whole entry; its OCC pins the row it read) and refuses with
+> `INPUT_VALIDATION_FAILED`. A Store update (`store(db, caller)`, `ctx.store`, any caller, system included, as `publish` checks
+> system callers too) that sets a required column to NULL (a geo field is its two columns) carries `status <> 'published'` in
+> its WHERE, its probe answering `INPUT_VALIDATION_FAILED` naming the declared fields; columns it leaves alone are not re-checked,
+> so a field added to `required` later does not freeze rows published before it. A SQL Procedure cannot write a publishing
+> Schema, so the generated transitions are its only writes there.
+
 ### 2. Row ops and set ops
 
 A write op's `where` is classified **on the caller's `where`, before any policy rewrite**, so an injected scope predicate never changes the class.
@@ -400,3 +418,9 @@ list manifest tools; its native media operations remain REST-backed.
   deployment. Hosted-service MCP connections, packers and lifecycle instructions
   are distributed separately; earlier Cloud-helper distribution text is historical.
   Generic platform adapters and SDK contracts remain public.
+
+- **2026-10-29, one consumer skill, no package skills (#1886).** Decision 13's two skill distributions are reduced to
+  one: the plugin's `mantle` skill, which routes to `mantle help` and holds no contract, version or workflow detail. The
+  package skills under `docs/skills/` are removed; their content lives once in the handbook that `mantle help` prints
+  (performance, deploy, media clean-up, upgrade, adoption in an existing app). The skill no longer needs to match the
+  SDK version, so installation examples are version-neutral. `scripts/check-skills.mjs` enforces the single skill.

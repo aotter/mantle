@@ -10,7 +10,7 @@ export function emitAdminDescriptors({plan,admin=false}:Pick<GenerateInput,"plan
   const schemaList=Object.values(plan.schemas);
   const placed=[...schemaList.map(s=>["schemas/"+s.name,s.uiSchema,s] as const),...Object.entries(plan.views).map(([name,v])=>["views/"+name,v.uiSchema,null] as const)];
   for(const [path,ui,s] of placed){
-    const nav=(ui?.["nav"]??{}) as Record<string,unknown>,group=nav["group"];
+    const nav=(ui?.["nav"]??{}) as Record<string,unknown>;
     // a child folded under its parent, or a translation on its parent's language tabs, has no sidebar entry to place
     if(s&&!isPrimaryCollection(s,schemaList))for(const key of ["group","order","hidden"])if(nav[key]!==undefined)diagnostics.push({code:"SCHEMA_UI_INVALID",path:`${path}/uiSchema/nav/${key}`,message:s.translates?`Schema '${s.name}' has no sidebar entry to place: it is a translation, shown on its parent's language tabs.`:`Schema '${s.name}' has no sidebar entry to place: it is folded under its parent${collectionOf(s,schemaList).parent?.parentField==="id"?"; nav.standalone: true lists it in the sidebar.":" and opens from its parent's workbench (standalone needs a required id reference)."}`});
   }
