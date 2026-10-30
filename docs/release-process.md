@@ -140,6 +140,9 @@ dist-tag DELETE only added failure and re-run state, and Actions
    Run the maintainer release skill's
    [startup and request-cost checkpoint](../.agents/skills/mantle-release/SKILL.md#startup-and-request-cost-checkpoint)
    when its auth/kernel/generator trigger applies and before every alpha or beta.
+   Before every release, alpha included, run Linux Full checks
+   (`gh workflow run full-checks.yml --ref <version PR branch>`) on the frozen
+   version PR head, and link the green run from the version PR.
 5. Freeze the PR head for self review; CI must pass before merge. Merge into
    `develop` with a merge commit for every version. For an alpha, dispatch
    release.yml from that merge with `version` (without v). For beta, RC and

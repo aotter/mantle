@@ -28,8 +28,9 @@ docs/release-process.md: pin
 merge commit, dispatch with `--ref main`. Stable also needs recorded owner
 acceptance on the version's release-gate issue, and its entry added to
 docs/handbook/releases/index.md. Do not infer permission to publish from an
-implementation PR. Before an alpha or beta, also run the startup and
-request-cost checkpoint below.
+implementation PR. Before every release, alpha included, run Linux Full checks
+on the frozen version PR head (docs/release-process.md step 4). Before an alpha
+or beta, also run the startup and request-cost checkpoint below.
 
 ## Startup and request-cost checkpoint
 
