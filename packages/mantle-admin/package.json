@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-admin",
-  "version": "0.2.1-alpha.4",
+  "version": "0.2.1",
   "description": "Native Admin console for Mantle apps: React admin app and build, same-origin preview and Admin MCP App. Uses @aotter/mantle as a peer.",
   "keywords": [
     "mantle",
@@ -125,7 +125,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@aotter/mantle": "0.2.1-alpha.4",
+    "@aotter/mantle": "0.2.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "playwright-core": ">=1.40 <2"
