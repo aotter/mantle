@@ -3,6 +3,7 @@ import { Background, Controls, ReactFlow, type ReactFlowInstance } from "@xyflow
 import { Maximize2 } from "lucide-react";
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "../../app/preferences";
+import { t } from "../../app/i18n";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { DeveloperAtom, DeveloperSchemaModel } from "../../lib/types";
 import { businessRules, type BusinessRule } from "./business-rules";
@@ -14,10 +15,9 @@ import { businessFlow, logicNodeTypes } from "./business-flow";
  */
 export function ProcedureLogicPreview({ atom, schemas, density = "compact" }: { atom: DeveloperAtom; schemas: readonly DeveloperSchemaModel[]; density?: "compact" | "full" }): React.ReactElement | null {
   const { language, resolvedTheme } = usePreferences();
-  const zh = language.startsWith("zh");
   const title = resolveLocalizedText(atom.title, language) || atom.name;
   const rules = React.useMemo(() => businessRules(atom, schemas, language), [atom, schemas, language]);
-  const layout = React.useMemo(() => businessFlow(atom.id, rules, zh), [atom.id, rules, zh]);
+  const layout = React.useMemo(() => businessFlow(atom.id, rules, language), [atom.id, rules, language]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [expandedFlow, setExpandedFlow] = React.useState<ReactFlowInstance | null>(null);
   const expandedCanvasRef = React.useRef<HTMLDivElement>(null);
@@ -55,22 +55,22 @@ export function ProcedureLogicPreview({ atom, schemas, density = "compact" }: { 
     <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground">{selectedRule.body || selectedRule.summary}</p>
   </div> : null;
 
-  return <section className="overflow-hidden rounded-lg border" aria-label={zh ? "流程邏輯" : "Procedure logic"}>
+  return <section className="overflow-hidden rounded-lg border" aria-label={t(language, "developer.logic.title")}>
     <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-      <h3 className="text-sm font-semibold">{zh ? "流程邏輯" : "Procedure logic"}</h3>
+      <h3 className="text-sm font-semibold">{t(language, "developer.logic.title")}</h3>
       <Dialog>
-        <DialogTrigger asChild><Button size="sm" variant="ghost"><Maximize2 aria-hidden />{zh ? "放大" : "Expand"}</Button></DialogTrigger>
-        <DialogContent className="flex h-[90svh] w-[95vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none" closeLabel={zh ? "關閉" : "Close"}>
+        <DialogTrigger asChild><Button size="sm" variant="ghost"><Maximize2 aria-hidden />{t(language, "developer.logic.expand")}</Button></DialogTrigger>
+        <DialogContent className="flex h-[90svh] w-[95vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none" closeLabel={t(language, "common.close")}>
           <div className="shrink-0 border-b px-5 py-3 pr-12">
             <DialogTitle>{title}</DialogTitle>
-            <DialogDescription className="mt-1">{zh ? "實線是執行順序，橘色虛線是欄位值的選擇，紅色虛線是失敗時整批回滾。點選節點查看規則。" : "Solid lines are statement order, amber dashed lines choose a field value, red dashed lines roll the batch back. Select a node for its rule."}</DialogDescription>
+            <DialogDescription className="mt-1">{t(language, "developer.logic.legend")}</DialogDescription>
           </div>
-          <div ref={expandedCanvasRef} className="min-h-0 flex-1" aria-label={zh ? "完整流程邏輯圖" : "Full procedure logic graph"}>{canvas(true)}</div>
+          <div ref={expandedCanvasRef} className="min-h-0 flex-1" aria-label={t(language, "developer.logic.graphFull")}>{canvas(true)}</div>
           {selectedRule ? <div className="max-h-[25svh] shrink-0 overflow-auto">{details}</div> : null}
         </DialogContent>
       </Dialog>
     </div>
-    <div className={density === "full" ? "h-[520px]" : "h-72"} aria-label={zh ? "流程邏輯圖" : "Procedure logic graph"}>{canvas(false)}</div>
+    <div className={density === "full" ? "h-[520px]" : "h-72"} aria-label={t(language, "developer.logic.graph")}>{canvas(false)}</div>
     {details}
   </section>;
 }

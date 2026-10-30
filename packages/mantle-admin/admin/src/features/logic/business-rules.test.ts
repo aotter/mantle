@@ -1,7 +1,10 @@
-import { expect, it } from 'vitest';
+import { beforeAll, expect, it } from 'vitest';
+import { loadLanguage } from '../../app/i18n';
 import { businessRules, type BusinessRule } from './business-rules';
 import { businessFlow } from './business-flow';
 import type { DeveloperAtom, DeveloperSchemaModel, SqlLogicNode } from '../../lib/types';
+
+beforeAll(() => loadLanguage('zh-TW'));
 
 it('derives business names and boundaries from arbitrary manifest fields without guessing units or state meanings', () => {
   const n = (kind: string, label: string, children: SqlLogicNode[] = []): SqlLogicNode => ({ kind, label, children });
@@ -11,9 +14,12 @@ it('derives business names and boundaries from arbitrary manifest fields without
   const rules = businessRules(atom, schemas, 'zh-TW');
   expect(rules.map((r) => r.title)).toEqual(['更新 庫存', '決定「處理方式」']);
   expect(rules[1]!.body).toContain('數量 小於 7');
+  // UI wording follows the Admin language; names stay the manifest's.
+  expect(businessRules(atom, schemas, 'en').map((r) => r.title)).toEqual(['Update 庫存', 'Choose “處理方式”']);
+  expect(businessRules(atom, schemas, 'en')[1]!.body).toContain('數量 is less than 7');
   expect(rules[1]!.body).toContain('保留');
   expect(rules[1]!.body).toContain('放行');
-  const flow = businessFlow(atom.id, rules, true);
+  const flow = businessFlow(atom.id, rules, 'zh-TW');
   const caseCards = flow.nodes.filter((node) => node.type === 'logicCase').map((node) => (node.data as { rule: BusinessRule }).rule);
   expect(caseCards.map((rule) => rule.branches!.map((branch) => branch.condition))).toEqual([['數量 小於 7']]);
   expect(caseCards.map((rule) => [...rule.branches!.map((branch) => branch.value), rule.otherwise])).toEqual([['保留', '放行']]);
@@ -21,7 +27,7 @@ it('derives business names and boundaries from arbitrary manifest fields without
   expect(flow.edges.filter((e) => e.source.includes(':case:')).every((e) => e.target.includes(':operation:') && e.style?.strokeDasharray)).toBe(true);
   expect(flow.edges.some((e) => e.target === `Rule:${atom.id}:rollback`)).toBe(true);
   expect(flow.nodes.filter((node) => node.type === 'logicStep' || node.type === 'logicCase').every((node) => node.parentId === `Rule:${atom.id}:tx`)).toBe(true);
-  const multi = businessFlow(atom.id, [rules[0]!, { ...rules[1]!, branches: [...rules[1]!.branches!, { condition: '數量 等於 9', value: '放行' }] }], true);
+  const multi = businessFlow(atom.id, [rules[0]!, { ...rules[1]!, branches: [...rules[1]!.branches!, { condition: '數量 等於 9', value: '放行' }] }], 'zh-TW');
   expect(multi.nodes.filter((node) => node.type === 'logicCase').map((node) => (node.data as { rule: BusinessRule }).rule.branches!.length)).toEqual([2]);
   expect(rules[1]!.body).not.toMatch(/主管|新臺幣|核准/);
   expect(businessRules(atom, [], 'zh-TW')[1]!.body).not.toContain('保留');
@@ -46,7 +52,7 @@ it('renders CASE assigned by INSERT VALUES and INSERT SELECT using positional co
     expect(rules.map(rule => rule.title)).toEqual(['新增 請購單', '決定「審核狀態」']);
     expect(rules[1]!.branches).toEqual([{ condition: '本次輸入「請購金額」 大於 10000', value: '待審核' }]);
     expect(rules[1]!.otherwise).toBe('已核准');
-    const flow = businessFlow(atom.id, rules, true);
+    const flow = businessFlow(atom.id, rules, 'zh-TW');
     const cases = flow.nodes.filter(node => node.type === 'logicCase').map(node => (node.data as { rule: BusinessRule }).rule);
     expect(cases.map(rule => [...rule.branches!.map(branch => branch.value), rule.otherwise])).toEqual([['待審核', '已核准']]);
     if (source.label === 'SELECT') {

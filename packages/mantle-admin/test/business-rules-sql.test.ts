@@ -1,9 +1,12 @@
-import { expect, it } from 'vitest';
+import { beforeAll, expect, it } from 'vitest';
 import { compileSql } from '../../mantle/src/build/spec/infrastructure/sql/compileSql';
 import * as pg from '../../mantle/src/build/postgres/compile/index';
 import { procedureFlow } from '../../mantle/src/build/admin/procedureFlow';
 import { businessRules } from '../admin/src/features/logic/business-rules';
 import type { DeveloperAtom, DeveloperSchemaModel } from '../admin/src/lib/types';
+import { loadLanguage } from '../admin/src/app/i18n';
+
+beforeAll(() => loadLanguage('zh-TW'));
 
 // Exercise the real compiler → developer AST → wording seam, not a parallel hand-built AST.
 async function project(value: string, currency?: string, mixedCase = false) {
@@ -35,7 +38,7 @@ it('does not present CASE operands inside arithmetic, casts or functions as assi
 it('preserves exact SQL thresholds when numeric conversion or currency formatting would round', async () => {
   for (const [threshold, currency] of [['1000000.00000000001', 'TWD'], ['9007199254740991', 'TWD'], ['9007199254740993', 'TWD'], ['7', 'JPY']]) {
     const { rules } = await project(choice(threshold!), currency);
-    expect(rules[1]!.branches![0]!.condition).toBe(`測量值 小於 ${threshold} (SQL 原值)`);
+    expect(rules[1]!.branches![0]!.condition).toBe(`測量值 小於 ${threshold}（SQL 原值）`);
   }
   const normal = await project(choice('1000000'), 'TWD');
   expect(normal.rules[1]!.branches![0]!.condition).toContain('10,000');
@@ -54,9 +57,9 @@ it('projects arbitrary state handoffs, aliases, role predicates and checks witho
   ] as DeveloperSchemaModel[];
   const rules = businessRules(atom, schemas, 'zh-TW');
   expect(rules[0]!.transitions).toEqual([{ schema: 'stock', field: 'phase', from: 'draft', to: ['ready', 'review'] }]);
-  expect(rules[0]!.conditions).toContain('提報者 不等於 目前使用者的識別碼');
-  expect(rules[0]!.conditions).toContain('操作資格 · 可操作 等於 是');
-  expect(rules[0]!.conditions).not.toContain('尚無業務翻譯');
+  expect(rules[0]!.body).toContain('提報者 不等於 目前使用者的識別碼');
+  expect(rules[0]!.body).toContain('操作資格 · 可操作 等於 是');
+  expect(rules[0]!.body).not.toContain('尚無業務翻譯');
   const { businessOverview } = await import('../admin/src/features/logic/business-overview');
   const graph = businessOverview({ atoms: [atom], relations: [] }, schemas, 'zh-TW');
   expect(graph.nodes[0]!.data.title).toBe('檢查庫存');

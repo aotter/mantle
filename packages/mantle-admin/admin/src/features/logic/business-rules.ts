@@ -1,6 +1,7 @@
 import type { DeveloperAtom, DeveloperSchemaModel, SqlLogicNode } from '../../lib/types';
 import type { AdminLanguage } from '../../app/preferences';
 import { resolveLocalizedText } from '../../lib/localized-text';
+import { t, type I18nKey } from '../../app/i18n';
 import { enumOptions, moneyMinorHint } from '@aotter/mantle-ui';
 
 export interface BusinessRule {
@@ -14,7 +15,8 @@ export interface BusinessRule {
   body: string;
   summary: string;
   field?: string;
-  conditions?: string;
+  /** The WHERE as separate conditions; `joiner` names the AND/OR that combines them. */
+  where?: { joiner?: string; items: string[] };
   assignments?: string[];
   transitions?: Array<{ schema: string; field: string; from: string; to: string[] }>;
   branches?: Array<{ condition: string; value: string }>;
@@ -24,7 +26,11 @@ export interface BusinessRule {
 /** UI wording is structural; domain names and option meanings belong to the manifest. */
 export function businessRules(atom: DeveloperAtom, schemas: readonly DeveloperSchemaModel[], language: AdminLanguage): BusinessRule[] {
   if (atom.handler?.kind !== 'sql') return [];
-  const zh = language.startsWith('zh');
+  const say = (key: string, vars?: Record<string, string>) => t(language, `developer.logic.${key}` as I18nKey, vars);
+  const list = (items: string[]) => items.join(say('listSeparator'));
+  const quote = (value: string) => say('quote', { value });
+  const labeled = (label: string, value: string) => say('labeled', { label, value });
+  const heading = (label: string, lines: string[]) => [say('heading', { label }), ...lines].join('\n');
   return (atom.handler.flow ?? []).flatMap((statement) => {
     const model = schemas.find((s) => s.name.toLowerCase() === statement.table?.toLowerCase());
     const name = model ? resolveLocalizedText(model.title, language) : statement.table;
@@ -34,7 +40,7 @@ export function businessRules(atom: DeveloperAtom, schemas: readonly DeveloperSc
       return key === undefined ? undefined : fields[key];
     };
     const fieldTitle = (name: string) => resolveLocalizedText(fieldSchema(name)?.title ?? null, language) || Object.keys(fields).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
-    const unknown = zh ? '此條件尚無業務翻譯，請查看程式依據' : 'Business wording unavailable; inspect source';
+    const unknown = say('unknown');
     // Each SELECT has its own relation scope. Aliases may shadow outer aliases.
     type Scope = Map<string, DeveloperSchemaModel | undefined>;
     const localScopes = new WeakMap<Scope, string[]>();
@@ -71,23 +77,23 @@ export function businessRules(atom: DeveloperAtom, schemas: readonly DeveloperSc
         const key = n.column?.name ?? n.label.slice(6);
         const inputKey = Object.keys(atom.input?.properties ?? {}).find((name) => name.toLowerCase() === key.toLowerCase());
         const title = resolveLocalizedText(inputKey ? atom.input?.properties?.[inputKey]?.title ?? null : null, language);
-        return `${zh ? '本次輸入' : 'Input'}${title ? `「${title}」` : ''}`;
+        return title ? say('inputNamed', { name: quote(title) }) : say('input');
       }
-      if (n.column && ['id', 'version'].includes(n.column.name.toLowerCase())) return zh ? n.column.name.toLowerCase() === 'id' ? '資料識別碼' : '資料版本' : n.column.name.toLowerCase() === 'id' ? 'Record ID' : 'Record version';
-      if (n.label === 'auth.uid' && n.kind === 'function') return zh ? '目前使用者的識別碼' : 'Current user ID';
+      if (n.column && ['id', 'version'].includes(n.column.name.toLowerCase())) return say(n.column.name.toLowerCase() === 'id' ? 'recordId' : 'recordVersion');
+      if (n.label === 'auth.uid' && n.kind === 'function') return say('currentUser');
       if (n.kind === 'expression' && children.length === 2) {
-        const operators: Record<string, string> = zh ? { '<': '小於', '>': '大於', '<=': '小於或等於', '>=': '大於或等於', '=': '等於', '<>': '不等於' } : { '<': 'is less than', '>': 'is greater than', '<=': 'is at most', '>=': 'is at least', '=': 'equals', '<>': 'differs from' };
-        if (operators[n.label]) { const left = n.children[0]!; const rightNode = n.children[1]!; const leftProp = property(left, scope); const right = rightNode.kind === 'value' && /^'.*'$/.test(rightNode.label) && leftProp ? enumValue(leftProp.schema, rightNode.label, language) : expr(rightNode, leftProp?.key ?? left.label, scope); return children[0] === unknown || right === unknown ? unknown : `${children[0]} ${operators[n.label]} ${right}`; }
+        const operator = ({ '<': 'lt', '>': 'gt', '<=': 'lte', '>=': 'gte', '=': 'eq', '<>': 'ne' } as Record<string, string>)[n.label];
+        if (operator) { const left = n.children[0]!; const rightNode = n.children[1]!; const leftProp = property(left, scope); const right = rightNode.kind === 'value' && /^'.*'$/.test(rightNode.label) && leftProp ? enumValue(leftProp.schema, rightNode.label, language) : expr(rightNode, leftProp?.key ?? left.label, scope); return children[0] === unknown || right === unknown ? unknown : `${children[0]} ${say(`op.${operator}`)} ${right}`; }
       }
-      if (n.kind === 'predicate' && /^(AND|OR) ·/.test(n.label)) return `${zh ? n.label.startsWith('AND') ? '全部條件成立' : '至少一個條件成立' : n.label.startsWith('AND') ? 'All conditions' : 'Any condition'}：\n${children.join('\n')}`;
+      if (n.kind === 'predicate' && /^(AND|OR) ·/.test(n.label)) return heading(say(n.label.startsWith('AND') ? 'all' : 'any'), children);
       if (n.label === 'Condition') return children.join('\n');
-      if (n.kind === 'predicate' && n.label === 'NOT') return `${zh ? '以下條件不成立' : 'Not'}：（${children.join('、')}）`;
+      if (n.kind === 'predicate' && n.label === 'NOT') return say('not', { conditions: list(children) });
       if (n.kind === 'predicate' && ['IS NULL', 'IS NOT NULL', 'IS TRUE', 'IS FALSE', 'IS NOT TRUE', 'IS NOT FALSE', 'IS UNKNOWN', 'IS NOT UNKNOWN'].includes(n.label)) {
-        const wording: Record<string, string> = { 'IS NULL': '為空值', 'IS NOT NULL': '不是空值', 'IS TRUE': '為真', 'IS FALSE': '為假', 'IS NOT TRUE': '不為真（含未知）', 'IS NOT FALSE': '不為假（含未知）', 'IS UNKNOWN': '為未知', 'IS NOT UNKNOWN': '不是未知' };
-        return `${children[0]} ${zh ? wording[n.label] : n.label}`;
+        const key = n.label.slice(3).toLowerCase().replace(/ (\w)/g, (_, c: string) => c.toUpperCase());
+        return `${children[0]} ${say(`is.${key}`)}`;
       }
-      if (n.kind === 'expression' && ['+', '-', '*', '/'].includes(n.label) && children.length === 2) return `（${children[0]} ${n.label} ${children[1]}）`;
-      if (n.kind === 'value' && ['TRUE', 'FALSE'].includes(n.label)) return zh ? n.label === 'TRUE' ? '是' : '否' : n.label === 'TRUE' ? 'Yes' : 'No';
+      if (n.kind === 'expression' && ['+', '-', '*', '/'].includes(n.label) && children.length === 2) return `(${children[0]} ${n.label} ${children[1]})`;
+      if (n.kind === 'value' && ['TRUE', 'FALSE'].includes(n.label)) return say(n.label === 'TRUE' ? 'yes' : 'no');
       if (n.kind === 'statement' && n.label === 'SELECT') {
         const sources = n.children.find((c) => c.label === 'FROM');
         const tableNames: string[] = [];
@@ -104,11 +110,11 @@ export function businessRules(atom: DeveloperAtom, schemas: readonly DeveloperSc
         const filter = n.children.find((c) => c.label.startsWith('WHERE'))?.children[0];
         const columns = n.children.find((c) => c.label === 'SELECT')?.children.map((c) => expr(c.children[0] ?? c, undefined, scope));
         if (unsupportedJoin || !tableNames.length || n.children.some((c) => ['WITH', 'WITH RECURSIVE', 'GROUP BY', 'HAVING · keep TRUE groups', 'LIMIT', 'DISTINCT', 'DISTINCT ON'].includes(c.label) || c.kind === 'set')) return unknown;
-        return `${zh ? '從' : 'From'} ${tableNames.join('、')}${columns?.length ? `${zh ? ' 讀取' : ' read'} ${columns.join('、')}` : ''}${filter || joinConditions.length ? `；${[...joinConditions, ...(filter ? [expr(filter, undefined, scope)] : [])].join('；')}` : ''}`;
+        const from = columns?.length ? say('fromRead', { tables: list(tableNames), columns: list(columns) }) : say('from', { tables: list(tableNames) });
+        return filter || joinConditions.length ? labeled(from, list([...joinConditions, ...(filter ? [expr(filter, undefined, scope)] : [])])) : from;
       }
-      if (n.kind === 'subquery' && ['EXISTS', 'EXPR'].includes(n.label)) return `${n.label === 'EXISTS' ? zh ? '存在符合以下條件的資料' : 'Matching data exists' : zh ? '查得的值' : 'Selected value'}：
-${children.join('\n')}`;
-      if (n.kind === 'value' && n.label === 'NULL') return zh ? '空值' : 'Empty value';
+      if (n.kind === 'subquery' && ['EXISTS', 'EXPR'].includes(n.label)) return heading(say(n.label === 'EXISTS' ? 'exists' : 'selected'), children);
+      if (n.kind === 'value' && n.label === 'NULL') return say('empty');
       if (n.kind === 'value' && /^-?\d+(\.\d+)?$/.test(n.label)) {
         if (field && moneyMinorHint(fieldSchema(field))) {
           // A SQL threshold must never be rounded by Number or currency display rules.
@@ -125,7 +131,7 @@ ${children.join('\n')}`;
             const rendered = `${parts.some((p) => p.type === 'minusSign') ? '-' : ''}${parts.filter((p) => p.type === 'integer').map((p) => p.value).join('')}.${parts.find((p) => p.type === 'fraction')?.value ?? ''}`;
             if (rendered.replace(/0+$/, '') === exact.replace(/0+$/, '')) return formatter.format(value / 100);
           }
-          return `${n.label} (${zh ? 'SQL 原值' : 'raw SQL value'})`;
+          return say('raw', { value: n.label });
         }
         return n.label;
       }
@@ -133,12 +139,11 @@ ${children.join('\n')}`;
         const value = n.label.slice(1, -1).replace(/''/g, "'");
         const options = (enumOptions(field ? fieldSchema(field) : undefined) ?? []).filter((o) => o.value === value && o.title);
         if (options.length === 1) return resolveLocalizedText(options[0]!.title!, language) || value;
-        return `「${value}」`;
+        return quote(value);
       }
       return unknown;
     };
-    const operation = ({ UPDATE: zh ? '更新' : 'Update', INSERT: zh ? '新增' : 'Create', DELETE: zh ? '刪除' : 'Delete', SELECT: zh ? '讀取' : 'Read' } as Record<string, string>)[statement.operation] ?? (zh ? '處理' : 'Process');
-    const tree = statement.logic;
+        const tree = statement.logic;
     const where = tree?.children.find((c) => c.label.startsWith('WHERE'));
     const columns = tree?.children.find((c) => c.label === 'Columns')?.children ?? [];
     const select = tree?.children.find((c) => c.label === 'Source SELECT')?.children[0];
@@ -149,11 +154,14 @@ ${children.join('\n')}`;
     const assignmentScope = statement.operation === 'INSERT' && select ? scopeFor(select, rootScope) : rootScope;
     const filter = where?.children[0];
     const conditionCount = filter?.label.startsWith('AND') || filter?.label.startsWith('OR') ? filter.children.length : filter ? 1 : 0;
-    const summary = outputs.length ? `${zh ? '設定' : 'Set'}：${outputs.map((o) => fieldTitle(o.label)).slice(0, 2).join('、')}${outputs.length > 2 ? (zh ? '等欄位' : '…') : ''}` : conditionCount ? (zh ? `篩選資料：${conditionCount} 項條件` : `Filter: ${conditionCount} conditions`) : '';
-    const conditions = where?.children[0] ? expr(where.children[0]) : '';
-    const assignments = outputs.map((o) => `${fieldTitle(o.label)} ← ${o.children[0]?.kind === 'case' ? zh ? '依下方規則決定' : 'Chosen by the rule below' : expr(o.children[0] ?? o, o.label, assignmentScope)}`);
+    const shown = list(outputs.map((o) => fieldTitle(o.label)).slice(0, 2));
+    const summary = outputs.length ? say('sets', { fields: outputs.length > 2 ? say('more', { fields: shown }) : shown }) : conditionCount ? say('filter', { count: String(conditionCount) }) : '';
+    const conditions = filter ? expr(filter) : '';
+    const joined = filter?.kind === 'predicate' && /^(AND|OR) ·/.test(filter.label);
+    const whereItems = filter ? { joiner: joined ? say(filter.label.startsWith('AND') ? 'all' : 'any') : undefined, items: joined ? filter.children.map((c) => expr(c)) : [conditions] } : undefined;
+    const assignments = outputs.map((o) => `${fieldTitle(o.label)} ← ${o.children[0]?.kind === 'case' ? say('chosenBelow') : expr(o.children[0] ?? o, o.label, assignmentScope)}`);
     const checks = (model?.checks ?? []).map((c) => expr(c, undefined, new Map(model ? [[model.name.toLowerCase(), model]] : [])));
-    const rules: BusinessRule[] = [{ kind: 'operation', statement: statement.index, mode: statement.mode, checks, summary, conditions, assignments, title: `${operation} ${name || (zh ? '資料' : 'data')}`, body: [conditions, assignments.join('\n'), checks.length ? `${zh ? '資料限制（不成立時整批不保存；空值依 SQL 規則）' : 'Data constraints (failure rolls back the batch)'}：\n${checks.join('\n')}` : '', statement.mode === 'row' ? (zh ? '必須符合一筆資料；否則整批不寫入' : 'Exactly one affected row; otherwise the batch rolls back') : statement.mode === 'set' ? (zh ? '可能符合多筆；零筆符合時仍繼續' : 'May affect multiple rows; zero matches still continues') : ''].filter(Boolean).join('\n') }];
+    const rules: BusinessRule[] = [{ kind: 'operation', statement: statement.index, mode: statement.mode, checks, summary, where: whereItems, assignments, title: say(`verb.${['UPDATE', 'INSERT', 'DELETE', 'SELECT'].includes(statement.operation) ? statement.operation : 'other'}`, { name: name || say('data') }), body: [conditions, assignments.join('\n'), checks.length ? heading(say('constraints'), checks) : '', statement.mode === 'row' ? say('rowRule') : statement.mode === 'set' ? say('setRule') : ''].filter(Boolean).join('\n') }];
     if (model && statement.mode === 'row' && statement.operation === 'UPDATE' && filter) {
       const predicates = (n: SqlLogicNode): SqlLogicNode[] => n.kind === 'predicate' && n.label.startsWith('AND ·') ? n.children.flatMap(predicates) : [n];
       rules[0]!.transitions = outputs.flatMap((output) => {
@@ -177,20 +185,20 @@ ${children.join('\n')}`;
       if (n.kind === 'case') {
         const selector = n.children.find((c) => c.label === 'Value')?.children[0];
         rules.push({
-          kind: 'case', statement: statement.index, field: field ? fieldTitle(field) : undefined, summary: zh ? '依順序選擇第一個成立的結果' : 'First matching result in order',
+          kind: 'case', statement: statement.index, field: field ? fieldTitle(field) : undefined, summary: say('caseSummary'),
           branches: n.children.filter((c) => c.kind === 'when').map((c) => {
             const condition = c.children[0]!;
             return { condition: expr(selector ? { kind: 'expression', label: '=', children: [selector, condition.children[0] ?? condition] } : condition, undefined, assignmentScope), value: expr(c.children[1]?.children[0] ?? c, field, assignmentScope) };
           }),
           otherwise: expr(n.children.find((c) => c.label === 'ELSE')?.children[0] ?? { kind: 'value', label: 'NULL', children: [] }, field, assignmentScope),
-          title: zh ? `決定${field ? `「${fieldTitle(field)}」` : '欄位值'}` : `Choose ${field ? fieldTitle(field) : 'a value'}`,
+          title: field ? say('choose', { field: quote(fieldTitle(field)) }) : say('chooseValue'),
           body: n.children.filter((c) => c.label !== 'Value').map((c) => {
             if (c.kind === 'when') {
               const condition = c.children[0]!;
               const comparison: SqlLogicNode = selector ? { kind: 'expression', label: '=', children: [selector, condition.children[0] ?? condition] } : condition;
-              return `${c.label.replace('WHEN', zh ? '條件' : 'Condition')}：${expr(comparison, undefined, assignmentScope)}\n${zh ? '結果' : 'Result'}：${expr(c.children[1]?.children[0] ?? c, field, assignmentScope)}`;
+              return `${labeled(c.label.replace('WHEN', say('condition')), expr(comparison, undefined, assignmentScope))}\n${labeled(say('result'), expr(c.children[1]?.children[0] ?? c, field, assignmentScope))}`;
             }
-            return c.label === 'ELSE' ? `${zh ? '其他情況（含未成立或未知）' : 'Otherwise (including false or unknown)'}：${expr(c.children[0] ?? c, field, assignmentScope)}` : expr(c);
+            return c.label === 'ELSE' ? labeled(say('otherwise'), expr(c.children[0] ?? c, field, assignmentScope)) : expr(c);
           }).join('\n'),
         });
       }
@@ -207,5 +215,5 @@ ${children.join('\n')}`;
 function enumValue(schema: import('../../lib/types').JsonSchema, literal: string, language: AdminLanguage): string {
   const value = literal.slice(1, -1).replace(/''/g, "'");
   const title = enumOptions(schema)?.find((o) => o.value === value)?.title;
-  return resolveLocalizedText(title ?? null, language) || `「${value}」`;
+  return resolveLocalizedText(title ?? null, language) || t(language, 'developer.logic.quote', { value });
 }

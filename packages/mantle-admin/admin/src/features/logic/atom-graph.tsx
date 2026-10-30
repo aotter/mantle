@@ -282,15 +282,15 @@ export function AtomGraph({
       <PageHeaderActions>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="ghost" className="min-w-0 max-w-full shrink" aria-label={language.startsWith("zh") ? "圖表模式" : "Diagram mode"}>
-              <span className="truncate">{language.startsWith("zh") ? business ? "業務狀態" : "系統接線" : business ? "Business states" : "System wiring"}</span>
+            <Button size="sm" variant="ghost" className="min-w-0 max-w-full shrink" aria-label={t(language, "developer.wiring.mode")}>
+              <span className="truncate">{t(language, business ? "developer.wiring.mode.business" : "developer.wiring.mode.system")}</span>
               <ChevronDown aria-hidden className="size-3" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuRadioGroup value={business ? "business" : "system"} onValueChange={(value) => onDiagramModeChange(value === "business" ? "business" : "system")}>
-              <DropdownMenuRadioItem value="business">{language.startsWith("zh") ? "業務狀態" : "Business states"}</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="system">{language.startsWith("zh") ? "系統接線" : "System wiring"}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="business">{t(language, "developer.wiring.mode.business")}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="system">{t(language, "developer.wiring.mode.system")}</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
