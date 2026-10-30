@@ -18,6 +18,8 @@ export function ProcedureFlow({ atom, schemas, statements, hooks = [], authoriza
   const { language } = usePreferences();
   const say = (key: Parameters<typeof t>[1], vars?: Record<string, string>) => t(language, key, vars);
   const labeled = (label: string, value: string) => say('developer.logic.labeled', { label, value });
+  // Mount the syntax trees only once opened: React Flow cannot fit a canvas that is still hidden.
+  const [astOpen, setAstOpen] = React.useState(false);
   const before = hooks.filter((h) => h.on.some((on) => on.startsWith('before_'))).map((h) => h.procedure);
   const after = hooks.filter((h) => h.on.some((on) => on.startsWith('after_'))).map((h) => h.procedure);
   const steps = [
@@ -33,14 +35,14 @@ export function ProcedureFlow({ atom, schemas, statements, hooks = [], authoriza
       {steps.map((step, index) => <li key={step} className="flex items-center gap-1.5">{index ? <span className="text-muted-foreground" aria-hidden>→</span> : null}<span className="rounded-md border bg-muted/40 px-2 py-1 font-mono">{step}</span></li>)}
     </ol>
     <ProcedureLogicPreview atom={atom} schemas={schemas} density="full" />
-    {statements.some((statement) => statement.logic) ? <details className="rounded-lg border">
+    {statements.some((statement) => statement.logic) ? <details className="rounded-lg border" onToggle={(event) => setAstOpen(event.currentTarget.open)}>
       <summary className="cursor-pointer px-3 py-2 text-sm font-medium">{say('developer.logic.ast')}</summary>
-      <div className="space-y-3 border-t p-3">
+      {astOpen ? <div className="space-y-3 border-t p-3">
         {statements.map((statement) => statement.logic ? <div key={statement.index}>
           <h3 className="font-mono text-xs font-semibold">{statement.index + 1}. {statement.operation} {statement.table}</h3>
           <SqlSyntaxFlow tree={statement.logic} language={language} />
         </div> : null)}
-      </div>
+      </div> : null}
     </details> : null}
   </section>;
 }
