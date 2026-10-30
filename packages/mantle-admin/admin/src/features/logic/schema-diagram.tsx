@@ -138,7 +138,7 @@ function SchemaDiagramCanvas({ snapshot, onOpen }: { snapshot: DeveloperConsoleS
         </Button>
       </Panel>
       {legend ? <Panel position="bottom-right" className="!mb-3 !mr-3"><ErdLegend /></Panel> : null}
-      {layout.nodes.length > 8 ? <MiniMap pannable zoomable position="bottom-left" className="!mb-3 !ml-14 hidden overflow-hidden rounded-lg border shadow-md sm:block" style={{ width: 160, height: 110 }} nodeStrokeWidth={2} /> : null}
+      <MiniMap pannable zoomable position="bottom-left" className="!mb-3 !ml-14 hidden overflow-hidden rounded-lg border shadow-md sm:block" style={{ width: 160, height: 110 }} nodeStrokeWidth={2} />
       {selectedId ? <Panel position="top-right" className="!m-3 w-72 max-w-[calc(100%-1.5rem)]"><SchemaHud model={snapshot.dataModel.schemas.find(({ name }) => `Schema:${name}` === selectedId)} relationCount={layout.edges.filter(({ source, target }) => source === selectedId || target === selectedId).length} onClose={() => select(null)} onOpen={() => onOpen(selectedId)} /></Panel> : null}
     </ReactFlow>
   );
