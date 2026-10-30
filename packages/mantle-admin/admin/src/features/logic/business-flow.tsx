@@ -1,89 +1,166 @@
 import * as React from "react";
-import dagre from "@dagrejs/dagre";
-import { Database, GitBranch, Pencil, ShieldCheck, Workflow } from "lucide-react";
+import { CircleCheck, CircleX, Database, GitBranch } from "lucide-react";
 import { Handle, MarkerType, Position, type Edge, type Node, type NodeProps } from "@xyflow/react";
 import type { BusinessRule } from "./business-rules";
+import { t } from "../../app/i18n";
+import type { AdminLanguage } from "../../app/preferences";
 
-type RuleData = { title: string; subtitle: string; kind: 'operation' | 'condition' | 'result' | 'eligibility'; zh: boolean; rule: BusinessRule };
-type RuleNode = Node<RuleData, 'businessRule'>;
-type GroupNode = Node<{ title: string; count: number; zh: boolean }, 'businessGroup'>;
-const width = 184;
-const height = 152;
+// One Procedure-logic graph for the side panel and the Procedure page (#1892): a transaction box with the statements
+// in order, one CASE card per CASE with its branches as numbered rows (first match wins, ELSE always shown), and the
+// COMMIT and ROLLBACK ends. Branch-row cards follow n8n Switch, Windmill and Step Functions; the double border is BPMN's
+// transaction marker.
+type StepData = { rule: BusinessRule; language: AdminLanguage; number: number };
+type CaseData = { rule: BusinessRule; language: AdminLanguage };
+type EndData = { commit: boolean; language: AdminLanguage };
+type TxData = { language: AdminLanguage };
+export type LogicNode = Node<StepData, "logicStep"> | Node<CaseData, "logicCase"> | Node<EndData, "logicEnd"> | Node<TxData, "logicTx">;
 
-export function BusinessRuleNode({ data }: NodeProps<RuleNode>): React.ReactElement {
-  const Icon = data.kind === 'eligibility' ? ShieldCheck : data.kind === 'condition' ? GitBranch : data.kind === 'result' ? Pencil : Database;
-  const tone = data.kind === 'condition' ? 'border-amber-400/70 bg-amber-500/10 text-amber-600 dark:text-amber-300' : data.kind === 'result' ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'border-blue-400/60 bg-blue-500/10 text-blue-600 dark:text-blue-300';
-  return <div className="group h-full text-center text-card-foreground">
-    <Handle type="target" position={Position.Left} style={{ left: 60, top: 32 }} className="!size-2.5 !border-background !bg-muted-foreground" />
-    <div className={`mx-auto flex size-16 items-center justify-center rounded-xl border-2 bg-card shadow-sm group-hover:ring-2 group-hover:ring-ring/40 ${tone}`}><Icon size={30} aria-hidden /></div>
-    <div className="mt-2 line-clamp-3 text-[16px] font-semibold leading-5" title={data.title}>{data.title}</div>
-    <div className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">{data.subtitle}</div>
-    {data.kind === 'condition' ? <>
-      <Handle id="yes" type="source" position={Position.Right} style={{ right: 60, top: 18 }} className="!size-2.5 !border-background !bg-emerald-500" />
-      <Handle id="no" type="source" position={Position.Right} style={{ right: 60, top: 46 }} className="!size-2.5 !border-background !bg-amber-500" />
-    </> : <Handle type="source" position={Position.Right} style={{ right: 60, top: 32 }} className="!size-2.5 !border-background !bg-muted-foreground" />}
-  </div>;
+const stepWidth = 280;
+const caseWidth = 320;
+const gap = 40;
+const pad = 20;
+const txHeader = 32;
+const chip = 20;
+
+function lines(text: string | undefined): string[] {
+  return (text ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
-export function BusinessGroupNode({ data }: NodeProps<GroupNode>): React.ReactElement {
-  return <section className="h-full rounded-2xl border border-border bg-card/60 text-card-foreground">
-    <Handle type="target" position={Position.Top} className="!opacity-0" />
-    <header className="flex h-[76px] items-center gap-3 border-b border-border px-5">
-      <Workflow className="size-6 text-amber-500" aria-hidden />
-      <div><h2 className="text-lg font-semibold">{data.title}</h2><p className="mt-1 text-xs text-muted-foreground">{data.zh ? `${data.count} 項資料操作 · 全部成功才保存` : `${data.count} operations · one transaction`}</p></div>
-      <div className="ml-auto flex flex-col gap-1 text-xs text-muted-foreground"><span>{data.zh ? '實線 → 操作順序' : 'Solid → statement order'}</span><span>{data.zh ? '虛線 ⇢ 欄位值選擇' : 'Dashed → value choice'}</span></div>
-    </header>
-    <Handle type="source" position={Position.Bottom} className="!opacity-0" />
-  </section>;
+/** WHERE as short chips, one per condition, each on one line. */
+function conditionChips(rule: BusinessRule): string[] {
+  return (rule.where?.items ?? []).map((item) => lines(item).join(" "));
 }
 
-/** CASE edges select a value for their statement; only statement edges describe operation order. */
-export function businessFlow(owner: string, title: string, rules: BusinessRule[], zh: boolean): { group: Node; nodes: Node[]; edges: Edge[] } {
-  const nodes: Node[] = [];
+function stepHeight(rule: BusinessRule): number {
+  const where = Math.min(conditionChips(rule).length, 3);
+  return 56 + (where ? 16 + where * chip : 0) + (rule.assignments?.length ? 20 : 0) + 28;
+}
+
+function caseHeight(rule: BusinessRule): number {
+  return 44 + ((rule.branches?.length ?? 0) + 1) * 44 + 22;
+}
+
+export function LogicStepNode({ data, selected }: NodeProps<Node<StepData, "logicStep">>): React.ReactElement {
+  const { rule, language, number } = data;
+  const items = conditionChips(rule);
+  const sets = rule.assignments?.map((line) => line.split(" ← ")[0]).join(t(language, "developer.logic.listSeparator"));
+  const badge = t(language, rule.mode === "row" ? "developer.logic.mode.row" : rule.mode === "set" ? "developer.logic.mode.set" : "developer.logic.mode.read");
+  return (
+    <div className={`h-full rounded-xl border bg-card text-card-foreground shadow-sm ${selected ? "border-foreground/60 ring-2 ring-ring/40" : "border-border"}`}>
+      <Handle type="target" position={Position.Top} isConnectable={false} className="!opacity-0" />
+      <Handle id="case" type="target" position={Position.Left} isConnectable={false} className="!opacity-0" />
+      <header className="flex items-center gap-2 border-b px-3 py-2">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-500/15 font-mono text-xs font-semibold text-blue-700 dark:text-blue-300">{number}</span>
+        <Database className="size-4 shrink-0 text-blue-600 dark:text-blue-300" aria-hidden />
+        <strong className="min-w-0 truncate text-sm" title={rule.title}>{rule.title}</strong>
+      </header>
+      <div className="space-y-1.5 px-3 py-2 text-xs">
+        {items.length ? (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t(language, "developer.logic.where")}{rule.where?.joiner ? ` · ${rule.where.joiner}` : ""}</p>
+            <ul className="mt-1 space-y-1">{items.slice(0, 3).map((item) => <li key={item} className="truncate rounded bg-muted px-1.5 py-0.5" title={item}>{item}</li>)}{items.length > 3 ? <li className="text-muted-foreground">+{items.length - 3}</li> : null}</ul>
+          </div>
+        ) : null}
+        {sets ? <p className="truncate text-muted-foreground" title={rule.assignments?.join("\n")}>{t(language, "developer.logic.sets", { fields: sets })}</p> : null}
+        <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${rule.mode === "row" ? "bg-rose-500/10 text-rose-700 dark:text-rose-300" : "bg-muted text-muted-foreground"}`}>{badge}</span>
+      </div>
+      <Handle type="source" position={Position.Bottom} isConnectable={false} className="!opacity-0" />
+      <Handle id="fail" type="source" position={Position.Right} isConnectable={false} className="!opacity-0" />
+    </div>
+  );
+}
+
+export function LogicCaseNode({ data, selected }: NodeProps<Node<CaseData, "logicCase">>): React.ReactElement {
+  const { rule, language } = data;
+  const rows = [...(rule.branches ?? []).map((branch, index) => ({ when: t(language, index ? "developer.logic.elseIf" : "developer.logic.if", { condition: branch.condition }), value: branch.value })), { when: t(language, "developer.logic.else"), value: rule.otherwise ?? t(language, "developer.logic.empty") }];
+  return (
+    <div className={`h-full rounded-xl border bg-card text-card-foreground shadow-sm ${selected ? "border-foreground/60 ring-2 ring-ring/40" : "border-amber-400/60"}`}>
+      <header className="flex items-center gap-2 border-b px-3 py-2">
+        <GitBranch className="size-4 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden />
+        <strong className="min-w-0 truncate text-sm" title={rule.title}>{rule.title}</strong>
+      </header>
+      <ol className="text-xs">
+        {rows.map((row, index) => (
+          <li key={index} className="flex h-[44px] items-center gap-2 border-b px-3 last:border-b-0">
+            <span className="w-4 shrink-0 font-mono text-[10px] text-muted-foreground">{index < rows.length - 1 ? index + 1 : "—"}</span>
+            <span className="line-clamp-2 min-w-0 flex-1 leading-4" title={row.when}>{row.when}</span>
+            <span className="shrink-0 text-muted-foreground">→</span>
+            <span className="max-w-[35%] shrink-0 truncate rounded bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-700 dark:text-emerald-300" title={row.value}>{row.value}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="px-3 pb-1 text-[10px] text-muted-foreground">{t(language, "developer.logic.caseNote")}</p>
+      <Handle type="source" position={Position.Right} isConnectable={false} className="!opacity-0" />
+    </div>
+  );
+}
+
+export function LogicEndNode({ data }: NodeProps<Node<EndData, "logicEnd">>): React.ReactElement {
+  const Icon = data.commit ? CircleCheck : CircleX;
+  return (
+    <div className={`flex h-full items-center gap-2 rounded-full border px-3 text-xs font-semibold ${data.commit ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-rose-500/50 bg-rose-500/10 text-rose-700 dark:text-rose-300"}`}>
+      <Handle type="target" position={data.commit ? Position.Top : Position.Left} isConnectable={false} className="!opacity-0" />
+      <Icon className="size-4 shrink-0" aria-hidden />
+      <span className="truncate whitespace-nowrap">{t(data.language, data.commit ? "developer.logic.commit" : "developer.logic.rollback")}</span>
+    </div>
+  );
+}
+
+export function LogicTxNode({ data }: NodeProps<Node<TxData, "logicTx">>): React.ReactElement {
+  return (
+    <section className="pointer-events-none h-full rounded-2xl border-[3px] border-double border-slate-400/70 bg-slate-500/[0.03] dark:border-slate-500/70">
+      <p className="px-4 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t(data.language, "developer.logic.transaction")}</p>
+    </section>
+  );
+}
+
+export const logicNodeTypes = { logicStep: LogicStepNode, logicCase: LogicCaseNode, logicEnd: LogicEndNode, logicTx: LogicTxNode };
+
+/** Statements top to bottom inside the transaction box, each CASE to the left of the statement it sets. */
+export function businessFlow(owner: string, rules: BusinessRule[], language: AdminLanguage): { nodes: LogicNode[]; edges: Edge[] } {
+  const operations = rules.filter((rule) => rule.kind === "operation");
+  const cases = rules.filter((rule) => rule.kind === "case");
+  const caseColumn = cases.length ? caseWidth + gap : 0;
+  const children: LogicNode[] = [];
   const edges: Edge[] = [];
-  const operations = rules.filter((r) => r.kind === 'operation');
-  const add = (id: string, kind: RuleData['kind'], title: string, subtitle: string, rule: BusinessRule) => {
-    nodes.push({ id, type: 'businessRule', parentId: owner, extent: 'parent', position: { x: 0, y: 0 }, data: { kind, title, subtitle, zh, rule }, style: { width, height }, draggable: false, ariaLabel: title });
+  const edge = (id: string, source: string, target: string, kind: "next" | "value" | "fail", sourceHandle?: string, targetHandle?: string) => {
+    const color = kind === "fail" ? "#e11d48" : kind === "value" ? "#d97706" : "#64748b";
+    edges.push({ id: `RuleEdge:${id}`, source, target, sourceHandle, targetHandle, type: kind === "next" ? "smoothstep" : "default", style: { stroke: color, strokeWidth: 1.5, ...(kind !== "next" && { strokeDasharray: "5 4" }) }, markerEnd: { type: MarkerType.ArrowClosed, color, width: 12, height: 12 } });
   };
-  const link = (source: string, target: string, value: boolean, label?: string, handle?: string) => edges.push({ id: `RuleEdge:${source}:${target}`, source, target, sourceHandle: handle, type: 'smoothstep', label, labelStyle: { fontSize: 12, fontWeight: 600, fill: 'var(--foreground)' }, labelBgStyle: { fill: 'var(--card)' }, labelBgPadding: [6, 4], labelBgBorderRadius: 5, style: { stroke: handle === 'yes' ? '#10b981' : handle === 'no' ? '#d97706' : value ? '#10b981' : '#64748b', strokeWidth: 1.8, ...(value ? { strokeDasharray: '5 4' } : {}) }, markerEnd: { type: MarkerType.ArrowClosed, color: handle === 'yes' ? '#10b981' : handle === 'no' ? '#d97706' : value ? '#10b981' : '#64748b', width: 14, height: 14 } });
-  operations.forEach((op, i) => {
+  const box = `Rule:${owner}:tx`;
+  let y = pad + txHeader;
+  operations.forEach((op, index) => {
     const id = `Rule:${owner}:operation:${op.statement}`;
-    if (i === 0 && op.conditions) {
-      const gate = `Rule:${owner}:eligibility`;
-      add(gate, 'eligibility', zh ? '辦理條件與限制' : 'Eligibility and constraints', zh ? '點選確認資格、狀態與限制' : 'Select for required conditions', { ...op, title: zh ? '辦理條件與限制' : 'Eligibility and constraints', body: op.conditions });
-      link(gate, id, false, zh ? '符合才處理' : 'Matching rows');
-    }
-    add(id, 'operation', op.title, op.summary || (zh ? '點選查看資料來源與條件' : 'Select for sources and conditions'), op);
-    if (i) link(`Rule:${owner}:operation:${operations[i - 1]!.statement}`, id, false, zh ? '接著' : 'Next');
-    rules.filter((r) => r.kind === 'case' && r.statement === op.statement).forEach((rule, ci) => {
-      const prefix = `Rule:${owner}:case:${op.statement}:${ci}`;
-      const branches = rule.branches ?? [];
-      branches.forEach((branch, bi) => {
-        const condition = `${prefix}:condition:${bi}`;
-        const result = `${prefix}:result:${bi}`;
-        add(condition, 'condition', branch.condition, rule.field ?? rule.title, rule);
-        add(result, 'result', branch.value, rule.field ?? '', rule);
-        link(condition, result, true, zh ? '成立' : 'True', 'yes');
-        link(condition, bi + 1 < branches.length ? `${prefix}:condition:${bi + 1}` : `${prefix}:otherwise`, true, zh ? '未成立／未知' : 'False / unknown', 'no');
-        link(result, id, true);
-      });
-      add(`${prefix}:otherwise`, 'result', rule.otherwise ?? (zh ? '空值' : 'Empty value'), rule.field ?? '', rule);
-      link(`${prefix}:otherwise`, id, true);
+    const own = cases.filter((rule) => rule.statement === op.statement);
+    const caseStack = own.reduce((sum, rule) => sum + caseHeight(rule) + 16, -16);
+    const top = y;
+    children.push({ id, type: "logicStep", parentId: box, extent: "parent", position: { x: pad + caseColumn, y: top }, data: { rule: op, language, number: index + 1 }, style: { width: stepWidth, height: stepHeight(op) }, draggable: false, ariaLabel: `${index + 1}. ${op.title}` });
+    let caseY = top;
+    own.forEach((rule, caseIndex) => {
+      const caseId = `Rule:${owner}:case:${op.statement}:${caseIndex}`;
+      children.push({ id: caseId, type: "logicCase", parentId: box, extent: "parent", position: { x: pad, y: caseY }, data: { rule, language }, style: { width: caseWidth, height: caseHeight(rule) }, draggable: false, ariaLabel: rule.title });
+      edge(`${caseId}:value`, caseId, id, "value", undefined, "case");
+      caseY += caseHeight(rule) + 16;
     });
+    if (index) edge(`${operations[index - 1]!.statement}:next`, `Rule:${owner}:operation:${operations[index - 1]!.statement}`, id, "next");
+    y = top + Math.max(stepHeight(op), caseStack) + gap;
   });
-  const layout = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-  layout.setGraph({ rankdir: 'LR', ranksep: 60, nodesep: 64, marginx: 28, marginy: 28 });
-  nodes.forEach((n) => layout.setNode(n.id, { width, height }));
-  edges.forEach((e) => layout.setEdge(e.source, e.target));
-  dagre.layout(layout);
-  nodes.forEach((n) => { const p = layout.node(n.id); n.position = { x: p.x - width / 2, y: p.y - height / 2 + 76 }; });
-  // Keep n8n's familiar TRUE-above / otherwise-below reading order for a two-way choice.
-  edges.filter((e) => e.sourceHandle === 'yes').forEach((yes) => {
-    const no = edges.find((e) => e.source === yes.source && e.sourceHandle === 'no');
-    const a = nodes.find((n) => n.id === yes.target);
-    const b = nodes.find((n) => n.id === no?.target);
-    if (a && b && a.position.x === b.position.x && a.position.y > b.position.y) [a.position.y, b.position.y] = [b.position.y, a.position.y];
-  });
-  const size = layout.graph();
-  return { group: { id: owner, type: 'businessGroup', position: { x: 0, y: 0 }, style: { width: size.width, height: size.height + 76 }, data: { title, count: operations.length, zh }, selectable: false, draggable: false, focusable: false }, nodes, edges };
+  const width = pad * 2 + caseColumn + stepWidth;
+  const height = y - gap + pad;
+  const commit = `Rule:${owner}:commit`;
+  const rollback = `Rule:${owner}:rollback`;
+  const last = operations.at(-1);
+  if (last) edge("commit", `Rule:${owner}:operation:${last.statement}`, commit, "next");
+  // A row rule or a data constraint can fail the batch; nothing else in the graph can.
+  operations.filter((op) => op.mode === "row" || op.checks?.length).forEach((op) => edge(`${op.statement}:fail`, `Rule:${owner}:operation:${op.statement}`, rollback, "fail", "fail"));
+  const failing = edges.some(({ target }) => target === rollback);
+  return {
+    nodes: [
+      { id: box, type: "logicTx", position: { x: 0, y: 0 }, data: { language }, style: { width, height }, selectable: false, draggable: false, focusable: false, zIndex: -1 },
+      ...children,
+      ...(last ? [{ id: commit, type: "logicEnd" as const, position: { x: pad + caseColumn + stepWidth / 2 - 90, y: height + 32 }, data: { commit: true, language }, style: { width: 180, height: 32 }, selectable: false, draggable: false }] : []),
+      ...(failing ? [{ id: rollback, type: "logicEnd" as const, position: { x: width + 48, y: Math.max(0, height / 2 - 16) }, data: { commit: false, language }, style: { width: 240, height: 32 }, selectable: false, draggable: false }] : []),
+    ],
+    edges,
+  };
 }
