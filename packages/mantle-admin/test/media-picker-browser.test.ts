@@ -104,8 +104,8 @@ export default defineAdmin({}, {pages: [{path: "cards", title: "Cards", element:
     expect(await page.evaluate(() => (window as any).picks)).toHaveLength(1);
     await page.evaluate(() => { (window as any).pickerTest.setMounted(false); (window as any).pickerTest.setRecord("r2"); (window as any).pickerTest.setReadOnly(false); });
     await page.evaluate(() => (window as any).pickerTest.setMounted(true));
-    await dialog.getByRole("button", {name: "Use this image"}).first().waitFor();
-    expect(await dialog.getByRole("button", {name: "Use this image"}).count()).toBe(2); // commit survives cancellation
+    // commit survives cancellation; the remounted list can paint its cached page before the refetch adds the upload
+    await expect.poll(() => dialog.getByRole("button", {name: "Use this image"}).count()).toBe(2);
     denied = true;
     await dialog.locator('input[type="file"]').setInputFiles({name: "denied.png", mimeType: "image/png", buffer: png});
     await dialog.getByText(/Upload refused/).waitFor();
