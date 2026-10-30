@@ -62,8 +62,8 @@ scope.
    what they are looking at. Keep building while they look; the app rebuilds on every change. Without a browser on the
    machine, give the user the admin URL it prints.
 6. **Run [role-only acceptance](../guides/agent-workflow-acceptance.md)** (`mantle help agent-workflow-acceptance`) as
-   planned. Scripted smoke is not acceptance. `pnpm accept` starts the app and hands each role to a fresh evaluator as
-   a URL that carries that role's session. After a repair, the guide's
+   planned. Scripted smoke is not acceptance. `pnpm accept` starts the app and prints, for each role, a URL that carries
+   that role's session; give each URL to a fresh evaluator. After a repair, the guide's
    [re-verification rule](../guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches) decides which roles
    and surfaces run again.
 7. **Run the [performance pass](../guides/performance.md)** as planned, for every role and surface acceptance reports
