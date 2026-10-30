@@ -98,8 +98,8 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   const canQuery = hasRequiredViewParams(view?.input, urlParams);
 
   const query = useInfiniteQuery({
-    ...pagedQueryOptions(["view", name, location.search], async (cursor, signal) => {
-      const page = await fetchView(name, { ...Object.fromEntries(urlParams), cursor, limit: VIEW_PAGE_SIZE }, signal);
+    ...pagedQueryOptions(["view", name, location.search], async (cursor) => {
+      const page = await fetchView(name, { ...Object.fromEntries(urlParams), cursor, limit: VIEW_PAGE_SIZE });
       return { rows: page.rows, next_cursor: page.nextCursor ?? null };
     }),
     enabled: !!view && canQuery,
