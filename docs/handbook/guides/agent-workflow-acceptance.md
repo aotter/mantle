@@ -85,9 +85,10 @@ rounds below before claiming the user-facing work is done. Keep the author's
 capability map and worked call sequence out of the fresh agent's prompt: an MCP
 evaluator must discover the workflow from public tool descriptions and results.
 
-## Propose the run first
+## Plan the run
 
-Before the first round, stop and give the user the plan, then wait for a go-ahead:
+The plan the user approves before the build ([Build from a product brief](../start/agents.md#build-from-a-product-brief))
+names, for acceptance:
 
 - each evaluator you will start: its role (`admin`, `user`, a visitor), the surfaces it uses (Admin, member pages,
   REST, MCP, visitor pages) and the goals it is asked to finish, in the user's words;

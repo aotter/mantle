@@ -25,6 +25,17 @@ the app entry (`--entry`) never imports, it warns and names the topic that shows
 
 ## Build from a product brief
 
+**Plan once, then run to the end.** Before writing anything, reply with one plan and wait for the user's go-ahead:
+
+- the app: the roles and surfaces, and the Schemas, Views, Procedures and Triggers you expect;
+- the [acceptance run](../guides/agent-workflow-acceptance.md#plan-the-run);
+- the [performance pass](../guides/performance.md#plan-the-pass);
+- anything that needs the user, such as a browser or a deployment.
+
+After the go-ahead, do every step below without stopping, and end with the report in the last step. Stop again only
+for what the plan did not cover and needs the user: a credential, a deployment, a destructive action or a change of
+scope.
+
 1. `mantle init`, install, then read the app's `README.md` and search for `AGENT:`.
 2. Map the brief to the [four atoms](../concepts/four-atoms.md): Schemas, Views, Procedures, Triggers.
    Decide what each role (`admin`, `user`) does on each surface: Admin, MCP, REST and any visitor pages.
@@ -43,16 +54,14 @@ the app entry (`--entry`) never imports, it warns and names the topic that shows
    the Schemas, Views, Procedures and Triggers and how they connect, with each surface's routes and tools. Tell the user
    what they are looking at. Keep building while they look; the app rebuilds on every change. Without a browser on the
    machine, give the user the admin URL it prints.
-6. **Stop and ask before acceptance.** Propose the [acceptance plan](../guides/agent-workflow-acceptance.md#propose-the-run-first)
-   and wait for the user's go-ahead. Then run [role-only acceptance](../guides/agent-workflow-acceptance.md)
-   (`mantle help agent-workflow-acceptance`). Scripted smoke is not acceptance. `pnpm accept` starts the app and hands
-   each role to a fresh evaluator as a URL that carries that role's session. After a repair, the guide's
+6. **Run [role-only acceptance](../guides/agent-workflow-acceptance.md)** (`mantle help agent-workflow-acceptance`) as
+   planned. Scripted smoke is not acceptance. `pnpm accept` starts the app and hands each role to a fresh evaluator as
+   a URL that carries that role's session. After a repair, the guide's
    [re-verification rule](../guides/agent-workflow-acceptance.md#re-verify-what-a-repair-touches) decides which roles
    and surfaces run again.
-7. **Stop and ask before the performance pass.** For every role and surface acceptance reports CONVERGED, propose the
-   [performance plan](../guides/performance.md#propose-the-pass-first) (which parts run, how much test data, which
-   targets) and wait for the go-ahead; then run the [performance pass](../guides/performance.md). BLOCKED or UNVERIFIED
-   parts are reported as they are, never optimized. A declined step is reported as not run, never as done.
+7. **Run the [performance pass](../guides/performance.md)** as planned, for every role and surface acceptance reports
+   CONVERGED. BLOCKED or UNVERIFIED parts are reported as they are, never optimized. A step the user declined in the
+   plan is reported as not run, never as done.
 8. **Report what changed, not only that it passed:** the [acceptance summary](../guides/agent-workflow-acceptance.md#summarise-for-the-user)
    and the [performance summary](../guides/performance.md#summarise-for-the-user), then the layered status.
 
