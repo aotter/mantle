@@ -1,0 +1,1860 @@
+{
+ "dataModel": {
+  "schemas": [
+   {
+    "name": "budgets",
+    "title": "Budgets",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "department",
+      "remaining"
+     ],
+     "properties": {
+      "department": {
+       "type": "string"
+      },
+      "remaining": {
+       "type": "integer"
+      }
+     }
+    },
+    "checks": [
+     {
+      "kind": "expression",
+      "label": ">=",
+      "children": [
+       {
+        "kind": "value",
+        "label": "remaining",
+        "children": [],
+        "column": {
+         "name": "remaining"
+        }
+       },
+       {
+        "kind": "value",
+        "label": "0",
+        "children": []
+       }
+      ]
+     }
+    ],
+    "uniqueIndexes": [
+     [
+      "department"
+     ]
+    ],
+    "indexes": [],
+    "searchableFields": [
+     "department"
+    ],
+    "manifest": {
+     "name": "budgets",
+     "title": "Budgets",
+     "uiSchema": {
+      "list": {
+       "primaryField": "department",
+       "columns": [
+        "remaining"
+       ]
+      }
+     },
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "department",
+       "remaining"
+      ],
+      "properties": {
+       "department": {
+        "type": "string"
+       },
+       "remaining": {
+        "type": "integer"
+       }
+      }
+     },
+     "fields": {
+      "department": "text",
+      "remaining": "integer"
+     },
+     "names": {
+      "department": "department",
+      "remaining": "remaining"
+     },
+     "search": [
+      "department"
+     ],
+     "unique": [
+      [
+       "department"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "ledger",
+    "title": "Budget ledger",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "readOnly": true,
+     "additionalProperties": false,
+     "required": [
+      "requestId",
+      "department",
+      "amount",
+      "remainingAfter"
+     ],
+     "properties": {
+      "requestId": {
+       "type": "string"
+      },
+      "department": {
+       "type": "string"
+      },
+      "amount": {
+       "type": "integer"
+      },
+      "remainingAfter": {
+       "type": "integer"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [
+     [
+      "requestid"
+     ]
+    ],
+    "indexes": [
+     [
+      "created_at",
+      "id"
+     ]
+    ],
+    "searchableFields": [
+     "department"
+    ],
+    "manifest": {
+     "name": "ledger",
+     "title": "Budget ledger",
+     "uiSchema": {
+      "list": {
+       "primaryField": "department",
+       "columns": [
+        "amount",
+        "remainingAfter",
+        "requestId"
+       ]
+      }
+     },
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "readOnly": true,
+      "additionalProperties": false,
+      "required": [
+       "requestId",
+       "department",
+       "amount",
+       "remainingAfter"
+      ],
+      "properties": {
+       "requestId": {
+        "type": "string"
+       },
+       "department": {
+        "type": "string"
+       },
+       "amount": {
+        "type": "integer"
+       },
+       "remainingAfter": {
+        "type": "integer"
+       }
+      }
+     },
+     "fields": {
+      "requestid": "text",
+      "department": "text",
+      "amount": "integer",
+      "remainingafter": "integer"
+     },
+     "names": {
+      "requestid": "requestId",
+      "department": "department",
+      "amount": "amount",
+      "remainingafter": "remainingAfter"
+     },
+     "search": [
+      "department"
+     ],
+     "unique": [
+      [
+       "requestid"
+      ]
+     ],
+     "indexes": [
+      [
+       "created_at",
+       "id"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "requests",
+    "title": "Purchase requests",
+    "lifecycle": "operational",
+    "localized": false,
+    "translates": null,
+    "schema": {
+     "type": "object",
+     "readOnly": true,
+     "additionalProperties": false,
+     "required": [
+      "title",
+      "amount",
+      "department",
+      "requestStatus"
+     ],
+     "properties": {
+      "title": {
+       "type": "string",
+       "minLength": 1
+      },
+      "amount": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "department": {
+       "type": "string"
+      },
+      "requestStatus": {
+       "type": "string",
+       "enum": [
+        "submitted",
+        "approved",
+        "rejected",
+        "ordered",
+        "confirmed"
+       ]
+      },
+      "supplierOrderId": {
+       "type": "string"
+      }
+     }
+    },
+    "checks": [],
+    "uniqueIndexes": [],
+    "indexes": [
+     [
+      "author_id",
+      "created_at",
+      "id"
+     ],
+     [
+      "requeststatus",
+      "created_at",
+      "id"
+     ]
+    ],
+    "searchableFields": [
+     "title",
+     "department"
+    ],
+    "manifest": {
+     "name": "requests",
+     "title": "Purchase requests",
+     "uiSchema": {
+      "list": {
+       "primaryField": "title",
+       "columns": [
+        "department",
+        "amount",
+        "requestStatus"
+       ],
+       "filterField": "requestStatus"
+      },
+      "nav": {
+       "group": "approvals",
+       "order": 2
+      }
+     },
+     "publishing": false,
+     "schema": {
+      "type": "object",
+      "readOnly": true,
+      "additionalProperties": false,
+      "required": [
+       "title",
+       "amount",
+       "department",
+       "requestStatus"
+      ],
+      "properties": {
+       "title": {
+        "type": "string",
+        "minLength": 1
+       },
+       "amount": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "department": {
+        "type": "string"
+       },
+       "requestStatus": {
+        "type": "string",
+        "enum": [
+         "submitted",
+         "approved",
+         "rejected",
+         "ordered",
+         "confirmed"
+        ]
+       },
+       "supplierOrderId": {
+        "type": "string"
+       }
+      }
+     },
+     "fields": {
+      "title": "text",
+      "amount": "integer",
+      "department": "text",
+      "requeststatus": "text",
+      "supplierorderid": "text"
+     },
+     "names": {
+      "title": "title",
+      "amount": "amount",
+      "department": "department",
+      "requeststatus": "requestStatus",
+      "supplierorderid": "supplierOrderId"
+     },
+     "search": [
+      "title",
+      "department"
+     ],
+     "indexes": [
+      [
+       "author_id",
+       "created_at",
+       "id"
+      ],
+      [
+       "requeststatus",
+       "created_at",
+       "id"
+      ]
+     ]
+    }
+   }
+  ],
+  "views": []
+ },
+ "logic": {
+  "triggers": [],
+  "procedures": [
+   {
+    "name": "approve-request-write",
+    "title": null,
+    "description": null,
+    "audience": "admin",
+    "input": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "id",
+      "expectedVersion"
+     ],
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "expectedVersion": {
+       "type": "integer"
+      }
+     }
+    },
+    "output": {
+     "type": "object"
+    },
+    "authorization": [
+     "ctx.admin"
+    ],
+    "guard": null,
+    "handler": {
+     "kind": "sql",
+     "statement": "UPDATE requests SET requestStatus = 'approved'\nWHERE id = input.id AND version = input.expectedVersion AND requestStatus = 'submitted'\nRETURNING id, title, amount, author_id AS \"authorId\";\nUPDATE budgets SET remaining = remaining - (SELECT r.amount FROM requests r WHERE r.id = input.id)\nWHERE department = (SELECT r.department FROM requests r WHERE r.id = input.id);\nINSERT INTO ledger (requestId, department, amount, remainingAfter)\nSELECT r.id, r.department, r.amount, b.remaining FROM requests r JOIN budgets b ON b.department = r.department\nWHERE r.id = input.id\n",
+     "flow": [
+      {
+       "index": 0,
+       "logic": {
+        "kind": "statement",
+        "label": "UPDATE",
+        "children": [
+         {
+          "kind": "target",
+          "label": "Target",
+          "children": [
+           {
+            "kind": "table",
+            "label": "requests",
+            "children": [],
+            "relation": {
+             "name": "requests"
+            }
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "SET",
+          "children": [
+           {
+            "kind": "output",
+            "label": "requeststatus",
+            "children": [
+             {
+              "kind": "value",
+              "label": "'approved'",
+              "children": []
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "WHERE · keep TRUE rows",
+          "children": [
+           {
+            "kind": "predicate",
+            "label": "AND · all conditions",
+            "children": [
+             {
+              "kind": "expression",
+              "label": "=",
+              "children": [
+               {
+                "kind": "value",
+                "label": "id",
+                "children": [],
+                "column": {
+                 "name": "id"
+                }
+               },
+               {
+                "kind": "value",
+                "label": "input.id",
+                "children": [],
+                "column": {
+                 "name": "id",
+                 "relation": "input"
+                }
+               }
+              ]
+             },
+             {
+              "kind": "expression",
+              "label": "=",
+              "children": [
+               {
+                "kind": "value",
+                "label": "version",
+                "children": [],
+                "column": {
+                 "name": "version"
+                }
+               },
+               {
+                "kind": "value",
+                "label": "input.expectedversion",
+                "children": [],
+                "column": {
+                 "name": "expectedversion",
+                 "relation": "input"
+                }
+               }
+              ]
+             },
+             {
+              "kind": "expression",
+              "label": "=",
+              "children": [
+               {
+                "kind": "value",
+                "label": "requeststatus",
+                "children": [],
+                "column": {
+                 "name": "requeststatus"
+                }
+               },
+               {
+                "kind": "value",
+                "label": "'submitted'",
+                "children": []
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "RETURNING",
+          "children": [
+           {
+            "kind": "output",
+            "label": "Output",
+            "children": [
+             {
+              "kind": "value",
+              "label": "id",
+              "children": [],
+              "column": {
+               "name": "id"
+              }
+             }
+            ]
+           },
+           {
+            "kind": "output",
+            "label": "Output",
+            "children": [
+             {
+              "kind": "value",
+              "label": "title",
+              "children": [],
+              "column": {
+               "name": "title"
+              }
+             }
+            ]
+           },
+           {
+            "kind": "output",
+            "label": "Output",
+            "children": [
+             {
+              "kind": "value",
+              "label": "amount",
+              "children": [],
+              "column": {
+               "name": "amount"
+              }
+             }
+            ]
+           },
+           {
+            "kind": "output",
+            "label": "authorId",
+            "children": [
+             {
+              "kind": "value",
+              "label": "author_id",
+              "children": [],
+              "column": {
+               "name": "author_id"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "operation": "UPDATE",
+       "table": "requests",
+       "mode": "row",
+       "reads": [],
+       "writes": [
+        "requests"
+       ],
+       "filter": "(id = input.id) AND (version = input.expectedversion) AND (requeststatus = 'submitted')",
+       "returns": [
+        "id",
+        "title",
+        "amount",
+        "author_id"
+       ],
+       "cases": []
+      },
+      {
+       "index": 1,
+       "logic": {
+        "kind": "statement",
+        "label": "UPDATE",
+        "children": [
+         {
+          "kind": "target",
+          "label": "Target",
+          "children": [
+           {
+            "kind": "table",
+            "label": "budgets",
+            "children": [],
+            "relation": {
+             "name": "budgets"
+            }
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "SET",
+          "children": [
+           {
+            "kind": "output",
+            "label": "remaining",
+            "children": [
+             {
+              "kind": "expression",
+              "label": "-",
+              "children": [
+               {
+                "kind": "value",
+                "label": "remaining",
+                "children": [],
+                "column": {
+                 "name": "remaining"
+                }
+               },
+               {
+                "kind": "subquery",
+                "label": "EXPR",
+                "children": [
+                 {
+                  "kind": "statement",
+                  "label": "SELECT",
+                  "children": [
+                   {
+                    "kind": "clause",
+                    "label": "SELECT",
+                    "children": [
+                     {
+                      "kind": "output",
+                      "label": "Output",
+                      "children": [
+                       {
+                        "kind": "value",
+                        "label": "r.amount",
+                        "children": [],
+                        "column": {
+                         "name": "amount",
+                         "relation": "r"
+                        }
+                       }
+                      ]
+                     }
+                    ]
+                   },
+                   {
+                    "kind": "clause",
+                    "label": "FROM",
+                    "children": [
+                     {
+                      "kind": "table",
+                      "label": "requests AS r",
+                      "children": [],
+                      "relation": {
+                       "name": "requests",
+                       "alias": "r"
+                      }
+                     }
+                    ]
+                   },
+                   {
+                    "kind": "clause",
+                    "label": "WHERE · keep TRUE rows",
+                    "children": [
+                     {
+                      "kind": "expression",
+                      "label": "=",
+                      "children": [
+                       {
+                        "kind": "value",
+                        "label": "r.id",
+                        "children": [],
+                        "column": {
+                         "name": "id",
+                         "relation": "r"
+                        }
+                       },
+                       {
+                        "kind": "value",
+                        "label": "input.id",
+                        "children": [],
+                        "column": {
+                         "name": "id",
+                         "relation": "input"
+                        }
+                       }
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "WHERE · keep TRUE rows",
+          "children": [
+           {
+            "kind": "expression",
+            "label": "=",
+            "children": [
+             {
+              "kind": "value",
+              "label": "department",
+              "children": [],
+              "column": {
+               "name": "department"
+              }
+             },
+             {
+              "kind": "subquery",
+              "label": "EXPR",
+              "children": [
+               {
+                "kind": "statement",
+                "label": "SELECT",
+                "children": [
+                 {
+                  "kind": "clause",
+                  "label": "SELECT",
+                  "children": [
+                   {
+                    "kind": "output",
+                    "label": "Output",
+                    "children": [
+                     {
+                      "kind": "value",
+                      "label": "r.department",
+                      "children": [],
+                      "column": {
+                       "name": "department",
+                       "relation": "r"
+                      }
+                     }
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "kind": "clause",
+                  "label": "FROM",
+                  "children": [
+                   {
+                    "kind": "table",
+                    "label": "requests AS r",
+                    "children": [],
+                    "relation": {
+                     "name": "requests",
+                     "alias": "r"
+                    }
+                   }
+                  ]
+                 },
+                 {
+                  "kind": "clause",
+                  "label": "WHERE · keep TRUE rows",
+                  "children": [
+                   {
+                    "kind": "expression",
+                    "label": "=",
+                    "children": [
+                     {
+                      "kind": "value",
+                      "label": "r.id",
+                      "children": [],
+                      "column": {
+                       "name": "id",
+                       "relation": "r"
+                      }
+                     },
+                     {
+                      "kind": "value",
+                      "label": "input.id",
+                      "children": [],
+                      "column": {
+                       "name": "id",
+                       "relation": "input"
+                      }
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "operation": "UPDATE",
+       "table": "budgets",
+       "mode": "set",
+       "reads": [
+        "requests"
+       ],
+       "writes": [
+        "budgets"
+       ],
+       "filter": "[SQL expression — see authored SQL]",
+       "returns": [],
+       "cases": []
+      },
+      {
+       "index": 2,
+       "logic": {
+        "kind": "statement",
+        "label": "INSERT",
+        "children": [
+         {
+          "kind": "target",
+          "label": "Target",
+          "children": [
+           {
+            "kind": "table",
+            "label": "ledger",
+            "children": [],
+            "relation": {
+             "name": "ledger"
+            }
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "Columns",
+          "children": [
+           {
+            "kind": "output",
+            "label": "requestid",
+            "children": []
+           },
+           {
+            "kind": "output",
+            "label": "department",
+            "children": []
+           },
+           {
+            "kind": "output",
+            "label": "amount",
+            "children": []
+           },
+           {
+            "kind": "output",
+            "label": "remainingafter",
+            "children": []
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "Source SELECT",
+          "children": [
+           {
+            "kind": "statement",
+            "label": "SELECT",
+            "children": [
+             {
+              "kind": "clause",
+              "label": "SELECT",
+              "children": [
+               {
+                "kind": "output",
+                "label": "Output",
+                "children": [
+                 {
+                  "kind": "value",
+                  "label": "r.id",
+                  "children": [],
+                  "column": {
+                   "name": "id",
+                   "relation": "r"
+                  }
+                 }
+                ]
+               },
+               {
+                "kind": "output",
+                "label": "Output",
+                "children": [
+                 {
+                  "kind": "value",
+                  "label": "r.department",
+                  "children": [],
+                  "column": {
+                   "name": "department",
+                   "relation": "r"
+                  }
+                 }
+                ]
+               },
+               {
+                "kind": "output",
+                "label": "Output",
+                "children": [
+                 {
+                  "kind": "value",
+                  "label": "r.amount",
+                  "children": [],
+                  "column": {
+                   "name": "amount",
+                   "relation": "r"
+                  }
+                 }
+                ]
+               },
+               {
+                "kind": "output",
+                "label": "Output",
+                "children": [
+                 {
+                  "kind": "value",
+                  "label": "b.remaining",
+                  "children": [],
+                  "column": {
+                   "name": "remaining",
+                   "relation": "b"
+                  }
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "kind": "clause",
+              "label": "FROM",
+              "children": [
+               {
+                "kind": "join",
+                "label": "INNER JOIN",
+                "children": [
+                 {
+                  "kind": "table",
+                  "label": "requests AS r",
+                  "children": [],
+                  "relation": {
+                   "name": "requests",
+                   "alias": "r"
+                  }
+                 },
+                 {
+                  "kind": "table",
+                  "label": "budgets AS b",
+                  "children": [],
+                  "relation": {
+                   "name": "budgets",
+                   "alias": "b"
+                  }
+                 },
+                 {
+                  "kind": "clause",
+                  "label": "ON",
+                  "children": [
+                   {
+                    "kind": "expression",
+                    "label": "=",
+                    "children": [
+                     {
+                      "kind": "value",
+                      "label": "b.department",
+                      "children": [],
+                      "column": {
+                       "name": "department",
+                       "relation": "b"
+                      }
+                     },
+                     {
+                      "kind": "value",
+                      "label": "r.department",
+                      "children": [],
+                      "column": {
+                       "name": "department",
+                       "relation": "r"
+                      }
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "kind": "clause",
+              "label": "WHERE · keep TRUE rows",
+              "children": [
+               {
+                "kind": "expression",
+                "label": "=",
+                "children": [
+                 {
+                  "kind": "value",
+                  "label": "r.id",
+                  "children": [],
+                  "column": {
+                   "name": "id",
+                   "relation": "r"
+                  }
+                 },
+                 {
+                  "kind": "value",
+                  "label": "input.id",
+                  "children": [],
+                  "column": {
+                   "name": "id",
+                   "relation": "input"
+                  }
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "operation": "INSERT",
+       "table": "ledger",
+       "mode": "set",
+       "reads": [
+        "budgets",
+        "requests"
+       ],
+       "writes": [
+        "ledger"
+       ],
+       "filter": "r.id = input.id",
+       "returns": [],
+       "cases": []
+      }
+     ],
+     "hooks": []
+    },
+    "manifest": {
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "id",
+       "expectedVersion"
+      ],
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "expectedVersion": {
+        "type": "integer"
+       }
+      }
+     },
+     "output": {
+      "type": "object"
+     },
+     "inputs": {
+      "id": "text",
+      "expectedversion": "integer"
+     },
+     "requires": {
+      "auth": {
+       "all": [
+        "ctx.admin"
+       ]
+      }
+     },
+     "target": {
+      "schema": "requests",
+      "id": "id",
+      "version": "expectedVersion"
+     },
+     "handler": {
+      "source": "UPDATE requests SET requestStatus = 'approved'\nWHERE id = input.id AND version = input.expectedVersion AND requestStatus = 'submitted'\nRETURNING id, title, amount, author_id AS \"authorId\";\nUPDATE budgets SET remaining = remaining - (SELECT r.amount FROM requests r WHERE r.id = input.id)\nWHERE department = (SELECT r.department FROM requests r WHERE r.id = input.id);\nINSERT INTO ledger (requestId, department, amount, remainingAfter)\nSELECT r.id, r.department, r.amount, b.remaining FROM requests r JOIN budgets b ON b.department = r.department\nWHERE r.id = input.id\n"
+     }
+    }
+   }
+  ]
+ },
+ "interfaces": {
+  "http": [],
+  "callable": []
+ },
+ "graph": {
+  "atoms": [
+   {
+    "id": "Procedure:approve-request-write",
+    "kind": "Procedure",
+    "name": "approve-request-write",
+    "title": null,
+    "description": null,
+    "audience": "admin",
+    "handler": {
+     "kind": "sql",
+     "statement": "UPDATE requests SET requestStatus = 'approved'\nWHERE id = input.id AND version = input.expectedVersion AND requestStatus = 'submitted'\nRETURNING id, title, amount, author_id AS \"authorId\";\nUPDATE budgets SET remaining = remaining - (SELECT r.amount FROM requests r WHERE r.id = input.id)\nWHERE department = (SELECT r.department FROM requests r WHERE r.id = input.id);\nINSERT INTO ledger (requestId, department, amount, remainingAfter)\nSELECT r.id, r.department, r.amount, b.remaining FROM requests r JOIN budgets b ON b.department = r.department\nWHERE r.id = input.id\n",
+     "flow": [
+      {
+       "index": 0,
+       "logic": {
+        "kind": "statement",
+        "label": "UPDATE",
+        "children": [
+         {
+          "kind": "target",
+          "label": "Target",
+          "children": [
+           {
+            "kind": "table",
+            "label": "requests",
+            "children": [],
+            "relation": {
+             "name": "requests"
+            }
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "SET",
+          "children": [
+           {
+            "kind": "output",
+            "label": "requeststatus",
+            "children": [
+             {
+              "kind": "value",
+              "label": "'approved'",
+              "children": []
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "WHERE · keep TRUE rows",
+          "children": [
+           {
+            "kind": "predicate",
+            "label": "AND · all conditions",
+            "children": [
+             {
+              "kind": "expression",
+              "label": "=",
+              "children": [
+               {
+                "kind": "value",
+                "label": "id",
+                "children": [],
+                "column": {
+                 "name": "id"
+                }
+               },
+               {
+                "kind": "value",
+                "label": "input.id",
+                "children": [],
+                "column": {
+                 "name": "id",
+                 "relation": "input"
+                }
+               }
+              ]
+             },
+             {
+              "kind": "expression",
+              "label": "=",
+              "children": [
+               {
+                "kind": "value",
+                "label": "version",
+                "children": [],
+                "column": {
+                 "name": "version"
+                }
+               },
+               {
+                "kind": "value",
+                "label": "input.expectedversion",
+                "children": [],
+                "column": {
+                 "name": "expectedversion",
+                 "relation": "input"
+                }
+               }
+              ]
+             },
+             {
+              "kind": "expression",
+              "label": "=",
+              "children": [
+               {
+                "kind": "value",
+                "label": "requeststatus",
+                "children": [],
+                "column": {
+                 "name": "requeststatus"
+                }
+               },
+               {
+                "kind": "value",
+                "label": "'submitted'",
+                "children": []
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "RETURNING",
+          "children": [
+           {
+            "kind": "output",
+            "label": "Output",
+            "children": [
+             {
+              "kind": "value",
+              "label": "id",
+              "children": [],
+              "column": {
+               "name": "id"
+              }
+             }
+            ]
+           },
+           {
+            "kind": "output",
+            "label": "Output",
+            "children": [
+             {
+              "kind": "value",
+              "label": "title",
+              "children": [],
+              "column": {
+               "name": "title"
+              }
+             }
+            ]
+           },
+           {
+            "kind": "output",
+            "label": "Output",
+            "children": [
+             {
+              "kind": "value",
+              "label": "amount",
+              "children": [],
+              "column": {
+               "name": "amount"
+              }
+             }
+            ]
+           },
+           {
+            "kind": "output",
+            "label": "authorId",
+            "children": [
+             {
+              "kind": "value",
+              "label": "author_id",
+              "children": [],
+              "column": {
+               "name": "author_id"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "operation": "UPDATE",
+       "table": "requests",
+       "mode": "row",
+       "reads": [],
+       "writes": [
+        "requests"
+       ],
+       "filter": "(id = input.id) AND (version = input.expectedversion) AND (requeststatus = 'submitted')",
+       "returns": [
+        "id",
+        "title",
+        "amount",
+        "author_id"
+       ],
+       "cases": []
+      },
+      {
+       "index": 1,
+       "logic": {
+        "kind": "statement",
+        "label": "UPDATE",
+        "children": [
+         {
+          "kind": "target",
+          "label": "Target",
+          "children": [
+           {
+            "kind": "table",
+            "label": "budgets",
+            "children": [],
+            "relation": {
+             "name": "budgets"
+            }
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "SET",
+          "children": [
+           {
+            "kind": "output",
+            "label": "remaining",
+            "children": [
+             {
+              "kind": "expression",
+              "label": "-",
+              "children": [
+               {
+                "kind": "value",
+                "label": "remaining",
+                "children": [],
+                "column": {
+                 "name": "remaining"
+                }
+               },
+               {
+                "kind": "subquery",
+                "label": "EXPR",
+                "children": [
+                 {
+                  "kind": "statement",
+                  "label": "SELECT",
+                  "children": [
+                   {
+                    "kind": "clause",
+                    "label": "SELECT",
+                    "children": [
+                     {
+                      "kind": "output",
+                      "label": "Output",
+                      "children": [
+                       {
+                        "kind": "value",
+                        "label": "r.amount",
+                        "children": [],
+                        "column": {
+                         "name": "amount",
+                         "relation": "r"
+                        }
+                       }
+                      ]
+                     }
+                    ]
+                   },
+                   {
+                    "kind": "clause",
+                    "label": "FROM",
+                    "children": [
+                     {
+                      "kind": "table",
+                      "label": "requests AS r",
+                      "children": [],
+                      "relation": {
+                       "name": "requests",
+                       "alias": "r"
+                      }
+                     }
+                    ]
+                   },
+                   {
+                    "kind": "clause",
+                    "label": "WHERE · keep TRUE rows",
+                    "children": [
+                     {
+                      "kind": "expression",
+                      "label": "=",
+                      "children": [
+                       {
+                        "kind": "value",
+                        "label": "r.id",
+                        "children": [],
+                        "column": {
+                         "name": "id",
+                         "relation": "r"
+                        }
+                       },
+                       {
+                        "kind": "value",
+                        "label": "input.id",
+                        "children": [],
+                        "column": {
+                         "name": "id",
+                         "relation": "input"
+                        }
+                       }
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "WHERE · keep TRUE rows",
+          "children": [
+           {
+            "kind": "expression",
+            "label": "=",
+            "children": [
+             {
+              "kind": "value",
+              "label": "department",
+              "children": [],
+              "column": {
+               "name": "department"
+              }
+             },
+             {
+              "kind": "subquery",
+              "label": "EXPR",
+              "children": [
+               {
+                "kind": "statement",
+                "label": "SELECT",
+                "children": [
+                 {
+                  "kind": "clause",
+                  "label": "SELECT",
+                  "children": [
+                   {
+                    "kind": "output",
+                    "label": "Output",
+                    "children": [
+                     {
+                      "kind": "value",
+                      "label": "r.department",
+                      "children": [],
+                      "column": {
+                       "name": "department",
+                       "relation": "r"
+                      }
+                     }
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "kind": "clause",
+                  "label": "FROM",
+                  "children": [
+                   {
+                    "kind": "table",
+                    "label": "requests AS r",
+                    "children": [],
+                    "relation": {
+                     "name": "requests",
+                     "alias": "r"
+                    }
+                   }
+                  ]
+                 },
+                 {
+                  "kind": "clause",
+                  "label": "WHERE · keep TRUE rows",
+                  "children": [
+                   {
+                    "kind": "expression",
+                    "label": "=",
+                    "children": [
+                     {
+                      "kind": "value",
+                      "label": "r.id",
+                      "children": [],
+                      "column": {
+                       "name": "id",
+                       "relation": "r"
+                      }
+                     },
+                     {
+                      "kind": "value",
+                      "label": "input.id",
+                      "children": [],
+                      "column": {
+                       "name": "id",
+                       "relation": "input"
+                      }
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "operation": "UPDATE",
+       "table": "budgets",
+       "mode": "set",
+       "reads": [
+        "requests"
+       ],
+       "writes": [
+        "budgets"
+       ],
+       "filter": "[SQL expression — see authored SQL]",
+       "returns": [],
+       "cases": []
+      },
+      {
+       "index": 2,
+       "logic": {
+        "kind": "statement",
+        "label": "INSERT",
+        "children": [
+         {
+          "kind": "target",
+          "label": "Target",
+          "children": [
+           {
+            "kind": "table",
+            "label": "ledger",
+            "children": [],
+            "relation": {
+             "name": "ledger"
+            }
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "Columns",
+          "children": [
+           {
+            "kind": "output",
+            "label": "requestid",
+            "children": []
+           },
+           {
+            "kind": "output",
+            "label": "department",
+            "children": []
+           },
+           {
+            "kind": "output",
+            "label": "amount",
+            "children": []
+           },
+           {
+            "kind": "output",
+            "label": "remainingafter",
+            "children": []
+           }
+          ]
+         },
+         {
+          "kind": "clause",
+          "label": "Source SELECT",
+          "children": [
+           {
+            "kind": "statement",
+            "label": "SELECT",
+            "children": [
+             {
+              "kind": "clause",
+              "label": "SELECT",
+              "children": [
+               {
+                "kind": "output",
+                "label": "Output",
+                "children": [
+                 {
+                  "kind": "value",
+                  "label": "r.id",
+                  "children": [],
+                  "column": {
+                   "name": "id",
+                   "relation": "r"
+                  }
+                 }
+                ]
+               },
+               {
+                "kind": "output",
+                "label": "Output",
+                "children": [
+                 {
+                  "kind": "value",
+                  "label": "r.department",
+                  "children": [],
+                  "column": {
+                   "name": "department",
+                   "relation": "r"
+                  }
+                 }
+                ]
+               },
+               {
+                "kind": "output",
+                "label": "Output",
+                "children": [
+                 {
+                  "kind": "value",
+                  "label": "r.amount",
+                  "children": [],
+                  "column": {
+                   "name": "amount",
+                   "relation": "r"
+                  }
+                 }
+                ]
+               },
+               {
+                "kind": "output",
+                "label": "Output",
+                "children": [
+                 {
+                  "kind": "value",
+                  "label": "b.remaining",
+                  "children": [],
+                  "column": {
+                   "name": "remaining",
+                   "relation": "b"
+                  }
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "kind": "clause",
+              "label": "FROM",
+              "children": [
+               {
+                "kind": "join",
+                "label": "INNER JOIN",
+                "children": [
+                 {
+                  "kind": "table",
+                  "label": "requests AS r",
+                  "children": [],
+                  "relation": {
+                   "name": "requests",
+                   "alias": "r"
+                  }
+                 },
+                 {
+                  "kind": "table",
+                  "label": "budgets AS b",
+                  "children": [],
+                  "relation": {
+                   "name": "budgets",
+                   "alias": "b"
+                  }
+                 },
+                 {
+                  "kind": "clause",
+                  "label": "ON",
+                  "children": [
+                   {
+                    "kind": "expression",
+                    "label": "=",
+                    "children": [
+                     {
+                      "kind": "value",
+                      "label": "b.department",
+                      "children": [],
+                      "column": {
+                       "name": "department",
+                       "relation": "b"
+                      }
+                     },
+                     {
+                      "kind": "value",
+                      "label": "r.department",
+                      "children": [],
+                      "column": {
+                       "name": "department",
+                       "relation": "r"
+                      }
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "kind": "clause",
+              "label": "WHERE · keep TRUE rows",
+              "children": [
+               {
+                "kind": "expression",
+                "label": "=",
+                "children": [
+                 {
+                  "kind": "value",
+                  "label": "r.id",
+                  "children": [],
+                  "column": {
+                   "name": "id",
+                   "relation": "r"
+                  }
+                 },
+                 {
+                  "kind": "value",
+                  "label": "input.id",
+                  "children": [],
+                  "column": {
+                   "name": "id",
+                   "relation": "input"
+                  }
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "operation": "INSERT",
+       "table": "ledger",
+       "mode": "set",
+       "reads": [
+        "budgets",
+        "requests"
+       ],
+       "writes": [
+        "ledger"
+       ],
+       "filter": "r.id = input.id",
+       "returns": [],
+       "cases": []
+      }
+     ],
+     "hooks": []
+    },
+    "input": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "id",
+      "expectedVersion"
+     ],
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "expectedVersion": {
+       "type": "integer"
+      }
+     }
+    }
+   },
+   {
+    "id": "Schema:budgets",
+    "kind": "Schema",
+    "name": "budgets",
+    "title": "Budgets"
+   },
+   {
+    "id": "Schema:ledger",
+    "kind": "Schema",
+    "name": "ledger",
+    "title": "Budget ledger"
+   },
+   {
+    "id": "Schema:requests",
+    "kind": "Schema",
+    "name": "requests",
+    "title": "Purchase requests"
+   }
+  ],
+  "relations": [
+   {
+    "id": "Procedure:approve-request-write:writes:budgets",
+    "kind": "procedure-schema",
+    "sourceId": "Procedure:approve-request-write",
+    "targetId": "Schema:budgets",
+    "pointer": "/spec/handler/sql",
+    "value": "budgets"
+   },
+   {
+    "id": "Procedure:approve-request-write:writes:ledger",
+    "kind": "procedure-schema",
+    "sourceId": "Procedure:approve-request-write",
+    "targetId": "Schema:ledger",
+    "pointer": "/spec/handler/sql",
+    "value": "ledger"
+   },
+   {
+    "id": "Procedure:approve-request-write:writes:requests",
+    "kind": "procedure-schema",
+    "sourceId": "Procedure:approve-request-write",
+    "targetId": "Schema:requests",
+    "pointer": "/spec/handler/sql",
+    "value": "requests"
+   }
+  ]
+ },
+ "operations": {
+  "schedules": [],
+  "ttlPolicies": [],
+  "observationAvailability": "unavailable",
+  "runs": [],
+  "latestRuns": []
+ }
+}
