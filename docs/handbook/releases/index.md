@@ -65,6 +65,25 @@ instead of a failed build.
   names `docs/skills/` paths; reinstall it.
 - **Docs moves.** The 0.1 → 0.2 upgrade guide is now the topic `mantle help upgrade-0.1-to-0.2`. The package README is
   an index of topics.
+- **The agent workflow checks in with the user.** Once the manifests generate, `pnpm accept --open` opens the Developer
+  UI (`/admin/dev`) so the user can see the wiring. The agent then stops twice with a plan: before acceptance and
+  before the performance pass. It finishes with an acceptance summary and a before → after performance summary
+  ([agents](../start/agents.md)).
+
+Regenerate to pick up the rest of this release. No manifest or API changes:
+
+- **Developer UI diagrams.**
+  - The data model is a real ER diagram: keys, types and crow's-foot cardinality, with three display modes.
+  - System wiring is laid out in columns, with a minimap.
+  - A Procedure's logic is one graph, the same in the wiring side panel and on the Procedure page: a transaction box,
+    CASE as ordered branch rows, and COMMIT and ROLLBACK ends. The SQL syntax trees stay available, folded, on the
+    Procedure page.
+  - Their wording is translated in every Admin language that has translations.
+- **Smaller startup.**
+  - Generated Workers emit a repeated SQL statement once. REST loads a Procedure on its first request, the way views and
+    MCP already did. The reference D1 Worker's startup is about 20% smaller.
+  - Admin loads sign-in, OAuth consent and the collection list on demand.
+  - The Admin MCP App uses native select and popover controls.
 
 ### Upgrading to 0.2.1-alpha.2
 
