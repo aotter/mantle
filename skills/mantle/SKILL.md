@@ -18,7 +18,8 @@ its docs one topic at a time.
 2. **Work in the user's application.** Read its `package.json` and lockfile for the exact Mantle version and keep using
    that version's docs until the user asks to upgrade (`mantle help releases/index`). Preserve existing code, identity,
    versions and resources.
-3. **Stop for the user at the entry page's checkpoints:** show the running Admin and its Developer UI once the manifests
-   generate, and ask before acceptance and before the performance pass. Never report done without them; end with what
-   each one found and changed, and each layer as CONVERGED, BLOCKED or UNVERIFIED.
+3. **Plan once, then run to the end.** For a new app, first reply with the entry page's plan, in plain business terms
+   and with the questions the brief leaves open, and wait for one go-ahead. Then build, show the Developer UI, accept
+   and measure without stopping. Never report done without acceptance and performance; end with what each found and
+   changed, and each layer as CONVERGED, BLOCKED or UNVERIFIED.
 4. **Deploy, delete remote data or publish nothing unless the user asks for that exact action.**

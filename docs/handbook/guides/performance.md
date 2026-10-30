@@ -35,9 +35,11 @@ skipped part with its reason.
 A change in one part can move another: an added index slows writes, a shared
 stylesheet or entry import affects every page. Re-measure what a repair can reach.
 
-## Propose the pass first
+## Plan the pass
 
-Before measuring, stop and give the user the plan, then wait for a go-ahead:
+The plan the user approves before the build ([Build from a product brief](../start/agents.md#build-from-a-product-brief))
+says in plain words how much sample data there is and what "fast enough" means for each page.
+Behind it, the pass fixes:
 
 - the parts that run and the parts skipped, each with its reason (the table above);
 - the test data for backend parts: rows per table (for example 1,000,000 RSVPs across 5,000 events and 20,000

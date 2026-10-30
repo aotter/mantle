@@ -85,15 +85,17 @@ rounds below before claiming the user-facing work is done. Keep the author's
 capability map and worked call sequence out of the fresh agent's prompt: an MCP
 evaluator must discover the workflow from public tool descriptions and results.
 
-## Propose the run first
+## Plan the run
 
-Before the first round, stop and give the user the plan, then wait for a go-ahead:
+The plan the user approves before the build ([Build from a product brief](../start/agents.md#build-from-a-product-brief))
+says in plain words who tries the app and what they try to get done. Behind it, the run
+fixes:
 
 - each evaluator you will start: its role (`admin`, `user`, a visitor), the surfaces it uses (Admin, member pages,
   REST, MCP, visitor pages) and the goals it is asked to finish, in the user's words;
 - the round limit (at most three) and what triggers a re-run;
-- anything the environment needs, such as a browser for a visitor or member page, so a missing one is settled now
-  rather than reported as BLOCKED later.
+- what the environment needs, such as a browser for a visitor or member page. Provide it yourself (install a headless
+  browser if none is there); only what you cannot provide goes to the user now, rather than reported as BLOCKED later.
 
 Keep the rubric itself private: the plan names goals, never the checks an evaluator is graded on.
 
