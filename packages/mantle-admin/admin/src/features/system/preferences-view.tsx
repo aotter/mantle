@@ -4,10 +4,8 @@ import {
   ChevronsUpDown,
   Languages,
   Monitor,
-  Moon,
   Pilcrow,
   Search,
-  Sun,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -15,11 +13,11 @@ import {
   directionForLanguage,
   usePreferences,
   type AdminLanguage,
-  type AdminTheme,
 } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { PageHeader, SectionCard } from "../../ui/page";
 import { cn } from "../../lib/utils";
+import { themeOptions } from "../../layout/preference-controls";
 
 export function PreferencesView(): React.ReactElement {
   const {
@@ -254,16 +252,4 @@ function PreferenceOptionButton({
       />
     </button>
   );
-}
-
-function themeOptions(language: AdminLanguage): ReadonlyArray<{
-  value: AdminTheme;
-  label: string;
-  icon: LucideIcon;
-}> {
-  return [
-    { value: "light", label: t(language, "preferences.light"), icon: Sun },
-    { value: "dark", label: t(language, "preferences.dark"), icon: Moon },
-    { value: "system", label: t(language, "preferences.system"), icon: Monitor },
-  ];
 }

@@ -1,6 +1,6 @@
 import { userReferences } from "../domain/userReferences.js";
 /** Selected View boundary: Core prints keyset SQL once; bare operations retain native rows. */
-import { parseNumeric, type RuntimePlan, type PlanLowered, type SqlNode } from "../build/compiler.js";
+import { parseNumeric, type RuntimePlan, type PlanLowered } from "../build/compiler.js";
 import { outputConversions } from "../domain/columns.js";
 import type { Target } from "../domain/model.js";
 import {authLines} from "../domain/input.js";

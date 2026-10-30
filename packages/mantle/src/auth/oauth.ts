@@ -1,5 +1,5 @@
 /** Optional provider integration. Better Auth owns signatures, PKCE, redirects and token rotation. */
-import type { AuthContext, BetterAuthOptions, BetterAuthPlugin } from "@better-auth/core";
+import type { AuthContext, BetterAuthPlugin } from "@better-auth/core";
 import { createAuthMiddleware } from "@better-auth/core/api";
 import type { oauthProvider } from "@better-auth/oauth-provider";
 import type { AuthInstance } from "./caller.js";

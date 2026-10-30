@@ -15,8 +15,9 @@ import { appLabels } from "./locale";
 
 declare const __MANTLE_VERSION__: string;
 
-/** Internal: the Admin MCP App's calendar (`@aotter/mantle-admin/build` swaps it for the kit's in this build only). */
+/** Internal: the Admin MCP App's calendar, select and popover (`@aotter/mantle-admin/build` swaps them for the kit's in this build only). */
 export { Calendar } from "./native-date";
+export { Popover, PopoverContent, PopoverTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./native-fields";
 
 /** The host's `tools/call` answers fresh data each time, and a failed call is not retried behind the person's back. */
 const newQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, staleTime: 10_000 } } });

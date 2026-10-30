@@ -90,7 +90,12 @@ export async function buildAdmin({ entry, mcpEntry, outDir }: BuildAdminOptions)
   await buildMcpApp(mcpEntry ?? entry, outDir, mcpEntry !== undefined);
 }
 
-const NATIVE_CALENDAR = "\0mantle-admin/native-calendar";
+// The App swaps these kit modules of mantle-ui's fields for native controls exported by its mount.
+const NATIVE: Record<string, string> = {
+  "../kit/components/ui/calendar.js": "Calendar",
+  "../kit/components/ui/select.js": "Select, SelectContent, SelectItem, SelectTrigger, SelectValue",
+  "../kit/components/ui/popover.js": "Popover, PopoverContent, PopoverTrigger",
+};
 
 /**
  * The App a host renders, from the application's own entry: its components in the `mcp-app` surface, its pages that declare
@@ -128,14 +133,13 @@ async function buildMcpApp(entry: string | undefined, outDir: string, explicitEn
     name: "mantle-mcp-app-replace", enforce: "pre",
     async resolveId(source, importer, options) {
       const from = importer ? normalizePath(importer) : "";
-      // the App swaps the kit's calendar for a native date input
-      if (source === "../kit/components/ui/calendar.js" && from.endsWith("/mantle-ui/dist/react/fields.js")) return NATIVE_CALENDAR;
+      if (NATIVE[source] && from.endsWith("/mantle-ui/dist/react/fields.js")) return `\0mantle-admin/native:${source}`;
       // and the public entry for the one without `<MantleAdmin>`, however the application reaches it
       if (!/mantle-admin|admin-app\/index\.js$/.test(source)) return undefined;
       const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
       return resolved && normalizePath(resolved.id) === normalizePath(resolve(dist, "admin-app/index.js")) ? resolve(dist, "admin-app/mcp-app.js") : undefined;
     },
-    load: id => id === NATIVE_CALENDAR ? `export { Calendar } from ${JSON.stringify(mount)};` : undefined,
+    load: id => id.startsWith("\0mantle-admin/native:") ? `export { ${NATIVE[id.slice("\0mantle-admin/native:".length)]} } from ${JSON.stringify(mount)};` : undefined,
   };
   const built = await build({
     ...core.config, base: "./", logLevel: "warn", plugins: [...core.plugins, replace, scan, viteSingleFile()],

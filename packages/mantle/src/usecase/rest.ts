@@ -25,7 +25,7 @@ export function emitRest(plan: RuntimePlan, lowered: PlanLowered, target: Target
   };
   for (const [name,view] of Object.entries(plan.views)) {
     if(view.surface!=="public") continue;
-    const id=views.length,encoded=encodeURIComponent(name);
+    const id=views.length;
     const wire = outputConversions(plan, name, target);
     imports.push(...viewImports(name,id).map(line=>wire.some(([,type])=>type==="int") ? line.replaceAll("./paged/views/", "./paged/wire/views/") : line));
     hasWire ||= wire.length > 0;
@@ -35,13 +35,12 @@ export function emitRest(plan: RuntimePlan, lowered: PlanLowered, target: Target
   for(const trigger of triggers) {
     if(trigger.source.kind!=="http") continue;
     const {method,path}=trigger.source,name=trigger.procedure,procedure=plan.procedures[name]!,id=procedures.length,ref="ref" in procedure.handler;
-    if(!ref) imports.push(`import procedure${id} from "./procedures/${encodeURIComponent(name)}.js";`);
     imports.push(`import { validate as validate${id} } from "./validation/procedures/${encodeURIComponent(name)}.js";`);
     const params=Object.fromEntries([...path.matchAll(/\{([^}]+)\}/g)].flatMap(([,key])=>{
       const type=[procedure.input?.properties?.[key!]?.type].flat().find(t=>t&&t!=="null");
       return type==="integer"||type==="number"?[[key,"number"]]:type==="boolean"?[[key,"boolean"]]:[];
     }));
-    procedures.push(`{ ${route(method,path)}, id: ${q(`rest:${method} ${template(path)}`)}, target: ${q({kind:"procedure",name})}${description.targets.find(t => t._meta.id === `procedure:${name}`)?._meta.readOnly ? ", readOnly: true" : ""}${guard(procedure.requires,`procedures/${name}`, lowered.procedures[name]?.caller?.flatMap(s=>s.binds), procedure.trustedOnly)}${Object.keys(params).length?`, params: ${q(params)}`:""}, validate: validate${id}${convert(conversions(procedure.input?.properties,lowered.procedures[name]?.caller?.flatMap(s=>s.binds) ?? [],target))}, run: ${ref?`(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)`:`procedure${id}`} }`);
+    procedures.push(`{ ${route(method,path)}, id: ${q(`rest:${method} ${template(path)}`)}, target: ${q({kind:"procedure",name})}${description.targets.find(t => t._meta.id === `procedure:${name}`)?._meta.readOnly ? ", readOnly: true" : ""}${guard(procedure.requires,`procedures/${name}`, lowered.procedures[name]?.caller?.flatMap(s=>s.binds), procedure.trustedOnly)}${Object.keys(params).length?`, params: ${q(params)}`:""}, validate: validate${id}${convert(conversions(procedure.input?.properties,lowered.procedures[name]?.caller?.flatMap(s=>s.binds) ?? [],target))}, run: ${ref?`(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)`:`async (db, caller, input) => (await import("./procedures/${encodeURIComponent(name)}.js")).default(db, caller, input)`} }`);
   }
   if (hasWire) imports.push('import { wireRows } from "@aotter/mantle/contracts";');
   const list = (items:string[]) => items.length ? `[\n${items.map(item=>"    "+item+",\n").join("")}  ]` : "[]";

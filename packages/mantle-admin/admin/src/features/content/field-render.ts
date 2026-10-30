@@ -1,4 +1,4 @@
-export { dateFromFieldValue, formatMoneyMinor, formatTimestampMs, moneyMinorHint, timestampHint } from "@aotter/mantle-ui";
+export { formatTimestampMs } from "@aotter/mantle-ui";
 
 /** Keep the distinguishing suffix; callers expose the full id in `title`. */
 export function idTail(id: string, length = 8): string {

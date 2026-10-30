@@ -65,5 +65,3 @@ export const POSITION_EDGE = {
 /** Compile-time: every edge above is reached by at least one position, so an edge cannot exist without a probe. */
 type Unreached = Exclude<RelationEdge, (typeof POSITION_EDGE)[RelationPosition]>;
 export const ALL_EDGES_REACHED: [Unreached] extends [never] ? true : never = true;
-
-export const ALL_POSITIONS = Object.keys(POSITION_EDGE) as RelationPosition[];

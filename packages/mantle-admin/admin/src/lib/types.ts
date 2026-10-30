@@ -144,10 +144,6 @@ export interface EntryDocument {
   collection: EntryEditorCollection;
   entry: EntryEditorEntry;
 }
-export interface EntryPage {
-  items: EntryEditorEntry[];
-  next_cursor: string | null;
-}
 export interface CollectionsMetadata {
   collections: Collection[];
   allCollections: Record<string, Collection>;

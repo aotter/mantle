@@ -2,7 +2,7 @@
 import { DiagnosticError, runtimeDiagnostic } from "../../spec/kernel/diagnostic.js";
 import type { SqlNode as N } from "../../spec/domain/model/SqlIr.js";
 import type { MantleDialect, StorageSchema } from "../dialect.js";
-import { S, op, ref } from "./ast.js";
+import { op, ref } from "./ast.js";
 import type { Compiled } from "./policy.js";
 
 export interface Program {
