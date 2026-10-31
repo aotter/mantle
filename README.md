@@ -1,7 +1,7 @@
 <h1 align="center">Mantle</h1>
 
 <p align="center">
-  <strong>Model your app in YAML. Get typed SQL, an Admin workspace, and tools for your AI.</strong>
+  <strong>Build custom MCP servers in no time. Admin included.</strong>
 </p>
 
 <p align="center">
@@ -27,13 +27,14 @@
   <em>Be the dungeon master. Don’t code every corridor.</em>
 </p>
 
-Mantle is an application SDK for developers and AI coding agents.
+Mantle is an SDK for building custom MCP servers and the apps behind them.
 Declare **Schemas, Views, Procedures, and Triggers** in YAML; compile them into
-native SQL and typed TypeScript for Cloudflare Workers or Bun. Select the REST,
-MCP, Admin, auth, and publishing capabilities your app needs.
+native SQL and typed TypeScript for Cloudflare Workers or Bun. The app shell
+ships with **MCP** at `/mcp`, **Admin MCP** at `/mcp/admin`, and an **Admin
+console** at `/admin`, with authorization and row rules enforced server-side.
 
 Your app owns its routes, frontend, auth configuration, database handles, and
-migrations. Authorization and row rules stay server-side.
+migrations.
 
 ## Get started
 
@@ -47,7 +48,7 @@ npx skills add aotter/mantle@mantle
 
 Describe what you want to build:
 
-> Use Mantle to build a purchasing workspace where employees submit requests and admins approve them within budget.
+> Use Mantle to build a purchasing MCP server with employee requests, admin approvals, and budget checks.
 
 The skill guides planning, implementation, acceptance, and performance checks
 using `mantle help` from your app’s installed version.
@@ -64,8 +65,8 @@ pnpm install
 pnpm exec mantle help
 ```
 
-The shell includes email-code sign-in, `admin` and `user` roles, Admin, REST,
-MCP, and local acceptance tooling. Its `README.md` covers manifests, bindings,
+The shell also includes REST, email-code sign-in, `admin` and `user` roles,
+and local acceptance tooling. Its `README.md` covers manifests, bindings,
 local auth, initializing an empty database, and startup. `init` writes app-owned code once;
 cloud resources and deployment remain yours.
 
@@ -79,7 +80,8 @@ Using ChatGPT Sites? Read [Mantle on ChatGPT Sites](docs/handbook/cloudflare/cha
 
 In the **Purchasing** workflow, employees submit requests and administrators
 approve or reject them. Approval spends the budget and records the decision
-atomically.
+atomically. Employees use submission tools on `/mcp`; admins use approval and
+rejection tools on `/mcp/admin`.
 
 ### An Admin workspace shaped by your model
 
@@ -109,11 +111,11 @@ ref-handler internals stay in application code.
 
 ### Explore the data model
 
-Inspect fields, keys, and indexes across budgets, requests, and the ledger.
-Only declared references appear as diagram edges; Purchasing joins identifiers
-in SQL.
+Each budget has many purchase requests and ledger entries. Each approved
+request has at most one ledger entry. The ER diagram shows these declared
+references, fields, keys, and indexes.
 
-![English schema diagram showing the budgets, requests, and ledger tables with their fields, primary keys, and indexes.](docs/assets/readme/entity-relationships.png)
+![English ER diagram showing one-to-many budget-to-request and budget-to-ledger relationships, plus the unique request-to-ledger reference.](docs/assets/readme/entity-relationships.png)
 
 ### Inspect the operation behind the button
 
@@ -140,14 +142,13 @@ and caller-bound Store writes enforce row rules.
 
 ### Built for people and agents
 
+- **MCP and Admin MCP built in.** Serve domain tools and privileged operations
+  from the same model. Remote clients authenticate to the app; Admin's WebMCP
+  tools use the signed-in browser session. [MCP and WebMCP](docs/handbook/concepts/mcp-and-agents.md).
 - **Give your team a working Admin.** Collections, related records, publishing,
   reports, and business actions follow the model. Customize navigation, pages,
   fields, and record regions with application-owned React.
   [Admin guide](docs/handbook/guides/native-admin.md).
-- **Let AI clients do the same work.** Selected MCP tools expose your declared
-  reads and actions. Admin's WebMCP tools use the signed-in browser session;
-  remote MCP clients authenticate to the app's endpoints. Authorization is
-  checked on each call. [MCP and WebMCP](docs/handbook/concepts/mcp-and-agents.md).
 - **Keep business guarantees close to the data.** SQL Procedures commit their
   statements atomically; explicit version checks reject stale writes. Schema
   locks protect sealed content, including from admin callers.
@@ -157,9 +158,10 @@ and caller-bound Store writes enforce row rules.
   tags. Your app renders its HTML.
   [Public pages](docs/handbook/guides/public-pages.md).
 
-## A small manifest, a real query
+## A small manifest, an Admin MCP tool
 
-This View supplies the pending-requests report and its admin MCP read tool:
+This View exposes `pending_requests` on Admin MCP and supplies the pending queue
+in Admin:
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
@@ -217,8 +219,8 @@ service also reads [the release notes](docs/handbook/releases/index.md).
 
 ### What is Mantle?
 
-Mantle compiles YAML application models into native SQL and typed TypeScript,
-with optional Admin, REST, MCP, auth, and publishing interfaces.
+An SDK for custom MCP servers, backed by typed SQL and a built-in Admin. Declare
+models and operations once; expose the tools your app needs.
 
 ### Is Mantle a framework?
 

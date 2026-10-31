@@ -2,9 +2,9 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
-import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve, join } from "node:path";
+import { resolve, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { chromium } from "../packages/mantle-admin/node_modules/playwright/index.mjs";
@@ -23,19 +23,23 @@ const supplier = createServer(async (request,response) => {
 try {
   await execute(process.execPath,[cli,"init",directory]);
   await cp(join(root,"docs/examples/purchasing"),directory,{recursive:true});
-  // Install the app shell's own peers, then use the current built SDK/Admin/UI.
-  await execute("pnpm",["install","--ignore-scripts"],{cwd:directory});
-  const modules = join(directory,"node_modules");
+  // Pack the current build so the app and SDK resolve one peer-dependency tree.
+  const tarballs=join(directory,".sdk");await mkdir(tarballs);
+  const manifest=JSON.parse(await readFile(join(directory,"package.json"),"utf8"));
   for(const name of ["mantle","mantle-admin","mantle-ui"]){
-    const target=join(modules,"@aotter",name);
-    await rm(target,{recursive:true,force:true});
-    await symlink(join(root,"packages",name),target,"dir");
+    const source=join(root,"packages",name);
+    const version=JSON.parse(await readFile(join(source,"package.json"),"utf8")).version;
+    await execute("pnpm",["pack","--pack-destination",tarballs],{cwd:source,maxBuffer:4*1024*1024});
+    manifest.dependencies[`@aotter/${name}`]=`file:${relative(directory,join(tarballs,`aotter-${name}-${version}.tgz`))}`;
   }
-  // The built CLI is a JS file; pnpm's local executable must invoke Node explicitly.
-  const bin=join(modules,".bin/mantle");
-  await rm(bin,{force:true});
-  await writeFile(bin,`#!/bin/sh\nexec node ${JSON.stringify(cli)} "$@"\n`,{mode:0o755});
-  await execute(process.execPath,[cli,"generate","cloudflare-d1","generated","manifests/purchasing.yaml","--auth","src/auth.ts","--entry","src/index.ts","--admin"],{cwd:directory});
+  await writeFile(join(directory,"package.json"),JSON.stringify(manifest,null,2));
+  await execute("pnpm",["install","--ignore-scripts"],{cwd:directory,maxBuffer:4*1024*1024});
+  const appCli=join(directory,"node_modules/@aotter/mantle/dist/infrastructure/cli.js");
+  await execute(process.execPath,[appCli,"generate","cloudflare-d1","generated","manifests/purchasing.yaml","--auth","src/auth.ts","--entry","src/index.ts","--admin"],{cwd:directory});
+  for(const check of ["types","check","test"])await execute("pnpm",[check],{cwd:directory,maxBuffer:4*1024*1024});
+  console.log("Purchasing types, generated-source check, typecheck and Admin MCP App test passed");
+  await execute(process.execPath,["smoke.mjs"],{cwd:directory,maxBuffer:4*1024*1024});
+  console.log("Official Purchasing smoke passed, including both MCP surfaces");
   await new Promise<void>(done=>supplier.listen(0,"127.0.0.1",done));
   const supplierUrl=`http://127.0.0.1:${(supplier.address() as {port:number}).port}`;
   process.chdir(directory);
@@ -82,6 +86,10 @@ try {
   await capture("system-wiring.png");
   await page.setViewportSize({width:1600,height:800});
   await page.goto(`${app!.origin}/admin/dev/overview/relationships`);await page.locator(".react-flow__node").first().waitFor();
+  const edges=await page.locator(".react-flow__edge-path").evaluateAll(paths=>paths.map(path=>({start:path.getAttribute("marker-start"),end:path.getAttribute("marker-end")})));
+  assert.equal(edges.length,3,"ER diagram must render all three declared references");
+  assert.equal(edges.filter(edge=>edge.start?.includes("erd-many")).length,2,"Budgets must have two one-to-many relationships");
+  assert.equal(edges.filter(edge=>edge.end?.includes("erd-one")).length,3);
   await capture("entity-relationships.png");
   await page.setViewportSize({width:1600,height:1060});
   await page.goto(`${app!.origin}/admin/dev/logic/procedures?selected=Procedure%3Aapprove-request-write`);await page.locator(".react-flow__node").first().waitFor();

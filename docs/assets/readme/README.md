@@ -24,8 +24,8 @@ MANTLE_TEST_CHROMIUM=/path/to/chromium node scripts/capture-readme.ts
 ```
 
 The script scaffolds a temporary app with the built CLI and overlays the
-Purchasing example. It installs the app shell's peers, then links the current
-built workspace SDK, Admin, and UI packages. The shell's existing smoke kit
+Purchasing example. It packs the current built SDK, Admin, and UI packages and installs them with
+the app shell’s peers into one dependency tree. The shell's existing smoke kit
 starts a fresh local D1 database, signs in a fictional administrator and
 employee through Better Auth, and drives the real application over HTTP.
 
@@ -50,16 +50,19 @@ timestamps can change on each run.
 | `entity-relationships.png` | 1600 × 800 | Schema diagram for budgets, requests, and ledger |
 | `procedure-chart.png` | 1600 × 1060 | SQL `approve-request-write`, its guards, three writes, rollback and commit |
 
-The harness also verifies an actual approval, supplier order, rejection, and
+Before capture, the harness runs the example’s type, generated-source, Admin MCP
+App, and full smoke checks, including discovery and authorization on both MCP
+surfaces. It also verifies an actual approval, supplier order, rejection, and
 budget refusal through the application. The budget remains unchanged after
 an over-budget approval is rejected. The procedure chart shows the SQL
 transaction; the ref handler's supplier/email side effects are not presented
 as generated SQL internals.
 
-This example joins department and request identifiers in its SQL without
-`x-mantle-ref` fields. Its schema diagram therefore shows no reference edges;
-none are invented for the screenshot. Diagrams alone do not establish runtime
-health, identity integration, or successful deployment.
+The example declares `requests.budgetId → budgets.id`, `ledger.budgetId → budgets.id`,
+and `ledger.requestId → requests.id`. The ER capture checks for three rendered edges
+and both one-to-many budget relationships. The unique request reference allows at
+most one ledger row per request. These are model references, not database foreign keys.
+Diagrams alone do not establish runtime health or successful deployment.
 
 ## Illustrated hero
 
