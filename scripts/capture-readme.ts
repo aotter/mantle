@@ -1,86 +1,92 @@
-/** Real, English-only README screenshots from the checked revisions guide. Local test identity only; never deploy. */
-import { spawn } from "node:child_process";
-import { readFile, writeFile, rm, mkdir } from "node:fs/promises";
+/** Real English README screenshots from the official Purchasing example. Local fixtures only; never deploy. */
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { createServer } from "node:http";
+import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
-import { prepareRevisionsExample } from "../packages/mantle-admin/test/fixtures/revisions-example";
-import { buildAdmin } from "../packages/mantle-admin/dist/build/index.js";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { chromium } from "../packages/mantle-admin/node_modules/playwright/index.mjs";
 
-const root = resolve(import.meta.dirname, ".."), directory = await prepareRevisionsExample();
-const output = resolve(root, "docs/assets/readme");
-await mkdir(output, { recursive: true });
-let backend: ReturnType<typeof spawn> | undefined;
+const root = resolve(import.meta.dirname, ".."), directory = await mkdtemp(join(tmpdir(), "mantle-readme-"));
+const output = resolve(root, "docs/assets/readme"), cli = resolve(root, "packages/mantle/dist/infrastructure/cli.js");
+const execute = promisify(execFile), previousCwd = process.cwd();
+let app: { stop(): Promise<void>; signIn(email:string):Promise<string>; owner:string; origin:string; call:Function; sql:Function } | undefined;
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+let orders = 0;
+// Same external-service boundary as the example's smoke: real approval logic, a local supplier and console email.
+const supplier = createServer(async (request,response) => {
+  for await (const _ of request) { /* drain the request */ }
+  response.writeHead(200,{"content-type":"application/json"}).end(JSON.stringify({orderId:`SUP-${++orders}`}));
+});
 try {
-  await buildAdmin({ entry: join(directory, "src/admin.tsx"), mcpEntry: join(directory, "src/admin.mcp.tsx"), outDir: join(directory, "dist") });
-  // Reuse the official browser-test server, its real Store/handlers and in-memory database.
-  // Only sample copy and the deliberately oversized pagination fixture change for the tour.
-  const fixture = resolve(root, "packages/mantle-admin/test/fixtures/revisions-server.ts");
-  let server = await readFile(fixture, "utf8");
-  server = server.replaceAll('"../../src/', JSON.stringify(resolve(root, "packages/mantle-admin/src") + "/").slice(0, -1))
-    .replace('"../../tests/native/server-native-scenarios.js"', JSON.stringify(resolve(root, "packages/mantle-admin/tests/native/server-native-scenarios.ts")))
-    .replace('slug: "hello"', 'slug: "publishing-with-confidence"')
-    .replaceAll('"Published title"', '"Publishing without downtime"')
-    .replaceAll('"Published body"', '"Keep the current article live while your team prepares the next revision."')
-    .replaceAll('"Candidate title"', '"Review once. Publish with confidence."')
-    .replaceAll('"Candidate body"', '"Preview the exact content you want to publish. Switching seals that revision and updates the live post together. Earlier revisions remain immutable rollback targets."')
-    .replaceAll('"Reviewed summary"', '"A stable URL, an editable draft, and a safe switch to reviewed content."')
-    .replace('for (let i = 0; i < 100; i++) await posts.insert({ slug: `filler-${i}` });', '')
-    .replace('"/posts/hello"', '"/posts/publishing-with-confidence"');
-  await writeFile(join(directory, "server.ts"), server);
-  backend = spawn("bun", [join(directory, "server.ts"), directory], { stdio: ["ignore", "pipe", "pipe"] });
-  let errors = ""; backend.stderr!.on("data", chunk => { errors += String(chunk); });
-  const ready = await new Promise<{origin:string;post:string;first:string;second:string}>((done, reject) => {
-    const timer = setTimeout(() => reject(Error(`Screenshot server timeout: ${errors}`)), 30_000);
-    backend!.once("exit", code => { clearTimeout(timer); reject(Error(`Screenshot server exited ${code}: ${errors}`)); });
-    let text = "";
-    backend!.stdout!.on("data", chunk => { text += chunk; const line = text.split("\n").find(line => line.startsWith('{"origin":')); if (line) { clearTimeout(timer); done(JSON.parse(line)); } });
-  });
-  const {origin,post,second} = ready;
-  browser = await chromium.launch({ headless: true, ...(process.env.MANTLE_TEST_CHROMIUM ? {executablePath:process.env.MANTLE_TEST_CHROMIUM} : {}) });
-  const page = await browser.newPage({ viewport: {width:1600,height:1060}, deviceScaleFactor:1, locale:"en-US", colorScheme:"light" });
-  page.setDefaultTimeout(20_000);
-  await page.addInitScript(() => { localStorage.setItem("cms.preference.language", "en"); localStorage.setItem("cms.preference.theme", "light"); });
-  const screenshot = async (name:string) => {
-    await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(800); // Graph layout and transition settling; no DOM/image manipulation.
-    const text = await page.locator("body").innerText();
-    if (/[\u3400-\u9fff]/u.test(text)) throw Error(`Non-English text in ${name}`);
-    await page.screenshot({path:join(output,name),animations:"disabled"});
-    console.log(`Captured ${name}`);
+  await execute(process.execPath,[cli,"init",directory]);
+  await cp(join(root,"docs/examples/purchasing"),directory,{recursive:true});
+  // Install the app shell's own peers, then use the current built SDK/Admin/UI.
+  await execute("pnpm",["install","--ignore-scripts"],{cwd:directory});
+  const modules = join(directory,"node_modules");
+  for(const name of ["mantle","mantle-admin","mantle-ui"]){
+    const target=join(modules,"@aotter",name);
+    await rm(target,{recursive:true,force:true});
+    await symlink(join(root,"packages",name),target,"dir");
+  }
+  // The built CLI is a JS file; pnpm's local executable must invoke Node explicitly.
+  const bin=join(modules,".bin/mantle");
+  await rm(bin,{force:true});
+  await writeFile(bin,`#!/bin/sh\nexec node ${JSON.stringify(cli)} "$@"\n`,{mode:0o755});
+  await execute(process.execPath,[cli,"generate","cloudflare-d1","generated","manifests/purchasing.yaml","--auth","src/auth.ts","--entry","src/index.ts","--admin"],{cwd:directory});
+  await new Promise<void>(done=>supplier.listen(0,"127.0.0.1",done));
+  const supplierUrl=`http://127.0.0.1:${(supplier.address() as {port:number}).port}`;
+  process.chdir(directory);
+  const {startApp}=await import(pathToFileURL(join(directory,"smoke-kit.mjs")).href);
+  app=await startApp({vars:{EMPLOYEE_DOMAIN:"example.test",SUPPLIER_API_URL:supplierUrl,SUPPLIER_WEBHOOK_SECRET:"local-readme-test-only"}});
+  const admin=await app!.signIn(app!.owner), employee=await app!.signIn("employee@example.test");
+  const submit=async(title:string,amount:number,department:string)=>{
+    const response=await app!.call("POST","/api/requests",{cookie:employee,body:{title,amount,department}});
+    assert.equal(response.status,200,JSON.stringify(response.body));return response.body.results[0][0];
   };
-  await page.setViewportSize({width:1600,height:680});
-  await page.goto(`${origin}/admin/c/posts/${post}?child=post_revisions`);
-  await page.getByText("publishing-with-confidence",{exact:true}).first().waitFor();
-  await screenshot("admin-workspace.png");
+  const review=await submit("Engineering laptops",2400,"Engineering");
+  const approved=await submit("Design software licenses",680,"Design");
+  const rejected=await submit("Office espresso machine",750,"Engineering");
+  await submit("Team onboarding equipment",1100,"Engineering");
+  await submit("Research display monitors",450,"Design");
+  await submit("Workshop stationery",45,"Design");
+  const overBudget=await submit("Server refresh proposal",12000,"Engineering");
+  const operation=(name:string,body:unknown)=>app!.call("POST",`/admin/api/operations/${name}`,{cookie:admin,body});
+  assert.equal((await operation("approve-request",{id:approved.id,expectedVersion:approved.version})).status,200);
+  assert.equal((await operation("reject-request",{id:rejected.id,expectedVersion:rejected.version})).status,200);
+  const before=await app!.sql("SELECT remaining FROM budgets WHERE department='Engineering'");
+  assert.equal((await operation("approve-request",{id:overBudget.id,expectedVersion:overBudget.version})).status,409);
+  assert.deepEqual(await app!.sql("SELECT remaining FROM budgets WHERE department='Engineering'"),before);
+  assert.equal(orders,1);
+  console.log("Verified real approval, supplier order, rejection and over-budget rollback");
+  browser=await chromium.launch({headless:true,...(process.env.MANTLE_TEST_CHROMIUM?{executablePath:process.env.MANTLE_TEST_CHROMIUM}:{})});
+  const page=await browser.newPage({viewport:{width:1600,height:820},deviceScaleFactor:1,locale:"en-US",colorScheme:"light",extraHTTPHeaders:{cookie:admin,origin:app!.origin}});
+  page.setDefaultTimeout(20_000);
+  await page.addInitScript(()=>{localStorage.setItem("cms.preference.language","en");localStorage.setItem("cms.preference.theme","light");});
+  await mkdir(output,{recursive:true});
+  const capture=async(name:string)=>{
+    await page.evaluate(()=>document.fonts.ready);await page.waitForTimeout(800);
+    assert.ok(!/[\u3400-\u9fff]/u.test(await page.locator("body").innerText()),`Non-English text in ${name}`);
+    await page.screenshot({path:join(output,name),animations:"disabled"});console.log(`Captured ${name}`);
+  };
+  await page.goto(`${app!.origin}/admin/c/requests`);
+  await page.getByText("Engineering laptops",{exact:true}).first().waitFor();
+  await capture("admin-workspace.png");
+  await page.goto(`${app!.origin}/admin/c/requests/${review.id}`);
+  await page.getByRole("button",{name:"Approve a purchase request",exact:true}).waitFor();
+  await capture("request-review.png");
   await page.setViewportSize({width:1600,height:1000});
-  await page.goto(`${origin}/admin/c/post_revisions/${second}/edit`);
-  await page.getByRole("button",{name:"Unlock editing",exact:true}).click();
-  await page.getByRole("button",{name:"Save changes",exact:true}).waitFor();
-  await screenshot("revision-editor.png");
-  await page.goto(`${origin}/admin/p/revisions?post=${post}`);
-  await page.getByLabel("Revision",{exact:true}).selectOption(second);
-  await page.getByRole("button",{name:"Preview selected revision",exact:true}).click();
-  await page.getByRole("heading",{name:"Review once. Publish with confidence.",exact:true}).waitFor();
-
-  await page.getByRole("button",{name:"Switch to reviewed revision",exact:true}).click();
-  await page.getByRole("status").filter({hasText:"Revision selected"}).waitFor();
-  const state = await (await fetch(`${origin}/test/state`)).json();
-  if(state.post.current_revision!==second || !state.second.sealed)throw Error("Revision switch did not commit");
-  console.log("Verified: reviewed revision selected and sealed by the real handler");
+  await page.goto(`${app!.origin}/admin/dev`);await page.locator(".react-flow__node").first().waitFor();
+  await capture("system-wiring.png");
   await page.setViewportSize({width:1600,height:800});
-  await page.goto(`${origin}/admin/dev`);
-  await page.locator(".react-flow__node").first().waitFor();
-  await screenshot("system-wiring.png");
-  await page.goto(`${origin}/admin/dev/overview/relationships`);
-  await page.locator(".react-flow__node").first().waitFor();
-  await screenshot("entity-relationships.png");
+  await page.goto(`${app!.origin}/admin/dev/overview/relationships`);await page.locator(".react-flow__node").first().waitFor();
+  await capture("entity-relationships.png");
   await page.setViewportSize({width:1600,height:1060});
-  await page.goto(`${origin}/admin/dev/logic/procedures?selected=Procedure%3Anew-revision`);
-  await page.locator(".react-flow__node").first().waitFor();
-  await screenshot("procedure-chart.png");
+  await page.goto(`${app!.origin}/admin/dev/logic/procedures?selected=Procedure%3Aapprove-request-write`);await page.locator(".react-flow__node").first().waitFor();
+  await capture("procedure-chart.png");
 } finally {
-  await browser?.close();
-  if(backend && backend.exitCode===null){backend.kill("SIGTERM");await new Promise<void>(done=>backend!.once("exit",()=>done()));}
-  await rm(directory,{recursive:true,force:true});
+  await browser?.close();await app?.stop();await new Promise<void>(done=>supplier.close(()=>done()));
+  process.chdir(previousCwd);await rm(directory,{recursive:true,force:true});
 }

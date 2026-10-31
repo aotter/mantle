@@ -9,6 +9,8 @@ take the pattern into your own manifests and `src/`. Do not copy an example dire
 | [App shell](./app-shell/README.md) | Better Auth (email OTP, `admin` + `user`), one Worker fetch, Admin, MCP, REST, local acceptance kit. No business manifests. |
 | [Recipes](./recipes/README.md) | Publishing (draft → publish), translations, visitor pages with SEO, JSON-LD, `llms.txt`, Markdown and hreflang alternates, R2 media. |
 | [Club events](./club-events/README.md) | Members who see and change only their own rows, no duplicates, capacity that never oversells, a handler that checks before writing, a member MCP tool, members-only sign-up. |
+| [Posts and revisions](../handbook/guides/revisions.md) | A focused recipe for live editing without downtime: editable revisions, frozen preview, atomic selection, immutable history and rollback. |
+| [Frontend MCP App](./frontend-mcp-app/README.md) | An application-owned interactive MCP App with its own frontend entry and authorized tools. |
 | [Purchasing](./purchasing/README.md) | An internal workflow: guarded status transitions, admin-only approval (Admin and admin MCP), optimistic concurrency, several writes in one transaction, an external API with a signed callback, email and cron. |
 | [Generated website](./generated-web/README.md) | The smallest public site: list and detail pages, REST, `llms.txt`, sitemap, Markdown alternates. |
 
@@ -28,6 +30,8 @@ take the pattern into your own manifests and `src/`. Do not copy an example dire
 | A record with its children in one read | club-events' `event-roster`: a JSON array per row ("A row with its children in one read") |
 | The latest row per group, rankings | `row_number() OVER (PARTITION BY ...)` ("The latest row of each group") |
 | A third-party API that answers later (webhooks, callbacks) | purchasing's `src/routes.ts`: verify the raw request, then call a Procedure |
+| Edit published content without downtime, preview the exact revision and roll back | [Posts and revisions](../handbook/guides/revisions.md): a stable publishing parent, operational revisions, a same-row seal and atomic pointer switch |
+| An interactive frontend inside an MCP host | [Frontend MCP App](./frontend-mcp-app/README.md): an app-owned renderer and authorized tools |
 | Public, multilingual, search- and AI-friendly pages | recipes' `src/routes.ts` |
 | Invite-only or members-only sign-up | club-events' `members` allowlist + `src/signup.ts` |
 | Notifications and reminders | purchasing's `EmailSender` call and `src/schedule.ts` |

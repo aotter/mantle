@@ -48,9 +48,7 @@ npx skills add aotter/mantle@mantle
 
 Then describe the product you want. For example:
 
-> Use the Mantle skill to build an editorial workspace with posts and revisions.
-> Keep the published article online while an editor prepares the next version.
-> Include an Admin workspace, a preview, and an explicit switch to reviewed content.
+> Use Mantle to build a purchasing workspace where employees submit requests and admins approve them within budget.
 
 The skill guides the agent through planning, implementation, checks, role-based
 acceptance, and performance measurement. It reads `mantle help` from the version
@@ -74,8 +72,7 @@ business manifests, generate the bindings, configure local auth, initialize an
 empty database, and start the app. `init` writes the shell once; it does not
 provision cloud resources or deploy it.
 
-[Follow the Worker quickstart →](docs/handbook/start/quickstart-worker.md) ·
-[Browse complete examples →](docs/examples/README.md)
+[Follow the Worker quickstart →](docs/handbook/start/quickstart-worker.md)
 
 **Adding Mantle to an existing app?** Keep your entry point and database;
 [generate only the operations you need](docs/handbook/guides/typed-queries.md#adopt-mantle-in-an-existing-application).
@@ -83,59 +80,59 @@ Using ChatGPT Sites? Read [Mantle on ChatGPT Sites](docs/handbook/cloudflare/cha
 
 ## See what you build
 
-The following screenshots show a running, English-language application built
-from the official [posts and revisions recipe](docs/handbook/guides/revisions.md).
-One example connects the editing workflow, data relationships, entry points,
-and business operations.
+The screenshots follow the official **Purchasing** workflow: employees submit
+requests; administrators approve or reject them; an approval spends the
+available budget and records the decision atomically. Find this workflow and
+other official recipes in the **Examples** catalog linked above.
 
 ### An Admin workspace shaped by your model
 
-A post keeps its URL and publishing status. Its revisions hold the content.
-Admin groups revisions under their post and exposes the declared **New revision**
-and **Switch revision** operations. A sealed revision remains readable, while
-its edit and delete controls are disabled by the server-enforced lock.
+The Approvals workspace groups the pending queue and purchase requests.
+Administrators can inspect the amount, department, and state, then invoke the
+declared approval or rejection operation. Generic editing is disabled so a
+record form cannot bypass the workflow.
 
-![English Mantle Admin showing a post with an editable revision, a sealed revision, and New revision and Switch revision actions.](docs/assets/readme/admin-workspace.png)
+![English Mantle Admin purchase-request list showing department, amount, status, and an Approvals navigation group.](docs/assets/readme/admin-workspace.png)
 
 <details>
-<summary>Open the revision editor</summary>
+<summary>Review a purchase request</summary>
 
-![English Mantle Admin revision editor showing the title, summary, body, note, and Save changes action for an editable draft.](docs/assets/readme/revision-editor.png)
+![English Mantle Admin request detail showing the purchase amount, department, state, version, and Approve and Reject actions.](docs/assets/readme/request-review.png)
 
-The recipe adds a custom Admin page to preview a revision and switch to the
-exact version reviewed. New edits leave the live page unchanged until the
-switch commits. Previously selected revisions stay immutable and can be
-selected again for rollback. The initial publication is a separate **Publish**
-action on the post.
+The approval uses the version the administrator reviewed. A changed request or
+an invalid state is a conflict; spending beyond the department budget rolls
+back the decision, deduction, and ledger write. The application contacts the
+supplier only after that transaction commits.
 
 </details>
 
 ### Follow the system wiring
 
-The Developer UI shows how Triggers invoke Procedures, which Schemas those
-Procedures write, and which Views read them. Inspect the connected declarations
-and the application's HTTP, MCP, and WebMCP interface documentation at `/admin/dev`.
+The Developer UI shows how Triggers invoke Procedures, which Schemas declared
+SQL Procedures write, and which Views read them. Inspect the connected
+declarations and the application's HTTP, MCP, and WebMCP interface documentation
+at `/admin/dev`. Application ref-handler internals remain application-owned.
 
-![English Developer UI system wiring connecting three admin MCP entry points to revision Procedures, the posts and post_revisions Schemas, and three Views.](docs/assets/readme/system-wiring.png)
+![English Developer UI system wiring for purchase submission, approval, budgets, ledger writes, and request Views.](docs/assets/readme/system-wiring.png)
 
-### Explore the data relationships
+### Explore the data model
 
-The entity relationship diagram exposes fields, keys, indexes, and declared
-references. Here, each revision belongs to a post, and the post points to its
-currently selected revision. References describe the model; the application
-still enforces relationship eligibility in its writes.
+The schema diagram exposes fields, keys, indexes, and declared references.
+Purchasing has department budgets, requests, and a budget ledger. This example
+joins department and request identifiers in its SQL; the diagram does not invent
+reference edges or foreign-key constraints for those joins.
 
-![English entity relationship diagram showing posts.current_revision linked to post_revisions.id and post_revisions.post linked to posts.id.](docs/assets/readme/entity-relationships.png)
+![English schema diagram showing the budgets, requests, and ledger tables with their fields, primary keys, and indexes.](docs/assets/readme/entity-relationships.png)
 
 ### Inspect the operation behind the button
 
-The procedure chart renders the declared SQL logic. **New revision** copies the
-current content, or starts an empty first revision; the chart shows the branch,
-the write, and its commit boundary beside the source SQL and related declarations.
-The separate **Switch revision** ref handler uses a caller-bound Store batch to
-seal the reviewed candidate and update the post pointer together.
+The SQL procedure chart shows **approve-request-write** changing the request
+state, deducting the budget, and inserting a ledger row in one transaction.
+A stale version, an invalid transition, or a failed budget check leaves all
+three unchanged. Inspect the guards, writes, and commit boundary beside the
+SQL and related declarations.
 
-![English procedure chart for new-revision showing a note-selection branch, a Create Post revisions write, and an all-or-nothing commit boundary.](docs/assets/readme/procedure-chart.png)
+![English procedure chart for approve-request-write showing a guarded request update, budget deduction, ledger insert, and all-or-nothing commit.](docs/assets/readme/procedure-chart.png)
 
 These are real Admin screenshots, not mockups. Diagrams inspect compiled
 manifest declarations; they do not certify runtime or deployment health.
@@ -157,7 +154,7 @@ row policy remains enforced in generated queries and caller-bound Store writes.
 
 ### Built for people and agents
 
-- **Give editors a working Admin.** Collections, related records, publishing,
+- **Give your team a working Admin.** Collections, related records, publishing,
   reports, and business actions follow the model. Customize navigation, pages,
   fields, and record regions with application-owned React.
   [Admin guide](docs/handbook/guides/native-admin.md).
@@ -168,8 +165,7 @@ row policy remains enforced in generated queries and caller-bound Store writes.
 - **Keep business guarantees close to the data.** SQL Procedures commit their
   statements atomically; explicit version checks reject stale writes. Schema
   locks protect sealed content, including from admin callers.
-  [Procedures](docs/handbook/concepts/procedures-and-triggers.md) ·
-  [Revision workflow](docs/handbook/guides/revisions.md).
+  [Procedures](docs/handbook/concepts/procedures-and-triggers.md).
 - **Publish pages from the same content.** Add public Views and the optional
   `web()` module for `llms.txt`, sitemaps, Markdown alternates, and canonical head
   tags. Your app renders its HTML.
@@ -183,14 +179,15 @@ this example supplies an Admin report and its admin MCP read tool:
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
-metadata: { name: recent-requests }
+metadata: { name: pending-requests }
 spec:
-  title: Recent requests
+  title: Pending purchase requests
   surface: admin
   requires: { auth: { all: [ctx.admin] } }
   sql: |
-    SELECT id, name, email, message, created_at FROM requests
-    ORDER BY created_at DESC, id DESC LIMIT 50
+    SELECT id, title, amount, department, version
+    FROM requests WHERE requestStatus = 'submitted'
+    ORDER BY created_at, id
 ```
 
 Generate native SQL and TypeScript from your manifests:
@@ -203,9 +200,7 @@ The app passes its native database handle and verified caller to generated
 operations, and mounts the selected interfaces. `generate` writes `generated/`
 and selected Wrangler build settings. Read the
 [project and CLI guide](docs/handbook/start/project-and-cli.md) for the outputs,
-checks, and application-owned files. The
-[reference service](docs/examples/reference-service/README.md) shows a complete
-service and its smoke test.
+checks, and application-owned files.
 
 ## Targets, databases and packages
 
@@ -215,7 +210,7 @@ service and its smoke test.
 | Target `cloudflare-d1` or `cloudflare-postgres` | App-owned Worker routing and D1 or postgres.js/Hyperdrive handles. |
 | Target `bun-sqlite` or `bun-postgres` | App-owned Bun server using bun:sqlite or Bun.SQL. |
 | `@aotter/mantle/auth` | Sign-in, admin roles, and OAuth for MCP. |
-| [The reference service](docs/examples/reference-service/README.md) | A whole service to read and run. |
+| [Service composition](docs/handbook/cloudflare/service-entry.md) | Mount selected interfaces inside your application. |
 
 PostgreSQL and SQLite are the two built-in dialects. Manifest SQL uses the
 compiler's PostgreSQL syntax and is rendered for the selected target.
