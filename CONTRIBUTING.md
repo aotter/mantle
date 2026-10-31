@@ -113,7 +113,7 @@ Build before running package tests locally; `pnpm test` does not rebuild or pack
 Package and upload bytes are reports; cold-start checks remain gates.
 
 Run the **Full checks** workflow (`.github/workflows/full-checks.yml`) by hand
-(Actions → Full checks → Run workflow on the branch) before releases, or when a change to drivers, auth,
+(Actions → Full checks → Run workflow on the branch) before every release, alpha included, or when a change to drivers, auth,
 generator output or Admin UI may behave differently on Linux. It runs native
 four-target and Wrangler/D1 integrations, packed-consumer checks, doc examples,
 OSS plugin validation, the two Chrome sandbox-boundary tests (design preview

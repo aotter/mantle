@@ -25,21 +25,22 @@ metadata: { name: requests }
 spec:
   title: Purchase requests
   lifecycle: operational
-  indexes: [[authorId, createdAt, id], [requestStatus, createdAt, id]]
+  indexes: [[authorId, createdAt, id], [requestStatus, createdAt, id], [budgetId, createdAt, id]]
   searchableFields: [title, department]
   # Sidebar: in the Approvals group (src/admin.tsx), after the queue of requests waiting for a decision.
-  uiSchema: { list: { primaryField: title, columns: [department, amount, requestStatus], filterField: requestStatus }, nav: { group: approvals, order: 2 } }
+  uiSchema: { list: { primaryField: title, columns: [department, amount, requestStatus], filterField: requestStatus }, nav: { standalone: true, group: approvals, order: 2 } }
   schema:
     type: object
     # Admin reads requests but cannot edit them generically: a generic edit could move requestStatus back to
     # 'submitted' and spend the budget twice. Every change goes through the guarded Procedures below.
     readOnly: true
     additionalProperties: false
-    required: [title, amount, department, requestStatus]
+    required: [title, amount, department, budgetId, requestStatus]
     properties:
       title: { type: string, minLength: 1 }
       amount: { type: integer, minimum: 1 }
       department: { type: string }
+      budgetId: { type: string, x-mantle-ref: budgets, readOnly: true }
       requestStatus: { type: string, enum: [submitted, approved, rejected, ordered, confirmed] }
       supplierOrderId: { type: string }
 ---
@@ -49,18 +50,19 @@ metadata: { name: ledger }
 spec:
   title: Budget ledger
   lifecycle: operational
-  indexes: [[createdAt, id]]
+  indexes: [[createdAt, id], [budgetId, createdAt, id]]
   # One row per spending request.
   uniqueIndexes: [[requestId]]
   searchableFields: [department]
-  uiSchema: { list: { primaryField: department, columns: [amount, remainingAfter, requestId] } }
+  uiSchema: { list: { primaryField: department, columns: [amount, remainingAfter, requestId] }, nav: { parentField: requestId, standalone: true } }
   schema:
     type: object
     readOnly: true # written only by approve-request-write and submit-request
     additionalProperties: false
-    required: [requestId, department, amount, remainingAfter]
+    required: [requestId, budgetId, department, amount, remainingAfter]
     properties:
-      requestId: { type: string }
+      requestId: { type: string, x-mantle-ref: requests }
+      budgetId: { type: string, x-mantle-ref: budgets }
       department: { type: string }
       amount: { type: integer }
       remainingAfter: { type: integer }
@@ -140,17 +142,17 @@ spec:
   # overspend. A pending request matches nothing there, which a set form (IN (SELECT ...), INSERT ... SELECT) allows.
   handler:
     sql: |
-      INSERT INTO requests (title, amount, department, requestStatus)
-      SELECT input.title, input.amount, b.department, CASE WHEN input.amount <= 100 THEN 'approved' ELSE 'submitted' END
+      INSERT INTO requests (title, amount, department, requestStatus, budgetId)
+      SELECT input.title, input.amount, b.department, CASE WHEN input.amount <= 100 THEN 'approved' ELSE 'submitted' END, b.id
       FROM budgets b WHERE b.department = input.department
       RETURNING id, version, requestStatus AS "requestStatus";
-      UPDATE budgets SET remaining = remaining - (SELECT SUM(r.amount) FROM requests r WHERE r.department = budgets.department
+      UPDATE budgets SET remaining = remaining - (SELECT SUM(r.amount) FROM requests r WHERE r.budgetId = budgets.id
           AND r.author_id = auth.uid() AND r.created_at = now() AND r.requestStatus = 'approved'
           AND NOT EXISTS (SELECT 1 FROM ledger l WHERE l.requestId = r.id))
-      WHERE department IN (SELECT r.department FROM requests r WHERE r.author_id = auth.uid() AND r.created_at = now()
+      WHERE id IN (SELECT r.budgetId FROM requests r WHERE r.author_id = auth.uid() AND r.created_at = now()
           AND r.requestStatus = 'approved' AND NOT EXISTS (SELECT 1 FROM ledger l WHERE l.requestId = r.id));
-      INSERT INTO ledger (requestId, department, amount, remainingAfter)
-      SELECT r.id, r.department, r.amount, b.remaining FROM requests r JOIN budgets b ON b.department = r.department
+      INSERT INTO ledger (requestId, budgetId, department, amount, remainingAfter)
+      SELECT r.id, r.budgetId, r.department, r.amount, b.remaining FROM requests r JOIN budgets b ON b.id = r.budgetId
       WHERE r.author_id = auth.uid() AND r.created_at = now() AND r.requestStatus = 'approved'
         AND NOT EXISTS (SELECT 1 FROM ledger l WHERE l.requestId = r.id)
 ---
@@ -220,9 +222,9 @@ spec:
       WHERE id = input.id AND version = input.expectedVersion AND requestStatus = 'submitted'
       RETURNING id, title, amount, author_id AS "authorId";
       UPDATE budgets SET remaining = remaining - (SELECT r.amount FROM requests r WHERE r.id = input.id)
-      WHERE department = (SELECT r.department FROM requests r WHERE r.id = input.id);
-      INSERT INTO ledger (requestId, department, amount, remainingAfter)
-      SELECT r.id, r.department, r.amount, b.remaining FROM requests r JOIN budgets b ON b.department = r.department
+      WHERE id = (SELECT r.budgetId FROM requests r WHERE r.id = input.id);
+      INSERT INTO ledger (requestId, budgetId, department, amount, remainingAfter)
+      SELECT r.id, r.budgetId, r.department, r.amount, b.remaining FROM requests r JOIN budgets b ON b.id = r.budgetId
       WHERE r.id = input.id
 ---
 apiVersion: cms.mantle.aotter.net/v2

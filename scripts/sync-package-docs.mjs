@@ -8,7 +8,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = process.cwd();
 if (packageRoot !== resolve(repoRoot, "packages/mantle")) throw new Error("sync-package-docs must run from packages/mantle");
 const target = resolve(packageRoot, "docs");
-const SHIPPED = ["handbook", "examples/README.md", "examples/generated-web", "examples/app-shell", "examples/recipes", "examples/club-events", "examples/purchasing"];
+const SHIPPED = ["handbook", "examples/README.md", "examples/generated-web", "examples/app-shell", "examples/recipes", "examples/club-events", "examples/purchasing", "examples/frontend-mcp-app"];
 // Runnable docs may have been installed or run locally; never publish that state.
 const LOCAL = ["node_modules", ".wrangler", ".dev.vars", "pnpm-lock.yaml", "generated", "dist"];
 

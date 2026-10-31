@@ -8,6 +8,11 @@ that have been waiting too long.
 
 ## Capabilities shown
 
+- **Declared relationships**: each request stores a read-only `budgetId` reference to its budget. Each ledger row references
+  both its budget and its request; `uniqueIndexes: [[requestId]]` permits at most one ledger row per request. The ER diagram
+  shows budget-to-request and budget-to-ledger as one-to-many. Department names remain readable snapshots; spending joins
+  stable budget IDs. These references are model metadata, not database foreign keys. Requests and ledger remain available
+  as standalone Admin collections, with the ledger also grouped under its request.
 - **Status workflow with guarded transitions**: the write Procedures use
   `UPDATE requests SET requestStatus = 'approved' ... WHERE id = input.id AND requestStatus = 'submitted'`. A match on
   0 rows is a `CONFLICT` (409). See `manifests/purchasing.yaml` (`approve-request-write`, `reject-request-write`,
@@ -64,6 +69,10 @@ scheme.
   write Procedure (one transaction).
 
 ## Run it
+
+Existing copies need a native migration for the new `budgetId` fields on requests
+and ledger: backfill them from the existing department budget and request,
+then enforce NOT NULL. Regeneration alone does not migrate an occupied database.
 
 This runs the example by itself, to read and try. For your own app, run `mantle init` and take only the patterns you need into its manifests and `src/` (`mantle help examples`).
 
