@@ -4,8 +4,12 @@ A directly authored shop using the single `@aotter/mantle` native SDK and the
 `@aotter/mantle-admin` server/SPA and the pure `@aotter/mantle-ui` kit. The release gate runs this service from
 exact packed tarballs (`scripts/check-worker-consumer.mjs`).
 
-- `manifests/`: scoped orders, a stock CHECK, joins, grouping, native full-text
-  search, atomic SQL Procedures, typed ref Procedures, REST and MCP exposure.
+- `manifests/`: scoped orders with an explicit `itemId` reference to catalog items,
+  a stock CHECK, joins, grouping, native full-text search, atomic SQL Procedures,
+  typed ref Procedures, REST and MCP exposure. Orders stay a standalone Admin
+  collection and also appear under their item; the ER diagram shows items to
+  orders as one-to-many. Activity subjects are polymorphic audit values, not
+  foreign references.
 - `src/auth.ts`: app-owned Better Auth options and verified-email admin bootstrap;
   Better Auth loads dynamically, and local-only email OTPs print to the log.
 - `src/handlers.ts`: scoped cancellation and stock restoration in one native
