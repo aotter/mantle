@@ -27,14 +27,13 @@
   <em>Be the dungeon master. Don’t code every corridor.</em>
 </p>
 
-Mantle is an open-source application SDK for developers and AI coding agents.
+Mantle is an application SDK for developers and AI coding agents.
 Declare **Schemas, Views, Procedures, and Triggers** in YAML; compile them into
 native SQL and typed TypeScript for Cloudflare Workers or Bun. Select the REST,
 MCP, Admin, auth, and publishing capabilities your app needs.
 
-Your application owns its routes, frontend, authentication configuration,
-database handles, and migrations. Mantle connects the declared model to the
-interfaces you choose, with authorization and row rules enforced on the server.
+Your app owns its routes, frontend, auth configuration, database handles, and
+migrations. Authorization and row rules stay server-side.
 
 ## Get started
 
@@ -46,18 +45,17 @@ Install the Mantle skill in your coding agent:
 npx skills add aotter/mantle@mantle
 ```
 
-Then describe the product you want. For example:
+Describe what you want to build:
 
 > Use Mantle to build a purchasing workspace where employees submit requests and admins approve them within budget.
 
-The skill guides the agent through planning, implementation, checks, role-based
-acceptance, and performance measurement. It reads `mantle help` from the version
-installed in your app, so the API guidance matches the package you are using.
+The skill guides planning, implementation, acceptance, and performance checks
+using `mantle help` from your app’s installed version.
 See [agent setup](docs/handbook/guides/agent-setup.md) for supported editors and plugins.
 
 ### Start an application yourself
 
-Use Node.js **22.22+** and pnpm **9+**. Scaffold the app shell with an exact SDK version:
+Use Node.js **22.22+** and pnpm **9+**, and pin the SDK version:
 
 ```sh
 npx @aotter/mantle@0.2.1 init my-app
@@ -67,10 +65,9 @@ pnpm exec mantle help
 ```
 
 The shell includes email-code sign-in, `admin` and `user` roles, Admin, REST,
-MCP, and local acceptance tooling. Follow its generated `README.md` to add your
-business manifests, generate the bindings, configure local auth, initialize an
-empty database, and start the app. `init` writes the shell once; it does not
-provision cloud resources or deploy it.
+MCP, and local acceptance tooling. Its `README.md` covers manifests, bindings,
+local auth, initializing an empty database, and startup. `init` writes app-owned code once;
+cloud resources and deployment remain yours.
 
 [Follow the Worker quickstart →](docs/handbook/start/quickstart-worker.md)
 
@@ -80,17 +77,14 @@ Using ChatGPT Sites? Read [Mantle on ChatGPT Sites](docs/handbook/cloudflare/cha
 
 ## See what you build
 
-The screenshots follow the official **Purchasing** workflow: employees submit
-requests; administrators approve or reject them; an approval spends the
-available budget and records the decision atomically. Find this workflow and
-other official recipes in the **Examples** catalog linked above.
+In the **Purchasing** workflow, employees submit requests and administrators
+approve or reject them. Approval spends the budget and records the decision
+atomically.
 
 ### An Admin workspace shaped by your model
 
-The Approvals workspace groups the pending queue and purchase requests.
-Administrators can inspect the amount, department, and state, then invoke the
-declared approval or rejection operation. Generic editing is disabled so a
-record form cannot bypass the workflow.
+The Approvals workspace groups requests and the pending queue. Declared
+approval and rejection actions control transitions; generic editing is disabled.
 
 ![English Mantle Admin purchase-request list showing department, amount, status, and an Approvals navigation group.](docs/assets/readme/admin-workspace.png)
 
@@ -99,44 +93,37 @@ record form cannot bypass the workflow.
 
 ![English Mantle Admin request detail showing the purchase amount, department, state, version, and Approve and Reject actions.](docs/assets/readme/request-review.png)
 
-The approval uses the version the administrator reviewed. A changed request or
-an invalid state is a conflict; spending beyond the department budget rolls
-back the decision, deduction, and ledger write. The application contacts the
-supplier only after that transaction commits.
+Approval uses the version the administrator reviewed. A changed request or
+invalid state is a conflict; exceeding the budget rolls back the decision,
+deduction, and ledger write. Supplier orders happen only after commit.
 
 </details>
 
 ### Follow the system wiring
 
-The Developer UI shows how Triggers invoke Procedures, which Schemas declared
-SQL Procedures write, and which Views read them. Inspect the connected
-declarations and the application's HTTP, MCP, and WebMCP interface documentation
-at `/admin/dev`. Application ref-handler internals remain application-owned.
+At `/admin/dev`, trace Triggers through Procedures to their Schemas and Views,
+and inspect HTTP, MCP, and WebMCP interfaces. SQL operations show their writes;
+ref-handler internals stay in application code.
 
 ![English Developer UI system wiring for purchase submission, approval, budgets, ledger writes, and request Views.](docs/assets/readme/system-wiring.png)
 
 ### Explore the data model
 
-The schema diagram exposes fields, keys, indexes, and declared references.
-Purchasing has department budgets, requests, and a budget ledger. This example
-joins department and request identifiers in its SQL; the diagram does not invent
-reference edges or foreign-key constraints for those joins.
+Inspect fields, keys, and indexes across budgets, requests, and the ledger.
+Only declared references appear as diagram edges; Purchasing joins identifiers
+in SQL.
 
 ![English schema diagram showing the budgets, requests, and ledger tables with their fields, primary keys, and indexes.](docs/assets/readme/entity-relationships.png)
 
 ### Inspect the operation behind the button
 
-The SQL procedure chart shows **approve-request-write** changing the request
-state, deducting the budget, and inserting a ledger row in one transaction.
-A stale version, an invalid transition, or a failed budget check leaves all
-three unchanged. Inspect the guards, writes, and commit boundary beside the
-SQL and related declarations.
+In **approve-request-write**, the request update, budget deduction, and ledger
+insert commit together. Stale versions, invalid transitions, or failed budget
+checks roll back all three.
 
 ![English procedure chart for approve-request-write showing a guarded request update, budget deduction, ledger insert, and all-or-nothing commit.](docs/assets/readme/procedure-chart.png)
 
-These are real Admin screenshots, not mockups. Diagrams inspect compiled
-manifest declarations; they do not certify runtime or deployment health.
-[Capture details and reproduction commands](docs/assets/readme/README.md).
+[Screenshot sources and reproduction](docs/assets/readme/README.md).
 
 ## Four atoms, connected interfaces
 
@@ -147,9 +134,8 @@ manifest declarations; they do not certify runtime or deployment health.
 | **Procedure** | A business action using SQL or an application handler | Typed writes, validation, and declared Admin actions |
 | **Trigger** | An HTTP or MCP entry point for a Procedure | An authorized, validated call to the same operation |
 
-Choose what each role can invoke and which rows it can access. An Admin button,
-a REST request, and an MCP call use the declared operation's authorization;
-row policy remains enforced in generated queries and caller-bound Store writes.
+Operation authorization applies across Admin, REST, and MCP. Generated queries
+and caller-bound Store writes enforce row rules.
 [Explore the four atoms](docs/handbook/concepts/four-atoms.md).
 
 ### Built for people and agents
@@ -173,8 +159,7 @@ row policy remains enforced in generated queries and caller-bound Store writes.
 
 ## A small manifest, a real query
 
-A View declares the read an application needs. With its `requests` Schema,
-this example supplies an Admin report and its admin MCP read tool:
+This View supplies the pending-requests report and its admin MCP read tool:
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v2
@@ -196,11 +181,10 @@ Generate native SQL and TypeScript from your manifests:
 pnpm exec mantle generate cloudflare-d1 generated manifests/*.yaml --admin
 ```
 
-The app passes its native database handle and verified caller to generated
-operations, and mounts the selected interfaces. `generate` writes `generated/`
-and selected Wrangler build settings. Read the
-[project and CLI guide](docs/handbook/start/project-and-cli.md) for the outputs,
-checks, and application-owned files.
+Pass your database handle and verified caller to the generated operations.
+Mount the interfaces your app selects. `generate` writes `generated/` and
+selected Wrangler build settings.
+[Project layout and CLI](docs/handbook/start/project-and-cli.md).
 
 ## Targets, databases and packages
 
@@ -212,8 +196,7 @@ checks, and application-owned files.
 | `@aotter/mantle/auth` | Sign-in, admin roles, and OAuth for MCP. |
 | [Service composition](docs/handbook/cloudflare/service-entry.md) | Mount selected interfaces inside your application. |
 
-PostgreSQL and SQLite are the two built-in dialects. Manifest SQL uses the
-compiler's PostgreSQL syntax and is rendered for the selected target.
+Manifest SQL uses PostgreSQL syntax and compiles for the selected target.
 PostgreSQL uses Bun.SQL on Bun and postgres.js on Workers; other native handles
 need an application-owned adapter. Upgrading from 0.1.x:
 [the upgrade guide](docs/handbook/releases/upgrade-0.1-to-0.2.md); an existing PostgreSQL
@@ -234,53 +217,41 @@ service also reads [the release notes](docs/handbook/releases/index.md).
 
 ### What is Mantle?
 
-Mantle is an open-source (Apache-2.0) agent-native application SDK and backend
-compiler. It compiles YAML manifests (Schemas, Views, Procedures
-and Triggers) into native SQL for SQLite, Cloudflare D1 and PostgreSQL, plus
-typed TypeScript operations, on Cloudflare Workers or Bun, with optional REST,
-MCP, web, auth and admin surfaces.
+Mantle compiles YAML application models into native SQL and typed TypeScript,
+with optional Admin, REST, MCP, auth, and publishing interfaces.
 
 ### Is Mantle a framework?
 
-No. Mantle does not own your entry point, router or auth, and it does not take
-control of your app. Your application imports the generated operations, passes
-its own database handle and verified caller, and mounts only the surfaces it
-selects. `mantle generate` writes only `generated/` and Wrangler build keys.
-`mantle init` writes a starting shell once; after that the code is yours.
+No. Your app owns its entry point, routing, and auth. It calls generated
+operations with its database handle and verified caller, and mounts selected
+interfaces. `init` writes a starting shell once; `generate` maintains generated
+files and Wrangler build settings.
 
 ### How is Mantle different from an ORM or a headless CMS?
 
-Instead of building queries in application code, you declare SQL Views and
-Procedures in manifests; the compiler checks them and emits native SQL with row
-policy, single-row write checks and atomic Procedures. A headless CMS is usually
-a separate product with its own content model. Mantle gives you publishing
-workflows, an admin console and public pages inside your own application and
-database, for content you model yourself.
+You declare SQL reads and business actions in manifests. Mantle compiles them
+with row policy, single-row write checks, and atomic Procedures. Publishing,
+Admin, and public pages use the same model inside your app and database.
 
 ### Which databases and hosts does Mantle support?
 
-Mantle supports SQLite (Cloudflare D1 or bun:sqlite) and PostgreSQL, on
-Cloudflare Workers or Bun, through four generator targets: `cloudflare-d1`
-(Cloudflare D1 on Workers), `cloudflare-postgres` (PostgreSQL via postgres.js,
-usually with Hyperdrive, on Workers), `bun-sqlite` (bun:sqlite) and
-`bun-postgres` (Bun.SQL). Manifest SQL uses PostgreSQL syntax and is rendered
-for the selected dialect.
+Four targets: `cloudflare-d1` for D1, `cloudflare-postgres` for PostgreSQL via
+postgres.js (usually with Hyperdrive), `bun-sqlite` for bun:sqlite, and
+`bun-postgres` for Bun.SQL. Manifest SQL compiles for the selected dialect.
 
 ### How do AI agents use Mantle?
 
-Coding agents build Mantle apps with the version-matched skill, `mantle help`
-and the compiler's diagnostics; at runtime, AI agents call the app's Model
-Context Protocol server at `/mcp` and `/mcp/admin`. `/mcp` serves the tools your
-public MCP Triggers expose, and `/mcp/admin` serves admin tools to admin roles.
-Each call keeps its declared authorization, row policy and input checks. See
+Coding agents use the skill, `mantle help`, and compiler diagnostics. Runtime
+agents call declared tools at `/mcp` or `/mcp/admin`, with authorization, row
+policy, and input checks enforced on each call. `/mcp` exposes public MCP
+Triggers; `/mcp/admin` exposes admin tools to admin roles. See
 [MCP and agents](docs/handbook/concepts/mcp-and-agents.md).
 
 ### Can Mantle serve `llms.txt`, a sitemap and Markdown pages?
 
-Yes. The generated `web()` module reads public Views and serves `/llms.txt`,
-`/sitemap.xml`, `.md` Markdown alternates and canonical head tags. SQL controls
-what is visible, so unpublished drafts stay out. Your app owns the HTML. For
-page layouts, JSON-LD and languages, see
+Yes. The optional `web()` module uses public Views for these outputs and
+canonical head tags. Unpublished drafts stay hidden; your app renders the HTML.
+For JSON-LD and languages, see
 [Public pages: SEO, AEO and languages](docs/handbook/guides/public-pages.md).
 
 ### Does Mantle run migrations?
