@@ -21,6 +21,12 @@
   <a href="#documentation">Documentation</a>
 </p>
 
+<p align="center">
+  <img src="docs/assets/mantle-hero-v2.png" width="900" alt="A cloaked dungeon master commands four golden runes as a luminous architectural labyrinth takes shape inside a pearlescent nautilus shell rising from the sea; an unused pickaxe rests on the shore.">
+  <br>
+  <em>Be the dungeon master. Don’t code every corridor.</em>
+</p>
+
 Mantle is an open-source application SDK for developers and AI coding agents.
 Declare **Schemas, Views, Procedures, and Triggers** in YAML; compile them into
 native SQL and typed TypeScript for Cloudflare Workers or Bun. Select the REST,

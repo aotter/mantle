@@ -54,3 +54,11 @@ its internal TypeScript is not presented as a generated SQL procedure chart.
 The diagram's references are declared model relationships, not a claim that the
 database installed foreign-key constraints. Diagrams alone do not establish
 runtime health, identity integration, or successful deployment.
+
+## Illustrated hero
+
+The root README also uses `../mantle-hero-v2.png`, an AI-generated refinement of
+the original `../mantle-hero.jpg`. The original is retained. The new illustration
+preserves the cloaked dungeon master, four golden primitive runes, unused pickaxe,
+and luminous labyrinth within a pearlescent nautilus shell. It is conceptual
+brand artwork, separate from the five real application screenshots above.
