@@ -26,15 +26,15 @@ spec:
   title: Orders
   lifecycle: operational
   scope: "owner = auth.uid()"
-  uiSchema: { list: { primaryField: itemId, columns: [qty, orderStatus] } }
-  indexes: [[owner, createdAt, id]]
+  uiSchema: { list: { primaryField: itemId, columns: [qty, orderStatus] }, nav: { standalone: true } }
+  indexes: [[owner, createdAt, id], [owner, itemId, createdAt, id]]
   searchableFields: [itemId]
   schema:
     type: object
     required: [owner, itemId, qty, orderStatus]
     properties:
       owner: { type: string }
-      itemId: { type: string }
+      itemId: { type: string, x-mantle-ref: items }
       qty: { type: integer, minimum: 1 }
       orderStatus: { type: string, enum: [placed, cancelled] }
       placedAt: { type: string, format: date-time }

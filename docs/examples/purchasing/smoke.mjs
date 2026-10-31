@@ -185,6 +185,11 @@ try {
     assert.equal((await ledgerRows()).length, ledgerBefore);
     assert.equal((await query("SELECT count(*) AS n FROM requests"))[0].n, requestsBefore);
     step("CASE approves a request of 100 or less at submission: the status, the budget and the ledger row commit together, and one that would overspend is refused with nothing written");
+    const engineeringBudget = (await query("SELECT id FROM budgets WHERE department = 'Engineering'"))[0].id;
+    assert.equal((await query(`SELECT budgetid FROM requests WHERE id = '${laptop}'`))[0].budgetid, engineeringBudget);
+    assert.equal((await query(`SELECT budgetid FROM ledger WHERE requestid = '${pens.id}'`))[0].budgetid, engineeringBudget);
+    assert.equal((await query("SELECT COUNT(*) AS n FROM ledger l JOIN requests r ON r.id = l.requestid WHERE l.budgetid <> r.budgetid"))[0].n, 0);
+    step("requests and ledger rows reference the same stable budget, with at most one ledger row per request");
   }, { vars: { EMPLOYEE_DOMAIN: "example.test", SUPPLIER_API_URL: `http://127.0.0.1:${supplier.address().port}/orders`, SUPPLIER_WEBHOOK_SECRET: SECRET } });
 } finally {
   supplier.close();

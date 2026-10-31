@@ -4,8 +4,12 @@ A directly authored shop using the single `@aotter/mantle` native SDK and the
 `@aotter/mantle-admin` server/SPA and the pure `@aotter/mantle-ui` kit. The release gate runs this service from
 exact packed tarballs (`scripts/check-worker-consumer.mjs`).
 
-- `manifests/`: scoped orders, a stock CHECK, joins, grouping, native full-text
-  search, atomic SQL Procedures, typed ref Procedures, REST and MCP exposure.
+- `manifests/`: scoped orders with an explicit `itemId` reference to catalog items,
+  a stock CHECK, joins, grouping, native full-text search, atomic SQL Procedures,
+  typed ref Procedures, REST and MCP exposure. Orders stay a standalone Admin
+  collection and also appear under their item; the ER diagram shows items to
+  orders as one-to-many. Activity subjects are polymorphic audit values, not
+  foreign references.
 - `src/auth.ts`: app-owned Better Auth options and verified-email admin bootstrap;
   Better Auth loads dynamically, and local-only email OTPs print to the log.
 - `src/handlers.ts`: scoped cancellation and stock restoration in one native
@@ -141,7 +145,8 @@ in force. No row spread, version echo or generic receipt wrapper is involved.
 The smoke verifies receipts against stored state, duplicate-SKU refusal,
 nonzero-stock/price preservation, null/extra-field refusal, stale versions and
 two concurrent renames using one reviewed version (one succeeds, one conflicts).
-It also checks member/anonymous denial. Initial DDL is unchanged.
+It also checks member/anonymous denial and the declared order-to-item reference.
+Existing copies add the owner/item/date index through an application-owned migration.
 
 Order placement and stock decrement, cancellation, and additive restock retain
 their existing native atomic boundaries. A TypeScript pre-read/write pair must

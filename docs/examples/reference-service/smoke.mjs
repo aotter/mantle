@@ -104,6 +104,9 @@ try {
   assert.deepEqual(mine.map(({ qty, orderStatus, item }) => ({ qty, orderStatus, item })), [{ qty: 2, orderStatus: "placed", item: "Oolong tea" }]);
   assert.deepEqual((await call("GET", "/api/views/my-orders", { cookie: admin })).body.rows, []);
   step("my-orders joins items and shows only the caller's own orders (scope)");
+  const diagram = await call("GET", "/admin/api/developer-console", { cookie: admin });
+  assert.equal(diagram.status, 200);
+  assert.ok(diagram.body.graph.relations.some(edge => edge.kind === "schema-reference" && edge.sourceId === "Schema:orders" && edge.targetId === "Schema:items"), "orders.itemId must remain a declared reference to items");
 
   const order = mine[0];
   assert.equal((await call("POST", "/api/orders/cancel", { cookie: admin, body: { orderId: order.id, expectedVersion: order.version } })).status, 409);
