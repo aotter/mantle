@@ -145,7 +145,8 @@ in force. No row spread, version echo or generic receipt wrapper is involved.
 The smoke verifies receipts against stored state, duplicate-SKU refusal,
 nonzero-stock/price preservation, null/extra-field refusal, stale versions and
 two concurrent renames using one reviewed version (one succeeds, one conflicts).
-It also checks member/anonymous denial. Initial DDL is unchanged.
+It also checks member/anonymous denial and the declared order-to-item reference.
+Existing copies add the owner/item/date index through an application-owned migration.
 
 Order placement and stock decrement, cancellation, and additive restock retain
 their existing native atomic boundaries. A TypeScript pre-read/write pair must
