@@ -3,7 +3,7 @@ import { ContractError, type Caller } from "../kernel/contracts.js";
 import { checkOrigin, surfaceFailure } from "../kernel/surface-failure.js";
 import { draining } from "../kernel/drain.js";
 import { guardAuthAdminRequest } from "./admin.js";
-import { CONSENT, MAX_BODY, json, readBody, text } from "./route-http.js";
+import { CONSENT, MAX_BODY, PRIVATE, json, readBody, text } from "./route-http.js";
 import { resolveCaller, type AuthInstance, type AuthLoader } from "./caller.js";
 
 export interface AuthRoutesOptions {
@@ -33,7 +33,7 @@ export function authRoutes(loader: AuthLoader<AuthInstance & { handler(request: 
         const bounded = request.body ? new Request(request, { body: await readBody(request) }) : request;
         await guardAuthAdminRequest(bounded, () => resolve(bounded), base);
         const registration = bounded.method === "POST" && pathname === `${base}/oauth2/register` ? await loopbackClientsAreNative(bounded) : bounded;
-        return await normalizeAuthResponseCookies(await auth.handler(registration));
+        return await normalizeAuthResponseCookies(await normalizeEmailOtpResponse(await auth.handler(registration)));
       } catch (error) { return surfaceFailure(error, undefined, `auth ${route}`); }
     }
     if (!CONSENT.has(route)) return null;
@@ -44,6 +44,20 @@ export function authRoutes(loader: AuthLoader<AuthInstance & { handler(request: 
       const [{ oauthConsents }, { consentSurface }] = await Promise.all([import("./oauth.js"), import("./consent.js")]);
       return await consentSurface(oauthConsents(await loader.get()), options)(request, caller, route);
     } catch (error) { return surfaceFailure(error, undefined, `auth ${route}`); }
+  });
+}
+
+/** Uniform public OTP failures; validation, expiry and attempt budgets remain Better Auth's. */
+export async function normalizeEmailOtpResponse(response: Response): Promise<Response> {
+  if ((response.status !== 400 && response.status !== 403) ||
+    response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") return response;
+  const error: unknown = await response.clone().json().catch(() => null);
+  if (!error || typeof error !== "object" || !("code" in error) || typeof error.code !== "string" ||
+    !["INVALID_OTP", "OTP_EXPIRED", "TOO_MANY_ATTEMPTS"].includes(error.code)) return response;
+  // Do not carry upstream error-state headers into the public response.
+  void response.body?.cancel().catch(() => {});
+  return Response.json({ code: "INVALID_OTP", message: "Invalid OTP" }, {
+    status: 400, statusText: "BAD_REQUEST", headers: { ...PRIVATE, "content-type": "application/json" },
   });
 }
 
