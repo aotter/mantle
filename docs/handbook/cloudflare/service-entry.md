@@ -205,7 +205,10 @@ const reader = async (path: string) => (await assets('/' + path)) ?? new Respons
 ```
 
 The reader returns a native `Response` or `null`, rejects traversal/control
-characters and escaping symlinks; the app owns shell, CSP and cache headers.
+characters and escaping symlinks, sets `nosniff` on every file and caches Admin's
+content-hashed `/assets/` chunks for a year (`immutable`); the app owns shell, CSP
+and any other cache headers. Bun has no edge in front of it: put a CDN or reverse
+proxy before the server to keep static requests off it.
 Use ignored `.env` on Bun.
 
 Admin's build tools and UI packages are dependencies of `@aotter/mantle-admin`,
