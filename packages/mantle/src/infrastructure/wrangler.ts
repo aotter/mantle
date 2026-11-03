@@ -4,6 +4,8 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
 
+// The Worker serves HTML shells and APIs; Admin's content-hashed chunks are answered by the edge (`mantle bundle` writes their headers).
+const workerFirst = ["/*", "!/admin/assets/*"];
 const requiredFlags = ["nodejs_compat", "global_fetch_strictly_public"];
 
 /** Newest date the project's installed workerd supports, as create-cloudflare picks it; a fixed date before Wrangler is installed. */
@@ -35,7 +37,7 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
     if (check) throw new Error("--check requires a JSON or JSONC Wrangler config; TOML generation only prints manual edits.");
     console.log(`Leave ${configPath} unchanged. Add these Wrangler TOML keys (include nodejs_compat and global_fetch_strictly_public in every compatibility_flags override):\n` +
       `main = ${JSON.stringify(keys.main)}\nno_bundle = true\nfind_additional_modules = true\nbase_dir = ${JSON.stringify(worker)}\ncompatibility_flags = ${JSON.stringify(requiredFlags)}\n\n` +
-      (assets === undefined ? "" : `[assets]\ndirectory = ${JSON.stringify(local(assets))}\nbinding = "ASSETS"\nrun_worker_first = true\nhtml_handling = "none"\n\n`) +
+      (assets === undefined ? "" : `[assets]\ndirectory = ${JSON.stringify(local(assets))}\nbinding = "ASSETS"\nrun_worker_first = ${JSON.stringify(workerFirst)}\nhtml_handling = "none"\n\n`) +
       `[[rules]]\ntype = "ESModule"\nglobs = ["**/*.js"]\nfallthrough = true\n\n[build]\ncommand = ${JSON.stringify(keys.build.command)}\nwatch_dir = ${JSON.stringify(keys.build.watch_dir)}`);
     return false;
   }
@@ -73,9 +75,9 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
       edit([...path, "directory"], local(assets));
       const ownsDefaults = current === undefined || current?.binding === undefined;
       if (ownsDefaults && current?.binding === undefined) edit([...path, "binding"], "ASSETS");
-      if (ownsDefaults && current?.run_worker_first === undefined) edit([...path, "run_worker_first"], true);
+      if (ownsDefaults && current?.run_worker_first === undefined) edit([...path, "run_worker_first"], workerFirst);
       // The shell fetches index.html itself; asset canonicalization would redirect it back to /admin/ forever.
-      if (current?.html_handling === undefined && (current?.run_worker_first === true || (ownsDefaults && current?.run_worker_first === undefined))) edit([...path, "html_handling"], "none");
+      if (current?.html_handling === undefined && (current?.run_worker_first === true || Array.isArray(current?.run_worker_first) || (ownsDefaults && current?.run_worker_first === undefined))) edit([...path, "html_handling"], "none");
     };
     wireAssets(["assets"], config.assets);
     for (const [name, environment] of Object.entries(config.env ?? {}) as [string, any][]) {

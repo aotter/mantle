@@ -107,7 +107,17 @@ export async function bundleApp(entry: string, outdir: string, assets = join(out
   catch (error) { refuse(error); return; }
   if (Object.keys(metafile.inputs).some(input => /(?:^|\/)mantle-admin\/(?:dist|src)\/server\/index\.[jt]s$/.test(input.replaceAll("\\", "/")))) {
     await bundleAdmin(source, outdir, join(assets, "admin"));
+    adminHeaders(assets);
   }
+}
+
+/** Admin's chunks are content-hashed and answered by the edge (`run_worker_first` excludes `/admin/assets/*`), so the
+ * headers `adminShell` would add live in `_headers`. An app's own `_headers` is never edited: it is told the rule. */
+const adminRule = "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=31536000, immutable\n";
+function adminHeaders(assets: string): void {
+  const file = join(assets, "_headers");
+  if (!existsSync(file)) return writeFileSync(file, adminRule);
+  if (!readFileSync(file, "utf8").includes("/admin/assets/*")) console.warn(`note: ${relative(process.cwd(), file)} has no /admin/assets/* rule; add:\n${adminRule}`);
 }
 
 /**

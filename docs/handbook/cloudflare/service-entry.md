@@ -115,9 +115,10 @@ its collection parameter selects only a generated table and visibility policy.
 ## Workers assets and secrets
 
 `mantle generate --admin --wrangler wrangler.jsonc` sets the selected assets
-directory. A new assets block defaults to `binding: "ASSETS"`, `run_worker_first: true`
-and `html_handling: "none"`. Existing blocks keep their binding and routing; when
-`run_worker_first` is already true, a missing `html_handling` defaults to `none`.
+directory. A new assets block defaults to `binding: "ASSETS"`,
+`run_worker_first: ["/*", "!/admin/assets/*"]` and `html_handling: "none"`.
+Existing blocks keep their binding and routing; when `run_worker_first` is true or a
+list, a missing `html_handling` defaults to `none`.
 A different binding needs a custom Admin HTML loader. Deploy the built assets and
 Worker together.
 
@@ -133,15 +134,20 @@ JSONC comments and unrelated settings survive regeneration:
   "assets": {
     "directory": "dist/client",
     "binding": "ASSETS",
-    "run_worker_first": true,
+    "run_worker_first": ["/*", "!/admin/assets/*"],
     "html_handling": "none"
   },
   "d1_databases": [{ "binding": "DB", "database_name": "your-database", "database_id": "your-id" }]
 }
 ```
 
-`run_worker_first` lets the application supply shell/security/cache headers;
-`none` keeps `index.html` available by name. `adminShell(request, assets)` passes
+The Worker serves HTML shells and APIs; static files are answered by the edge without
+running it. `mantle bundle` writes `<assets>/_headers` with `nosniff` and a one-year
+`immutable` cache for Admin's content-hashed `/admin/assets/*` (an existing `_headers`
+is not edited: the build prints the rule to add). Add the app's own static prefixes to
+the exclusion (`"!/assets/*"`) and set their headers in the same `_headers` file; a
+path the Worker must answer stays out of the exclusion. `none` keeps `index.html`
+available by name. `adminShell(request, assets)` passes
 paths relative to the Admin directory, so the app fetches them under `/admin/`:
 `path => env.ASSETS.fetch(new Request(new URL("/admin/" + path, request.url), request))`. Admin assets are not a public database
 API. PostgreSQL uses application-owned Hyperdrive/postgres.js wiring,
