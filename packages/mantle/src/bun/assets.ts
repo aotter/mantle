@@ -2,7 +2,9 @@
 import { realpath, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
-/** Native file response, or null for missing or invalid paths. */
+/** Native file response, or null for missing or invalid paths. Every file gets `nosniff`; Admin's content-hashed
+ * chunks under `/assets/` are cached for a year, as the edge `_headers` does on Workers. Other files keep no cache
+ * header (`adminShell` marks the shell `no-store`). */
 export function bunAdminAssets(root: string): (path: string) => Promise<Response | null> {
   const base = resolve(root);
   return async path => {
@@ -12,6 +14,8 @@ export function bunAdminAssets(root: string): (path: string) => Promise<Response
     if (!target.startsWith(`${base}${sep}`)) return null;
     const physical = await realpath(target).catch(() => "");
     if (!physical || !physical.startsWith(`${await realpath(base)}${sep}`) || !(await stat(physical)).isFile()) return null;
-    return new Response(Bun.file(physical));
+    const headers = new Headers({ "x-content-type-options": "nosniff" });
+    if (path.startsWith("/assets/")) headers.set("cache-control", "public, max-age=31536000, immutable");
+    return new Response(Bun.file(physical), { headers });
   };
 }
