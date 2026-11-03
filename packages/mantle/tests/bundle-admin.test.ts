@@ -41,7 +41,9 @@ test("mantle bundle: the Worker into <outdir>/worker, Admin into <assets>/admin;
     const dist = join(dir, "dist");
     await bundleApp(entry, dist);
     expect(existsSync(join(dist, "worker/worker.js"))).toBe(true);
-    expect(readdirSync(join(dist, "client"))).toEqual(["admin"]);
+    expect(readdirSync(join(dist, "client")).sort()).toEqual(["_headers", "admin"]);
+    // Admin chunks are answered by the edge: their headers live in _headers.
+    expect(await readFile(join(dist, "client/_headers"), "utf8")).toContain("/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=31536000, immutable");
     expect(await readFile(join(dist, "client/admin/index.html"), "utf8")).toBe("undefined"); // the built-in entry
     await bundleApp(entry, dist);
     expect(await builds()).toHaveLength(1);
@@ -65,8 +67,12 @@ test("mantle bundle: the Worker into <outdir>/worker, Admin into <assets>/admin;
     await bundleApp(entry, dist);
     expect(await builds()).toHaveLength(5);
 
+    // An app's own _headers is never edited.
+    await mkdir(join(dir, "public"), { recursive: true });
+    await writeFile(join(dir, "public/_headers"), "/assets/*\n  Cache-Control: no-cache\n");
     await bundleApp(entry, dist, join(dir, "public"));
     expect(existsSync(join(dir, "public/admin/index.html"))).toBe(true);
+    expect(await readFile(join(dir, "public/_headers"), "utf8")).toBe("/assets/*\n  Cache-Control: no-cache\n");
     await expect(bundleApp(entry, dist, dist)).rejects.toThrow("must not overlap the Worker directory");
     await expect(bundleApp(entry, dist, join(dist, "worker/static"))).rejects.toThrow("must not overlap the Worker directory");
   } finally { await rm(dir, { recursive: true, force: true }); }

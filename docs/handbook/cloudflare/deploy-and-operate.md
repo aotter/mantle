@@ -60,6 +60,11 @@ can move fetch execution closer to observed back-end services:
 "placement": { "mode": "smart" }
 ```
 
+A placed Worker runs every request that reaches it in that location, static files
+included. Keep static prefixes out of `assets.run_worker_first` (the generated
+default already excludes `/admin/assets/*`) so the edge answers them next to the
+visitor; see [Workers assets](service-entry.md#workers-assets-and-secrets).
+
 For globally distributed, read-heavy D1 traffic, enable
 [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/)
 on the database and pass one request-scoped `env.DB.withSession(...)` handle to
