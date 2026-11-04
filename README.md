@@ -22,7 +22,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/mantle-hero-v2.png" width="900" alt="A cloaked dungeon master commands four golden runes as a luminous architectural labyrinth takes shape inside a pearlescent nautilus shell rising from the sea; an unused pickaxe rests on the shore.">
+  <img src="packages/mantle-admin/admin/public/favicon.svg" width="128" height="128" alt="Mantle shell logo">
   <br>
   <em>Be the dungeon master. Don’t code every corridor.</em>
 </p>
