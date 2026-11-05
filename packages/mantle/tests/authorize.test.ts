@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { fixtureCaller } from "./apps/fixtures.js";
-import type { Authorize, Caller, Target } from "../src/kernel/contracts.js";
+import { ContractError, type Authorize, type Caller, type Target } from "../src/kernel/contracts.js";
 
 const doc = (kind: string, name: string, spec: object) => JSON.stringify({apiVersion:"cms.mantle.aotter.net/v2",kind,metadata:{name},spec});
 const source = [
@@ -77,4 +77,23 @@ test("generated MCP authorizes calls and filters lists using requires and manife
   expect((await ask(fetch,"tools/list")).data.result.tools.map((t:{name:string})=>t.name)).toEqual(["open_notes"]);
   expect(seen).toEqual([{kind:"view",name:"open-notes"}]);seen.length=0;
   expect((await ask(fetch,"tools/call",{name:"list_notes",arguments:{}})).response.status).toBe(401);expect(seen).toEqual([]);
+  // discovery "all": one list for every caller, authorize decides at call time, and its AUTH_DENIED reason is kept
+  const reason="Only a manager may call echo-notes.";
+  const decide=async(t:Target)=>t.name!=="echo-notes"||Promise.reject(new ContractError("AUTH_DENIED",reason,"procedure/echo-notes"));
+  const loaders:string[][]=[];
+  const all=mcp({discovery:"all",apps:{public:{resources:[{uri:"ui://notes",name:"notes",html:({tools}:{tools:ReadonlySet<string>})=>{loaders.push([...tools]);return "<p>Notes</p>";},renders:["list_notes"]}]}},db:()=>db,caller:()=>admin,handlers:{"echo-notes":()=>({ok:true})},authorize:decide});
+  const filtered=mcp({db:()=>db,caller:()=>admin,handlers:{"echo-notes":()=>({ok:true})},authorize:decide});
+  expect((await ask(all,"tools/list")).data.result.tools.map((t:{name:string})=>t.name)).toEqual(["list_notes","open_notes","echo_notes"]);
+  expect((await ask(filtered,"tools/list")).data.result.tools.map((t:{name:string})=>t.name)).toEqual(["list_notes","open_notes"]);
+  await ask(all,"resources/read",{uri:"ui://notes"});
+  expect(loaders).toEqual([["list_notes","open_notes","echo_notes"]]);
+  for(const fetch of [all,filtered]){
+    const denied=await ask(fetch,"tools/call",{name:"echo_notes",arguments:{}});
+    expect(denied.response.status).toBe(403);
+    expect(denied.data.error).toMatchObject({code:"AUTH_DENIED",message:reason});
+  }
+  expect((await ask(all,"tools/call",{name:"list_notes",arguments:{}})).response.status).toBe(200);
+  // a plain false, or any other rejection, still answers the generic refusal
+  const plain=mcp({discovery:"all",db:()=>db,caller:()=>admin,handlers:{},authorize:async()=>Promise.reject(Error("internal detail"))});
+  expect((await ask(plain,"tools/call",{name:"list_notes",arguments:{}})).data.error).toMatchObject({code:"AUTH_DENIED",message:"Target is not authorized."});
 }));

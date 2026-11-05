@@ -12,6 +12,12 @@ export type { McpApps, McpAppsSource, McpAppResource, McpAppRender, McpAppPage, 
 export interface Options<Env, Database> extends GatewayOptions {
   apps?: Readonly<Partial<Record<"public" | "admin", McpAppsSource | readonly McpAppsSource[]>>>;
   authorize?: Authorize;
+  /**
+   * With `authorize`: `"authorized"` (default) lists only the tools each caller may call, and resource HTML loaders get
+   * those names; `"all"` lists the endpoint's whole catalogue to every caller, so a host's saved tool list stays valid
+   * when a caller's grant changes, and `authorize` decides at call time. Listing a tool grants nothing either way.
+   */
+  discovery?: "authorized" | "all";
   gateway?: Gateway;
   fields?: import("./user-fields.js").UserFields;
   db: (env: Env) => Database;

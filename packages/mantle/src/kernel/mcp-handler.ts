@@ -158,7 +158,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
           await authorizeTarget(options.authorize, tool.target ?? { kind: tool.page ? "view" : "procedure", name: tool.name }, caller);
         }
         // an App's HTML is rendered for the same tools the caller's tools/list shows
-        if ((Array.isArray(parsedBody) ? parsedBody : [parsedBody]).some(message => message?.method === "tools/list" || message?.method === "resources/read")) {
+        if (options.discovery !== "all" && (Array.isArray(parsedBody) ? parsedBody : [parsedBody]).some(message => message?.method === "tools/list" || message?.method === "resources/read")) {
           const visible = [];
           for (const tool of selected) {
             if (caller.kind === "anonymous" && tool.closed || !options.gateway && caller.kind === "user" && caller.credential === "oauth" && tool.scopes?.some(scope => !caller.scopes.includes(scope))) continue;
