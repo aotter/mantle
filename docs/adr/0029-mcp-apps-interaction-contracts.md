@@ -109,8 +109,8 @@ rediscover its saved tool definitions or renew a revoked OAuth grant.
 > (claiming no renderer) for conversations that hold one, and `previous` keeps older
 > ones. A measured downstream run on claude.ai rendered, without a further refresh, a new
 > chat after an HTML redeploy (with the new HTML) and a chat that held the old hash URI.
-> `identity: "hash"` keeps one tool link per build; an explicit `uri` changes identity
-> on purpose, for an App that saved conversations must not load. A custom HTML function
+> An explicit `uri` changes identity on purpose, for an App that saved conversations
+> must not load; there is no per-build tool link mode. A custom HTML function
 > has no build identity and may use the fixed URI. Only raw assets are cached, and the
 > caller-filtered catalogue is still embedded per read; an old hash is never answered
 > with the latest HTML.

@@ -39,12 +39,13 @@ test("by default tools link the fixed URI across builds; it reads the current bu
   expect(revisions[0]).not.toBe(revisions[1]);
 });
 
-test("identity: hash updates tools and resource links together per build, without caching a caller catalogue", async () => {
+test("each build's hash URI reads that build only, without caching a caller catalogue", async () => {
   const api = mcp<Env, null>(tools, { db: () => null, caller: () => caller, authorize: target => target.name === "pending",
-    apps: { admin: [adminMcpApps({ catalogue, renders: ["pending"], identity: "hash" }), custom] } });
+    apps: { admin: [adminMcpApps({ catalogue, renders: ["pending"] }), custom] } });
   const builds = [env("build-one"), env("build-two")];
   const lists = await Promise.all(builds.map(binding => rpc(api, binding, "tools/list")));
-  const uris = lists.map(list => list.body.result.tools[0]._meta.ui.resourceUri);
+  const uris = await Promise.all(builds.map(async binding => (await rpc(api, binding, "resources/list")).body.result.resources
+    .map((resource: { uri: string }) => resource.uri).find((uri: string) => /\/admin\/[a-f0-9]{64}$/.test(uri))));
   expect(uris[0]).not.toBe(uris[1]);
   for (const [index, binding] of builds.entries()) {
     expect(lists[index]!.body.result.tools.map((tool: { name: string }) => tool.name)).toEqual(["pending"]);

@@ -148,15 +148,14 @@ assets with the server; missing assets can fail discovery.
 
 Change the URI only when saved conversations must not load the new App, because its
 contract with its tools changed incompatibly: pass an explicit `uri` such as
-`ui://mantle-admin/admin/v2`. `identity: "hash"` keeps the earlier behaviour, a new tool
-link per build. A custom `html` function has no build identity to hash: it is served at
-the fixed URI or an explicit `uri`, and needs an explicit one with `identity: "hash"`.
+`ui://mantle-admin/admin/v2`. A custom `html` function has no build identity to hash: it
+is served at the fixed URI or an explicit `uri`.
 
 ### Keep old conversations working after an upgrade
 
 With the fixed default, conversations keep rendering across deploys without retention.
-A conversation that holds a content-hash URI from an earlier build (from before this
-default, with `identity: "hash"`, or before an explicit `uri` change) needs that page
+A conversation that holds a content-hash URI from an earlier build (one started before
+this default, or before an explicit `uri` change) needs that page
 retained: a new URI does not invalidate a host's saved tool definitions or old
 conversation cards. Keep previously deployed pages with `adminMcpApps({ catalogue, previous })`.
 `previous` is an array of `AdminMcpSnapshot` from `@aotter/mantle-admin/mcp`:
@@ -214,7 +213,7 @@ const context = { env: {}, request: new Request('https://archive.invalid/mcp') }
 const source = adminMcpApps({ ...appDefinition,
   html: readFileSync('dist/client/admin/mcp-app.html', 'utf8') });
 const { resources } = typeof source === 'function' ? await source(context) : source;
-// The build's own URI: its content hash with the fixed default, the only resource with `identity: 'hash'`.
+// The build's own content-hash URI (an explicit `uri` contributes only that URI).
 const resource = resources.find(r => /\/admin\/[a-f0-9]{64}$/.test(r.uri)) ?? resources[0];
 const tools = new Set([...Object.keys(appDefinition.catalogue.views),
   ...Object.keys(appDefinition.catalogue.actions)]);

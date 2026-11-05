@@ -184,12 +184,13 @@ describe("adminMcpApps", () => {
       const page = typeof resource.html === "string" ? resource.html : await resource.html({ ...context, tools: new Set(tools) });
       return typeof page === "string" ? { html: page } : page;
     };
-    const old = (await resolve(adminMcpApps({ catalogue: catalog, identity: "hash", html: "<head></head><h1>Build A</h1>", domain: "old.apps.example" }))).resources[0]!;
+    // Build A's own (hash) URI, as a conversation started on it holds it
+    const old = (await resolve(adminMcpApps({ catalogue: catalog, html: "<head></head><h1>Build A</h1>", domain: "old.apps.example" }))).resources[1]!;
     const snapshot = { uri: old.uri, ...await read(old, ["pending", "review_requisition"]), csp: { resourceDomains: ["https://old.assets.example"] }, domain: old.domain };
-    const upgraded = await resolve(adminMcpApps({ catalogue: catalog, identity: "hash", html: "<head></head><h1>Build B</h1>", title: "New title", previous: [{ ...snapshot, title: "Original title" }] }));
-    expect(upgraded.resources).toHaveLength(2);
-    const [current, retained] = upgraded.resources;
-    expect(current!.uri).not.toBe(old.uri);
+    const upgraded = await resolve(adminMcpApps({ catalogue: catalog, html: "<head></head><h1>Build B</h1>", title: "New title", previous: [{ ...snapshot, title: "Original title" }] }));
+    expect(upgraded.resources).toHaveLength(3);
+    const [current, , retained] = upgraded.resources;
+    expect(current!.uri).toBe("ui://mantle-admin/admin");
     expect(retained!.uri).toBe(old.uri);
     expect(retained!.renders).toBeUndefined();
     expect(retained!.appOnly).toBeUndefined();
@@ -222,9 +223,7 @@ describe("adminMcpApps", () => {
     expect(oldRead.contents[0].text).toContain("Build A");
     expect(oldRead.contents[0].text).not.toContain("review_requisition");
     expect(oldRead.contents[0]._meta.ui.csp).toEqual(snapshot.csp);
-    // A no-op redeploy does not register the same immutable URI twice.
-    expect((await resolve(adminMcpApps({ catalogue: catalog, identity: "hash", html: "<head></head><h1>Build A</h1>", domain: "old.apps.example", previous: [snapshot] }))).resources).toHaveLength(1);
-    // With the fixed default the same build answers at the fixed URI and at its hash, where the snapshot is not repeated.
+    // A no-op redeploy: the same build answers at the fixed URI and at its hash, where the snapshot is not repeated.
     expect((await resolve(adminMcpApps({ catalogue: catalog, html: "<head></head><h1>Build A</h1>", domain: "old.apps.example", previous: [snapshot] }))).resources.map(r => r.uri)).toEqual(["ui://mantle-admin/admin", old.uri]);
   });
 

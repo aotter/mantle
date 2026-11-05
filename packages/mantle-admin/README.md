@@ -154,8 +154,7 @@ endpoint's origin/identity gates, it also serves the current build at
 `ui://mantle-admin/admin/<digest>`, derived from the built HTML, full static catalogue and
 resource metadata, for conversations that hold that URI. Workers retain only the raw
 asset/identity per ASSETS binding; catalogue filtering happens per read. Bun rereads the
-file, so a new build is served in the same process. `identity: "hash"` links tools to the
-content-hash URI instead (a new link per build); an explicit `uri` (e.g.
+file, so a new build is served in the same process. An explicit `uri` (e.g.
 `ui://mantle-admin/admin/v2`) is for an App that saved conversations must not load. Use `renders: ['view_tool']`
 to partition Views when registering another renderer; competing claims fail.
 

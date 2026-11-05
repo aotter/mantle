@@ -21,16 +21,12 @@ export interface AdminMcpOptions {
     /** Where Bun reads the built App from when `html` is not given; `dist/client/admin/mcp-app.html` by default. */
     readonly file?: string;
     /**
-     * An explicit resource URI. Omit it for the default: tools link the fixed `ui://mantle-admin/admin` (see `identity`).
-     * Change it only for an App that saved conversations must not load, e.g. `ui://mantle-admin/admin/v2`.
+     * An explicit resource URI. Without it, tools link the fixed `ui://mantle-admin/admin`, which hosts that prefetch and
+     * cache the template keep across deploys, and the current build also answers at its content-hash URI for
+     * conversations that hold one. Change it only for an App that saved conversations must not load, e.g.
+     * `ui://mantle-admin/admin/v2`.
      */
     readonly uri?: string;
-    /**
-     * Without `uri`: `"fixed"` (default) links tools to `ui://mantle-admin/admin`, so hosts that prefetch and cache the
-     * template keep rendering across deploys, and also serves the current build at its content-hash URI for
-     * conversations that hold one. `"hash"` links tools to the content-hash URI itself (a new URI per build).
-     */
-    readonly identity?: "fixed" | "hash";
     readonly title?: string;
     /** Views rendered by this App; all catalogue Views by default. Partition explicitly before registering another renderer. */
     readonly renders?: readonly string[];
@@ -118,13 +114,9 @@ export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
         ] };
     };
     const html = options.html ?? builtApp(options.file ?? "dist/client/admin/mcp-app.html");
-    const fixed = (options.identity ?? "fixed") === "fixed";
     if (options.uri !== undefined) return contribute(options.uri, html);
-    if (typeof options.html === "function") {
-        // a caller-dependent loader has no build identity to hash: it can only have the fixed URI
-        if (fixed) return contribute(FIXED_URI, html);
-        throw new ContractError("INPUT_VALIDATION_FAILED", "A custom Admin HTML loader must declare a build-specific uri; caller-dependent loader output is never cached.", "mcp/apps");
-    }
+    // a caller-dependent loader has no build identity to hash: the fixed URI only
+    if (typeof options.html === "function") return contribute(FIXED_URI, html);
 
     const prepare = async (page: McpAppPage) => {
         // The base asset has no caller catalogue. A declaration change also changes the
@@ -154,7 +146,7 @@ export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
         }
         // Bun rereads the file: a new build in the same process gets a new identity.
         const loaded = await prepared;
-        return fixed ? contribute(FIXED_URI, () => loaded.page, loaded.uri) : contribute(loaded.uri, () => loaded.page);
+        return contribute(FIXED_URI, () => loaded.page, loaded.uri);
     };
 }
 /** The default Admin App URI: stable across deploys, as hosts that prefetch and cache UI templates expect (#1934). */
