@@ -252,12 +252,13 @@ describe("resolveCaller: OAuth bearer", () => {
   });
 
   test("app shell answers its own JWKS URL in process; Better Auth still verifies and caches by that URL (#1932)", async () => {
-    const { withInProcessJwks } = await import("../../../docs/examples/app-shell/src/jwks.ts");
+    // the shell's own module, as smoke-kit.test.ts loads the shell's kit
+    const { withInProcessJwks } = await import(new URL("../../../docs/examples/app-shell/src/jwks.ts", import.meta.url).href);
     const app = await makeApp(), { cookie, userId } = await app.signIn();
     const { accessToken } = await oauthAccessToken(app, cookie);
     const url = `${app.baseURL}/jwks`, outer = globalThis.fetch, network: string[] = [];
     let reads = 0;
-    const counting = ((input: RequestInfo | URL, init?: RequestInit) => { network.push(input instanceof Request ? input.url : String(input)); return outer(input, init); }) as typeof fetch;
+    const counting = ((input: Request | string | URL, init?: RequestInit) => { network.push(input instanceof Request ? input.url : String(input)); return outer(input, init); }) as typeof fetch;
     globalThis.fetch = withInProcessJwks(counting, url, async () => { reads++; return app.auth.api.getJwks(); });
     try {
       expect(await resolveCaller(bearer(app, accessToken), app.loader, { audience: AUDIENCE })).toMatchObject({ subject: userId, credential: "oauth" });
