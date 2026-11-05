@@ -77,7 +77,10 @@ on one version.
 
 `src/service.ts` and `src/index.ts` rarely change. The default shell mounts REST and MCP together. If the app deliberately
 chooses asymmetric exposure, delete the blocks marked `MCP / OAuth (deliberate exception)` in `auth.ts` and `service.ts`;
-HTTP-only Procedures will keep generating with a warning.
+HTTP-only Procedures will keep generating with a warning. `src/jwks.ts` (installed by `service.ts`) is a temporary
+Workers workaround: it answers the app's own JWKS URL in process when access tokens are verified; delete it with the
+MCP / OAuth blocks, and once Better Auth can take an in-process key source
+([Verifying access tokens on Workers](../../handbook/cloudflare/authentication.md#verifying-access-tokens-on-workers)).
 
 Search for `AGENT:` to find what an app must fill in.
 

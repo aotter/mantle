@@ -17,6 +17,7 @@ import { mcpAppCatalogues } from "../generated/admin-descriptors.js";
 import type { Handlers } from "../generated/generated.js";
 import { handlers } from "./handlers.js";
 import { appRoutes } from "./routes.js";
+import { withInProcessJwks } from "./jwks.js";
 
 let auth: ReturnType<typeof authLoader<ReturnType<typeof import("./auth.js").createAuth>>> | undefined;
 const authorities = new WeakMap<Request, () => Promise<Caller>>();
@@ -26,7 +27,12 @@ let serveMcpHandler: ReturnType<typeof serveMcp<Env, Handle, Handlers>> | undefi
 const serveRest = rest(options);
 
 export async function fetchService(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
-  auth ??= authLoader(() => import("./auth.js").then(m => m.createAuth(env)));
+  if (!auth) {
+    auth = authLoader(() => import("./auth.js").then(m => m.createAuth(env)));
+    // Once per isolate: Better Auth's JWKS fetch for verifying access tokens stays in process (see src/jwks.ts).
+    const loader = auth;
+    globalThis.fetch = withInProcessJwks(globalThis.fetch, `${env.PUBLIC_ORIGIN}/api/auth/jwks`, async () => (await loader.get()).api.getJwks());
+  }
   const headers = new Headers();
   let authority: Promise<Caller> | undefined;
   // One Caller per request, resolved on first use; every surface below shares it.

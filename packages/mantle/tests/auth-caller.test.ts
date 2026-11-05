@@ -251,6 +251,30 @@ describe("resolveCaller: OAuth bearer", () => {
     expect(failure).toMatchObject({ code: "UNAUTHENTICATED" });
   });
 
+  test("app shell answers its own JWKS URL in process; Better Auth still verifies and caches by that URL (#1932)", async () => {
+    // the shell's own module, as smoke-kit.test.ts loads the shell's kit
+    const { withInProcessJwks } = await import(new URL("../../../docs/examples/app-shell/src/jwks.ts", import.meta.url).href);
+    const app = await makeApp(), { cookie, userId } = await app.signIn();
+    const { accessToken } = await oauthAccessToken(app, cookie);
+    const url = `${app.baseURL}/jwks`, outer = globalThis.fetch, network: string[] = [];
+    let reads = 0;
+    const counting = ((input: Request | string | URL, init?: RequestInit) => { network.push(input instanceof Request ? input.url : String(input)); return outer(input, init); }) as typeof fetch;
+    globalThis.fetch = withInProcessJwks(counting, url, async () => { reads++; return app.auth.api.getJwks(); });
+    try {
+      expect(await resolveCaller(bearer(app, accessToken), app.loader, { audience: AUDIENCE })).toMatchObject({ subject: userId, credential: "oauth" });
+      expect(await resolveCaller(bearer(app, accessToken), app.loader, { audience: AUDIENCE })).toMatchObject({ subject: userId });
+      // no request reached the issuer's /jwks over the network; one in-process read, then Better Auth's cache for that URL
+      expect(network.filter(seen => seen === url)).toEqual([]);
+      expect(reads).toBe(1);
+      // the keys still decide: a token whose signature does not verify is refused
+      const [header, payload] = accessToken.split(".");
+      expect(await code(resolveCaller(bearer(app, `${header}.${payload}.${b64url(new Uint8Array(64))}`), app.loader, { audience: AUDIENCE }))).toBe("UNAUTHENTICATED");
+      // anything else, including a write to that URL, goes to the real fetch
+      expect((await globalThis.fetch(url, { method: "POST" })).status).not.toBe(200);
+      expect(network).toEqual([url]);
+    } finally { globalThis.fetch = outer; }
+  });
+
   test("app-shell issued bearer initializes MCP and lists Admin tools", async () => {
     const app = await makeApp(), { cookie, userId } = await app.signIn();
     app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [userId]);

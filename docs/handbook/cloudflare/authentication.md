@@ -62,6 +62,34 @@ or `oauthProvider` for ordinary OAuth. These are optional app dependencies behin
 Use the live grant/session hooks and route wiring in [OAuth](../guides/oauth.md); merge verification hooks with the app shell's
 user hooks. `genericOAuth` is a login plugin, distinct from the OAuth provider.
 
+### Verifying access tokens on Workers
+
+`resolveCaller` verifies a Bearer or DPoP access token with Better Auth's resource client, which fetches the
+issuer's keys from `<baseURL>/jwks` by URL and caches them per isolate for five minutes. When the issuer is the
+same Worker, each request that lands on an isolate without those keys first makes a public-network request back
+into the Worker, which also reads D1 and passes Better Auth's HTTP rate limiter. Better Auth 1.7 has no supported
+in-process key source for this path yet ([better-auth/better-auth#11604](https://github.com/better-auth/better-auth/issues/11604)).
+
+Until it does, the app shell's `src/jwks.ts` answers exactly that URL in process. `service.ts` installs it once per
+isolate around `globalThis.fetch`, with the URL its `auth.ts` produces (`${PUBLIC_ORIGIN}/api/auth/jwks`):
+
+```ts
+globalThis.fetch = withInProcessJwks(globalThis.fetch, `${env.PUBLIC_ORIGIN}/api/auth/jwks`,
+  async () => (await loader.get()).api.getJwks());
+```
+
+- Only a GET of that exact URL is answered, from `auth.api.getJwks()`: public keys only, under the jwt plugin's own
+  rotation rules. Every other request uses the real `fetch`.
+- Better Auth still verifies the token, its DPoP binding and replay, and Mantle still checks the live grant. Better
+  Auth still caches the keys by that URL, so an isolate reads them once per five minutes.
+- The call does not go through Better Auth's HTTP router, so it shares no rate-limit bucket and needs no
+  `ExecutionContext`.
+- Keep the URL in step with `baseURL`, `basePath` and the jwt plugin's `jwksPath`. A mismatch is not a failure: the
+  request just goes over the network as before. With `jwks.remoteUrl`, keys live elsewhere: do not install it.
+
+This patches `fetch` inside the application's own Worker; Mantle Core does not. Remove `src/jwks.ts` once Better
+Auth's resource client accepts an in-process key source.
+
 ## Identity helpers
 
 `@aotter/mantle/auth/identity` exports `d1Identity(db, auth, caller, request.headers)` and
