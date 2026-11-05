@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { api, downloadAdminFile, csvCell } from "./api";
+import { api, downloadAdminFile, csvCell, type ApiError } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -43,6 +43,20 @@ test("entry guard and uncertain failures retain their outcome after re-read; unr
     fetch.mockClear();
     await expect(api.post("/operations/edit",{})).rejects.toMatchObject({body:{error:{code}}});
     expect(fetch).toHaveBeenCalledOnce();
+  }
+});
+
+test("a Schema check refusal is not a stale write: no re-read, no concurrent-change advice, no generated constraint name (#1910)",async()=>{
+  for(const [check,shown] of [["_mantle_chk_feedback_1",false],["requestStatus <> 'shipped' OR releaseUrl IS NOT NULL",true]] as const){
+    const error={code:"CONFLICT",message:`A check of the Schema failed: feedback: ${check}`,path:"schemas/feedback/admin",kind:"check",schema:"feedback",check};
+    const fetch=vi.fn(async()=>Response.json({error},{status:409}));
+    vi.stubGlobal("fetch",fetch);
+    const failure=await api.patch<never>("/entries/item?collection=feedback",{expectedVersion:1,data:{}}).catch((error:ApiError)=>error);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({status:409,body:{error}});
+    expect(failure.message).toMatch(/^The entry does not meet a check of its Schema.* Nothing was saved\. Correct the values the check requires, then save again\.$/);
+    expect(failure.message).not.toMatch(/version|no longer match|_mantle_chk_/);
+    expect(failure.message.includes(check)).toBe(shown);
   }
 });
 
