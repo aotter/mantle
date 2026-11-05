@@ -20,7 +20,12 @@ export interface AdminMcpOptions {
     readonly html?: McpAppResource["html"];
     /** Where Bun reads the built App from when `html` is not given; `dist/client/admin/mcp-app.html` by default. */
     readonly file?: string;
-    /** Immutable cache identity. Omit for built assets: their HTML, catalogue and resource metadata determine it. A custom HTML function must supply its own build-specific URI. */
+    /**
+     * An explicit resource URI. Without it, tools link the fixed `ui://mantle-admin/admin`, which hosts that prefetch and
+     * cache the template keep across deploys, and the current build also answers at its content-hash URI for
+     * conversations that hold one. Change it only for an App that saved conversations must not load, e.g.
+     * `ui://mantle-admin/admin/v2`.
+     */
     readonly uri?: string;
     readonly title?: string;
     /** Views rendered by this App; all catalogue Views by default. Partition explicitly before registering another renderer. */
@@ -28,7 +33,7 @@ export interface AdminMcpOptions {
     readonly appOnly?: readonly string[];
     /** Passed through as `_meta.ui.domain`, for a host that serves each App from its own origin. */
     readonly domain?: string;
-    /** Previously deployed immutable pages. Keep these in source/artifact storage across clean builds; they claim no current renderer. */
+    /** Previously deployed pages, kept so conversations that hold their URIs still render; they claim no current renderer. */
     readonly previous?: readonly AdminMcpSnapshot[];
 }
 /** The catalogue as one caller sees it: only Views and actions its tools/list shows, so the HTML names no other tool. */
@@ -94,14 +99,24 @@ export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
             ...(snapshot.domain !== undefined ? { domain: snapshot.domain } : {}),
             html: async render => ({ html: embed(base, render, archivedCatalogue), ...(snapshot.csp ? { csp: snapshot.csp } : {}) }) };
     });
-    const contribute = (uri: string, html: McpAppResource["html"]): McpApps => ({ resources: [{ uri, name: "mantle-admin-admin", title: options.title ?? "Admin", html: async (render: McpAppRender) => {
-        const loaded = typeof html === "string" ? html : await html(render), page = typeof loaded === "string" ? { html: loaded } : loaded;
-        return { ...page, html: embed(page.html, render) };
-    }, renders, ...(options.appOnly ? { appOnly: options.appOnly } : {}), ...(options.domain !== undefined ? { domain: options.domain } : {}) }, ...previous.filter(resource => resource.uri !== uri)] });
+    // `alias`: the current build also answers at its content-hash URI, as a page that claims no renderer
+    const contribute = (uri: string, html: McpAppResource["html"], alias?: string): McpApps => {
+        const page = async (render: McpAppRender) => {
+            const loaded = typeof html === "string" ? html : await html(render), page = typeof loaded === "string" ? { html: loaded } : loaded;
+            return { ...page, html: embed(page.html, render) };
+        };
+        const domain = options.domain !== undefined ? { domain: options.domain } : {};
+        const title = options.title ?? "Admin";
+        return { resources: [
+            { uri, name: "mantle-admin-admin", title, html: page, renders, ...(options.appOnly ? { appOnly: options.appOnly } : {}), ...domain },
+            ...(alias !== undefined && alias !== uri ? [{ uri: alias, name: "mantle-admin-admin-revision", title, html: page, ...domain }] : []),
+            ...previous.filter(resource => resource.uri !== uri && resource.uri !== alias),
+        ] };
+    };
     const html = options.html ?? builtApp(options.file ?? "dist/client/admin/mcp-app.html");
     if (options.uri !== undefined) return contribute(options.uri, html);
-    if (typeof options.html === "function")
-        throw new ContractError("INPUT_VALIDATION_FAILED", "A custom Admin HTML loader must declare a build-specific uri; caller-dependent loader output is never cached.", "mcp/apps");
+    // a caller-dependent loader has no build identity to hash: the fixed URI only
+    if (typeof options.html === "function") return contribute(FIXED_URI, html);
 
     const prepare = async (page: McpAppPage) => {
         // The base asset has no caller catalogue. A declaration change also changes the
@@ -131,6 +146,8 @@ export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
         }
         // Bun rereads the file: a new build in the same process gets a new identity.
         const loaded = await prepared;
-        return contribute(loaded.uri, () => loaded.page);
+        return contribute(FIXED_URI, () => loaded.page, loaded.uri);
     };
 }
+/** The default Admin App URI: stable across deploys, as hosts that prefetch and cache UI templates expect (#1934). */
+const FIXED_URI = "ui://mantle-admin/admin";

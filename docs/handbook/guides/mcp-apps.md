@@ -135,24 +135,29 @@ file carries the `csp` your `defineAdmin({ mcp: { csp } })` declared; a loader m
 `resources/read`; it replaces the resource's own `csp` rather than merging with it. A loader
 that throws answers the host with a redacted error and logs the message on the server.
 
-Resource URIs are immutable cache identities. By default Admin contributes an async
-resource source: after the request passes the origin/identity/Admin gates, Admin
-reads its built asset and hashes the HTML, full static catalogue and material
-resource metadata into `ui://mantle-admin/admin/<digest>`. A new UI build or catalogue
-gets a new URI, used consistently by tools and resource reads. Workers cache only
-the raw immutable asset/identity per contributor and ASSETS binding; caller-filtered
-catalogues are embedded per read. Bun rereads the file so rebuilding in the same
-process changes the identity. Run `mantle bundle` and deploy its assets with the server;
-missing assets can fail discovery when Admin resolves the build identity.
+Resource URIs are stable identities. The MCP Apps specification lets a host prefetch
+and cache a UI resource by its URI, so by default Admin links its tools to the fixed
+`ui://mantle-admin/admin`: after a deploy a host keeps the link it saved, and a new read
+returns the new build. After the request passes the origin/identity/Admin gates, Admin
+reads its built asset and also serves it at `ui://mantle-admin/admin/<digest>`, a hash of
+the HTML, full static catalogue and material resource metadata, for conversations that
+hold that URI. Workers cache only the raw asset and its identity per contributor and
+ASSETS binding; caller-filtered catalogues are embedded per read. Bun rereads the file,
+so a rebuild in the same process serves the new build. Run `mantle bundle` and deploy its
+assets with the server; missing assets can fail discovery.
 
-An explicit `uri` keeps application-owned identity. A custom `html` function must
-supply a build-specific `uri`: Core cannot infer its build or safely memoize its
-request-dependent output. A raw `html` string may use the automatic identity.
+Change the URI only when saved conversations must not load the new App, because its
+contract with its tools changed incompatibly: pass an explicit `uri` such as
+`ui://mantle-admin/admin/v2`. A custom `html` function has no build identity to hash: it
+is served at the fixed URI or an explicit `uri`.
 
 ### Keep old conversations working after an upgrade
 
-A new URI does not invalidate a host's saved tool definitions or old conversation
-cards. Keep previously deployed pages with `adminMcpApps({ catalogue, previous })`.
+With the fixed default, conversations keep rendering across deploys without retention.
+A conversation that holds a content-hash URI from an earlier build (one started before
+this default, or before an explicit `uri` change) needs that page
+retained: a new URI does not invalidate a host's saved tool definitions or old
+conversation cards. Keep previously deployed pages with `adminMcpApps({ catalogue, previous })`.
 `previous` is an array of `AdminMcpSnapshot` from `@aotter/mantle-admin/mcp`:
 `{ uri, html, csp?, domain?, title? }`. Each `html` includes the original `mantle-catalog`
 script (the page returned by `resources/read`, not the raw bundle). The SDK serves
@@ -207,7 +212,9 @@ const previous = JSON.parse(readFileSync(path, 'utf8'));
 const context = { env: {}, request: new Request('https://archive.invalid/mcp') };
 const source = adminMcpApps({ ...appDefinition,
   html: readFileSync('dist/client/admin/mcp-app.html', 'utf8') });
-const { resources: [resource] } = typeof source === 'function' ? await source(context) : source;
+const { resources } = typeof source === 'function' ? await source(context) : source;
+// The build's own content-hash URI (an explicit `uri` contributes only that URI).
+const resource = resources.find(r => /\/admin\/[a-f0-9]{64}$/.test(r.uri)) ?? resources[0];
 const tools = new Set([...Object.keys(appDefinition.catalogue.views),
   ...Object.keys(appDefinition.catalogue.actions)]);
 const loaded = typeof resource.html === 'string' ? resource.html
@@ -300,7 +307,7 @@ uses the official `AppBridge`; your app runs its generated version ([Run the com
 `mantle bundle` builds the Admin MCP App from the same entry as the browser Admin
 (`src/admin.tsx`, or the built-in one) into one self-contained file,
 `<assets>/admin/mcp-app.html`, which `adminMcpApps` serves as
-`ui://mantle-admin/admin/<digest>` by default. Shared View cells and opted-in pages reach the host, with application plugins,
+`ui://mantle-admin/admin` by default. Shared View cells and opted-in pages reach the host, with application plugins,
 Tailwind classes and CSS. Browser-only record/input overrides do not mount there.
 
 ### Which slots render where

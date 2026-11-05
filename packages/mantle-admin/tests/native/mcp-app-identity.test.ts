@@ -19,12 +19,33 @@ const rpc = async (api: ReturnType<typeof mcp<Env, null>>, env: Env, method: str
   return { status: response!.status, body: JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text) };
 };
 
-test("new Admin builds update tools and resource links together, without caching a caller catalogue", async () => {
+test("by default tools link the fixed URI across builds; it reads the current build, which also answers at its hash URI (#1934)", async () => {
+  const api = mcp<Env, null>(tools, { db: () => null, caller: () => caller, authorize: target => target.name === "pending",
+    apps: { admin: [adminMcpApps({ catalogue, renders: ["pending"] }), custom] } });
+  const builds = [env("build-one"), env("build-two")];
+  const revisions: string[] = [];
+  for (const [index, binding] of builds.entries()) {
+    const tool = (await rpc(api, binding, "tools/list")).body.result.tools[0];
+    expect(tool._meta.ui.resourceUri).toBe("ui://mantle-admin/admin");
+    const listed = (await rpc(api, binding, "resources/list")).body.result.resources.map((resource: { uri: string }) => resource.uri);
+    const revision = listed.find((uri: string) => /^ui:\/\/mantle-admin\/admin\/[a-f0-9]{64}$/.test(uri));
+    expect(revision).toBeDefined();
+    revisions.push(revision);
+    for (const uri of ["ui://mantle-admin/admin", revision]) {
+      const read = (await rpc(api, binding, "resources/read", { uri })).body.result.contents[0];
+      expect(read.text).toContain(index === 0 ? "build-one" : "build-two");
+    }
+  }
+  expect(revisions[0]).not.toBe(revisions[1]);
+});
+
+test("each build's hash URI reads that build only, without caching a caller catalogue", async () => {
   const api = mcp<Env, null>(tools, { db: () => null, caller: () => caller, authorize: target => target.name === "pending",
     apps: { admin: [adminMcpApps({ catalogue, renders: ["pending"] }), custom] } });
   const builds = [env("build-one"), env("build-two")];
   const lists = await Promise.all(builds.map(binding => rpc(api, binding, "tools/list")));
-  const uris = lists.map(list => list.body.result.tools[0]._meta.ui.resourceUri);
+  const uris = await Promise.all(builds.map(async binding => (await rpc(api, binding, "resources/list")).body.result.resources
+    .map((resource: { uri: string }) => resource.uri).find((uri: string) => /\/admin\/[a-f0-9]{64}$/.test(uri))));
   expect(uris[0]).not.toBe(uris[1]);
   for (const [index, binding] of builds.entries()) {
     expect(lists[index]!.body.result.tools.map((tool: { name: string }) => tool.name)).toEqual(["pending"]);
@@ -53,6 +74,6 @@ test("default/custom renderer collisions fail in either order; explicit partitio
   const api = mcp<Env, null>(tools, { db: () => null, caller: () => caller,
     apps: { admin: [adminMcpApps({ catalogue, renders: ["pending"] }), custom] } });
   const listed = (await rpc(api, env("build"), "tools/list")).body.result.tools;
-  expect(listed.find((tool: { name: string }) => tool.name === "pending")._meta.ui.resourceUri).toMatch(/^ui:\/\/mantle-admin\/admin\/[a-f0-9]{64}$/);
+  expect(listed.find((tool: { name: string }) => tool.name === "pending")._meta.ui.resourceUri).toBe("ui://mantle-admin/admin");
   expect(listed.find((tool: { name: string }) => tool.name === "other")._meta.ui.resourceUri).toBe("ui://custom/other/build-1");
 });

@@ -114,7 +114,8 @@ authorizes.
    sidebar, router) does not run inside an MCP host.
    - `mantle bundle` builds it from the same entry by default (an optional
      `src/admin.mcp.tsx` isolates browser-only imports, #1712), as a single-file
-     `<assets>/admin/mcp-app.html`, served as `ui://mantle-admin/admin/<digest>`
+     `<assets>/admin/mcp-app.html`, served as `ui://mantle-admin/admin/<digest>` (since #1934
+     tools link the fixed `ui://mantle-admin/admin`; see the ADR-0029 amendment)
      by default (#1705): the Admin contributor hashes its HTML, catalogue and
      resource metadata; Core validates and serves the resulting links without
      owning a UI build. An explicit custom URI is an immutable build identity.
