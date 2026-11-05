@@ -266,7 +266,7 @@ describe("resolveCaller: OAuth bearer", () => {
       // no request reached the issuer's /jwks over the network; one in-process read, then Better Auth's cache for that URL
       expect(network.filter(seen => seen === url)).toEqual([]);
       expect(reads).toBe(1);
-      // the keys still decide: a token signed by another key is refused
+      // the keys still decide: a token whose signature does not verify is refused
       const [header, payload] = accessToken.split(".");
       expect(await code(resolveCaller(bearer(app, `${header}.${payload}.${b64url(new Uint8Array(64))}`), app.loader, { audience: AUDIENCE }))).toBe("UNAUTHENTICATED");
       // anything else, including a write to that URL, goes to the real fetch
