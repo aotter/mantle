@@ -100,6 +100,21 @@ own the retention window and compatibility of existing tool names/inputs/results
 Breaking tool contracts need an application migration; Core cannot force a host to
 rediscover its saved tool definitions or renew a revoked OAuth grant.
 
+> **Amendment (#1934): stable default Admin App URI.** The MCP Apps specification
+> (SEP-1865) lets a host "prefetch and cache UI resource content" and asks servers for
+> nothing about versioning. A content-hash URI per build cost more than it saved: on
+> claude.ai, after a deploy that changed it, App cards stopped rendering until the user
+> refreshed the connector's tools. Admin's default therefore links tools to the fixed
+> `ui://mantle-admin/admin`; the current build also answers at its content-hash URI
+> (claiming no renderer) for conversations that hold one, and `previous` keeps older
+> ones. A measured downstream run on claude.ai rendered, without a further refresh, a new
+> chat after an HTML redeploy (with the new HTML) and a chat that held the old hash URI.
+> `identity: "hash"` keeps one tool link per build; an explicit `uri` changes identity
+> on purpose, for an App that saved conversations must not load. A custom HTML function
+> has no build identity and may use the fixed URI. Only raw assets are cached, and the
+> caller-filtered catalogue is still embedded per read; an old hash is never answered
+> with the latest HTML.
+
 Both protocol eras are served: `2026-07-28` and `2025-*` in stateless mode
 (`createMcpHandler(..., { legacy: "stateless" })`).
 

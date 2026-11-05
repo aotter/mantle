@@ -66,7 +66,9 @@ test("html still overrides the default: a string, a zero-argument loader or one 
   const uri = "ui://mantle-admin/custom/build-1";
   expect(await load({ uri, html: () => "<head></head><p>none</p>" }, {})).toContain("<p>none</p>");
   expect(await load({ uri, html: ({ tools }: { tools: ReadonlySet<string> }) => `<head></head><p>${[...tools]}</p>` }, {})).toContain("<p>pending</p>");
-  expect(() => adminMcpApps({ catalogue, html: () => "<head></head>" })).toThrow("build-specific uri");
+  // a caller-dependent loader has no build identity: the fixed URI, or an explicit one for content-hash identity
+  expect((adminMcpApps({ catalogue, html: () => "<head></head>" }) as { resources: { uri: string }[] }).resources.map(r => r.uri)).toEqual(["ui://mantle-admin/admin"]);
+  expect(() => adminMcpApps({ catalogue, identity: "hash", html: () => "<head></head>" })).toThrow("build-specific uri");
 });
 
 test("duplicate retained resource URIs fail when the contributor is constructed", () => {
@@ -74,8 +76,28 @@ test("duplicate retained resource URIs fail when the contributor is constructed"
   expect(() => adminMcpApps({ catalogue, html: "<head></head>new", previous: [snapshot, snapshot] })).toThrow("registered twice");
 });
 
-test("the default URI versions raw build bytes, static catalogue and material resource metadata", async () => {
-  const source = adminMcpApps({ catalogue });
+test("the default URI is fixed across builds; the current build also answers at its content-hash URI (#1934)", async () => {
+  const env = (body: string) => ({ ASSETS: { fetch: async () => new Response(`<head></head><p>${body}</p>`) } });
+  const one = (await resolve(adminMcpApps({ catalogue }), env("build-one"))).resources;
+  const two = (await resolve(adminMcpApps({ catalogue }), env("build-two"))).resources;
+  // tools link the fixed URI whatever the build; only it claims the renderer
+  for (const resources of [one, two]) {
+    expect(resources[0]).toMatchObject({ uri: "ui://mantle-admin/admin", renders: ["pending"] });
+    expect(resources[1]!.uri).toMatch(/^ui:\/\/mantle-admin\/admin\/[a-f0-9]{64}$/);
+    expect(resources[1]).not.toHaveProperty("renders");
+  }
+  expect(one[1]!.uri).not.toBe(two[1]!.uri);
+  // the hash alias is the same page as the fixed URI, with the caller's catalogue embedded per read
+  const read = (resource: (typeof one)[number]) => (resource.html as (render: object) => Promise<{ html: string }>)({ env: env("build-one"), request, tools: new Set(["pending"]) });
+  expect((await read(one[1]!)).html).toBe((await read(one[0]!)).html);
+  // a retained snapshot keeps its own URI beside both; one with the current URI is not served twice
+  const snapshot = { uri: "ui://mantle-admin/admin/" + "0".repeat(64), html: '<head><script type="application/json" id="mantle-catalog">{"views":{},"actions":{}}</script></head>' };
+  const kept = (await resolve(adminMcpApps({ catalogue, previous: [snapshot, { ...snapshot, uri: "ui://mantle-admin/admin" }] }), env("build-one"))).resources;
+  expect(kept.map(r => r.uri)).toEqual(["ui://mantle-admin/admin", one[1]!.uri, snapshot.uri]);
+});
+
+test("identity: hash keeps a content-hash URI per build, from raw build bytes, static catalogue and material resource metadata", async () => {
+  const source = adminMcpApps({ catalogue, identity: "hash" });
   let reads = 0;
   const env = { ASSETS: { fetch: async () => { reads++; return new Response("<head></head><p>build-one</p>"); } } };
   const [first, again] = await Promise.all([resolve(source, env), resolve(source, env)]);
@@ -86,10 +108,11 @@ test("the default URI versions raw build bytes, static catalogue and material re
   const changedEnv = { ASSETS: { fetch: async () => new Response("<head></head><p>build-two</p>") } };
   expect((await resolve(source, changedEnv)).resources[0]!.uri).not.toBe(uri);
   const changedCatalogue = { views: { pending: { columns: { amount: { type: "integer" } }, actions: [] } }, actions: {} };
-  expect((await resolve(adminMcpApps({ catalogue: changedCatalogue }), env)).resources[0]!.uri).not.toBe(uri);
-  expect((await resolve(adminMcpApps({ catalogue, domain: "https://app.example.test" }), env)).resources[0]!.uri).not.toBe(uri);
-  expect((await resolve(adminMcpApps({ catalogue, title: "Other title" }), env)).resources[0]!.uri).not.toBe(uri);
-  expect((await resolve(adminMcpApps({ catalogue, renders: [] }), env)).resources[0]!.uri).not.toBe(uri);
+  expect((await resolve(adminMcpApps({ catalogue: changedCatalogue, identity: "hash" }), env)).resources[0]!.uri).not.toBe(uri);
+  expect((await resolve(adminMcpApps({ catalogue, identity: "hash", domain: "https://app.example.test" }), env)).resources[0]!.uri).not.toBe(uri);
+  expect((await resolve(adminMcpApps({ catalogue, identity: "hash", title: "Other title" }), env)).resources[0]!.uri).not.toBe(uri);
+  expect((await resolve(adminMcpApps({ catalogue, identity: "hash", renders: [] }), env)).resources[0]!.uri).not.toBe(uri);
+  expect((await resolve(source, env)).resources).toHaveLength(1);
 });
 
 test("only raw assets are cached: each read embeds the current caller's tools, and failed loads retry", async () => {
@@ -107,14 +130,16 @@ test("only raw assets are cached: each read embeds the current caller's tools, a
   expect(reads).toBe(2);
 });
 
-test("a Bun build changed in the same process gets a new URI; explicit renderer partitions are checked", async () => {
+test("a Bun build changed in the same process gets a new revision URI behind the fixed one; explicit renderer partitions are checked", async () => {
   const dir = mkdtempSync(join(tmpdir(), "mantle-mcp-build-identity-"));
   try {
     const file = join(dir, "mcp-app.html"), source = adminMcpApps({ catalogue, file });
     writeFileSync(file, "<head></head><p>one</p>");
-    const first = (await resolve(source, {})).resources[0]!.uri;
+    const first = (await resolve(source, {})).resources;
     writeFileSync(file, "<head></head><p>two</p>");
-    expect((await resolve(source, {})).resources[0]!.uri).not.toBe(first);
+    const second = (await resolve(source, {})).resources;
+    expect([first[0]!.uri, second[0]!.uri]).toEqual(["ui://mantle-admin/admin", "ui://mantle-admin/admin"]);
+    expect(second[1]!.uri).not.toBe(first[1]!.uri);
   } finally { rmSync(dir, { recursive: true, force: true }); }
   expect(() => adminMcpApps({ catalogue, renders: ["unknown"] })).toThrow("unknown View");
   const custom = adminMcpApps({ catalogue, uri: "ui://mantle-admin/explicit/build-2", html: "<head></head>", renders: [] });

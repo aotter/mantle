@@ -148,12 +148,15 @@ through to `_meta.ui`. What the App asks of a host is in the
 components must do to render there, and how it upgrades from the prebuilt App, in
 [Customising Admin for MCP hosts](../../docs/handbook/guides/mcp-apps.md#customising-admin-for-mcp-hosts).
 
-Without an explicit `uri`, this is a request-time contributor: after the endpoint's
-origin/identity gates, it derives `ui://mantle-admin/admin/<digest>` from the built
-HTML, full static catalogue and resource metadata. Workers retain only the raw
-immutable asset/identity per ASSETS binding; catalogue filtering happens per read.
-Bun rereads the file so a new build changes the URI in the same process. A custom
-`html` function must supply a build-specific `uri`. Use `renders: ['view_tool']`
+Without an explicit `uri`, tools link the fixed `ui://mantle-admin/admin`, which hosts can
+prefetch and cache across deploys (#1934). This is a request-time contributor: after the
+endpoint's origin/identity gates, it also serves the current build at
+`ui://mantle-admin/admin/<digest>`, derived from the built HTML, full static catalogue and
+resource metadata, for conversations that hold that URI. Workers retain only the raw
+asset/identity per ASSETS binding; catalogue filtering happens per read. Bun rereads the
+file, so a new build is served in the same process. `identity: "hash"` links tools to the
+content-hash URI instead (a new link per build); an explicit `uri` (e.g.
+`ui://mantle-admin/admin/v2`) is for an App that saved conversations must not load. Use `renders: ['view_tool']`
 to partition Views when registering another renderer; competing claims fail.
 
 The App uses the pinned official ext-apps `App` and `PostMessageTransport` for initialization, notifications, host requests,
