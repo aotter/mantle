@@ -45,9 +45,10 @@ async function request<T>(path: string, init?: RequestInit, input?: unknown): Pr
     const error = new ApiError(statusLine(res, body), res.status, body);
     const { code, kind, check } = refusalOf(body) ?? {};
     const entry = path.match(/^(\/entries\/[^/?]+)(?:\/(?:publish|unpublish|archive))?(\?[^#]*)?$/);
-    // a Schema check refuses the values, not a version: no one else changed the entry (#1910). A generated
-    // PostgreSQL constraint name means nothing to an editor; the structured refusal keeps it in `body`.
-    if (code === "CONFLICT" && kind === "check") error.message = "The entry does not meet a check of its Schema"
+    // an entry write a Schema check refused: the values, not a version, so no one else changed the entry (#1910).
+    // A generated PostgreSQL constraint name means nothing to an editor; the structured refusal keeps it in `body`.
+    // Other routes (operations) keep the server's own message.
+    if (init?.method && entry && code === "CONFLICT" && kind === "check") error.message = "The entry does not meet a check of its Schema"
       + (check && !check.startsWith("_mantle_chk_") ? ` (${check})` : "") + ". Nothing was saved. Correct the values the check requires, then save again.";
     // a Schema lock's or check's refusal is its own explanation: no version moved (#1822)
     else if (init?.method && entry && (code === "CONFLICT" && kind !== "lock" || code === "OUTCOME_UNKNOWN")) {

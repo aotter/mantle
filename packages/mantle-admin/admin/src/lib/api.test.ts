@@ -57,6 +57,10 @@ test("a Schema check refusal is not a stale write: no re-read, no concurrent-cha
     expect(failure.message).toMatch(/^The entry does not meet a check of its Schema.* Nothing was saved\. Correct the values the check requires, then save again\.$/);
     expect(failure.message).not.toMatch(/version|no longer match|_mantle_chk_/);
     expect(failure.message.includes(check)).toBe(shown);
+    // an operation's check refusal is not an entry write: its own message stays
+    fetch.mockClear();
+    await expect(api.post("/operations/edit",{})).rejects.toMatchObject({message:error.message});
+    expect(fetch).toHaveBeenCalledOnce();
   }
 });
 
