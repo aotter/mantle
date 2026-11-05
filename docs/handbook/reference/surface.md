@@ -215,6 +215,16 @@ by declared identity, scope and `check` requirements. Without `authorize`, the
 complete endpoint catalogue is not a permission-filtered catalogue. Operation
 validation, guards and credential checks still apply to calls.
 
+With `authorize`, `discovery: "all"` keeps the caller-independent list: every
+caller of the endpoint gets the same `tools/list` and the same tool names in
+resource HTML, and `authorize` (with `requires`, scopes and `check`) decides at
+call time. Prefer it when a caller's grant can change during a conversation, for
+example a role switched in a directory: a host keeps the tool list it saved, and a
+filtered list would leave it naming tools that are gone or missing ones the caller
+now has. An `authorize` that rejects with `new ContractError("AUTH_DENIED", message)`
+returns that message, so a refusal can name the role that may call the tool; a
+plain `false` or any other rejection answers "Target is not authorized."
+
 `toolsPageSize` pages `tools/list`: each page holds at most that many tools and
 carries an opaque `nextCursor` while more remain; pass it back as `cursor`. A
 cursor is valid only for the catalogue version that issued it; an unknown or
