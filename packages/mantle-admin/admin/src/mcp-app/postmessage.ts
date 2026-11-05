@@ -129,7 +129,7 @@ export function connectHost(handlers: {
         try { const result = await app.requestDisplayMode({ mode }); return MODES.includes(result.mode) ? result.mode : null; } catch { return null; }
       },
     }, app.getHostContext() ?? {});
-    stopResize = app.setupSizeChangedNotifications();
+    stopResize = reportHeight(app, win);
   }).catch(error => {
     if (!closed) { handlers.error(new Error(`Unable to connect to the MCP host. Reopen the App to reconnect. ${error instanceof Error ? error.message : String(error)}`)); disconnect(); }
   });
@@ -143,6 +143,33 @@ export function connectHost(handlers: {
   return disconnect;
 }
 
+/**
+ * `ui/notifications/size-changed` with the content height only. The SDK's own observer also reports
+ * `window.innerWidth`; a host that first mounts the frame wider than its screen would keep that width,
+ * so the frame never shrinks (#1931). `width` is optional in the notification: the host owns it.
+ */
+function reportHeight(app: App, win: Window): () => void {
+  const doc = win.document, root = doc.documentElement;
+  let pending = false, last = 0;
+  const measure = () => {
+    if (pending) return;
+    pending = true;
+    win.requestAnimationFrame(() => {
+      pending = false;
+      // the SDK's measurement: the content's own height, not the frame's
+      const height = root.style.height;
+      root.style.height = "max-content";
+      const next = Math.ceil(root.getBoundingClientRect().height);
+      root.style.height = height;
+      if (next !== last) { last = next; void app.sendSizeChanged({ height: next }).catch(() => {}); }
+    });
+  };
+  measure();
+  const observer = new ResizeObserver(measure);
+  observer.observe(root); observer.observe(doc.body);
+  return () => observer.disconnect();
+}
+
 export function applyHostContext(value: McpUiHostContext, doc: Document = document): void {
   const root = doc.documentElement;
   if (value.locale) root.lang = value.locale;
@@ -153,7 +180,9 @@ export function applyHostContext(value: McpUiHostContext, doc: Document = docume
   const insets = value.safeAreaInsets, box = value.containerDimensions as Partial<Record<"height" | "maxHeight" | "width" | "maxWidth", number>> | undefined;
   if (insets) root.style.padding = `${insets.top}px ${insets.right}px ${insets.bottom}px ${insets.left}px`;
   if (box) {
-    for (const key of ["height", "width", "maxWidth"] as const) root.style[key] = box[key] === undefined ? "" : `${box[key]}px`;
+    root.style.height = box.height === undefined ? "" : `${box.height}px`;
+    // the host's width is an upper bound; the frame's own width wins when the host reports a wider one (#1931)
+    for (const key of ["width", "maxWidth"] as const) root.style[key] = box[key] === undefined ? "" : `min(${box[key]}px, 100%)`;
     // a bounded frame scrolls its content; the max-height also holds the measured size within a fixed height
     const bound = Math.min(box.height ?? Infinity, box.maxHeight ?? Infinity);
     root.style.maxHeight = bound === Infinity ? "" : `${bound}px`;

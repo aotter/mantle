@@ -114,9 +114,11 @@ export function EntryEditView({
     },
     [queryClient, queryOptions.queryKey],
   );
-  // a CONFLICT re-reads the entry, so the newer version's notice (and its reload action) shows
+  // a CONFLICT re-reads the entry, so the newer version's notice (and its reload action) shows; a Schema check
+  // refused the values, so the entry did not change and there is nothing newer to read (#1910)
   const onWriteError = React.useCallback((error: unknown) => {
-    if (!(error instanceof ApiError) || refusalOf(error.body)?.code !== "CONFLICT") return;
+    const refusal = error instanceof ApiError ? refusalOf(error.body) : undefined;
+    if (refusal?.code !== "CONFLICT" || refusal.kind === "check") return;
     setForm(reannounceNewer);
     void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey });
   }, [queryClient, queryOptions.queryKey]);

@@ -16,8 +16,7 @@ vi.mock("@modelcontextprotocol/ext-apps", () => ({
     sendMessage = vi.fn(async () => ({}));
     updateModelContext = vi.fn(async () => ({}));
     requestDisplayMode = vi.fn(async ({ mode }: { mode: string }) => ({ mode }));
-    stopResize = vi.fn();
-    setupSizeChangedNotifications = vi.fn(() => this.stopResize);
+    sendSizeChanged = vi.fn(async () => {});
     close = vi.fn(async () => {});
     constructor(readonly info: unknown, readonly appCapabilities: unknown, readonly options: unknown) {
       this.connected = new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; });
@@ -29,9 +28,14 @@ vi.mock("@modelcontextprotocol/ext-apps", () => ({
   },
   PostMessageTransport: class { constructor(readonly target: unknown, readonly source: unknown) {} },
 }));
+// the content-height observer: one per connection, disconnected with it
+const observers = vi.hoisted(() => [] as { observed: unknown[]; disconnect: ReturnType<typeof vi.fn> }[]);
+vi.stubGlobal("ResizeObserver", class { observed: unknown[] = []; disconnect = vi.fn(); constructor() { observers.push(this); } observe(node: unknown) { this.observed.push(node); } });
 const make = async (capabilities = {}, context = {}, initialize = true) => {
   const ready = vi.fn(), input = vi.fn(), result = vi.fn(), cancelled = vi.fn(), changed = vi.fn(), error = vi.fn();
-  const win = { parent: { postMessage: vi.fn() }, addEventListener: vi.fn(), removeEventListener: vi.fn(), setTimeout } as unknown as Window;
+  const root = { style: { height: "" }, getBoundingClientRect: () => ({ height: 412.2 }) }, body = {};
+  const win = { parent: { postMessage: vi.fn() }, addEventListener: vi.fn(), removeEventListener: vi.fn(), setTimeout,
+    document: { documentElement: root, body }, requestAnimationFrame: (run: () => void) => { run(); return 0; } } as unknown as Window;
   const disconnect = connectHost({ ready, input, result, cancelled, context: changed, error }, win, "9.9.9");
   const app = sdk.apps.at(-1)!;
   app.capabilities = capabilities; app.context = context;
@@ -43,7 +47,7 @@ const make = async (capabilities = {}, context = {}, initialize = true) => {
   return { app, ready, input, result, cancelled, changed, error, win, disconnect, host: ready.mock.calls[0]?.[0] as HostApi };
 };
 
-test("official App owns initialization and resizing, with package version and supported layouts", async () => {
+test("official App owns initialization, with package version, supported layouts and a height-only size report", async () => {
   const { app, win, disconnect } = await make();
   expect(app.info).toEqual({ name: "mantle", version: "9.9.9" });
   expect(app.appCapabilities).toEqual({ availableDisplayModes: ["inline", "fullscreen"] });
@@ -51,9 +55,12 @@ test("official App owns initialization and resizing, with package version and su
   expect(transport.source).toBe(win.parent);
   transport.target.postMessage({ hello: "host" }, "*");
   expect(win.parent.postMessage).toHaveBeenCalledWith({ hello: "host" }, "https://host.test");
-  expect(app.setupSizeChangedNotifications).toHaveBeenCalledOnce();
+  // the content height, never the frame's width: the host owns the width (#1931)
+  expect(app.sendSizeChanged.mock.calls).toEqual([[{ height: 413 }]]);
+  const observer = observers.at(-1)!;
+  expect(observer.observed).toEqual([win.document.documentElement, win.document.body]);
   disconnect(); disconnect();
-  expect(app.stopResize).toHaveBeenCalledOnce();
+  expect(observer.disconnect).toHaveBeenCalledOnce();
   expect(app.close).toHaveBeenCalledOnce();
   expect(win.removeEventListener).toHaveBeenCalledWith("message", expect.any(Function), true);
 });
@@ -114,7 +121,7 @@ test("unmount during initialization suppresses late ready/error; a fresh mount r
   state.disconnect(); state.app.resolve(); await Promise.resolve();
   expect(state.ready).not.toHaveBeenCalled();
   expect(state.error).not.toHaveBeenCalled();
-  expect(state.app.setupSizeChangedNotifications).not.toHaveBeenCalled();
+  expect(state.app.sendSizeChanged).not.toHaveBeenCalled();
   const fresh = await make();
   expect(fresh.ready).toHaveBeenCalledOnce();
   fresh.disconnect();
@@ -171,7 +178,7 @@ test("applyHostContext: dark as both .dark and data-theme, only spec style varia
  expect(root.dataset).toEqual({theme:"dark"});
  expect([...classes]).toEqual(["dark"]);
  expect(Object.fromEntries(properties)).toEqual({"--color-background-primary":"#000","--border-radius-md":"4px","--font-text-sm-size":"13px","--font-weight-medium":"550"});
- expect(style).toMatchObject({padding:"10px 1px 20px 2px",maxHeight:"400px",width:"320px",height:"",maxWidth:"",overflow:"auto"});
+ expect(style).toMatchObject({padding:"10px 1px 20px 2px",maxHeight:"400px",width:"min(320px, 100%)",height:"",maxWidth:"",overflow:"auto"});
  applyHostContext({theme:"light"},doc);
  expect([...classes]).toEqual([]);
  // a fixed height is also the measured size's bound

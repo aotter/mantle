@@ -90,6 +90,8 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     expect(state.calls[1]).toMatchObject({ name: "pending", arguments: { limit: 5 } });
     expect(["number", "string"]).toContain(typeof state.calls[0]._meta.progressToken);
     expect(state.sizes.length).toBeGreaterThan(0);
+    // height only: the host owns the frame's width, so a frame mounted too wide is never held at that width (#1931)
+    expect(state.sizes.filter((size: { width?: number }) => size.width !== undefined)).toEqual([]);
     const root = await app.locator("html").evaluate(node => ({ lang: node.lang, theme: node.dataset.theme, color: node.style.getPropertyValue("--color-text-primary") }));
     expect(root).toEqual({ lang: "zh-TW", theme: "dark", color: "rgb(1, 2, 3)" });
     // a bounded container: the App scrolls and reports a height within the bound
@@ -152,6 +154,9 @@ it("renders an application's pages[].mcp page for its View's tool, not the rows,
     expect(await app.getByText("工作待辦").count()).toBe(1);
     expect(await app.getByRole("link", { name: "Queue help" }).count()).toBe(1);
     expect(await app.getByRole("heading", { name: "queue-page" }).locator("..").evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(192, 255, 238)");
+    // a host that reports a wider container than the frame it renders (#1931): the frame's own width wins
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { width: 760 } }));
+    await expect.poll(() => app.locator("html").evaluate(node => node.style.width)).toBe("min(760px, 100%)");
     for (const width of [340, 700]) {
       await page.locator("iframe").evaluate((node, width) => { (node as HTMLIFrameElement).width = String(width); }, width);
       await expect.poll(() => app.locator("body").evaluate(() => window.innerWidth)).toBe(width);
