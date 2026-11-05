@@ -13,7 +13,7 @@ An app-shell pattern and a handbook recipe, with one small Core change. No gramm
    with a first-party URL `https://<origin>/approve/<opaque id>` that carries no credential.
 2. **Channel.** On a 2026-07-28 request that declares `elicitation.url`, the answer is `inputRequired.elicitUrl({ url,
    message })`; the host opens the URL out of the model's view and retries the same call. On any other request the
-   answer is an ordinary tool result: "Approval required: open <url>, then call this tool again." The 2025-era `-32042`
+   answer is an ordinary tool result: "Approval required: open `<url>`, then call this tool again." The 2025-era `-32042`
    error is not used: a stateless 2025 request carries no client capabilities, and 2026-07-28 removes it.
 3. **Approval.** The page accepts only a cookie session whose subject is the requester's; any `Authorization` header is
    refused and Origin is checked. It renders the frozen input from the stored row, never model-written text. It requires
