@@ -92,20 +92,16 @@ export function SignInView(): React.ReactElement {
         {methods.isLoading ? (
           <Skeleton className="h-9 w-full" />
         ) : null}
-        {methods.data?.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {t(language, "auth.signIn.noMethods")}
-          </p>
-        ) : null}
-        {methods.data && methods.data.length > 0 ? (
+        {methods.isLoading ? null : (
+          // Mounted once the list has loaded, failed or come back empty, so a method an application adds still shows.
           <Slot name="SignIn" Default={SignInMethods} props={{
-            methods: methods.data,
+            methods: methods.data ?? [],
             returnTo: ret,
             oauthQuery: oauthQuery || undefined,
             emailAutoComplete: "email",
             onSignedIn: navigateAfterSignIn,
           }} />
-        ) : null}
+        )}
       </CardContent>
     </AuthCard>
   );
@@ -118,6 +114,9 @@ function navigateAfterSignIn(next: string): void {
 
 /** The built-in `SignIn` slot: one section per method. */
 function SignInMethods({ methods, returnTo, oauthQuery, emailAutoComplete, onSignedIn }: SignInProps): React.ReactElement {
+  const { language } = usePreferences();
+  usePasskeyAutofill(methods.some(m => m.kind === "passkey") && /\bwebauthn\b/.test(emailAutoComplete), returnTo, oauthQuery, onSignedIn);
+  if (methods.length === 0) return <p className="text-sm text-muted-foreground">{t(language, "auth.signIn.noMethods")}</p>;
   // Wrap so each section's `first:` selectors target the first method in the list, not the first child of the card.
   return (
     <div>
@@ -330,7 +329,7 @@ function MethodSection({
   emailAutoComplete: string;
   onSignedIn: (next: string) => void;
 }): React.ReactElement {
-  // Exhaustive switch — adding a kind to AuthMethodInfo without
+  // Exhaustive switch — adding a kind to SignInMethod without
   // adding a case here is a TS error. `social` covers all OAuth
   // providers (per Better Auth's socialProviders block); the
   // `provider` discriminator picks the button label.
@@ -537,6 +536,26 @@ function EmailOtpSection({
       }}
     />
   );
+}
+
+/**
+ * Passkey autofill: with a passkey method and an email input whose `autocomplete` names `webauthn`, start a conditional
+ * WebAuthn request so the browser offers saved passkeys in the field. Picking one signs in like the button does.
+ */
+function usePasskeyAutofill(enabled: boolean, returnTo: string, oauthQuery: string | undefined, onSignedIn: (next: string) => void): void {
+  const done = React.useRef(onSignedIn);
+  done.current = onSignedIn;
+  React.useEffect(() => {
+    const credential = globalThis.PublicKeyCredential as unknown as { isConditionalMediationAvailable?: () => Promise<boolean> } | undefined;
+    if (!enabled || !credential?.isConditionalMediationAvailable) return;
+    const abort = new AbortController();
+    void credential.isConditionalMediationAvailable().then(async available => {
+      if (!available || abort.signal.aborted) return;
+      const next = await signInWithPasskey(AUTH_BASE, oauthQuery, abort.signal, "conditional");
+      done.current(next ?? returnTo);
+    }).catch(() => {}); // dismissed, aborted or refused: the field stays an ordinary email input
+    return () => abort.abort();
+  }, [enabled, returnTo, oauthQuery]);
 }
 
 /** Passkey sign-in through Better Auth's passkey plugin; on success it continues like the email code. */

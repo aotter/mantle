@@ -10,7 +10,7 @@ import { createServer } from "node:http";
 // own element, and runs its own step after an in-page sign-in before continuing to the same URL. Better Auth's passkey
 // endpoints are fixtures here: the browser's real WebAuthn API (Chromium's virtual authenticator) signs the assertion,
 // and the test checks what reaches the server, not Better Auth's verification.
-it("the SignIn slot sets the email autocomplete, signs in with a passkey and runs the app's step before continuing", async () => {
+it("the SignIn slot sets the email autocomplete, signs in with a passkey (autofill or button) and runs the app's step", async () => {
   const root = await mkdtemp(join(tmpdir(), "mantle-sign-in-slot-"));
   const { buildAdmin } = await import("../dist/build/index.js");
   const dist = join(root, "admin"), entry = join(root, "entry.tsx");
@@ -21,7 +21,7 @@ export default defineAdmin({}, {
   components: {
     SignIn: (props) => <>
       <p>app-sign-in-note</p>
-      {props.renderDefault({ ...props, emailAutoComplete: "username webauthn",
+      {props.renderDefault({ ...props, emailAutoComplete: location.search.includes("plain") ? props.emailAutoComplete : "username webauthn",
         onSignedIn: next => window.location.assign("/admin/p/after?next=" + encodeURIComponent(next)) })}
     </>,
   },
@@ -31,7 +31,7 @@ export default defineAdmin({}, {
   await buildAdmin({ entry, outDir: dist });
   const rpId = "localhost", challenge = randomBytes(32).toString("base64url"), credentialId = randomBytes(16);
   const posts: { path: string; body: Record<string, unknown> }[] = [];
-  let signedIn = false;
+  let signedIn = false, methods: unknown[] = [{ kind: "email-otp" }, { kind: "passkey" }];
   const server = createServer(async (request, response) => {
     const url = new URL(request.url!, "http://localhost");
     const json = (status: number, data: unknown) => { response.writeHead(status, { "content-type": "application/json" }); response.end(JSON.stringify(data)); };
@@ -39,7 +39,7 @@ export default defineAdmin({}, {
       let raw = ""; for await (const chunk of request) raw += chunk;
       posts.push({ path: url.pathname, body: JSON.parse(raw || "{}") });
     }
-    if (url.pathname === "/api/auth/methods") return json(200, { methods: [{ kind: "email-otp" }, { kind: "passkey" }] });
+    if (url.pathname === "/api/auth/methods") return json(200, { methods });
     if (url.pathname === "/api/auth/passkey/generate-authenticate-options") return json(200, { challenge, rpId, timeout: 60000, userVerification: "preferred", allowCredentials: [] });
     if (url.pathname === "/api/auth/passkey/verify-authentication") { signedIn = true; return json(200, { session: {} }); }
     if (url.pathname === "/api/auth/email-otp/send-verification-otp") return json(200, { success: true });
@@ -78,10 +78,20 @@ export default defineAdmin({}, {
       credentialId: credentialId.toString("base64"), isResidentCredential: true, rpId, userHandle: Buffer.from("user-1").toString("base64"),
       privateKey: privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"), signCount: 0 } });
 
+    // autofill: the app's `username webauthn` makes Admin start a conditional request; the virtual authenticator picks
+    // the passkey without a click (automatic presence), as a person choosing it in the field would
     await page.goto(origin + "/admin/sign-in");
-    await page.getByText("app-sign-in-note").waitFor();
-    expect(await page.getByRole("textbox").first().getAttribute("autocomplete")).toBe("username webauthn");
+    await page.getByText("after-step").waitFor();
+    expect(new URL(page.url()).searchParams.get("next")).toBe("/admin");
+    expect(posts.filter(post => post.path === "/api/auth/passkey/verify-authentication")).toHaveLength(1);
 
+    // the button, with the default autocomplete: no autofill request runs, a press signs in
+    signedIn = false; posts.length = 0;
+    await page.goto(origin + "/admin/sign-in?plain=1");
+    await page.getByText("app-sign-in-note").waitFor();
+    expect(await page.getByRole("textbox").first().getAttribute("autocomplete")).toBe("email");
+    await page.waitForTimeout(500);
+    expect(posts).toEqual([]);
     await page.getByRole("button", { name: "Sign in with a passkey" }).click();
     await page.getByText("after-step").waitFor();
     // the app's step ran with where Admin would have gone, unchanged
@@ -98,11 +108,17 @@ export default defineAdmin({}, {
 
     // the email code takes the same path: the app's step gets Better Auth's continuation URL
     signedIn = false;
-    await page.goto(origin + "/admin/sign-in");
+    await page.goto(origin + "/admin/sign-in?plain=1");
     await page.getByRole("textbox").first().fill("person@example.test");
     await page.getByRole("button", { name: "Send code" }).click();
     await page.getByRole("textbox").first().fill("123456");
     await page.getByText("after-step").waitFor();
     expect(new URL(page.url()).searchParams.get("next")).toBe("/admin/from-otp");
+
+    // no server methods: the slot still mounts, so what the application adds still shows
+    signedIn = false; methods = [];
+    await page.goto(origin + "/admin/sign-in?plain=1");
+    await page.getByText("app-sign-in-note").waitFor();
+    await page.getByText("No sign-in methods", { exact: false }).waitFor();
   } finally { await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
 }, 120_000);

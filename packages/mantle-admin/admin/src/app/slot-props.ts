@@ -107,7 +107,8 @@ export interface SignInProps {
    * Called once an in-page method (email code, passkey) has signed in, with where to go next: the OAuth authorize
    * continuation, or `returnTo`. The default navigates there. Wrap it to run a step of your own first (for example
    * offering to add a passkey) and then navigate to the same URL unchanged. Redirecting methods (social, OAuth, magic
-   * link) leave the page and do not call it.
+   * link) leave the page and do not call it. The signed-in method stays locked (its code is spent, its button busy), so
+   * navigate away, or replace the page, rather than leaving the sign-in card in place.
    */
   readonly onSignedIn: (next: string) => void;
 }

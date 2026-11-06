@@ -53,13 +53,24 @@ export function assertionJson(credential: PublicKeyCredential): Json {
 }
 
 /**
- * Sign in with a passkey. Resolves to the URL to continue to (Better Auth answers an OAuth sign-in with the authorize
- * continuation) or `undefined`; throws when the browser or the server refuses.
+ * Sign in with a passkey; `mediation: "conditional"` waits for the user to pick a passkey offered in an input whose
+ * `autocomplete` names `webauthn` (autofill). Resolves to the URL to continue to (Better Auth answers an OAuth sign-in
+ * with the authorize continuation) or `undefined`; throws when the browser or the server refuses.
  */
-export async function signInWithPasskey(authBase: string, oauthQuery: string | undefined, signal?: AbortSignal): Promise<string | undefined> {
-  const options = await fetch(`${authBase}/passkey/generate-authenticate-options`, { credentials: "include" });
+/** The pending autofill request: a browser runs one WebAuthn request at a time, so a button press cancels it first. */
+let autofill: AbortController | undefined;
+
+export async function signInWithPasskey(authBase: string, oauthQuery: string | undefined, given?: AbortSignal, mediation?: CredentialMediationRequirement): Promise<string | undefined> {
+  autofill?.abort();
+  autofill = undefined;
+  let signal = given;
+  if (mediation === "conditional") {
+    const own = autofill = new AbortController();
+    signal = given ? AbortSignal.any([given, own.signal]) : own.signal;
+  }
+  const options = await fetch(`${authBase}/passkey/generate-authenticate-options`, { credentials: "include", ...(signal ? { signal } : {}) });
   if (!options.ok) throw new Error(`passkey options ${options.status}`);
-  const credential = await navigator.credentials.get({ publicKey: requestOptions(await options.json() as Json), ...(signal ? { signal } : {}) });
+  const credential = await navigator.credentials.get({ publicKey: requestOptions(await options.json() as Json), ...(signal ? { signal } : {}), ...(mediation ? { mediation } : {}) });
   if (!credential) throw new Error("no passkey");
   const verified = await fetch(`${authBase}/passkey/verify-authentication`, {
     method: "POST",
