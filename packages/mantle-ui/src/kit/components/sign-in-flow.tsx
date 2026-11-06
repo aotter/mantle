@@ -65,6 +65,11 @@ export type SignInFlowProps = {
   className?: string;
   /** Namespaces the field ids and their labels when a page mounts more than one flow. */
   idPrefix?: string;
+  /**
+   * The email input's `autocomplete`, `email` by default. `username webauthn` lets the browser offer saved passkeys in
+   * the field (passkey autofill), when the page also starts a conditional WebAuthn request.
+   */
+  emailAutoComplete?: string;
 };
 
 export type SignInFlowState = {
@@ -133,6 +138,7 @@ export function SignInFlow({
   onVerifyCode,
   className,
   idPrefix = "signin",
+  emailAutoComplete = "email",
 }: SignInFlowProps): React.ReactElement {
   const [state, dispatch] = React.useReducer(signInFlowReducer, SIGN_IN_FLOW_INITIAL);
   const { step, email, otp, busy, error } = state;
@@ -189,7 +195,7 @@ export function SignInFlow({
             onChange={(e) => dispatch({ type: "email", value: e.currentTarget.value })}
             placeholder={labels.emailPlaceholder}
             required
-            autoComplete="email"
+            autoComplete={emailAutoComplete}
           />
           <SignInButton type="submit" className="w-full" busy={busy} disabled={!email}>
             {labels.sendButton}

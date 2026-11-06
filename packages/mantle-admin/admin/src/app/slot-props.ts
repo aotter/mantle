@@ -82,6 +82,37 @@ export interface HomeProps {
   readonly site: AdminSiteSummary | undefined;
 }
 
+/** A sign-in method as `GET <auth>/methods` lists it (`authRoutes` `methods`). */
+export type SignInMethod =
+  | { readonly kind: "email-otp" }
+  | { readonly kind: "magic-link" }
+  | { readonly kind: "passkey" }
+  | { readonly kind: "social"; readonly provider: string }
+  | { readonly kind: "oauth"; readonly providerId: string; readonly displayName?: string };
+
+/**
+ * `SignIn`: the methods on `/admin/sign-in`, below the card's title. Surface: browser. Pass changed props to
+ * `renderDefault` to reorder or drop `methods` or to set `emailAutoComplete`; render your own elements around it to add a
+ * method of your own. A `passkey` method is listed for this slot: the default renders nothing for it.
+ */
+export interface SignInProps {
+  readonly methods: readonly SignInMethod[];
+  /** The same-origin path to land on after signing in (`?return=`, else `/admin`). */
+  readonly returnTo: string;
+  /** The signed OAuth authorize query when this sign-in continues an authorization (an MCP connector's), else undefined. */
+  readonly oauthQuery: string | undefined;
+  /** The email input's `autocomplete` for the email-code method; `email` by default. */
+  readonly emailAutoComplete: string;
+  /**
+   * Called once the email code has signed in, with where to go next: the OAuth authorize
+   * continuation, or `returnTo`. The default navigates there. Wrap it to run a step of your own first and then navigate
+   * to the same URL unchanged. Redirecting methods (social, OAuth, magic
+   * link) leave the page and do not call it. The signed-in method stays locked (its code is spent, its button busy), so
+   * navigate away, or replace the page, rather than leaving the sign-in card in place.
+   */
+  readonly onSignedIn: (next: string) => void;
+}
+
 /** `CollectionList`: a collection's list page, which reads its filters from the location. Surface: browser. */
 export interface CollectionListProps {
   readonly collection: string;

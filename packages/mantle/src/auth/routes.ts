@@ -10,7 +10,7 @@ export interface AuthRoutesOptions {
   /** Same basePath as app-owned betterAuth options. */
   readonly basePath?: string;
   readonly resolver?: (request: Request) => Caller | Promise<Caller>;
-  readonly methods: readonly ({ readonly kind: "social"; readonly provider: string } | { readonly kind: "oauth"; readonly providerId: string; readonly displayName?: string } | { readonly kind: "email-otp" | "magic-link" })[];
+  readonly methods: readonly ({ readonly kind: "social"; readonly provider: string } | { readonly kind: "oauth"; readonly providerId: string; readonly displayName?: string } | { readonly kind: "email-otp" | "magic-link" | "passkey" })[];
   readonly connectedAppsPage?: string;
 }
 
