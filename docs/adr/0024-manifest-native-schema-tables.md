@@ -104,8 +104,8 @@ RuntimePlan and emits a versioned SQL migration artifact containing:
 Mantle deterministically emits initial tables and safe additive changes. Field
 renames, type conversions, data transforms, narrowing constraints, and any
 `uniqueIndexes` tuple change are
-destructive in the pre-beta contract. Cloud rejects them; operators rebuild the
-database and move required data manually outside Mantle and Control. Production
+destructive in the pre-beta contract. The managed host rejects them; operators rebuild the
+database and move required data manually outside Mantle and the host. Production
 neither generates nor accepts arbitrary migration SQL.
 
 Preparation records applied migration ids in the `_mantle_migrations` ledger (#1150).
@@ -121,34 +121,34 @@ input. Automatic deployments retain removed fields, indexes, and tables as a
 physical superset; logical reads follow the selected plan, while retained
 storage keeps the previous Worker rollback-compatible.
 
-### Builder support
+### Interactive preview support
 
-Builder keeps its in-memory or IndexedDB semantic adapter for interactive
-preview. It does not carry SQLite into portable Runtime.
+An interactive authoring preview keeps its in-memory or IndexedDB semantic
+adapter. It does not carry SQLite into portable Runtime.
 
 Each successful build can show a draft-to-draft storage delta for authoring
-feedback. It is not labeled as the deployment artifact: only Cloud knows the
+feedback. It is not labeled as the deployment artifact: only the host knows the
 last successfully deployed source revision and produces the exact immutable
 artifact used by deployment. The publish result shows its source/target
 fingerprints, risk classification, ordered SQL, and checksum.
 The interactive preview continues to run the real Mantle Runtime over the
 existing IndexedDB semantic adapter; it does not carry a second SQLite runtime
 or copy preview data into one. Destructive changes remain previewable but are
-not deployable on the pre-beta Cloud path.
+not deployable on the pre-beta managed-host path.
 
-CI executes generated SQL against SQLite. Mantle Cloud/D1 is authoritative at
+CI executes generated SQL against SQLite. The host's D1 deployment is authoritative at
 deployment: it checks the immutable artifact, migration ledger, source/target
 fingerprints, database integrity, and canary before restoring traffic. Running
-the same DDL in every Builder browser would duplicate those gates while adding
+the same DDL in every preview browser would duplicate those gates while adding
 WASM weight and a second Worker/browser compatibility surface.
 
 Unsaved invalid Manifest edits produce diagnostics and no storage revision.
-Intermediate Builder edits do not become production migrations. Deployment
+Intermediate preview edits do not become production migrations. Deployment
 diffs the last deployed storage revision against the selected project revision.
 
-### Cloud runtime and Schema upgrades
+### Hosted runtime and Schema upgrades
 
-Every Cloud deployment pins these immutable identities:
+Every managed-host deployment pins these immutable identities:
 
 - Mantle runtime release;
 - project revision and compiled plan fingerprint;
@@ -195,11 +195,11 @@ are not valid deployment input.
 ### Negative
 
 - This is a storage-format break and requires coordinated changes across Spec,
-  Runtime, SQLite adapters, conformance tests, Builder, and Cloud deployment.
+  Runtime, SQLite adapters, conformance tests, preview, and hosted deployment.
 - Unqualified global entry lookups and implicit cross-Schema lists disappear.
 - Optional nullable fields no longer distinguish absent from explicit null.
 - Destructive schema changes require a manual rebuild and data move outside
-  Mantle and Control.
+  Mantle and the host.
 
 ## Alternatives
 
@@ -216,7 +216,7 @@ Schema-qualified access removes the need for it.
 
 ### Put SQLite WASM in the portable Runtime
 
-Rejected. Runtime already has a semantic storage boundary. Builder can verify
+Rejected. Runtime already has a semantic storage boundary. A build can verify
 the SQLite lowering as a build check without making every adapter or browser
 preview depend on SQLite.
 
@@ -236,29 +236,29 @@ production mutation.
    compatibility helpers.
 4. Update memory and IndexedDB adapters to the new semantic port shape.
 5. Add build-time migration diff/artifact inspection, plus SQLite execution in
-   CI and Cloud/D1 deployment verification.
+   CI and hosted D1 deployment verification.
 6. Pin content-addressed runtime, storage, migration, application, and Worker
-   revision identities in Cloud deploys; test initial deploy, additive Schema
+   revision identities in hosted deploys; test initial deploy, additive Schema
    change, runtime-only upgrade, partial migration retry, and route rollback.
-7. Update all public storage, Schema, Builder, deployment, and migration
+7. Update all public storage, Schema, preview, deployment, and migration
    documentation after the conformance and consumer checks pass.
 
 ## Decision review
 
 Reviewed after implementation against ADR-0019, the semantic storage ports,
-Builder preview persistence, and Mantle Cloud's retryable deployment state.
+preview persistence, and the managed host's retryable deployment state.
 The review found and corrected three boundary mistakes before acceptance:
 
 - authored data was allowed to contain `id`, `status`, or `createdAt`, so
   physical envelope columns require the `_mantle_` prefix (the prefix stays;
   ADR-0025 later reserved those names for authored data as well);
-- Builder should expose draft storage risk without pretending it knows the
-  deployed baseline; Cloud shows the exact immutable artifact, while CI and
-  Cloud/D1 own executable DDL verification and preview stays on IndexedDB;
-- Cloud must pin the runtime release and storage artifact selected when the
+- the preview should expose draft storage risk without pretending it knows the
+  deployed baseline; the host shows the exact immutable artifact, while CI and
+  the host's D1 deployment own executable DDL verification and preview stays on IndexedDB;
+- the host must pin the runtime release and storage artifact selected when the
   operation starts; a mutable current release would make retry and rollback
   nondeterministic.
 
 The native-table path is implemented without a compatibility `entries` table.
-Acceptance is gated by the repository consumer check and the Cloud upgrade,
+Acceptance is gated by the repository consumer check and the hosted upgrade,
 retry, and rollback checks in the ADR's final application step.

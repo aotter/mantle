@@ -40,7 +40,7 @@ the existing UI. The browser API is feature-detected, not polyfilled.
 Only the explicitly marked, same-origin sandbox preview accepts the parent
 message-port tool bridge. It reuses the same executor even in browsers without
 native WebMCP. Canonical Admin refuses embedding and installs no parent bridge.
-Builder keeps reset/seed/observe and member/anonymous sandbox tests; owner
+The host's preview keeps reset/seed/observe and member/anonymous sandbox tests; owner
 staff calls traverse the iframe Admin executor and existing sandbox HTTP bridge.
 Timeout/cancellation does not imply a write was rolled back; reconcile before
 retry. Preview remains isolated from live network APIs.

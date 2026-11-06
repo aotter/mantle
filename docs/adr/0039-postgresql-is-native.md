@@ -46,11 +46,11 @@ The PostgreSQL audit on the procurement fixture (S, M and L tiers, Bun and Worke
 ### Who actually needs D1/PostgreSQL parity
 
 No caller needs one manifest to switch engines without changes:
-- **Cloud tenants** are moving to PostgreSQL.
+- **Hosted tenants** may run on PostgreSQL.
 - **On-premises single-organization deployments** run PostgreSQL on Bun.
 - **D1 services** stay on D1.
 
-What callers do need is that one PostgreSQL plan behaves the same on Bun and on Workers. The same app runs in Cloud and on-premises, and handler code and output schemas see the values directly.
+What callers do need is that one PostgreSQL plan behaves the same on Bun and on Workers. The same app runs on a managed host and on-premises, and handler code and output schemas see the values directly.
 
 ## Decision
 

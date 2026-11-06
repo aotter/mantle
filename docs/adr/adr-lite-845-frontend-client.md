@@ -34,5 +34,5 @@ also receive the configured exact-origin CORS policy for public browser clients.
 Existing native public cache tags and purge handle same-Worker invalidation.
 External consumers start with private/no-store, or explicitly bound TTL; durable
 remote invalidation delivery remains the parent #792 contract and must be proven
-before advertising a stronger freshness guarantee. Cloud's integration includes
+before advertising a stronger freshness guarantee. A host's integration includes
 the actual external consumer and browser evidence, not only this package change.

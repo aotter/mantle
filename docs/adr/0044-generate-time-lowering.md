@@ -63,8 +63,8 @@ Plan-derived work runs, in this order of preference:
    `lowered` is ignored, a warning is logged (except under `restrict`, where
    ignoring is the contract), the existing compile path runs unchanged and
    `bootReport().lowered` names the reason: `used`, `absent`, `restricted`,
-   `mantle-version`, `dialect` or `unsupported`. Boot does not refuse: Mantle
-   Cloud upgrades its runtime independently of uploaded plans, and a stale
+   `mantle-version`, `dialect` or `unsupported`. Boot does not refuse: a managed
+   host upgrades its runtime independently of uploaded plans, and a stale
    self-hosted plan is caught by `mantle generate --check` in CI. A seeding
    failure (a malformed `lowered` with a valid fingerprint) is a warning and
    seeds nothing.
@@ -131,7 +131,7 @@ Plan-derived work runs, in this order of preference:
 - **Storing policy or paged ASTs in the plan.** Plan size and boot canonical-hash
   cost grow; text is enough.
 - **Pre-printed fragments.** A second printer, rejected in #1432.
-- **Refusing boot on a version mismatch.** Breaks Cloud upgrades.
+- **Refusing boot on a version mismatch.** Breaks managed-host upgrades.
 - **Priming executor WeakMaps instead of carrying the text with the statement.**
   A seeded entry would depend on which executor was primed, and two runtimes
   share the dialect singleton and the compile cache.

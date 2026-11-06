@@ -7,7 +7,7 @@ PostgreSQL dialect amendment's "What it accepts".
 
 **Date:** 2026-10-02
 
-**Related:** ADR-0014 (Cloud and tenants), ADR-0034, ADR-0035, ADR-0036, #1293
+**Related:** ADR-0014 (hosting and tenants), ADR-0034, ADR-0035, ADR-0036, #1293
 
 ## Context
 
@@ -119,7 +119,7 @@ amendment.
   a new catalog function or a server upgrade adds one. Rejected.
 - **A Schema-level visibility predicate** (a second `scope`, injected by the rewriter). It solves the repeated window, but only
   for row filters; View references solve it and every other shared rule.
-- **Native row-level security on PostgreSQL** (ADR-0035 decision 3's `policy: "native"`). The right second layer for Cloud
+- **Native row-level security on PostgreSQL** (ADR-0035 decision 3's `policy: "native"`). The right second layer for a hosted platform
   (decision 6); a larger change than this ADR needs.
 
 ## Conformance cases
