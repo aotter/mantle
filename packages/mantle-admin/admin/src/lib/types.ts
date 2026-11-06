@@ -171,9 +171,6 @@ export interface AdminUser {
   userId?: string;
 }
 
-/** Public sign-in capabilities returned by `GET /api/auth/methods`: the `SignIn` slot's method type. */
-export type AuthMethodInfo = import("../app/slot-props").SignInMethod;
-
 /** Row from `GET /admin/api/admin` (admin-only). `createdAt` arrives
  *  as an ISO string over the wire. `emailVerified: false` with no
  *  `githubLogin` marks a pending invitation nobody has signed in to. */

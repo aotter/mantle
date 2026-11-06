@@ -20,7 +20,7 @@ export default defineAdmin({}, {
     SignIn: (props) => <>
       <p>app-sign-in-note {props.methods.map(m => m.kind).join(",")}</p>
       {props.renderDefault({ ...props, emailAutoComplete: "username webauthn",
-        onSignedIn: next => window.location.assign("/admin/p/after?next=" + encodeURIComponent(next)) })}
+        onSignedIn: next => { sessionStorage.setItem("after-sign-in", next); window.location.assign("/admin/p/after"); } })}
     </>,
   },
   pages: [{ path: "after", title: "After", element: <p>after-step</p> }],
@@ -77,7 +77,7 @@ export default defineAdmin({}, {
     await page.getByRole("button", { name: "Send code" }).click();
     await page.getByRole("textbox").first().fill("123456");
     await page.getByText("after-step").waitFor();
-    expect(new URL(page.url()).searchParams.get("next")).toBe("/admin/from-otp");
+    expect(await page.evaluate(() => sessionStorage.getItem("after-sign-in"))).toBe("/admin/from-otp");
 
     // no server methods: the slot still mounts, so what the application adds still shows
     signedIn = false; methods = [];

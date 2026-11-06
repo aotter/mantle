@@ -14,7 +14,6 @@ import { Skeleton } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { authMethodsQueryOptions } from "../../lib/queries";
-import type { AuthMethodInfo } from "../../lib/types";
 import { ThemeToggle } from "../../layout/preference-controls";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
@@ -72,7 +71,7 @@ export function SignInView(): React.ReactElement {
   const ret = safeReturnPath(params.get("return"));
   const oauthQuery = signedOAuthQuery(window.location.search);
 
-  const methods = useQuery<AuthMethodInfo[]>(authMethodsQueryOptions());
+  const methods = useQuery<SignInMethod[]>(authMethodsQueryOptions());
 
   return (
     <AuthCard action={<ThemeToggle />}>
@@ -90,8 +89,7 @@ export function SignInView(): React.ReactElement {
         ) : null}
         {methods.isLoading ? (
           <Skeleton className="h-9 w-full" />
-        ) : null}
-        {methods.isLoading ? null : (
+        ) : (
           // Mounted once the list has loaded, failed or come back empty, so a method an application adds still shows.
           <Slot name="SignIn" Default={SignInMethods} props={{
             methods: methods.data ?? [],

@@ -2,7 +2,8 @@ import { infiniteQueryOptions } from "@tanstack/react-query";
 import { api } from "./api";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
 import { foldedChildScopeValue, isFoldedFieldChild } from "./collection-nav";
-import type { EntryDocument, AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, AdminOperation, ViewManifestInfo } from "./types";
+import type { SignInMethod } from "../app/slot-props";
+import type { EntryDocument, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, AdminOperation, ViewManifestInfo } from "./types";
 import { AUTH_BASE } from "./auth";
 
 export const COLLECTION_PAGE_SIZE = 50;
@@ -141,7 +142,7 @@ export function adminWebMcpQueryOptions(): {
 
 export function authMethodsQueryOptions(): {
   queryKey: readonly ["auth-methods"];
-  queryFn: () => Promise<AuthMethodInfo[]>;
+  queryFn: () => Promise<SignInMethod[]>;
   retry: false;
 } {
   return {
@@ -149,7 +150,7 @@ export function authMethodsQueryOptions(): {
     queryFn: async () => {
       const res = await fetch(`${AUTH_BASE}/methods`, { credentials: "include" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { methods?: AuthMethodInfo[] };
+      const data = (await res.json()) as { methods?: SignInMethod[] };
       return data.methods ?? [];
     },
     retry: false,
