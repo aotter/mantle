@@ -227,6 +227,7 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 | `Brand` | browser | `title`, `image?`, `href?` |
 | `Home` | browser | `collections`, `site` (what the page shows; the built-in page loads its own data) |
 | `CollectionList` | browser | `collection` (filters come from the page's location) |
+| `SignIn` | browser | `methods`, `returnTo`, `oauthQuery`, `emailAutoComplete`, `onSignedIn(next)` ([below](#sign-in)) |
 | `RecordView` | browser | `collection`, `entryId`, `surface` |
 | `record.aside:<schema>` | browser | `collection`, `entry`, `surface` |
 | `record.actions:<schema>` | browser | `collection`, `entry`, `surface` |
@@ -403,6 +404,30 @@ View that has an MCP tool (`tsc` checks it against the generated `admin-client.t
 
 Authorization is unchanged by any of this. A component that shows or hides something grants or denies nothing; the server
 checks every route, View and Procedure.
+
+### Sign-in
+
+`/admin/sign-in` lists the methods `authRoutes` returns from `GET <auth>/methods` (`email-otp`, `magic-link`, `passkey`,
+`social`, `oauth`) through the `SignIn` slot. Pass changed props to `renderDefault` to reorder or add `methods`, set the
+email field's `emailAutoComplete` (for example `username webauthn`, the browser's passkey autofill), or wrap
+`onSignedIn`. Admin calls `onSignedIn(next)` once an in-page method (the email code or a passkey) has signed in. `next`
+is where Admin goes by default: Better Auth's OAuth authorize continuation when the sign-in came from an OAuth client
+such as an MCP connector, or the page's return path. Run your own step first, for example offering to add a passkey
+while the session is fresh, then navigate to the same `next`. Redirecting methods (social, OAuth, magic link) leave the
+page and do not call it.
+
+```tsx
+export default defineAdmin(admin, {
+  components: {
+    SignIn: (props) => props.renderDefault({ ...props, emailAutoComplete: "username webauthn",
+      onSignedIn: next => window.location.assign(`/admin/p/add-passkey?next=${encodeURIComponent(next)}`) }),
+  },
+  pages: [{ path: "add-passkey", title: "Add a passkey", element: <AddPasskey /> }],
+});
+```
+
+Your page continues with `next` unchanged (it is a same-origin path or Better Auth's continuation). The enrolment prompt,
+its copy and when to show it are the application's; Admin ships the method and the seam, not the experience.
 
 ### Components that also render in an MCP host
 

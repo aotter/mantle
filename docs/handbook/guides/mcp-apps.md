@@ -314,7 +314,7 @@ Tailwind classes and CSS. Browser-only record/input overrides do not mount there
 
 | Slot | Browser | MCP host |
 | --- | --- | --- |
-| `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `list.actions:<schema>` | yes | never: the App has no shell, sidebar or router |
+| `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `SignIn`, `list.actions:<schema>` | yes | never: the App has no shell, sidebar or router |
 | `cell:view:<view>.<column>` | yes | yes: each column of the rows the host's View tool returned |
 | `cell:<schema>.<field>`, `input:<schema>.<field>`, `record.aside:<schema>`, `record.actions:<schema>`, `RecordView` | yes | never: browser-only record/collection slots; their `surface` is `"browser"` (`mantle bundle` reminds you) |
 | `pages[]`, `nav`, `home`, nav badges | yes | only a page that declares `mcp` (below) |

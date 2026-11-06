@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { MAX_BADGE_VIEWS } from "./transport";
 import type { AdminLayers, SlotComponent } from "./slots";
-import type { BrandProps, CellProps, CollectionListProps, HeaderProps, HomeProps, InputProps, ListActionsProps, RecordActionsProps, RecordAsideProps, RecordViewProps, ShellProps, SidebarProps, SurfaceProp } from "./slot-props";
+import type { BrandProps, CellProps, CollectionListProps, HeaderProps, HomeProps, InputProps, ListActionsProps, RecordActionsProps, RecordAsideProps, RecordViewProps, ShellProps, SidebarProps, SignInProps, SurfaceProp } from "./slot-props";
 
 /**
  * What `generated/admin-client.ts` knows about an application, as types: the input and row of each admin View, the
@@ -73,6 +73,7 @@ export type AdminComponents<T extends AdminTypes = AdminTypes> = {
   readonly Header?: Browser<HeaderProps>;
   readonly Brand?: Browser<BrandProps>;
   readonly Home?: Browser<HomeProps>;
+  readonly SignIn?: Browser<SignInProps>;
   readonly CollectionList?: Browser<CollectionListProps>;
   readonly RecordView?: BrowserRecord<RecordViewProps>;
 } & {

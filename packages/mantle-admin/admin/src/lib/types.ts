@@ -175,6 +175,7 @@ export interface AdminUser {
 export type AuthMethodInfo =
   | { kind: "email-otp" }
   | { kind: "magic-link" }
+  | { kind: "passkey" }
   | { kind: "social"; provider: string }
   | { kind: "oauth"; providerId: string; displayName?: string };
 

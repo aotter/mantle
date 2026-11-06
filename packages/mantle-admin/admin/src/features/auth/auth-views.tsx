@@ -19,6 +19,9 @@ import { ThemeToggle } from "../../layout/preference-controls";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
 import { GateError, GateLoading } from "./gate-views";
+import { Slot } from "../../app/slots";
+import type { SignInMethod, SignInProps } from "../../app/slot-props";
+import { signInWithPasskey } from "./passkey";
 
 // Per-section spacing. `first:` zeroes top spacing for whichever
 // section the server returns first — keeps the spacing rules
@@ -61,7 +64,8 @@ export { claimInFlight, SignInButton } from "@aotter/mantle-ui/kit";
  *
  * Method labels come from `auth.signIn.method.<kind>.*` i18n keys. The
  * fallback chain is: current language → English → key. Adding a new
- * method (passkey, google) is a new union case + new i18n keys.
+ * method is a new union case + new i18n keys. The list renders through the `SignIn` slot, so an application can add
+ * methods, set the email input's `autocomplete`, or run its own step after an in-page sign-in (`onSignedIn`).
  */
 export function SignInView(): React.ReactElement {
   const { language } = usePreferences();
@@ -94,27 +98,40 @@ export function SignInView(): React.ReactElement {
           </p>
         ) : null}
         {methods.data && methods.data.length > 0 ? (
-          // Wrap so each section's `first:` selectors target the first
-          // method in the list, not the first child of the card.
-          <div>
-            {methods.data.map((m) => (
-              <MethodSection
-                key={
-                  m.kind === "social"
-                    ? `social:${m.provider}`
-                    : m.kind === "oauth"
-                      ? `oauth:${m.providerId}`
-                      : m.kind
-                }
-                method={m}
-                returnTo={ret}
-                oauthQuery={oauthQuery}
-              />
-            ))}
-          </div>
+          <Slot name="SignIn" Default={SignInMethods} props={{
+            methods: methods.data,
+            returnTo: ret,
+            oauthQuery: oauthQuery || undefined,
+            emailAutoComplete: "email",
+            onSignedIn: navigateAfterSignIn,
+          }} />
         ) : null}
       </CardContent>
     </AuthCard>
+  );
+}
+
+/** The default after an in-page sign-in: the session cookie is set, so the next page load is authenticated. */
+function navigateAfterSignIn(next: string): void {
+  window.location.assign(next);
+}
+
+/** The built-in `SignIn` slot: one section per method. */
+function SignInMethods({ methods, returnTo, oauthQuery, emailAutoComplete, onSignedIn }: SignInProps): React.ReactElement {
+  // Wrap so each section's `first:` selectors target the first method in the list, not the first child of the card.
+  return (
+    <div>
+      {methods.map((m) => (
+        <MethodSection
+          key={m.kind === "social" ? `social:${m.provider}` : m.kind === "oauth" ? `oauth:${m.providerId}` : m.kind}
+          method={m}
+          returnTo={returnTo}
+          oauthQuery={oauthQuery}
+          emailAutoComplete={emailAutoComplete}
+          onSignedIn={onSignedIn}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -304,10 +321,14 @@ function MethodSection({
   method,
   returnTo,
   oauthQuery,
+  emailAutoComplete,
+  onSignedIn,
 }: {
-  method: AuthMethodInfo;
+  method: SignInMethod;
   returnTo: string;
   oauthQuery?: string;
+  emailAutoComplete: string;
+  onSignedIn: (next: string) => void;
 }): React.ReactElement {
   // Exhaustive switch — adding a kind to AuthMethodInfo without
   // adding a case here is a TS error. `social` covers all OAuth
@@ -341,7 +362,9 @@ function MethodSection({
         />
       );
     case "email-otp":
-      return <EmailOtpSection returnTo={returnTo} oauthQuery={oauthQuery} />;
+      return <EmailOtpSection returnTo={returnTo} oauthQuery={oauthQuery} emailAutoComplete={emailAutoComplete} onSignedIn={onSignedIn} />;
+    case "passkey":
+      return <PasskeySection returnTo={returnTo} oauthQuery={oauthQuery} onSignedIn={onSignedIn} />;
     case "magic-link":
       return <MagicLinkSection returnTo={returnTo} oauthQuery={oauthQuery} />;
     default: {
@@ -453,14 +476,19 @@ function RedirectSignInSection({
 function EmailOtpSection({
   returnTo,
   oauthQuery,
+  emailAutoComplete,
+  onSignedIn,
 }: {
   returnTo: string;
   oauthQuery?: string;
+  emailAutoComplete: string;
+  onSignedIn: (next: string) => void;
 }): React.ReactElement {
   const { language } = usePreferences();
   return (
     <SignInFlow
       className={SECTION_DIVIDED}
+      emailAutoComplete={emailAutoComplete}
       labels={{
         description: t(language, "auth.signIn.method.email-otp.body"),
         emailLabel: t(language, "auth.signIn.method.email-otp.emailLabel"),
@@ -501,16 +529,53 @@ function EmailOtpSection({
         if (!res.ok) {
           return { error: t(language, "auth.signIn.method.email-otp.verifyFailed") };
         }
-        // Navigate to the original return URL. The session cookie is
-        // already set on the response, so the next request to
-        // `returnTo` is authenticated and the gate routes accordingly.
-        // Plain reload() would land back on /admin/sign-in — the
-        // pathname is unchanged, the gate sees us on the sign-in page
-        // and renders SignInView again instead of routing through.
+        // Continue to the OAuth continuation or the return URL (through `onSignedIn`, which navigates by default). The
+        // session cookie is already set, so the next request is authenticated. Plain reload() would land back on
+        // /admin/sign-in: the pathname is unchanged and the gate renders SignInView again.
         const data = (await res.json()) as { url?: string };
-        window.location.assign(data.url ?? returnTo);
+        onSignedIn(data.url ?? returnTo);
       }}
     />
+  );
+}
+
+/** Passkey sign-in through Better Auth's passkey plugin; on success it continues like the email code. */
+function PasskeySection({
+  returnTo,
+  oauthQuery,
+  onSignedIn,
+}: {
+  returnTo: string;
+  oauthQuery?: string;
+  onSignedIn: (next: string) => void;
+}): React.ReactElement {
+  const { language } = usePreferences();
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  return (
+    <section className={SECTION_DIVIDED}>
+      <p className="mb-3 text-sm text-muted-foreground">{t(language, "auth.signIn.method.passkey.body")}</p>
+      <SignInButton
+        type="button"
+        className="w-full"
+        busy={busy}
+        onClick={async () => {
+          if (busy) return;
+          setBusy(true);
+          setError(null);
+          try {
+            const next = await signInWithPasskey(AUTH_BASE, oauthQuery);
+            onSignedIn(next ?? returnTo);
+          } catch {
+            setBusy(false);
+            setError(t(language, "auth.signIn.method.passkey.failed"));
+          }
+        }}
+      >
+        {t(language, "auth.signIn.method.passkey.button")}
+      </SignInButton>
+      {error ? <p className="mt-2 text-sm text-destructive" role="alert">{error}</p> : null}
+    </section>
   );
 }
 

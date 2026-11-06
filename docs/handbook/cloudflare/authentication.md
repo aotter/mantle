@@ -71,6 +71,31 @@ or `oauthProvider` for ordinary OAuth. These are optional app dependencies behin
 Use the live grant/session hooks and route wiring in [OAuth](../guides/oauth.md); merge verification hooks with the app shell's
 user hooks. `genericOAuth` is a login plugin, distinct from the OAuth provider.
 
+### Passkey sign-in
+
+Admin's sign-in page offers a passkey when `authRoutes` lists `{ kind: "passkey" }` in `methods`. Better Auth's
+`@better-auth/passkey` plugin does the work; add it in your own `auth.ts`, pinned to the same version as `better-auth`:
+
+```ts
+import { passkey } from "@better-auth/passkey";
+// plugins: [ ..., passkey({ rpID: new URL(origin).hostname, rpName: "Your app", origin }) ],
+```
+
+- **`rpID` is the auth host.** Every origin under the `rpID` may ask for assertions with those passkeys, so a parent
+  domain is acceptable only when the deployment owns the whole registrable domain and serves nothing else beneath it.
+  Serve every page that asks for a passkey on a host whose origin matches the `rpID`.
+- **Register right after sign-in.** The plugin registers a passkey only for a fresh session (one day by default), so an
+  "add a passkey" offer belongs right after an email-code sign-in: Admin's `SignIn` slot calls `onSignedIn` there
+  ([Customising Admin](../guides/native-admin.md#sign-in)), and an account page later fails with "Session is not fresh".
+- **Keep the email code.** It is the first sign-in and the recovery path when a device is lost.
+- **User verification is not enforced.** The plugin verifies sign-in with `requireUserVerification: false`, so a tap
+  without biometrics or a PIN signs in. That is fine for sign-in (a passkey is still phishing-resistant); do not use the
+  plugin's sign-in endpoint to approve an action.
+- `mantle generate --auth src/auth.ts` adds the plugin's `passkey` table to `schema.sql`.
+
+A passkey sign-in that came from an OAuth client (an MCP connector) continues the authorization like the email code:
+Admin sends the signed `oauth_query` with the assertion, and `onSignedIn` receives Better Auth's continuation URL.
+
 ### Verifying access tokens on Workers
 
 `resolveCaller` verifies a Bearer or DPoP access token with Better Auth's resource client, which fetches the
