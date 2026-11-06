@@ -109,7 +109,7 @@
     "@modelcontextprotocol/server": "2.3.1",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
-    "@better-auth/test-utils": "1.7.7",
+    "@better-auth/test-utils": "1.7.12",
     "@cloudflare/workers-types": "^5.20261027.1",
     "@types/node": "catalog:",
     "better-auth": "catalog:",
