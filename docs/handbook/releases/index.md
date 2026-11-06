@@ -494,7 +494,7 @@ See [HTTP, MCP, CLI and packages](../reference/surface.md) for the full list.
 
 **Hosting.** `createMantleWorker` assembles the conventional Cloudflare Worker:
 D1 and assets bindings, Better Auth 1.7 (social providers, email OTP, magic
-link, passkey), Admin, MCP, Web and R2 media uploads. The Bun and Vercel
+link, and app-enabled plugins such as passkey), Admin, MCP, Web and R2 media uploads. The Bun and Vercel
 adapters are experimental, cover public Views and HTTP Triggers only, and leave
 authentication and CSRF to the host. ChatGPT Sites is a
 first-class integration with a runnable reference.

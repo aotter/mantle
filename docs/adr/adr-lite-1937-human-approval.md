@@ -1,64 +1,62 @@
-# ADR-lite: Human-approved Procedures (passkey gate, MCP URL elicitation)
+# ADR-lite: Human-approved actions
 
-**Status:** Proposed, issue #1937. A first, application-level answer to ADR-0029 §11 "Human approval (D3)", which stays
-deferred for Core grammar. Evidence: a prototype run (see Evidence).
+**Status:** Accepted (revision 3), issue #1937. Answers ADR-0029 §11 "Human approval (D3)": Core adds no grammar, API
+or runtime feature for it. Revision 3 records the final split, which a downstream application ran in production with a
+real passkey; it supersedes the approval error and MCP URL-elicitation answer that revisions 1 and 2 proposed.
 
 ## Decision
 
-An app-shell pattern and a handbook recipe, with one small Core change. No grammar change.
+**Core adds nothing.** No manifest field, no approval error or MCP URL-elicitation answer, no approval page or verifier,
+and no new Caller or host-contract field.
 
-1. **Request.** A gated handler, called with an `oauth` Caller and no approved approval, records a pending approval in
-   an app-owned `operational`, root-`readOnly` Schema: subject, tenant, tool, a hash of the frozen input (including the
-   target id and observed version), expiry, single-use nonce, requesting OAuth client. It answers "approval required"
-   with a first-party URL `https://<origin>/approve/<opaque id>` that carries no credential.
-2. **Channel.** On a 2026-07-28 request that declares `elicitation.url`, the answer is `inputRequired.elicitUrl({ url,
-   message })`; the host opens the URL out of the model's view and retries the same call. On any other request the
-   answer is an ordinary tool result: "Approval required: open `<url>`, then call this tool again." The 2025-era `-32042`
-   error is not used: a stateless 2025 request carries no client capabilities, and 2026-07-28 removes it.
-3. **Approval.** The page accepts only a cookie session whose subject is the requester's; any `Authorization` header is
-   refused and Origin is checked. It renders the frozen input from the stored row, never model-written text. It requires
-   a WebAuthn assertion with `requireUserVerification: true` against the user's Better Auth-registered passkeys; the
-   challenge is derived from approval id, input hash and nonce and is consumed atomically.
-4. **Execution, once.** The retried call finds the approved row, compares the input hash, and moves the row from
-   approved to executing in the same transaction as the write. The approver's session Caller executes (same subject);
-   the requesting client is recorded. OCC uses the frozen `expectedVersion`: a moved version is `CONFLICT`. An uncertain
-   outcome is never re-run.
-5. **Core change.** The MCP tool wrapper's `catch` (`packages/mantle/src/kernel/mcp-handler.ts`) converts every thrown
-   error into an `isError` result. Core exports a marker error (`ApprovalRequired({ url, message, fallback })`); the
-   wrapper turns it into `inputRequired.elicitUrl` when the request declares URL elicitation and into its `fallback`
-   result otherwise. Nothing else in Core changes.
+The split, for applications and hosts:
+
+- **The application decides what is approved.** Which actions need the person present is its own design. It freezes the
+  request (a hash of the input, including the target id and observed version) with a single-use nonce and an expiry in
+  its own records, and shows the summary on its own page.
+- **The host's identity service answers only "is this the person".** A generic verification page runs a passkey
+  assertion with user verification required over the nonce, refuses an expired request before offering a passkey, and
+  returns a short-lived step-up token. It renders no business content.
+- **The gateway hands the application only the proven nonce.** It verifies the token against the person's own session
+  (subject, audience, authentication context, age) and passes the nonce on in the request. The application never
+  verifies identity-provider tokens, so every comparison it makes stays in its own subject namespace.
+- **MCP never carries the step-up.** No MCP result returns the nonce or token, so an agent holding the user's credential
+  cannot complete the approval.
+
+A host-verified step-up claim on the Caller may be proposed later if a host needs it. It is not planned.
+
+Core documents two boundaries:
+
+- `_meta.ui.visibility: ["app"]` hides a tool from the model's list; it is not an access boundary. Any client holding
+  the same credential can call an App-only tool, so an action that needs the person present is enforced on the server.
+- A host-side rule keyed on a request must use the same canonicalisation as `matchTarget`; a rule on the raw path can be
+  bypassed by an equivalent spelling.
+
+## Guidance for applications
+
+- **Bind the approval to what was asked.** A moved version at execution is `CONFLICT`, never a silent rebind.
+- **Own approvals by `author_id`**, the Core-stamped caller, never by an editable display name.
+- **Scope the approval records**, or refuse them on generic entry routes, so no role reads another person's challenge.
+- **Carry the deadline** to the verifier; the application still enforces the expiry.
+- **Spend a step-up only for the approval that asked for it**: show the summary again and require an explicit action.
+- **Treat adding or removing a passkey as a security event**: a recent sign-in, never under impersonation, and a notice
+  to the person.
+- **Require user verification.** Better Auth's passkey sign-in accepts a user-presence-only assertion, so its sign-in
+  endpoint is not an approval verifier (ADR-lite #1936).
 
 ## Evidence
 
-Prototype: Bun, better-auth 1.7.7 with `@better-auth/passkey` 1.7.7, an approval endpoint on `@simplewebauthn/server`
-`verifyAuthenticationResponse`, driven by Playwright with Chromium's CDP virtual authenticator. All cases pass:
-registration through Better Auth; approval with user verification executes once; replay refused (409/401); a
-user-presence-only assertion, including a client that downgrades to `discouraged`, refused (401 "User verification
-required"); a bearer-only request refused (401) and a wrong Origin refused (403); a changed input refused (409); an
-expired approval refused (410). Better Auth's own passkey sign-in accepts a user-presence-only assertion, which is why
-its endpoints are not the gate.
-
-Learned: replay protection rests on the single-use challenge, because synced passkeys usually report counter 0;
-`passkey.publicKey` is standard-base64 COSE (decode with `@better-auth/utils/base64` on Workers); a passkey registered
-without user verification can never approve. Not yet run on workerd; the `@simplewebauthn/server` import graph has no
-`node:` specifiers.
-
-## Threats
-
-Approval phishing (frozen, server-rendered input only); confused deputy (approver subject equals requester subject);
-CSRF (`checkOrigin`, WebAuthn origin and RP-ID binding); cross-tenant (Schema scope); replay (single-use challenge);
-a browser-driving agent holding a session cookie (the user-verification gesture); approval fatigue (gate only declared
-high-risk Procedures, no "approve all"). Not covered: a compromised user device; macOS accepts the login password when
-Touch ID is unavailable.
+A prototype (passkey assertions verified with `requireUserVerification: true`, driven by a virtual authenticator)
+showed that a single-use challenge refuses replay, a user-presence-only assertion, a changed input and an expired
+request; synced passkeys usually report counter 0, so the challenge is the replay guard. A downstream application then
+ran the split above end to end with a real passkey and a security review, which produced the guidance.
 
 ## Non-goals
 
-- A grammar declaration (`spec.approval`): proposed only after the recipe is proven, as an ADR-0029 §11 amendment.
-- A `Caller` field for "verified at T" (a later ADR may generalise `checkFresh`).
-- Approval inside an MCP App iframe; Admin approval UI beyond the page.
+- A manifest declaration of gated Procedures, or any Core runtime support for approvals.
+- Approval inside an MCP App iframe.
 
 ## Acceptance
 
-Recipe with the cases above against a real app (aotter/project-mantle-geosun `sign_billing`), the Core change with tests
-for both answers, the approval table's atomic consume on D1, a workerd run, and manual host checks of URL elicitation
-(Claude Code on 2026-07-28; others recorded as found).
+- The MCP Apps guide states that visibility is not an access boundary; the describe reference states the
+  canonicalisation rule.
