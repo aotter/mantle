@@ -1,6 +1,6 @@
 # ADR-lite #845: frontend calls use the existing HTTP Trigger contract
 
-Status: Accepted for implementation under #845 and mantle-home #86.
+Status: Accepted for implementation under #845.
 
 `mantle-web/client` is a browser-safe fetch client for declared public Views and
 HTTP Triggers. `mantle-web/client-runtime` projects that contract from the sealed

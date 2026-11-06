@@ -177,7 +177,7 @@ What `verifyPlan` proves is that a plan reads and writes only through the policy
 
 - #1196's JSON program and `select` grammar, and the parser and graph rules written for them, are replaced by SQL lowering; `StoreProgram`'s rules move onto the compiled statement. The spike decides whether #1196 is rewritten or superseded.
 - The 16 MiB-patched `libpg-query`, its workerd wrapper and the Control memory test proposed for parsing in Control are not needed.
-- The Builder's in-browser preview (`packages/builder/src/lib/memory-storage.ts` in aotter/mantle-home) is built on ports this release removes, so its replacement must be decided before aotter/mantle-home adopts 0.2.0; the direction is a signed-in Cloud preview on the existing candidate preview.
+- A downstream in-browser preview built on the ports this release removes needs a replacement before it adopts 0.2.0.
 - Admin's Developer Console draws a program from the IR: `CASE` as a branch, a `WHERE` guard as an edge, joins, checks, aggregates and `RETURNING` as nodes, anything else as SQL text.
 
 ## Alternatives

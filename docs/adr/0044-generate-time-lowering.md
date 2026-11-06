@@ -12,7 +12,7 @@ statements) and ADR-0040 (state is added only as cache seeds).
 ## Context
 
 A cold isolate pays to compile every program it runs for the first time. The
-measured cost of a Swolhalla first request on 0.2.0-alpha.6 was about 24 ms of
+measured cost of a downstream application's first request on 0.2.0-alpha.6 was about 24 ms of
 `validateIr`, 12 ms of `applyPolicy`, 17 ms of printing and 14 ms of building
 JSON Schema validators. Compiling a sealed program depends only on its IR, its
 declared inputs, the plan's Schemas, the dialect, the mode and the Procedure's
@@ -89,7 +89,7 @@ Plan-derived work runs, in this order of preference:
    existing compile cache bypass).
 7. **Validators.** Built on first use, one per entry, kept per plan
    (`planValidators`, a `WeakMap`). Building every validator at `createMantle()`
-   put 30–40 ms into each cold isolate on Swolhalla's plan (26 Procedures,
+   put 30–40 ms into each cold isolate on that application's plan (26 Procedures,
    24 Views), against about 10 ms for the entries a first request reaches.
    Generated standalone validators, with no zod at runtime, are the next step
    under the order above.
@@ -114,7 +114,7 @@ Plan-derived work runs, in this order of preference:
   cache, which is keyed by the plan's own objects and the dialect object, so
   they serve the one storage adapter whose dialect object the runtime booted
   with, not a second adapter on the same plan.
-- A platform that validates uploaded plans (Mantle Cloud) must accept the new
+- A platform that validates uploaded plans must accept the new
   optional top-level `lowered` key, and run `verifyPlan` or pass `restrict`.
 - Still on the cold path, and not covered: boot's `planFingerprint` (canonical
   JSON and SHA-256 over a larger plan, about 8 ms cold for the reference

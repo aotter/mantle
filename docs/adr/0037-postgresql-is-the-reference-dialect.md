@@ -17,15 +17,15 @@ D1. That kept engines interchangeable, but it held services that chose PostgreSQ
 frames, no `FILTER`, no jsonb operators. A View that needed one rule in many places (a plan's visible window, for example)
 had to repeat it.
 
-Services that pick PostgreSQL pick it for good (Swolhalla runs on PostgreSQL from day one). The subset should be D1's
+Services that pick PostgreSQL pick it for good (some self-hosted services run on PostgreSQL from day one). The subset should be D1's
 limitation, not every dialect's.
 
 Two kinds of author write Mantle SQL, and the allowlist means something different to each:
-- **A self-hosted service** (enterprise, Swolhalla): the author also operates the database and can reach it directly. The
+- **A self-hosted service** (for example an enterprise deployment): the author also operates the database and can reach it directly. The
   allowlist does not stop malice there; it stops mistakes, above all SQL (often written by an AI) that would read another
   member's rows.
-- **Mantle Cloud:** tenants are third parties. Today each tenant has its own D1 and its own Workers for Platforms script, and
-  the tenant's `ref` handlers run in that script with the raw `DB` binding (aotter/mantle-home `apps/control/src/deploy/provider.ts`).
+- **A hosted multi-tenant platform:** tenants are third parties. When each tenant has its own D1 and its own script, the
+  tenant's `ref` handlers run in that script with the raw `DB` binding.
   Isolation between tenants is the separate database, not the allowlist. A PostgreSQL cell shared by thousands of tenants
   behind one Hyperdrive config (one connection string, one role) cannot isolate tenants that way.
 
@@ -96,22 +96,22 @@ amendment.
 - A database role used by Mantle is not a superuser and holds no file or server privilege (`pg_read_server_files`,
   `pg_execute_server_program`). The handbook says so; Mantle does not check.
 
-### 6. Mantle Cloud's boundary
+### 6. A hosted platform's boundary
 
-- **D1 (today):** the tenant's database is the isolation unit, so the tenant's code may hold its binding, as it does.
-- **PostgreSQL (when Cloud adds it):** the cell's connection never enters a tenant script. The platform owns the Hyperdrive
+- **D1:** the tenant's database is the isolation unit, so the tenant's code may hold its binding, as it does.
+- **PostgreSQL:** the cell's connection never enters a tenant script. The platform owns the Hyperdrive
   binding and runs a Store service the tenant script calls (as it calls `MAIL` and `MEDIA`). The service validates every IR
-  with the dialect, then a Cloud `restrict` profile, then the policy rewriter, and runs each transaction as the tenant with
+  with the dialect, then the platform's `restrict` profile, then the policy rewriter, and runs each transaction as the tenant with
   `SET LOCAL ROLE` and the tenant's `search_path`. The cell role is a member of every tenant role; a tenant role holds only its
   schema. The allowlist is then a real boundary, and PostgreSQL's privileges are the second one.
-- The Cloud profile and the Store service are aotter/mantle-home's to build; Core provides decision 4.
+- The platform profile and the Store service are the platform's to build; Core provides decision 4.
 
 ## Consequences
 
 - A PostgreSQL manifest may no longer compile for D1. Moving from PostgreSQL to D1 can need a rewrite; moving from D1 to
   PostgreSQL still needs none.
 - The reference profile grows by amendment, one construct at a time, each with its probe.
-- Swolhalla's free-plan window is one internal View every other View reads.
+- An application's free-plan window can be one internal View every other View reads.
 
 ## Alternatives
 

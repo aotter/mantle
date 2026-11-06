@@ -63,7 +63,7 @@ key, private import or second identity resolver. Fresh PR #1336 consumer
 verification independently reproduced the contributor generic-read gap and
 verified the stricter host composition with real sessions and PostgreSQL.
 
-This source audit does not prove remote authenticated Cloud publication. Cloud
-staging/production rollout and release evidence belong to `aotter/mantle-home`.
+This source audit does not prove remote authenticated hosted publication. Hosted
+staging/production rollout and release evidence belong to the hosting platform.
 The source changes reach installed package consumers through a later authorized
 SDK release; no npm publication is part of this audit.

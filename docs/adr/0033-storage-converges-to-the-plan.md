@@ -68,8 +68,8 @@ The SQLite family (D1, Bun, libSQL) implements introspection. The IndexedDB adap
 
 - Removed: `buildSqliteMigrationArtifact`, `renderSqliteManagedMigration`, `isAdditiveSchemaTableChange`, `coversSchemaTableProjection`, the managed read-only boot mode (`managedStorageFingerprint`), the append-only artifact and its `storage-fingerprint.json`, the #1080 reviewed-artifact contract, and the per-column ledger ids. `buildSqliteMigrationArtifact` and `isAdditiveSchemaTableChange` are public exports of `@aotter/mantle-runtime` 0.1.4, so their removal is a breaking change listed in the 0.2.0 release note; the rest shipped only in 0.1.5 alphas.
 - #1011 is covered: undeclared indexes are visible on every diff.
-- The Swolhalla unique-index case (#1080) becomes: create the new unique index, drop the old one, rerun the check. No new Schema, no abandoned table.
-- **Cloud.** "Storage matches the plan" becomes a platform-verified fact (ADR-0032 decision 10), checked by introspection instead of by the list of scripts that ran. A tenant's agent cannot run SQL against a Cloud-owned database today, so Cloud keeps refusing blocked changes until aotter/mantle-home offers a channel for author-made changes; that is a mantle-home issue, not a Core blocker.
+- The unique-index case (#1080) becomes: create the new unique index, drop the old one, rerun the check. No new Schema, no abandoned table.
+- **Hosted platforms.** "Storage matches the plan" can become a platform-verified fact (ADR-0032 decision 10), checked by introspection instead of by the list of scripts that ran. Where an author cannot run SQL against a platform-owned database, the platform refuses blocked changes until it offers a channel for author-made changes; that is the platform's work, not a Core blocker.
 - Boot on a changed plan costs a few `PRAGMA` reads per Schema, once per fingerprint.
 - ADR-0024's "operators rebuild the database" is replaced by decision 2. Its native-table layout, reserved names and ownership rules are unchanged.
 

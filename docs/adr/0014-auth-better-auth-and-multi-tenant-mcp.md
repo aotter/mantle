@@ -437,8 +437,7 @@ and self-managed GitHub reuse the same atomic first-owner bootstrap rule. The
 conventional customer-site path uses the proxy's public OAuth client with PKCE
 and `ADMIN_GITHUB_LOGIN`; it does not use Platform Account OIDC, a client
 secret, or an owner email handoff. The local provider id remains `github`.
-The wire contract remains in [Platform #35](https://github.com/aotter/mantle-platform/issues/35),
-and the product boundary is documented in
+The wire contract is owned by the hosting platform, and the product boundary is documented in
 [`docs/auth-hosting-model.md`](https://github.com/aotter/mantle/blob/main/docs/auth-hosting-model.md).
 
 This does not change ADR-0014's core rule: Mantle does not expose an

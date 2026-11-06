@@ -29,7 +29,7 @@ counts only, no rows). To compare a change against it, run the same command in t
 | mode | all; warm: 3 rounds x up to 200 samples (warmup 20, 5000 ms budget per item per round); cold: 10 fresh processes per item per side (+1 discarded); counters on |
 | date | 2026-10-10T15:18:45.983Z |
 
-The fixture is Swolhalla-shaped: one member over 3 years (624 workouts, 18,720 sets) plus four noise owners, six Views, two
+The fixture is shaped like a workout-tracking application: one member over 3 years (624 workouts, 18,720 sets) plus four noise owners, six Views, two
 ref-handler Procedures that combine several Views, one inline write and one `Store.select` item. The machine was shared with
 another process during the run (4 CPUs), so absolute numbers carry noise; compare variants run back to back, not across days.
 

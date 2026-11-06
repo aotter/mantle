@@ -6,7 +6,7 @@
 
 ## Context
 
-Entry persistence grew parallel paths: builtin-op use cases over `EntryRepository`, `ctx.writeAtomically` over `AtomicEntryWriter`, declarative Views with their own Filter AST, typed-query bindings, `runtime.entries` readers and the TTL sweeper. Each re-implements filters, OCC and SQL for every adapter, and the public vocabulary stops at id-addressed single rows. A consumer deleting one workout (swolhalla/swolhalla-mantle#15) expands it to two statements per row — about 51 queries for a small workout and 615 for a large one — or bypasses Mantle with raw SQL against Mantle-owned tables.
+Entry persistence grew parallel paths: builtin-op use cases over `EntryRepository`, `ctx.writeAtomically` over `AtomicEntryWriter`, declarative Views with their own Filter AST, typed-query bindings, `runtime.entries` readers and the TTL sweeper. Each re-implements filters, OCC and SQL for every adapter, and the public vocabulary stops at id-addressed single rows. A downstream application deleting one workout expands it to two statements per row — about 51 queries for a small workout and 615 for a large one — or bypasses Mantle with raw SQL against Mantle-owned tables.
 
 ## Decision
 

@@ -6,7 +6,7 @@
 
 **Date:** 2026-09-27
 
-**Related:** #1151 (Store), #1152 (identity), #1156 (table namespace), #1150, #1189, ADR-0022, ADR-0023, ADR-0028, ADR-0031, aotter/mantle-home#201
+**Related:** #1151 (Store), #1152 (identity), #1156 (table namespace), #1150, #1189, ADR-0022, ADR-0023, ADR-0028, ADR-0031
 
 ## Context
 
@@ -194,11 +194,11 @@ Admin UI assets honour the base path. Hono may stay inside a package; it is no l
 
 ### 10. Cloud verifies the plan; the user owns the entry
 
-- `semanticFingerprint` becomes SHA-256; it now crosses a trust boundary, which its `ponytail:` comment named as the upgrade point. It is the "compiled plan fingerprint" aotter/mantle-home#201 records.
+- `semanticFingerprint` becomes SHA-256; it now crosses a trust boundary, which its `ponytail:` comment named as the upgrade point. It is the "compiled plan fingerprint" a hosting platform records.
 - `createMantleRuntime` accepts `expectedFingerprint` and refuses to boot on a mismatch (`PLAN_FINGERPRINT_MISMATCH`).
 - `runtime.bootReport()` returns `MantleBootReport`: `{ fingerprint, coreVersion }`. Handler refs need no report because boot already refuses a mismatch; schedules are in the plan.
 - Cloud's guarantee names two kinds of fact. **Platform-verified:** the Cloud-compiled plan, the pinned Core, storage matching the plan (ADR-0033) and the fingerprint handshake. **Service-reported:** the surfaces and mounts the service chose, which Cloud confirms only by probing them in smoke. A service that never boots the runtime has no manifest scope to guarantee, and smoke shows that.
-- The plugin's Cloud helper script (decision 13) distinguishes a handlers-only artifact (today's closed module, host protocol 2 per ADR-0031) from a service-entry artifact, which is closed except for `@aotter/mantle*` externals that Cloud supplies at the pinned Core. The artifact field is `artifactKind: "handlers" | "service"`; service entries use host protocol 3. aotter/mantle-home reserves the field now and accepts service entries after Core 0.2.0, as its own issue.
+- A hosting platform's upload helper (decision 13) distinguishes a handlers-only artifact (today's closed module, host protocol 2 per ADR-0031) from a service-entry artifact, which is closed except for `@aotter/mantle*` externals that the platform supplies at the pinned Core. The artifact field is `artifactKind: "handlers" | "service"`; service entries use host protocol 3. A platform may reserve the field now and accept service entries after Core 0.2.0.
 
 > **Amendment (ADR-0034):** The guarantee is a Cloud-validated plan. The CLI compiles; Cloud validates the IR and never parses SQL; whether the IR matches its SQL source is service-reported. Host protocol 3 uploads the plan.
 
@@ -228,7 +228,7 @@ Every Mantle package versions and releases together, so splitting by area buys n
 - Platform and heavy libraries (`better-auth`, `hono`, `@libsql/client`, the MCP SDK, React) are optional peers. A subpath that is not imported is never loaded, so Core still requires no Admin, Web, Auth or platform code; `check:boundaries` enforces this at module level instead of package level (amends ADR-0019's optional-package boundary).
 - `@aotter/mantle` never imports `@aotter/mantle-ui`. The generated preset passes the Admin assets from `@aotter/mantle-ui/admin` to `createAdminSurface`.
 - `@aotter/mantle-spec`, `-runtime`, `-cloudflare`, `-bun`, `-vercel`, `-indexeddb`, `-auth`, `-admin`, `-mcp` and `-web` fold into subpaths; `@aotter/mantle-admin-ui` folds into `@aotter/mantle-ui/admin`. `@aotter/mantle-host` was never published and is removed.
-- **The plugin** (this repository's agent plugin) ships one `mantle` skill and helper scripts. Its configuration carries the Mantle Cloud MCP endpoint as an absolute URL, `https://cloud.mantle.tools/mcp`; aotter/mantle-home provides only that MCP. The helper scripts (`.mjs`) orchestrate the Cloud MCP sequence so an agent does less by hand, and keep the upload rules whose artifact bytes depend on the Core version (ADR-0031). The `mantle-host` name disappears; ADR-0031's protocol is the host protocol. Deploying anywhere else uses that host's own CLI, and the skill states that the user may always self-host: Mantle Cloud is one option, never a requirement.
+- **The plugin** (this repository's agent plugin) ships one `mantle` skill and helper scripts, and carries no hosted-platform endpoint. The helper scripts (`.mjs`) keep the upload rules whose artifact bytes depend on the Core version (ADR-0031). The `mantle-host` name disappears; ADR-0031's protocol is the host protocol. Deploying anywhere else uses that host's own CLI, and the skill states that the user may always self-host: a hosted platform is one option, never a requirement.
 
 > **Amendment (ADR-0034):** `/indexeddb` is removed, with no browser driver in 0.2.0. D1 test helpers live at `/cloudflare/testing`. The plugin's helper scripts compile with the project's installed `@aotter/mantle/spec` and bundle no parser.
 
