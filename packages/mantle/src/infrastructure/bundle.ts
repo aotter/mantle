@@ -94,6 +94,7 @@ export async function bundleApp(entry: string, outdir: string, assets = join(out
   let dirs: string[];
   try { dirs = generatedDirs(own); }
   catch (error) { refuse(error); return; }
+  apart();
   copyPublic(outdir, assets);
   if (dirs.some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"))) {
     // Packages are external here, so only the app's own imports of the Admin server are seen; one reached through another package is not.
@@ -119,15 +120,19 @@ export async function bundleApp(entry: string, outdir: string, assets = join(out
  * that another build step wrote into the assets directory are left alone. `public/admin` is refused: Admin owns it.
  */
 function copyPublic(outdir: string, assets: string): void {
-  const record = join(outdir, ".mantle-public"), source = resolve("public");
-  if (existsSync(record)) for (const path of JSON.parse(readFileSync(record, "utf8")) as string[]) rmSync(join(assets, path), { force: true });
+  const record = join(outdir, ".mantle-public"), source = resolve("public"), target = resolve(assets);
+  if (existsSync(record)) {
+    const previous = JSON.parse(readFileSync(record, "utf8")) as { assets: string; files: string[] };
+    // only from the directory they were copied to: a changed --assets never touches the new directory's own files
+    if (previous.assets === target) for (const path of previous.files) rmSync(join(assets, path), { force: true });
+  }
   if (!existsSync(source)) return void rmSync(record, { force: true });
   if (existsSync(join(source, "admin"))) throw new Error("public/admin is reserved for Admin's build; move those files elsewhere under public/.");
   const files = (readdirSync(source, { recursive: true, withFileTypes: true }) as import("node:fs").Dirent[])
-    .filter(entry => entry.isFile()).map(entry => relative(source, join(entry.parentPath, entry.name)));
+    .filter(entry => entry.isFile() || entry.isSymbolicLink()).map(entry => relative(source, join(entry.parentPath, entry.name)));
   cpSync(source, assets, { recursive: true });
   mkdirSync(outdir, { recursive: true });
-  writeFileSync(record, JSON.stringify(files));
+  writeFileSync(record, JSON.stringify({ assets: target, files }));
 }
 
 /** Admin's chunks are content-hashed and answered by the edge (`run_worker_first` excludes `/admin/assets/*`), so the

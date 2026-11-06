@@ -336,6 +336,20 @@ test("mantle bundle: public/ is copied into the assets directory; files it copie
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     try { await bundleApp(entry, dist); expect(warn.mock.calls.flat().join("\n")).toContain("/admin/assets/*"); } finally { warn.mockRestore(); }
     expect(await readFile(join(client, "_headers"), "utf8")).toBe("/assets/*\n  X-Content-Type-Options: nosniff\n");
+    // a symlink copied last time is removed like a file
+    await symlink(join(dir, "public/assets/logo.svg"), join(dir, "public/assets/alias.svg"));
+    await bundleApp(entry, dist);
+    expect(existsSync(join(client, "assets/alias.svg"))).toBe(true);
+    await rm(join(dir, "public/assets/alias.svg"));
+    await bundleApp(entry, dist);
+    expect(existsSync(join(client, "assets/alias.svg"))).toBe(false);
+    // a changed assets directory keeps its own files that share a name with last time's copies
+    const site = join(dist, "site");
+    await mkdir(site, { recursive: true });
+    await writeFile(join(site, "_headers"), "the site's own");
+    await rm(join(dir, "public/_headers"));
+    await bundleApp(entry, dist, site);
+    expect(await readFile(join(site, "_headers"), "utf8")).toBe("the site's own");
     await mkdir(join(dir, "public/admin"));
     await expect(bundleApp(entry, dist)).rejects.toThrow("public/admin is reserved");
   } finally { process.chdir(cwd); await rm(dir, { recursive: true, force: true }); }
