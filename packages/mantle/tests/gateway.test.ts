@@ -78,9 +78,6 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
     for (const r of [await restCall(snapshot, '/api/write', '{}'), await mcpCall(snapshot, 'write'), await restCall(snapshot, '/api/touch', '{}'), await mcpCall(snapshot, 'touch')]) { expect(r.status).toBe(403); expect((await r.json()).error.code).toBe('STALE_CALLER'); }
     expect(touched).toBe(0);
     expect((await restCall(mantleProps(), '/api/touch', '{}')).status).toBe(200); expect(touched).toBe(1);
-    // Host-verified step-up reaches the handler with the brand intact, so the nonce is compared without a body rewrite.
-    const stepped = await restCall(mantleProps({ stepUp: { acr: 'urn:example:passkey-uv', auth_time: 1_790_000_000, nonce: 'n-1' } }), '/api/touch', '{}');
-    expect(stepped.status).toBe(200); expect(await stepped.json()).toMatchObject({ nonce: 'n-1' }); touched--;
     const all = mantleProps({ user: { ...mantleProps().user, region: { all: true } } });
     expect((await (await restCall(all)).json()).rows.map((r: any) => r.title)).toEqual(['JPA', 'TWA']);
     const own = db.query("SELECT id,version FROM records WHERE region='TW' AND store='A'").get() as { id: string; version: number };
@@ -154,6 +151,9 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
     expect(resolves).toBe(0);
     // Workers pass `ctx.props` as `{}` on ordinary requests: only `props.mantle` is the host contract.
     for (const props of [{}, { other: 1 }]) expect((await localSite.fetch(request('/records.md'), {}, { props })).status).not.toBe(412);
+    // Host-verified step-up reaches the handler with the brand intact, so the nonce is compared without a body rewrite.
+    const stepped = await restCall(mantleProps({ stepUp: { acr: 'urn:example:passkey-uv', auth_time: 1_790_000_000, nonce: 'n-1' } }), '/api/touch', '{}');
+    expect(stepped.status).toBe(200); expect(await stepped.json()).toMatchObject({ nonce: 'n-1' });
   } finally { db.close(); await rm(dir, { recursive: true, force: true }); }
 });
 

@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { mcp } from "../src/kernel/mcp.js";
-import { ApprovalRequired } from "../src/kernel/approval.js";
+import { ApprovalRequired, isApprovalRequired } from "../src/kernel/approval.js";
+import { hostCaller, hostFailure } from "../src/kernel/host-caller.js";
+import { surfaceFailure } from "../src/kernel/surface-failure.js";
+import { mantleProps } from "./gateway-fixture.js";
 import { ContractError, wire } from "../src/kernel/contracts.js";
 
 const url = "https://app.test/approve/a1";
@@ -21,6 +24,9 @@ test("ApprovalRequired asks for URL elicitation only on a 2026-07-28 request tha
   const retried = (await call("sign", { _meta: modern({ elicitation: { url: {} } }), inputResponses: { "net.aotter.mantle/approval": { action: "decline" } } }, "2026-07-28")).result;
   expect(retried.isError).toBe(true);
   expect(retried.content[0]).toEqual({ type: "text", text: `Approve the billing run. Open ${url}, then call this tool again.` });
+  // So does a response the SDK dropped as malformed: it was answered, only in the wrong shape.
+  const wrapped = (await call("sign", { _meta: modern({ elicitation: { url: {} } }), inputResponses: { "net.aotter.mantle/approval": { method: "elicitation/create", result: { action: "accept" } } } }, "2026-07-28")).result;
+  expect(wrapped.resultType).not.toBe("input_required"); expect(wrapped.isError).toBe(true);
   for (const [params, era] of [[{ _meta: modern({ elicitation: { form: {} } }) }, "2026-07-28"], [{ _meta: modern({}) }, "2026-07-28"], [{}, undefined]] as const) {
     const result = (await call("sign", params, era)).result;
     expect(result.resultType).not.toBe("input_required");
@@ -41,6 +47,24 @@ test("ApprovalRequired is a 428 ContractError with a credential-free absolute UR
   const error = new ApprovalRequired({ url, message: "Approve." }, "procedure:sign");
   expect(error).toBeInstanceOf(ContractError);
   expect(wire(error)).toEqual({ status: 428, error: { code: "APPROVAL_REQUIRED", message: "Approve.", path: "procedure:sign", url } });
-  for (const bad of ["/approve/a1", "javascript:alert(1)", "https://user:pass@app.test/approve", "not a url"])
+  expect(isApprovalRequired(error)).toBe(true); expect(isApprovalRequired(new ContractError("APPROVAL_REQUIRED", "x"))).toBe(false); expect(isApprovalRequired(null)).toBe(false);
+  for (const local of ["http://localhost:8787/approve/a1", "http://127.0.0.1/approve/a1", "http://[::1]/approve/a1"]) expect(new ApprovalRequired({ url: local, message: "x" }).url).toBe(local);
+  for (const bad of ["/approve/a1", "javascript:alert(1)", "http://app.test/approve/a1", "https://user:pass@app.test/approve", "not a url"])
     expect(() => new ApprovalRequired({ url: bad, message: "x" })).toThrow(TypeError);
+});
+
+test("REST and host failures carry the approval URL; observations do not carry the step-up", async () => {
+  const error = new ApprovalRequired({ url, message: "Approve." }, "procedure:sign");
+  const local = surfaceFailure(error);
+  expect(local.status).toBe(428); expect(((await local.json()) as { error: unknown }).error).toMatchObject({ code: "APPROVAL_REQUIRED", url });
+  const caller = hostCaller(mantleProps({ stepUp: { acr: "x", auth_time: 1, nonce: "live" } }), { tenant: "example" });
+  const host = hostFailure(error, caller);
+  expect(host.status).toBe(428); expect(await host.json()).toEqual({ error: { code: "APPROVAL_REQUIRED", target: "procedure:sign", url } });
+  const events: any[] = [];
+  const observed = mcp([tool("sign")], { db: () => ({}), caller: () => caller, onObservation: (event: unknown) => { events.push(event); } });
+  await observed(new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "sign", arguments: {} } }) }), {});
+  const invocations = events.filter(event => event.kind === "invocation");
+  expect(invocations.length).toBe(2);
+  for (const event of invocations) { expect(event.caller.subject).toBe(caller.subject); expect("stepUp" in event.caller).toBe(false); }
+  expect(invocations[1]).toMatchObject({ phase: "completion", outcome: "failed", code: "APPROVAL_REQUIRED" });
 });

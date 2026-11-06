@@ -1,7 +1,7 @@
 /** Request-only MCP implementation, excluded from Worker startup. */
 import { authorized, authorizeTarget } from "./authorization.js";
 import { forwarded, isAdmin, ContractError, wire, type Caller, type RequestContext } from "./contracts.js";
-import { ApprovalRequired } from "./approval.js";
+import { isApprovalRequired } from "./approval.js";
 import { checkOrigin, surfaceCaller, surfaceError } from "./surface-failure.js";
 import { draining } from "./drain.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
@@ -200,8 +200,8 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         registered.add(tool.name);
         // Not part of structured output: the version, and on failure the current input contract.
         const about = (contract: boolean) => { const text = [tool.version && `tool version ${tool.version}`, contract && `input schema ${JSON.stringify(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema)}`].filter(Boolean).join("; "); return text ? [{ type: "text" as const, text }] : []; };
-        server.registerTool(tool.name, { ...(meta ? { _meta: meta } : {}), ...(tool.title ? { title: text(tool.title, locale) } : {}), description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name, inputSchema: schema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) }, async (raw: unknown, context: { mcpReq?: { envelope?: Record<string, unknown>; inputResponses?: Record<string, unknown> } }) => {
-        const metadata = options.onObservation ? { kind: "invocation" as const, surface, invocationId: crypto.randomUUID(), tool: tool.name, caller: Object.freeze(caller.kind === "user" ? { ...caller, scopes: Object.freeze([...caller.scopes]) } : { ...caller }) } : undefined;
+        server.registerTool(tool.name, { ...(meta ? { _meta: meta } : {}), ...(tool.title ? { title: text(tool.title, locale) } : {}), description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name, inputSchema: schema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) }, async (raw: unknown, context: { mcpReq?: { envelope?: Record<string, unknown>; inputResponses?: Record<string, unknown>; droppedInputResponseKeys?: string[] } }) => {
+        const metadata = options.onObservation ? { kind: "invocation" as const, surface, invocationId: crypto.randomUUID(), tool: tool.name, caller: observed(caller) } : undefined;
         const started = metadata ? performance.now() : 0;
         if (metadata) observe(options.onObservation, { ...metadata, phase: "attempt", at: Date.now() });
         let outcome: "succeeded" | "failed" | "denied" = "succeeded", code: string | undefined;
@@ -234,7 +234,8 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         } catch (error) {
           if (host) access?.finish(error);
           // Asked once per call: a retry that still needs approval (declined, or the page left unfinished) gets the fallback.
-          if (error instanceof ApprovalRequired && elicitsUrl(server.server.getNegotiatedProtocolVersion(), context?.mcpReq) && !context?.mcpReq?.inputResponses?.[APPROVAL_INPUT]) {
+          const answered = !!context?.mcpReq?.inputResponses?.[APPROVAL_INPUT] || !!context?.mcpReq?.droppedInputResponseKeys?.includes(APPROVAL_INPUT);
+          if (isApprovalRequired(error) && !answered && elicitsUrl(server.server.getNegotiatedProtocolVersion(), context?.mcpReq)) {
             code = error.code; outcome = "failed";
             return inputRequired({ inputRequests: { [APPROVAL_INPUT]: inputRequired.elicitUrl({ url: error.url, message: error.message }) } });
           }
@@ -242,7 +243,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
           code = diagnostic.code; outcome = code === "AUTH_DENIED" || code === "UNAUTHENTICATED" ? "denied" : "failed";
           if (diagnostic.path === "request:origin") observe(options.onRefusal, { at: Date.now(), status: 403, reason: "origin" });
           const payload = { diagnostics: [diagnostic] };
-          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), isError: true, content: [...(error instanceof ApprovalRequired ? [{ type: "text" as const, text: error.fallback }] : []), { type: "text" as const, text: JSON.stringify(payload) }, ...about(outcome === "failed" && !(error instanceof ApprovalRequired))], ...(tool.outputSchema ? {} : { structuredContent: payload }) };
+          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), isError: true, content: [...(isApprovalRequired(error) ? [{ type: "text" as const, text: error.fallback }] : []), { type: "text" as const, text: JSON.stringify(payload) }, ...about(outcome === "failed" && !isApprovalRequired(error))], ...(tool.outputSchema ? {} : { structuredContent: payload }) };
         } finally {
           if (metadata) observe(options.onObservation, { ...metadata, phase: "completion", at: Date.now(), outcome, durationMs: Math.max(0, performance.now() - started), ...(code ? { code } : {}) });
         }
@@ -270,6 +271,11 @@ function catalogueVersion(tools: readonly { readonly surface: string; readonly n
   return [...text].reduce((h, c) => Math.imul(h ^ c.codePointAt(0)!, 16777619) >>> 0, 2166136261).toString(16).padStart(8, "0");
 }
 
+/** The caller an observation carries: a frozen copy without the step-up, whose nonce is a live challenge. */
+function observed(caller: Caller): Caller {
+  const { stepUp: _, ...copy } = caller as Caller & { stepUp?: unknown };
+  return Object.freeze(copy.kind === "user" ? { ...copy, scopes: Object.freeze([...copy.scopes]) } : copy) as Caller;
+}
 const CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities";
 /** The `inputRequests` key of an approval's URL elicitation. */
 const APPROVAL_INPUT = "net.aotter.mantle/approval";

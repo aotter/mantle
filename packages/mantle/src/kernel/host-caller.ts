@@ -28,6 +28,7 @@ export interface HostProps {
  * challenge it stored for `caller.subject`; Core never verifies identity-provider tokens.
  */
 export interface StepUp { readonly acr: string; readonly auth_time: number; readonly nonce?: string }
+/** `stepUp` is only on this type: read it from a Caller with {@link stepUpOf}, which checks the host brand. */
 export type HostCaller = Extract<Caller, { kind: "user" | "host" }> & {
   readonly authenticatedAs: HostProps["authenticatedAs"];
   readonly credential: HostProps["credential"];
@@ -74,7 +75,7 @@ export function hostFailure(error: unknown, caller?: Caller, where?: string, cha
 
 /** The verified step-up of a branded host caller; anything else has none, whatever its fields say. */
 export function stepUpOf(caller: Caller): StepUp | undefined {
-  return isHostCaller(caller) && "stepUp" in caller ? caller.stepUp : undefined;
+  return isHostCaller(caller) ? (caller as HostCaller).stepUp : undefined;
 }
 
 export { isHostCaller } from "./caller-identity.js";

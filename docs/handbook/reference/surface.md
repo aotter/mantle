@@ -258,7 +258,7 @@ this tool again.") followed by the `APPROVAL_REQUIRED` diagnostic with `url`.
 REST answers 428 `APPROVAL_REQUIRED` with `url`. The 2025-era `-32042` error is
 not used: a stateless 2025 request carries no client capabilities.
 
-`url` must be an absolute http(s) URL without credentials. On the fallback path
+`url` must be an absolute https URL (http only on loopback) without credentials. On the fallback path
 the model reads it, so it names the approval and grants nothing: the page
 behind it authenticates the person with their own browser session, shows the
 stored input rather than anything the model wrote, and verifies them. Core does
