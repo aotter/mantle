@@ -321,8 +321,12 @@ decision (Context 10). The handbook documents the pattern that works today: a
 `readOnly: true` Schema blocks generic writes, and an approval Procedure with
 only an HTTP Trigger and a `ctx.staff` requirement appears in Admin but in no
 MCP catalog. A test asserts an MCP-audience token cannot call an HTTP
-Trigger. Any future Core mechanism is enforced at the server boundary and
-binds target, input and version.
+Trigger. App-only visibility is not an access boundary.
+
+> **Amended (ADR-lite #1937, revision 3):** Core adds no mechanism for human
+> approval. The application decides what is approved and binds target, input
+> and version; the host confirms the person and hands the application only the
+> proven single-use value through the request.
 
 ### 12. Presentation boundary
 
