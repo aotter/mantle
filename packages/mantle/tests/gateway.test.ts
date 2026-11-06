@@ -3,7 +3,7 @@ import { Database } from 'bun:sqlite';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { userCaller } from '../src/kernel/user-caller.js';
-import { hostCaller, stepUpOf } from '../src/kernel/host-caller.js';
+import { hostCaller } from '../src/kernel/host-caller.js';
 import { fieldsOf, hasRole } from '../src/kernel/caller-identity.js';
 import { isAll, modeOf } from '../src/kernel/user-fields.js';
 import { binds } from '../src/kernel/binds.js';
@@ -49,7 +49,7 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
     for (const [region, store] of [['TW', 'A'], ['JP', 'A'], ['TW', 'B']] as const) await app.store(db, { kind: 'system', reason: 'fixture' }).collection('records').insert({ region, store, title: region + store });
     const { targets } = await import(resolve(dir, 'access-targets.ts'));
     const { rest } = await import(resolve(dir, 'rest.ts')), { mcp } = await import(resolve(dir, 'mcp.ts'));
-    const options = { handlers: { touch: (ctx: any) => { touched++; return { subject: ctx.caller.subject, nonce: stepUpOf(ctx.caller)?.nonce ?? null }; } }, gateway: { tenant: 'example' }, db: () => { acquired++; return db; }, caller: () => { resolves++; throw Error('Local auth must not load'); }, authorize: (_target: unknown, caller: Caller) => { authorized = caller; return true; } };
+    const options = { handlers: { touch: (ctx: any) => { touched++; return { subject: ctx.caller.subject }; } }, gateway: { tenant: 'example' }, db: () => { acquired++; return db; }, caller: () => { resolves++; throw Error('Local auth must not load'); }, authorize: (_target: unknown, caller: Caller) => { authorized = caller; return true; } };
     const api = rest(options), tools = mcp(options);
     const request = (path: string, method = 'GET', body?: string, headers = {}) => new Request('https://app.test' + path, { method, body, headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers } });
     const restCall = async (props: unknown, path = '/api/views/public-records', raw?: string, headers = {}) => api(request(path, raw === undefined ? 'GET' : 'POST', raw, headers), {}, { props: { mantle: await pinned(props, targets, `rest:${raw === undefined ? 'GET' : 'POST'} ${path}`) } });
@@ -151,9 +151,6 @@ test('generated REST and MCP enforce gateway contracts, scope, freshness and loc
     expect(resolves).toBe(0);
     // Workers pass `ctx.props` as `{}` on ordinary requests: only `props.mantle` is the host contract.
     for (const props of [{}, { other: 1 }]) expect((await localSite.fetch(request('/records.md'), {}, { props })).status).not.toBe(412);
-    // Host-verified step-up reaches the handler with the brand intact, so the nonce is compared without a body rewrite.
-    const stepped = await restCall(mantleProps({ stepUp: { acr: 'urn:example:passkey-uv', auth_time: 1_790_000_000, nonce: 'n-1' } }), '/api/touch', '{}');
-    expect(stepped.status).toBe(200); expect(await stepped.json()).toMatchObject({ nonce: 'n-1' });
   } finally { db.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -273,16 +270,4 @@ test('MCP media writes refuse dry runs before acquiring a database or running to
     expect(response!.status).toBe(412);
     expect(await response!.json()).toMatchObject({error:{code:'DRY_RUN_UNSUPPORTED'}});
   }
-});
-
-test('v1 carries host-verified step-up claims only in their own shape, readable only from a branded caller', async () => {
-  const stepUp = { acr: 'urn:example:passkey-uv', auth_time: 1_790_000_000, nonce: 'n-1' };
-  const caller = hostCaller(mantleProps({ stepUp }), { tenant: 'example' });
-  expect(caller.stepUp).toEqual(stepUp); expect(Object.isFrozen(caller.stepUp)).toBe(true); expect(stepUpOf(caller)).toEqual(stepUp);
-  expect(hostCaller(mantleProps({ stepUp: { acr: 'x', auth_time: 0 } }), { tenant: 'example' }).stepUp).toEqual({ acr: 'x', auth_time: 0 });
-  expect('stepUp' in hostCaller(mantleProps(), { tenant: 'example' })).toBe(false);
-  // A copy loses the host brand, so its claims are not believed.
-  expect(stepUpOf({ ...caller })).toBeUndefined(); expect(stepUpOf(userCaller({ id: 'person' }))).toBeUndefined();
-  for (const bad of [null, 'x', [], {}, { acr: '' , auth_time: 1 }, { acr: 'x' }, { acr: 'x', auth_time: -1 }, { acr: 'x', auth_time: 1.5 }, { acr: 'x', auth_time: '1' }, { acr: 'x', auth_time: 1, nonce: '' }, { acr: 'x', auth_time: 1, nonce: 2 }, { acr: 'x', auth_time: 1, amr: ['pwd'] }])
-    expect(() => hostCaller(mantleProps({ stepUp: bad as never }), { tenant: 'example' })).toThrow(expect.objectContaining({ code: 'HOST_CONTRACT', fields: { field: 'stepUp' } }));
 });

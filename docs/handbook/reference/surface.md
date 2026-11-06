@@ -235,40 +235,6 @@ carries no `nextCursor`.
 A hand-built tool's `meta` and a `run` returning `withResultMeta(data, meta)`
 add listed and result `_meta`; see [MCP Apps](../guides/mcp-apps.md#tool-metadata-and-result-_meta).
 
-### Actions that need the person present
-
-Some actions must not run on the agent's word alone, however the tool is listed.
-The application decides which, records a pending approval (the frozen input, a
-single-use nonce, an expiry, owned by `caller.subject`) and throws
-`ApprovalRequired` from `@aotter/mantle/approval`. Record it outside any
-`transaction` the throw rolls back.
-
-```ts
-import { ApprovalRequired } from '@aotter/mantle/approval';
-
-throw new ApprovalRequired({ url: `${origin}/approve/${approval.id}`, message: 'Approve the billing run.' });
-```
-
-On a `2026-07-28` request whose own `_meta` client capabilities declare
-`elicitation.url`, MCP answers `inputRequired.elicitUrl({ url, message })`: the
-host opens the URL outside the model's view and then retries the same call. A
-retry that still needs approval, and every other request, gets an error result
-whose first text block is `fallback` (by default "`<message>` Open `<url>`, then call
-this tool again.") followed by the `APPROVAL_REQUIRED` diagnostic with `url`.
-REST answers 428 `APPROVAL_REQUIRED` with `url`. The 2025-era `-32042` error is
-not used: a stateless 2025 request carries no client capabilities.
-
-`url` must be an absolute https URL (http only on loopback) without credentials. On the fallback path
-the model reads it, so it names the approval and grants nothing: the page
-behind it authenticates the person with their own browser session, shows the
-stored input rather than anything the model wrote, and verifies them. Core does
-not provide that page or its verifier. In gateway mode the host verifies and
-forwards the result as `stepUp` (see [Gateway mode](authorization.md#gateway-mode));
-`stepUpOf(caller)` from `@aotter/mantle/host-caller` returns it from the
-original host Caller only. Compare its `nonce` with the challenge stored for
-`caller.subject`, and compare the frozen input and expected version before the
-write: a moved version is `CONFLICT`, never a silent rebind.
-
 The app resolves bearer tokens with `resolveCaller(request, auth, { audience:
 new URL('/mcp', request.url).href })` (both surfaces use `<origin>/mcp`). The app
 must also mount Better Auth's `/.well-known/oauth-protected-resource/mcp`
