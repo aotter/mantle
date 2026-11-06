@@ -46,6 +46,15 @@ Mantle reads the official admin plugin’s `adminRoles` when auth loads (default
 - `withAuthTasks(ctx.waitUntil.bind(ctx), () => auth.handler(request))` retains background sends/cleanup for the current request, with concurrent requests isolated. `authHardening` installs `retainAuthTask` as Better Auth's background handler. Failure logs are generic and contain no OTPs/credentials.
 - `authSetupIncomplete()` returns 503/no-store while secrets/providers are unconfigured; do not authenticate by fallback.
 
+`authRoutes` also gives public OTP validation failures one JSON response (400,
+`INVALID_OTP`, private/no-store), including error headers. Better Auth still enforces
+expiry and attempt limits. Success cookies, HTTP 429 and other protocol errors are
+preserved. This matches error codes rather than URL spelling and does not equalize
+response time or replace rate limiting. An application mounting `auth.handler`
+directly can call `normalizeEmailOtpResponse(await auth.handler(request))` from
+`@aotter/mantle/auth/routes`; apply host CORS and security headers outside this
+normalizer. It does not alter the application's native Better Auth hooks.
+
 Better Auth config is app-owned, so restrict who may sign up (an allowlist, an invitation) with a
 `databaseHooks.user.create.before` hook that throws `APIError("FORBIDDEN")` from `better-auth/api` (the app shell calls
 `src/signup.ts` there; returning `false` instead breaks email-OTP sign-in in Better Auth 1.7.7, which does not expect a refused create).

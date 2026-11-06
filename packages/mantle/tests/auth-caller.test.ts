@@ -31,7 +31,7 @@ afterAll(() => { for (const server of servers) server.stop(true); });
 
 type App = Awaited<ReturnType<typeof makeApp>>;
 
-async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean; additionalFields?: NonNullable<BetterAuthOptions["user"]>["additionalFields"]; derivedRegion?: boolean; localOnly?: boolean; magicLinkStore?: "plain" | "hashed"; fullBaseURL?: boolean; basePath?: string; jwtOptions?: (baseURL: string) => Parameters<typeof jwt>[0] } = {}) {
+async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: string; sessionCache?: boolean; customAdmin?: boolean; additionalFields?: NonNullable<BetterAuthOptions["user"]>["additionalFields"]; derivedRegion?: boolean; localOnly?: boolean; disableOtpSignUp?: boolean; magicLinkStore?: "plain" | "hashed"; fullBaseURL?: boolean; basePath?: string; jwtOptions?: (baseURL: string) => Parameters<typeof jwt>[0] } = {}) {
   const sqlite = new Database(":memory:");
   sqlite.run("PRAGMA foreign_keys = ON");
   const otps: { email: string; otp: string }[] = [], resets: string[] = [], phoneOtps: string[] = [], links: string[] = [];
@@ -60,7 +60,7 @@ async function makeApp(options: { cookiePrefix?: string; sessionTokenName?: stri
     },
     plugins: [
       ...(options.derivedRegion ? [customSession(async ({ user, session }) => ({ user: { ...user, region: ['TW'] }, session }))] : []),
-      emailOTP({ sendVerificationOTP: async ({ email, otp }) => { otps.push({ email, otp }); } }),
+      emailOTP({ disableSignUp: options.disableOtpSignUp, sendVerificationOTP: async ({ email, otp }) => { otps.push({ email, otp }); } }),
       phoneNumber({ sendOTP: () => {}, sendPasswordResetOTP: async ({ code }) => { phoneOtps.push(code); } }),
       magicLink({ storeToken: options.magicLinkStore ?? "plain", sendMagicLink: async ({ token }) => { links.push(token); } }),
       options.customAdmin ? adminFunction({ adminRoles: ["admin"], ac, roles: { admin: ac.newRole(defaultStatements) } }) : adminFunction(),
@@ -848,4 +848,38 @@ test("first-party skip_consent tokens require live client scopes and a live sess
   expect(await caller()).toMatchObject({ subject: userId });
   app.sqlite.run('DELETE FROM session WHERE userId = ?', [userId]);
   await expect(caller()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+});
+
+for (const basePath of ["/api/auth", "/staff", ""]) test(`authRoutes uses one public OTP failure response at ${basePath || "/"}`, async () => {
+  const app = await makeApp({ localOnly: true, disableOtpSignUp: true, basePath });
+  const context = await app.auth.$context;
+  const known = "member@example.test", unknown = "unknown@example.test";
+  await context.internalAdapter.createUser({ email: known, name: "Member", emailVerified: true }, { method: "admin" });
+  const routes = authRoutes(app.loader as never, { basePath, methods: [{ kind: "email-otp" }] });
+  const post = async (path: string, body: unknown) => (await routes(new Request(`${app.baseURL}${path}`, {
+    method: "POST", headers: { origin: app.origin, "content-type": "application/json" }, body: JSON.stringify(body),
+  })))!;
+  const send = async (email: string) => {
+    const response = await post("/email-otp/send-verification-otp", { email, type: "sign-in" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+  };
+  const reject = async (email: string) => {
+    const response = await post("/sign-in/email-otp", { email, otp: "deliberately-invalid" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ code: "INVALID_OTP", message: "Invalid OTP" });
+    expect([...response.headers]).toEqual([["cache-control", "private, no-store"], ["content-type", "application/json"]]);
+    expect(response.statusText).toBe("BAD_REQUEST");
+  };
+  await send(known); await send(unknown);
+  expect(app.otps.some(entry => entry.email === unknown)).toBe(false);
+  for (let attempt = 0; attempt < 5; attempt++) { await reject(known); await reject(unknown); }
+  // A fresh request restores the legitimate path; expiry still rejects before login.
+  await send(known);
+  await context.adapter.updateMany({ model: "verification", where: [], update: { expiresAt: new Date(Date.now() - 1000) } });
+  await reject(known); await reject(unknown);
+  await send(known);
+  const response = await post("/sign-in/email-otp", { email: known, otp: app.otps.findLast(entry => entry.email === known)!.otp });
+  expect(response.status).toBe(200);
+  expect(response.headers.getSetCookie().length).toBeGreaterThan(0);
 });
