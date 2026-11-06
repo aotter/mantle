@@ -92,8 +92,8 @@ export type SignInMethod =
 
 /**
  * `SignIn`: the methods on `/admin/sign-in`, below the card's title. Surface: browser. Pass changed props to
- * `renderDefault` to add or reorder `methods`, or set `emailAutoComplete` (`username webauthn` for passkey autofill); render
- * your own elements around it to add a method of your own.
+ * `renderDefault` to reorder or drop `methods` or to set `emailAutoComplete`; render your own elements around it to add a
+ * method of your own. A `passkey` method is listed for this slot: the default renders nothing for it.
  */
 export interface SignInProps {
   readonly methods: readonly SignInMethod[];
@@ -104,9 +104,9 @@ export interface SignInProps {
   /** The email input's `autocomplete` for the email-code method; `email` by default. */
   readonly emailAutoComplete: string;
   /**
-   * Called once an in-page method (email code, passkey) has signed in, with where to go next: the OAuth authorize
-   * continuation, or `returnTo`. The default navigates there. Wrap it to run a step of your own first (for example
-   * offering to add a passkey) and then navigate to the same URL unchanged. Redirecting methods (social, OAuth, magic
+   * Called once the email code has signed in, with where to go next: the OAuth authorize
+   * continuation, or `returnTo`. The default navigates there. Wrap it to run a step of your own first and then navigate
+   * to the same URL unchanged. Redirecting methods (social, OAuth, magic
    * link) leave the page and do not call it. The signed-in method stays locked (its code is spent, its button busy), so
    * navigate away, or replace the page, rather than leaving the sign-in card in place.
    */

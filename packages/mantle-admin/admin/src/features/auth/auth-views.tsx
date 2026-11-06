@@ -21,7 +21,6 @@ import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { GateError, GateLoading } from "./gate-views";
 import { Slot } from "../../app/slots";
 import type { SignInMethod, SignInProps } from "../../app/slot-props";
-import { signInWithPasskey } from "./passkey";
 
 // Per-section spacing. `first:` zeroes top spacing for whichever
 // section the server returns first — keeps the spacing rules
@@ -115,7 +114,6 @@ function navigateAfterSignIn(next: string): void {
 /** The built-in `SignIn` slot: one section per method. */
 function SignInMethods({ methods, returnTo, oauthQuery, emailAutoComplete, onSignedIn }: SignInProps): React.ReactElement {
   const { language } = usePreferences();
-  usePasskeyAutofill(methods.some(m => m.kind === "passkey") && /\bwebauthn\b/.test(emailAutoComplete), returnTo, oauthQuery, onSignedIn);
   if (methods.length === 0) return <p className="text-sm text-muted-foreground">{t(language, "auth.signIn.noMethods")}</p>;
   // Wrap so each section's `first:` selectors target the first method in the list, not the first child of the card.
   return (
@@ -328,7 +326,7 @@ function MethodSection({
   oauthQuery?: string;
   emailAutoComplete: string;
   onSignedIn: (next: string) => void;
-}): React.ReactElement {
+}): React.ReactElement | null {
   // Exhaustive switch — adding a kind to SignInMethod without
   // adding a case here is a TS error. `social` covers all OAuth
   // providers (per Better Auth's socialProviders block); the
@@ -363,7 +361,8 @@ function MethodSection({
     case "email-otp":
       return <EmailOtpSection returnTo={returnTo} oauthQuery={oauthQuery} emailAutoComplete={emailAutoComplete} onSignedIn={onSignedIn} />;
     case "passkey":
-      return <PasskeySection returnTo={returnTo} oauthQuery={oauthQuery} onSignedIn={onSignedIn} />;
+      // Listed for the `SignIn` slot: Admin ships no passkey sign-in of its own; the application renders it.
+      return null;
     case "magic-link":
       return <MagicLinkSection returnTo={returnTo} oauthQuery={oauthQuery} />;
     default: {
@@ -535,66 +534,6 @@ function EmailOtpSection({
         onSignedIn(data.url ?? returnTo);
       }}
     />
-  );
-}
-
-/**
- * Passkey autofill: with a passkey method and an email input whose `autocomplete` names `webauthn`, start a conditional
- * WebAuthn request so the browser offers saved passkeys in the field. Picking one signs in like the button does.
- */
-function usePasskeyAutofill(enabled: boolean, returnTo: string, oauthQuery: string | undefined, onSignedIn: (next: string) => void): void {
-  const done = React.useRef(onSignedIn);
-  done.current = onSignedIn;
-  React.useEffect(() => {
-    const credential = globalThis.PublicKeyCredential as unknown as { isConditionalMediationAvailable?: () => Promise<boolean> } | undefined;
-    if (!enabled || !credential?.isConditionalMediationAvailable) return;
-    const abort = new AbortController();
-    void credential.isConditionalMediationAvailable().then(async available => {
-      if (!available || abort.signal.aborted) return;
-      const next = await signInWithPasskey(AUTH_BASE, oauthQuery, abort.signal, "conditional");
-      done.current(next ?? returnTo);
-    }).catch(() => {}); // dismissed, aborted or refused: the field stays an ordinary email input
-    return () => abort.abort();
-  }, [enabled, returnTo, oauthQuery]);
-}
-
-/** Passkey sign-in through Better Auth's passkey plugin; on success it continues like the email code. */
-function PasskeySection({
-  returnTo,
-  oauthQuery,
-  onSignedIn,
-}: {
-  returnTo: string;
-  oauthQuery?: string;
-  onSignedIn: (next: string) => void;
-}): React.ReactElement {
-  const { language } = usePreferences();
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  return (
-    <section className={SECTION_DIVIDED}>
-      <p className="mb-3 text-sm text-muted-foreground">{t(language, "auth.signIn.method.passkey.body")}</p>
-      <SignInButton
-        type="button"
-        className="w-full"
-        busy={busy}
-        onClick={async () => {
-          if (busy) return;
-          setBusy(true);
-          setError(null);
-          try {
-            const next = await signInWithPasskey(AUTH_BASE, oauthQuery);
-            onSignedIn(next ?? returnTo);
-          } catch {
-            setBusy(false);
-            setError(t(language, "auth.signIn.method.passkey.failed"));
-          }
-        }}
-      >
-        {t(language, "auth.signIn.method.passkey.button")}
-      </SignInButton>
-      {error ? <p className="mt-2 text-sm text-destructive" role="alert">{error}</p> : null}
-    </section>
   );
 }
 

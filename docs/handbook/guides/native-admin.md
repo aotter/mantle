@@ -408,30 +408,30 @@ checks every route, View and Procedure.
 ### Sign-in
 
 `/admin/sign-in` lists the methods `authRoutes` returns from `GET <auth>/methods` (`email-otp`, `magic-link`, `passkey`,
-`social`, `oauth`) through the `SignIn` slot. Pass changed props to `renderDefault` to reorder or add `methods`, set the
-email field's `emailAutoComplete` (for example `username webauthn`: with a `passkey` method, Admin then starts a conditional WebAuthn request so the browser offers
-saved passkeys in the field), or wrap
-`onSignedIn`. Admin calls `onSignedIn(next)` once an in-page method (the email code or a passkey) has signed in. `next`
-is where Admin goes by default: Better Auth's OAuth authorize continuation when the sign-in came from an OAuth client
-such as an MCP connector, or the page's return path. Run your own step first, for example offering to add a passkey
-while the session is fresh, then navigate to the same `next`. Redirecting methods (social, OAuth, magic link) leave the
-page and do not call it.
+`social`, `oauth`) through the `SignIn` slot. Admin renders the email code, magic link, social and OAuth methods; it
+renders nothing for `passkey`, which is listed for an application that builds its own. Pass changed props to
+`renderDefault` to reorder or drop `methods`, set the email field's `emailAutoComplete`, or wrap `onSignedIn`; render
+your own elements around it to add a method of your own.
+
+Admin calls `onSignedIn(next)` once the email code has signed in. `next` is where Admin goes by default: Better Auth's
+OAuth authorize continuation when the sign-in came from an OAuth client such as an MCP connector, or the page's return
+path. Run your own step first, then navigate to the same `next`. Redirecting methods (social, OAuth, magic link) leave
+the page and do not call it.
 
 ```tsx
 export default defineAdmin(admin, {
   components: {
-    SignIn: (props) => props.renderDefault({ ...props, emailAutoComplete: "username webauthn",
-      onSignedIn: next => { sessionStorage.setItem("after-sign-in", next); window.location.assign("/admin/p/add-passkey"); } }),
+    SignIn: (props) => props.renderDefault({ ...props,
+      onSignedIn: next => { sessionStorage.setItem("after-sign-in", next); window.location.assign("/admin/p/welcome"); } }),
   },
-  pages: [{ path: "add-passkey", title: "Add a passkey", element: <AddPasskey /> }],
+  pages: [{ path: "welcome", title: "Welcome", element: <Welcome /> }],
 });
 ```
 
 Keep `next` out of the step page's URL: read it back from where your wrapper stored it, then navigate there unchanged.
 A page that follows a `?next=` from its own address is an open redirect, and `next` may be Better Auth's absolute OAuth
 continuation, so a "same-origin only" check would also break connector sign-in. The signed-in method stays locked once
-`onSignedIn` runs, so navigate away (or replace the page) rather than leaving the card in place. The enrolment prompt,
-its copy and when to show it are the application's; Admin ships the method and the seam, not the experience.
+`onSignedIn` runs, so navigate away (or replace the page) rather than leaving the card in place.
 
 ### Components that also render in an MCP host
 
