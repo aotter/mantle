@@ -1,42 +1,50 @@
 # ADR-lite: Sign-in methods beyond email OTP
 
-**Status:** Proposed, issue #1936. Builds on ADR-0014 (Better Auth owns sign-in) and keeps the app shell passwordless by default.
+**Status:** Proposed (revision 2), issue #1936. Builds on ADR-0014 (Better Auth owns sign-in) and keeps the app shell
+passwordless by default. Revision 2 narrows the record to the seams Core provides; the passkey experience itself is
+built by applications and hosts on top of them.
 
 ## Decision
 
-- **Passkey is the recommended fast path; email OTP stays the first sign-in and the recovery path.** The app enables
-  Better Auth's `@better-auth/passkey` plugin in its own `auth.ts`. Right after an OTP sign-in (a fresh session, which
-  the plugin requires for registration by default) Admin offers to add a passkey; later sign-ins use the browser's
-  passkey autofill, with "use an email code instead" always available. Admin gets list, rename and delete for passkeys.
-- **Password is opt-in only**, and only together with `requireEmailVerification: true`, a minimum length of at least 12,
-  Better Auth's `haveibeenpwned` plugin and `twoFactor` for admins.
-- **Contract:** `authRoutes` `methods` gains `{ kind: "passkey" }` and `{ kind: "password" }`; Admin's sign-in page
-  renders them. The WebAuthn browser client is loaded lazily, inside the UI size budgets.
-- **Delivery:** the app shell default does not change (email OTP). Both opt-ins are handbook recipes under Cloudflare
-  authentication; the passkey table comes from `mantle generate --auth` (Better Auth's `getSchema`).
+Core provides three seams and no passkey user experience of its own.
+
+1. **A `passkey` sign-in method.** `authRoutes` `methods` accepts `{ kind: "passkey" }`. Sign-in goes through Better
+   Auth's own passkey endpoints (the application enables `@better-auth/passkey` in its `auth.ts`); Core adds no UI beyond
+   what the method contract already renders.
+2. **A sign-in page extension slot.** An application can add a sign-in method and adjust the email input (for example
+   `autocomplete="username webauthn"` for the browser's passkey autofill) without forking `auth-views.tsx`.
+3. **A post-sign-in step before the OAuth continuation.** After a successful sign-in an application may run its own page
+   or step; Core then resumes the pending authorize redirect, or the original return URL, unchanged. This is where an
+   application offers to add a passkey right after an email-code sign-in, including inside an OAuth authorize flow such
+   as an MCP connector's sign-in.
+
+Email OTP stays the first sign-in and the recovery path in the app shell.
 
 ## Constraints recorded
 
-- Better Auth 1.7.7's passkey plugin verifies registration and sign-in with `requireUserVerification: false` and
-  `userVerification: "preferred"`. A user-presence-only assertion signs in (spike for #1937, case h). This is accepted
-  for member sign-in: a passkey is still a phishing-resistant possession factor. Requiring user verification for
-  admins needs an upstream option; until then it is not claimed.
-- `rpID` defaults to the `baseURL` host. A deployment with several hosts chooses one host or a shared registrable
-  parent domain; a passkey works only there.
-- `Caller` does not record how a session was obtained, so step-up for sensitive actions is not part of this record
-  (see ADR-lite #1937).
-- Password hashing is Better Auth's native scrypt on workerd (N=16384, r=16, about 32 MB per hash); its CPU cost on the
-  Workers plans is measured and documented before the password recipe ships.
+- **`rpID` defaults to the auth host.** A passkey is usable by every origin under its `rpID`. Setting it to a parent
+  domain under which other tenants are served lets any of them request assertions for those credentials. A
+  parent-domain `rpID` is acceptable only when the deployment owns the whole registrable domain and nothing else is
+  served beneath it; the recipe says so. Pages that verify a passkey (sign-in, and any approval page, ADR-lite #1937)
+  are served on a host whose origin matches the `rpID`.
+- **Register right after sign-in.** Better Auth's passkey plugin requires a fresh session to register (one day by
+  default). Registration offered only on an account page later fails with "Session is not fresh"; the post-sign-in step
+  (seam 3) is the reliable place.
+- **No enforced user verification.** Better Auth 1.7's passkey plugin verifies with `requireUserVerification: false`;
+  a user-presence-only assertion signs in. Acceptable for sign-in (still a phishing-resistant possession factor).
+  Nothing in Core claims biometric or PIN verification at sign-in.
+- **`Caller` does not record how a session was obtained.** Verified step-up claims are proposed as a host seam in
+  ADR-lite #1937.
 
-## Non-goals
+## Out of scope for Core
 
-- Changing the app shell default, or password sign-in for Admin by default.
-- Mantle-owned credential storage or hashing: Better Auth owns them.
-- Biometric enforcement for sign-in.
+The enrolment prompt, its copy and dismissal policy, autofill behaviour, passkey management screens, and a password
+method. Applications and hosts build these on the seams. Password sign-in remains plain Better Auth configuration in an
+application's own `auth.ts`; Core's existing grant revocation on password reset and change already applies.
 
 ## Acceptance
 
-- OTP sign-in, then passkey registration, then passkey sign-in; deleting the passkey falls back to OTP.
-- Password: verification required before sign-in; reset ends sessions and OAuth grants (`oauthGrantRevocation`, already
-  covered); rate limits per Better Auth's sign-in rule.
-- `@simplewebauthn/server` exercised on workerd in the packed-consumer check.
+- `methods` with `{ kind: "passkey" }` renders and signs in through Better Auth's endpoints.
+- The slot changes the email input and adds a method without a fork.
+- A post-sign-in step runs and the pending OAuth authorize redirect resumes unchanged.
+- The handbook recipe states the `rpID` rule and the fresh-session rule.

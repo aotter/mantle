@@ -111,5 +111,5 @@ These retain their issue-based filenames and original decision status.
 | [909 Admin UI kit](adr-lite-909-admin-ui-kit.md) | Accepted; amended by 0029 and #1376 revision 4 |
 | [#1376 Admin customization](adr-lite-1376-admin-extensions.md) | Accepted (revision 4); implementation in progress; amends 909 and 0029 |
 | [#1395 Durable Object SQLite driver](adr-lite-1395-durable-object-driver.md) | Accepted; experimental |
-| [#1936 Sign-in methods beyond email OTP](adr-lite-1936-sign-in-methods.md) | Proposed |
-| [#1937 Human-approved Procedures](adr-lite-1937-human-approval.md) | Proposed; prototype evidence |
+| [#1936 Sign-in methods beyond email OTP](adr-lite-1936-sign-in-methods.md) | Proposed (revision 2: seams only) |
+| [#1937 Human-approved Procedures](adr-lite-1937-human-approval.md) | Proposed (revision 2: seams, no manifest field) |
