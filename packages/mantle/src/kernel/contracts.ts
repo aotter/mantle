@@ -52,6 +52,8 @@ type IdentityCaller = {
   readonly target?: string;
   readonly targetHash?: string;
   readonly dryRun?: boolean;
+  /** Host-verified step-up; read it with `stepUpOf` from `@aotter/mantle/host-caller`, which checks the host brand. */
+  readonly stepUp?: import("./host-caller.js").StepUp;
 };
 export type Caller =
   | { readonly kind: "anonymous" }

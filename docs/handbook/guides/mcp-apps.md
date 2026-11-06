@@ -45,6 +45,10 @@ than `["app"]` on an `appOnly` tool) fails when `mcp()` is constructed.
 from clients that declare no MCP Apps support, as `appOnly` does for Views. It
 is a listing hint only: `tools/call` still runs every identity, scope, `check`
 and `authorize` decision, so an App-only write is authorized like any other.
+It is not an access boundary either: any client holding the same credential can
+call an App-only tool directly. An action that needs the person present is
+enforced on the server; see
+[Actions that need the person present](../reference/surface.md#actions-that-need-the-person-present).
 
 A `run` may return `withResultMeta(data, meta)` from `@aotter/mantle/mcp`. The
 result's text and `structuredContent` are built from `data` exactly as before;

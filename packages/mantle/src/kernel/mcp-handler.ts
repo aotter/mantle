@@ -1,6 +1,7 @@
 /** Request-only MCP implementation, excluded from Worker startup. */
 import { authorized, authorizeTarget } from "./authorization.js";
 import { forwarded, isAdmin, ContractError, wire, type Caller, type RequestContext } from "./contracts.js";
+import { ApprovalRequired } from "./approval.js";
 import { checkOrigin, surfaceCaller, surfaceError } from "./surface-failure.js";
 import { draining } from "./drain.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
@@ -103,7 +104,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
     if (surface === "admin") selected = await select();
     // Before per-caller filtering, so every caller of a deploy sees one catalogue version.
     const version = catalogueVersion(selected);
-    const { McpServer, ProtocolError, ProtocolErrorCode, createMcpHandler, fromJsonSchema } = await import("@modelcontextprotocol/server");
+    const { McpServer, ProtocolError, ProtocolErrorCode, createMcpHandler, fromJsonSchema, inputRequired } = await import("@modelcontextprotocol/server");
     if (request.method === "POST" && !cookieOnly && !options.gateway) await parse();
     if (tooLarge && access) return challenge(new ContractError("INPUT_VALIDATION_FAILED", "MCP body exceeds its limit.", "mcp"), undefined, true);
     if (tooLarge) return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Request body exceeds 1048576 bytes." } }, { status: 413 });
@@ -199,7 +200,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         registered.add(tool.name);
         // Not part of structured output: the version, and on failure the current input contract.
         const about = (contract: boolean) => { const text = [tool.version && `tool version ${tool.version}`, contract && `input schema ${JSON.stringify(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema)}`].filter(Boolean).join("; "); return text ? [{ type: "text" as const, text }] : []; };
-        server.registerTool(tool.name, { ...(meta ? { _meta: meta } : {}), ...(tool.title ? { title: text(tool.title, locale) } : {}), description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name, inputSchema: schema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) }, async (raw: unknown) => {
+        server.registerTool(tool.name, { ...(meta ? { _meta: meta } : {}), ...(tool.title ? { title: text(tool.title, locale) } : {}), description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name, inputSchema: schema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) }, async (raw: unknown, context: { mcpReq?: { envelope?: Record<string, unknown>; inputResponses?: Record<string, unknown> } }) => {
         const metadata = options.onObservation ? { kind: "invocation" as const, surface, invocationId: crypto.randomUUID(), tool: tool.name, caller: Object.freeze(caller.kind === "user" ? { ...caller, scopes: Object.freeze([...caller.scopes]) } : { ...caller }) } : undefined;
         const started = metadata ? performance.now() : 0;
         if (metadata) observe(options.onObservation, { ...metadata, phase: "attempt", at: Date.now() });
@@ -232,11 +233,16 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
           return { ...(meta || resultMeta ? { _meta: { ...resultMeta, "net.aotter.mantle/tool": tool.name } } : {}), content: [{ type: "text" as const, text }, ...about(false), ...(notice ? [{ type: "text" as const, text: `This page is larger than the ${MCP_PAGE_BUDGET}-character page size budget (a single row over it, or a View without an order, is returned whole), so a host may truncate it. Continue with nextCursor, if any.` }] : [])], ...(data && typeof data === "object" && !Array.isArray(data) ? { structuredContent: data as Record<string, unknown> } : {}) };
         } catch (error) {
           if (host) access?.finish(error);
+          // Asked once per call: a retry that still needs approval (declined, or the page left unfinished) gets the fallback.
+          if (error instanceof ApprovalRequired && elicitsUrl(server.server.getNegotiatedProtocolVersion(), context?.mcpReq) && !context?.mcpReq?.inputResponses?.[APPROVAL_INPUT]) {
+            code = error.code; outcome = "failed";
+            return inputRequired({ inputRequests: { [APPROVAL_INPUT]: inputRequired.elicitUrl({ url: error.url, message: error.message }) } });
+          }
           const diagnostic = host ? (await (await import("./host-caller.js")).hostFailure(error, caller, `mcp ${tool.name}`).json() as {error: ReturnType<typeof surfaceError>["error"]}).error : surfaceError(error, `mcp ${tool.name}`).error;
           code = diagnostic.code; outcome = code === "AUTH_DENIED" || code === "UNAUTHENTICATED" ? "denied" : "failed";
           if (diagnostic.path === "request:origin") observe(options.onRefusal, { at: Date.now(), status: 403, reason: "origin" });
           const payload = { diagnostics: [diagnostic] };
-          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), isError: true, content: [{ type: "text" as const, text: JSON.stringify(payload) }, ...about(outcome === "failed")], ...(tool.outputSchema ? {} : { structuredContent: payload }) };
+          return { ...(meta ? { _meta: { "net.aotter.mantle/tool": tool.name } } : {}), isError: true, content: [...(error instanceof ApprovalRequired ? [{ type: "text" as const, text: error.fallback }] : []), { type: "text" as const, text: JSON.stringify(payload) }, ...about(outcome === "failed" && !(error instanceof ApprovalRequired))], ...(tool.outputSchema ? {} : { structuredContent: payload }) };
         } finally {
           if (metadata) observe(options.onObservation, { ...metadata, phase: "completion", at: Date.now(), outcome, durationMs: Math.max(0, performance.now() - started), ...(code ? { code } : {}) });
         }
@@ -265,6 +271,13 @@ function catalogueVersion(tools: readonly { readonly surface: string; readonly n
 }
 
 const CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities";
+/** The `inputRequests` key of an approval's URL elicitation. */
+const APPROVAL_INPUT = "net.aotter.mantle/approval";
+/** URL elicitation rides the 2026-07-28 multi-round-trip result, and only for a request whose own envelope declares it. */
+function elicitsUrl(version: string | undefined, request: { envelope?: Record<string, unknown> } | undefined): boolean {
+  const declared = request?.envelope?.[CLIENT_CAPABILITIES_META_KEY], elicitation = isRecord(declared) ? declared.elicitation : undefined;
+  return !!version && version >= "2026-07-28" && isRecord(elicitation) && isRecord(elicitation.url);
+}
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** `unknown`: a stateless request after `initialize` carries no capabilities, so only an explicit refusal hides Apps. */
