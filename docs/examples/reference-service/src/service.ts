@@ -85,6 +85,11 @@ export async function fetchService(request: Request, env: Env, context: Executio
     }
     const shell = await adminShell(request, path => env.ASSETS.fetch(new Request(new URL("/admin/" + path, url), request)));
     if (shell) return shell;
+    // public/ files outside /assets/* (for example /favicon.ico) reach the Worker first; serve them from ASSETS.
+    if (request.method === "GET" || request.method === "HEAD") {
+      const file = await env.ASSETS.fetch(request);
+      if (file.status !== 404) return file;
+    }
     return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
   } catch (error) { return surfaceFailure(error); }
 }

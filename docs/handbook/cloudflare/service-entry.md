@@ -116,7 +116,7 @@ its collection parameter selects only a generated table and visibility policy.
 
 `mantle generate --admin --wrangler wrangler.jsonc` sets the selected assets
 directory. A new assets block defaults to `binding: "ASSETS"`,
-`run_worker_first: ["/*", "!/admin/assets/*"]` and `html_handling: "none"`.
+`run_worker_first: ["/*", "!/admin/assets/*", "!/assets/*"]` and `html_handling: "none"`.
 Existing blocks keep their binding and routing; when `run_worker_first` is true or a
 list, a missing `html_handling` defaults to `none`.
 A different binding needs a custom Admin HTML loader. Deploy the built assets and
@@ -134,7 +134,7 @@ JSONC comments and unrelated settings survive regeneration:
   "assets": {
     "directory": "dist/client",
     "binding": "ASSETS",
-    "run_worker_first": ["/*", "!/admin/assets/*"],
+    "run_worker_first": ["/*", "!/admin/assets/*", "!/assets/*"],
     "html_handling": "none"
   },
   "d1_databases": [{ "binding": "DB", "database_name": "your-database", "database_id": "your-id" }]
@@ -144,9 +144,21 @@ JSONC comments and unrelated settings survive regeneration:
 The Worker serves HTML shells and APIs; static files are answered by the edge without
 running it. `mantle bundle` writes `<assets>/_headers` with `nosniff` and a one-year
 `immutable` cache for Admin's content-hashed `/admin/assets/*` (an existing `_headers`
-is not edited: the build prints the rule to add). Add the app's own static prefixes to
-the exclusion (`"!/assets/*"`) and set their headers in the same `_headers` file; a
-path the Worker must answer stays out of the exclusion. `none` keeps `index.html`
+is not edited: the build prints the rule to add). `mantle bundle` also copies the
+working directory's `public/` into the assets directory (removing what it copied last
+time; `public/admin` is refused). `/assets/*` is excluded by default, so
+`public/assets/*` is answered by the edge; other public files reach the Worker first,
+which can serve them with `env.ASSETS.fetch(request)` as the app shell does. Cloudflare
+sends `Cache-Control: public, max-age=0, must-revalidate` and an ETag by default; set
+`immutable` in `public/_headers` only for content-hashed files. `_headers` does not
+apply to responses the Worker builds. A path the Worker must answer stays out of the
+exclusion.
+
+After a deploy the previous version's assets are gone, so an open Admin tab that loads
+a chunk from the old build gets a 404; Admin reloads the page once when that happens.
+With [gradual deployments](https://developers.cloudflare.com/workers/versions-and-deployments/gradual-deployments/version-affinity/),
+set a version key (`Cloudflare-Workers-Version-Key`) so a page and its chunks come from
+the same version. `none` keeps `index.html`
 available by name. `adminShell(request, assets)` passes
 paths relative to the Admin directory, so the app fetches them under `/admin/`:
 `path => env.ASSETS.fetch(new Request(new URL("/admin/" + path, request.url), request))`. Admin assets are not a public database

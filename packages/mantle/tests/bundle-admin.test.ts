@@ -307,3 +307,36 @@ test("under wrangler dev a stale refusal still rejects assets inside the Worker 
     expect(existsSync(join(assets, "keep.txt"))).toBe(true);
   } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30_000);
+
+test("mantle bundle: public/ is copied into the assets directory; files it copied last time are removed, others kept", async () => {
+  const { dir, entry } = await app();
+  const cwd = process.cwd();
+  try {
+    process.chdir(dir);
+    const dist = join(dir, "dist"), client = join(dist, "client");
+    await mkdir(join(dir, "public/assets"), { recursive: true });
+    await writeFile(join(dir, "public/assets/logo.svg"), "<svg/>");
+    await writeFile(join(dir, "public/robots.txt"), "User-agent: *\n");
+    await mkdir(client, { recursive: true });
+    await writeFile(join(client, "frontend.js"), "another build step's file");
+    await bundleApp(entry, dist);
+    expect(await readFile(join(client, "assets/logo.svg"), "utf8")).toBe("<svg/>");
+    expect(await readFile(join(client, "robots.txt"), "utf8")).toBe("User-agent: *\n");
+    expect(existsSync(join(client, "admin/index.html"))).toBe(true);
+    // the record lives outside the uploaded assets
+    expect(existsSync(join(client, ".mantle-public"))).toBe(false);
+    await rm(join(dir, "public/robots.txt"));
+    await bundleApp(entry, dist);
+    expect(existsSync(join(client, "robots.txt"))).toBe(false);
+    expect(existsSync(join(client, "assets/logo.svg"))).toBe(true);
+    expect(await readFile(join(client, "frontend.js"), "utf8")).toBe("another build step's file");
+    // a public _headers is the app's: the Admin rule is not merged into it, only reported
+    await writeFile(join(dir, "public/_headers"), "/assets/*\n  X-Content-Type-Options: nosniff\n");
+    await rm(join(client, "_headers"));
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try { await bundleApp(entry, dist); expect(warn.mock.calls.flat().join("\n")).toContain("/admin/assets/*"); } finally { warn.mockRestore(); }
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe("/assets/*\n  X-Content-Type-Options: nosniff\n");
+    await mkdir(join(dir, "public/admin"));
+    await expect(bundleApp(entry, dist)).rejects.toThrow("public/admin is reserved");
+  } finally { process.chdir(cwd); await rm(dir, { recursive: true, force: true }); }
+});

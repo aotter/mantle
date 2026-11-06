@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
 
 // The Worker serves HTML shells and APIs; Admin's content-hashed chunks are answered by the edge (`mantle bundle` writes their headers).
-const workerFirst = ["/*", "!/admin/assets/*"];
+const workerFirst = ["/*", "!/admin/assets/*", "!/assets/*"];
 const requiredFlags = ["nodejs_compat", "global_fetch_strictly_public"];
 
 /** Newest date the project's installed workerd supports, as create-cloudflare picks it; a fixed date before Wrangler is installed. */
