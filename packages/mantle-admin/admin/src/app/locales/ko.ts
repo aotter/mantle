@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "출력 스키마",
     "docs.readOnly": "읽기 전용",
     "docs.noEntries": "이 인터페이스에 선언된 진입점이 없습니다.",
+    "docs.mcpNotMounted": "MCP 도구 {count}개가 선언되어 있지만 이 호스트에 MCP 엔드포인트가 마운트되지 않아 여기서는 호출할 수 없습니다.",
     "developer.graph.title": "Manifest 그래프",
     "developer.graph.details": "항목 세부정보",
     "developer.graph.openModel": "데이터 모델에서 열기",

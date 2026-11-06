@@ -359,6 +359,7 @@ export default {
     "docs.outputSchema": "Output schema",
     "docs.readOnly": "Read only",
     "docs.noEntries": "No entry points are declared for this interface.",
+    "docs.mcpNotMounted": "{count} MCP tools are declared, but this host mounts no MCP endpoint, so none can be called here.",
     "logic.surface": "Surface",
     "logic.hooks": "Hooks",
     "developer.graph.title": "Manifest graph",

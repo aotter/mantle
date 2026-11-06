@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "สคีมาเอาต์พุต",
     "docs.readOnly": "อ่านอย่างเดียว",
     "docs.noEntries": "ยังไม่ได้ประกาศจุดเข้าสำหรับอินเทอร์เฟซนี้",
+    "docs.mcpNotMounted": "ประกาศเครื่องมือ MCP ไว้ {count} รายการ แต่โฮสต์นี้ไม่ได้เมานต์ปลายทาง MCP จึงยังเรียกใช้ที่นี่ไม่ได้",
     "developer.graph.title": "กราฟ Manifest",
     "developer.graph.details": "รายละเอียดรายการ",
     "developer.graph.openModel": "เปิดในโมเดลข้อมูล",

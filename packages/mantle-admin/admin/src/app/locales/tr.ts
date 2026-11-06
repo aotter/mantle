@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "Çıktı şeması",
     "docs.readOnly": "Salt okunur",
     "docs.noEntries": "Bu arayüz için giriş noktası bildirilmemiş.",
+    "docs.mcpNotMounted": "{count} MCP aracı bildirildi, ancak bu ana makine bir MCP uç noktası bağlamıyor; burada hiçbiri çağrılamaz.",
     "developer.graph.title": "Manifest grafiği",
     "developer.graph.details": "Öğe ayrıntıları",
     "developer.graph.openModel": "Veri modelinde aç",

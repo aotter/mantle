@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "Skema keluaran",
     "docs.readOnly": "Hanya baca",
     "docs.noEntries": "Tidak ada titik masuk yang dideklarasikan untuk antarmuka ini.",
+    "docs.mcpNotMounted": "{count} alat MCP dideklarasikan, tetapi host ini tidak memasang endpoint MCP, jadi tidak ada yang dapat dipanggil di sini.",
     "developer.graph.title": "Grafik Manifest",
     "developer.graph.details": "Detail item",
     "developer.graph.openModel": "Buka dalam model data",

@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "Schemat wyjścia",
     "docs.readOnly": "Tylko do odczytu",
     "docs.noEntries": "Nie zadeklarowano punktów wejścia dla tego interfejsu.",
+    "docs.mcpNotMounted": "Zadeklarowano {count} narzędzi MCP, ale ten host nie udostępnia punktu końcowego MCP, więc nie można ich tu wywołać.",
     "developer.graph.title": "Graf Manifest",
     "developer.graph.details": "Szczegóły elementu",
     "developer.graph.openModel": "Otwórz w modelu danych",
