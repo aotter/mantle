@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { AdminRoot } from "./admin-root";
 import type { AdminDefinition } from "./define-admin";
 import { canRenderAdmin, installPreviewPolicy, isAdminPreview } from "./frame-policy";
+import { reloadOnStaleChunk } from "./stale-chunk";
 
 /**
  * Internal: what `@aotter/mantle-admin/build`'s page runs. It renders an entry's `defineAdmin(...)` into `#root` under
@@ -14,6 +15,7 @@ export function mountAdmin(admin: AdminDefinition): void {
   const preview = isAdminPreview();
   if (preview && canRenderAdmin(window, true)) installPreviewPolicy(window);
   if (canRenderAdmin(window, preview)) {
+    reloadOnStaleChunk(window);
     ReactDOM.createRoot(rootElement).render(
       <StrictMode>
         <AdminRoot admin={admin} preview={preview} />

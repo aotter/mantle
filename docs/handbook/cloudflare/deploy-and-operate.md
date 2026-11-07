@@ -62,7 +62,7 @@ can move fetch execution closer to observed back-end services:
 
 A placed Worker runs every request that reaches it in that location, static files
 included. Keep static prefixes out of `assets.run_worker_first` (the generated
-default already excludes `/admin/assets/*`) so the edge answers them next to the
+default already excludes `/admin/assets/*` and `/assets/*`) so the edge answers them next to the
 visitor; see [Workers assets](service-entry.md#workers-assets-and-secrets).
 
 For globally distributed, read-heavy D1 traffic, enable
