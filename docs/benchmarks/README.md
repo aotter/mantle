@@ -8,7 +8,7 @@ claim; each says what it ran on.
 | [Runtime overhang baseline](runtime-overhang-baseline.md) | Warm and cold Mantle cost over the SQL it sends, with call counters, on develop before #1432 and #1433. Produced by the harness below; raw numbers in [`data/`](data/). |
 | [Native driver cleanup](native-driver-cleanup.md) | Local evidence for the native driver cleanup. |
 | [Native query cleanup](native-query-cleanup.md) | Local evidence for the native query cleanup (#1428, ADR-0042). |
-| [Swolhalla native cleanup](swolhalla-native-cleanup.md) | The same cleanup measured against an application workload. |
+| [Application native cleanup](application-native-cleanup.md) | The same cleanup measured against an application workload. |
 
 ## The harness
 

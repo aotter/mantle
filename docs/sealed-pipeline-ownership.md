@@ -75,8 +75,6 @@ public Core PRs receive no cross-repository credentials:
 | Historical consumer | Revision | Gate at the time | Manifest paths |
 |---|---|---|---|
 | `aotter/mantle-starters` | `157e8f49e1e25ae1c52c0115f0dd9e8b6017ef0e` | Core CI + release | `blank/manifests/site.yaml`; `overlays/{community,intake,presence,publication,reservation,transaction}/manifests/site.yaml`; `recipes/typed-web/manifests/site.yaml` |
-| `aotter/mantle-landing` | `4381354dd25d5d94f4096cf3e55a4cb9eecbf3ad` | Landing CI + Core release | `manifests/site.yaml` |
-| `aotter/mantle-platform` (Remote Mantle/control plane) | `3cc0d9ad6ee47b15f06c915c12f56fc4b9143f32` | Platform `exact-packed-core` | `manifests/platform.yaml` |
 | Core i18n fixture | this repository | Core CI | `packages/mantle-spec/test/fixtures/i18n-parent-child/manifests/site.yaml` |
 
 ## Baseline gates

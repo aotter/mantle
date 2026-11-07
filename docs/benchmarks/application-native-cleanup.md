@@ -1,4 +1,4 @@
-# Swolhalla: real-data local before/after evidence
+# A downstream application: real-data local before/after evidence
 
 Issue #1428. A read-only Cloudflare D1 query captured one consistent application-data snapshot. Cloudflare's whole-database export refuses FTS5, so the local snapshot recreates its virtual index from native schema SQL. Auth credentials were excluded; authenticated HTTP uses synthetic local sessions. No remote writes or deployment occurred.
 
