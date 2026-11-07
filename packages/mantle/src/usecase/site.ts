@@ -20,7 +20,8 @@ import type { ${pg ? "Postgres" : "Handle"} as Database } from "${root}/${pg ? "
 import * as DRIVER from "${root}/driver/${driver}";
 import { param, escapeLike, likeEscape, like } from "${root}/dialect/${pg ? "postgres" : "sqlite"}";
 export const siteDefaults = ${q(defaults)} as const;
-const policies = ${q(policies)} as const;
+/** The site's media purposes, expanded; the library and upload_media check against them. */
+export const policies = ${q(policies)} as const;
 export function site(db: Database, caller: Caller) { return createSite({read:(sql,values)=>DRIVER.read(db,sql,values),write:steps=>DRIVER.procedure(db,steps,"site"),definitive:DRIVER.definitive},{param,escapeLike,likeEscape,like},caller,siteDefaults,policies); }
 `,"site-seed.sql": seed + "\n", "site-schema.sql":`CREATE TABLE site_config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE media_assets (id TEXT PRIMARY KEY, created_at ${pg?"BIGINT":"INTEGER"} NOT NULL, owner_id TEXT, alt TEXT, caption TEXT, variants TEXT NOT NULL, metadata TEXT);

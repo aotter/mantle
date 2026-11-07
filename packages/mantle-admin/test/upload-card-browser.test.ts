@@ -110,6 +110,8 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       { name: "upload_media", arguments: { uploadId: id, purpose: "cover" } },
     ]);
     expect(messages).toEqual([{ role: "user", content: [{ type: "text", text: `I uploaded cat.png to the media library: asset id ${id} (purpose cover).` }] }]);
+    // a finished upload offers no second upload of the same file
+    expect(await upload.isDisabled()).toBe(true);
     expect(errors).toEqual([]);
   } finally { await browser.close(); await new Promise<void>(done => server.close(() => done())); }
 }, 60_000);

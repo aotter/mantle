@@ -224,13 +224,13 @@ export const UPLOAD_META = "net.aotter.mantle/upload";
  */
 export async function uploadMedia(library: MediaLibrary, policies: readonly MediaPurposePolicy[], input: Record<string, unknown>, call: { readonly apps: boolean }): Promise<unknown> {
   const { uploadId, sourceUrl, file, variants, purpose, filename, ...described } = input;
-  const extra = (keys: string[]) => keys.filter(key => input[key] !== undefined);
+  const present = (keys: string[]) => keys.filter(key => input[key] !== undefined);
   if (uploadId !== undefined) {
-    if (extra(["variants", "filename", "sourceUrl", "file"]).length) throw bad("{ uploadId, purpose?, alt?, caption? }: filename, variants, sourceUrl and file belong to the first call");
+    if (present(["variants", "filename", "sourceUrl", "file"]).length) throw bad("{ uploadId, purpose?, alt?, caption? }: filename, variants, sourceUrl and file belong to the first call");
     return library.commitUpload(String(uploadId), { ...described, ...(purpose !== undefined ? { purpose } : {}) });
   }
   if (sourceUrl !== undefined || file !== undefined) {
-    if (extra(["sourceUrl", "file", "variants"]).length > 1) throw bad("one of variants, sourceUrl or file");
+    if (present(["sourceUrl", "file", "variants"]).length > 1) throw bad("one of variants, sourceUrl or file");
     const policy = policies.find(p => p.name === purpose);
     if (!policy) throw fail("MEDIA_PURPOSE_REJECTED", `purpose '${String(purpose)}' is not declared`);
     if (policy.required.length !== 1) throw fail("MEDIA_VARIANTS_INCOMPLETE", `purpose '${policy.name}' takes ${policy.required.length} variants, and a fetched file is one: prepare the variants locally and send them as variants`);
@@ -253,7 +253,7 @@ export async function uploadMedia(library: MediaLibrary, policies: readonly Medi
     const data = { uploadId: created.uploadGroupId, expiresAt: created.expiresAt };
     return call.apps ? withResultMeta(data, { [UPLOAD_META]: { targets } }) : { ...data, targets };
   }
-  if (extra(["filename", "alt", "caption"]).length) throw bad("variants, sourceUrl or file with filename, alt and caption");
+  if (present(["filename", "alt", "caption"]).length) throw bad("variants, sourceUrl or file with filename, alt and caption");
   const listed = policies.filter(p => purpose === undefined || p.name === purpose);
   if (purpose !== undefined && !listed.length) throw fail("MEDIA_PURPOSE_REJECTED", `purpose '${String(purpose)}' is not declared`);
   return { purposes: listed, ...(call.apps ? { card: "The upload card is open: the person picks the file there, and the card reports the committed asset id." } : {}) };

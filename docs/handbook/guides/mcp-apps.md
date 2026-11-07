@@ -69,7 +69,8 @@ const uploadTarget: Tool<unknown> = {
 ```
 
 `run` also receives `{ apps }` after `handlers`: `apps` is true when the
-`tools/call` request declares MCP Apps support, so a tool can keep a secret in
+`tools/call` request declares MCP Apps support and an App resource renders the
+tool, so a tool can keep a secret in
 the result `_meta` for an App and return it in the data for a client that has
 none (`upload_media` does this with its targets). `callTool` and `callToolLazy`
 take it as an optional last argument (default `{ apps: false }`).
@@ -341,7 +342,8 @@ purpose with several variant slots needs an agent that prepares them, and the
 card says so. It needs the host's `serverTools`.
 
 The targets reach the card in the result `_meta` (`net.aotter.mantle/upload`)
-when the request declares MCP Apps support; otherwise they are in the result,
+when the request declares MCP Apps support and the card is registered;
+otherwise they are in the result,
 for an agent that PUTs them itself. The card reads either.
 
 On `resources/read` the card declares the storage origin as

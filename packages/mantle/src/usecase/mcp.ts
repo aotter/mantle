@@ -17,7 +17,7 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
   const imports: string[] = plan.access ? ['import { userBinds } from "@aotter/mantle/user-fields";'] : [], tools: { fields: string[]; schema: string }[] = [];
   // A version hashes the listed definition as for every tool; `_meta` (here `openai/fileParams`) is not part of it.
   const mediaTools = policies ? mediaDefinitions(policies).map(({action,...tool})=>{ const {meta,...listed}=tool as typeof tool & {meta?: Record<string,unknown>}; return {action,...versioned({...listed,title:toolTitle(tool.name)}),...(meta ? {meta} : {})}; }) : [];
-  const files:Record<string,string> = policies ? emitMcpMedia(mediaTools, policies, refuse) : {};
+  const files:Record<string,string> = policies ? emitMcpMedia(mediaTools, refuse) : {};
   let hasRef=false,hasWire=false;
   const names = new Set<string>(mediaTools.map(tool=>"admin:"+tool.name));
 

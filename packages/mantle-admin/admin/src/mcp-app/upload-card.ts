@@ -29,7 +29,7 @@ document.body.innerHTML = `<form id="card" aria-busy="true" novalidate>
 const form = $<HTMLFormElement>("card"), select = $<HTMLSelectElement>("purpose"), file = $<HTMLInputElement>("file");
 const alt = $<HTMLInputElement>("alt"), button = $<HTMLButtonElement>("upload"), progress = $<HTMLProgressElement>("progress"), status = $<HTMLParagraphElement>("status");
 
-let host: HostApi | undefined, purposes: readonly Purpose[] = [], asked: string | undefined, busy = false;
+let host: HostApi | undefined, purposes: readonly Purpose[] = [], asked: string | undefined, busy = false, done = false;
 const say = (text: string, alert = false) => { status.textContent = text; status.setAttribute("role", alert ? "alert" : "status"); };
 /** The diagnostic message of a failed call, else `fallback`. */
 const failure = (result: ToolResult, fallback: string) => {
@@ -45,13 +45,19 @@ function render() {
   $("purpose-row").hidden = !!asked || names.length < 2;
   const purpose = current();
   file.accept = purpose?.required.length === 1 ? purpose.required[0]! : "image/*";
-  button.disabled = busy || !host?.call || !purpose;
+  button.disabled = busy || done || !host?.call || !purpose;
   form.setAttribute("aria-busy", String(busy || !host));
   if (!host) say("Connecting to the MCP host…");
   else if (asked && purposes.length && !purpose) say(`The purpose '${asked}' is not declared.`, true);
   else if (!host.call) say("This host does not let the card call tools.", true);
 }
 
+/** The upload is committed: report the asset and offer no second upload of it. */
+function finish(id: string) {
+  done = true; progress.hidden = true; file.disabled = true; alt.disabled = true;
+  form.dataset.asset = id;
+  say(`Uploaded. Asset id ${id}.`);
+}
 /** PUT with upload progress: `fetch` reports none. */
 const put = (target: Target, body: File) => new Promise<void>((resolve, reject) => {
   const xhr = new XMLHttpRequest();
@@ -89,12 +95,11 @@ async function upload(picked: File, purpose: Purpose, call: NonNullable<HostApi[
 // a click, not a form submission: a sandbox without allow-forms never dispatches submit
 button.addEventListener("click", () => {
   const picked = file.files?.[0], purpose = current(), call = host?.call;
-  if (!picked || !purpose || !call || busy) return;
+  if (!picked || !purpose || !call || busy || done) return;
   busy = true; render();
   void upload(picked, purpose, call).then(async asset => {
     const text = `I uploaded ${picked.name} to the media library: asset id ${asset.id} (purpose ${purpose.name}).`;
-    say(`Uploaded. Asset id ${asset.id}.`);
-    form.dataset.asset = asset.id;
+    finish(asset.id);
     // a user message continues the conversation; a host without one learns it at the model's next turn
     if (!(await host!.sendMessage(text))) await host!.updateModelContext({ content: [{ type: "text", text }], structuredContent: { asset } });
   }, (error: unknown) => {
@@ -116,7 +121,8 @@ connectHost({
     }, () => { say("The media purposes could not be read.", true); });
   },
   input: args => { if (typeof args.purpose === "string") { asked = args.purpose; render(); } },
-  result: () => {},
+  // a call that already committed (by uploadId, sourceUrl or file) renders as its asset, not as a new form
+  result: result => { const out = outputOf(result); if (!result.isError && record(out) && typeof out.id === "string" && Array.isArray(out.variants)) { finish(out.id); render(); } },
   cancelled: () => {},
   context: applyHostContext,
   error: error => say(error.message, true),

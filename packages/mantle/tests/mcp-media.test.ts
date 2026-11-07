@@ -118,13 +118,13 @@ test("upload_media prepares, commits and fetches; find, update and delete_media;
   "https://cdn.example.com/stream.png":()=>new Response(new ReadableStream({start(c){c.enqueue(png(80));c.enqueue(png(80));c.close();}})),
   "https://cdn.example.com/page.html":()=>new Response("<!doctype html>"),
  };
- globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{const url=String(input instanceof Request?input.url:input);fetched.push(url);
+ globalThis.fetch=(async(input:string|URL|Request,init?:RequestInit)=>{const url=String(input instanceof Request?input.url:input);fetched.push(url);
   if(url.startsWith("https://upload.test/")){objects.set(new URL(url).pathname.slice(1),{type:new Headers(init?.headers).get("content-type")!,bytes:new Uint8Array(init!.body as Uint8Array)});return new Response(null,{status:200});}
   const answer=sources[url];if(!answer)throw Error("unexpected fetch "+url);expect(init?.redirect).toBe("manual");return answer();}) as typeof fetch;
  try{
   db.exec(generated.files["schema.sql"]!);await writeGenerated(dir,generated.files);
-  const {mcp}=await import(join(dir,"mcp.ts")),handle=mcp({db:()=>db,allowedOrigins:["https://app.test"],caller:()=>admin,media:()=>storage});
-  const rpc=async(method:string,params:object)=>{const response=await handle(new Request("https://app.test/mcp/admin",{method:"POST",headers:{origin:"https://app.test","content-type":"application/json",accept:"application/json, text/event-stream"},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})}),{});const text=await response.text();return JSON.parse(text.startsWith("event:")?text.split("data: ")[1]!.split("\n")[0]!:text).result;};
+  const {mcp}=await import(join(dir,"mcp.ts")),options={db:()=>db,allowedOrigins:["https://app.test"],caller:()=>admin,media:()=>storage},handle=mcp({...options,apps:{admin:{resources:[{uri:"ui://media/upload",name:"upload",html:"<p>card</p>",renders:["upload_media"]}]}}}),bare=mcp(options);
+  const rpc=async(method:string,params:object,handler=handle)=>{const response=await handler(new Request("https://app.test/mcp/admin",{method:"POST",headers:{origin:"https://app.test","content-type":"application/json",accept:"application/json, text/event-stream"},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})}),{});const text=await response.text();return JSON.parse(text.startsWith("event:")?text.split("data: ")[1]!.split("\n")[0]!:text).result;};
   const call=(name:string,args:object,meta?:object)=>rpc("tools/call",{name,arguments:args,...(meta?{_meta:meta}:{})});
   const code=(result:any)=>{expect(result.isError).toBe(true);return JSON.parse(result.content[0].text).diagnostics[0].code;};
   const {tools}=await rpc("tools/list",{});
@@ -135,6 +135,8 @@ test("upload_media prepares, commits and fetches; find, update and delete_media;
   expect(code(await call("upload_media",{purpose:"hero"}))).toBe("INPUT_VALIDATION_FAILED");expect(code(await call("upload_media",{purpose:"cover",alt:"x"}))).toBe("INPUT_VALIDATION_FAILED");
   const args={purpose:"cover",filename:"cat.png",variants:[{mimeType:"image/png",byteSize:8,role:"primary"}]};
   // an agent that PUTs itself reads the targets; an MCP App host gets them only in the result _meta
+  // without a resource that renders upload_media, an Apps client is an agent like any other
+  expect((await rpc("tools/call",{name:"upload_media",arguments:args,_meta:ui},bare)).structuredContent.targets).toHaveLength(1);
   const plain=await call("upload_media",args);expect(plain._meta).toEqual({"net.aotter.mantle/tool":"upload_media"});expect(plain.structuredContent.targets).toEqual([{role:"primary",mimeType:"image/png",method:"PUT",url:`https://upload.test/uploads/${plain.structuredContent.uploadId}/primary`,headers:{"content-type":"image/png"}}]);
   const app=await call("upload_media",args,ui),id=app.structuredContent.uploadId;expect(Object.keys(app.structuredContent).sort()).toEqual(["expiresAt","uploadId"]);expect(JSON.stringify(app.content)).not.toContain("upload.test");
   const [target]=app._meta["net.aotter.mantle/upload"].targets;expect(target.url).toBe(`https://upload.test/uploads/${id}/primary`);

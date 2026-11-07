@@ -418,15 +418,17 @@ input and advertises read-only/destructive/open-world hints.
    returns `{ uploadId, expiresAt, targets: [{ role, mimeType, method, url, headers }] }`.
    PUT each variant's bytes to its `url` with its `headers`. Targets expire in
    15 minutes and serve this one upload. When the request declares MCP Apps
-   support, `targets` is left out of the result and sent only in the result
+   support and a resource such as the upload card renders `upload_media`,
+   `targets` is left out of the result and sent only in the result
    `_meta["net.aotter.mantle/upload"]`, which hosts give the App and not the
    model; an agent without MCP Apps (a CLI agent such as Claude Code) reads them
    in the result.
 2. `{ uploadId, purpose?, alt?, caption? }` commits and returns the asset.
    Store its id in fields that reference `media_assets.id`, never an upload URL.
    An unknown or expired `uploadId` is `MEDIA_UPLOAD_EXPIRED` (make a new first
-   call); a `purpose` other than the upload's is `MEDIA_UPLOAD_MISMATCH`; a
-   committed `uploadId` returns the same asset again.
+   call); before the commit, a `purpose` other than the upload's is
+   `MEDIA_UPLOAD_MISMATCH`; a committed `uploadId` returns the same asset again
+   (the asset records no purpose).
 
 `{ purpose? }` alone returns the purposes' policy, `{ purposes: [{ name, required, maxBytes }] }`
 (each `required` slot lists its accepted MIME types, comma-separated); the
