@@ -176,11 +176,12 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
         throw own(error);
       }
       if (asset.id !== uploadGroupId) throw new ContractError("OUTCOME_UNKNOWN", "Storage returned a different asset id; reconcile this upload group.", P);
-      // a private asset is saved without public URLs, whatever its storage returned; a public one must have them all
-      if (record.private) asset = { ...asset, variants: asset.variants.map(({ publicUrl: _, ...v }) => v) };
-      else if (asset.variants.some((v) => typeof v.publicUrl !== "string")) {
-        await removeAll(asset.variants, storage);
-        throw fail("MEDIA_NOT_CONFIGURED", "The public media storage returned a variant without a publicUrl.");
+      // a private storage that hands out public URLs serves its objects publicly; a public one must give every variant one
+      if (asset.variants.some((v) => record.private ? v.publicUrl !== undefined : typeof v.publicUrl !== "string")) {
+        const failed = rejected(await removeAll(asset.variants, storage));
+        await discard();
+        if (failed.length) throw fail("PARTIAL_FAILURE", "Some copied variants could not be removed. Retry the same upload group.", { cause: new AggregateError(failed.map(r => r.reason)) });
+        throw fail("MEDIA_NOT_CONFIGURED", record.private ? "The private media storage returned a publicUrl: its objects would be public." : "The public media storage returned a variant without a publicUrl.");
       }
       await driver.write([save(asset, p), unpend(uploadGroupId)]).catch(async error => {
         // Cleanup requires positive native rollback evidence; an unclassified failure may have committed.

@@ -81,12 +81,18 @@ test("a private asset has no public URL on library, Admin or MCP reads, and sign
  }finally{await f.close();}
 });
 
-test("a private storage's URLs never reach the record, and an unsigned private storage is a configuration error",async()=>{
- const f=await fixture([docs]),pub=bucket("https://media.test");
- const leaky:MediaStorage={async createUpload(a){return {capabilities:a.variants.map(v=>({...v,method:"PUT" as const,storageKey:"uploads/"+a.uploadGroupId,uploadUrl:"https://up.test/"+a.uploadGroupId}))};},async commitUpload(a){return {id:a.uploadGroupId,createdAt:a.now,variants:a.variants.map(v=>({...v,storageKey:"committed/"+a.uploadGroupId,publicUrl:"https://leak.test/"+a.uploadGroupId,byteSize:5}))};},async deleteObject(){}};
- try{const media=f.site(f.db,admin).media({public:pub.storage,private:leaky}),u=await media.createUpload(upload("docs")),asset=await media.commitUpload(u.uploadGroupId);
-  expect(asset.visibility).toBe("private");expect(JSON.stringify(asset)).not.toContain("leak.test");expect(JSON.stringify(f.db.query("SELECT variants FROM media_assets").all())).not.toContain("leak.test");
-  await expect(media.signRead(asset.id)).rejects.toMatchObject({code:"MEDIA_NOT_CONFIGURED"});
+test("a storage whose URLs contradict its visibility is refused, and an unsigned private storage is a configuration error",async()=>{
+ const f=await fixture([cover,docs]),pub=bucket("https://media.test");
+ const custom=(publicUrl:boolean)=>{const deleted:string[]=[];const storage:MediaStorage={async createUpload(a){return {capabilities:a.variants.map(v=>({...v,method:"PUT" as const,storageKey:"uploads/"+a.uploadGroupId,uploadUrl:"https://up.test/"+a.uploadGroupId}))};},async commitUpload(a){return {id:a.uploadGroupId,createdAt:a.now,variants:a.variants.map(v=>({...v,storageKey:"committed/"+a.uploadGroupId,...(publicUrl?{publicUrl:"https://leak.test/"+a.uploadGroupId}:{}),byteSize:5}))};},async deleteObject({storageKey}){deleted.push(storageKey);}};return {storage,deleted};};
+ try{
+  for(const [purpose,storages] of [["docs",(()=>{const s=custom(true);return {s,option:{public:pub.storage,private:s.storage}};})()],["cover",(()=>{const s=custom(false);return {s,option:{public:s.storage,private:bucket(null).storage}};})()]] as const){
+   const media=f.site(f.db,admin).media(storages.option),u=await media.createUpload(upload(purpose));
+   await expect(media.commitUpload(u.uploadGroupId)).rejects.toMatchObject({code:"MEDIA_NOT_CONFIGURED"});
+   expect(storages.s.deleted.sort()).toEqual(["committed/"+u.uploadGroupId,"uploads/"+u.uploadGroupId]);
+  }
+  expect(f.db.query("SELECT id FROM media_assets").all()).toEqual([]);
+  const unsigned=custom(false),media=f.site(f.db,admin).media({public:pub.storage,private:unsigned.storage}),u=await media.createUpload(upload("docs")),asset=await media.commitUpload(u.uploadGroupId);
+  expect(asset.visibility).toBe("private");await expect(media.signRead(asset.id)).rejects.toMatchObject({code:"MEDIA_NOT_CONFIGURED"});
  }finally{await f.close();}
 });
 

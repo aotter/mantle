@@ -82,7 +82,8 @@ export function selectPurpose(
     return purposes.find((purpose) => purpose.name === preferredPurpose) ?? null;
   }
   const content = purposes.find((purpose) => purpose.name === "content");
-  return content ?? purposes[0] ?? null;
+  // a guess never lands in private storage: it would leave the image without a public URL
+  return content ?? purposes.find((purpose) => purpose.visibility !== "private") ?? null;
 }
 
 export function purposeForMediaField(
@@ -102,7 +103,7 @@ export function purposeForMediaField(
   for (const candidate of candidates) {
     if (purposes.some((purpose) => purpose.name === candidate)) return candidate;
   }
-  return purposes[0]?.name;
+  return purposes.find((purpose) => purpose.visibility !== "private")?.name;
 }
 
 export function primaryPublicUrl(asset: CommittedMediaAsset): string | null {
