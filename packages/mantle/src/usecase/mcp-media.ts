@@ -21,11 +21,11 @@ export function emitMcpMedia(definitions: readonly (ReturnType<typeof mediaDefin
   const inputs = Object.fromEntries(definitions.map(tool => [tool.name,{input:tool.inputSchema as JsonSchema}]));
   const checks = Object.fromEntries(Object.entries(emitValidation({views:{},procedures:inputs},refuse)).map(([path,code])=>[path.replace("validation/procedures/","validation/media/"),code]));
   return {...checks,"mcp-media.ts":`import { policies, site } from "./site.js";
-import type { MediaStorage } from "@aotter/mantle/site";
+import type { MediaStorageOption } from "@aotter/mantle/site";
 import { findMedia, uploadMedia } from "@aotter/mantle/media";
 import type { Tool, ToolCall } from "@aotter/mantle/mcp";
 ${definitions.map((tool,i)=>`import { validate as v${i} } from "./validation/media/${tool.name}.js";`).join("\n")}
-export function mediaTools<Handlers = never>(storage: () => MediaStorage): Tool<Parameters<typeof site>[0], Handlers>[] { return [
+export function mediaTools<Handlers = never>(storage: () => MediaStorageOption): Tool<Parameters<typeof site>[0], Handlers>[] { return [
 ${definitions.map(({action,...tool},i)=>`{...${JSON.stringify({...tool,...(tool.annotations.readOnlyHint ? {readOnly:true} : {})})},surface:"admin",closed:true,validate:v${i},run:${invoke[action]}}`).join(",\n")}
 ]; }
 `};
