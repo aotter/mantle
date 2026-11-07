@@ -52,7 +52,7 @@ function sniff(b: Uint8Array): string | undefined {
  * GET one image of at most `maxBytes` from a public https URL, following at most three redirects, each checked again.
  * Refusals are `MEDIA_SOURCE_REJECTED`, `MEDIA_VARIANT_SIZE_EXCEEDED` or `MEDIA_MIME_REJECTED`; an unreachable source is `MEDIA_SOURCE_FAILED`.
  */
-export async function fetchImage(source: string, maxBytes: number): Promise<{ readonly bytes: Uint8Array; readonly mimeType: string; readonly filename: string }> {
+export async function fetchImage(source: string, maxBytes: number): Promise<{ readonly bytes: Uint8Array<ArrayBuffer>; readonly mimeType: string; readonly filename: string }> {
   let url = publicUrl(source), response: Response;
   const signal = AbortSignal.timeout(TIMEOUT_MS);
   for (let hops = 0; ; hops++) {
