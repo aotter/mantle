@@ -37,6 +37,7 @@ export function r2MediaStorage({ bucket, signer, endpoint, publicBase }: R2Media
   const base = publicBase.replace(/\/+$/, "");
   const s3 = endpoint.replace(/\/+$/, "");
   return {
+    uploadOrigin: new URL(s3).origin,
     async createUpload({ uploadGroupId, purpose, variants, now, expiresAt }) {
       const ttl = Math.max(60, Math.floor((expiresAt - now) / 1000));
       return {

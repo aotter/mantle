@@ -44,7 +44,9 @@ An existing S3 signer (for example an application already using aws4fetch) fits
 this port. This package adds no AWS SDK. The signer must return a SigV4
 query-signed PUT URL and preserve `X-Amz-Expires`; never give its credentials to
 the client. Configure bucket CORS to allow PUT from the application's origins
-and the returned Content-Type header. Uploads go to `uploads/<purpose>/<group>/<role>.<ext>` and each commit copies them
+and the returned Content-Type header (and from each MCP host's App sandbox origin
+when you register the [upload card](../guides/mcp-apps.md#the-upload-card); its
+CSP names the storage's `uploadOrigin`, the origin of `endpoint`). Uploads go to `uploads/<purpose>/<group>/<role>.<ext>` and each commit copies them
 to `committed/<group>/<attempt>/<role>.<ext>`. Serve the `committed/` prefix on the public domain. Keep `uploads/`
 private/unserved on the public domain and add a bucket lifecycle rule for abandoned upload keys. Mantle 0.1.x wrote
 `<purpose>/<group>/<role>.<ext>` keys (`<group>/<role>.<ext>` when the purpose was not a plain slug); an asset reads its keys from the stored `storageKey` and `publicUrl` of each

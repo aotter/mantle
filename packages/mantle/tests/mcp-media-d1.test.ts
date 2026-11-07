@@ -56,7 +56,7 @@ export default{async fetch(request,env){const url=new URL(request.url),key=url.p
   const rpc=async(method:string,params:unknown={},path="/mcp/admin",headers:Record<string,string>={})=>{const response=await fetch(origin+path,{method:"POST",headers:{origin,"content-type":"application/json",accept:"application/json, text/event-stream",...headers},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})});const body=await response.text();return{response,data:JSON.parse(body.startsWith("event:")?body.split("data: ")[1]!.split("\n")[0]!:body)};};
   const call=async(name:string,args:unknown={})=>(await rpc("tools/call",{name,arguments:args})).data.result;
   const names=(await rpc("tools/list")).data.result.tools.map((tool:{name:string})=>tool.name);
-  expect(names).toEqual(["get_media_upload_policy","create_media_upload","commit_media_upload","list_media_assets","get_media_asset","update_media_asset","delete_media_asset"]);
+  expect(names).toEqual(["upload_media","find_media","update_media","delete_media","get_media_upload_policy","create_media_upload","commit_media_upload","list_media_assets","get_media_asset","update_media_asset","delete_media_asset"]);
   expect((await rpc("tools/list",{},"/mcp")).data.result.tools.map((tool:{name:string})=>tool.name)).toEqual(["entries"]);expect((await counts()).reads).toBe(0);
   expect((await rpc("tools/list",{},"/mcp/admin",{"x-test-caller":"anonymous"})).response.status).toBe(401);expect((await rpc("tools/list",{},"/mcp/admin",{"x-test-caller":"member"})).response.status).toBe(403);
   expect((await call("get_media_asset",{id:2})).isError).toBe(true);expect((await counts()).reads).toBe(0);

@@ -69,7 +69,7 @@ export interface Tool<Database, Handlers = never> {
   /** A View tool: its operation path and paged boundary. */
   readonly path?: string;
   readonly page?: (db: Database, caller: Caller, input: never, paging: Paging) => Promise<unknown>;
-  readonly run?: (db: Database, caller: Caller, input: never, handlers: Handlers) => Promise<unknown>;
+  readonly run?: (db: Database, caller: Caller, input: never, handlers: Handlers, call: ToolCall) => Promise<unknown>;
   /**
    * Merged into this tool's `_meta` in `tools/list` (top level shallow, `ui` one level deep) with what its App links produce;
    * a contradicting value fails at `mcp(...)`. `ui.visibility: ["app"]` hides the tool from clients without MCP Apps.
@@ -78,13 +78,12 @@ export interface Tool<Database, Handlers = never> {
   readonly meta?: Readonly<Record<string, unknown>>;
 }
 
-/** What `withResultMeta` returns: `data` is the tool result as usual, `_meta` goes only to the `tools/call` result `_meta`. */
-export interface ResultWithMeta<T> { readonly data: T; readonly _meta: Readonly<Record<string, unknown>> }
-/**
- * Returned from a tool's `run`: MCP sends `data` exactly as an unwrapped return, and `meta` only in the result `_meta`
- * (beside `net.aotter.mantle/tool`, which it cannot replace). `callTool` returns the wrapper itself; drop `_meta` before forwarding to a model.
- */
-export const withResultMeta = <T>(data: T, meta: Readonly<Record<string, unknown>>): ResultWithMeta<T> => ({ [Symbol.for("net.aotter.mantle/result")]: true, data, _meta: meta }) as ResultWithMeta<T>;
+export { withResultMeta, type ResultWithMeta } from "./result-meta.js";
+/** What a `tools/call` tells a tool beside its input. */
+export interface ToolCall {
+  /** The request declared MCP Apps support, so an App renders the result and reads its `_meta`; a secret for the App belongs there, not in the data a model reads. */
+  readonly apps: boolean;
+}
 
 /** Request-bound tool tables keep native environment bindings outside the cached App catalogue. */
 export type Tools<Env, Database, Handlers = never> = readonly Tool<Database, Handlers>[] | ((request: Request, env: Env) => readonly Tool<Database, Handlers>[] | Promise<readonly Tool<Database, Handlers>[]>);

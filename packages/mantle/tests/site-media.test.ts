@@ -13,7 +13,7 @@ const admin:any=fixtureCaller({kind:"user",subject:"admin-id",role:"admin", admi
 function memoryStorage() {
  const objects=new Map<string,{type:string;size:number}>(); let failedDelete:string|undefined;
  const bucket:R2Bucket={async head(key){const o=objects.get(key);return o?{size:o.size,httpMetadata:{contentType:o.type}}:null;},async get(key){const o=objects.get(key);return o?{size:o.size,httpMetadata:{contentType:o.type},body:new Blob([new Uint8Array(o.size)]).stream()}:null;},async put(key,body,options){objects.set(key,{size:(await new Response(body).arrayBuffer()).byteLength,type:options.httpMetadata.contentType});},async delete(keys){for(const key of typeof keys==="string"?[keys]:keys){if(key===failedDelete)throw new Error("temporary private blob deletion failure");objects.delete(key);}}};
- const storage=r2MediaStorage({bucket,signer:{async sign(url){return {url};}},endpoint:"https://r2.test",publicBase:"https://media.test"});
+ const storage=r2MediaStorage({bucket,signer:{async sign(url){return {url};}},endpoint:"https://r2.test",publicBase:"https://media.test"});expect(r2MediaStorage({bucket,signer:{async sign(url){return {url};}},endpoint:"https://bucket.r2.test/",publicBase:"https://media.test"}).uploadOrigin).toBe("https://bucket.r2.test");
  return {objects,storage,failDelete(key:string|undefined){failedDelete=key;}};
 }
 const upload={filename:"photo.png",purpose:"cover",alt:"original",variants:[{mimeType:"image/png",byteSize:90,role:"primary"},{mimeType:"image/webp",byteSize:60,role:"alternate"}]};

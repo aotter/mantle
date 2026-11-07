@@ -39,6 +39,8 @@ export interface MediaAsset {
 
 /** Object storage for media, public bucket only. The bytes go to `uploadUrl` directly, never through the Worker. */
 export interface MediaStorage {
+  /** The origin every `uploadUrl` PUTs to, such as the bucket's S3 endpoint: what an MCP App that uploads declares in its CSP `connectDomains`. */
+  readonly uploadOrigin?: string;
   /** One short-lived PUT capability per variant, keyed under `uploadGroupId`. */
   createUpload(args: {
     readonly uploadGroupId: string;

@@ -3,18 +3,21 @@ import type { AppDescription } from "../domain/describe/index.js";
 import { mcpToolNameSegment, procedureAnnotations, toolTitle, viewAnnotations, type RuntimePlan, type PlanLowered, type LoweredStatement } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
 import { emitMcpMedia, mediaDefinitions } from "./mcp-media.js";
+import type { mediaPolicies } from "./site.js";
 import { advertised, emitValidation } from "./validation.js";
 import { databaseImport, literal, q } from "../domain/entry.js";
 import { authLines, conversions } from "../domain/input.js";
 import { publishingAnnotations, publishingInput } from "./publishing.js";
 import { versioned } from "./tool-version.js";
 import { boundaryPage, outputConversions } from "../domain/columns.js";
-export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target, description: AppDescription, refuse: (path: string, message: string) => void, media = false): Record<string, string> {
+export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target, description: AppDescription, refuse: (path: string, message: string) => void, policies?: ReturnType<typeof mediaPolicies>): Record<string, string> {
+  const media = !!policies;
   if (!Object.values(plan.views).some(view=>view.surface!=="internal") && !Object.values(plan.triggers).some(trigger=>trigger.source.kind==="mcp")) return {};
   const reads: { name: string; surface: string }[] = [];
   const imports: string[] = plan.access ? ['import { userBinds } from "@aotter/mantle/user-fields";'] : [], tools: { fields: string[]; schema: string }[] = [];
-  const mediaTools = media ? mediaDefinitions().map(({action,...tool})=>({action,...versioned({...tool,title:toolTitle(tool.name)})})) : [];
-  const files:Record<string,string> = media ? emitMcpMedia(mediaTools, refuse) : {};
+  // A version hashes the listed definition as for every tool; `_meta` (here `openai/fileParams`) is not part of it.
+  const mediaTools = policies ? mediaDefinitions(policies).map(({action,...tool})=>{ const {meta,...listed}=tool as typeof tool & {meta?: Record<string,unknown>}; return {action,...versioned({...listed,title:toolTitle(tool.name)}),...(meta ? {meta} : {})}; }) : [];
+  const files:Record<string,string> = policies ? emitMcpMedia(mediaTools, refuse) : {};
   let hasRef=false,hasWire=false;
   const names = new Set<string>(mediaTools.map(tool=>"admin:"+tool.name));
 
