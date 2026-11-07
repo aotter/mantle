@@ -25,7 +25,9 @@ export interface AdminMcpOptions {
      * An explicit resource URI. Without it, tools link the fixed `ui://mantle-admin/admin`, which hosts that prefetch and
      * cache the template keep across deploys, and the current build also answers at its content-hash URI for
      * conversations that hold one. Change it only for an App that saved conversations must not load, e.g.
-     * `ui://mantle-admin/admin/v2`.
+     * `ui://mantle-admin/admin/v2`, or to scope the App per site for a host that re-serves several sites' Apps, e.g.
+     * `ui://mantle-admin/<site>/admin`. The given URI is then the only one: the resource and every tool it renders link
+     * it, and no content-hash alias is served (`previous` keeps older URIs answering).
      */
     readonly uri?: string;
     readonly title?: string;

@@ -9,7 +9,7 @@ const P = "media";
 /** HTTP status of each media code: a custom MediaStorage may throw them without one. */
 const STATUS = new Map(Object.entries({
   MEDIA_PURPOSE_REJECTED: 400, MEDIA_SVG_REJECTED: 400, MEDIA_MIME_REJECTED: 400, MEDIA_VARIANTS_INCOMPLETE: 400, MEDIA_VARIANT_SIZE_EXCEEDED: 400, MEDIA_VARIANTS_SUSPICIOUS_SIZE: 400,
-  MEDIA_SOURCE_REJECTED: 400, MEDIA_ASSET_NOT_FOUND: 404, MEDIA_OBJECT_NOT_FOUND: 409, MEDIA_UPLOAD_MISMATCH: 409, MEDIA_UPLOAD_EXPIRED: 410,
+  MEDIA_SOURCE_REJECTED: 400, MEDIA_ASSET_NOT_FOUND: 404, MEDIA_NOT_OWNED: 404, MEDIA_OBJECT_NOT_FOUND: 409, MEDIA_UPLOAD_MISMATCH: 409, MEDIA_UPLOAD_EXPIRED: 410,
   SITE_NOT_CONFIGURED: 501, MEDIA_NOT_CONFIGURED: 501, MEDIA_SOURCE_FAILED: 502, MEDIA_STORAGE_FAILED: 502, PARTIAL_FAILURE: 503,
 }));
 const extra = (code: string) => ({ status: STATUS.get(code), ...(code === "PARTIAL_FAILURE" ? { fields: { failure: { outcome: "partial", retry: "safe", resource: "media" } } } : {}) });
@@ -32,6 +32,12 @@ const ROLES = new Set<unknown>(["primary", "alternate", "fallback"]);
 const TTL_MS = 15 * 60 * 1000;
 /** The SigV4 limit on a presigned URL. */
 const MAX_READ_SECONDS = 7 * 24 * 3600;
+/**
+ * New ids are `<tag>_<uuid>`, the tag drawn once per database and kept in `site_config`, so a miss on an id another
+ * server minted is told apart from an unknown or expired one without asking that server. Untagged (legacy) ids still resolve.
+ */
+const TAG_KEY = "media_id_tag";
+const TAGGED = /^([0-9a-f]{8})_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 interface Pending {
   readonly purpose: string;
@@ -106,9 +112,22 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
   const byId = (id: string) => one(`SELECT ${COLUMNS} FROM media_assets WHERE id = ${p(1)}`, [id]);
   const unpend = (id: string) => ({ sql: `DELETE FROM pending_media_uploads WHERE id = ${p(1)}`, binds: [id] });
   const removeAll = (variants: readonly { storageKey: string }[], storage: MediaStorage) => Promise.allSettled(variants.map((v) => storage.deleteObject({ storageKey: v.storageKey })));
+  const ownTag = async () => (await one(`SELECT value FROM site_config WHERE key = ${p(1)}`, [TAG_KEY]))?.value as string | undefined;
+  const tag = async () => {
+    const found = await ownTag();
+    if (found) return found;
+    await driver.write([{ sql: `INSERT INTO site_config (key, value) VALUES (${p(1)}, ${p(2)}) ON CONFLICT(key) DO NOTHING`, binds: [TAG_KEY, crypto.randomUUID().slice(0, 8)] }]);
+    return (await ownTag())!;
+  };
+  /** A miss: an id tagged by another server is refused as not ours, saying nothing about that server. */
+  const missing = async (id: string, what: string, code: string, message: string) => {
+    const foreign = TAGGED.exec(id)?.[1];
+    return foreign && foreign !== await ownTag() ? fail("MEDIA_NOT_OWNED", `not ${what} of this server; use the server that created it`) : fail(code, message);
+  };
+  const notFound = (id: string) => missing(id, "a media asset", "MEDIA_ASSET_NOT_FOUND", `no media asset '${id}'`);
   const get = async (id: string) => {
     const r = await byId(id);
-    if (!r) throw fail("MEDIA_ASSET_NOT_FOUND", `no media asset '${id}'`);
+    if (!r) throw await notFound(id);
     return assetOf(r);
   };
 
@@ -129,7 +148,7 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
       const at = now();
       const expiresAt = at + TTL_MS;
       // bearer-equivalent until commit: storage keys under it must not be guessable
-      const uploadGroupId = crypto.randomUUID();
+      const uploadGroupId = `${await tag()}_${crypto.randomUUID()}`;
       const isPrivate = policy.visibility === "private", storage = storeOf(isPrivate);
       const specs = asked.map(({ mimeType, byteSize, role }) => ({ mimeType, byteSize, role, maxBytes: policy.maxBytes[mimeType]! }));
       let capabilities;
@@ -156,7 +175,7 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
       const discard = () => removeAll(record?.variants ?? [], storage);
       if (!record || record.expiresAt <= now()) {
         if (record) { await discard(); await driver.write([unpend(uploadGroupId)]); }
-        throw fail("MEDIA_UPLOAD_EXPIRED", `upload group '${uploadGroupId}' is unknown or expired; create a new upload`);
+        throw await missing(uploadGroupId, "an upload", "MEDIA_UPLOAD_EXPIRED", `upload group '${uploadGroupId}' is unknown or expired; create a new upload`);
       }
       const named = obj(request).purpose;
       if (named !== undefined && named !== record.purpose) throw fail("MEDIA_UPLOAD_MISMATCH", `upload '${uploadGroupId}' was created for purpose '${record.purpose}', not '${String(named)}'`);
@@ -219,7 +238,7 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
       if (!patch.length) return get(id);
       // only the patched columns, and only a row that still exists: a concurrent delete or edit of the other field stands
       const [r] = (await driver.write([{ sql: `UPDATE media_assets SET ${patch.map(([k], i) => `${k} = ${p(i + 2)}`).join(", ")} WHERE id = ${p(1)} RETURNING ${COLUMNS}`, binds: [id, ...patch.map(([, v]) => v)] }]))[0]!;
-      if (!r) throw fail("MEDIA_ASSET_NOT_FOUND", `no media asset '${id}'`);
+      if (!r) throw await notFound(id);
       return assetOf(r);
     },
 
