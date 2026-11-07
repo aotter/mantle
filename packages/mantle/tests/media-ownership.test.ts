@@ -25,7 +25,7 @@ const storage: MediaStorage = {
 };
 const upload = { filename: "x.png", purpose: "cover", variants: [{ mimeType: "image/png", byteSize: 5, role: "primary" }] };
 
-test("another server's upload and asset ids get a distinct refusal over MCP that names nothing of that server; legacy ids still resolve (#1952)", async () => {
+test("another server's upload and asset ids get a distinct refusal over MCP (old and new tool names) that names nothing of that server; legacy ids still resolve (#1952)", async () => {
   const generated = await generateFromSources({ target: "bun-sqlite", sources: { sources: [{ sourceId: "media.yaml", text: source }] }, site: { media: { purposes: [{ name: "cover", required: ["png"], maxBytes: { "image/png": 100 } }] } } });
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const dir = await mkdtemp(join(import.meta.dir, ".media-ownership-"));
@@ -63,6 +63,13 @@ test("another server's upload and asset ids get a distinct refusal over MCP that
         expect(refused.text).not.toContain(tag);
       }
     }
+    // the four tools answer the same way: upload_media's commit call refuses, find_media lists the id as missing
+    const viaUpload = await call(b, "upload_media", { uploadId: pending });
+    expect(code(viaUpload)).toMatchObject({ code: "MEDIA_NOT_OWNED", message: "not an upload of this server; use the server that created it" });
+    for (const name of ["update_media", "delete_media"]) expect(code(await call(b, name, { id: committed })).code).toBe("MEDIA_NOT_OWNED");
+    const found = await call(b, "find_media", { ids: [committed] });
+    expect(found.result.structuredContent).toEqual({ rows: [], missing: [committed] });
+    expect(found.text).not.toContain("_" + tag);
     // the owner still answers; its own unknown ids keep the unknown/expired codes
     expect((await call(a, "get_media_asset", { id: committed })).result.structuredContent.id).toBe(committed);
     expect(code(await call(a, "get_media_asset", { id: `${tag}_${crypto.randomUUID()}` })).code).toBe("MEDIA_ASSET_NOT_FOUND");

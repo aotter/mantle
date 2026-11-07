@@ -322,6 +322,6 @@ export async function findMedia(library: MediaLibrary, input: Record<string, unk
   if (ids === undefined) return library.list(query);
   if (Object.values(query).some(value => value !== undefined) || !Array.isArray(ids) || ids.some(id => typeof id !== "string")) throw bad("ids: string[] alone, or limit, cursor and search");
   // ponytail: one read per id (at most 100); a library `getMany` if hosts send many ids
-  const found = await Promise.all([...new Set(ids as string[])].map(id => library.get(id).catch(error => { if (error instanceof ContractError && error.code === "MEDIA_ASSET_NOT_FOUND") return id; throw error; })));
+  const found = await Promise.all([...new Set(ids as string[])].map(id => library.get(id).catch(error => { if (error instanceof ContractError && (error.code === "MEDIA_ASSET_NOT_FOUND" || error.code === "MEDIA_NOT_OWNED")) return id; throw error; })));
   return { rows: found.filter(row => typeof row !== "string"), missing: found.filter(row => typeof row === "string") };
 }
