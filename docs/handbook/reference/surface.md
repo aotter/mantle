@@ -399,16 +399,60 @@ own entry; inherited property names never become titles or descriptions.
 ### Admin media MCP tools
 
 With generated site configuration, `mcp({ db, caller, media: env => storage })`
-loads the media module only on a configured admin MCP request and
-adds `get_media_upload_policy`, `create_media_upload`, `commit_media_upload`,
-`list_media_assets`, `get_media_asset`, `update_media_asset` and
-`delete_media_asset` to `/mcp/admin` only. `storage` is the same `MediaStorage`
-used by the Admin media library. Omitting `media` omits all seven tools.
-Admins can invoke them; cookie writes retain the origin check.
-Generated boundary code checks each input and advertises the 0.2 schemas and
-read-only/destructive/open-world hints. Image bytes are PUT directly to the
-returned short-lived URLs with their required headers, then committed; bytes
-never enter MCP. Store permanent asset ids, never upload URLs.
+loads the media module only on a configured admin MCP request and adds four
+tools to `/mcp/admin` only. `storage` is the same `MediaStorage` used by the
+Admin media library. Omitting `media` omits every media tool. Admins can invoke
+them; cookie writes retain the origin check. Generated boundary code checks each
+input and advertises read-only/destructive/open-world hints.
+
+| Tool | Does |
+|---|---|
+| `upload_media` | Upload one image, in two calls (below). |
+| `find_media` | Committed assets by `ids` (ids not found come back in `missing`), or newest first with `limit`, `cursor` and `search` (id, alt or caption). Read-only. |
+| `update_media` | Set `alt` or `caption` of `id`; an omitted field is unchanged, an empty string clears it. |
+| `delete_media` | Delete `id`'s objects and record (`destructiveHint`, so hosts confirm). A partial failure is retried with the same id. |
+
+`upload_media` takes one mode per call:
+
+1. `{ purpose, filename, variants: [{ mimeType, byteSize, role }], alt?, caption? }`
+   returns `{ uploadId, expiresAt, targets: [{ role, mimeType, method, url, headers }] }`.
+   PUT each variant's bytes to its `url` with its `headers`. Targets expire in
+   15 minutes and serve this one upload. When the request declares MCP Apps
+   support, `targets` is left out of the result and sent only in the result
+   `_meta["net.aotter.mantle/upload"]`, which hosts give the App and not the
+   model; an agent without MCP Apps (a CLI agent such as Claude Code) reads them
+   in the result.
+2. `{ uploadId, purpose?, alt?, caption? }` commits and returns the asset.
+   Store its id in fields that reference `media_assets.id`, never an upload URL.
+   An unknown or expired `uploadId` is `MEDIA_UPLOAD_EXPIRED` (make a new first
+   call); a `purpose` other than the upload's is `MEDIA_UPLOAD_MISMATCH`; a
+   committed `uploadId` returns the same asset again.
+
+`{ purpose? }` alone returns the purposes' policy, `{ purposes: [{ name, required, maxBytes }] }`
+(each `required` slot lists its accepted MIME types, comma-separated); the
+generated input schema also names the purposes and their caps, and policy
+failures say what was expected. With the [upload card](../guides/mcp-apps.md#the-upload-card)
+registered, an MCP Apps host shows it for this call.
+
+`{ purpose, sourceUrl }` and `{ purpose, file: { download_url, file_id } }` have the
+server fetch one image and run both steps in one call. `file` is the tool's
+`openai/fileParams` argument, so a host that hands the tool a chat attachment
+passes its download URL. Either takes a purpose with one variant slot. The fetch
+accepts only `https` on the default port, without credentials, to a public host:
+IPv6 literals, private, loopback, link-local, shared, reserved and multicast
+IPv4 addresses, single-label names and names such as `localhost`, `*.local` and
+`*.internal` are `MEDIA_SOURCE_REJECTED`, as is each redirect target (at most
+three). The body is capped at the purpose's byte cap
+(`MEDIA_VARIANT_SIZE_EXCEEDED`) and must sniff as PNG, JPEG, GIF, WebP or AVIF
+(`MEDIA_MIME_REJECTED`); an unreachable source is `MEDIA_SOURCE_FAILED` and a
+storage PUT failure `MEDIA_STORAGE_FAILED`. Names are checked, not resolved:
+Workers cannot reach private addresses, and on another runtime restrict the
+server's egress to the public internet. File content is never accepted as base64.
+
+The 0.1 names `get_media_upload_policy`, `create_media_upload`,
+`commit_media_upload`, `list_media_assets`, `get_media_asset`,
+`update_media_asset` and `delete_media_asset` still work in 0.2, after the four,
+with descriptions marked deprecated; they are removed in 0.3.
 
 Generation always emits a `Handlers` type (empty when no Procedure uses `handler: { ref }`), so every app wires the
 same way: `const handlers: Handlers = {...}`, then `store(db, caller, { handlers })`, `adminBindings({ handlers })`,

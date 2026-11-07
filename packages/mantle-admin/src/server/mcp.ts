@@ -2,6 +2,7 @@
 import { ContractError } from "@aotter/mantle/contracts";
 import { declaredMeta } from "../app/declared-meta.js";
 import type { McpApps, McpAppsSource, McpAppPage, McpAppRender, McpAppResource } from "@aotter/mantle/mcp";
+import type { MediaStorage } from "@aotter/mantle/site";
 /** An archived resources/read page, including its embedded catalogue; application-owned, never caller rows or credentials. */
 export interface AdminMcpSnapshot extends McpAppPage {
     readonly uri: string;
@@ -151,3 +152,39 @@ export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
 }
 /** The default Admin App URI: stable across deploys, as hosts that prefetch and cache UI templates expect (#1934). */
 const FIXED_URI = "ui://mantle-admin/admin";
+
+export interface MediaUploadCardOptions<Env = never> {
+    /**
+     * The `media` option the application passes generated `mcp(...)`. Its storage's `uploadOrigin` (the origin its upload
+     * URLs PUT to) is the card's CSP `connectDomains`, sent on `resources/read`.
+     */
+    readonly media: (env: Env) => Pick<MediaStorage, "uploadOrigin">;
+    /** `ui://mantle-admin/upload` by default. */
+    readonly uri?: string;
+    readonly title?: string;
+    /** Passed through as `_meta.ui.domain`, for a host that serves each App from its own origin. */
+    readonly domain?: string;
+}
+/**
+ * The upload card, an MCP App that renders `upload_media` on `/mcp/admin`: the person picks an image, the card uploads it
+ * straight to storage and commits it. Register it beside `adminMcpApps(...)` when `mcp(...)` has `media`. The page loads
+ * on `resources/read` only.
+ */
+export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env>): McpApps {
+    const uri = options.uri ?? "ui://mantle-admin/upload";
+    if (!/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(uri))
+        throw new ContractError("INPUT_VALIDATION_FAILED", "Admin App resources use ui://mantle-admin/….", "mcp/apps");
+    return { resources: [{
+        uri, name: "mantle-admin-upload", title: options.title ?? "Upload media", renders: ["upload_media"],
+        description: "Pick an image and upload it to the media library.",
+        ...(options.domain !== undefined ? { domain: options.domain } : {}),
+        html: async ({ env }) => {
+            const origin = options.media(env as Env).uploadOrigin;
+            if (!origin || !URL.canParse(origin) || new URL(origin).origin !== origin)
+                throw new Error("mediaUploadCard: the media storage needs `uploadOrigin`, the origin its upload URLs PUT to (such as https://bucket.example.com).");
+            const { default: html } = await import("./upload-card.js");
+            if (!html) throw new Error("mediaUploadCard: the card is built into dist by the package build.");
+            return { html, csp: { connectDomains: [origin] } };
+        },
+    }] };
+}

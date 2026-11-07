@@ -177,7 +177,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       const server = new McpServer(serverInfo, { maxToolInputElements: MCP_INPUT_ELEMENTS, ...(options.instructions ? { instructions: options.instructions } : {}) });
       server.server.registerCapabilities({ tools: { listChanged: false } });
       if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
-      const enabled = clientUiSupport(parsedBody) !== "unsupported";
+      const support = clientUiSupport(parsedBody), enabled = support !== "unsupported", call = { apps: support === "supported" };
       const appMeta = links ? registerApps(server, links, enabled, new Set(selected.map(tool => tool.name)), { env, request }) : undefined;
       // A host's stale copy names a tool this catalogue lacks: say so, with the catalogue version, instead of the SDK's bare "not found".
       // Wrapped where the SDK stores it, so transport and request validation still answer first.
@@ -209,7 +209,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
           if (tool.run && (!host || !tool.readOnly)) checkOrigin(request, caller);
           let db: Database | undefined, resultMeta: Readonly<Record<string, unknown>> | undefined;
           const run = async (input: Record<string, unknown>) => {
-            const out = await callTool(tool, input, () => db ??= options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
+            const out = await callTool(tool, input, () => db ??= options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined, call);
             // withResultMeta: the data is the result, the meta reaches only the result `_meta`.
             return isRecord(out) && Symbol.for("net.aotter.mantle/result") in out ? (resultMeta = out._meta as typeof resultMeta, out.data) : out;
           };

@@ -3,12 +3,14 @@ import { ContractError, type Row } from "./contracts.js";
 import type { Bound } from "./binds.js";
 import type { Dialect } from "./dialect/common.js";
 import type { MediaAsset, MediaLibrary, MediaStorage, MediaVariantRole, MediaPurposePolicy } from "./site-types.js";
+import { withResultMeta } from "./result-meta.js";
 export interface MediaDatabase { read(sql: string, binds: unknown[]): Row[] | PromiseLike<Row[]>; write(steps: readonly Bound[]): Promise<Row[][]>; /** Positive native evidence that the write rolled back; absence is uncertain. */ definitive?(error: unknown): boolean }
 const P = "media";
 /** HTTP status of each media code: a custom MediaStorage may throw them without one. */
 const STATUS = new Map(Object.entries({
   MEDIA_PURPOSE_REJECTED: 400, MEDIA_SVG_REJECTED: 400, MEDIA_MIME_REJECTED: 400, MEDIA_VARIANTS_INCOMPLETE: 400, MEDIA_VARIANT_SIZE_EXCEEDED: 400, MEDIA_VARIANTS_SUSPICIOUS_SIZE: 400,
-  MEDIA_ASSET_NOT_FOUND: 404, MEDIA_OBJECT_NOT_FOUND: 409, MEDIA_UPLOAD_EXPIRED: 410, SITE_NOT_CONFIGURED: 501, MEDIA_NOT_CONFIGURED: 501, PARTIAL_FAILURE: 503,
+  MEDIA_SOURCE_REJECTED: 400, MEDIA_ASSET_NOT_FOUND: 404, MEDIA_OBJECT_NOT_FOUND: 409, MEDIA_UPLOAD_MISMATCH: 409, MEDIA_UPLOAD_EXPIRED: 410,
+  SITE_NOT_CONFIGURED: 501, MEDIA_NOT_CONFIGURED: 501, MEDIA_SOURCE_FAILED: 502, MEDIA_STORAGE_FAILED: 502, PARTIAL_FAILURE: 503,
 }));
 const extra = (code: string) => ({ status: STATUS.get(code), ...(code === "PARTIAL_FAILURE" ? { fields: { failure: { outcome: "partial", retry: "safe", resource: "media" } } } : {}) });
 /**
@@ -138,6 +140,8 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
         if (record) { await discard(); await driver.write([unpend(uploadGroupId)]); }
         throw fail("MEDIA_UPLOAD_EXPIRED", `upload group '${uploadGroupId}' is unknown or expired; create a new upload`);
       }
+      const named = obj(request).purpose;
+      if (named !== undefined && named !== record.purpose) throw fail("MEDIA_UPLOAD_MISMATCH", `upload '${uploadGroupId}' was created for purpose '${record.purpose}', not '${String(named)}'`);
       let asset: MediaAsset;
       try { asset = await storage.commitUpload({
         uploadGroupId, filename: record.filename, now: record.createdAt,
@@ -208,4 +212,59 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
 export function mediaItem(asset: MediaAsset) {
   const primary=asset.variants.find(v=>v.role==="primary") ?? asset.variants[0];
   return {id:asset.id,variants:asset.variants,primaryUrl:primary?.publicUrl??null,mime:primary?.mimeType??null,byteSize:primary?.byteSize??null,alt:asset.alt??null,caption:asset.caption??null,createdAt:asset.createdAt};
+}
+
+/** Where `upload_media` puts the upload targets for an MCP App: the result `_meta`, which the host gives the App and not the model. */
+export const UPLOAD_META = "net.aotter.mantle/upload";
+
+/**
+ * `upload_media`, one mode per call: `{ uploadId }` commits; `variants` returns the targets (in the result `_meta` when the
+ * client renders MCP Apps, else in the data, for an agent that PUTs itself); `sourceUrl` or `file` fetches one public image
+ * and commits it; a bare purpose returns the policy. `policies` are the site's expanded purposes.
+ */
+export async function uploadMedia(library: MediaLibrary, policies: readonly MediaPurposePolicy[], input: Record<string, unknown>, call: { readonly apps: boolean }): Promise<unknown> {
+  const { uploadId, sourceUrl, file, variants, purpose, filename, ...described } = input;
+  const extra = (keys: string[]) => keys.filter(key => input[key] !== undefined);
+  if (uploadId !== undefined) {
+    if (extra(["variants", "filename", "sourceUrl", "file"]).length) throw bad("{ uploadId, purpose?, alt?, caption? }: filename, variants, sourceUrl and file belong to the first call");
+    return library.commitUpload(String(uploadId), { ...described, ...(purpose !== undefined ? { purpose } : {}) });
+  }
+  if (sourceUrl !== undefined || file !== undefined) {
+    if (extra(["sourceUrl", "file", "variants"]).length > 1) throw bad("one of variants, sourceUrl or file");
+    const policy = policies.find(p => p.name === purpose);
+    if (!policy) throw fail("MEDIA_PURPOSE_REJECTED", `purpose '${String(purpose)}' is not declared`);
+    if (policy.required.length !== 1) throw fail("MEDIA_VARIANTS_INCOMPLETE", `purpose '${policy.name}' takes ${policy.required.length} variants, and a fetched file is one: prepare the variants locally and send them as variants`);
+    const accepts = policy.required[0]!.split(",");
+    const url = sourceUrl ?? obj(file).download_url;
+    if (typeof url !== "string") throw bad("sourceUrl: string, or file: { download_url, file_id }");
+    const fetched = await (await import("./media-fetch.js")).fetchImage(url, Math.max(...accepts.map(mime => policy.maxBytes[mime] ?? 0)));
+    if (!accepts.includes(fetched.mimeType)) throw fail("MEDIA_MIME_REJECTED", `the source is ${fetched.mimeType}; purpose '${policy.name}' takes ${accepts.join(" or ")}`);
+    const created = await library.createUpload({ ...described, purpose, filename: filename ?? fetched.filename, variants: [{ mimeType: fetched.mimeType, byteSize: fetched.bytes.byteLength, role: "primary" }] });
+    for (const target of created.capabilities) {
+      let status = 0;
+      try { const response = await fetch(target.uploadUrl, { method: target.method, headers: target.requiredHeaders ?? {}, body: fetched.bytes }); status = response.status; await response.body?.cancel(); } catch {}
+      if (status < 200 || status > 299) throw fail("MEDIA_STORAGE_FAILED", `storage did not accept the upload${status ? ` (${status})` : ""}; call upload_media again`);
+    }
+    return library.commitUpload(created.uploadGroupId);
+  }
+  if (variants !== undefined) {
+    const created = await library.createUpload(input);
+    const targets = created.capabilities.map(({ role, mimeType, method, uploadUrl, requiredHeaders }) => ({ role, mimeType, method, url: uploadUrl, headers: requiredHeaders ?? {} }));
+    const data = { uploadId: created.uploadGroupId, expiresAt: created.expiresAt };
+    return call.apps ? withResultMeta(data, { [UPLOAD_META]: { targets } }) : { ...data, targets };
+  }
+  if (extra(["filename", "alt", "caption"]).length) throw bad("variants, sourceUrl or file with filename, alt and caption");
+  const listed = policies.filter(p => purpose === undefined || p.name === purpose);
+  if (purpose !== undefined && !listed.length) throw fail("MEDIA_PURPOSE_REJECTED", `purpose '${String(purpose)}' is not declared`);
+  return { purposes: listed, ...(call.apps ? { card: "The upload card is open: the person picks the file there, and the card reports the committed asset id." } : {}) };
+}
+
+/** `find_media`: `ids` reads those assets (ids not found are listed in `missing`), else the newest-first list. */
+export async function findMedia(library: MediaLibrary, input: Record<string, unknown>): Promise<unknown> {
+  const { ids, ...query } = input;
+  if (ids === undefined) return library.list(query);
+  if (Object.values(query).some(value => value !== undefined) || !Array.isArray(ids) || ids.some(id => typeof id !== "string")) throw bad("ids: string[] alone, or limit, cursor and search");
+  // ponytail: one read per id (at most 100); a library `getMany` if hosts send many ids
+  const found = await Promise.all([...new Set(ids as string[])].map(id => library.get(id).catch(error => { if (error instanceof ContractError && error.code === "MEDIA_ASSET_NOT_FOUND") return id; throw error; })));
+  return { rows: found.filter(row => typeof row !== "string"), missing: found.filter(row => typeof row === "string") };
 }

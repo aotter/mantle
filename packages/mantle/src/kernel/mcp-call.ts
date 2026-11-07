@@ -1,13 +1,13 @@
 import type { Caller } from "./contracts.js";
 import { convert, invalid } from "./surface.js";
 import { checkPageLimit } from "./paging.js";
-import type { Tool } from "./mcp.js";
+import type { Tool, ToolCall } from "./mcp.js";
 
-export async function callTool<Database, Handlers>(tool: Tool<Database, Handlers>, raw: Record<string, unknown>, db: Database, caller: Caller, handlers: Handlers): Promise<unknown> {
-  return callToolLazy(tool, raw, () => db, caller, handlers);
+export async function callTool<Database, Handlers>(tool: Tool<Database, Handlers>, raw: Record<string, unknown>, db: Database, caller: Caller, handlers: Handlers, call?: ToolCall): Promise<unknown> {
+  return callToolLazy(tool, raw, () => db, caller, handlers, undefined, call);
 }
 /** Transport input is checked before acquiring an application-owned native handle. */
-export async function callToolLazy<Database, Handlers>(tool: Tool<Database, Handlers>, raw: Record<string, unknown>, getDb: () => Database, caller: Caller, handlers: Handlers, dryRun?: () => unknown): Promise<unknown> {
+export async function callToolLazy<Database, Handlers>(tool: Tool<Database, Handlers>, raw: Record<string, unknown>, getDb: () => Database, caller: Caller, handlers: Handlers, dryRun?: () => unknown, call: ToolCall = { apps: false }): Promise<unknown> {
   if (tool.page) {
     const { limit, cursor, ...input } = raw;
     if (limit !== undefined) checkPageLimit(limit, tool.path!);
@@ -20,5 +20,5 @@ export async function callToolLazy<Database, Handlers>(tool: Tool<Database, Hand
   const input = await tool.validate(raw);
   convert(input, tool.convert);
   if (dryRun) return dryRun();
-  return tool.run!(getDb(), caller, input as never, handlers);
+  return tool.run!(getDb(), caller, input as never, handlers, call);
 }
