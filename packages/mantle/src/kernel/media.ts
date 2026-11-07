@@ -35,9 +35,10 @@ const MAX_READ_SECONDS = 7 * 24 * 3600;
 /**
  * New ids are `<tag>_<uuid>`, the tag drawn once per database and kept in `site_config`, so a miss on an id another
  * server minted is told apart from an unknown or expired one without asking that server. Untagged (legacy) ids still resolve.
+ * ponytail: a lost or copied tag row misreports misses (own ids as foreign, or a clone's as ours); a configured site id would fix that.
  */
 const TAG_KEY = "media_id_tag";
-const TAGGED = /^([0-9a-f]{8})_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const TAGGED = /^([0-9a-f]{12})_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 interface Pending {
   readonly purpose: string;
@@ -116,7 +117,7 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
   const tag = async () => {
     const found = await ownTag();
     if (found) return found;
-    await driver.write([{ sql: `INSERT INTO site_config (key, value) VALUES (${p(1)}, ${p(2)}) ON CONFLICT(key) DO NOTHING`, binds: [TAG_KEY, crypto.randomUUID().slice(0, 8)] }]);
+    await driver.write([{ sql: `INSERT INTO site_config (key, value) VALUES (${p(1)}, ${p(2)}) ON CONFLICT(key) DO NOTHING`, binds: [TAG_KEY, crypto.randomUUID().slice(0, 13).replace("-", "")] }]);
     return (await ownTag())!;
   };
   /** A miss: an id tagged by another server is refused as not ours, saying nothing about that server. */

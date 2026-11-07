@@ -47,7 +47,7 @@ test("another server's upload and asset ids get a distinct refusal over MCP that
     const committed = (await call(a, "create_media_upload", upload)).result.structuredContent.uploadGroupId as string;
     expect((await call(a, "commit_media_upload", { uploadGroupId: committed })).result.structuredContent.id).toBe(committed);
     const tag = committed.split("_")[0]!;
-    expect(committed).toMatch(/^[0-9a-f]{8}_[0-9a-f-]{36}$/);
+    expect(committed).toMatch(/^[0-9a-f]{12}_[0-9a-f-]{36}$/);
     expect(pending.startsWith(tag + "_")).toBe(true);
 
     // b has never minted an id: any tagged id is another server's, before and after it mints its own
