@@ -73,10 +73,10 @@ export function emitMcp(plan: RuntimePlan, lowered: PlanLowered, target: Target,
   for (const { schema } of tools) uses.set(schema, (uses.get(schema) ?? 0) + 1);
   for (const [schema, count] of uses) if (count > 1 && schema) shared.set(schema, `schema${shared.size}`);
   return {...files,"mcp.ts": `${[`import { mcp as serve, type Options as McpOptions, type Tool } from "@aotter/mantle/mcp";`, databaseImport(target),
-    ...(media ? ['import type { MediaStorage } from "@aotter/mantle/site";'] : []),
+    ...(media ? ['import type { MediaStorageOption } from "@aotter/mantle/site";'] : []),
     'import type { Handlers } from "./generated.js";', ...(hasRef ? ['import { store } from "./generated.js";'] : []), ...imports,
     ...[...shared].map(([schema, name]) => `const ${name} = ${schema};`)].join("\n")}
-export type Options<Env = unknown> = McpOptions<Env, Database> & { handlers${refs ? "" : "?"}: Handlers }${media ? " & { media?: (env: Env) => MediaStorage }" : ""};
+export type Options<Env = unknown> = McpOptions<Env, Database> & { handlers${refs ? "" : "?"}: Handlers }${media ? " & { media?: (env: Env) => MediaStorageOption }" : ""};
 /** The generated tools, exported so an app can compose them with its own tools and MCP Apps. */
 export const tools: readonly Tool<Database, Handlers>[] = [
 ${tools.map(({ fields, schema }) => `  { ${fields.map(field => field === "inputSchema" ? `inputSchema: ${shared.get(schema) ?? schema}` : field).join(", ")} },`).join("\n")}

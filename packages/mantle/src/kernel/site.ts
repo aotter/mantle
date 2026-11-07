@@ -4,7 +4,7 @@ import { invalid } from "./surface.js";
 import { mediaLibrary, type MediaDatabase } from "./media.js";
 import type { Dialect } from "./dialect/common.js";
 import type { MantleSite, SiteDefaults, SiteConfig, MediaPurposePolicy } from "./site-types.js";
-export type { MantleSite, SiteDefaults, SiteConfig, MediaStorage, MediaAsset, MediaLibrary, MediaPurposePolicy } from "./site-types.js";
+export type { MantleSite, SiteDefaults, SiteConfig, MediaStorage, MediaStorageOption, MediaAsset, MediaLibrary, MediaPurposePolicy } from "./site-types.js";
 const icons = [{src:"/admin/favicon.png",mimeType:"image/png",sizes:["64x64"]},{src:"/admin/favicon.svg",mimeType:"image/svg+xml",sizes:["any"]}];
 export function createSite(db: MediaDatabase, d: Pick<Dialect,"param"|"escapeLike"|"likeEscape"|"like">, caller: Caller, defaults: SiteDefaults, policies: readonly MediaPurposePolicy[]): MantleSite {
   const admin = () => deny(caller, isAdmin(caller), "site");

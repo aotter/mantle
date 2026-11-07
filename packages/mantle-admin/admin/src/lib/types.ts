@@ -252,11 +252,13 @@ export interface MediaPurposePolicy {
   name: string;
   required: string[];
   maxBytes: Record<string, number>;
+  visibility?: "public" | "private";
 }
 
 export interface MediaAssetVariant {
   mimeType: string;
-  publicUrl: string;
+  /** Absent on a private asset. */
+  publicUrl?: string;
   storageKey?: string;
   byteSize?: number;
   role: "primary" | "alternate" | "fallback";

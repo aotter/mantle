@@ -52,6 +52,9 @@ export interface MediaPurposePolicy {
    *  rejects with `MEDIA_VARIANT_SIZE_EXCEEDED` when a variant's
    *  declared `byteSize` exceeds its cap. */
   readonly maxBytes: Readonly<Record<string, number>>;
+  /** `"public"` (the default) or `"private"`: a private purpose's assets go to
+   *  the private storage of the `media` option and carry no public URL. */
+  readonly visibility?: "public" | "private";
 }
 
 /**

@@ -5,7 +5,7 @@ import { nativeRest, body, ADMIN_API_BASE, canonicalPath, routeSource, type Rout
 import { userOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
 import { convert, type Conversions } from "@aotter/mantle/surface";
-import { siteInfo, type MantleSite, type MediaStorage } from "@aotter/mantle/site";
+import { siteInfo, type MantleSite, type MediaStorageOption } from "@aotter/mantle/site";
 import { csv } from "./csv.js";
 export type Admin = (Extract<Caller, { kind: "user" }> & { readonly admin: true; readonly credential: "session" }) | (Extract<Caller, { kind: "host" }> & { readonly admin: true });
 export interface Context<Env, Database> {
@@ -75,7 +75,8 @@ export interface Options<Env, Database> extends GatewayOptions {
         image?: string | null;
     } | null>;
     site?: (db: Database, caller: Caller) => MantleSite;
-    media?: MediaStorage;
+    /** One storage for all-public media, or `{ public, private }` when a purpose is private. */
+    media?: MediaStorageOption;
     identity?: {
         directory?: (context: Context<Env, Database>) => Partial<IdentityMethods> | Promise<Partial<IdentityMethods>>;
         roles?: {
