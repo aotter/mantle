@@ -77,3 +77,14 @@ test("default/custom renderer collisions fail in either order; explicit partitio
   expect(listed.find((tool: { name: string }) => tool.name === "pending")._meta.ui.resourceUri).toBe("ui://mantle-admin/admin");
   expect(listed.find((tool: { name: string }) => tool.name === "other")._meta.ui.resourceUri).toBe("ui://custom/other/build-1");
 });
+
+test("a host-supplied URI scopes the App per site: the resource and every tool it renders link it, and no default or hash URI is served (#1952)", async () => {
+  for (const uri of ["ui://mantle-admin/site-a/admin", "ui://mantle-admin/site-b/admin"]) {
+    const api = mcp<Env, null>(tools, { db: () => null, caller: () => caller, apps: { admin: [adminMcpApps({ catalogue, uri })] } });
+    const listed = (await rpc(api, env("build"), "tools/list")).body.result.tools;
+    expect(listed.map((tool: { _meta: { ui: { resourceUri: string } } }) => tool._meta.ui.resourceUri)).toEqual([uri, uri]);
+    expect((await rpc(api, env("build"), "resources/list")).body.result.resources.map((resource: { uri: string }) => resource.uri)).toEqual([uri]);
+    expect((await rpc(api, env("build"), "resources/read", { uri })).body.result.contents[0].text).toContain("build");
+    expect((await rpc(api, env("build"), "resources/read", { uri: "ui://mantle-admin/admin" })).body.error).toBeDefined();
+  }
+});

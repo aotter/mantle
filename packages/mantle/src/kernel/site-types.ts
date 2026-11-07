@@ -108,7 +108,7 @@ export interface MediaLibrary {
     readonly capabilities: readonly { readonly mimeType: string; readonly role: MediaVariantRole; readonly method: "PUT"; readonly uploadUrl: string; readonly requiredHeaders?: Readonly<Record<string, string>> }[];
     readonly expiresAt: number;
   }>;
-  /** An unknown or expired group is `MEDIA_UPLOAD_EXPIRED`. */
+  /** An unknown or expired group is `MEDIA_UPLOAD_EXPIRED`; one another server created is `MEDIA_NOT_OWNED`, as is its asset id in the calls below. */
   commitUpload(uploadGroupId: string, request?: unknown): Promise<MediaAsset>;
   /** Newest first; `search` matches id, alt and caption. */
   list(query: { readonly limit?: number; readonly cursor?: string; readonly search?: string }): Promise<{ readonly rows: readonly MediaAsset[]; readonly nextCursor?: string }>;

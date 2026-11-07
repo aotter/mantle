@@ -54,7 +54,8 @@ variant, so 0.1.x assets keep working while their prefixes stay served.
 
 Commit checks every object's MIME and size, then rechecks the exact GET
 response used for the copy. Public keys cannot be reached by an upload URL. Each commit attempt has a separate
-public-key UUID, while the asset id remains the upload-group UUID. A concurrent
+public-key UUID, while the asset id remains the upload-group id (`<tag>_<uuid>`; the tag is
+this database's `site_config.media_id_tag`, so another server's id is refused as `MEDIA_NOT_OWNED`). A concurrent
 loser can neither overwrite nor remove the winner's objects. After SQL selects
 the durable asset, the losing attempt removes only its own unselected copies.
 Upload sources remain until the database commit succeeds, so an uncertain DB
