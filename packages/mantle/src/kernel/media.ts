@@ -2,13 +2,15 @@
 import { ContractError, type Row } from "./contracts.js";
 import type { Bound } from "./binds.js";
 import type { Dialect } from "./dialect/common.js";
-import type { MediaAsset, MediaLibrary, MediaStorage, MediaVariantRole, MediaPurposePolicy } from "./site-types.js";
+import type { MediaAsset, MediaLibrary, MediaStorage, MediaStorageOption, MediaVariantRole, MediaPurposePolicy } from "./site-types.js";
+import { withResultMeta } from "./result-meta.js";
 export interface MediaDatabase { read(sql: string, binds: unknown[]): Row[] | PromiseLike<Row[]>; write(steps: readonly Bound[]): Promise<Row[][]>; /** Positive native evidence that the write rolled back; absence is uncertain. */ definitive?(error: unknown): boolean }
 const P = "media";
 /** HTTP status of each media code: a custom MediaStorage may throw them without one. */
 const STATUS = new Map(Object.entries({
   MEDIA_PURPOSE_REJECTED: 400, MEDIA_SVG_REJECTED: 400, MEDIA_MIME_REJECTED: 400, MEDIA_VARIANTS_INCOMPLETE: 400, MEDIA_VARIANT_SIZE_EXCEEDED: 400, MEDIA_VARIANTS_SUSPICIOUS_SIZE: 400,
-  MEDIA_ASSET_NOT_FOUND: 404, MEDIA_OBJECT_NOT_FOUND: 409, MEDIA_UPLOAD_EXPIRED: 410, SITE_NOT_CONFIGURED: 501, MEDIA_NOT_CONFIGURED: 501, PARTIAL_FAILURE: 503,
+  MEDIA_SOURCE_REJECTED: 400, MEDIA_ASSET_NOT_FOUND: 404, MEDIA_NOT_OWNED: 404, MEDIA_OBJECT_NOT_FOUND: 409, MEDIA_UPLOAD_MISMATCH: 409, MEDIA_UPLOAD_EXPIRED: 410,
+  SITE_NOT_CONFIGURED: 501, MEDIA_NOT_CONFIGURED: 501, MEDIA_SOURCE_FAILED: 502, MEDIA_STORAGE_FAILED: 502, PARTIAL_FAILURE: 503,
 }));
 const extra = (code: string) => ({ status: STATUS.get(code), ...(code === "PARTIAL_FAILURE" ? { fields: { failure: { outcome: "partial", retry: "safe", resource: "media" } } } : {}) });
 /**
@@ -28,9 +30,20 @@ const ALLOWED = new Set(["image/png", "image/jpeg", "image/webp", "image/avif", 
 const MODERN = new Set(["image/avif", "image/webp"]);
 const ROLES = new Set<unknown>(["primary", "alternate", "fallback"]);
 const TTL_MS = 15 * 60 * 1000;
+/** The SigV4 limit on a presigned URL. */
+const MAX_READ_SECONDS = 7 * 24 * 3600;
+/**
+ * New ids are `<tag>_<uuid>`, the tag drawn once per database and kept in `site_config`, so a miss on an id another
+ * server minted is told apart from an unknown or expired one without asking that server. Untagged (legacy) ids still resolve.
+ * ponytail: a lost or copied tag row misreports misses (own ids as foreign, or a clone's as ours); a configured site id would fix that.
+ */
+const TAG_KEY = "media_id_tag";
+const TAGGED = /^([0-9a-f]{12})_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 interface Pending {
   readonly purpose: string;
+  /** Absent on a group created before visibility existed: public. */
+  readonly private?: true;
   readonly filename: string;
   readonly variants: readonly { mimeType: string; role: MediaVariantRole; storageKey: string; expectedSize: number; maxBytes: number }[];
   readonly alt?: string;
@@ -70,9 +83,12 @@ function checkVariants(policy: MediaPurposePolicy, variants: readonly { mimeType
 }
 
 const COLUMNS = "id, created_at, alt, caption, variants, metadata";
+/** A private asset is stored without public URLs, so their absence is its visibility. */
+const hidden = (variants: MediaAsset["variants"]) => variants.length > 0 && variants.every((v) => v.publicUrl === undefined);
 function assetOf(r: Record<string, unknown>): MediaAsset {
+  const variants: MediaAsset["variants"] = JSON.parse(String(r.variants));
   return {
-    id: String(r.id), variants: JSON.parse(String(r.variants)), createdAt: Number(r.created_at),
+    id: String(r.id), variants, createdAt: Number(r.created_at), ...(hidden(variants) ? { visibility: "private" as const } : {}),
     ...(r.alt === null ? {} : { alt: String(r.alt) }), ...(r.caption === null ? {} : { caption: String(r.caption) }),
     ...(r.metadata === null ? {} : { metadata: JSON.parse(String(r.metadata)) }),
   };
@@ -82,15 +98,37 @@ const save = (a: MediaAsset, p: Dialect["param"]) => ({
   binds: [a.id, a.createdAt, a.alt ?? null, a.caption ?? null, JSON.stringify(a.variants), a.metadata ? JSON.stringify(a.metadata) : null],
 });
 
-export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "escapeLike" | "likeEscape" | "like">, storage: MediaStorage, policies: readonly MediaPurposePolicy[], now = Date.now): MediaLibrary {
+export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "escapeLike" | "likeEscape" | "like">, option: MediaStorageOption, policies: readonly MediaPurposePolicy[], now = Date.now): MediaLibrary {
+  const split = "public" in option;
+  const pub = split ? option.public : option, priv = split ? option.private as MediaStorage | undefined : undefined;
+  const closed = policies.filter((policy) => policy.visibility === "private").map((policy) => `'${policy.name}'`);
+  // never a silent fallback to the public storage
+  if (closed.length && !priv) throw fail("MEDIA_NOT_CONFIGURED", `media purpose(s) ${closed.join(", ")} are private, but the media option has no private storage; pass { public, private }`);
+  const storeOf = (isPrivate: unknown) => {
+    if (isPrivate && !priv) throw fail("MEDIA_NOT_CONFIGURED", "This asset is private, but the media option has no private storage; pass { public, private }");
+    return isPrivate ? priv! : pub;
+  };
   const p = d.param;
   const one = async (sql: string, binds: unknown[]) => (await driver.read(sql, binds))[0];
   const byId = (id: string) => one(`SELECT ${COLUMNS} FROM media_assets WHERE id = ${p(1)}`, [id]);
   const unpend = (id: string) => ({ sql: `DELETE FROM pending_media_uploads WHERE id = ${p(1)}`, binds: [id] });
-  const removeAll = (variants: readonly { storageKey: string }[]) => Promise.allSettled(variants.map((v) => storage.deleteObject({ storageKey: v.storageKey })));
+  const removeAll = (variants: readonly { storageKey: string }[], storage: MediaStorage) => Promise.allSettled(variants.map((v) => storage.deleteObject({ storageKey: v.storageKey })));
+  const ownTag = async () => (await one(`SELECT value FROM site_config WHERE key = ${p(1)}`, [TAG_KEY]))?.value as string | undefined;
+  const tag = async () => {
+    const found = await ownTag();
+    if (found) return found;
+    await driver.write([{ sql: `INSERT INTO site_config (key, value) VALUES (${p(1)}, ${p(2)}) ON CONFLICT(key) DO NOTHING`, binds: [TAG_KEY, crypto.randomUUID().slice(0, 13).replace("-", "")] }]);
+    return (await ownTag())!;
+  };
+  /** A miss: an id tagged by another server is refused as not ours, saying nothing about that server. */
+  const missing = async (id: string, what: string, code: string, message: string) => {
+    const foreign = TAGGED.exec(id)?.[1];
+    return foreign && foreign !== await ownTag() ? fail("MEDIA_NOT_OWNED", `not ${what} of this server; use the server that created it`) : fail(code, message);
+  };
+  const notFound = (id: string) => missing(id, "a media asset", "MEDIA_ASSET_NOT_FOUND", `no media asset '${id}'`);
   const get = async (id: string) => {
     const r = await byId(id);
-    if (!r) throw fail("MEDIA_ASSET_NOT_FOUND", `no media asset '${id}'`);
+    if (!r) throw await notFound(id);
     return assetOf(r);
   };
 
@@ -111,12 +149,13 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
       const at = now();
       const expiresAt = at + TTL_MS;
       // bearer-equivalent until commit: storage keys under it must not be guessable
-      const uploadGroupId = crypto.randomUUID();
+      const uploadGroupId = `${await tag()}_${crypto.randomUUID()}`;
+      const isPrivate = policy.visibility === "private", storage = storeOf(isPrivate);
       const specs = asked.map(({ mimeType, byteSize, role }) => ({ mimeType, byteSize, role, maxBytes: policy.maxBytes[mimeType]! }));
       let capabilities;
       try { ({ capabilities } = await storage.createUpload({ uploadGroupId, purpose, filename, variants: specs, now: at, expiresAt })); } catch (error) { throw own(error); }
       const record: Pending = {
-        purpose, filename, ...described, expiresAt, createdAt: at,
+        purpose, ...(isPrivate ? { private: true as const } : {}), filename, ...described, expiresAt, createdAt: at,
         variants: capabilities.map((c, i) => ({ mimeType: c.mimeType, role: c.role, storageKey: c.storageKey, expectedSize: specs[i]!.byteSize, maxBytes: specs[i]!.maxBytes })),
       };
       await driver.write([
@@ -132,12 +171,15 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
       if (committed) return assetOf(committed);
       const row = await one(`SELECT record FROM pending_media_uploads WHERE id = ${p(1)}`, [uploadGroupId]);
       const record = row ? JSON.parse(String(row.record)) as Pending : null;
+      const storage = storeOf(record?.private);
       // a rejected group's objects are deleted: an upload URL takes any type and size, so what was PUT is not trusted
-      const discard = () => removeAll(record?.variants ?? []);
+      const discard = () => removeAll(record?.variants ?? [], storage);
       if (!record || record.expiresAt <= now()) {
         if (record) { await discard(); await driver.write([unpend(uploadGroupId)]); }
-        throw fail("MEDIA_UPLOAD_EXPIRED", `upload group '${uploadGroupId}' is unknown or expired; create a new upload`);
+        throw await missing(uploadGroupId, "an upload", "MEDIA_UPLOAD_EXPIRED", `upload group '${uploadGroupId}' is unknown or expired; create a new upload`);
       }
+      const named = obj(request).purpose;
+      if (named !== undefined && named !== record.purpose) throw fail("MEDIA_UPLOAD_MISMATCH", `upload '${uploadGroupId}' was created for purpose '${record.purpose}', not '${String(named)}'`);
       let asset: MediaAsset;
       try { asset = await storage.commitUpload({
         uploadGroupId, filename: record.filename, now: record.createdAt,
@@ -154,10 +196,17 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
         throw own(error);
       }
       if (asset.id !== uploadGroupId) throw new ContractError("OUTCOME_UNKNOWN", "Storage returned a different asset id; reconcile this upload group.", P);
+      // a private storage that hands out public URLs serves its objects publicly; a public one must give every variant one
+      if (asset.variants.some((v) => record.private ? v.publicUrl !== undefined : typeof v.publicUrl !== "string")) {
+        const failed = rejected(await removeAll(asset.variants, storage));
+        await discard();
+        if (failed.length) throw fail("PARTIAL_FAILURE", "Some copied variants could not be removed. Retry the same upload group.", { cause: new AggregateError(failed.map(r => r.reason)) });
+        throw fail("MEDIA_NOT_CONFIGURED", record.private ? "The private media storage returned a publicUrl: its objects would be public." : "The public media storage returned a variant without a publicUrl.");
+      }
       await driver.write([save(asset, p), unpend(uploadGroupId)]).catch(async error => {
         // Cleanup requires positive native rollback evidence; an unclassified failure may have committed.
         if (driver.definitive?.(error) === true) {
-          const failed = rejected(await removeAll(asset.variants));
+          const failed = rejected(await removeAll(asset.variants, storage));
           if (failed.length) throw fail("PARTIAL_FAILURE", "The write rolled back, but some attempt copies could not be removed. Reconcile storage before retrying.", {cause:new AggregateError([error,...failed.map(r=>r.reason)])});
           throw error;
         }
@@ -166,7 +215,7 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
       const durable = await get(uploadGroupId);
       // ON CONFLICT may select another concurrent attempt. Only discard this attempt's unselected copies.
       const selected = new Set(durable.variants.map(v => v.storageKey));
-      if (rejected(await removeAll(asset.variants.filter(v => !selected.has(v.storageKey)))).length) throw new ContractError("OUTCOME_UNKNOWN", "The asset is committed, but unselected upload copies need storage reconciliation.", P);
+      if (rejected(await removeAll(asset.variants.filter(v => !selected.has(v.storageKey)), storage)).length) throw new ContractError("OUTCOME_UNKNOWN", "The asset is committed, but unselected upload copies need storage reconciliation.", P);
       await discard();
       return durable;
     },
@@ -190,13 +239,25 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
       if (!patch.length) return get(id);
       // only the patched columns, and only a row that still exists: a concurrent delete or edit of the other field stands
       const [r] = (await driver.write([{ sql: `UPDATE media_assets SET ${patch.map(([k], i) => `${k} = ${p(i + 2)}`).join(", ")} WHERE id = ${p(1)} RETURNING ${COLUMNS}`, binds: [id, ...patch.map(([, v]) => v)] }]))[0]!;
-      if (!r) throw fail("MEDIA_ASSET_NOT_FOUND", `no media asset '${id}'`);
+      if (!r) throw await notFound(id);
       return assetOf(r);
+    },
+
+    async signRead(id, expiresIn = 300) {
+      if (!Number.isSafeInteger(expiresIn) || expiresIn < 1 || expiresIn > MAX_READ_SECONDS) throw bad(`expiresIn: whole seconds, 1..${MAX_READ_SECONDS}`);
+      const asset = await get(id);
+      if (!asset.visibility) return { id, variants: asset.variants.map(({ mimeType, role, publicUrl }) => ({ mimeType, role, url: publicUrl! })) };
+      const storage = storeOf(true);
+      if (!storage.signRead) throw fail("MEDIA_NOT_CONFIGURED", "The private media storage cannot sign reads: it has no signRead.");
+      const expiresAt = now() + expiresIn * 1000;
+      let variants;
+      try { variants = await Promise.all(asset.variants.map(async ({ mimeType, role, storageKey }) => ({ mimeType, role, url: await storage.signRead!({ storageKey, expiresIn }) }))); } catch (error) { throw own(error); }
+      return { id, variants, expiresAt };
     },
 
     async delete(id) {
       const asset = await get(id);
-      const failed = rejected(await removeAll(asset.variants));
+      const failed = rejected(await removeAll(asset.variants, storeOf(asset.visibility)));
       if (failed.length) throw fail("PARTIAL_FAILURE", "Some objects could not be removed. Retry deleting the same asset.", { cause: new AggregateError(failed.map(r => r.reason)) });
       await driver.write([{ sql: `DELETE FROM media_assets WHERE id = ${p(1)}`, binds: [id] }]);
       return { deleted: true, variantsRemoved: asset.variants.length };
@@ -207,5 +268,60 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
 /** The 0.2 Admin library item's convenience fields, without changing the storage DTO. */
 export function mediaItem(asset: MediaAsset) {
   const primary=asset.variants.find(v=>v.role==="primary") ?? asset.variants[0];
-  return {id:asset.id,variants:asset.variants,primaryUrl:primary?.publicUrl??null,mime:primary?.mimeType??null,byteSize:primary?.byteSize??null,alt:asset.alt??null,caption:asset.caption??null,createdAt:asset.createdAt};
+  return {id:asset.id,variants:asset.variants,primaryUrl:primary?.publicUrl??null,mime:primary?.mimeType??null,byteSize:primary?.byteSize??null,alt:asset.alt??null,caption:asset.caption??null,createdAt:asset.createdAt,...(asset.visibility ? {visibility:asset.visibility} : {})};
+}
+
+/** Where `upload_media` puts the upload targets for an MCP App: the result `_meta`, which the host gives the App and not the model. */
+export const UPLOAD_META = "net.aotter.mantle/upload";
+
+/**
+ * `upload_media`, one mode per call: `{ uploadId }` commits; `variants` returns the targets (in the result `_meta` when the
+ * client renders MCP Apps, else in the data, for an agent that PUTs itself); `sourceUrl` or `file` fetches one public image
+ * and commits it; a bare purpose returns the policy. `policies` are the site's expanded purposes.
+ */
+export async function uploadMedia(library: MediaLibrary, policies: readonly MediaPurposePolicy[], input: Record<string, unknown>, call: { readonly apps: boolean }): Promise<unknown> {
+  const { uploadId, sourceUrl, file, variants, purpose, filename, ...described } = input;
+  const present = (keys: string[]) => keys.filter(key => input[key] !== undefined);
+  if (uploadId !== undefined) {
+    if (present(["variants", "filename", "sourceUrl", "file"]).length) throw bad("{ uploadId, purpose?, alt?, caption? }: filename, variants, sourceUrl and file belong to the first call");
+    return library.commitUpload(String(uploadId), { ...described, ...(purpose !== undefined ? { purpose } : {}) });
+  }
+  if (sourceUrl !== undefined || file !== undefined) {
+    if (present(["sourceUrl", "file", "variants"]).length > 1) throw bad("one of variants, sourceUrl or file");
+    const policy = policies.find(p => p.name === purpose);
+    if (!policy) throw fail("MEDIA_PURPOSE_REJECTED", `purpose '${String(purpose)}' is not declared`);
+    if (policy.required.length !== 1) throw fail("MEDIA_VARIANTS_INCOMPLETE", `purpose '${policy.name}' takes ${policy.required.length} variants, and a fetched file is one: prepare the variants locally and send them as variants`);
+    const accepts = policy.required[0]!.split(",");
+    const url = sourceUrl ?? obj(file).download_url;
+    if (typeof url !== "string") throw bad("sourceUrl: string, or file: { download_url, file_id }");
+    const fetched = await (await import("./media-fetch.js")).fetchImage(url, Math.max(...accepts.map(mime => policy.maxBytes[mime] ?? 0)));
+    if (!accepts.includes(fetched.mimeType)) throw fail("MEDIA_MIME_REJECTED", `the source is ${fetched.mimeType}; purpose '${policy.name}' takes ${accepts.join(" or ")}`);
+    const created = await library.createUpload({ ...described, purpose, filename: filename ?? fetched.filename, variants: [{ mimeType: fetched.mimeType, byteSize: fetched.bytes.byteLength, role: "primary" }] });
+    for (const target of created.capabilities) {
+      let status = 0;
+      try { const response = await fetch(target.uploadUrl, { method: target.method, headers: target.requiredHeaders ?? {}, body: fetched.bytes }); status = response.status; await response.body?.cancel(); } catch {}
+      if (status < 200 || status > 299) throw fail("MEDIA_STORAGE_FAILED", `storage did not accept the upload${status ? ` (${status})` : ""}; call upload_media again`);
+    }
+    return library.commitUpload(created.uploadGroupId);
+  }
+  if (variants !== undefined) {
+    const created = await library.createUpload(input);
+    const targets = created.capabilities.map(({ role, mimeType, method, uploadUrl, requiredHeaders }) => ({ role, mimeType, method, url: uploadUrl, headers: requiredHeaders ?? {} }));
+    const data = { uploadId: created.uploadGroupId, expiresAt: created.expiresAt };
+    return call.apps ? withResultMeta(data, { [UPLOAD_META]: { targets } }) : { ...data, targets };
+  }
+  if (present(["filename", "alt", "caption"]).length) throw bad("variants, sourceUrl or file with filename, alt and caption");
+  const listed = policies.filter(p => purpose === undefined || p.name === purpose);
+  if (purpose !== undefined && !listed.length) throw fail("MEDIA_PURPOSE_REJECTED", `purpose '${String(purpose)}' is not declared`);
+  return { purposes: listed, ...(call.apps ? { card: "The upload card is open: the person picks the file there, and the card reports the committed asset id." } : {}) };
+}
+
+/** `find_media`: `ids` reads those assets (ids not found are listed in `missing`), else the newest-first list. */
+export async function findMedia(library: MediaLibrary, input: Record<string, unknown>): Promise<unknown> {
+  const { ids, ...query } = input;
+  if (ids === undefined) return library.list(query);
+  if (Object.values(query).some(value => value !== undefined) || !Array.isArray(ids) || ids.some(id => typeof id !== "string")) throw bad("ids: string[] alone, or limit, cursor and search");
+  // ponytail: one read per id (at most 100); a library `getMany` if hosts send many ids
+  const found = await Promise.all([...new Set(ids as string[])].map(id => library.get(id).catch(error => { if (error instanceof ContractError && (error.code === "MEDIA_ASSET_NOT_FOUND" || error.code === "MEDIA_NOT_OWNED")) return id; throw error; })));
+  return { rows: found.filter(row => typeof row !== "string"), missing: found.filter(row => typeof row === "string") };
 }

@@ -227,6 +227,7 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 | `Brand` | browser | `title`, `image?`, `href?` |
 | `Home` | browser | `collections`, `site` (what the page shows; the built-in page loads its own data) |
 | `CollectionList` | browser | `collection` (filters come from the page's location) |
+| `SignIn` | browser | `methods`, `returnTo`, `oauthQuery`, `emailAutoComplete`, `onSignedIn(next)` ([below](#sign-in)) |
 | `RecordView` | browser | `collection`, `entryId`, `surface` |
 | `record.aside:<schema>` | browser | `collection`, `entry`, `surface` |
 | `record.actions:<schema>` | browser | `collection`, `entry`, `surface` |
@@ -403,6 +404,34 @@ View that has an MCP tool (`tsc` checks it against the generated `admin-client.t
 
 Authorization is unchanged by any of this. A component that shows or hides something grants or denies nothing; the server
 checks every route, View and Procedure.
+
+### Sign-in
+
+`/admin/sign-in` lists the methods `authRoutes` returns from `GET <auth>/methods` (`email-otp`, `magic-link`, `passkey`,
+`social`, `oauth`) through the `SignIn` slot. Admin renders the email code, magic link, social and OAuth methods; it
+renders nothing for `passkey`, which is listed for an application that builds its own. Pass changed props to
+`renderDefault` to reorder or drop `methods`, set the email field's `emailAutoComplete`, or wrap `onSignedIn`; render
+your own elements around it to add a method of your own.
+
+Admin calls `onSignedIn(next)` once the email code has signed in. `next` is where Admin goes by default: Better Auth's
+OAuth authorize continuation when the sign-in came from an OAuth client such as an MCP connector, or the page's return
+path. Run your own step first, then navigate to the same `next`. Redirecting methods (social, OAuth, magic link) leave
+the page and do not call it.
+
+```tsx
+export default defineAdmin(admin, {
+  components: {
+    SignIn: (props) => props.renderDefault({ ...props,
+      onSignedIn: next => { sessionStorage.setItem("after-sign-in", next); window.location.assign("/admin/p/welcome"); } }),
+  },
+  pages: [{ path: "welcome", title: "Welcome", element: <Welcome /> }],
+});
+```
+
+Keep `next` out of the step page's URL: read it back from where your wrapper stored it, then navigate there unchanged.
+A page that follows a `?next=` from its own address is an open redirect, and `next` may be Better Auth's absolute OAuth
+continuation, so a "same-origin only" check would also break connector sign-in. The signed-in method stays locked once
+`onSignedIn` runs, so navigate away (or replace the page) rather than leaving the card in place.
 
 ### Components that also render in an MCP host
 

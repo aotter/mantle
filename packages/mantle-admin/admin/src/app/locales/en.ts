@@ -15,7 +15,7 @@ export default {
     "developer.sqlProcedure": "This procedure runs its SQL statements together: all of them apply, or none.",
     "webmcp.title": "Work with an AI agent",
     "webmcp.description": "WebMCP is available in this browser. An AI agent can use your admin tools, upload images and navigate Admin with your current permissions. Copy this prompt into your agent to begin.",
-    "webmcp.prompt": "Use the WebMCP tools on this Mantle Admin page. First call admin_get_context and explain what you can help me do. Ask what I want to accomplish, then use the available admin tools and show the relevant page. Read the current version before updates; do not retry conflicts automatically. For images, use create_media_upload, upload directly to the returned URLs, then commit_media_upload.",
+    "webmcp.prompt": "Use the WebMCP tools on this Mantle Admin page. First call admin_get_context and explain what you can help me do. Ask what I want to accomplish, then use the available admin tools and show the relevant page. Read the current version before updates; do not retry conflicts automatically. For images, call upload_media, PUT each variant directly to its returned target, then call upload_media again with the uploadId.",
     "webmcp.copied": "Copied",
     "webmcp.copy": "Copy prompt",
     "webmcp.copyFailed": "Could not copy. Select and copy the prompt manually.",

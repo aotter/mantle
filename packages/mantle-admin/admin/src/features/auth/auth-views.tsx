@@ -14,11 +14,12 @@ import { Skeleton } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { authMethodsQueryOptions } from "../../lib/queries";
-import type { AuthMethodInfo } from "../../lib/types";
 import { ThemeToggle } from "../../layout/preference-controls";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
 import { GateError, GateLoading } from "./gate-views";
+import { Slot } from "../../app/slots";
+import type { SignInMethod, SignInProps } from "../../app/slot-props";
 
 // Per-section spacing. `first:` zeroes top spacing for whichever
 // section the server returns first — keeps the spacing rules
@@ -61,7 +62,8 @@ export { claimInFlight, SignInButton } from "@aotter/mantle-ui/kit";
  *
  * Method labels come from `auth.signIn.method.<kind>.*` i18n keys. The
  * fallback chain is: current language → English → key. Adding a new
- * method (passkey, google) is a new union case + new i18n keys.
+ * method is a new union case + new i18n keys. The list renders through the `SignIn` slot, so an application can add
+ * methods, set the email input's `autocomplete`, or run its own step after an in-page sign-in (`onSignedIn`).
  */
 export function SignInView(): React.ReactElement {
   const { language } = usePreferences();
@@ -69,7 +71,7 @@ export function SignInView(): React.ReactElement {
   const ret = safeReturnPath(params.get("return"));
   const oauthQuery = signedOAuthQuery(window.location.search);
 
-  const methods = useQuery<AuthMethodInfo[]>(authMethodsQueryOptions());
+  const methods = useQuery<SignInMethod[]>(authMethodsQueryOptions());
 
   return (
     <AuthCard action={<ThemeToggle />}>
@@ -87,34 +89,44 @@ export function SignInView(): React.ReactElement {
         ) : null}
         {methods.isLoading ? (
           <Skeleton className="h-9 w-full" />
-        ) : null}
-        {methods.data?.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {t(language, "auth.signIn.noMethods")}
-          </p>
-        ) : null}
-        {methods.data && methods.data.length > 0 ? (
-          // Wrap so each section's `first:` selectors target the first
-          // method in the list, not the first child of the card.
-          <div>
-            {methods.data.map((m) => (
-              <MethodSection
-                key={
-                  m.kind === "social"
-                    ? `social:${m.provider}`
-                    : m.kind === "oauth"
-                      ? `oauth:${m.providerId}`
-                      : m.kind
-                }
-                method={m}
-                returnTo={ret}
-                oauthQuery={oauthQuery}
-              />
-            ))}
-          </div>
-        ) : null}
+        ) : (
+          // Mounted once the list has loaded, failed or come back empty, so a method an application adds still shows.
+          <Slot name="SignIn" Default={SignInMethods} props={{
+            methods: methods.data ?? [],
+            returnTo: ret,
+            oauthQuery: oauthQuery || undefined,
+            emailAutoComplete: "email",
+            onSignedIn: navigateAfterSignIn,
+          }} />
+        )}
       </CardContent>
     </AuthCard>
+  );
+}
+
+/** The default after an in-page sign-in: the session cookie is set, so the next page load is authenticated. */
+function navigateAfterSignIn(next: string): void {
+  window.location.assign(next);
+}
+
+/** The built-in `SignIn` slot: one section per method. */
+function SignInMethods({ methods, returnTo, oauthQuery, emailAutoComplete, onSignedIn }: SignInProps): React.ReactElement {
+  const { language } = usePreferences();
+  if (methods.length === 0) return <p className="text-sm text-muted-foreground">{t(language, "auth.signIn.noMethods")}</p>;
+  // Wrap so each section's `first:` selectors target the first method in the list, not the first child of the card.
+  return (
+    <div>
+      {methods.map((m) => (
+        <MethodSection
+          key={m.kind === "social" ? `social:${m.provider}` : m.kind === "oauth" ? `oauth:${m.providerId}` : m.kind}
+          method={m}
+          returnTo={returnTo}
+          oauthQuery={oauthQuery}
+          emailAutoComplete={emailAutoComplete}
+          onSignedIn={onSignedIn}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -304,12 +316,16 @@ function MethodSection({
   method,
   returnTo,
   oauthQuery,
+  emailAutoComplete,
+  onSignedIn,
 }: {
-  method: AuthMethodInfo;
+  method: SignInMethod;
   returnTo: string;
   oauthQuery?: string;
-}): React.ReactElement {
-  // Exhaustive switch — adding a kind to AuthMethodInfo without
+  emailAutoComplete: string;
+  onSignedIn: (next: string) => void;
+}): React.ReactElement | null {
+  // Exhaustive switch — adding a kind to SignInMethod without
   // adding a case here is a TS error. `social` covers all OAuth
   // providers (per Better Auth's socialProviders block); the
   // `provider` discriminator picks the button label.
@@ -341,7 +357,10 @@ function MethodSection({
         />
       );
     case "email-otp":
-      return <EmailOtpSection returnTo={returnTo} oauthQuery={oauthQuery} />;
+      return <EmailOtpSection returnTo={returnTo} oauthQuery={oauthQuery} emailAutoComplete={emailAutoComplete} onSignedIn={onSignedIn} />;
+    case "passkey":
+      // Listed for the `SignIn` slot: Admin ships no passkey sign-in of its own; the application renders it.
+      return null;
     case "magic-link":
       return <MagicLinkSection returnTo={returnTo} oauthQuery={oauthQuery} />;
     default: {
@@ -453,14 +472,19 @@ function RedirectSignInSection({
 function EmailOtpSection({
   returnTo,
   oauthQuery,
+  emailAutoComplete,
+  onSignedIn,
 }: {
   returnTo: string;
   oauthQuery?: string;
+  emailAutoComplete: string;
+  onSignedIn: (next: string) => void;
 }): React.ReactElement {
   const { language } = usePreferences();
   return (
     <SignInFlow
       className={SECTION_DIVIDED}
+      emailAutoComplete={emailAutoComplete}
       labels={{
         description: t(language, "auth.signIn.method.email-otp.body"),
         emailLabel: t(language, "auth.signIn.method.email-otp.emailLabel"),
@@ -501,14 +525,11 @@ function EmailOtpSection({
         if (!res.ok) {
           return { error: t(language, "auth.signIn.method.email-otp.verifyFailed") };
         }
-        // Navigate to the original return URL. The session cookie is
-        // already set on the response, so the next request to
-        // `returnTo` is authenticated and the gate routes accordingly.
-        // Plain reload() would land back on /admin/sign-in — the
-        // pathname is unchanged, the gate sees us on the sign-in page
-        // and renders SignInView again instead of routing through.
+        // Continue to the OAuth continuation or the return URL (through `onSignedIn`, which navigates by default). The
+        // session cookie is already set, so the next request is authenticated. Plain reload() would land back on
+        // /admin/sign-in: the pathname is unchanged and the gate renders SignInView again.
         const data = (await res.json()) as { url?: string };
-        window.location.assign(data.url ?? returnTo);
+        onSignedIn(data.url ?? returnTo);
       }}
     />
   );

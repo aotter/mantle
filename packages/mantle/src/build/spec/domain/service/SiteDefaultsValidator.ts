@@ -56,7 +56,8 @@ export interface MediaPurposeIssue {
     | "empty-required-slot"
     | "overlapping-slot-mimes"
     | "maxBytes-missing-mime"
-    | "maxBytes-non-positive";
+    | "maxBytes-non-positive"
+    | "invalid-visibility";
   readonly detail?: string;
 }
 
@@ -80,6 +81,8 @@ export class InvalidMediaPurposesError extends Error {
                 return `${tag} maxBytes is missing entries: ${i.detail}`;
               case "maxBytes-non-positive":
                 return `${tag} maxBytes has non-positive entries: ${i.detail}`;
+              case "invalid-visibility":
+                return `${tag} visibility must be 'public' or 'private', not ${i.detail}`;
             }
           })
           .join("; ") +
@@ -148,6 +151,10 @@ function collectMediaPurposeIssues(
   for (const p of purposes) {
     if (!MEDIA_PURPOSE_SLUG_PATTERN.test(p.name)) {
       out.push({ name: p.name, reason: "invalid-slug" });
+      continue;
+    }
+    if (p.visibility !== undefined && p.visibility !== "public" && p.visibility !== "private") {
+      out.push({ name: p.name, reason: "invalid-visibility", detail: JSON.stringify(p.visibility) });
       continue;
     }
     if (p.required.length === 0) {

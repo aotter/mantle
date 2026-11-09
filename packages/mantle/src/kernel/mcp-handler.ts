@@ -177,7 +177,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
       const server = new McpServer(serverInfo, { maxToolInputElements: MCP_INPUT_ELEMENTS, ...(options.instructions ? { instructions: options.instructions } : {}) });
       server.server.registerCapabilities({ tools: { listChanged: false } });
       if (host) server.server.onclose = () => access?.finish(isRecord(parsedBody) && parsedBody.method === "initialize" ? undefined : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", {status: 400}));
-      const enabled = clientUiSupport(parsedBody) !== "unsupported";
+      const support = clientUiSupport(parsedBody), enabled = support !== "unsupported", apps = support === "supported";
       const appMeta = links ? registerApps(server, links, enabled, new Set(selected.map(tool => tool.name)), { env, request }) : undefined;
       // A host's stale copy names a tool this catalogue lacks: say so, with the catalogue version, instead of the SDK's bare "not found".
       // Wrapped where the SDK stores it, so transport and request validation still answer first.
@@ -197,6 +197,8 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
         if (linked === false || !enabled && Array.isArray(visibility) && !visibility.includes("model")) continue;
         const meta = linked && own ? { ...linked, ...own, ui: { ...linked.ui, ...own.ui as object } } : linked ?? own;
         registered.add(tool.name);
+        // an App renders this result only when the client declared support and a resource renders this tool
+        const call = { apps: apps && !!linked };
         // Not part of structured output: the version, and on failure the current input contract.
         const about = (contract: boolean) => { const text = [tool.version && `tool version ${tool.version}`, contract && `input schema ${JSON.stringify(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema)}`].filter(Boolean).join("; "); return text ? [{ type: "text" as const, text }] : []; };
         server.registerTool(tool.name, { ...(meta ? { _meta: meta } : {}), ...(tool.title ? { title: text(tool.title, locale) } : {}), description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name, inputSchema: schema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema), ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}), ...(tool.annotations ? { annotations: tool.annotations } : {}) }, async (raw: unknown) => {
@@ -209,7 +211,7 @@ export function handler<Env, Database, Handlers>(tools: Tools<Env, Database, Han
           if (tool.run && (!host || !tool.readOnly)) checkOrigin(request, caller);
           let db: Database | undefined, resultMeta: Readonly<Record<string, unknown>> | undefined;
           const run = async (input: Record<string, unknown>) => {
-            const out = await callTool(tool, input, () => db ??= options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined);
+            const out = await callTool(tool, input, () => db ??= options.db(env), caller, options.handlers as Handlers, access?.dryRun ? () => ({dryRun: true, event: access.finish()}) : undefined, call);
             // withResultMeta: the data is the result, the meta reaches only the result `_meta`.
             return isRecord(out) && Symbol.for("net.aotter.mantle/result") in out ? (resultMeta = out._meta as typeof resultMeta, out.data) : out;
           };

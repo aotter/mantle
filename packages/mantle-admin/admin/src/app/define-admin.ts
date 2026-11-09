@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { MAX_BADGE_VIEWS } from "./transport";
 import type { AdminLayers, SlotComponent } from "./slots";
-import type { BrandProps, CellProps, CollectionListProps, HeaderProps, HomeProps, InputProps, ListActionsProps, RecordActionsProps, RecordAsideProps, RecordViewProps, ShellProps, SidebarProps, SurfaceProp } from "./slot-props";
+import type { BrandProps, CellProps, CollectionListProps, HeaderProps, HomeProps, InputProps, ListActionsProps, RecordActionsProps, RecordAsideProps, RecordViewProps, ShellProps, SidebarProps, SignInProps, SurfaceProp } from "./slot-props";
 
 /**
  * What `generated/admin-client.ts` knows about an application, as types: the input and row of each admin View, the
@@ -62,7 +62,7 @@ type Of<K extends string, Prefix extends string> = K extends `${Prefix}${infer R
  * name fails `tsc`. In a key, `<schema>` is a collection's name, `<field>` one of its fields (names contain no `.`), and
  * `<view>.<column>` a column of an admin View.
  *
- * Surface: `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList` and `list.actions:` exist in the browser only.
+ * Surface: `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `SignIn` and `list.actions:` exist in the browser only.
  * `cell:view:` renders in both surfaces. `RecordView`, `record.aside:`, `record.actions:`, collection cells and
  * record inputs render only in browser Admin; their `surface` is the literal `"browser"`. An MCP row-action form
  * edits a Procedure's input, not a collection record, and never mounts record/input overrides.
@@ -73,6 +73,7 @@ export type AdminComponents<T extends AdminTypes = AdminTypes> = {
   readonly Header?: Browser<HeaderProps>;
   readonly Brand?: Browser<BrandProps>;
   readonly Home?: Browser<HomeProps>;
+  readonly SignIn?: Browser<SignInProps>;
   readonly CollectionList?: Browser<CollectionListProps>;
   readonly RecordView?: BrowserRecord<RecordViewProps>;
 } & {

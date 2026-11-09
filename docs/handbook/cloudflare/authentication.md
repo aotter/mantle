@@ -71,6 +71,20 @@ or `oauthProvider` for ordinary OAuth. These are optional app dependencies behin
 Use the live grant/session hooks and route wiring in [OAuth](../guides/oauth.md); merge verification hooks with the app shell's
 user hooks. `genericOAuth` is a login plugin, distinct from the OAuth provider.
 
+### Passkeys
+
+`authRoutes` may list `{ kind: "passkey" }` in `methods` when the app adds Better Auth's `@better-auth/passkey` plugin
+in its own `auth.ts`, pinned to the same version as `better-auth`. Admin lists the method to its `SignIn` slot
+([Customising Admin](../guides/native-admin.md#sign-in)) and renders no passkey sign-in of its own; the sign-in
+experience is the application's.
+
+- **`rpID` is the auth host.** Every origin under the `rpID` may ask for assertions with those passkeys, so use a parent
+  domain only when the deployment owns the whole registrable domain.
+- **User verification is not enforced.** The plugin verifies sign-in with `requireUserVerification: false`, so a tap
+  without biometrics or a PIN signs in. Its sign-in endpoint does not prove the person is present; do not use it to
+  approve an action.
+- `mantle generate --auth src/auth.ts` adds the plugin's `passkey` table to `schema.sql`.
+
 ### Verifying access tokens on Workers
 
 `resolveCaller` verifies a Bearer or DPoP access token with Better Auth's resource client, which fetches the

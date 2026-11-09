@@ -172,7 +172,7 @@ test("WebMCP dispatch includes publishing and media tools and cannot claim readO
     expect(target(report, id).readOnly).toBe(false);
     expect(report.targets.find(t => t._meta.id === id)!.name).toBe(`${verb}_posts`);
   }
-  for (const name of ["get_media_upload_policy", "create_media_upload", "commit_media_upload", "list_media_assets", "get_media_asset", "update_media_asset", "delete_media_asset"])
+  for (const name of ["upload_media", "find_media", "update_media", "delete_media", "get_media_upload_policy", "create_media_upload", "commit_media_upload", "list_media_assets", "get_media_asset", "update_media_asset", "delete_media_asset"])
     expect(dispatcher.variants.some(v => v.id === `admin:tool:${name}`)).toBe(true);
   const empty = await describeApp(await compile(dual.split("---").slice(0, 2).join("---")));
   expect(target(empty, "admin:POST /operations/:name").readOnly).toBe(false);

@@ -19,7 +19,7 @@ export default {
     "webmcp.copied": "已复制",
     "webmcp.title": "与 AI agent 一起操作",
     "webmcp.description": "此浏览器已支持 WebMCP。AI agent 可按你当前的后台权限操作工具、上传图片及切换页面。复制下方提示词给 agent 即可开始。",
-    "webmcp.prompt": "请使用这个 Mantle Admin 页面的 WebMCP 工具。先调用 admin_get_context，说明你可以协助我做什么，再询问我的目标。使用可用的 管理工具，并显示相关页面。更新前先读取当前版本；版本冲突时不要自动重试。图片请使用 create_media_upload，直接上传到返回的 URL，再调用 commit_media_upload。",
+    "webmcp.prompt": "请使用这个 Mantle Admin 页面的 WebMCP 工具。先调用 admin_get_context，说明你可以协助我做什么，再询问我的目标。使用可用的 管理工具，并显示相关页面。更新前先读取当前版本；版本冲突时不要自动重试。图片请调用 upload_media，将每个版本直接 PUT 到返回的目标，再以 uploadId 调用一次 upload_media。",
     "webmcp.copy": "复制提示词",
     "webmcp.copyFailed": "无法复制，请选中提示词后手动复制。",
 
