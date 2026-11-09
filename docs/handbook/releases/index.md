@@ -34,6 +34,20 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ## 0.2.2 — in preparation
 
+### Upgrading to 0.2.2-alpha.2
+
+Pin the selected packages to `0.2.2-alpha.2` and regenerate. Existing configuration keeps working; long LIKE searches
+on PostgreSQL and bun-sqlite are now refused (see Fixes):
+
+- **Upload card.** `mediaUploadCard({ tool, forward })` names the tool the card calls (default `upload_media`) and the
+  argument names it repeats from the rendering call's input on each of its calls (for example `server`). Without them,
+  the card behaves as before. See [MCP Apps](../guides/mcp-apps.md).
+- **Fixes.** While the session loads, Admin shows a neutral page frame instead of its sign-in card. A LIKE search whose
+  escaped pattern is longer than D1's 50-byte cap is refused as `INPUT_VALIDATION_FAILED` on every dialect, instead of
+  failing as `INTERNAL_ERROR` on D1: member search, Better Auth `contains`/`starts_with`/`ends_with` and Store `like`.
+  On PostgreSQL and bun-sqlite these searches previously ran; they are now refused too, so the result is the same on
+  every host. A longer media search still matches a whole id; alt and caption match only within the cap.
+
 ### Upgrading to 0.2.2-alpha.1
 
 Pin the selected packages to `0.2.2-alpha.1` and regenerate. Nothing breaks, and existing configuration keeps working:
