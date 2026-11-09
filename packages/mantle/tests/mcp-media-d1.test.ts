@@ -67,7 +67,7 @@ export default{async fetch(request,env){const url=new URL(request.url),key=url.p
   expect(committed.id).toBe(upload.uploadGroupId);expect(committed.variants[0].byteSize).toBe(5);expect(committed.variants[0].storageKey.startsWith("committed/")).toBe(true);
   expect(Array.from(new Uint8Array(await(await fetch(committed.variants[0].publicUrl)).arrayBuffer()))).toEqual(Array.from(bytes));expect((await counts()).objects).toEqual([committed.variants[0].storageKey]);
   expect((await call("commit_media_upload",{uploadGroupId:upload.uploadGroupId})).structuredContent.id).toBe(committed.id);
-  expect((await call("list_media_assets",{search:committed.id})).structuredContent.rows).toHaveLength(1);
+  expect((await call("list_media_assets",{search:committed.id})).structuredContent.rows).toHaveLength(1);expect((await call("list_media_assets",{search:"a".repeat(49)})).structuredContent.rows).toHaveLength(0);
   expect((await call("update_media_asset",{id:committed.id,alt:"native R2"})).structuredContent.alt).toBe("native R2");
   const before=(await counts()).reads,refused=await rpc("tools/call",{name:"delete_media_asset",arguments:{id:committed.id}},"/mcp/admin",{origin:"https://evil.test"});
   expect(refused.response.status).toBe(403);expect(refused.data.error.message).toBe("Invalid Origin: evil.test");expect((await counts()).reads).toBe(before);

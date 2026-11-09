@@ -18,7 +18,7 @@ import * as postgres from "../kernel/dialect/postgres.js";
 import * as sqlite from "../kernel/dialect/sqlite.js";
 import * as bunSql from "../kernel/driver/postgres.js";
 import type { Reader } from "../kernel/driver/d1.js";
-import { condition as spell } from "../kernel/where.js";
+import { condition as spell, likeTooLong, LIKE_TOO_LONG } from "../kernel/where.js";
 
 type Row = Record<string, unknown>;
 /** Runs one statement; `changes` is the affected-row count. */
@@ -53,8 +53,9 @@ function customAdapter(d: Spelling, exec: Exec, seed: (identifier: string) => Pr
       const { value, operator } = w;
       const fold = w.mode === "insensitive" && (typeof value === "string" || (Array.isArray(value) && value.every(v => typeof v === "string")));
       if (operator === "contains" || operator === "starts_with" || operator === "ends_with") {
-        const text = d.escapeLike(String(value));
-        return spell(d, col, "like", operator === "contains" ? `%${text}%` : operator === "starts_with" ? `${text}%` : `%${text}`, bind, fold);
+        const text = d.escapeLike(String(value)), pattern = operator === "contains" ? `%${text}%` : operator === "starts_with" ? `${text}%` : `%${text}`;
+        if (likeTooLong(pattern)) throw new APIError("BAD_REQUEST", { code: "INPUT_VALIDATION_FAILED", message: LIKE_TOO_LONG });
+        return spell(d, col, "like", pattern, bind, fold);
       }
       return spell(d, col, operator === "not_in" ? "notIn" : operator, value, bind, fold);
     };

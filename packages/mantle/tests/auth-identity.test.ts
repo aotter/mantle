@@ -97,6 +97,9 @@ test("native member keysets forward/backward, scoped search and Better Auth acce
     expect(prev.items.map(x => x.id)).toEqual(["m0", "m1"]);
     await expect(a.directory.listMembers({ search: "x", cursor: p.nextCursor! })).rejects.toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
     expect((await a.directory.listMembers({ search: "%" })).items.map(x => x.id)).toEqual(["m4"]);
+    // D1's 50-byte LIKE pattern cap (#1960), refused on every dialect: 48 characters fit, 49 or an escaped 25th '%' do not.
+    await a.directory.listMembers({ search: "x".repeat(48) });
+    for (const search of ["x".repeat(49), "%".repeat(25)]) await expect(a.directory.listMembers({ search })).rejects.toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
     await expect(a.directory.setUserRole("s", null)).rejects.toMatchObject({ code: "CONFLICT" });
     await expect(d1Identity(a.d1, a.auth, fixtureCaller({ ...admin, role: "owner", admin: false }), new Headers()).listMembers()).rejects.toMatchObject({ code: "AUTH_DENIED" });
     await expect(d1Identity(a.d1, a.auth, fixtureCaller({ ...admin, credential: "oauth" }), new Headers()).listMembers()).rejects.toMatchObject({ code: "AUTH_DENIED" });
