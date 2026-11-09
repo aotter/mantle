@@ -226,8 +226,9 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
       const offset = cursor === undefined ? 0 : Number(cursor);
       if (!Number.isInteger(n) || n < 1 || n > 500 || !Number.isSafeInteger(offset) || offset < 0 || (cursor !== undefined && String(offset) !== cursor)) throw bad("limit 1..500 and a cursor this list returned");
       const term = search ? d.escapeLike(search) : undefined;
-      const where = term ? `WHERE id ${d.like(true)} ${p(3)}${d.likeEscape} OR alt ${d.like(true)} ${p(3)}${d.likeEscape} OR caption ${d.like(true)} ${p(3)}${d.likeEscape}` : "";
-      const page = await driver.read( `SELECT ${COLUMNS} FROM media_assets ${where} ORDER BY created_at DESC, id DESC LIMIT ${p(1)} OFFSET ${p(2)}`, [n + 1, offset, ...(term ? [`%${term}%`] : [])]);
+      // The id matches exactly: a whole id plus `%…%` passes D1's 50-byte LIKE pattern limit ("pattern too complex").
+      const where = term ? `WHERE id = ${p(4)} OR alt ${d.like(true)} ${p(3)}${d.likeEscape} OR caption ${d.like(true)} ${p(3)}${d.likeEscape}` : "";
+      const page = await driver.read( `SELECT ${COLUMNS} FROM media_assets ${where} ORDER BY created_at DESC, id DESC LIMIT ${p(1)} OFFSET ${p(2)}`, [n + 1, offset, ...(term ? [`%${term}%`, search] : [])]);
       const rows = page.slice(0, n).map(assetOf);
       return { rows, ...(page.length > n ? { nextCursor: String(offset + n) } : {}) };
     },

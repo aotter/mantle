@@ -155,7 +155,7 @@ apply to responses the Worker builds. A path the Worker must answer stays out of
 exclusion.
 
 After a deploy the previous version's assets are gone, so an open Admin tab that loads
-a chunk from the old build gets a 404; Admin reloads the page once when that happens.
+a chunk from the old build gets a 404; Admin then offers a reload and warns that unsaved changes may be lost.
 With [gradual deployments](https://developers.cloudflare.com/workers/versions-and-deployments/gradual-deployments/version-affinity/),
 set a version key (`Cloudflare-Workers-Version-Key`) so a page and its chunks come from
 the same version. `none` keeps `index.html`

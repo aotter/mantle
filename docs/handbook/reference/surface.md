@@ -408,7 +408,7 @@ input and advertises read-only/destructive/open-world hints.
 | Tool | Does |
 |---|---|
 | `upload_media` | Upload one image, in two calls (below). |
-| `find_media` | Committed assets by `ids` (ids not found come back in `missing`), or newest first with `limit`, `cursor` and `search` (id, alt or caption). Read-only. |
+| `find_media` | Committed assets by `ids` (ids not found come back in `missing`), or newest first with `limit`, `cursor` and `search` (the exact id, or text in alt or caption). Read-only. |
 | `update_media` | Set `alt` or `caption` of `id`; an omitted field is unchanged, an empty string clears it. |
 | `delete_media` | Delete `id`'s objects and record (`destructiveHint`, so hosts confirm). A partial failure is retried with the same id. |
 
