@@ -176,15 +176,15 @@ refuses a statement larger than about 100 KB (`SQLITE_TOOBIG`), so a long `INSER
 generating statement does not. On SQLite and D1, a recursive CTE counts the rows:
 
 ```sql
--- seed.sql: 100,000 events, one hour apart
+-- seed.sql: 100,000 events, one hour apart (date-time fields are integer microseconds on SQLite and D1)
 INSERT INTO events (id, version, created_at, updated_at, title, startsAt, capacity, seats_taken, closed)
 WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 100000)
 SELECT 'seed-' || i, 1, 1767225600000000 + i, 1767225600000000 + i, 'Event ' || i,
-  strftime('%Y-%m-%dT%H:%M:%SZ', 1767225600 + i * 3600, 'unixepoch'), 50, 0, 0 FROM n;
+  (1767225600 + i * 3600) * 1000000, 50, 0, 0 FROM n;
 ```
 
 Apply it with `wrangler d1 execute DB --local --file seed.sql` (`DB` is the binding in `wrangler.jsonc`). On
-PostgreSQL write `FROM generate_series(1, 100000) AS i` instead of the CTE, use `now()` for the timestamps, and run
+PostgreSQL write `FROM generate_series(1, 100000) AS i` instead of the CTE, use `now() + i * interval '1 hour'` for the timestamps, and run
 it with `psql -f seed.sql`. Seed related tables the same way, choosing parent ids by `i` (`'seed-' || (i % 5000 + 1)`).
 
 Units differ by table: entry timestamps (`created_at`, `updated_at`, `published_at` and declared `date-time` fields)
