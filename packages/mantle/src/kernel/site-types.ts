@@ -110,7 +110,7 @@ export interface MediaLibrary {
   }>;
   /** An unknown or expired group is `MEDIA_UPLOAD_EXPIRED`; one another server created is `MEDIA_NOT_OWNED`, as is its asset id in the calls below. */
   commitUpload(uploadGroupId: string, request?: unknown): Promise<MediaAsset>;
-  /** Newest first; `search` matches id, alt and caption. */
+  /** Newest first; `search` matches the exact id, or text in alt or caption. */
   list(query: { readonly limit?: number; readonly cursor?: string; readonly search?: string }): Promise<{ readonly rows: readonly MediaAsset[]; readonly nextCursor?: string }>;
   get(id: string): Promise<MediaAsset>;
   /** `{ alt?, caption? }`: an omitted field is unchanged, an empty string clears it. */
