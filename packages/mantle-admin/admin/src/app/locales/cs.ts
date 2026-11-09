@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "Výstupní schéma",
     "docs.readOnly": "Pouze pro čtení",
     "docs.noEntries": "Pro toto rozhraní nejsou deklarovány žádné vstupní body.",
+    "docs.mcpNotMounted": "Je deklarováno {count} nástrojů MCP, ale tento hostitel nepřipojuje žádný koncový bod MCP, takže je zde nelze volat.",
     "developer.graph.title": "Graf Manifest",
     "developer.graph.details": "Podrobnosti položky",
     "developer.graph.openModel": "Otevřít v datovém modelu",

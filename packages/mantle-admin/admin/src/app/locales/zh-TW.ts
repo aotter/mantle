@@ -342,6 +342,7 @@ export default {
     "docs.outputSchema": "輸出格式",
     "docs.readOnly": "唯讀",
     "docs.noEntries": "此介面沒有宣告任何入口。",
+    "docs.mcpNotMounted": "已宣告 {count} 個 MCP 工具，但此主機沒有掛載 MCP 端點，因此目前無法在這裡呼叫。",
     "logic.surface": "服務範圍",
     "logic.hooks": "事件",
     "developer.graph.title": "Manifest 關係圖",

@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "Schema di output",
     "docs.readOnly": "Sola lettura",
     "docs.noEntries": "Non sono dichiarati punti di ingresso per questa interfaccia.",
+    "docs.mcpNotMounted": "Sono dichiarati {count} strumenti MCP, ma questo host non monta alcun endpoint MCP, quindi qui non è possibile chiamarli.",
     "developer.graph.title": "Grafo del Manifest",
     "developer.graph.details": "Dettagli elemento",
     "developer.graph.openModel": "Apri nel modello dati",

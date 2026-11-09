@@ -278,6 +278,7 @@ export default {
     "docs.outputSchema": "输出格式",
     "docs.readOnly": "只读",
     "docs.noEntries": "此接口没有声明任何入口。",
+    "docs.mcpNotMounted": "已声明 {count} 个 MCP 工具，但此主机没有挂载 MCP 端点，因此目前无法在这里调用。",
     "logic.surface": "服务范围",
     "logic.hooks": "事件",
     "developer.graph.title": "Manifest 关系图",

@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "Lược đồ đầu ra",
     "docs.readOnly": "Chỉ đọc",
     "docs.noEntries": "Chưa khai báo điểm vào nào cho giao diện này.",
+    "docs.mcpNotMounted": "Đã khai báo {count} công cụ MCP, nhưng máy chủ này không gắn điểm cuối MCP nào nên không thể gọi chúng tại đây.",
     "developer.graph.title": "Đồ thị Manifest",
     "developer.graph.details": "Chi tiết mục",
     "developer.graph.openModel": "Mở trong mô hình dữ liệu",

@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "طرحواره خروجی",
     "docs.readOnly": "فقط خواندنی",
     "docs.noEntries": "هیچ نقطه ورودی برای این رابط تعریف نشده است.",
+    "docs.mcpNotMounted": "{count} ابزار MCP تعریف شده است، اما این میزبان هیچ نقطه پایانی MCP ارائه نمی‌کند، بنابراین اینجا قابل فراخوانی نیستند.",
     "developer.graph.title": "نمودار Manifest",
     "developer.graph.details": "جزئیات مورد",
     "developer.graph.openModel": "باز کردن در مدل داده",

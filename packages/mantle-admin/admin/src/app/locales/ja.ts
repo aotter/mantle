@@ -157,6 +157,7 @@ export default {
     "docs.outputSchema": "出力スキーマ",
     "docs.readOnly": "読み取り専用",
     "docs.noEntries": "このインターフェースにはエントリーポイントが宣言されていません。",
+    "docs.mcpNotMounted": "{count} 個の MCP ツールが宣言されていますが、このホストには MCP エンドポイントがマウントされていないため、ここでは呼び出せません。",
     "developer.graph.title": "Manifest グラフ",
     "developer.graph.details": "項目の詳細",
     "developer.erd.display": "図の表示",

@@ -37,6 +37,7 @@ export function InterfaceDocsView(): React.ReactElement {
   const httpTriggers = http.filter((operation) => operation.kind === "procedure" && matches([operation.method, operation.path, operation.name, operation.description, operation.target]));
   const matchedCallable = callable.filter((capability) => matches([capability.name, capability.description, capability.target, capability.trigger, capability.surface, capability.audience]));
   const filteredCallable = matchedCallable.filter((capability) => site.data?.mcpEndpoints?.[capability.surface]);
+  const unmountedCount = matchedCallable.length - filteredCallable.length;
   return (
     <section className="h-full min-h-0 overflow-y-auto" aria-label={t(language, "docs.title")}>
       {page === "api" ? (
@@ -54,7 +55,8 @@ export function InterfaceDocsView(): React.ReactElement {
               const entries = filteredCallable.filter((capability) => capability.surface === surface);
               return entries.length ? <section key={surface} className="space-y-3"><h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{surface}</h2><OperationList>{entries.map((capability) => <CapabilityOperation key={`${surface}:${capability.name}`} capability={capability} />)}</OperationList></section> : null;
             })}
-            {!site.isLoading && !site.isError && !filteredCallable.length ? <EmptyDocs /> : null}
+            {/* The host decides which MCP surfaces it mounts; declared tools on none of them get a notice, not "nothing declared". */}
+            {!site.isLoading && !site.isError && !filteredCallable.length ? (unmountedCount ? <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">{t(language, "docs.mcpNotMounted", { count: String(unmountedCount) })}</p> : <EmptyDocs />) : null}
           </DocSection>
       ) : null}
       {page === "webmcp" ? (

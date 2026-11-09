@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "Uitvoerschema",
     "docs.readOnly": "Alleen-lezen",
     "docs.noEntries": "Voor deze interface zijn geen toegangspunten gedeclareerd.",
+    "docs.mcpNotMounted": "Er zijn {count} MCP-tools gedeclareerd, maar deze host koppelt geen MCP-endpoint, dus hier kan er geen worden aangeroepen.",
     "developer.graph.title": "Manifest-grafiek",
     "developer.graph.details": "Itemdetails",
     "developer.graph.openModel": "Openen in datamodel",

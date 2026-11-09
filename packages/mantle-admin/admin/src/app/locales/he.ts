@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "סכמת פלט",
     "docs.readOnly": "קריאה בלבד",
     "docs.noEntries": "לא הוגדרו נקודות כניסה לממשק זה.",
+    "docs.mcpNotMounted": "הוגדרו {count} כלי MCP, אבל המארח הזה לא מספק נקודת קצה של MCP, ולכן אי אפשר לקרוא להם כאן.",
     "developer.graph.title": "גרף Manifest",
     "developer.graph.details": "פרטי פריט",
     "developer.graph.openModel": "פתיחה במודל הנתונים",

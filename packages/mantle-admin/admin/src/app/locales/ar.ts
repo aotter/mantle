@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "مخطط الإخراج",
     "docs.readOnly": "للقراءة فقط",
     "docs.noEntries": "لم يتم تعريف نقاط دخول لهذه الواجهة.",
+    "docs.mcpNotMounted": "تم تعريف {count} من أدوات MCP، لكن هذا المضيف لا يوفّر أي نقطة نهاية MCP، لذا لا يمكن استدعاؤها هنا.",
     "developer.graph.title": "رسم Manifest البياني",
     "developer.graph.details": "تفاصيل العنصر",
     "developer.graph.openModel": "فتح في نموذج البيانات",

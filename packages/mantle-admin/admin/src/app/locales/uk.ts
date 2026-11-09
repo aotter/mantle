@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "Схема виходу",
     "docs.readOnly": "Лише читання",
     "docs.noEntries": "Для цього інтерфейсу точки входу не оголошено.",
+    "docs.mcpNotMounted": "Оголошено інструментів MCP: {count}, але цей хост не підключає кінцеву точку MCP, тому викликати їх тут не можна.",
     "developer.graph.title": "Граф Manifest",
     "developer.graph.details": "Відомості про елемент",
     "developer.graph.openModel": "Відкрити в моделі даних",

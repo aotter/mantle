@@ -134,6 +134,7 @@ export default {
     "docs.outputSchema": "Ausgabeschema",
     "docs.readOnly": "Schreibgeschützt",
     "docs.noEntries": "Für diese Schnittstelle sind keine Einstiegspunkte deklariert.",
+    "docs.mcpNotMounted": "{count} MCP-Tools sind deklariert, aber dieser Host stellt keinen MCP-Endpunkt bereit; hier kann keines aufgerufen werden.",
     "developer.graph.title": "Manifest-Graph",
     "developer.graph.details": "Elementdetails",
     "developer.graph.openModel": "Im Datenmodell öffnen",
