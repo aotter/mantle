@@ -15,7 +15,7 @@ export interface R2Bucket {
 }
 /** `aws4fetch`'s `AwsClient` has this shape. */
 export interface S3Signer {
-  sign(url: string, init: { method: "PUT"; aws: { signQuery: true; service: "s3" } }): Promise<{ url: string }>;
+  sign(url: string, init: { method: "PUT" | "GET"; aws: { signQuery: true; service: "s3" } }): Promise<{ url: string }>;
 }
 
 export interface R2MediaStorageOptions {
@@ -23,7 +23,8 @@ export interface R2MediaStorageOptions {
   readonly signer: S3Signer;
   /** This bucket's S3 endpoint, e.g. `https://<bucket>.<account>.r2.cloudflarestorage.com`. */
   readonly endpoint: string;
-  readonly publicBase: string;
+  /** The bucket's public URL, or `null` for a private bucket: its variants then get no `publicUrl`, and reads go through `signRead`. */
+  readonly publicBase: string | null;
 }
 
 const EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/avif": "avif", "image/gif": "gif" };
@@ -33,20 +34,23 @@ const ext = (mimeType: string) => EXT[mimeType] ?? "bin";
 const cancel = (o?: { body: ReadableStream } | null) => o?.body.cancel().catch(() => undefined);
 
 export function r2MediaStorage({ bucket, signer, endpoint, publicBase }: R2MediaStorageOptions): MediaStorage {
-  if (!publicBase) throw fail("MEDIA_NOT_CONFIGURED", "R2 media storage needs publicBase, the bucket's public URL");
-  const base = publicBase.replace(/\/+$/, "");
+  if (!publicBase && publicBase !== null) throw fail("MEDIA_NOT_CONFIGURED", "R2 media storage needs publicBase, the bucket's public URL, or null for a private bucket");
+  const base = publicBase?.replace(/\/+$/, "");
   const s3 = endpoint.replace(/\/+$/, "");
+  const signed = async (method: "PUT" | "GET", storageKey: string, seconds: number) => {
+    const target = new URL(`${s3}/${storageKey}`);
+    target.searchParams.set("X-Amz-Expires", String(seconds));
+    return (await signer.sign(target.href, { method, aws: { signQuery: true, service: "s3" } })).url;
+  };
   return {
+    uploadOrigin: new URL(s3).origin,
     async createUpload({ uploadGroupId, purpose, variants, now, expiresAt }) {
       const ttl = Math.max(60, Math.floor((expiresAt - now) / 1000));
       return {
         capabilities: await Promise.all(variants.map(async (v) => {
           // server-made keys, one directory per asset so its variants list together
           const storageKey = `${UPLOADS}${purpose}/${uploadGroupId}/${v.role}.${ext(v.mimeType)}`;
-          const target = new URL(`${s3}/${storageKey}`);
-          target.searchParams.set("X-Amz-Expires", String(ttl));
-          const { url } = await signer.sign(target.href, { method: "PUT", aws: { signQuery: true, service: "s3" } });
-          return { mimeType: v.mimeType, role: v.role, method: "PUT" as const, uploadUrl: url, storageKey, requiredHeaders: { "Content-Type": v.mimeType } };
+          return { mimeType: v.mimeType, role: v.role, method: "PUT" as const, uploadUrl: await signed("PUT", storageKey, ttl), storageKey, requiredHeaders: { "Content-Type": v.mimeType } };
         })),
       };
     },
@@ -74,7 +78,7 @@ export function r2MediaStorage({ bucket, signer, endpoint, publicBase }: R2Media
             throw fail("MEDIA_OBJECT_NOT_FOUND", `variant ${spec.role} of '${uploadGroupId}' changed during commit`);
           }
           // Remember a possibly published key before awaiting put: a failed response may still have stored it.
-          out.push({ mimeType: spec.mimeType, publicUrl: `${base}/${key}`, storageKey: key, byteSize: o.size, role: spec.role });
+          out.push({ mimeType: spec.mimeType, ...(base === undefined ? {} : { publicUrl: `${base}/${key}` }), storageKey: key, byteSize: o.size, role: spec.role });
           try {
             await bucket.put(key, o.body, {
               httpMetadata: { contentType: spec.mimeType },
@@ -92,5 +96,6 @@ export function r2MediaStorage({ bucket, signer, endpoint, publicBase }: R2Media
     },
 
     deleteObject: ({ storageKey }) => bucket.delete(storageKey),
+    signRead: ({ storageKey, expiresIn }) => signed("GET", storageKey, expiresIn),
   };
 }

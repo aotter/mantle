@@ -140,11 +140,11 @@ test("/mcp/admin over the official client: publishing and media tools carry mark
   for(const mode of eras){
    const client=await connect(handle,mode,"/mcp/admin",{cookie:"fixture=1",origin:"https://app.test"});
    const {tools}=await client.listTools(),version=(name:string)=>/\(tool version ([0-9a-f]{8})\)$/.exec(tools.find(t=>t.name===name)!.description!)![1];
-   expect(tools.map(t=>t.name)).toEqual(expect.arrayContaining(["publish_posts","archive_posts","get_media_upload_policy","create_media_upload"]));
+   expect(tools.map(t=>t.name)).toEqual(expect.arrayContaining(["publish_posts","archive_posts","upload_media","find_media","get_media_upload_policy","create_media_upload"]));
    expectListedHashes(tools);
-   const policy=await client.callTool({name:"get_media_upload_policy",arguments:{}});
-   expect(policy.isError).toBeFalsy();expect((policy.content as {type:string;text:string}[])[1]).toEqual({type:"text",text:`tool version ${version("get_media_upload_policy")}`});
-   for(const [name,args] of [["publish_posts",{id:"",expectedVersion:1}],["create_media_upload",{filename:"x"}]] as const){
+   const policy=await client.callTool({name:"upload_media",arguments:{purpose:"cover"}});
+   expect(policy.isError).toBeFalsy();expect((policy.content as {type:string;text:string}[])[1]).toEqual({type:"text",text:`tool version ${version("upload_media")}`});
+   for(const [name,args] of [["publish_posts",{id:"",expectedVersion:1}],["create_media_upload",{filename:"x"}],["upload_media",{purpose:"other"}]] as const){
     const bad=await client.callTool({name,arguments:args});expect(bad.isError).toBe(true);
     const about=(bad.content as {text:string}[])[1]!.text;expect(about).toStartWith(`tool version ${version(name)}; input schema `);
     expect(JSON.parse(about.slice(about.indexOf("{")))).toEqual(tools.find(t=>t.name===name)!.inputSchema);

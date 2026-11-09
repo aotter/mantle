@@ -150,6 +150,7 @@ export const DIAGNOSTIC_CODES = [
   "MEDIA_VARIANT_SIZE_EXCEEDED",
   "MEDIA_VARIANTS_SUSPICIOUS_SIZE",
   "MEDIA_ASSET_NOT_FOUND",
+  "MEDIA_NOT_OWNED",
 ] as const;
 
 export type DiagnosticCode = (typeof DIAGNOSTIC_CODES)[number];

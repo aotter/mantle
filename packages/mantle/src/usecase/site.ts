@@ -2,6 +2,8 @@
 import { assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired, type SiteDefaults } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
 import { driverFor, isSqlite, q } from "../domain/entry.js";
+/** The site's media purposes with each `required` slot expanded to its comma-separated MIME types, as the library checks them. */
+export const mediaPolicies = (defaults: SiteDefaults | undefined) => defaults?.media?.purposes?.map(p=>({...p,required:expandPolicyRequired(p.required).map(slot=>slot.join(","))})) ?? [];
 export function emitSite(target: Target, defaults: SiteDefaults | undefined, refuse: (path:string,message:string)=>void, schemaNames: readonly string[]): Record<string,string> {
   if (!defaults) return {};
   try { assertSiteDefaultsCanonical(defaults); } catch (error) { refuse("site",String((error as Error).message)); return {}; }
@@ -9,7 +11,7 @@ export function emitSite(target: Target, defaults: SiteDefaults | undefined, ref
   if (new Set(defaults.media?.purposes?.map(p=>p.name)).size !== (defaults.media?.purposes?.length ?? 0)) refuse("site/media/purposes", "Media purpose names must be unique.");
   defaults = {...defaults, ...(defaults.locales ? {locales:canonicalizeLocaleList(defaults.locales).valid} : {})};
   const pg = !isSqlite(target), driver = driverFor(target);
-  const policies = defaults.media?.purposes?.map(p=>({...p,required:expandPolicyRequired(p.required).map(slot=>slot.join(","))})) ?? [];
+  const policies = mediaPolicies(defaults);
   const seed = (["brand","title","description"] as const).filter(key=>defaults![key]).map(key=>`INSERT INTO site_config (key,value) VALUES ('${key}','${defaults![key]!.replaceAll("'","''")}') ON CONFLICT(key) DO NOTHING;`).join("\n");
   const root = "@aotter/mantle";
   return {"site.ts":`import { createSite } from "${root}/site";
@@ -18,7 +20,8 @@ import type { ${pg ? "Postgres" : "Handle"} as Database } from "${root}/${pg ? "
 import * as DRIVER from "${root}/driver/${driver}";
 import { param, escapeLike, likeEscape, like } from "${root}/dialect/${pg ? "postgres" : "sqlite"}";
 export const siteDefaults = ${q(defaults)} as const;
-const policies = ${q(policies)} as const;
+/** The site's media purposes, expanded; the library and upload_media check against them. */
+export const policies = ${q(policies)} as const;
 export function site(db: Database, caller: Caller) { return createSite({read:(sql,values)=>DRIVER.read(db,sql,values),write:steps=>DRIVER.procedure(db,steps,"site"),definitive:DRIVER.definitive},{param,escapeLike,likeEscape,like},caller,siteDefaults,policies); }
 `,"site-seed.sql": seed + "\n", "site-schema.sql":`CREATE TABLE site_config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE media_assets (id TEXT PRIMARY KEY, created_at ${pg?"BIGINT":"INTEGER"} NOT NULL, owner_id TEXT, alt TEXT, caption TEXT, variants TEXT NOT NULL, metadata TEXT);

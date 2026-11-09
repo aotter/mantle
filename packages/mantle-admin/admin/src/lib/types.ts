@@ -171,13 +171,6 @@ export interface AdminUser {
   userId?: string;
 }
 
-/** Public sign-in capabilities returned by `GET /api/auth/methods`. */
-export type AuthMethodInfo =
-  | { kind: "email-otp" }
-  | { kind: "magic-link" }
-  | { kind: "social"; provider: string }
-  | { kind: "oauth"; providerId: string; displayName?: string };
-
 /** Row from `GET /admin/api/admin` (admin-only). `createdAt` arrives
  *  as an ISO string over the wire. `emailVerified: false` with no
  *  `githubLogin` marks a pending invitation nobody has signed in to. */
@@ -259,11 +252,13 @@ export interface MediaPurposePolicy {
   name: string;
   required: string[];
   maxBytes: Record<string, number>;
+  visibility?: "public" | "private";
 }
 
 export interface MediaAssetVariant {
   mimeType: string;
-  publicUrl: string;
+  /** Absent on a private asset. */
+  publicUrl?: string;
   storageKey?: string;
   byteSize?: number;
   role: "primary" | "alternate" | "fallback";

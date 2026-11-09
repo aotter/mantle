@@ -73,6 +73,13 @@ const uploadTarget: Tool<unknown> = {
 };
 ```
 
+`run` also receives `{ apps }` after `handlers`: `apps` is true when the
+`tools/call` request declares MCP Apps support and an App resource renders the
+tool, so a tool can keep a secret in
+the result `_meta` for an App and return it in the data for a client that has
+none (`upload_media` does this with its targets). `callTool` and `callToolLazy`
+take it as an optional last argument (default `{ apps: false }`).
+
 `callTool` and `callToolLazy` return the wrapper itself, `{ data, _meta }`.
 A caller that forwards a result to a model, such as an application's own agent,
 must forward only `data` and drop `_meta`, or the signed URL leaks through that
@@ -307,6 +314,63 @@ full screen, a row action, and a link. Check too that the host advertises
 `hostCapabilities.serverTools`; without it the App is read-only. The automated interoperability test
 uses the official `AppBridge`; your app runs its generated version ([Run the compatibility test](#run-the-compatibility-test)).
 
+## The upload card
+
+`upload_media` on `/mcp/admin` can open an upload card, an MCP App Admin ships
+prebuilt. Register it beside the Admin App, with the same `media` function you
+pass `mcp(...)`:
+
+```ts
+import { adminMcpApps, mediaUploadCard } from '@aotter/mantle-admin/mcp';
+import type { MediaStorage } from '@aotter/mantle/site';
+import { mcp } from './generated/mcp.js';
+import { mcpAppCatalogues } from './generated/admin-descriptors.js';
+
+declare const options: Parameters<typeof mcp>[0];
+declare function storage(env: unknown): MediaStorage; // e.g. r2MediaStorage(...)
+
+const handler = mcp({ ...options, media: storage, apps: { admin: [
+  adminMcpApps({ catalogue: mcpAppCatalogues.admin }),
+  mediaUploadCard({ media: storage }),
+] } });
+```
+
+The card is `ui://mantle-admin/upload` and renders `upload_media`. The person
+picks an image (and may type alt text); the card reads the purposes with
+`upload_media`, calls it with the file's metadata, PUTs the file straight to the
+target with progress, calls `upload_media` again with the `uploadId`, and sends
+`ui/message` with the asset id (or `ui/update-model-context` when the host takes
+no messages). The bytes never pass through MCP or the host. The card uploads the
+original file as the single variant a purpose takes
+([ADR-0017](../../adr/0017-media-multi-variant-agent-side-optimization.md)); a
+purpose with several variant slots needs an agent that prepares them, and the
+card says so. It needs the host's `serverTools`.
+
+The targets reach the card in the result `_meta` (`net.aotter.mantle/upload`)
+when the request declares MCP Apps support and the card is registered;
+otherwise they are in the result,
+for an agent that PUTs them itself. The card reads either.
+
+On `resources/read` the card declares the storage origin as
+`_meta.ui.csp.connectDomains`. It is the storage's `uploadOrigin`:
+`r2MediaStorage` sets it to the origin of its `endpoint`; a custom
+`MediaStorage` sets it to the origin its `uploadUrl`s PUT to. Without it the
+read fails with a logged error.
+
+The bucket must answer the card's CORS preflight. Allow `PUT` with the
+`Content-Type` header from the origin the host serves Apps from, and key the
+rule on `Origin`: the request carries no cookies, and some clients (iOS) send no
+`Referer`. A sandboxed frame without its own origin sends `Origin: null`. For
+example, as R2 CORS JSON:
+
+```json
+[{ "AllowedOrigins": ["https://your-host-sandbox.example"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
+```
+
+Use the sandbox origin each host documents for its Apps (a host that honours
+`_meta.ui.domain` serves the App from that origin; `mediaUploadCard` passes
+`domain` through).
+
 ## Customising Admin for MCP hosts
 
 `mantle bundle` builds the Admin MCP App from the same entry as the browser Admin
@@ -319,7 +383,7 @@ Tailwind classes and CSS. Browser-only record/input overrides do not mount there
 
 | Slot | Browser | MCP host |
 | --- | --- | --- |
-| `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `list.actions:<schema>` | yes | never: the App has no shell, sidebar or router |
+| `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `SignIn`, `list.actions:<schema>` | yes | never: the App has no shell, sidebar or router |
 | `cell:view:<view>.<column>` | yes | yes: each column of the rows the host's View tool returned |
 | `cell:<schema>.<field>`, `input:<schema>.<field>`, `record.aside:<schema>`, `record.actions:<schema>`, `RecordView` | yes | never: browser-only record/collection slots; their `surface` is `"browser"` (`mantle bundle` reminds you) |
 | `pages[]`, `nav`, `home`, nav badges | yes | only a page that declares `mcp` (below) |

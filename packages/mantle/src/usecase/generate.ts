@@ -17,7 +17,7 @@ import { refuseDeclarations } from "./refusals.js";
 import { emitHandlers } from "./handlers.js";
 import { emitAdminDescriptors } from "./adminDescriptors.js";
 import { emitAdminClient } from "./adminClient.js";
-import { emitSite } from "./site.js";
+import { emitSite, mediaPolicies } from "./site.js";
 import { emitTranslations } from "./translations.js";
 import { emitAdminBindings } from "./adminBindings.js";
 import { emitRest } from "./rest.js";
@@ -134,7 +134,7 @@ export function generate(input: GenerateInput): GenerateResult {
   emitTtl(plan, isSqlite, declarations, procedures, entries, refuse);
   emitPublishing(plan, isSqlite, declarations, procedures, entries, values, refuse, input.locks);
   const stores = emitStores(plan.schemas, isSqlite, newId, refuse, hasHandlers, input.locks);
-  const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target, input.description), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, input.description, refuse, !!site), ...emitAdminDescriptors({plan,admin},diagnostics), ...emitAdminBindings(input,refuse), ...(admin ? emitAdminClient(plan, typeOf) : {}), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
+  const surfaces = { ...emitPaging(plan, lowered, target, refuse, paging), ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true), ...emitValidation(plan, refuse), ...emitRest(plan, lowered, target, input.description), ...emitWeb(plan, lowered, target), ...emitMcp(plan, lowered, target, input.description, refuse, site ? mediaPolicies(site) : undefined), ...emitAdminDescriptors({plan,admin},diagnostics), ...emitAdminBindings(input,refuse), ...(admin ? emitAdminClient(plan, typeOf) : {}), ...emitSite(target, site, refuse, Object.keys(plan.schemas)), ...emitTranslations(plan,target) };
   if (diagnostics.length) return { ok: false, diagnostics };
   const storeProcedures = hasHandlers ? "storeProcedures" : "procedures";
   const code = [...(declarations.some(d => d.includes("  await _fresh(caller, ")) ? ['const _fresh = (caller: Caller, path: string) => "authenticatedAs" in caller && caller.authenticatedAs === "snapshot" ? import("@aotter/mantle/host-caller").then(m => m.checkFresh(caller, false, path)) : undefined;'] : []), ...(Object.keys(plan.access?.userFields ?? {}).length ? [`export const userFields = ${q(plan.access!.userFields)} as const;`] : []), ...declarations, `export const views = { ${views.join(", ")} };`, `export const procedures = { ${procedures.join(", ")} };`, ...(stores ? [

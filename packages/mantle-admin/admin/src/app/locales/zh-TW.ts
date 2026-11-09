@@ -15,7 +15,7 @@ export default {
     "webmcp.copied": "已複製",
     "webmcp.title": "與 AI agent 一起操作",
     "webmcp.description": "此瀏覽器已支援 WebMCP。AI agent 可依你目前的後台權限操作工具、上傳圖片及切換頁面。複製下方提示詞給 agent 即可開始。",
-    "webmcp.prompt": "請使用這個 Mantle Admin 頁面的 WebMCP 工具。先呼叫 admin_get_context，說明你可以協助我做什麼，再詢問我的目標。使用可用的 管理工具，並顯示相關頁面。更新前先讀取目前版本；版本衝突時不要自動重試。圖片請使用 create_media_upload，直接上傳到回傳的 URL，再呼叫 commit_media_upload。",
+    "webmcp.prompt": "請使用這個 Mantle Admin 頁面的 WebMCP 工具。先呼叫 admin_get_context，說明你可以協助我做什麼，再詢問我的目標。使用可用的 管理工具，並顯示相關頁面。更新前先讀取目前版本；版本衝突時不要自動重試。圖片請呼叫 upload_media，將每個版本直接 PUT 到回傳的目標，再以 uploadId 呼叫一次 upload_media。",
     "webmcp.copy": "複製提示詞",
     "webmcp.copyFailed": "無法複製，請選取提示詞後手動複製。",
 

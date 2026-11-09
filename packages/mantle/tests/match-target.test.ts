@@ -76,6 +76,8 @@ test('REST precedence is the router order, not manifest order or parameter count
   expect(id('POST', '/api//items/x')).toBe(null);
   expect(matchTarget(describe, { surface: 'mcp', tool: 'item' })?.id).toBe('procedure:item');
   expect(matchTarget(describe, { surface: 'mcp', tool: 'item', path: '/mcp' })).toBe(null);
+  expect(matchTarget(describe, { surface: 'mcp', tool: 'upload_media', path: '/mcp/admin' })?.id).toBe('admin:tool:upload_media');
+  expect(matchTarget(describe, { surface: 'mcp', tool: 'find_media', path: '/mcp/admin' })?.id).toBe('admin:tool:find_media');
   expect(matchTarget(describe, { surface: 'mcp', tool: 'create_media_upload', path: '/mcp/admin' })?.id).toBe('admin:tool:create_media_upload');
   expect(matchTarget(describe, { surface: 'admin', method: 'GET', path: '/admin/api/entries/export' })?.id).toBe('admin:GET /entries/export');
   expect(matchTarget(describe, { surface: 'admin', method: 'GET', path: '/admin/api/entries/abc' })?.id).toBe('admin:GET /entries/:id');
