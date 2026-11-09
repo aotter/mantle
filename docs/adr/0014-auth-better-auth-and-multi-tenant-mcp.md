@@ -900,8 +900,8 @@ Authorization needs a `jwt-bearer` (ID-JAG) grant whose issuer and JWKS belong
 to one enterprise IdP; that is adopter configuration, not an SDK default, and
 Core has no business knowing the issuer. Curating a first-class
 `enterpriseIdp` field would put an IdP contract inside Core and still forward
-it verbatim underneath. The reference implementation lives outside Core
-(`@aotterclam/id-jag`).
+it verbatim underneath. An implementation lives outside Core, in the
+adopter's own package.
 
 Boundaries that stay:
 
