@@ -91,6 +91,11 @@ and Admin routers for every route of the example apps:
   limit the match to that endpoint's tools. Without a path, a name that the two
   endpoints map to different targets matches nothing.
 
+A host rule keyed on a request (for example "these targets need a step-up")
+must key on the target `matchTarget` returns, or apply the same normalisation
+itself. A rule on the raw pathname can be bypassed by an equivalent spelling
+such as `/api/views/%6Frders` or a trailing slash.
+
 Media tools (`admin:tool:<name>`) and the optional Admin developer and
 statistics routes match even when the application does not mount them; the
 application then answers `NOT_FOUND`. Routes and tools the application adds
