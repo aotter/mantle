@@ -120,7 +120,7 @@ Auth's resource client accepts an in-process key source.
 Better Auth table/field names. Every operation requires a current admin cookie session.
 
 Methods: `listUsers()` lists all admin; `listMembers({search,limit,cursor,cursorDirection})` searches id/name/email
-(literal LIKE), pages 1–100 and supports forward/backward opaque cursors bound to normalized search;
+(literal LIKE, at most 48 characters: D1 caps a LIKE pattern at 50 bytes), pages 1–100 and supports forward/backward opaque cursors bound to normalized search;
 `setUserRole(id, "admin" | null)`, `inviteUser(email)`, `revokeInvite(id)`, `deleteUser(id)`.
 Only identity fields reach outputs, never tokens/internal columns. Self-demotion/deletion is refused. Inviting an existing
 member grants admin only after email verification; an unverified existing account is refused. Revocation deletes only an unverified admin invitation with no linked account. Deletion clears OTP

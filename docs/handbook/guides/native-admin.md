@@ -100,7 +100,7 @@ wrote through the app's own Views with HTTP Triggers (`mantle help trigger`).
 | `GET /view-batch?names=a,b` | One to 20 comma-separated admin View names, deduplicated; reads the first row of each as the caller, with the single route's checks (`requires`, scope, TTL, `authorize`), and returns `{ views: { <name>: { rows } \| { unavailable: true } \| { error: true } } }`. A refused View and a missing one are the same `{ unavailable: true }`; a View that cannot answer with no input is `{ error: true }`. Neither fails the batch. Empty or more than 20 names is a 400, before the database is acquired. |
 | `GET /me` | Returns `{ userId, role, admin, login, image }` for the signed-in caller. |
 | `GET /admin` | Administrators and pending invitations, plus `adminRoles` (mounted with `identity`). |
-| `GET /members?search=&limit=&cursor=&direction=` | Pages members (1–100), searching id, name and email. |
+| `GET /members?search=&limit=&cursor=&direction=` | Pages members (1–100), searching id, name and email; a search longer than 48 characters is `INPUT_VALIDATION_FAILED`. |
 | `PATCH /admin/{id}/role` | Body `{ role }`: an admin role name grants Admin, `null` removes it. You cannot change your own role. |
 | `POST /admin/invitations` | Body `{ email, role }`; invites an administrator by email. Returns `{ ok, userId, emailSent }`. |
 | `DELETE /admin/invitations/{id}` | Revokes an invitation nobody has signed in to yet (otherwise 409). |

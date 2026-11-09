@@ -4,6 +4,7 @@ import type { Bound } from "./binds.js";
 import type { Dialect } from "./dialect/common.js";
 import type { MediaAsset, MediaLibrary, MediaStorage, MediaStorageOption, MediaVariantRole, MediaPurposePolicy } from "./site-types.js";
 import { withResultMeta } from "./result-meta.js";
+import { likeTooLong } from "./where.js";
 export interface MediaDatabase { read(sql: string, binds: unknown[]): Row[] | PromiseLike<Row[]>; write(steps: readonly Bound[]): Promise<Row[][]>; /** Positive native evidence that the write rolled back; absence is uncertain. */ definitive?(error: unknown): boolean }
 const P = "media";
 /** HTTP status of each media code: a custom MediaStorage may throw them without one. */
@@ -225,10 +226,11 @@ export function mediaLibrary(driver: MediaDatabase, d: Pick<Dialect, "param" | "
       const n = limit ?? 50;
       const offset = cursor === undefined ? 0 : Number(cursor);
       if (!Number.isInteger(n) || n < 1 || n > 500 || !Number.isSafeInteger(offset) || offset < 0 || (cursor !== undefined && String(offset) !== cursor)) throw bad("limit 1..500 and a cursor this list returned");
-      const term = search ? d.escapeLike(search) : undefined;
-      // The id matches exactly: a whole id plus `%…%` passes D1's 50-byte LIKE pattern limit ("pattern too complex").
-      const where = term ? `WHERE id = ${p(4)} OR alt ${d.like(true)} ${p(3)}${d.likeEscape} OR caption ${d.like(true)} ${p(3)}${d.likeEscape}` : "";
-      const page = await driver.read( `SELECT ${COLUMNS} FROM media_assets ${where} ORDER BY created_at DESC, id DESC LIMIT ${p(1)} OFFSET ${p(2)}`, [n + 1, offset, ...(term ? [`%${term}%`, search] : [])]);
+      // The id matches exactly; alt and caption match a substring. D1 caps a LIKE pattern at 50 bytes ("pattern too
+      // complex"), so a longer search, such as a whole id, matches the id alone, on every dialect.
+      const pattern = search ? `%${d.escapeLike(search)}%` : "", like = pattern && !likeTooLong(pattern) ? pattern : undefined;
+      const where = !search ? "" : like ? `WHERE id = ${p(4)} OR alt ${d.like(true)} ${p(3)}${d.likeEscape} OR caption ${d.like(true)} ${p(3)}${d.likeEscape}` : `WHERE id = ${p(3)}`;
+      const page = await driver.read( `SELECT ${COLUMNS} FROM media_assets ${where} ORDER BY created_at DESC, id DESC LIMIT ${p(1)} OFFSET ${p(2)}`, [n + 1, offset, ...(like ? [like, search] : search ? [search] : [])]);
       const rows = page.slice(0, n).map(assetOf);
       return { rows, ...(page.length > n ? { nextCursor: String(offset + n) } : {}) };
     },

@@ -8,6 +8,7 @@ import { adminLayerOf, rolesFrom } from "../kernel/user-caller.js";
 import * as sqlite from "../kernel/dialect/sqlite.js";
 import * as postgres from "../kernel/dialect/postgres.js";
 import type { Dialect } from "../kernel/dialect/common.js";
+import { likeTooLong, LIKE_TOO_LONG } from "../kernel/where.js";
 import { read as d1Read, type Reader } from "../kernel/driver/d1.js";
 import { read as pgRead, transaction } from "../kernel/driver/postgres.js";
 type User = { id: string; email: string; name: string; role?: string | null; githubLogin?: string | null; emailVerified: boolean | number; createdAt: string | Date };
@@ -101,7 +102,9 @@ function directory(auth: IdentityAuth, _caller: Caller, headers: Headers, d: Dia
             const values: unknown[] = [], bind = (v: unknown) => (values.push(v), d.param(values.length));
             const conditions = [`NOT ${privileged}`];
             if (term) {
-                const like = bind(`%${d.escapeLike(term)}%`);
+                const pattern = `%${d.escapeLike(term)}%`;
+                if (likeTooLong(pattern)) throw invalid(LIKE_TOO_LONG);
+                const like = bind(pattern);
                 conditions.push(`(${[`CAST(${col("id")} AS text)`, col("name"), col("email")].map(c => `${c} ${d.like(true)} ${like}${d.likeEscape}`).join(" OR ")})`);
             }
             const backward = cursorDirection === "backward", order = backward ? "DESC" : "ASC", op = backward ? "<" : ">";
