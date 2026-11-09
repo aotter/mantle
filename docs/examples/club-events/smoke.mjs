@@ -76,7 +76,7 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step, logs }) => {
   assert.equal(foreign.status, 409, JSON.stringify(foreign.body));
   assert.equal((await sql(`SELECT count(*) AS n FROM registrations WHERE id = '${aliceHike.id}'`))[0].n, 1);
   assert.equal(await seatsOf(hike.id), 2);
-  step("another member neither sees nor cancels it: cancel is 409, the row and seats_left are unchanged (restrict)");
+  step("another member neither sees nor cancels it: cancel is 409, the row and seats_left are unchanged (author_id = auth.uid())");
 
   const racers = [];
   for (const name of ["carol", "dave", "erin", "frank"]) racers.push(await signIn(`${name}@example.test`));
@@ -124,4 +124,34 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step, logs }) => {
   assert.equal(shrunk.status, 409, JSON.stringify(shrunk.body));
   assert.equal(await seatsOf(hike.id), before);
   step("officers edit an event with the whole record; the server-maintained seats_taken is ignored, and capacity below the seats taken is 409");
+
+  await create("Talk", 1);
+  const { Talk: talk } = await events(alice);
+  const carol = racers[0], register = (cookie, body) => call("POST", "/api/registrations", { cookie, body: { eventId: talk.id, ...body } });
+  const cancel = (cookie, id) => call("POST", "/api/registrations/cancel", { cookie, body: { id } });
+  const place = async cookie => (await mine(cookie)).find(r => r.eventId === talk.id);
+  assert.equal((await register(alice)).status, 200);
+  assert.equal((await register(bob)).status, 409);
+  for (const cookie of [bob, carol]) assert.equal((await register(cookie, { waitlist: true })).status, 200);
+  assert.equal(await seatsOf(talk.id), 0);
+  assert.equal(!!(await place(bob)).waitlisted, true);
+  step("a full event is 409, unless the member asks for the waiting list: then a place that takes no seat");
+
+  const seat = await place(alice), bobPlace = await place(bob), carolPlace = await place(carol);
+  assert.equal((await cancel(carol, seat.id)).status, 409);
+  assert.equal(!!(await place(bob)).waitlisted, true);
+  assert.equal((await place(alice)).id, seat.id);
+  step("another member cancelling the seat is still 409 and nobody is promoted: the whole program rolled back");
+
+  assert.equal((await cancel(alice, seat.id)).status, 200);
+  assert.equal(!!(await place(bob)).waitlisted, false);
+  assert.equal(!!(await place(carol)).waitlisted, true);
+  assert.equal(await seatsOf(talk.id), 0);
+  step("cancelling a seat promotes the earliest waiter; the seat passes on and seats_left stays 0");
+
+  assert.equal((await cancel(carol, carolPlace.id)).status, 200);
+  assert.equal(await seatsOf(talk.id), 0);
+  assert.equal((await cancel(bob, bobPlace.id)).status, 200);
+  assert.equal(await seatsOf(talk.id), 1);
+  step("leaving the waiting list frees no seat; cancelling with nobody waiting returns the seat");
 });
