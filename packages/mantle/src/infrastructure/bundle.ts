@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -94,6 +94,8 @@ export async function bundleApp(entry: string, outdir: string, assets = join(out
   let dirs: string[];
   try { dirs = generatedDirs(own); }
   catch (error) { refuse(error); return; }
+  apart();
+  copyPublic(outdir, assets);
   if (dirs.some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"))) {
     // Packages are external here, so only the app's own imports of the Admin server are seen; one reached through another package is not.
     if (Object.values(own.inputs).some(input => input.imports.some(imported => /^@aotter\/mantle-admin\/server(?:\/|$)/.test(imported.path)))) await bundleAdmin(source, outdir, join(assets, "admin"));
@@ -109,6 +111,30 @@ export async function bundleApp(entry: string, outdir: string, assets = join(out
     await bundleAdmin(source, outdir, join(assets, "admin"));
     adminHeaders(assets);
   }
+}
+
+/**
+ * The app's own static files: `public/` in the working directory is copied into the assets directory, so
+ * `public/assets/logo.svg` is served at `/assets/logo.svg`. Files copied by the previous build are removed first (the
+ * list lives in `<outdir>/.mantle-public`, outside the uploaded assets), so a deleted file is not served again; files
+ * that another build step wrote into the assets directory are left alone. `public/admin` is refused: Admin owns it.
+ * When the assets directory is `public/` itself (`--assets public`) or overlaps it, nothing is copied: the files are
+ * already where Wrangler uploads them.
+ */
+function copyPublic(outdir: string, assets: string): void {
+  const record = join(outdir, ".mantle-public"), source = resolve("public"), target = resolve(assets);
+  if (existsSync(record)) {
+    const previous = JSON.parse(readFileSync(record, "utf8")) as { assets: string; files: string[] };
+    // only from the directory they were copied to: a changed --assets never touches the new directory's own files
+    if (previous.assets === target) for (const path of previous.files) rmSync(join(assets, path), { force: true });
+  }
+  if (!existsSync(source) || within(source, target) || within(target, source)) return void rmSync(record, { force: true });
+  if (existsSync(join(source, "admin"))) throw new Error("public/admin is reserved for Admin's build; move those files elsewhere under public/.");
+  const files = (readdirSync(source, { recursive: true, withFileTypes: true }) as import("node:fs").Dirent[])
+    .filter(entry => entry.isFile() || entry.isSymbolicLink()).map(entry => relative(source, join(entry.parentPath, entry.name)));
+  cpSync(source, assets, { recursive: true });
+  mkdirSync(outdir, { recursive: true });
+  writeFileSync(record, JSON.stringify({ assets: target, files }));
 }
 
 /** Admin's chunks are content-hashed and answered by the edge (`run_worker_first` excludes `/admin/assets/*`), so the
