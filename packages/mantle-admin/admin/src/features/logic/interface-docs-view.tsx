@@ -37,7 +37,7 @@ export function InterfaceDocsView(): React.ReactElement {
   const httpTriggers = http.filter((operation) => operation.kind === "procedure" && matches([operation.method, operation.path, operation.name, operation.description, operation.target]));
   const matchedCallable = callable.filter((capability) => matches([capability.name, capability.description, capability.target, capability.trigger, capability.surface, capability.audience]));
   const filteredCallable = matchedCallable.filter((capability) => site.data?.mcpEndpoints?.[capability.surface]);
-  const unmountedCount = callable.some((capability) => site.data?.mcpEndpoints?.[capability.surface]) ? 0 : matchedCallable.length;
+  const unmountedCount = matchedCallable.length - filteredCallable.length;
   return (
     <section className="h-full min-h-0 overflow-y-auto" aria-label={t(language, "docs.title")}>
       {page === "api" ? (
