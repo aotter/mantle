@@ -6,7 +6,7 @@
 
 **Date:** 2026-09-27
 
-**Related:** #1151 (Store), #1152 (identity), #1156 (table namespace), #1150, #1189, ADR-0022, ADR-0023, ADR-0028, ADR-0031, aotter/mantle-home#201
+**Related:** #1151 (Store), #1152 (identity), #1156 (table namespace), #1150, #1189, ADR-0022, ADR-0023, ADR-0028, ADR-0031
 
 ## Context
 
@@ -192,15 +192,15 @@ A surface is `(request: Request, caller: Caller) => Promise<Response>`, created 
 
 Admin UI assets honour the base path. Hono may stay inside a package; it is no longer in any public signature. Mantle Web and Admin read through Store, and `EntryReader` is removed. A typed client for custom frontends is deferred; it is additive. The `@aotter/mantle/admin-ui/kit` re-export and `rowBindings` are removed (#1140).
 
-### 10. Cloud verifies the plan; the user owns the entry
+### 10. The host verifies the plan; the user owns the entry
 
-- `semanticFingerprint` becomes SHA-256; it now crosses a trust boundary, which its `ponytail:` comment named as the upgrade point. It is the "compiled plan fingerprint" aotter/mantle-home#201 records.
+- `semanticFingerprint` becomes SHA-256; it now crosses a trust boundary, which its `ponytail:` comment named as the upgrade point. It is the "compiled plan fingerprint" a hosting platform records.
 - `createMantleRuntime` accepts `expectedFingerprint` and refuses to boot on a mismatch (`PLAN_FINGERPRINT_MISMATCH`).
 - `runtime.bootReport()` returns `MantleBootReport`: `{ fingerprint, coreVersion }`. Handler refs need no report because boot already refuses a mismatch; schedules are in the plan.
-- Cloud's guarantee names two kinds of fact. **Platform-verified:** the Cloud-compiled plan, the pinned Core, storage matching the plan (ADR-0033) and the fingerprint handshake. **Service-reported:** the surfaces and mounts the service chose, which Cloud confirms only by probing them in smoke. A service that never boots the runtime has no manifest scope to guarantee, and smoke shows that.
-- The plugin's Cloud helper script (decision 13) distinguishes a handlers-only artifact (today's closed module, host protocol 2 per ADR-0031) from a service-entry artifact, which is closed except for `@aotter/mantle*` externals that Cloud supplies at the pinned Core. The artifact field is `artifactKind: "handlers" | "service"`; service entries use host protocol 3. aotter/mantle-home reserves the field now and accepts service entries after Core 0.2.0, as its own issue.
+- A managed host's guarantee names two kinds of fact. **Platform-verified:** the host-compiled plan, the pinned Core, storage matching the plan (ADR-0033) and the fingerprint handshake. **Service-reported:** the surfaces and mounts the service chose, which the host confirms only by probing them in smoke. A service that never boots the runtime has no manifest scope to guarantee, and smoke shows that.
+- A hosting platform's upload helper (decision 13) distinguishes a handlers-only artifact (today's closed module, host protocol 2 per ADR-0031) from a service-entry artifact, which is closed except for `@aotter/mantle*` externals that the platform supplies at the pinned Core. The artifact field is `artifactKind: "handlers" | "service"`; service entries use host protocol 3. A platform may reserve the field now and accept service entries after Core 0.2.0.
 
-> **Amendment (ADR-0034):** The guarantee is a Cloud-validated plan. The CLI compiles; Cloud validates the IR and never parses SQL; whether the IR matches its SQL source is service-reported. Host protocol 3 uploads the plan.
+> **Amendment (ADR-0034):** The guarantee is a host-validated plan. The CLI compiles; the host validates the IR and never parses SQL; whether the IR matches its SQL source is service-reported. Host protocol 3 uploads the plan.
 
 ### 11. Table namespace
 
@@ -228,7 +228,7 @@ Every Mantle package versions and releases together, so splitting by area buys n
 - Platform and heavy libraries (`better-auth`, `hono`, `@libsql/client`, the MCP SDK, React) are optional peers. A subpath that is not imported is never loaded, so Core still requires no Admin, Web, Auth or platform code; `check:boundaries` enforces this at module level instead of package level (amends ADR-0019's optional-package boundary).
 - `@aotter/mantle` never imports `@aotter/mantle-ui`. The generated preset passes the Admin assets from `@aotter/mantle-ui/admin` to `createAdminSurface`.
 - `@aotter/mantle-spec`, `-runtime`, `-cloudflare`, `-bun`, `-vercel`, `-indexeddb`, `-auth`, `-admin`, `-mcp` and `-web` fold into subpaths; `@aotter/mantle-admin-ui` folds into `@aotter/mantle-ui/admin`. `@aotter/mantle-host` was never published and is removed.
-- **The plugin** (this repository's agent plugin) ships one `mantle` skill and helper scripts. Its configuration carries the Mantle Cloud MCP endpoint as an absolute URL, `https://cloud.mantle.tools/mcp`; aotter/mantle-home provides only that MCP. The helper scripts (`.mjs`) orchestrate the Cloud MCP sequence so an agent does less by hand, and keep the upload rules whose artifact bytes depend on the Core version (ADR-0031). The `mantle-host` name disappears; ADR-0031's protocol is the host protocol. Deploying anywhere else uses that host's own CLI, and the skill states that the user may always self-host: Mantle Cloud is one option, never a requirement.
+- **The plugin** (this repository's agent plugin) ships one `mantle` skill and helper scripts, and carries no hosted-platform endpoint. The helper scripts (`.mjs`) keep the upload rules whose artifact bytes depend on the Core version (ADR-0031). The `mantle-host` name disappears; ADR-0031's protocol is the host protocol. Deploying anywhere else uses that host's own CLI, and the skill states that the user may always self-host: a hosted platform is one option, never a requirement.
 
 > **Amendment (ADR-0034):** `/indexeddb` is removed, with no browser driver in 0.2.0. D1 test helpers live at `/cloudflare/testing`. The plugin's helper scripts compile with the project's installed `@aotter/mantle/spec` and bundle no parser.
 
@@ -251,7 +251,7 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 - **Net deletion** of about 3,200 lines: `DatabaseEntryRepository`, `LifecycleHookingEntryRepository`, `InvokeBuiltinUseCase`, `BuiltinProjector`, the content use cases and `AtomicEntryWriteUseCase`; the `EntryRepository`, `EntryReader`, `AtomicEntryWriter` and `ExpirySweeper` ports; the declarative part of `SqliteViewCompiler`; `IndexedDbEntryRepository` and `IndexedDbViewQueryExecutor`; `page`/`show`; the in-memory test fake; the twelve auth `CREATE`s in `0001-init`.
 - **Breaking for every consumer:** grammar, the handler API, Worker composition and the pagination wire. The release ships the `mantle-update` codemod (builtin handlers to inline programs, Filter AST to `select`, `params` to `input`, `page`/`show` to `limit`/`cursor`, `extend` to the service preset) and old-to-new tables.
 - **Main risk: lifecycle semantics.** They move into `LifecycleStateMachine` with their tests ported first.
-- Cloud's promise changes from "Admin at /admin" to "the surfaces you declare work at the mounts you declare".
+- A managed host's promise changes from "Admin at /admin" to "the surfaces you declare work at the mounts you declare".
 - A service with working users and auth keeps them. Fresh databases without mantle-auth get no auth tables; databases that have them are left alone.
 
 ## Alternatives
@@ -261,7 +261,7 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 - **One npm package per area** (today's fourteen). Rejected: they version together, so each split adds a publish, a peer and a pin without independent releases.
 - **One adapter factory per host** (`createMantleWorker`, `createBunMantle`, `createVercelMantle`, each taking the service). Rejected: with a WinterTC service they would differ only in the storage driver and a few lines of entry spelling, which the driver package and the generated preset already carry.
 - **A handler-host port with remote execution.** Deferred: the service already is the host. The serializable `Invocation` keeps remote execution possible.
-- **Keeping a Mantle-owned Worker with extension seams.** Rejected: it limits custom frontends, SSR and webhooks, and duplicates Cloud-only assembly.
+- **Keeping a Mantle-owned Worker with extension seams.** Rejected: it limits custom frontends, SSR and webhooks, and duplicates host-only assembly.
 - **An identity port in Runtime, or auth tables in Core.** Rejected in #1152: Core only ever sees a resolved `Caller`.
 - **Prefixing every Mantle-created table** (#1156). Rejected: the prefix marks system tables. Product tables follow the same rule as Better Auth's, and the ownership check in decision 11 covers the collision risk without a rename migration for live sessions and tokens.
 - **Moving the Core auth DDL into mantle-auth as `mantle-auth:0001`** (#1152). Rejected: mantle-auth already derives it from Better Auth's own `getMigrations`, so a copy would be a second source of truth.
@@ -269,7 +269,7 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
 
 ## How to apply
 
-1. Land this ADR and ADR-0033, then build in this order: the three conformance contracts; Store and cross-executor conformance; cut every legacy path over and delete it; service, surfaces and identity; Cloud service-entry artifacts. Vercel and IndexedDB completion may trail.
+1. Land this ADR and ADR-0033, then build in this order: the three conformance contracts; Store and cross-executor conformance; cut every legacy path over and delete it; service, surfaces and identity; hosted service-entry artifacts. Vercel and IndexedDB completion may trail.
 2. **Keep proven host integrations as maintained examples, not Core contracts.** Core models no host's delivery workflow, but a working integration saves the next user the search. The reference examples of decision 6 are ported to the 0.2.0 contracts and rechecked when their host changes. For ChatGPT Sites that means Sites sign-in mapped to a `CallerResolver` and an `AdminIdentity` over `sites_users` (the 0.1.x `host-chatgpt-sites` example's `chatgpt-auth.ts`, whose `chatgpt:<sub>` id is already a namespaced subject key) and R2 behind the `MediaStorage` port (its `media.ts`). That example was removed with the 0.1.x packages; [Mantle on ChatGPT Sites](../handbook/cloudflare/chatgpt-sites.md) carries the 0.2.0 guide.
 3. New code uses only the identifiers named here. A new public name needs an amendment to this ADR.
 4. `mantle validate` diagnostics listed here are added with the grammar slice; the runtime codes with the Store and invocation slices.
@@ -309,7 +309,7 @@ The three contracts #1188 made ADR gates are accepted only with these cases, run
     - It also writes the service preset once (amendment "the service preset" below); an application that already has `src/service.ts` keeps its own entry.
   - **`plan.json`** is the one copy of the plan: `{ "sourceHash": <hex>, "plan": <RuntimePlan> }` as `compileLinkedPlan` returns it, with two-space indentation and a trailing newline. Its key order is deterministic, so identical input gives identical bytes, and it is not sorted: a JSON Schema's `properties` keep the order Admin and MCP show.
     - `sourceHash` is ADR-0034 decision 7's source hash. It is the SHA-256 of the JSON array `[[name, text], …]` of the manifest files, sorted by file name, so the project's location never enters it. A text loses a leading BOM and has CRLF read as LF first, so a Windows checkout is the same source; `--check` compares generated files the same way. Host protocol 3 uploads this file.
-    - The hash sits beside the plan, not in it, so it is **not part of the fingerprint**. Reformatting a manifest changes `sourceHash`, but not the fingerprint Cloud and boot compare.
+    - The hash sits beside the plan, not in it, so it is **not part of the fingerprint**. Reformatting a manifest changes `sourceHash`, but not the fingerprint a host and boot compare.
   - **`mantle.ts`** imports `./plan.json` (`with { type: "json" }`) and exports:
     - `plan` (the `RuntimePlan`, for `createMantle`) and `sourceHash`;
     - the `emit-types` namespace `Mantle`;
@@ -416,7 +416,7 @@ list manifest tools; its native media operations remain REST-backed.
 - **2026-10-12, OSS plugin distribution boundary (#1466).** The public plugin
   retains local authoring, installed-version documentation and self-hosted
   deployment. Hosted-service MCP connections, packers and lifecycle instructions
-  are distributed separately; earlier Cloud-helper distribution text is historical.
+  are distributed separately; earlier hosted-helper distribution text is historical.
   Generic platform adapters and SDK contracts remain public.
 
 - **2026-10-29, one consumer skill, no package skills (#1886).** Decision 13's two skill distributions are reduced to

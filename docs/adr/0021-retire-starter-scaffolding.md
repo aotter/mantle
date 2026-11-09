@@ -17,7 +17,7 @@ composition, with consumer-provided templates and routes.
 Version-matched install/update skills describe direct authoring and reviewed
 SDK dependency upgrades. Existing project source, provider identity, secrets
 and legacy metadata remain user-owned. No replacement init/template command,
-new preset registry or Builder/Platform implementation belongs to this change.
+new preset registry or hosted-platform implementation belongs to this change.
 
 A small Core-owned reference consumer proves generation and a running Worker
 against exact packed packages and public registry candidates. It is a test and

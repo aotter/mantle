@@ -579,6 +579,6 @@ SEO notes:
 
 The revisions are the content history: who may read them, switch and prune is the Procedures' `requires`. A record of
 who changed what and when, across the whole app, is an observability concern rather than part of this content model;
-it is planned outside the SDK, with Mantle Cloud's observability or the app's own logging when self-hosted, and the
+it is planned outside the SDK, with the hosting platform's observability or the app's own logging when self-hosted, and the
 SDK's part is being discussed as a way to observe writes (aotter/mantle#1796). Until then, a revision's `author_id`
 and `created_at` say who started it and when, and the switch handler is the place to log a switch.

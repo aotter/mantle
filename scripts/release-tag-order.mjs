@@ -62,7 +62,7 @@ if (process.argv[2] === "--self-test") {
     /- name: Check native hosts\n        if: steps\.ver\.outputs\.tag_exists != 'true'\n        run: pnpm --filter @aotter\/mantle test:native\n        env:\n          MANTLE_PG_URL: postgres:\/\/\S+\n/,
   );
   assert.match(workflow, /CORE_SHA=\$TAG_SHA/);
-  assert.doesNotMatch(workflow, /mantle-starters|mantle-landing|RELEASE_FANOUT_TOKEN|deploy_landing/);
+  assert.doesNotMatch(workflow, /mantle-starters|RELEASE_FANOUT_TOKEN|deploy_landing/);
   assert.match(workflow, /node scripts\/check-worker-consumer\.mjs --registry "\$VERSION"/);
   assert.match(
     workflow,

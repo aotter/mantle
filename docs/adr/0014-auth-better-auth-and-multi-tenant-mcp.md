@@ -427,18 +427,17 @@ The original ADR-0014 §"Auth as contract, Better Auth as default" framing stays
 
 ## Amendment — 2026-06-30: Hosted-auth boundary and first-party cookie fields
 
-Mantle Platform introduces a first-party hosted-auth use case. Platform owns
-site-owner accounts, billing, entitlement, provider credentials, and managed
-email, while Hosted Auth is an OAuth proxy rather than a member directory.
+A hosting platform introduces a first-party hosted-auth use case. The host owns
+site-owner accounts, provider credentials, and managed email, while its
+hosted auth is an OAuth proxy rather than a member directory.
 Each customer site owns its Better Auth users, linked provider accounts,
-sessions, roles, and grants. For Hosted GitHub, the validated proxy profile's
+sessions, roles, and grants. For hosted GitHub, the validated proxy profile's
 `github_login` maps to the existing site-local `user.githubLogin`, so hosted
 and self-managed GitHub reuse the same atomic first-owner bootstrap rule. The
 conventional customer-site path uses the proxy's public OAuth client with PKCE
-and `ADMIN_GITHUB_LOGIN`; it does not use Platform Account OIDC, a client
+and `ADMIN_GITHUB_LOGIN`; it does not use the host's account OIDC, a client
 secret, or an owner email handoff. The local provider id remains `github`.
-The wire contract remains in [Platform #35](https://github.com/aotter/mantle-platform/issues/35),
-and the product boundary is documented in
+The wire contract is owned by the hosting platform, and the product boundary is documented in
 [`docs/auth-hosting-model.md`](https://github.com/aotter/mantle/blob/main/docs/auth-hosting-model.md).
 
 This does not change ADR-0014's core rule: Mantle does not expose an
@@ -454,21 +453,21 @@ The first-party SSO use case needs exactly three Better Auth fields:
 - `crossSubDomainCookies` — Better Auth's same-parent-domain cookie
   support for a trusted first-party app family.
 - `cookiePrefix` — required when two Better Auth apps can write cookies
-  under the same parent domain, so Platform cookies do not collide with
-  Landing or generated-site cookies.
+  under the same parent domain, so the host's cookies do not collide with
+  landing-page or generated-site cookies.
 
 These fields are additive. Existing consumers that do not pass them keep
 the previous cookie/session behavior.
 
 The boundary is deliberately narrower than "hosted auth everywhere":
 
-- Free users can still self-host every login method Mantle exposes
+- Self-hosted sites can still use every login method Mantle exposes
   through `createAuth()`.
 - Same-parent-domain SSO can use `crossSubDomainCookies` when the same
   party controls all participating subdomains.
-- Customer-owned domains cannot receive `mantle.tools` cookies. Paid
-  hosted auth for `customer.com` must use an OAuth/OIDC broker flow:
-  Platform authenticates and returns identity; the customer site creates
+- Customer-owned domains cannot receive the host's parent-domain cookies.
+  Hosted auth for `customer.com` must use an OAuth/OIDC broker flow:
+  the host authenticates and returns identity; the customer site creates
   its own local session and maps identity into local grants.
 
 ## Amendment — 2026-07-15: one adapter-owned authorization pipeline
@@ -901,8 +900,8 @@ Authorization needs a `jwt-bearer` (ID-JAG) grant whose issuer and JWKS belong
 to one enterprise IdP; that is adopter configuration, not an SDK default, and
 Core has no business knowing the issuer. Curating a first-class
 `enterpriseIdp` field would put an IdP contract inside Core and still forward
-it verbatim underneath. The reference implementation lives outside Core
-(`@aotterclam/id-jag`).
+it verbatim underneath. An implementation lives outside Core, in the
+adopter's own package.
 
 Boundaries that stay:
 

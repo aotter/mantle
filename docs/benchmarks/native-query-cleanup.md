@@ -55,4 +55,4 @@ MANTLE_PG_URL="$DISPOSABLE_POSTGRES_URL" pnpm check
 MANTLE_PG_URL="$DISPOSABLE_POSTGRES_URL" pnpm --filter @aotter/mantle test:bun
 ```
 
-[Swolhalla real-data before/after evidence](swolhalla-native-cleanup.md) adds actual application runtime and guarded local Worker comparisons, including regressions and mixed HTTP latency.
+[Application real-data before/after evidence](application-native-cleanup.md) adds actual application runtime and guarded local Worker comparisons, including regressions and mixed HTTP latency.

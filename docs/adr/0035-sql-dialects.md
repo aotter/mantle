@@ -55,7 +55,7 @@ The CLI front end is shared and dialect-free. It parses, links, and refuses what
 ### 5. Choosing a dialect (amends ADR-0032 decision 12)
 
 - `mantle.config.json` version 2 gains `dialect`, an npm module name. Absent, it is the built-in D1 dialect, so existing projects do not change. There is no CLI flag and no `host` field.
-- The plan records the dialect's name and version, and both are part of the fingerprint. Boot refuses a plan compiled for another dialect. Cloud Control (ADR-0034 decision 7) accepts only D1 plans.
+- The plan records the dialect's name and version, and both are part of the fingerprint. Boot refuses a plan compiled for another dialect. A managed host that validates plans (ADR-0034 decision 7) may accept only D1 plans.
 - A dialect and a host are different things. The dialect is the engine and is a public interface; the host is the platform entry (a Worker, `Bun.serve`, scheduling, media), which stays an application-owned preset. The open-source generator writes the Cloudflare preset only (ADR-0032 decision 6); another host's preset belongs with whoever ships it.
 
 ### 6. The D1 dialect (amends ADR-0034 decisions 5, 6 and 8)
@@ -81,7 +81,7 @@ The CLI front end is shared and dialect-free. It parses, links, and refuses what
 ## Consequences
 
 - Another engine is a module, not a fork, and it proves itself with the same suite D1 passes.
-- Core loses its SQLite code; the D1 dialect owns it. Mantle Cloud stays D1-only.
+- Core loses its SQLite code; the D1 dialect owns it.
 - Manifests name Mantle's extensions explicitly (`mantle.search(...)`), and anything unqualified reads as PostgreSQL.
 - A plan is dialect-specific; moving a service to another engine is a recompile.
 - The interface is new public surface, versioned with the plan.
@@ -142,7 +142,7 @@ Proposed.
 > - The generic cases are requisition, stock, report View, before hook, policy (the relation-position probe), search and places, the printer corpus (rows, not SQL text) and Store (including `StoreSelect.search`). What depends on how D1 spells or stores things (the printed SQL, SQLite's query plan, FTS5's trigram floor, D1's `meta.changes`, the storage encodings of the types case, and that D1 accepts the whole corpus) is D1's own test, `test/d1/dialect.test.ts`. `testing` no longer reaches `d1`.
 > - **Not yet dialect-neutral: computed outputs.** Store decodes a View's output column only when it reads a Schema field unchanged; a computed typed value (`now()`, `date_trunc`, a numeric literal, a `CAST` to bool) reaches the caller as the engine stores it. So the corpus rows that compute such values, and the whole types case (integer division, exact numerics, the interval boundary, `round`, `date_trunc` and `extract` across daylight saving), expect D1's encodings, and the types case runs only in D1's test. Typing each output column in the compile side and decoding it in Store is the prerequisite for a second dialect; with it, the types case's View checks return to the generic suite and only its storage reads stay in D1's test.
 
-> **Amendment (PostgreSQL dialect, #1293, 2026-10-02):** The second dialect ships in this repository, not outside it: `@aotter/mantle/postgres` and `@aotter/mantle/postgres/compile`. This amends the Context's "an enterprise PostgreSQL dialect is the first one written outside it"; decision 5's "Cloud Control accepts only D1 plans" stands for now. A consumer service behind Cloudflare Hyperdrive wants PostgreSQL from day one, and a dialect inside the repository is the one the compliance suite keeps honest.
+> **Amendment (PostgreSQL dialect, #1293, 2026-10-02):** The second dialect ships in this repository, not outside it: `@aotter/mantle/postgres` and `@aotter/mantle/postgres/compile`. This amends the Context's "an enterprise PostgreSQL dialect is the first one written outside it"; decision 5's note on a host that validates plans is unchanged. A consumer service behind Cloudflare Hyperdrive wants PostgreSQL from day one, and a dialect inside the repository is the one the compliance suite keeps honest.
 > - **What it accepts** (*replaced by ADR-0037: the PostgreSQL dialect runs the reference profile, and D1 the base subset*): D1's subset (decision 6) less SQLite's own functions (`typeof`, `hex`, `json_extract`, `json_set`, `json_insert`, `json_remove`), refused with a position. A PostgreSQL manifest therefore compiles for D1 too. `mantle.near`, `mantle.distance` and `mantle.search_rank` are lowered without an extension (a range and a haversine; an occurrence count instead of bm25).
 > - **Values:** columns have native types. The executor asks node-postgres for every value as text and decodes it by the column's type OID, so computed outputs are typed wire values, which is the prerequisite How to apply 5 named, for this dialect. The printer corpus therefore accepts, per item, D1's encoding or the typed wire values (`typedRows`).
 > - **Core:** the `now` and `cutoff` binds and the TTL sweep's bind go through `codec.encode("timestamptz", …)` (the identity on D1), and `PolicyLowering.system` lets a dialect type `now()`'s bind (PostgreSQL cannot infer `$1 - interval '1 hour'`). D1's output is unchanged.
