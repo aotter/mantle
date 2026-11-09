@@ -350,6 +350,12 @@ test("mantle bundle: public/ is copied into the assets directory; files it copie
     await rm(join(dir, "public/_headers"));
     await bundleApp(entry, dist, site);
     expect(await readFile(join(site, "_headers"), "utf8")).toBe("the site's own");
+    // --assets public: public/ already is the assets directory (Admin writes public/admin); nothing to copy, twice over
+    await bundleApp(entry, dist, join(dir, "public"));
+    await bundleApp(entry, dist, join(dir, "public"));
+    expect(await readFile(join(dir, "public/assets/logo.svg"), "utf8")).toBe("<svg/>");
+    expect(existsSync(join(dir, "public/admin/index.html"))).toBe(true);
+    await rm(join(dir, "public/admin"), { recursive: true });
     await mkdir(join(dir, "public/admin"));
     await expect(bundleApp(entry, dist)).rejects.toThrow("public/admin is reserved");
   } finally { process.chdir(cwd); await rm(dir, { recursive: true, force: true }); }

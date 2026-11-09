@@ -118,6 +118,8 @@ export async function bundleApp(entry: string, outdir: string, assets = join(out
  * `public/assets/logo.svg` is served at `/assets/logo.svg`. Files copied by the previous build are removed first (the
  * list lives in `<outdir>/.mantle-public`, outside the uploaded assets), so a deleted file is not served again; files
  * that another build step wrote into the assets directory are left alone. `public/admin` is refused: Admin owns it.
+ * When the assets directory is `public/` itself (`--assets public`) or overlaps it, nothing is copied: the files are
+ * already where Wrangler uploads them.
  */
 function copyPublic(outdir: string, assets: string): void {
   const record = join(outdir, ".mantle-public"), source = resolve("public"), target = resolve(assets);
@@ -126,7 +128,7 @@ function copyPublic(outdir: string, assets: string): void {
     // only from the directory they were copied to: a changed --assets never touches the new directory's own files
     if (previous.assets === target) for (const path of previous.files) rmSync(join(assets, path), { force: true });
   }
-  if (!existsSync(source)) return void rmSync(record, { force: true });
+  if (!existsSync(source) || within(source, target) || within(target, source)) return void rmSync(record, { force: true });
   if (existsSync(join(source, "admin"))) throw new Error("public/admin is reserved for Admin's build; move those files elsewhere under public/.");
   const files = (readdirSync(source, { recursive: true, withFileTypes: true }) as import("node:fs").Dirent[])
     .filter(entry => entry.isFile() || entry.isSymbolicLink()).map(entry => relative(source, join(entry.parentPath, entry.name)));
