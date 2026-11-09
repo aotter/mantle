@@ -37,10 +37,12 @@ spec:
   schema:
     type: object
     readOnly: true
-    required: [eventId, member]
+    required: [eventId, member, waitlisted]
     properties:
       eventId: { type: string, x-mantle-ref: events }
       member: { type: string }
+      # true: on the waiting list, holding no seat. Cancelling a seat promotes the earliest waiter.
+      waitlisted: { type: boolean, title: Waiting }
       # A snapshot of the member's name at sign-up, so officers see who registered (member is an opaque id).
       memberName: { type: string, maxLength: 200 }
 ---
@@ -74,7 +76,7 @@ spec:
   sql: |
     SELECT id, title, startsAt AS "startsAt", capacity - seats_taken AS seats_left, closed FROM events ORDER BY startsAt, id
 ---
-# Only the caller's own rows: restrict narrows registrations to author_id = the caller.
+# Only the caller's own rows, seats and waiting places: restrict narrows registrations to author_id = the caller.
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: my-registrations }
@@ -84,7 +86,7 @@ spec:
   requires: { auth: { all: [ctx.user] } }
   restrict: { registrations: "author_id = auth.uid()" }
   sql: |
-    SELECT r.id, r.eventId AS "eventId", e.title, e.startsAt AS "startsAt"
+    SELECT r.id, r.eventId AS "eventId", e.title, e.startsAt AS "startsAt", r.waitlisted
     FROM registrations r JOIN events e ON e.id = r.eventId
     ORDER BY r.created_at DESC, r.id DESC
 ---
@@ -100,7 +102,7 @@ spec:
   requires: { auth: { all: [ctx.admin] } }
   sql: |
     SELECT e.id, e.title, e.startsAt AS "startsAt", e.seats_taken AS "seatsTaken",
-      (SELECT json_group_array(json_set('{}', '$.memberName', r.memberName)) FROM registrations r WHERE r.eventId = e.id) AS attendees
+      (SELECT json_group_array(json_set('{}', '$.memberName', r.memberName)) FROM registrations r WHERE r.eventId = e.id AND NOT r.waitlisted) AS attendees
     FROM events e ORDER BY e.startsAt, e.id
 ---
 # The member-facing entry: a ref handler checks the event, then runs register-write.
@@ -109,7 +111,7 @@ kind: Procedure
 metadata: { name: register }
 spec:
   title: Register for an event
-  description: Take one seat at a club event for the signed-in member. Fails when the event is closed, full or already registered.
+  description: Take one seat at a club event for the signed-in member, or with waitlist true a place on its waiting list when it is full. Fails when the event is closed, full (without waitlist) or already registered.
   requires: { auth: { all: [ctx.user] } }
   input:
     type: object
@@ -117,6 +119,7 @@ spec:
     additionalProperties: false
     properties:
       eventId: { type: string }
+      waitlist: { type: boolean, description: "When the event is full, join its waiting list instead of failing." }
   output: { type: object }
   handler: { ref: register }
 ---
@@ -136,18 +139,38 @@ spec:
   output: { type: object }
   handler:
     sql: |
-      INSERT INTO registrations (eventId, member, memberName) VALUES (input.eventId, input.member, input.memberName) RETURNING id, eventId AS "eventId";
+      INSERT INTO registrations (eventId, member, memberName, waitlisted) VALUES (input.eventId, input.member, input.memberName, false) RETURNING id, eventId AS "eventId";
       UPDATE events SET seats_taken = seats_taken + 1 WHERE id = input.eventId RETURNING capacity - seats_taken AS seats_left
 ---
-# restrict: another member's registration is invisible here, so the UPDATE matches no row -> CONFLICT, nothing changes.
+# Internal: a place on the waiting list takes no seat. The member's own insert, so author_id is the member.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: waitlist-write }
+spec:
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    required: [eventId, member]
+    properties:
+      eventId: { type: string }
+      member: { type: string }
+      memberName: { type: string, maxLength: 200 }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO registrations (eventId, member, memberName, waitlisted) VALUES (input.eventId, input.member, input.memberName, true) RETURNING id, eventId AS "eventId", waitlisted
+---
+# No restrict: promoting the next waiter must see and change another member's row. Every statement instead pins the
+# caller's own row inline (author_id = auth.uid()). The DELETE must remove exactly one row, so another member's id is
+# CONFLICT and the whole program rolls back. The seat goes back only when nobody waits; otherwise it passes to the
+# earliest waiter. Both are decided before the promotion changes the waiting list. D1 runs the program serialized.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: cancel-registration }
 spec:
   title: Cancel a registration
-  description: Cancel one of the signed-in member's registrations and return the seat.
+  description: Cancel one of the signed-in member's registrations or waiting places. A freed seat goes to the first member on the waiting list, or back to the event.
   requires: { auth: { all: [ctx.user] } }
-  restrict: { registrations: "author_id = auth.uid()" }
   input:
     type: object
     required: [id]
@@ -157,8 +180,16 @@ spec:
   output: { type: object }
   handler:
     sql: |
-      UPDATE events SET seats_taken = seats_taken - 1 WHERE id = (SELECT eventId FROM registrations WHERE id = input.id) RETURNING capacity - seats_taken AS seats_left;
-      DELETE FROM registrations WHERE id = input.id RETURNING id
+      UPDATE events SET seats_taken = seats_taken - 1
+        WHERE id = (SELECT r.eventId FROM registrations r WHERE r.id = input.id AND r.author_id = auth.uid() AND NOT r.waitlisted)
+          AND NOT EXISTS (SELECT 1 FROM registrations w WHERE w.eventId = events.id AND w.waitlisted)
+        RETURNING capacity - seats_taken AS seats_left;
+      UPDATE registrations SET waitlisted = false
+        WHERE id = (SELECT w.id FROM registrations w JOIN registrations r ON r.eventId = w.eventId
+            WHERE r.id = input.id AND r.author_id = auth.uid() AND NOT r.waitlisted AND w.waitlisted
+            ORDER BY w.created_at, w.id LIMIT 1)
+        RETURNING id AS promoted;
+      DELETE FROM registrations WHERE id = input.id AND author_id = auth.uid() RETURNING id
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger

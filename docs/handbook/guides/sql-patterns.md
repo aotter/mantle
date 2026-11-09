@@ -257,6 +257,39 @@ check is "at least one", so a statement that writes several rows (`json_each(inp
 passes; give an array input `minItems: 1` when an empty one is a mistake. A ref handler throws its own
 `ContractError` instead.
 
+## Change another member's row: inline author_id
+
+A Procedure `restrict` narrows every statement in the program, including the ones after the first. With
+`restrict: { registrations: "author_id = auth.uid()" }`, "cancel my seat and give it to the first person waiting"
+cannot work: the promotion runs as the caller and sees no other member's row, so it changes nothing. Leave the
+Procedure without `restrict` and pin the caller's own row inline, in every statement that reads it, with
+`author_id = auth.uid()`; the statement that acts on other members' rows then runs unrestricted. Decide everything
+that depends on the waiting list before the statement that changes it, and end with the own-row write that must
+change exactly one row (`WHERE id = input.id`), so another member's id is `CONFLICT` and the whole program rolls back.
+
+```sql
+-- 1. Return the seat only if nobody waits for it.
+UPDATE events SET seats_taken = seats_taken - 1
+  WHERE id = (SELECT r.eventId FROM registrations r WHERE r.id = input.id AND r.author_id = auth.uid() AND NOT r.waitlisted)
+    AND NOT EXISTS (SELECT 1 FROM registrations w WHERE w.eventId = events.id AND w.waitlisted)
+  RETURNING capacity - seats_taken AS seats_left;
+-- 2. Otherwise the earliest waiter (another member's row) takes it.
+UPDATE registrations SET waitlisted = false
+  WHERE id = (SELECT w.id FROM registrations w JOIN registrations r ON r.eventId = w.eventId
+      WHERE r.id = input.id AND r.author_id = auth.uid() AND NOT r.waitlisted AND w.waitlisted
+      ORDER BY w.created_at, w.id LIMIT 1)
+  RETURNING id AS promoted;
+-- 3. The caller's own row: exactly one, or CONFLICT and nothing above stays.
+DELETE FROM registrations WHERE id = input.id AND author_id = auth.uid() RETURNING id
+```
+
+A `= auth.uid()` term in the SQL is a filter like any other, not a policy: every statement that must stay on the
+caller's rows needs its own. Rows another member waits with are their own inserts, so `author_id` names them; a
+Procedure never inserts a row on someone else's behalf, since `author_id` is stamped from the caller. D1 runs the
+program serialized. Under PostgreSQL's READ COMMITTED, two cancels for the same event at once can both pick the same
+waiter and leave one seat counted as taken; measure that case before relying on it there.
+[Club events](../../examples/club-events/README.md) has the whole waiting list (`cancel-registration`).
+
 ## A row with its children in one read
 
 An admin, or an AI client, reads each product with its orders in one call instead of one call per product. A
