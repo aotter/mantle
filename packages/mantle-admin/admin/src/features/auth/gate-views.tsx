@@ -6,17 +6,22 @@ import { t } from "../../app/i18n";
 import { signOut } from "../../lib/auth";
 import { ThemeToggle } from "../../layout/preference-controls";
 
+/**
+ * While the session or `me` loads: a neutral page frame, not the sign-in card. A signed-in user who lands here from
+ * an app's own sign-in page would otherwise read the card as a second sign-in step (#1943).
+ */
 export function GateLoading(): React.ReactElement {
   return (
-    <AuthCard action={<ThemeToggle />}>
-      <CardHeader>
-        <Skeleton className="h-4 w-24" />
-      </CardHeader>
-      <CardContent className="space-y-2" aria-busy="true">
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-2/3" />
-      </CardContent>
-    </AuthCard>
+    <div role="status" aria-busy="true" className="min-h-svh bg-background">
+      <div className="flex h-14 items-center border-b px-4">
+        <Skeleton className="h-5 w-32" />
+      </div>
+      <div className="space-y-3 p-6">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-4 w-full max-w-xl" />
+        <Skeleton className="h-4 w-2/3 max-w-md" />
+      </div>
+    </div>
   );
 }
 
