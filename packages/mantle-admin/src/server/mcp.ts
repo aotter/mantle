@@ -161,8 +161,15 @@ export interface MediaUploadCardOptions<Env = never> {
      * URLs PUT to) is the card's CSP `connectDomains`, sent on `resources/read`.
      */
     readonly media: (env: Env) => Pick<MediaStorage, "uploadOrigin">;
-    /** `ui://mantle-admin/upload` by default. */
+    /** `ui://mantle-admin/upload` by default. A host serving several servers' cards gives each its own. */
     readonly uri?: string;
+    /**
+     * The tool the card renders and calls, `upload_media` by default: a host that re-serves several servers' media under
+     * one endpoint names its own tool, which takes `upload_media`'s arguments plus the `forward` ones.
+     */
+    readonly tool?: string;
+    /** Arguments of the rendering call's input the card repeats on each of its calls, such as a host's `server`. */
+    readonly forward?: readonly string[];
     readonly title?: string;
     /** Passed through as `_meta.ui.domain`, for a host that serves each App from its own origin. */
     readonly domain?: string;
@@ -173,11 +180,14 @@ export interface MediaUploadCardOptions<Env = never> {
  * on `resources/read` only.
  */
 export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env>): McpApps {
-    const uri = options.uri ?? "ui://mantle-admin/upload";
+    const uri = options.uri ?? "ui://mantle-admin/upload", tool = options.tool ?? "upload_media", forward = options.forward ?? [];
+    // `<` escaped: the config sits in a script element
+    const config = tool === "upload_media" && !forward.length ? "" :
+        `<script type="application/json" id="mantle-upload-config">${JSON.stringify({ tool, forward }).replace(/</g, "\\u003c")}</script>`;
     if (!/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(uri))
         throw new ContractError("INPUT_VALIDATION_FAILED", "Admin App resources use ui://mantle-admin/….", "mcp/apps");
     return { resources: [{
-        uri, name: "mantle-admin-upload", title: options.title ?? "Upload media", renders: ["upload_media"],
+        uri, name: "mantle-admin-upload", title: options.title ?? "Upload media", renders: [tool],
         description: "Pick an image and upload it to the media library.",
         ...(options.domain !== undefined ? { domain: options.domain } : {}),
         html: async ({ env }) => {
@@ -186,7 +196,7 @@ export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env
                 throw new Error("mediaUploadCard: the media storage needs `uploadOrigin`, the origin its upload URLs PUT to (such as https://bucket.example.com).");
             const { default: html } = await import("./upload-card.js");
             if (!html) throw new Error("mediaUploadCard: the card is built into dist by the package build.");
-            return { html, csp: { connectDomains: [origin] } };
+            return { html: config ? html.replace("<head>", "<head>" + config) : html, csp: { connectDomains: [origin] } };
         },
     }] };
 }

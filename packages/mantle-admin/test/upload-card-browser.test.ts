@@ -8,21 +8,23 @@ import type { MediaLibrary } from "@aotter/mantle/site";
 
 const body = async (request: IncomingMessage) => { const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(chunk as Buffer); return Buffer.concat(chunks); };
 
-it("the upload card PUTs the picked image to storage through CORS and commits it with upload_media", async () => {
+// A host re-serving several servers' media names its own tool and has the card repeat `server` from the tool input.
+it.each([{}, { tool: "open_upload", forward: ["server"] }])("the upload card PUTs the picked image to storage through CORS and commits it (%o)", async (options: { tool?: string; forward?: string[] }) => {
+  const TOOL = options.tool ?? "upload_media", extra = options.forward ? { server: "shop" } : {};
   const root = resolve(import.meta.dirname, "../../.."), pkg = resolve(import.meta.dirname, "..");
   const { build } = createRequire(resolve(root, "packages/mantle/package.json"))("esbuild");
   const require = createRequire(resolve(pkg, "package.json"));
   // the built card, as `mediaUploadCard` serves it on resources/read
   const { mediaUploadCard } = await import("../dist/server/mcp.js");
   let origin = "";
-  const card = mediaUploadCard({ media: () => ({ uploadOrigin: origin }) }).resources[0]!;
-  expect(card).toMatchObject({ uri: "ui://mantle-admin/upload", renders: ["upload_media"] });
+  const card = mediaUploadCard({ media: () => ({ uploadOrigin: origin }), ...options }).resources[0]!;
+  expect(card).toMatchObject({ uri: "ui://mantle-admin/upload", renders: [TOOL] });
   const host = await build({ stdin: { contents: `
 import {AppBridge,PostMessageTransport} from '@modelcontextprotocol/ext-apps/app-bridge';
 const frame=document.createElement('iframe');frame.sandbox='allow-scripts';document.body.append(frame);
 window.host={calls:[],messages:[]};
 const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{}});
-bridge.oninitialized=()=>{void bridge.sendToolInput({arguments:{purpose:'cover'}});};
+bridge.oninitialized=()=>{void bridge.sendToolInput({arguments:{purpose:'cover',server:'shop'}});};
 bridge.oncalltool=async params=>{window.host.calls.push(params);return (await fetch('/tool',{method:'POST',body:JSON.stringify(params)})).json();};
 bridge.onmessage=async params=>{window.host.messages.push(params);return {};};
 bridge.onsizechange=()=>{};
@@ -55,9 +57,9 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       return;
     }
     if (url === "/tool") {
-      const { name, arguments: args } = JSON.parse(String(await body(request)));
+      const { name, arguments: { server, ...args } } = JSON.parse(String(await body(request)));
       try {
-        if (name !== "upload_media") throw new Error(`unknown tool ${name}`);
+        if (name !== TOOL || server !== (options.forward ? "shop" : undefined)) throw new Error(`unexpected call ${name} ${server}`);
         const out = await uploadMedia(library, policies, args, { apps: true }) as Record<string | symbol, unknown>;
         const [data, meta] = Symbol.for("net.aotter.mantle/result") in out ? [out.data, out._meta] : [out, undefined];
         response.end(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data, ...(meta ? { _meta: meta } : {}) }));
@@ -68,7 +70,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       return;
     }
     if (url === "/card") {
-      const page = await (card.html as (render: unknown) => Promise<{ html: string; csp: unknown }>)({ env: {}, tools: new Set(["upload_media"]), request: new Request(`${origin}/mcp/admin`) });
+      const page = await (card.html as (render: unknown) => Promise<{ html: string; csp: unknown }>)({ env: {}, tools: new Set([TOOL]), request: new Request(`${origin}/mcp/admin`) });
       expect(page.csp).toEqual({ connectDomains: [origin] });
       response.setHeader("content-type", "text/html");
       response.end(page.html);
@@ -105,9 +107,9 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
     expect(preflights).toEqual(["null"]);
     const { calls, messages } = await page.evaluate(() => (window as unknown as { host: { calls: unknown[]; messages: unknown[] } }).host);
     expect(calls.map(call => ({ name: (call as { name: string }).name, arguments: (call as { arguments: unknown }).arguments }))).toEqual([
-      { name: "upload_media", arguments: {} },
-      { name: "upload_media", arguments: { purpose: "cover", filename: "cat.png", variants: [{ mimeType: "image/png", byteSize: 64, role: "primary" }], alt: "A cat" } },
-      { name: "upload_media", arguments: { uploadId: id, purpose: "cover" } },
+      { name: TOOL, arguments: { ...extra } },
+      { name: TOOL, arguments: { purpose: "cover", filename: "cat.png", variants: [{ mimeType: "image/png", byteSize: 64, role: "primary" }], alt: "A cat", ...extra } },
+      { name: TOOL, arguments: { uploadId: id, purpose: "cover", ...extra } },
     ]);
     expect(messages).toEqual([{ role: "user", content: [{ type: "text", text: `I uploaded cat.png to the media library: asset id ${id} (purpose cover).` }] }]);
     // a finished upload offers no second upload of the same file

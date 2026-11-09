@@ -10,7 +10,9 @@ import { outputOf, type ToolResult } from "../../../src/app/bridge.js";
 
 /** `@aotter/mantle/media`'s `UPLOAD_META`: the result `_meta` key with the upload targets. */
 const UPLOAD_META = "net.aotter.mantle/upload";
-const TOOL = "upload_media";
+/** `mediaUploadCard`'s `tool` and `forward`, written into the page by the server (absent: `upload_media`, nothing forwarded). */
+const config = JSON.parse(document.getElementById("mantle-upload-config")?.textContent ?? "{}") as { tool?: string; forward?: string[] };
+const TOOL = config.tool ?? "upload_media", forward = config.forward ?? [];
 interface Purpose { readonly name: string; readonly required: readonly string[]; readonly maxBytes: Readonly<Record<string, number>> }
 interface Target { readonly url: string; readonly method: string; readonly headers: Readonly<Record<string, string>> }
 
@@ -29,6 +31,11 @@ document.body.innerHTML = `<form id="card" aria-busy="true" novalidate>
 const form = $<HTMLFormElement>("card"), select = $<HTMLSelectElement>("purpose"), file = $<HTMLInputElement>("file");
 const alt = $<HTMLInputElement>("alt"), button = $<HTMLButtonElement>("upload"), progress = $<HTMLProgressElement>("progress"), status = $<HTMLParagraphElement>("status");
 
+// the forwarded arguments come from the rendering call's input, so every call waits for it when there are any
+const bound: Record<string, unknown> = {};
+let inputArrived!: () => void;
+const input = forward.length ? new Promise<void>(resolve => { inputArrived = resolve; }) : Promise.resolve();
+const bind = (call: NonNullable<HostApi["call"]>): NonNullable<HostApi["call"]> => async (name, args, signal) => { await input; return call(name, { ...args, ...bound }, signal); };
 let host: HostApi | undefined, purposes: readonly Purpose[] = [], asked: string | undefined, busy = false, done = false;
 const say = (text: string, alert = false) => { status.textContent = text; status.setAttribute("role", alert ? "alert" : "status"); };
 /** The diagnostic message of a failed call, else `fallback`. */
@@ -94,7 +101,7 @@ async function upload(picked: File, purpose: Purpose, call: NonNullable<HostApi[
 
 // a click, not a form submission: a sandbox without allow-forms never dispatches submit
 button.addEventListener("click", () => {
-  const picked = file.files?.[0], purpose = current(), call = host?.call;
+  const picked = file.files?.[0], purpose = current(), call = host?.call && bind(host.call);
   if (!picked || !purpose || !call || busy || done) return;
   busy = true; render();
   void upload(picked, purpose, call).then(async asset => {
@@ -113,14 +120,18 @@ connectHost({
   ready: (connected, context) => {
     host = connected; applyHostContext(context); render();
     // the policy, from the server: it is the authority on purposes, types and caps
-    void connected.call?.(TOOL, {}).then(result => {
+    if (connected.call) void bind(connected.call)(TOOL, {}).then(result => {
       const out = outputOf(result);
       if (!result.isError && record(out) && Array.isArray(out.purposes)) { purposes = out.purposes as Purpose[]; say(""); }
       else say(failure(result, "The media purposes could not be read."), true);
       render();
     }, () => { say("The media purposes could not be read.", true); });
   },
-  input: args => { if (typeof args.purpose === "string") { asked = args.purpose; render(); } },
+  input: args => {
+    for (const name of forward) if (args[name] !== undefined) bound[name] = args[name];
+    inputArrived?.();
+    if (typeof args.purpose === "string") { asked = args.purpose; render(); }
+  },
   // a call that already committed (by uploadId, sourceUrl or file) renders as its asset, not as a new form
   result: result => { const out = outputOf(result); if (!result.isError && record(out) && typeof out.id === "string" && Array.isArray(out.variants)) { finish(out.id); render(); } },
   cancelled: () => {},
