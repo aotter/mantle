@@ -32,6 +32,29 @@ Pin every package you use to the same exact version and upgrade them together.
 From 0.1.x, follow [Upgrade 0.1 to 0.2](upgrade-0.1-to-0.2.md) instead: a new database, a reviewed and rehearsed data
 move, and never booting 0.2 against a 0.1.x database.
 
+## 0.2.2 — in preparation
+
+### Upgrading to 0.2.2-alpha.1
+
+Pin the selected packages to `0.2.2-alpha.1` and regenerate. Nothing breaks, and existing configuration keeps working:
+
+- **Media tools.** `/mcp/admin` has four media tools: `upload_media`, `find_media`, `update_media` and
+  `delete_media`, plus an upload card. The seven older names still answer, marked "Deprecated, removed in 0.3".
+  A media purpose may be `visibility: "private"`: its assets carry no public URL, and `signRead` returns a
+  short-lived one. New media ids carry a per-database tag; another server's id is `MEDIA_NOT_OWNED` (404).
+- **MCP.** `discovery: "all"` gives every caller of an endpoint the same `tools/list`, and `authorize` still decides
+  each call. The Admin MCP App links at the fixed `ui://mantle-admin/admin` by default; the build's hash URI still
+  answers.
+- **Admin sign-in seams.** A `{ kind: "passkey" }` method, a `SignIn` component slot and an `onSignedIn` step; Admin
+  ships no passkey experience of its own.
+- **Static files at the edge.** A newly generated `run_worker_first` excludes `/admin/assets/*` and `/assets/*`, and
+  `mantle bundle` copies `public/` into the assets directory. Existing `run_worker_first` settings are not changed;
+  in a new config an app route under `/assets/` no longer reaches the Worker.
+- **Fixes.** OTP failures are normalised at the HTTP boundary; a Schema check refusal is no longer reported as a stale
+  write; media search by id works on D1.
+- **Docs.** [Bulk seeding](../reference/schema.md#seed-in-bulk), changing another member's row with an inline
+  `author_id = auth.uid()` ([SQL patterns](../guides/sql-patterns.md)), and a waiting list in the club-events example.
+
 ## 0.2.1 (2026-10-30)
 
 0.2.1 adds **Schema locks**: a manifest rule that refuses a row's update or delete on every caller path (REST, MCP,
