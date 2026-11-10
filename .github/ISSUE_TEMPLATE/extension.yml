@@ -1,0 +1,52 @@
+name: Extension point request
+description: An application had to work around the SDK. Report the workaround so the extension point is opened on evidence.
+title: "[Extension] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when an application reaches past the public API: it re-implements SDK logic, patches a package, or imports something that is not a documented entry point.
+        Mark the workaround in the application with `drop when aotter/mantle#<this issue>`, so the same need found again is counted here instead of rediscovered.
+        Do not include secrets, customer names or private repository links.
+  - type: textarea
+    id: goal
+    attributes:
+      label: What the application needs to do
+      description: The outcome, not the hook you expect.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: The workaround today
+      description: The code or patch, reduced to what shows which SDK behaviour it depends on.
+      render: ts
+    validations:
+      required: true
+  - type: textarea
+    id: knowledge
+    attributes:
+      label: What it has to know about the SDK
+      description: Internal shapes, ordering or defaults the workaround relies on. This is what breaks on upgrade.
+    validations:
+      required: true
+  - type: dropdown
+    id: varies
+    attributes:
+      label: What varies
+      description: Extension points belong where applications differ; pick the closest.
+      options:
+        - Host runtime (Workers, Bun, other)
+        - Identity or authorization
+        - Storage or media
+        - MCP host behaviour
+        - Admin or UI composition
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: seen
+    attributes:
+      label: Where else this was needed
+      description: Other applications or issues with the same need, if any.
