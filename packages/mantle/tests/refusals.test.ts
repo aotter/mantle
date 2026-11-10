@@ -84,3 +84,10 @@ console.log(JSON.stringify(await generateFromSources({ target: "bun-postgres", s
   expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "views/bad-cast", message: "Input $1 must appear only as CAST($1 AS jsonb). Wrap each occurrence in CAST($1 AS jsonb)." });
   expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "views/bad-cast/requires/guard", message: "Dynamic authorization guards are unsupported. Write a custom handler that checks authorization before executing queries." });
 }, 30_000);
+
+test("date and timestamp literals that do not exist are refused at generate, as request input is", async () => {
+  for (const target of ["bun-sqlite", "bun-postgres"] as const) for (const literal of ["'2026-13-01'::date", "'2026-02-30'::date", "'2026-10-11T24:00:00Z'::timestamptz", "'2026-13-01T00:00:00Z'::timestamptz"]) {
+    const result = await generateFromSources({ target, sources: { sources: [{ sourceId: "refused.yaml", text: [...base, doc("View", "dated", { surface: "internal", sql: `SELECT id, ${literal} AS at FROM notes` })].join("\n---\n") }] } });
+    expect(result.ok, `${target} ${literal}`).toBe(false);
+  }
+});

@@ -43,7 +43,8 @@ export function encodeTimestamptz(v: string | Date | number): number {
     if (!Number.isSafeInteger(v)) throw new Refused('SQL_TYPE', `${v} is not a whole number of microseconds within 2^53`);
     return v;
   }
-  const m = /^(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d(?::\d\d)?)(?:\.(\d{1,6}))?(Z|[+-]\d\d(?::?\d\d)?)$/.exec(v.trim());
+  // hours 00-23, as kernel/scalars.ts: Date.parse would roll T24:00 over to the next day
+  const m = /^(\d{4}-\d\d-\d\d)[T ]((?:[01]\d|2[0-3]):\d\d(?::\d\d)?)(?:\.(\d{1,6}))?(Z|[+-]\d\d(?::?\d\d)?)$/.exec(v.trim());
   if (!m) throw new Refused('SQL_TYPE', `'${v}' is not a timestamp with an explicit offset`);
   const [, day, time, fraction, offset] = m as unknown as string[];
   const frac = (fraction ?? '').padEnd(6, '0');
@@ -65,7 +66,7 @@ export function encodeDate(v: string | Date): number {
   const dt = new Date(0);
   dt.setUTCFullYear(+y!, +mo! - 1, +d!); // Date.UTC would read years 0 to 99 as 1900 to 1999
   const days = dt.getTime() / (US_PER_DAY / 1000);
-  if (dt.getUTCDate() !== +d!) throw new Refused('SQL_TYPE', `'${v}' is not a valid date`);
+  if (dt.getUTCDate() !== +d! || dt.getUTCMonth() !== +mo! - 1) throw new Refused('SQL_TYPE', `'${v}' is not a valid date`);
   return days;
 }
 export const decodeDate = (days: number) => new Date(days * 86_400_000).toISOString().slice(0, 10);
