@@ -39,7 +39,7 @@ interface Desired {
   readonly indexes: readonly { name: string; unique: boolean; columns: readonly string[]; sql: string }[];
   readonly triggers: readonly { name: string; sql: string }[];
   /** FTS5 / R*Tree tables with the SQL they must have been created with. */
-  readonly virtuals: readonly { name: string; sql: string; rebuild: string }[];
+  readonly virtuals: readonly { name: string; sql: string }[];
 }
 
 function desired(name: string, s: StorageSchema): Desired {
@@ -74,7 +74,7 @@ function desired(name: string, s: StorageSchema): Desired {
     const f = s.search.map(q).join(", ");
     const n = s.search.map((c) => `new.${q(c)}`).join(", ");
     const o = s.search.map((c) => `old.${q(c)}`).join(", ");
-    virtuals.push({ name: ftsTableName(name), sql: `CREATE VIRTUAL TABLE ${fts} USING fts5(${f}, content=${lit(name)}, content_rowid='_rid', tokenize='trigram')`, rebuild: `INSERT INTO ${fts} (${fts}) VALUES ('rebuild')` });
+    virtuals.push({ name: ftsTableName(name), sql: `CREATE VIRTUAL TABLE ${fts} USING fts5(${f}, content=${lit(name)}, content_rowid='_rid', tokenize='trigram')` });
     triggers.push(
       { name: `_mantle_fts_${name}_i`, sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_i`)} AFTER INSERT ON ${t} BEGIN INSERT INTO ${fts} (rowid, ${f}) VALUES (new._rid, ${n}); END` },
       { name: `_mantle_fts_${name}_d`, sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_d`)} AFTER DELETE ON ${t} BEGIN INSERT INTO ${fts} (${fts}, rowid, ${f}) VALUES ('delete', old._rid, ${o}); END` },
@@ -88,7 +88,7 @@ function desired(name: string, s: StorageSchema): Desired {
     const g = q(tree);
     const la = q(`${geo}_lat`);
     const ln = q(`${geo}_lng`);
-    virtuals.push({ name: tree, sql: `CREATE VIRTUAL TABLE ${g} USING rtree(id, minLat, maxLat, minLng, maxLng)`, rebuild: `INSERT INTO ${g} SELECT _rid, ${la}, ${la}, ${ln}, ${ln} FROM ${t} WHERE ${la} IS NOT NULL AND ${ln} IS NOT NULL` });
+    virtuals.push({ name: tree, sql: `CREATE VIRTUAL TABLE ${g} USING rtree(id, minLat, maxLat, minLng, maxLng)` });
     triggers.push(
       { name: `${tree}_i`, sql: `CREATE TRIGGER ${q(`${tree}_i`)} AFTER INSERT ON ${t} WHEN new.${la} IS NOT NULL AND new.${ln} IS NOT NULL BEGIN INSERT INTO ${g} VALUES (new._rid, new.${la}, new.${la}, new.${ln}, new.${ln}); END` },
       { name: `${tree}_d`, sql: `CREATE TRIGGER ${q(`${tree}_d`)} AFTER DELETE ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; END` },

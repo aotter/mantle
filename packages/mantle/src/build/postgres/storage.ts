@@ -23,9 +23,6 @@ function indexes(name: string, s: StorageSchema) {
   return [
     ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: s.userScopes?.length ? [...new Set([...(s.scope ? [s.scope] : []), ...s.userScopes.map(x => x.column), ...u])] : s.scope && u[0] !== s.scope ? [s.scope, ...u] : [...u] })),
     ...(s.indexes ?? []).map((cols, i) => ({ name: `_mantle_ix_${name}_${i}`, unique: false, columns: [...cols] })),
-    // Admin's default list order (updated_at descending, then the id tiebreak), served by a backward scan (ADR-0039 decision 2)
-    // ponytail: every Schema pays this index on UPDATE; a write-hot table that is never listed could opt out once one is measured; a large existing table is better served by CREATE INDEX CONCURRENTLY (outside the convergence transaction) with the same name and columns, which is the upgrade path
-    { name: `_mantle_ix_${name}_updated`, unique: false, columns: [...(s.scope ? [s.scope] : []), "updated_at", "id"] },
   ].map((i) => ({ ...i, name: ident(i.name), sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${q(ident(i.name))} ON ${q(name)} (${i.columns.map(q).join(", ")})` }));
 }
 
@@ -53,7 +50,7 @@ const createTable = (name: string, s: StorageSchema, notNull: ReadonlySet<string
 export function initialStorageSql(plan: Readonly<Record<string, StorageSchema>>): readonly string[] {
   return Object.entries(plan).flatMap(([name, schema]) => [
     // No Admin surface is selected by this SQL-only artifact; emit authored indexes only.
-    createTable(name, schema, notNullColumns(schema)), ...indexes(name, schema).filter((i) => i.name !== ident(`_mantle_ix_${name}_updated`)).map((i) => i.sql),
+    createTable(name, schema, notNullColumns(schema)), ...indexes(name, schema).map((i) => i.sql),
     ...(schema.checks ?? []).map((check, i) => `ALTER TABLE ${q(name)} ADD CONSTRAINT ${q(ident(`_mantle_chk_${name}_${i}`))} CHECK (${checkText(check, schema)})`),
   ]);
 }
