@@ -2,7 +2,6 @@
 import { type LoweredPage, type LoweredStatement, type LoweredView, type PlanLowered, type RuntimePlan, type SqlNode as N } from "../../spec/domain/index.js";
 import type { MantleDialect, StorageSchema } from "../dialect.js";
 import { lifecycleHookSets } from "../runtime/hooks.js";
-import { MANTLE_VERSION } from "../version.js";
 import { schemaColumns } from "./allowlist.js";
 import { writeTarget } from "./ast.js";
 import { compileProgram } from "./compile.js";
@@ -18,7 +17,7 @@ export interface LoweringOptions {
   readonly project?: (ast: N, kind: "view" | "procedure", name: string, page?: Paged) => N;
 }
 
-type Body = Omit<RuntimePlan, "fingerprint" | "lowered">;
+type Body = Omit<RuntimePlan, "lowered">;
 
 const PROCEDURE_MODES = ["caller", "trusted"] as const;
 
@@ -94,5 +93,5 @@ export function lowerPlan(plan: Body, dialect: MantleDialect, options: LoweringO
     const lowered = Object.fromEntries(PROCEDURE_MODES.flatMap((mode) => { const x = lowerProcedure(env, { inputs, ir, restrict: proc.restrict }, proc.trustedOnly ? "trusted" : mode, returning, columns, warn, `plan#/procedures/${name}`, options.project && (ast => options.project!(ast, "procedure", name))); return x ? [[mode, x.map((s, i) => (steps[i]?.onNoRows ? { ...s, onNoRows: steps[i]!.onNoRows } : s))]] : []; }));
     return Object.keys(lowered).length ? [[name, lowered]] : [];
   });
-  return { lowered: { mantle: MANTLE_VERSION, dialect: { name: dialect.name, version: dialect.version, key: dialect.lowerKey ?? "" }, views: Object.fromEntries(views), procedures: Object.fromEntries(procedures) }, warnings };
+  return { lowered: { dialect: { name: dialect.name, version: dialect.version }, views: Object.fromEntries(views), procedures: Object.fromEntries(procedures) }, warnings };
 }

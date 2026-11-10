@@ -5,10 +5,9 @@
  */
 import { validateDiagnostic, type Diagnostic, type SourceLocation } from "../../kernel/diagnostic.js";
 import { stepProgram, type JsonSchema, type ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
-import { NATIVE_OUTPUT_TYPES, RUNTIME_PLAN_VERSION, type PlanProcedure, type PlanSchema, type PlanTrigger, type PlanView, type RuntimePlan } from "../../domain/model/RuntimePlan.js";
+import { NATIVE_OUTPUT_TYPES, type PlanProcedure, type PlanSchema, type PlanTrigger, type PlanView, type RuntimePlan } from "../../domain/model/RuntimePlan.js";
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { refChecks } from "../../domain/service/SqlRowPolicy.js";
-import { planFingerprint } from "../../domain/service/PlanFingerprint.js";
 import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
 import { AGGREGATES, NATIVE_COLUMNS, NATIVE_NOT_NULL, notNullColumns, viewCacheProblem, checkShapeProblem, lockIndexProblem, lockShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
@@ -469,9 +468,8 @@ export async function compileLinkedPlan(linked: LinkedManifestSet, dialect: SqlD
       diagnostics.push(validateDiagnostic({ code: "USER_FIELD_CONFLICT", severity: "error", path: `schemas/${schema.name}/scope`, message: `'${schema.name}.${field}' references '${target!.name}', which is scoped by auth.user('${term.field}'); scope '${schema.name}' by the same field so its rows cannot expose what that scope hides.` }));
   }
   if (diagnostics.length) return { ok: false, diagnostics };
-  const sealed = { version: RUNTIME_PLAN_VERSION, dialect: { name: dialect.name, version: dialect.version }, schemas, views, procedures, triggers,
-    ...(Object.keys(userFields).length ? { access: { roles: [], userFields, warnings } } : {}) };
-  return { ok: true, plan: { ...sealed, fingerprint: await planFingerprint(sealed) } };
+  return { ok: true, plan: { dialect: { name: dialect.name, version: dialect.version }, schemas, views, procedures, triggers,
+    ...(Object.keys(userFields).length ? { access: { roles: [], userFields, warnings } } : {}) } };
 }
 
 /** The plugin's contract: parse, link and compile manifest sources in one call. */

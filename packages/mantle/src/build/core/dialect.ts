@@ -39,8 +39,4 @@ export interface MantleDialect {
    * inline Procedure through it. Absent, a plan for this dialect carries no lowered statements.
    */
   print?(ast: SqlNode, schemas: Readonly<Record<string, StorageSchema>>): string;
-  /** What else the printed text depends on (PostgreSQL: the time zone); compared with `plan.lowered.dialect.key`. */
-  readonly lowerKey?: string;
-  /** Set by `restricted()`: an operator's refusals run on every program, so lowered statements are never used (ADR-0044 decision 5). */
-  readonly restricted?: boolean;
 }

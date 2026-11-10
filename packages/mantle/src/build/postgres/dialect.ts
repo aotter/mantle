@@ -17,8 +17,7 @@ export function postgresDialect(timeZone = "UTC"): MantleDialect {
     lowering: pgLowering(timeZone),
     nativeOrder: true,
     nativeSql: true,
-    // the executor prints `typed` then the deparser (ADR-0044 decision 3); `lowerKey` carries what the text embeds besides the dialect: the zone
+    // the executor prints `typed` then the deparser (ADR-0044 decision 3)
     print: (ast, schemas) => print(typed(ast, schemas)),
-    lowerKey: timeZone,
   };
 }
