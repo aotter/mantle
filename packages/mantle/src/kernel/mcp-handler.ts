@@ -6,7 +6,8 @@ import { authorized } from "./authorization.js";
 import { isAdmin, ContractError, wire, type Caller, type RequestContext } from "./contracts.js";
 import { draining } from "./drain.js";
 import type { Tool, Tools, Options } from "./mcp.js";
-import { linkSurface, resourcesOf, type McpAppRender, type McpAppsSource } from "./mcp-apps.js";
+import { linkSurface, type McpAppRender, type McpAppsSource } from "./mcp-apps.js";
+import { resolveMcpApps } from "./mcp-app-pages.js";
 import { serveTools } from "./mcp-server.js";
 import { isView, openPipeline, type Call, type Pipeline } from "./request-pipeline.js";
 
@@ -302,7 +303,7 @@ async function linkRequestApps(
   if (!declared) return undefined;
   const sources = (Array.isArray(declared) ? declared : [declared]) as readonly McpAppsSource[];
   const dynamic = sources.some(source => typeof source === "function");
-  const resolved = resourcesOf(await Promise.all(sources.map(source => typeof source === "function" ? source(render) : source)));
+  const resolved = await resolveMcpApps(sources, render);
   // Equal tool names say nothing about request-bound resource identity or ownership.
   const current = linkSurface(resolved, selected, dynamic ? undefined : cache[surface]);
   if (!dynamic) cache[surface] = current;

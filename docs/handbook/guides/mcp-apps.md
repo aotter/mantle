@@ -216,22 +216,20 @@ for the next build. Run it in the deployment script, not as a manual cache fix:
 
 ```js
 import { readFileSync, writeFileSync } from 'node:fs';
+import { resolveMcpApps } from '@aotter/mantle/mcp/apps';
 import { adminMcpApps } from '@aotter/mantle-admin/mcp';
 import { appDefinition } from '../src/mcp-app-definition.ts';
 
 const path = 'mcp-app-previous.json';
 const previous = JSON.parse(readFileSync(path, 'utf8'));
 const context = { env: {}, request: new Request('https://archive.invalid/mcp') };
-const source = adminMcpApps({ ...appDefinition,
-  html: readFileSync('dist/client/admin/mcp-app.html', 'utf8') });
-const { resources } = typeof source === 'function' ? await source(context) : source;
+const { resources } = await resolveMcpApps(adminMcpApps({ ...appDefinition,
+  html: readFileSync('dist/client/admin/mcp-app.html', 'utf8') }), context);
 // The build's own content-hash URI (an explicit `uri` contributes only that URI).
 const resource = resources.find(r => /\/admin\/[a-f0-9]{64}$/.test(r.uri)) ?? resources[0];
 const tools = new Set([...Object.keys(appDefinition.catalogue.views),
   ...Object.keys(appDefinition.catalogue.actions)]);
-const loaded = typeof resource.html === 'string' ? resource.html
-  : await resource.html({ ...context, tools });
-const page = typeof loaded === 'string' ? { html: loaded } : loaded;
+const page = await resource.html({ ...context, tools });
 const snapshot = { uri: resource.uri, title: resource.title, ...page,
   ...(resource.domain === undefined ? {} : { domain: resource.domain }) };
 // This application's policy: retain the last two deployed pages for future builds.
@@ -243,6 +241,15 @@ Custom loaders must archive their actual immutable resource, including CSP/domai
 instead of using this default-asset recipe. Compare the archived URI with deployed
 `tools/list`/`resources/read`; a mismatching declaration or stale local build is
 not deployment evidence.
+
+Contributors are convenient to write and uniform to read. What you pass may be a static
+`McpApps` or a function of `{ env, request }`, and a resource's `html` may be a string, a
+loader, or a loader returning a string or `{ html, csp }`. What comes back is in one normal
+form: `resolveMcpApps(sources, { env, request })` from `@aotter/mantle/mcp/apps` returns
+`NormalMcpApps`, whose every `html` is an async loader resolving to `{ html, csp? }`. The
+endpoint reads its Apps through the same function, and `adminMcpApps` and `mediaUploadCard`
+return resources already in that form. Wrap a contributor by resolving it and returning
+the changed resources; do not test for functions or strings yourself.
 
 Core accepts static contributors or async `(context: { env, request }) => McpApps`
 sources, including mixed arrays. Static declarations are checked at construction;

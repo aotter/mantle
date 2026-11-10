@@ -11,7 +11,7 @@ import { loadFixtureSources } from "./apps/link.js";
 /** Developer API: documented in the handbook or skills, or imported by hand-written application code. */
 const DEVELOPER = [
   ".", "./generate", "./generate/auth", "./package.json",
-  "./contracts", "./rest", "./mcp", "./web", "./site", "./media", "./media/r2", "./email", "./cron", "./testing",
+  "./contracts", "./rest", "./mcp", "./mcp/apps", "./web", "./site", "./media", "./media/r2", "./email", "./cron", "./testing",
   "./auth", "./auth/adapter", "./auth/oauth", "./auth/routes", "./auth/identity", "./auth/hardening", "./auth/admin",
   "./bun/assets",
   // The SQLite `Handle` contracts an application names for its database; generated code imports the same modules.

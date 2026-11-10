@@ -6,6 +6,7 @@
 import { ContractError, type Caller } from "./contracts.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
 import type { Tool, Options } from "./mcp.js";
+import { mcpAppPageLoader } from "./mcp-app-pages.js";
 import { RESOURCE_MIME_TYPE, type linkSurface, type McpAppCsp, type McpAppRender, type McpAppResource } from "./mcp-apps.js";
 import type { Call, Pipeline } from "./request-pipeline.js";
 
@@ -291,8 +292,8 @@ function registerApps(
     };
     server.registerResource(resource.name, resource.uri, listing, async () => {
       try {
-        const loaded = typeof resource.html === "string" ? resource.html : await resource.html({ tools, ...request });
-        const page = typeof loaded === "string" ? { html: loaded } : loaded, read = page.csp ? appMeta(resource, page.csp) : meta;
+        // A statically linked resource is as its contributor declared it; a resolved one is already in normal form.
+        const page = await mcpAppPageLoader(resource.html)({ tools, ...request }), read = page.csp ? appMeta(resource, page.csp) : meta;
         return { contents: [{ uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: page.html, ...(read ? { _meta: read } : {}) }] };
       } catch (error) {
         console.error("[mantle mcp] resource rendering failed:", error instanceof Error ? error.message : String(error));
