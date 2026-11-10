@@ -75,18 +75,18 @@ export function rowPolicy(s: RowSchema, mode: RowMode, schemas?: Readonly<Record
   ];
 }
 
-/** What a write adds. `status`: the status an update moves the entry to. `idGiven`: the insert names its id. `lock`: the update is checked against a version. `trusted`: a system write, which no Schema lock binds. */
-export function writePolicy(s: RowSchema, kind: "insert" | "update" | "delete", o: { status?: string; idGiven?: boolean; lock?: boolean; trusted?: boolean } = {}): RowWrite {
+/** What a write adds. `idGiven`: the insert names its id. `lock`: the update is checked against a version. `trusted`: a system write, which no Schema lock binds. */
+export function writePolicy(s: RowSchema, kind: "insert" | "update" | "delete", o: { idGiven?: boolean; lock?: boolean; trusted?: boolean } = {}): RowWrite {
   const lock = kind !== "insert" && o.lock ? ["version", "eq", { k: "version" }] as const : undefined;
   const locks = kind === "insert" || o.trusted ? [] : (s.locks ?? []).filter(l => l.on.includes(kind)).map(l => [l.name, "lock", l.when] as const);
   if (kind === "delete") return { fills: [], sets: [], lock, locks };
-  const sets = [["version", "bump"], ["updated_at", NOW], ...(o.status ? [["status", { k: "const", value: o.status }] as const] : [])] as const;
+  const sets = [["version", "bump"], ["updated_at", NOW]] as const;
   if (kind === "update") return { fills: [], sets, lock, locks };
   const uid: RowValue = { k: "uid" };
   return {
     // a scoped Schema always gets a generated id: a caller-chosen id would collide with (and reveal) another owner's row
     fills: [...(s.scope ? [[s.scope, uid] as const] : []), ["created_at", NOW], ["updated_at", NOW], ["author_id", uid], ...(o.idGiven && !s.scope && !s.userScopes?.length ? [] : [["id", "newId"] as const])],
-    sets: sets.slice(0, 2),
+    sets,
     locks,
   };
 }
