@@ -12,8 +12,7 @@ export const forwarded = (ctx?: RequestContext, gateway?: Gateway): boolean => !
 export interface AccessTarget {
   readonly targetHash: string;
   readonly opaque: boolean;
-  readonly guard?: string;
-  readonly variants?: readonly (Pick<AccessTarget, "opaque" | "guard"> & { readonly id: string })[];
+  readonly variants?: readonly (Pick<AccessTarget, "opaque"> & { readonly id: string })[];
 }
 export interface AccessEvent {
   readonly v: 1;

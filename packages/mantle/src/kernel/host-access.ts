@@ -24,7 +24,7 @@ export function accessRequest(ctx: RequestContext | undefined, options: GatewayO
       if (c.targetHash !== undefined && (!meta || c.targetHash !== meta.targetHash)) fail("TARGET_HASH_MISMATCH", 412);
       checkFresh(caller, readOnly, id);
       const policy = variant ? meta?.variants?.find(v => v.id === variant) ?? meta : meta;
-      if (this.dryRun && (!policy || policy.opaque || policy.guard)) fail("DRY_RUN_UNSUPPORTED", 412);
+      if (this.dryRun && (!policy || policy.opaque)) fail("DRY_RUN_UNSUPPORTED", 412);
     },
     finish(error?: unknown): AccessEvent {
       if (finished) return finished;
