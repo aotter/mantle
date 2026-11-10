@@ -176,7 +176,7 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
       return mounts.get(key)!;
     };
 
-    const lines: string[] = [], divergent: string[] = [];
+    const lines: string[] = [], divergent: string[] = [], acquiredBeforeDenial: string[] = [];
     const run = async (gateway: boolean, authorization: Authorization, callerName: string, shapeName: string, target: TargetCase) => {
       const cell = `gateway=${gateway ? "on" : "off"} authorize=${authorization} caller=${callerName} shape=${shapeName} target=${target.name}`;
       const props = gateway ? hostCallers[callerName] : undefined;
@@ -198,6 +198,7 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
         await new Promise(resolve => setTimeout(resolve, 0));
         const event = events.map(event => `${event.outcome}${event.reason ? `:${event.reason}` : ""}@${event.target}${event.dryRun ? " dry" : ""}`).join(",") || "none";
         decisions.push(outcome.decision);
+        if (outcome.decision.startsWith("deny:") && acquired > 0) acquiredBeforeDenial.push(`${cell} ${surface}`);
         parts.push(`  ${surface}: ${outcome.decision} [${outcome.detail}] db=${acquired > 0 ? 1 : 0} authorize=${authorizations} resolver=${resolutions} event=${event}`);
       };
       if (target.rest) {
@@ -237,6 +238,11 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
     const actual = lines.join("\n") + "\n";
     if (process.env.UPDATE_MATRIX) await writeFile(GOLDEN, actual);
     expect(actual).toBe(await readFile(GOLDEN, "utf8"));
+
+    // Every surface refuses before it acquires a database handle. The one exception is the fixture's own: `peek` is
+    // marked read-only by hand but still writes, so a snapshot host caller passes the pipeline's freshness step and
+    // the generated Procedure's own freshness guard refuses it.
+    expect(acquiredBeforeDenial.filter(cell => !/ caller=host-(member|admin)-snapshot .* target=peek /.test(cell))).toEqual([]);
 
     // Surfaces must agree on a cell unless one of these documented rules explains the difference.
     const unexplained = divergent.filter(cell => !divergences.some(rule => rule.test(cell)));
