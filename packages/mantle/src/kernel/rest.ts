@@ -10,6 +10,7 @@ type Paging = { limit?: number; cursor?: string };
 /** Options of a generated `rest(...)`; it adds required `handlers` when the app declares ref Procedures. */
 export interface Options<Env, Database> extends GatewayOptions {
   authorize?: Authorize;
+  /** Host platform contract, versioned by `v`; stable within a version. */
   gateway?: Gateway;
   fields?: import("./user-fields.js").UserFields;
   db: (env: Env) => Database;

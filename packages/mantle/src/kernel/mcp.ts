@@ -18,6 +18,7 @@ export interface Options<Env, Database> extends GatewayOptions {
    * when a caller's grant changes, and `authorize` decides at call time. Listing a tool grants nothing either way.
    */
   discovery?: "authorized" | "all";
+  /** Host platform contract, versioned by `v`; stable within a version. */
   gateway?: Gateway;
   fields?: import("./user-fields.js").UserFields;
   db: (env: Env) => Database;

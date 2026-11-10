@@ -6,7 +6,10 @@ import { userCaller } from "./user-caller.js";
 import type { UserFields, UserValue } from "./user-fields.js";
 import { identities, isHostCaller } from "./caller-identity.js";
 
-/** The complete JSON supplied as ctx.props.mantle by a trusted gateway. */
+/**
+ * The complete JSON supplied as ctx.props.mantle by a trusted gateway.
+ * Host platform contract, versioned by `v`; stable within a version.
+ */
 export interface HostProps {
   readonly v: 1;
   readonly tenant: string;

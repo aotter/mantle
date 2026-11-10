@@ -59,6 +59,7 @@ export type WebOptions<Database, E> = {
   locales?: readonly string[];
   pages: Record<string, PageSpec>;
   cacheControl?: string;
+  /** Host platform contract, versioned by `v`; stable within a version. */
   gateway?: Gateway;
   fields?: UserFields;
   authorize?: Authorize;
