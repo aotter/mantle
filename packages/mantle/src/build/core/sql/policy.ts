@@ -32,8 +32,6 @@ export type PolicyOpts = {
   restrict?: PlanRestrict;
   /** add `AND version = ?` (the version checked by the publishing lifecycle) to a row op's WHERE */
   lockVersion?: boolean;
-  /** the status an update moves the entry to (the lifecycle decided it is legal); SQL cannot write `status` */
-  status?: string;
   /** skip `refs` (see CompileContext) */
   uncheckedRefs?: true;
   /** records every relation position the pass printed a wrapper for (the probe checks it is complete) */
@@ -81,8 +79,6 @@ export type Compiled = {
   kind: 'read' | 'row' | 'set';
   schema?: string;
   verb?: 'insert' | 'update' | 'delete';
-  /** the update publishes the entry */
-  publish: boolean;
   /** a Schema lock guards this row write: the probe that classifies its conflict (#1822), with its own binds */
   probe?: { ast: N; binds: BindSpec[] };
 
@@ -456,7 +452,7 @@ function update(n: N, c: C): N {
   if (n.targetList.some((target: N) => columns.includes(String(target.ResTarget.name).toLowerCase()))) throw new Refused('USER_FIELD_POSITION', 'The scoped column is never writable through SET.');
   const out = deep(n, c, 'UpdateStmt');
   c.sel.pop();
-  const w = writePolicy(s, 'update', { status: c.status, lock: c.lockVersion, trusted: c.mode === 'trusted' });
+  const w = writePolicy(s, 'update', { lock: c.lockVersion, trusted: c.mode === 'trusted' });
   // the partition is never SET, so the child's is the row's own
   const checked = refs(s, c, a, column => out.targetList.find((t: N) => String(t.ResTarget.name).toLowerCase() === column)?.ResTarget.val, column => col(a, column), true);
   out.targetList.push(...sets(w, c));
@@ -570,10 +566,9 @@ export function lockCondition(when: N, schemas: Schemas, lower: PolicyLowering):
 export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
   const t = Object.keys(stmt)[0]!;
   const verb = t === 'InsertStmt' ? 'insert' : t === 'UpdateStmt' ? 'update' : t === 'DeleteStmt' ? 'delete' : undefined;
-  // the Schema as publishing and the context key it: SQL folds the name (the allowlist admits only a lower-case one)
+  // the Schema the context keys: SQL folds the name (the allowlist admits only a lower-case one)
   const schema = verb ? String(stmt[t].relation.relname).toLowerCase() : undefined;
-  const publish = opts.status === 'published';
   const c: C = { ...opts, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [], ctes: [] };
   const ast = tx(stmt, c);
-  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, publish, ...(c.probe ? { probe: renumber(c.probe, c.binds) } : {}) };
+  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, ...(c.probe ? { probe: renumber(c.probe, c.binds) } : {}) };
 }

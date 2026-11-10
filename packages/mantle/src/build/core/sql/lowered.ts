@@ -28,7 +28,6 @@ const stmtOf = (c: Compiled, sql: string, print?: (ast: N) => string): LoweredSt
     ...(c.probe && print ? { probe: { sql: print(c.probe.ast), binds: c.probe.binds } } : {}),
     sql, binds: c.binds, kind: c.kind,
     ...(c.schema ? { schema: c.schema } : {}), ...(c.verb ? { verb: c.verb } : {}),
-    ...(c.publish ? { publish: true as const } : {}),
     ...(returningClause(c.ast) ? { returns: true as const } : {}), ...(target ? { target } : {}),
   };
 };
