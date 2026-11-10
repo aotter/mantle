@@ -43,6 +43,13 @@ resources and enforces endpoint/renderer ownership; Admin owns its built-asset
 identity and thin official-client adapter. Do not add another bridge package,
 provider, slot registry or query cache beside the application-built composition.
 
+Extension points are opened on evidence. An application that works around the SDK
+(re-implementing its logic, patching a package, importing an undocumented entry)
+files an "Extension point request" and marks the workaround
+`drop when aotter/mantle#N`. Repeated requests for one need decide the design.
+Values the SDK returns are in one normal form; accept unions only in parameters,
+so wrapping a returned value never needs the SDK's own normalisation.
+
 `skills/*` are versioned consumer product artifacts. Maintainer instructions
 live at the repository root and in `.agents/skills`; do not merge the two
 audiences or copy maintainer policy into shipped skills.
