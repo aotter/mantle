@@ -9,6 +9,19 @@ diagnostic emitters and measured harnesses.
 
 **Related**: [ADR-0007](0007-ai-as-primary-author.md) (the AI-as-primary-author contract this diagnostic format serves); the zod runtime is described in [`docs/design-atoms.md`](https://github.com/aotter/mantle/blob/main/docs/design-atoms.md) § "Manifest validation — JSON Schema in, zod at runtime".
 
+> **Amended 2026-11-10.** The catalogue lives in the private compiler
+> (`packages/mantle/src/build/spec/kernel/diagnostic.ts`) and keeps only codes
+> the package source raises. The `boot` and `test` phases, `bootDiagnostic`,
+> the `failure` and `conflict` fields (ADR-0023) and the catalogue entries for
+> `FIXTURE_SCHEMA_VIOLATION`, `DISPATCHER_NOT_BUILT`,
+> `PLAN_FINGERPRINT_MISMATCH`, `STORAGE_CHANGE_BLOCKED`,
+> `STORAGE_TABLE_NOT_OWNED`, `HANDLER_NOT_DECLARED`,
+> `INVOCATION_DEPTH_EXCEEDED`, `ENTITLEMENT_REQUIRED`, `RATE_LIMITED`,
+> `RESOURCE_EXHAUSTED`, `RESOURCE_UNAVAILABLE`, `PRECONDITION_FAILED` and the
+> other never-raised codes are removed; the shape below is otherwise current.
+> References below to `boot`, `test`, `@aotter/mantle-spec` and these codes
+> are decision history.
+
 ---
 
 ## Context

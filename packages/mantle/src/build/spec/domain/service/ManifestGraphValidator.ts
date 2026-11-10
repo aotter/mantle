@@ -35,7 +35,7 @@ export function validateManifestGraph(
   diags.push(...checkCaseCollisions(partitioned.schemas, [...partitioned.views, ...partitioned.procedures], filePaths));
   diags.push(...checkReaderNames(partitioned.schemas, filePaths));
 
-  diags.push(...checkTranslatesReferences(partitioned.schemas, "validate", filePaths));
+  diags.push(...checkTranslatesReferences(partitioned.schemas, filePaths));
   diags.push(...checkSchemaNavTargetsGraph(partitioned.schemas, schemasByName, filePaths));
 
   for (const s of partitioned.schemas) {

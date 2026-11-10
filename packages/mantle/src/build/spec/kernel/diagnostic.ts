@@ -1,8 +1,6 @@
 /**
- * Structured diagnostic shape — see ADR-0008. Used uniformly across
- * static validation, boot-time, and runtime feedback. The public `test`
- * phase remains reserved for consumer-authored test diagnostics; Core's
- * shipped performance harnesses emit purpose-shaped reports instead.
+ * Structured diagnostic shape — see ADR-0008. The compiler emits it for
+ * static validation and for the runtime-shaped refusals of its SQL lowering.
  *
  * Codes are unprefixed UPPER_SNAKE strings; the `phase` field
  * disambiguates which loop emitted each diagnostic. The same `code`
@@ -12,16 +10,13 @@
  * `candidates` is security-sensitive at runtime; `redactForWire`
  * strips it before HTTP egress.
  */
-export type Phase = "validate" | "test" | "boot" | "runtime";
+export type Phase = "validate" | "runtime";
 
 /**
- * Closed catalog of diagnostic codes the SDK emits across all phases.
- * Per ADR-0008, spec **defines** the catalog; runtime / cli / adapters
- * **emit** them. Codes in the cross-phase and runtime-only sections
- * below are not raised by spec source — they live here because the
- * catalog is the public contract, not the union of what spec happens
- * to throw today. Adding a new code is a grammar-revise event
- * (ADR-0001).
+ * Closed catalog of diagnostic codes the SDK emits. Every code here is raised
+ * somewhere in the package source; the cross-phase and runtime-only sections
+ * name codes the request modules raise with their own types. Adding a new code
+ * is a grammar-revise event (ADR-0001).
  *
  * Single source of truth: the const array drives `DiagnosticCode`
  * (type), so adding a code is one edit.
@@ -34,12 +29,8 @@ export const DIAGNOSTIC_CODES = [
   "USER_FIELD_POSITION",
   "USER_REF_SCOPE_ONLY",
   "USER_SCOPE_PUBLIC_ANON_EMPTY",
-  "RESOURCE_EXHAUSTED",
-  "RESOURCE_UNAVAILABLE",
-  "RATE_LIMITED",
   "OUTCOME_UNKNOWN",
   "PARTIAL_FAILURE",
-  "PRECONDITION_FAILED",
   // Validate-only.
   "INVALID_MANIFEST_ENVELOPE",
   "DUPLICATE_NAME",
@@ -52,7 +43,6 @@ export const DIAGNOSTIC_CODES = [
   "JSON_SCHEMA_UNSUPPORTED",
   "JSON_SCHEMA_REF_INVALID",
   "JSON_SCHEMA_LIMIT_EXCEEDED",
-  "AUTH_PREDICATE_NOT_IN_ENUM",
   "SCHEMA_INDEX_INVALID",
   "SCHEMA_INDEX_FIELD_UNKNOWN",
   "UNIQUE_INDEX_FIELD_UNKNOWN",
@@ -69,10 +59,6 @@ export const DIAGNOSTIC_CODES = [
   // ADR-0043: two Schemas project to one `store.db` reader name, or a name is reserved.
   "SCHEMA_READER_NAME_COLLISION",
   "FIELD_NAME_CASE_COLLISION",
-  "MANIFEST_ROOT_NOT_FOUND",
-  "MANIFEST_READ_FAILED",
-  // `mantle generate` (ADR-0032 decision 12): a selected feature's package is not installed, or it needs an identity.
-  "GENERATE_FEATURE_DEPENDENCY_MISSING",
   // Store SQL compile (ADR-0034): raised by the CLI compiler and, for the
   // shared allowlist, by the runtime's plan validation.
   "SQL_SYNTAX",
@@ -83,29 +69,18 @@ export const DIAGNOSTIC_CODES = [
   "SQL_WRITE",
   "SQL_SHAPE",
   "SQL_TYPE",
-  // Reserved for consumer-authored test diagnostics.
-  "FIXTURE_SCHEMA_VIOLATION",
-  // Cross-phase (validate / boot / runtime as applicable).
+  // Cross-phase (validate / runtime as applicable).
   "HANDLER_NOT_REGISTERED",
-  "HANDLER_NOT_DECLARED",
-  "PLAN_FINGERPRINT_MISMATCH",
-  "STORAGE_CHANGE_BLOCKED",
-  "STORAGE_TABLE_NOT_OWNED",
-  "INVOCATION_DEPTH_EXCEEDED",
   "TRIGGER_TARGET_PROCEDURE_UNKNOWN",
   "TRIGGER_PATH_COLLISION",
   "TRIGGER_PATH_INVALID",
   "MCP_TOOL_NAME_COLLISION",
   "MCP_TOOL_DESCRIPTION_MISSING",
-  "MCP_TOOL_INPUT_UNION_AMBIGUOUS",
-  "MCP_TOOL_INPUT_UNBOUNDED",
   "MANTLE_REF_INVALID",
   "PROCEDURE_TARGET_INVALID",
-  "PROCEDURE_NOT_FOUND",
   "NOT_FOUND",
   "METHOD_NOT_ALLOWED",
-  // Locale + translates: validate / boot.
-  "SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES",
+  // Locale + translates: validate.
   "TRANSLATES_PARENT_UNKNOWN",
   "TRANSLATES_REQUIRES_LOCALIZED",
   "TRANSLATES_REQUIRES_CONTENT_FIELD",
@@ -117,13 +92,9 @@ export const DIAGNOSTIC_CODES = [
   "INPUT_VALIDATION_FAILED",
   "UNAUTHENTICATED",
   "AUTH_DENIED",
-  "ENTITLEMENT_REQUIRED",
   "CONFLICT",
-  "DISPATCHER_NOT_BUILT",
   "INTERNAL_ERROR",
   "OUTPUT_VALIDATION_FAILED",
-  // Locale-data invariants: boot + runtime.
-  "INVALID_LOCALE",
   // Media uploads (runtime-only). Adapter signs presigned PUTs; commit
   // verifies metadata. Codes surface from Create / Commit use cases.
   "MEDIA_NOT_CONFIGURED",
@@ -131,9 +102,7 @@ export const DIAGNOSTIC_CODES = [
   "MEDIA_UPLOAD_EXPIRED",
   "MEDIA_OBJECT_NOT_FOUND",
   "MEDIA_MIME_REJECTED",
-  "MEDIA_SIZE_EXCEEDED",
   "MEDIA_SVG_REJECTED",
-  "MEDIA_CHECKSUM_MISMATCH",
   "MEDIA_PURPOSE_REJECTED",
   "MEDIA_VARIANTS_INCOMPLETE",
   "MEDIA_VARIANT_SIZE_EXCEEDED",
@@ -175,17 +144,6 @@ export interface Diagnostic {
   readonly candidates?: readonly string[];
   readonly suggestion?: string;
   readonly message: string;
-  /** Safe effect/retry facts supplied by a port; never provider payloads. */
-  readonly failure?: {
-    readonly outcome: "not-applied" | "partial" | "unknown";
-    readonly retry: "never" | "after-change" | "safe" | "reconcile";
-    readonly resource?: string;
-  };
-  /** Why a `CONFLICT` write failed (ADR-0032 decision 1); `opIndex` names the statement in the batch (ADR-0034). */
-  readonly conflict?: {
-    readonly opIndex?: number;
-    readonly reason: "lock" | "expect" | "unique";
-  };
 }
 
 /**
@@ -215,17 +173,12 @@ export function makeDiagnostic(
     candidates,
     suggestion,
     message: msg,
-    ...(input.failure ? { failure: input.failure } : {}),
-    ...(input.conflict ? { conflict: input.conflict } : {}),
   };
 }
 
 /** Phase-stamping helpers — equivalent to `makeDiagnostic({...input, phase})`
- *  but read cleaner at call sites. `phase: "test"` has no Core helper because
- *  the shipped performance harnesses emit purpose-shaped reports; the phase
- *  remains part of the public Diagnostic contract for consumer tests. */
+ *  but read cleaner at call sites. */
 export const validateDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "validate" });
-export const bootDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "boot" });
 export const runtimeDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "runtime" });
 
 type PhaselessInput = Omit<Diagnostic, "phase" | "message"> & { message?: string };
@@ -243,8 +196,6 @@ function formatValue(v: unknown): string {
   }
 }
 
-const BRAND = Symbol.for("net.aotter.mantle.DiagnosticError");
-
 /**
  * Throwable carrier for one or more Diagnostics. Layers that surface
  * an error across a transport boundary (HTTP handler, MCP tool call,
@@ -254,15 +205,6 @@ const BRAND = Symbol.for("net.aotter.mantle.DiagnosticError");
  * throws.
  */
 export class DiagnosticError extends Error {
-  /**
-   * A handler bundled with its own copy of this class (a closed-module artifact) still throws a DiagnosticError: `instanceof`
-   * matches the brand, not the class identity, so the runtime keeps its code instead of reporting INTERNAL_ERROR.
-   */
-  static override [Symbol.hasInstance](value: unknown): boolean {
-    if (this !== DiagnosticError) return Function.prototype[Symbol.hasInstance].call(this, value);
-    return typeof value === "object" && value !== null && (value as Record<symbol, unknown>)[BRAND] === true;
-  }
-  readonly [BRAND] = true;
   readonly diagnostics: readonly Diagnostic[];
   constructor(diagnostic: Diagnostic | readonly Diagnostic[], options?: ErrorOptions) {
     const list = Array.isArray(diagnostic) ? diagnostic : [diagnostic as Diagnostic];
@@ -270,12 +212,5 @@ export class DiagnosticError extends Error {
     super(head ? head.message : "DiagnosticError", options);
     this.name = "DiagnosticError";
     this.diagnostics = list;
-  }
-
-  /** First diagnostic — convenience for single-diagnostic call sites. */
-  get diagnostic(): Diagnostic {
-    const d = this.diagnostics[0];
-    if (!d) throw new Error("DiagnosticError carries no diagnostics");
-    return d;
   }
 }
