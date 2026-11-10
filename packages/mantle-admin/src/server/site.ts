@@ -2,7 +2,6 @@
 import { json, type Context, type Options, type Route, type IdentityMethods } from "./index.js";
 import { ContractError } from "@aotter/mantle/contracts";
 import { roleName } from "@aotter/mantle/internal/user-fields";
-import { invalid } from "@aotter/mantle/internal/surface";
 import { mediaError, mediaItem } from "@aotter/mantle/media";
 const settings = ({ brand, title, description }: {
     brand: string;
@@ -37,7 +36,7 @@ export function siteRoutes<Env, Database>(options: Options<Env, Database>): Rout
         { method: "GET", path: "/media", run: async (c) => {
                 const m = media(c), q = c.url.searchParams, raw = q.get("limit"), search = q.get("search")?.trim();
                 if (search?.includes("\0"))
-                    invalid("Search must not contain NUL.", "admin");
+                    throw new ContractError("INPUT_VALIDATION_FAILED", "Search must not contain NUL.", "admin");
                 const result = await m.list({ ...(raw ? { limit: Number(raw) } : {}), ...(q.get("cursor") ? { cursor: q.get("cursor")! } : {}), ...(search ? { search } : {}) });
                 return { items: result.rows.map(mediaItem), next_cursor: result.nextCursor ?? null };
             } },
@@ -48,14 +47,14 @@ export function siteRoutes<Env, Database>(options: Options<Env, Database>): Rout
         { method: "GET", path: "/members", run: async (c) => {
                 const list = await identity(c, "listMembers"), q = c.url.searchParams, limit = Number(q.get("limit") ?? 50), search = q.get("search")?.trim() ?? "", cursor = q.get("cursor") || undefined, direction = q.get("cursor_direction") ?? "forward";
                 if (!Number.isInteger(limit) || limit < 1 || limit > 100 || search.length > 200 || search.includes("\0") || !["forward", "backward"].includes(direction))
-                    invalid("Invalid member page options.", "admin");
+                    throw new ContractError("INPUT_VALIDATION_FAILED", "Invalid member page options.", "admin");
                 const result = await list({ limit, search, cursor, cursorDirection: direction as "forward" | "backward" });
                 return { items: result.items.map(memberInfo), adminRoles: (await options.identity?.directory?.(c))?.adminRoles ?? ["admin"], previous_cursor: result.previousCursor, next_cursor: result.nextCursor };
             } },
         { method: "PATCH", path: "/admin/{id}/role", run: async (c) => {
                 const id = c.params.id!, set = await identity(c, "setUserRole"), { role } = await json(c);
                 if (role !== null && (typeof role !== "string" || !roleName.test(role)))
-                    invalid("Role must be a role name or null.", "admin");
+                    throw new ContractError("INPUT_VALIDATION_FAILED", "Role must be a role name or null.", "admin");
                 if (!await set(id, role as string | null))
                     throw new ContractError("NOT_FOUND", "No such user.", "admin");
                 return { ok: true };
@@ -63,7 +62,7 @@ export function siteRoutes<Env, Database>(options: Options<Env, Database>): Rout
         { method: "POST", path: "/admin/invitations", run: async (c) => {
                 const invite = await identity(c, "inviteUser"), input = await json(c), email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
                 if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || typeof input.role !== "string" || !roleName.test(input.role))
-                    invalid("An invitation needs an email and the admin role.", "admin");
+                    throw new ContractError("INPUT_VALIDATION_FAILED", "An invitation needs an email and the admin role.", "admin");
                 const result = await invite(email, input.role as string);
                 const send = options.identity?.roles?.sendAdminInvitation;
                 await send?.(email, input.role as string);
