@@ -30,7 +30,17 @@ if (!registry) {
       if (name === "@aotter/mantle" || name.startsWith("@aotter/mantle-")) pkg.dependencies[name] = version;
     }
     writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
-    run("pnpm", ["install", "--no-frozen-lockfile"], temp);
+    // A version published a moment ago may not be on every registry edge yet: try the install again before failing.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        run("pnpm", ["install", "--no-frozen-lockfile"], temp);
+        break;
+      } catch (error) {
+        if (attempt === 3) throw error;
+        console.error(`[registry-consumer] install failed (attempt ${attempt} of 3); retrying in 60s`);
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60_000);
+      }
+    }
     for (const name of Object.keys(pkg.dependencies).filter(name => name.startsWith("@aotter/mantle"))) {
       const installed = JSON.parse(readFileSync(join(temp, "node_modules", name, "package.json"), "utf8"));
       if (installed.version !== version) throw new Error(`Unexpected ${name}@${installed.version}`);
