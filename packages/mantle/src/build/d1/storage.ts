@@ -1,5 +1,6 @@
 /** Build-time initial SQLite DDL; applications own migrations. */
-import { ftsTableName, geoTreeName, checkShapeProblem, notNullColumns, storageColumns, parseNumeric, type SqlNode } from "../spec/domain/index.js";
+import { ftsTableName, geoTreeName, checkShapeProblem, notNullColumns, storageColumns, type SqlNode } from "../spec/domain/index.js";
+import { sqliteType } from "./codec.js";
 import type { StorageSchema } from "../core/dialect.js";
 import { print } from "./print.js";
 
@@ -7,16 +8,6 @@ export type { StorageSchema };
 
 const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
-
-function colType(t: string): "TEXT" | "INTEGER" | "REAL" {
-  if (parseNumeric(t)) return "INTEGER";
-  switch (t) {
-    case "text": case "json": return "TEXT";
-    case "integer": case "bool": case "timestamptz": case "date": return "INTEGER";
-    case "real": return "REAL";
-  }
-  throw new Error(`no column type for ${t}`);
-}
 
 /** `stock >= 0` as IR -> `"new"."stock" >= 0`: the same printer as everything else. */
 function checkText(expr: SqlNode, s: StorageSchema): string {
@@ -55,7 +46,7 @@ function desired(name: string, s: StorageSchema): Desired {
     ...(s.publishing ? [{ name: "status", type: "TEXT", native: true }, { name: "published_at", type: "INTEGER", native: false }] : []),
     // the scope field is a declared property too, but it is the native column above
     ...Object.entries(s.fields).filter(([f]) => f !== s.scope).flatMap(([f, ty]): Column[] =>
-      ty === "geo" ? [{ name: `${f}_lat`, type: "REAL", native: false }, { name: `${f}_lng`, type: "REAL", native: false }] : [{ name: f, type: colType(ty), native: false }]),
+      ty === "geo" ? [{ name: `${f}_lat`, type: "REAL", native: false }, { name: `${f}_lng`, type: "REAL", native: false }] : [{ name: f, type: sqliteType(ty).toUpperCase(), native: false }]),
   ];
   const indexes = [
     ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: s.userScopes?.length ? [...new Set([...(s.scope ? [s.scope] : []), ...s.userScopes.map(x => x.column), ...u])] : s.scope && u[0] !== s.scope ? [s.scope, ...u] : [...u] })), // the grammar already starts a scoped unique index with the scope

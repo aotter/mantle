@@ -3,8 +3,7 @@
 //   date        -> INTEGER days since 1970-01-01
 //   numeric(p,s)-> INTEGER scaled by 10^s, p <= 15 (D1 rounds integers past 2^53)
 import { SqlRefusal as Refused, parseNumeric } from '../spec/domain/index.js';
-
-const US_PER_DAY = 86_400_000_000;
+import * as scalars from '../../kernel/scalars.js';
 
 /** SQLite storage class a Mantle type is bound and CAST as. Every bind goes through `CAST(?n AS <this>)`. */
 export function sqliteType(type: string): 'text' | 'integer' | 'real' {
@@ -36,37 +35,10 @@ export function decodeNumeric(n: number, s: number): string {
   return neg ? `-${out}` : out;
 }
 
-/** ISO-8601 with an explicit offset (or Z) -> microseconds. Refuses a zone-less timestamp. */
-export function encodeTimestamptz(v: string | Date | number): number {
-  if (v instanceof Date) return v.getTime() * 1000;
-  if (typeof v === 'number') {
-    if (!Number.isSafeInteger(v)) throw new Refused('SQL_TYPE', `${v} is not a whole number of microseconds within 2^53`);
-    return v;
-  }
-  // hours 00-23, as kernel/scalars.ts: Date.parse would roll T24:00 over to the next day
-  const m = /^(\d{4}-\d\d-\d\d)[T ]((?:[01]\d|2[0-3]):\d\d(?::\d\d)?)(?:\.(\d{1,6}))?(Z|[+-]\d\d(?::?\d\d)?)$/.exec(v.trim());
-  if (!m) throw new Refused('SQL_TYPE', `'${v}' is not a timestamp with an explicit offset`);
-  const [, day, time, fraction, offset] = m as unknown as string[];
-  const frac = (fraction ?? '').padEnd(6, '0');
-  const zone = offset === 'Z' ? 'Z' : offset!.length === 3 ? `${offset}:00` : offset!.includes(':') ? offset! : `${offset!.slice(0, 3)}:${offset!.slice(3)}`;
-  const secs = Date.parse(`${day}T${time!.length === 5 ? time + ':00' : time}${zone}`);
-  encodeDate(day!); // Date.parse rolls 2026-02-30 over to March; a day that does not exist is refused
-  const micros = secs * 1000 + Number(frac);
-  if (Number.isNaN(secs) || !Number.isSafeInteger(micros)) throw new Refused('SQL_TYPE', `'${v}' is not a valid timestamp`);
-  return micros;
-}
-export function decodeTimestamptz(us: number): string {
-  const ms = Math.floor(us / 1000), rest = us - ms * 1000;
-  return new Date(ms).toISOString().replace('Z', String(rest).padStart(3, '0') + 'Z');
-}
-export function encodeDate(v: string | Date): number {
-  const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(typeof v === 'string' ? v : v.toISOString().slice(0, 10));
-  if (!m) throw new Refused('SQL_TYPE', `'${v}' is not a date`);
-  const [, y, mo, d] = m as unknown as string[];
-  const dt = new Date(0);
-  dt.setUTCFullYear(+y!, +mo! - 1, +d!); // Date.UTC would read years 0 to 99 as 1900 to 1999
-  const days = dt.getTime() / (US_PER_DAY / 1000);
-  if (dt.getUTCDate() !== +d! || dt.getUTCMonth() !== +mo! - 1) throw new Refused('SQL_TYPE', `'${v}' is not a valid date`);
-  return days;
-}
-export const decodeDate = (days: number) => new Date(days * 86_400_000).toISOString().slice(0, 10);
+/** The request-time scalar checks (ISO with an explicit offset -> microseconds or canonical text, a calendar day -> days or
+ *  itself), refusing as the compiler does. */
+const refused = <T>(check: (v: string) => T) => (v: string): T => {
+  try { return check(v); } catch (e) { throw new Refused('SQL_TYPE', (e as Error).message); }
+};
+export const encodeTimestamptz = refused(scalars.encodeTimestamptz), encodeDate = refused(scalars.encodeDate);
+export const isoTimestamptz = refused(scalars.isoTimestamptz), isoDate = refused(scalars.isoDate);

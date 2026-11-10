@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { generateFromSources } from "../src/infrastructure/generateAuth.js";
-import { compilePlan } from "../src/build/compiler.js";
+import { compilePlan, compileProgram, d1Dialect, postgresDialect } from "../src/build/compiler.js";
 import { wireScalars } from "../src/domain/wireScalars.js";
 import { dialect } from "../src/kernel/dialect/sqlite.js";
 
@@ -81,8 +81,16 @@ console.log(JSON.stringify(await generateFromSources({ target: "bun-postgres", s
 }, 30_000);
 
 test("date and timestamp literals that do not exist are refused at generate, as request input is", async () => {
-  for (const target of ["bun-sqlite", "bun-postgres"] as const) for (const literal of ["'2026-13-01'::date", "'2026-02-30'::date", "'2026-10-11T24:00:00Z'::timestamptz", "'2026-13-01T00:00:00Z'::timestamptz"]) {
-    const result = await generateFromSources({ target, sources: { sources: [{ sourceId: "refused.yaml", text: [...base, doc("View", "dated", { surface: "internal", sql: `SELECT id, ${literal} AS at FROM notes` })].join("\n---\n") }] } });
+  // The compiler checks literals with the request-time scalars; the refusal keeps the compiler's SQL_TYPE code and wording.
+  for (const target of ["bun-sqlite", "bun-postgres"] as const) for (const [literal, message] of [["'2026-13-01'::date", "'2026-13-01' is not a valid date"], ["'2026-02-30'::date", "'2026-02-30' is not a valid date"], ["'x'::date", "'x' is not a date"], ["'2026-10-11T24:00:00Z'::timestamptz", "'2026-10-11T24:00:00Z' is not a timestamp with an explicit offset"], ["'2026-13-01T00:00:00Z'::timestamptz", "'2026-13-01' is not a valid date"]] as const) {
+    const text = [...base, doc("View", "dated", { surface: "internal", sql: `SELECT id, ${literal} AS at FROM notes` })].join("\n---\n");
+    const result = await generateFromSources({ target, sources: { sources: [{ sourceId: "refused.yaml", text }] } });
     expect(result.ok, `${target} ${literal}`).toBe(false);
+    if (!result.ok) expect(result.diagnostics).toEqual([{ code: "GENERATE_UNSUPPORTED", path: "views/dated", message: "Every reachable visibility mode must have canonical lowered SQL." }]);
+    const dialect = target === "bun-postgres" ? postgresDialect() : d1Dialect;
+    const compiled = await compilePlan({ sources: [{ sourceId: "refused.yaml", text }] }, dialect, "operational");
+    if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+    const view = compiled.plan.views["dated"]!;
+    expect(() => compileProgram(view.stmts, { dialect, schemas: compiled.plan.schemas, inputs: view.inputs, kind: "view", mode: "caller" })).toThrow(expect.objectContaining({ code: "SQL_TYPE", message }));
   }
 });

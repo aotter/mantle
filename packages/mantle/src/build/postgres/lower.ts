@@ -4,10 +4,11 @@
 import { SqlRefusal as Refused, type SqlNode as N } from "../spec/domain/index.js";
 import { S, num } from "../core/sql/ast.js";
 import type { LoweringScope, PolicyLowering } from "../core/sql/policy.js";
-import { encodeDate, encodeNumeric, encodeTimestamptz, decodeDate, decodeNumeric, decodeTimestamptz } from "../d1/codec.js";
+import { encodeNumeric, decodeNumeric, isoDate, isoTimestamptz } from "../d1/codec.js";
 import { parseNumeric } from "../spec/domain/index.js";
 import { pgType } from "./codec.js";
 import type { RawExpr } from "./print.js";
+import { searchLike } from "../../kernel/search.js";
 
 const fn = (f: string, args: N[], extra: Record<string, unknown> = {}): N => ({ FuncCall: { funcname: [S(f)], args, funcformat: "COERCE_EXPLICIT_CALL", ...extra } });
 const str = (s: string): N => ({ A_Const: { sval: { sval: s } } });
@@ -80,8 +81,7 @@ export function pgLowering(timeZone: string): PolicyLowering {
           if (!def.search?.length) throw new Refused("SQL_FUNCTION", `${schema} declares no search fields`);
           scope.seen("search");
           // ponytail: ILIKE over the declared fields, a scan; a pg_trgm GIN index is the upgrade when a search shows in latency
-          const pattern = `'%' || replace(replace(replace(__q, '!', '!!'), '%', '!%'), '_', '!_') || '%'`;
-          return sql(def.search.map((fld) => `${q(alias)}.${q(fld)} ILIKE ${pattern} ESCAPE '!'`).join(" OR "), { __q: scope.tx(args[1]) });
+          return sql(searchLike(def.search.map((fld) => `${q(alias)}.${q(fld)}`), "__q", "ILIKE"), { __q: scope.tx(args[1]) });
         }
         case "mantle.search_rank": {
           const alias = args[0]!.ColumnRef.fields[0].String.sval;
@@ -120,8 +120,8 @@ export function pgLowering(timeZone: string): PolicyLowering {
       const a = n.arg?.A_Const;
       const text = a?.sval?.sval ?? a?.fval?.fval ?? (a?.ival?.ival !== undefined ? String(a.ival.ival) : undefined);
       // a literal is checked as D1 checks it, so both dialects refuse the same text, and sent in one spelling
-      if (t === "timestamptz" && text !== undefined) return cast(str(decodeTimestamptz(encodeTimestamptz(text))), "timestamptz");
-      if (t === "date" && text !== undefined) return cast(str(decodeDate(encodeDate(text))), "date");
+      if (t === "timestamptz" && text !== undefined) return cast(str(isoTimestamptz(text)), "timestamptz");
+      if (t === "date" && text !== undefined) return cast(str(isoDate(text)), "date");
       if (t === "numeric" && n.typeName.typmods?.length === 2) {
         const [p, s] = n.typeName.typmods.map((m: N) => m.A_Const.ival.ival);
         parseNumeric(`numeric(${p}, ${s})`);

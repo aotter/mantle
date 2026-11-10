@@ -6,6 +6,7 @@ import { S, num, ref as col, target as res } from '../core/sql/ast.js';
 import type { PolicyLowering, LoweringScope } from '../core/sql/policy.js';
 import { encodeDate, encodeNumeric, encodeTimestamptz, sqliteType } from './codec.js';
 import type { RawExpr } from './print.js';
+import { searchLike } from '../../kernel/search.js';
 
 type Arg = { input: string; type: string } | { const: number };
 /** The one bind the D1 dialect adds: a corner of the R*Tree box a near() query reads. */
@@ -79,7 +80,7 @@ function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
       const query = scope.tx(f === 'mantle.search' ? args[1] : searchQuery ?? (() => { throw new Refused('SQL_FUNCTION', `mantle.search_rank(${alias}) needs a mantle.search(${alias}, ...) in the same query`); })());
       const phrase = `'"' || replace(__q, '"', '""') || '"'`; // a quoted phrase: FTS5 operators in the query are literal. `fts = q` is FTS5's spelling of `fts MATCH q`; PostgreSQL's grammar has no MATCH
       if (f === 'mantle.search_rank') return sql(`coalesce((SELECT bm25(${fts}) FROM ${fts} WHERE ${fts} = ${phrase} AND rowid = ${a}._rid), 0)`, { __q: query });
-      const like = def.search.map((fld) => `${a}.${q(fld)} LIKE '%' || replace(replace(replace(__q, '!', '!!'), '%', '!%'), '_', '!_') || '%' ESCAPE '!'`).join(' OR ');
+      const like = searchLike(def.search.map((fld) => `${a}.${q(fld)}`), '__q', 'LIKE');
       // trigram cannot match under three characters: fall back to LIKE over the same fields
       return sql(`CASE WHEN length(__q) >= 3 THEN ${a}._rid IN (SELECT rowid FROM ${fts} WHERE ${fts} = ${phrase}) ELSE (${like}) END`, { __q: query });
     }
