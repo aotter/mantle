@@ -88,3 +88,21 @@ test("a host-supplied URI scopes the App per site: the resource and every tool i
     expect((await rpc(api, env("build"), "resources/read", { uri: "ui://mantle-admin/admin" })).body.error).toBeDefined();
   }
 });
+
+test("`tools` links a Procedure tool to the Admin App beside the catalogue's Views; an unserved name is refused", async () => {
+  const approve: Tool<null> = { name: "approve_request", target: { kind: "procedure", name: "approve-request" }, surface: "admin",
+    description: "approve", inputSchema: { type: "object" }, validate: () => ({}), run: async () => ({ results: [[{ id: "r1" }]] }) };
+  const api = mcp<Env, null>([...tools, approve], { db: () => null, caller: () => caller,
+    apps: { admin: adminMcpApps({ catalogue, tools: ["approve_request"] }) } });
+  const listed = (await rpc(api, env("build-one"), "tools/list")).body.result.tools as { name: string; _meta?: { ui?: { resourceUri?: string } } }[];
+  expect(listed.map(tool => [tool.name, tool._meta?.ui?.resourceUri])).toEqual([
+    ["pending", "ui://mantle-admin/admin"], ["other", "ui://mantle-admin/admin"], ["approve_request", "ui://mantle-admin/admin"],
+  ]);
+  const errors = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const unserved = mcp<Env, null>(tools, { db: () => null, caller: () => caller, apps: { admin: adminMcpApps({ catalogue, tools: ["approve_request"] }) } });
+    // MCP_APP_CONFLICT is a configuration error: redacted on the wire, logged on the server
+    expect((await rpc(unserved, env("build-one"), "tools/list")).status).toBe(500);
+    expect(String((errors.mock.calls[0]![1] as Error).message)).toContain("names tool 'approve_request', which this endpoint does not serve");
+  } finally { errors.mockRestore(); }
+});

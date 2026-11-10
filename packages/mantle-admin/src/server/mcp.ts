@@ -33,6 +33,12 @@ export interface AdminMcpOptions {
     readonly title?: string;
     /** Views rendered by this App; all catalogue Views by default. Partition explicitly before registering another renderer. */
     readonly renders?: readonly string[];
+    /**
+     * Other tools of this endpoint whose results this App renders: Procedures, or the application's own tools. The App
+     * shows the page declared for the tool (`pages[].mcp`), or the result's rows when it has any. The endpoint refuses
+     * a name it does not serve.
+     */
+    readonly tools?: readonly string[];
     readonly appOnly?: readonly string[];
     /** Passed through as `_meta.ui.domain`, for a host that serves each App from its own origin. */
     readonly domain?: string;
@@ -85,9 +91,10 @@ export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcp
 export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcpAppsLoader {
     if (options.uri !== undefined && !/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(options.uri))
         throw new ContractError("INPUT_VALIDATION_FAILED", "Admin App resources use ui://mantle-admin/….", "mcp/apps");
-    const renders = options.renders ?? Object.keys(options.catalogue.views);
-    for (const view of renders) if (!Object.hasOwn(options.catalogue.views, view))
-        throw new ContractError("MCP_APP_CONFLICT", `Admin App renderer names unknown View '${view}'.`, "mcp/apps");
+    const views = options.renders ?? Object.keys(options.catalogue.views);
+    for (const view of views) if (!Object.hasOwn(options.catalogue.views, view))
+        throw new ContractError("MCP_APP_CONFLICT", `Admin App renderer names unknown View '${view}'. Name a Procedure or your own tool in \`tools\`.`, "mcp/apps");
+    const renders = options.tools?.length ? [...new Set([...views, ...options.tools])] : views;
     const embed = (html: string, render: McpAppRender, catalogue = options.catalogue) => {
         const script = '<script type="application/json" id="mantle-catalog">' + JSON.stringify(visibleCatalogue(catalogue, render.tools)).replace(/</g, "\\u003c") + "</script>";
         // right after the opening <head>: the module script that follows may hold the text "</head>" in a string
