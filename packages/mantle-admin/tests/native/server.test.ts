@@ -234,3 +234,10 @@ test("reference titles resolve as the caller with one query per referenced colle
   const editor=await ask(customers,undefined,"/entries/o1?collection=orders");
   expect(editor.refTitles.customer.c1.title).toBe("Acme");
 });
+test("identity capability: only with a directory and never for a host caller, whose identities the host manages",async()=>{
+  const { hostCaller } = await import("@aotter/mantle/host-caller");
+  const site=async(caller:Caller,identity?:object)=>{const fetch=adminFunction(metadata,[],[],{db:()=>({}),caller:()=>caller,...identity?{identity:identity as never}:{}});return (await(await fetch(new Request("https://app.test/admin/api/site",{headers:{origin:"https://app.test"}}),{}))!.json()).capabilities.identity;};
+  const directory={directory:()=>({listMembers:async()=>[]})};
+  const host=hostCaller({v:1,tenant:"t",layer:"admin",user:{id:"u"},authenticatedAs:"snapshot",credential:"session",requestId:"r",target:"x",targetHash:"h"},{tenant:"t"});
+  expect([await site(admin),await site(admin,directory),await site(host,directory)]).toEqual([false,true,false]);
+});

@@ -63,6 +63,15 @@ describe("member navigation", () => {
     expect(urls()).toEqual(expect.arrayContaining(["/admin/media", "/admin/settings"]));
   });
 
+  it("hides Members and Admins when the deployment manages no identities here", () => {
+    const urls = (identity?: boolean) => buildNavGroups([], [], "en", null, true, false, { siteSettings: true, media: true, invitationEmail: false, statistics: false, identity })
+      .flatMap(({ items }) => items).flatMap((item) => "url" in item ? [item.url] : []);
+    expect(urls(false)).not.toContain("/admin/members");
+    expect(urls(false)).not.toContain("/admin/admin");
+    expect(urls(false)).toContain("/admin/settings");
+    expect(urls()).toEqual(expect.arrayContaining(["/admin/members", "/admin/admin"]));
+  });
+
   it("keeps developer navigation out of Content Admin", () => {
     expect(JSON.stringify(buildNavGroups([], [], "en", null, true))).not.toContain("/admin/dev");
     const items = buildDeveloperNavGroups("en")[0]?.items ?? [];
