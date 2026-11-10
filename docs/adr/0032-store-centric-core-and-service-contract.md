@@ -236,6 +236,8 @@ Every Mantle package versions and releases together, so splitting by area buys n
 
 MCP offers optional `onObservation` at registered tool dispatch and its existing request-refusal gates. Attempt and completion share the runtime cause ID; output/input, requested unknown names, URLs and exception messages are never observation fields. Unknown and client-hidden tools are not registered invocations. An authentication-refused request or batch is a request refusal, not a set of executed tools. Invalid credentials and session-origin refusals remain owned by `withCaller`, which offers optional `onRefusal` without parsing the body or exposing credentials.
 
+> **Amendment (2026-11-10, #1971):** `onRefusal` is removed. It duplicated `onObservation`'s `request-refused` event; that event now carries the `reason` (`origin` or `credential`) and is also emitted when the session Origin rule refuses a tool call.
+
 Callbacks are best-effort and platform-independent. Their synchronous exceptions and rejected promises do not change the business result or authentication challenge; delivery promises are not awaited. A host owns request lifetime, transport, source enrichment, storage, query authorization and reporting delivery failure. A pending callback can outlive the available request lifetime or be lost. Neither callback promises exactly-once capture or transactional audit. Core adds no telemetry table, provider binding, queue or global I/O promise. The existing business Store audit contract is unchanged.
 
 ## Conformance cases

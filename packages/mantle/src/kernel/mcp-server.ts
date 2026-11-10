@@ -282,7 +282,13 @@ async function invoke<Env, Database, Handlers>(
     code = diagnostic.code;
     outcome = code === "AUTH_DENIED" || code === "UNAUTHENTICATED" ? "denied" : "failed";
     if (diagnostic.path === "request:origin")
-      observe(options.onRefusal, { at: Date.now(), status: 403, reason: "origin" });
+      observe(options.onObservation, {
+        kind: "request-refused",
+        at: Date.now(),
+        surface: serving.surface,
+        status: 403,
+        reason: "origin",
+      });
     const payload = { diagnostics: [diagnostic] };
     return {
       ...(hasMeta ? { _meta: { [TOOL_META_KEY]: tool.name } } : {}),

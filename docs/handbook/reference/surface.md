@@ -276,7 +276,7 @@ as an explicit option.
 ### MCP catalogue and callbacks
 
 `mcp({ db, caller, handlers?, locale?, instructions?, serverInfo?, requiredScopes?,
-resourceMetadata?, allowedOrigins?, onObservation?, onRefusal? })` keeps the SDK behind its first
+resourceMetadata?, allowedOrigins?, onObservation? })` keeps the SDK behind its first
 request. Locale defaults to `en`; localized titles/descriptions fall back to
 English, then their first entry. Tools carry the [tool hints](procedure.md#mcp-tool-hints). `instructions` is returned by initialize.
 The scope floor defaults to `["mcp"]` for every credential except cookie sessions;
@@ -314,9 +314,11 @@ the route and `dev.host` hosts out of `allowedOrigins` in local development.
 
 `onObservation` receives request refusals and invocation attempt/completion
 metadata, including duration and outcome. Its Caller and scopes are frozen copies.
-`onRefusal` receives credential/origin refusals. Neither callback receives request
-headers, bodies or tokens; delivery failures never change the business response
-and promises are not awaited. The application owns callback delivery.
+A `request-refused` event carries its `status` and `reason`: `credential`, or
+`origin` for a browser Origin refused by the endpoint or, on a tool call, by the
+session Origin rule. The callback receives no request headers, bodies or tokens;
+delivery failures never change the business response and promises are not
+awaited. The application owns callback delivery.
 
 **Procedure output:** SQL Procedures retain the native `{ results }`
 contract rather than 0.2's authored output projection/validation; MCP advertises

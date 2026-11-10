@@ -197,15 +197,14 @@ export function handler<Env, Database, Handlers>(
   });
 }
 
-/** `request-refused` for observers of the endpoint, then the refusal for the application's own accounting. */
+/** `request-refused` for observers of the endpoint. */
 function observeRefusal(
-  options: Pick<Options<never, unknown>, "onObservation" | "onRefusal">,
+  options: Pick<Options<never, unknown>, "onObservation">,
   surface: Surface,
   status: 401 | 403,
   reason: "origin" | "credential",
 ): void {
-  observe(options.onObservation, { kind: "request-refused", at: Date.now(), surface, status });
-  observe(options.onRefusal, { at: Date.now(), status, reason });
+  observe(options.onObservation, { kind: "request-refused", at: Date.now(), surface, status, reason });
 }
 
 /**

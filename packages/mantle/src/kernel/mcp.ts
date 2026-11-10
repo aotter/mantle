@@ -47,14 +47,8 @@ export interface Options<Env, Database> extends GatewayOptions {
   /** Browser origins MCP answers besides loopback, compared by hostname: `https://console.example` or the official SDK's bare `console.example`. The site's own origin is not implied. */
   allowedOrigins?: readonly string[];
   onObservation?: (event: McpObservation) => void | Promise<void>;
-  onRefusal?: (event: CallerRefusal) => void | Promise<void>;
   /** Tools per `tools/list` page: the result carries `nextCursor` while more remain. Unset, one page lists every tool. */
   toolsPageSize?: number;
-}
-export interface CallerRefusal {
-  readonly at: number;
-  readonly status: 401 | 403;
-  readonly reason: "origin" | "credential";
 }
 export type McpObservation =
   | {
@@ -62,6 +56,8 @@ export type McpObservation =
       readonly at: number;
       readonly surface: "public" | "admin";
       readonly status: 401 | 403;
+      /** `origin`: a browser Origin the endpoint or the session Origin rule refused; `credential`: the caller's credential. */
+      readonly reason: "origin" | "credential";
     }
   | ({
       readonly kind: "invocation";
