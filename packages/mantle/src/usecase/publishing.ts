@@ -16,8 +16,8 @@ export const publishRequired = (s: RuntimePlan["schemas"][string]): [column: str
 export function emitPublishing(plan: RuntimePlan, isSqlite: boolean, declarations: string[], procedures: string[], entries: Record<string, string>, values: Set<string>, refuse: (path: string, message: string) => void, locks: Readonly<Record<string, readonly Lock[]>> = {}): void {
   const d = isSqlite ? sqlite : postgres;
   const translations = Object.values(plan.schemas).some(s=>s.translates);
-  if(translations)declarations.push('import {translationWrite} from "@aotter/mantle/driver/transaction-context";');
-  if(Object.values(plan.schemas).some(s=>s.publishing))declarations.push('import { transition } from "@aotter/mantle/publishing";');
+  if(translations)declarations.push('import {translationWrite} from "@aotter/mantle/internal/driver/transaction-context";');
+  if(Object.values(plan.schemas).some(s=>s.publishing))declarations.push('import { transition } from "@aotter/mantle/internal/publishing";');
   for (const s of Object.values(plan.schemas).filter(s => s.publishing).sort((a, b) => a.name.localeCompare(b.name))) {
     if (Object.hasOwn(s.fields, "published_at")) { refuse(`schemas/${s.name}`, "published_at is a publishing system column; remove the declared field."); continue; }
     if (s.ttl) values.add("cutoff");

@@ -93,7 +93,7 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
     const base = `${kind}/${name}/input`, file = `validation/${kind}/${encodeURIComponent(name)}.ts`;
     const json = q(root);
     if (kind === "procedures" && json === q(publishingInput)) {
-      files[file] = `import { transition } from "@aotter/mantle/validation";\nexport const validate = (raw: unknown) => transition(${q(base)}, raw);\n`;
+      files[file] = `import { transition } from "@aotter/mantle/internal/validation";\nexport const validate = (raw: unknown) => transition(${q(base)}, raw);\n`;
       continue;
     }
     // Only a local `$ref`, or more than 100 nested objects and arrays, can reach the nesting limit: only then is `depth` passed.
@@ -166,7 +166,7 @@ export function emitValidation(plan: { views:Readonly<Record<string,{input?:Json
       return type === "boolean" || type === "integer" || type === "number" ? [key,type] : [key];
     }) : undefined;
     const helpers = [...(functions.length ? ["fail"] : []), ...(equality ? ["equal"] : []), ...(fields ? ["query as read"] : [])];
-    const code = `${helpers.length ? `import { ${helpers.join(", ")} } from "@aotter/mantle/validation";\n` : ""}${formats.size ? `import { ${[...formats].join(", ")} } from "@aotter/mantle/scalars";\n` : ""}${[...patterns].map(([pattern,name])=>`const ${name} = new RegExp(${q(pattern)});\n`).join("")}${functions.join("\n")}
+    const code = `${helpers.length ? `import { ${helpers.join(", ")} } from "@aotter/mantle/internal/validation";\n` : ""}${formats.size ? `import { ${[...formats].join(", ")} } from "@aotter/mantle/internal/scalars";\n` : ""}${[...patterns].map(([pattern,name])=>`const ${name} = new RegExp(${q(pattern)});\n`).join("")}${functions.join("\n")}
 export function validate(raw:unknown):Record<string,unknown> { ${validate}(raw,${q(base)}${recursive ? ",0" : ""}); return raw as Record<string,unknown>; }
 ${fields ? `export const query = (params:URLSearchParams) => read(params, validate, ${q(`${kind}/${name}`)}, ${q(fields)});\n` : ""}`;
     files[file]=code;

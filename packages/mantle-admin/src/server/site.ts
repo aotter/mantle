@@ -1,8 +1,8 @@
 /** Site, media and identity routes inside Admin's shared session/origin gate. */
 import { json, type Context, type Options, type Route, type IdentityMethods } from "./index.js";
 import { ContractError } from "@aotter/mantle/contracts";
-import { roleName } from "@aotter/mantle/user-fields";
-import { invalid } from "@aotter/mantle/surface";
+import { roleName } from "@aotter/mantle/internal/user-fields";
+import { invalid } from "@aotter/mantle/internal/surface";
 import { mediaError, mediaItem } from "@aotter/mantle/media";
 const settings = ({ brand, title, description }: {
     brand: string;

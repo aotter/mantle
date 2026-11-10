@@ -3,6 +3,8 @@ import { ContractError } from "./contract-error.js";
 export { ContractError } from "./contract-error.js";
 import { hasRole, isAdminCaller as isAdmin } from "./caller-identity.js";
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
+/** The declared user fields an entry's `fields` option takes, and the values a Caller carries for them. */
+export type { AllValues, UserField, UserFields, UserValue } from "./user-fields.js";
 
 export interface Gateway { readonly tenant: string }
 export interface RequestContext { readonly props?: unknown }

@@ -4,7 +4,7 @@ import { forwarded, deny, isAdmin, ContractError, checkOrigin, surfaceCaller, ty
 import { nativeRest, body, ADMIN_API_BASE, canonicalPath, routeSource, type Route as RestRoute } from "@aotter/mantle/rest";
 import { userOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
-import { convert, type Conversions } from "@aotter/mantle/surface";
+import { convert, type Conversions } from "@aotter/mantle/internal/surface";
 import { siteInfo, type MantleSite, type MediaStorageOption } from "@aotter/mantle/site";
 import { csv } from "./csv.js";
 export type Admin = (Extract<Caller, { kind: "user" }> & { readonly admin: true; readonly credential: "session" }) | (Extract<Caller, { kind: "host" }> & { readonly admin: true });
@@ -62,7 +62,7 @@ export interface IdentityMethods {
 export interface Options<Env, Database> extends GatewayOptions {
     authorize?: Authorize;
     gateway?: Gateway;
-    fields?: import("@aotter/mantle/user-fields").UserFields;
+    fields?: import("@aotter/mantle/internal/user-fields").UserFields;
     locale?: string;
     /** Read-only developer preview bindings, including public Views. */
     developerViews?: readonly View<Database>[];
@@ -95,7 +95,7 @@ export interface Descriptor {
 }
 export interface Metadata {
     readonly accessTargets?: GatewayOptions["accessTargets"];
-    readonly userFields?: import("@aotter/mantle/user-fields").UserFields;
+    readonly userFields?: import("@aotter/mantle/internal/user-fields").UserFields;
     /** Generated requires guards for metadata targets beyond callable Admin routes. */
     readonly allows?: (target: Target, caller: Caller) => boolean;
     readonly collections: readonly Descriptor[];
@@ -155,7 +155,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
     const site = async (c: Context<Env, Database>) => { const info = siteInfo(options.site ? await options.site(c.db, c.caller).read() : { brand: "AotterMantle", title: "CMS", description: "", origin: "", locales: [], canonicalLocale: null, icons: [{ src: "/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] }, { src: "/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }], media: { purposes: [] } }, { origin: c.url.origin, siteSettings: !!options.site, media: !!options.site && !!options.media, invitationEmail: !!options.identity?.roles?.sendAdminInvitation, mcpEndpoints: options.mcpEndpoints }); return { ...info, capabilities: { ...info.capabilities, statistics: !!options.routes?.some(route => route.path === "/collections/{name}/statistics"),
         // Members and Admins manage identities: only when a directory is configured and the caller is not a host (whose identities are managed by the host)
         identity: !!options.identity?.directory && !(await import("@aotter/mantle/host-caller")).isHostCaller(c.caller) } }; };
-    const checkTarget = async (target: Target, caller: Caller) => (await import("@aotter/mantle/authorization")).authorizeTarget(options.authorize!, target, caller);
+    const checkTarget = async (target: Target, caller: Caller) => (await import("@aotter/mantle/internal/authorization")).authorizeTarget(options.authorize!, target, caller);
     const developerConsole = async () => typeof metadata.developerConsole === "function" ? await (metadata.developerConsole as () => unknown)() : metadata.developerConsole;
     // only the developer-console route resolves and filters the snapshot
     const visibleMetadata = async (c: Context<Env, Database>, developer = false) => {
@@ -247,7 +247,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
         // The pattern grammar describe's matchTarget compiles from the same ids.
         const { source, keys } = routeSource(route.path, ADMIN_API_BASE, true);
         return { id: `admin:${route.method} ${route.path.replace(/\{([^}*]+)\*?\}/g, ":$1")}`, method: route.method, pattern: new RegExp(source), keys, bodyLimit: route.bodyLimit, rawBody: route.rawBody, handle: async (request, env, getDb, caller, params, _handlers, input) => {
-                const result = await runRoute(route, { request, url: new URL(request.url), env, get db() { return getDb(); }, caller: caller as Admin, params, input, ...(options.authorize ? { authorize: (target: Target) => import("@aotter/mantle/authorization").then(m => m.authorized(options.authorize!, target, caller)) } : {}) });
+                const result = await runRoute(route, { request, url: new URL(request.url), env, get db() { return getDb(); }, caller: caller as Admin, params, input, ...(options.authorize ? { authorize: (target: Target) => import("@aotter/mantle/internal/authorization").then(m => m.authorized(options.authorize!, target, caller)) } : {}) });
                 if (!(result instanceof Response))
                     return result;
                 const headers = new Headers(result.headers);
@@ -302,7 +302,7 @@ export function admin<Env, Database, Handlers = never>(metadata: Metadata, views
                 if (!route.prepare) throw new ContractError("DRY_RUN_UNSUPPORTED", "Opaque Admin work.", matched.id, {status:412});
                 const params = Object.fromEntries((matched.keys ?? []).map((key, i) => [key, decodeURIComponent(matched.pattern.exec(canonical!)![i + 1]!)]));
                 const input = ["GET", "HEAD", "OPTIONS"].includes(request.method) ? undefined : await body(request, route.bodyLimit);
-                const c: Context<Env, Database> = {request, url:new URL(request.url), env, get db(): Database { throw new Error("Dry run attempted database acquisition"); }, caller:caller as Admin, params, input, ...(options.authorize ? {authorize:(target:Target)=>import("@aotter/mantle/authorization").then(m=>m.authorized(options.authorize!,target,caller!))} : {})};
+                const c: Context<Env, Database> = {request, url:new URL(request.url), env, get db(): Database { throw new Error("Dry run attempted database acquisition"); }, caller:caller as Admin, params, input, ...(options.authorize ? {authorize:(target:Target)=>import("@aotter/mantle/internal/authorization").then(m=>m.authorized(options.authorize!,target,caller!))} : {})};
                 if (options.authorize && route.target) await checkTarget(route.target(c), caller);
                 await route.prepare(c);
                 return access.response();

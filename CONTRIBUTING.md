@@ -65,6 +65,9 @@ audiences or copy maintainer policy into shipped skills.
 - Scope/auth, publishing visibility, explicit OCC, atomic writes and uncertain
   commit outcomes remain enforced. Input at transport boundaries uses generated
   checks; never remove data-loss protection, security or accessibility to meet size.
+- Every `exports` subpath of `@aotter/mantle` is classified in `packages/mantle/tests/public-surface.test.ts`: developer
+  API (documented, a compatibility promise), host platform contract (versioned, names and paths stay), or generated-code
+  plumbing under `./internal/*` (no promise; only `mantle generate` output imports it).
 - Generated module imports perform no kernel initialization. Store metadata is
   initialized once on first `store()`, with database/Caller/handlers bound per call.
 

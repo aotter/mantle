@@ -177,7 +177,7 @@ test("format uri is an absolute http or https URL", async () => {
 test("patterns are compiled once per module", () => {
   const source = emitValidation(plan({ type: "object", properties: { a: { type: "string", pattern: "^a" }, b: { type: "string", pattern: "^a" }, c: { type: "string", pattern: "^c" } } }))["validation/procedures/save.ts"]!;
   expect(source.match(/new RegExp\(/g)).toHaveLength(2);
-  expect(source).toStartWith('import { fail } from "@aotter/mantle/validation";\nconst pattern0 = new RegExp("^a");\nconst pattern1 = new RegExp("^c");\n');
+  expect(source).toStartWith('import { fail } from "@aotter/mantle/internal/validation";\nconst pattern0 = new RegExp("^a");\nconst pattern1 = new RegExp("^c");\n');
 });
 
 test("rules of another shape fail generation with the supported shape", () => {
