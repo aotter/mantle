@@ -21,8 +21,6 @@ export type BindSpec =
   | { k: 'version' }
   | { k: 'cursor'; i: number };
 
-/** The prefix of the columns that carry an after hook's row; the runner strips them from the result. */
-export const HOOK_PREFIX = '_mantle_h_';
 export type { Mode };
 export type PolicyOpts = {
   /** `MantleDialect.nativeOrder`: the id tiebreak follows the last sort key's direction */
@@ -36,8 +34,6 @@ export type PolicyOpts = {
   lockVersion?: boolean;
   /** the status an update moves the entry to (the lifecycle decided it is legal); SQL cannot write `status` */
   status?: string;
-  /** Schema + semantic verb keys (`posts.publish`, `items.update`) whose after hooks need whole rows. */
-  returning?: ReadonlySet<string>;
   /** skip `refs` (see CompileContext) */
   uncheckedRefs?: true;
   /** records every relation position the pass printed a wrapper for (the probe checks it is complete) */
@@ -85,9 +81,7 @@ export type Compiled = {
   kind: 'read' | 'row' | 'set';
   schema?: string;
   verb?: 'insert' | 'update' | 'delete';
-  /** an after hook exists for the target: RETURNING carries the row in `HOOK_PREFIX` columns the runner splits off */
-  hooked: boolean;
-  /** the update publishes the entry: publish hooks fire instead of update hooks */
+  /** the update publishes the entry */
   publish: boolean;
   /** a Schema lock guards this row write: the probe that classifies its conflict (#1822), with its own binds */
   probe?: { ast: N; binds: BindSpec[] };
@@ -107,7 +101,7 @@ const sort = (node: N, dir = 'SORTBY_DEFAULT'): N => ({ SortBy: { node, sortby_d
 // ---- Schema helpers -------------------------------------------------------------------------------
 // the scope column is never read back, not even by `SELECT *`: it is the caller's own subject key
 const declaredCols = (s: SchemaDef) => Object.entries(s.fields).filter(([f]) => f !== s.scope).flatMap(([f, t]) => (t === 'geo' ? [`${f}_lat`, `${f}_lng`] : [f]));
-/** what the wrapper exposes: the declared fields plus the columns policy and hooks read */
+/** what the wrapper exposes: the declared fields plus the columns policy reads */
 const readable = (s: SchemaDef) => ['id', 'version', 'created_at', 'updated_at', 'author_id', ...(s.publishing ? ['status', 'published_at'] : []), ...declaredCols(s)];
 /** what `SELECT *` and `RETURNING *` expand to: declared fields only, never scope or system columns */
 const starCols = (s: SchemaDef) => declaredCols(s);
@@ -115,7 +109,6 @@ const starCols = (s: SchemaDef) => declaredCols(s);
 // ---- policy ---------------------------------------------------------------------------------------
 type SelInfo = { container: RelationPosition; hasWindow: boolean; hasJsonEach: boolean; scope: Map<string, string>; searchQ: Map<string, N> };
 type C = PolicyOpts & {
-  hooked: boolean;
   binds: BindSpec[];
   keys: Map<string, number>;
   edge: string;
@@ -445,12 +438,10 @@ function expandStar(n: N, info: SelInfo, c: C): N {
 }
 
 const alias$ = (rel: N) => rel.alias?.aliasname ?? rel.relname;
-function returning(rc: N | undefined, s: SchemaDef, c: C, target: string): N | undefined {
+function returning(rc: N | undefined, s: SchemaDef, target: string): N | undefined {
   // `*` and `<target>.*` are the target's declared columns, as in a SELECT; any other star is left for PostgreSQL to refuse
   const own = (f: N[] | undefined) => !!f?.at(-1)?.A_Star && (f.length === 1 || f[0]?.String?.sval === target);
   const exprs = (rc?.exprs ?? []).flatMap((e: N) => (own(e.ResTarget.val?.ColumnRef?.fields) ? starCols(s).map((f) => res(col(f))) : [e]));
-  // an after hook gets the whole row whatever the author returns: its own columns, which the result never carries (ADR-0032 decision 3)
-  if (c.hooked) exprs.push(...readable(s).map((f) => res(col(f), `${HOOK_PREFIX}${f}`)));
   return exprs.length ? { exprs } : undefined;
 }
 function dmlScope(rel: N, c: C) {
@@ -471,7 +462,7 @@ function update(n: N, c: C): N {
   out.targetList.push(...sets(w, c));
   if (w.locks.length) c.probe = probe(c, n.relation, a, out.whereClause, w.locks);
   out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock), checked, ...w.locks.map(l => locked(c, a, String(n.relation.relname).toLowerCase(), l)));
-  out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
+  out.returningClause = returning(out.returningClause, s, alias$(n.relation));
   return { UpdateStmt: out };
 }
 function del(n: N, c: C): N {
@@ -483,7 +474,7 @@ function del(n: N, c: C): N {
   const w = writePolicy(s, 'delete', { lock: c.lockVersion, trusted: c.mode === 'trusted' });
   if (w.locks.length) c.probe = probe(c, n.relation, a, out.whereClause, w.locks);
   out.whereClause = and(out.whereClause, visible(s, a, c, String(n.relation.relname)), w.lock && term(c, a, w.lock), ...w.locks.map(l => locked(c, a, String(n.relation.relname).toLowerCase(), l)));
-  out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
+  out.returningClause = returning(out.returningClause, s, alias$(n.relation));
   return { DeleteStmt: out };
 }
 function insert(n0: N, c: C): N {
@@ -551,7 +542,7 @@ function insert(n0: N, c: C): N {
       oc.whereClause = and(oc.whereClause, visible(s, t, c, t), setRef, ...locks);
     }
   }
-  out.returningClause = returning(out.returningClause, s, c, alias$(n.relation));
+  out.returningClause = returning(out.returningClause, s, alias$(n.relation));
   return { InsertStmt: out };
 }
 
@@ -569,7 +560,7 @@ function renumber(ast: N, binds: readonly BindSpec[]): { ast: N; binds: BindSpec
 
 /** A lock's `when` as the dialect spells it, for a runtime that prints its own WHERE (the Store, #1822). It binds nothing. */
 export function lockCondition(when: N, schemas: Schemas, lower: PolicyLowering): N {
-  const c: C = { schemas, inputs: {}, mode: 'trusted', lower, hooked: false, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [], ctes: [] };
+  const c: C = { schemas, inputs: {}, mode: 'trusted', lower, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [], ctes: [] };
   const out = tx(structuredClone(when), c);
   if (c.binds.length) throw new Refused('SQL_SHAPE', 'a lock binds no value');
   return out;
@@ -579,11 +570,10 @@ export function lockCondition(when: N, schemas: Schemas, lower: PolicyLowering):
 export function applyPolicy(stmt: N, opts: PolicyOpts): Compiled {
   const t = Object.keys(stmt)[0]!;
   const verb = t === 'InsertStmt' ? 'insert' : t === 'UpdateStmt' ? 'update' : t === 'DeleteStmt' ? 'delete' : undefined;
-  // the Schema as hooks, publishing and the context key it: SQL folds the name (the allowlist admits only a lower-case one)
+  // the Schema as publishing and the context key it: SQL folds the name (the allowlist admits only a lower-case one)
   const schema = verb ? String(stmt[t].relation.relname).toLowerCase() : undefined;
   const publish = opts.status === 'published';
-  const hooked = !!schema && !!opts.returning?.has(`${schema}.${publish ? 'publish' : verb}`);
-  const c: C = { ...opts, hooked, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [], ctes: [] };
+  const c: C = { ...opts, binds: [], keys: new Map(), edge: '', embed: 'top', sel: [], ctes: [] };
   const ast = tx(stmt, c);
-  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, hooked, publish, ...(c.probe ? { probe: renumber(c.probe, c.binds) } : {}) };
+  return { ast, binds: c.binds, kind: classify(stmt), schema, verb, publish, ...(c.probe ? { probe: renumber(c.probe, c.binds) } : {}) };
 }

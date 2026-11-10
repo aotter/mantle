@@ -35,7 +35,7 @@ Each target’s `_meta` contains:
   relative to the API base. Publishing ids use `procedure:<schema>.<verb>`;
   media tool ids use `admin:tool:<name>`.
 - `targetHash`: a hash of behavior, inputs, requirements, restrictions,
-  related Schema definitions, surfaces, Triggers and reachable hooks.
+  related Schema definitions, surfaces and Triggers.
   Optional lowering caches do not affect it. Ref registration keys are
   included; application-owned handler implementations are not.
 - `scope` and `restrict`: per-Schema owner and user-field terms. Owner terms

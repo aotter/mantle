@@ -34,7 +34,6 @@ export interface LinkedProcedure extends ResolvedManifestReference<ParsedProcedu
 
 export interface LinkedTrigger extends ResolvedManifestReference<ParsedTrigger> {
   readonly target: ResolvedManifestReference<ParsedProcedure>;
-  readonly lifecycleSchema?: ResolvedManifestReference<ParsedSchema>;
 }
 
 declare const linkedManifestSetBrand: unique symbol;
@@ -102,9 +101,6 @@ export function linkManifestSet(
   const triggers = graph.triggers.map((manifest) => Object.freeze({
     ...resolve(manifest as ParsedTrigger),
     target: resolveProcedure(manifest.spec.target.procedure),
-    ...(manifest.spec.source.kind === "lifecycle"
-      ? { lifecycleSchema: resolveSchema(manifest.spec.source.schema) }
-      : {}),
   }));
 
   return {

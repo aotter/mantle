@@ -57,7 +57,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: product-created }
 spec:
-  source: { kind: lifecycle, schema: products, on: [after_create] }
+  source: { kind: mcp, surface: admin }
   target: { procedure: allow-product }
 `));
 
@@ -67,7 +67,6 @@ spec:
     expect(linked.value.procedures[1]?.collectionActionSchema?.manifest.metadata.name)
       .toBe("products");
     expect(linked.value.triggers[0]?.target.manifest.metadata.name).toBe("allow-product");
-    expect(linked.value.triggers[0]?.lifecycleSchema?.manifest.metadata.name).toBe("products");
     expect(Object.isFrozen(linked.value)).toBe(true);
   });
 

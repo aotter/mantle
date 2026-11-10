@@ -84,17 +84,6 @@ spec:
   target: { procedure: place-order }
 ---
 apiVersion: cms.mantle.aotter.net/v2
-kind: Trigger
-metadata:
-  name: order-created
-spec:
-  source:
-    kind: lifecycle
-    schema: orders
-    on: [after_create]
-  target: { procedure: place-order }
----
-apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata:
   name: cancel-order

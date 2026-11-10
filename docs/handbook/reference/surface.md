@@ -12,8 +12,8 @@
 - MCP retains public `POST /mcp`, admin `POST /mcp/admin`,
   snake-cased View names on each declared surface, and snake-cased Procedure
   names per MCP Trigger. Its SDK loads only through a request-time dynamic import.
-- HTTP/MCP Triggers declare exposure only. `mantle generate` refuses schedule
-  and lifecycle Triggers; host scheduling is a separate capability.
+- HTTP/MCP Triggers declare exposure only; they are the only Trigger sources.
+  Host scheduling is a separate capability.
 - Native Admin retains selected 0.2 paths and the console contracts; see
   [Native Admin](../guides/native-admin.md) for app-mounted
   `adminBindings()` and `entries(bindings.schemas, bindings.adapter)`.

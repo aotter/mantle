@@ -42,18 +42,8 @@ export function developerConsole(plan: RuntimePlan) {
   const schemas = Object.values(plan.schemas).sort((a, b) => a.name.localeCompare(b.name));
   const views = Object.entries(plan.views).sort(([a], [b]) => a.localeCompare(b));
   const procedureAudience = (name: string): Audience => audienceOf(plan.procedures[name]?.requires) ?? "public";
-  const handlerOf = (h: RuntimePlan["procedures"][string]["handler"]) => {
-    if ("ref" in h) return { kind: "ref" as const, ref: h.ref };
-    const flow = procedureFlow(h.sql.stmts, relationsOf);
-    const verbs: Record<string, string> = { INSERT: "create", UPDATE: "update", DELETE: "delete" };
-    const hooks = Object.entries(plan.triggers).flatMap(([trigger, t]) => {
-      if (t.source.kind !== "lifecycle") return [];
-      const source = t.source;
-      const on = source.on.filter((hook) => flow.some((s) => s.writes.includes(source.schema.toLowerCase()) && hook.endsWith(`_${verbs[s.operation]}`)));
-      return on.length ? [{ trigger, procedure: t.procedure, schema: source.schema, on }] : [];
-    });
-    return { kind: "sql" as const, statement: h.source, flow, hooks };
-  };
+  const handlerOf = (h: RuntimePlan["procedures"][string]["handler"]) =>
+    "ref" in h ? { kind: "ref" as const, ref: h.ref } : { kind: "sql" as const, statement: h.source, flow: procedureFlow(h.sql.stmts, relationsOf) };
   const procedures = Object.entries(plan.procedures).sort(([a], [b]) => a.localeCompare(b)).map(([name, p]) => ({
     name, title: p.title ?? null, description: p.description ?? null, audience: procedureAudience(name), input: p.input, output: p.output,
     authorization: p.requires?.auth?.all ?? [], guard: p.requires?.guard?.procedure ?? null, handler: handlerOf(p.handler),
@@ -61,7 +51,7 @@ export function developerConsole(plan: RuntimePlan) {
   }));
   const triggers = Object.entries(plan.triggers).sort(([a], [b]) => a.localeCompare(b)).map(([name, t]) => ({
     name, target: t.procedure, source: t.source, manifest: t,
-    audience: (t.source.kind === "lifecycle" || t.source.kind === "schedule" ? "system" : t.source.kind === "mcp" && t.source.surface === "admin" ? "admin" : procedureAudience(t.procedure)) as Audience,
+    audience: (t.source.kind === "mcp" && t.source.surface === "admin" ? "admin" : procedureAudience(t.procedure)) as Audience,
   }));
   const viewAudience = (v: RuntimePlan["views"][string]): Audience => (v.surface === "internal" ? "system" : v.surface === "admin" ? "admin" : audienceOf(v.requires) ?? "public");
 
@@ -83,10 +73,7 @@ export function developerConsole(plan: RuntimePlan) {
       ...("sql" in p.handler ? [...relationsOf(p.handler.sql.stmts).writes].map(schemaName) : [p.target && schemaName(p.target.schema.toLowerCase())]).flatMap((s) => (s ? [relation(`Procedure:${name}:writes:${s}`, "procedure-schema", `Procedure:${name}`, `Schema:${s}`, "sql" in p.handler ? "/spec/handler/sql" : "/spec/target/schema", s)] : [])),
       ...(p.requires?.guard ? [relation(`Procedure:${name}:guard:${p.requires.guard.procedure}`, "authorization-guard", `Procedure:${name}`, `Procedure:${p.requires.guard.procedure}`, "/spec/requires/guard/procedure", p.requires.guard.procedure)] : []),
     ]),
-    ...Object.entries(plan.triggers).flatMap(([name, t]) => [
-      relation(`Trigger:${name}:target:${t.procedure}`, "trigger-target", `Trigger:${name}`, `Procedure:${t.procedure}`, "/spec/target/procedure", t.procedure),
-      ...(t.source.kind === "lifecycle" && schemaName(t.source.schema.toLowerCase()) ? [relation(`Trigger:${name}:source:${t.source.schema}`, "lifecycle-source", `Trigger:${name}`, `Schema:${schemaName(t.source.schema.toLowerCase())}`, "/spec/source/schema", t.source.schema)] : []),
-    ]),
+    ...Object.entries(plan.triggers).map(([name, t]) => relation(`Trigger:${name}:target:${t.procedure}`, "trigger-target", `Trigger:${name}`, `Procedure:${t.procedure}`, "/spec/target/procedure", t.procedure)),
   ].sort((a, b) => a.id.localeCompare(b.id));
 
   const callable = (["public", "admin"] as const).flatMap((surface) => mcpTools(plan, surface).map((tool) => ({
@@ -127,7 +114,8 @@ export function developerConsole(plan: RuntimePlan) {
       relations,
     },
     operations: {
-      schedules: Object.entries(plan.triggers).flatMap(([id, { procedure, source }]) => (source.kind === "schedule" ? [{ id, procedure, cron: source.cron, enabled: source.enabled ?? true, registration: "not-observed" }] : [])),
+      // Admin's wire shape keeps the field; a plan declares no schedule (the application owns scheduled()).
+      schedules: [],
       ttlPolicies: schemas.filter((s) => s.ttl).map((s) => ({ schema: s.name, field: s.names[s.ttl!] ?? s.ttl!, expireAfterSeconds: s.ttlSeconds ?? 0, sweepObservation: "unavailable" })),
       observationAvailability: "unavailable", runs: [], latestRuns: [],
     },

@@ -150,18 +150,6 @@ ${H}kind: Trigger
 metadata: {name: add-admin}
 spec: {source: {kind: mcp, surface: admin}, target: {procedure: add-thing}}
 `;
-const auditHook = `---\n${H}kind: Procedure
-metadata: {name: audit}
-spec:
-  input: {type: object}
-  output: {type: object}
-  handler: {ref: audit}
----
-${H}kind: Trigger
-metadata: {name: audit-hook}
-spec: {source: {kind: lifecycle, schema: orders, on: [after_update]}, target: {procedure: audit}}
-`;
-
 test("WebMCP dispatch includes publishing and media tools and cannot claim readOnly", async () => {
   const report = await describeApp(await compile(posts));
   const dispatcher = target(report, "admin:POST /webmcp/:tool");
@@ -236,30 +224,6 @@ test("reading another Schema widens, while adding terms to a read Schema narrows
   expect(diffApp(a, c)).toContainEqual(expect.objectContaining({ id, field: "scope", direction: "narrowed" }));
   const text = (await fixtureText()).replace("sql: SELECT id, title, region FROM orders ORDER BY title, id", "sql: SELECT o.id, o.title, n.title AS note FROM orders o LEFT JOIN notes n ON n.id = o.id ORDER BY o.title, o.id");
   expect(diffApp(a, await describeApp(await compile(text)))).toContainEqual(expect.objectContaining({ id, field: "scope", direction: "widened" }));
-});
-
-test("lifecycle hooks pin writers, REST and generic entries routes and expose ref opacity", async () => {
-  const a = await fixture(), b = await compile(await fixtureText() + auditHook);
-  for (const id of ["procedure:rename-order", "rest:POST /api/orders/rename", "admin:PATCH /entries/:id"]) {
-    expect(await targetHash(b, id)).not.toBe(await targetHash(a, id));
-    expect(target(await describeApp(b), id).opaque).toBe(true);
-    expect(diffApp(await describeApp(a), await describeApp(b))).toContainEqual(expect.objectContaining({ id, field: "opaque", direction: "widened" }));
-  }
-  const changed = copy(b); changed.procedures.audit.handler.ref = "different";
-  expect(await targetHash(changed, "procedure:rename-order")).not.toBe(await targetHash(b, "procedure:rename-order"));
-  const unrelated = copy(b); unrelated.triggers["audit-hook"].source.on = ["after_delete"];
-  expect(await targetHash(unrelated, "procedure:rename-order")).toBe(await targetHash(a, "procedure:rename-order"));
-  expect(await targetHash(a, "view:regional-orders")).toBe(await targetHash(b, "view:regional-orders"));
-});
-
-test("publishing hooks pin publishing tools and their dispatchers", async () => {
-  const a = await compile(posts), b = copy(a);
-  b.procedures.hook = { input: { type: "object" }, output: { type: "object" }, inputs: {}, handler: { ref: "publish-hook" } };
-  b.triggers.hook = { source: { kind: "lifecycle", schema: "posts", on: ["before_publish", "after_publish"] }, procedure: "hook" };
-  for (const id of ["procedure:posts.publish", "admin:POST /webmcp/:tool", "admin:POST /entries/:id/publish"]) {
-    expect(await targetHash(a, id)).not.toBe(await targetHash(b, id));
-    expect(target(await describeApp(b), id).opaque).toBe(true);
-  }
 });
 
 test("ref handlers conservatively report all possible read scopes", async () => {
