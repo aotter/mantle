@@ -86,7 +86,7 @@ Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty va
 | `packages/mantle/tests/auth-resource.test.ts` | OAuth resource selection/seeding and renamed native models without boot SQL. |
 | `packages/mantle/tests/auth-split.test.ts` | Lazy optional auth imports, startup import tripwires, auth schema/index compatibility and CLI auth loading. |
 | `packages/mantle/tests/authorize.test.ts` | REST and MCP authorize manifest targets before SQL/handlers; requires precedes authorization and lists hide denied targets. |
-| `packages/mantle/tests/boundaries.test.ts` | Request and build imports respect package/layer boundaries. |
+| `packages/mantle/tests/boundaries.test.ts` | Kernel source statically imports no package; folder reach is `scripts/check-boundaries.mjs`. |
 | `packages/mantle/tests/bun-assets.test.ts` | Asset reader refuses traversal, malformed paths and escaping symlinks. |
 | `packages/mantle/tests/cli.test.ts` | CLI handler guidance, config preservation/idempotence, executable consumer build and the removed `--admin-extensions` option; process timeout 30 s. |
 | `packages/mantle/tests/compiler-boundary.test.ts` | Generator loads and compiles without optional auth/MCP dependencies; process timeout 30 s. |
