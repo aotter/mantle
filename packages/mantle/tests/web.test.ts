@@ -87,6 +87,7 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     expect(text).toContain("# Blog\n\n> Summary");expect(text.match(/^- /gm)).toHaveLength(6);expect(text).not.toContain("post0");expect(text).toContain("Title \\[1\\]");expect(text).toContain("(https://site.test/posts/a%26b%29)");
     const sitemap=await site.fetch(request("/sitemap.xml"));expect((await sitemap.text()).match(/<url>/g)).toHaveLength(6);
     const md=await site.fetch(request("/posts/a%26b).md"));expect(await md.text()).toBe("# body 1");expect(md.headers.get("cache-control")).toBe("public, max-age=60");
+    for (const response of [llms,sitemap,md]) expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect((await site.fetch(request("/posts/post0.md"))).status).toBe(404);expect(await site.head(request("/posts/post0"))).toBe("");
     const tags=await site.head(request("/posts/a%26b)"));expect(tags).toContain('rel="canonical" href="https://site.test/posts/a%26b%29"');expect(tags).toContain('type="text/markdown"');expect(tags).toContain('hreflang="en"');
     const etag=md.headers.get("etag");expect((await site.fetch(request("/posts/a%26b).md",{headers:{"if-none-match":"W/"+etag}}))).status).toBe(304);
