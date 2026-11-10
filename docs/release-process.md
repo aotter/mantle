@@ -59,8 +59,7 @@ release reruns that same controller and version.
 candidate tag pointing at the last published candidate. Official channels
 are only `alpha`, `beta`, `rc`, and `latest`. Consumers must not install
 `mantle-release`. Deleting it after promotion is not part of the release:
-dist-tag DELETE only added failure and re-run state, and Actions
-`NPM_TOKEN` 403s on that DELETE.
+dist-tag DELETE only added failure and re-run state.
 
 ## Branches and channels
 
@@ -237,13 +236,61 @@ issue with the run link and completion evidence.
 
 ## Credentials and verification
 
-Core needs NPM_TOKEN for npmjs. Its job-scoped GITHUB_TOKEN creates the Core
-tag/release and mirrors GitHub Packages. No cross-repository fanout token is
-needed. Before tagging, verify credentials and new-version absence on both
-registries. Existing artifacts on retry must have matching integrity. The
-preflight cannot prove write access for a package's first publish
-(`@aotter/mantle-ui` with 0.2): `npm access` lists only existing packages, so
-confirm NPM_TOKEN has `@aotter` scope write before the immutable tag.
+npmjs authentication is npm
+[trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC): the
+repository holds no npm token. npmjs.com trusts the workflow file
+`release.yml` of this repository running in the GitHub environment
+`npm-publish`, and npm exchanges the job's identity for a short-lived
+credential at `npm publish` and `npm dist-tag add`. Provenance is attached
+automatically. Job-scoped GITHUB_TOKENs create the Core tag and release and
+mirror GitHub Packages. No cross-repository fanout token is needed.
+
+The controller is a chain of jobs, each with only the permissions it needs:
+
+| Job | Does | Permissions |
+|---|---|---|
+| `prepare` | Resolve state, source gates, pack; tarballs travel as a run artifact | `contents: read`, `pull-requests: read` |
+| `publish` | Preflight, Core tag, npmjs publish, metadata and artifact verification | `contents: write`, `packages: read`, `id-token: write`; environment `npm-publish` |
+| `mirror` | GitHub Packages mirror | `contents: read`, `packages: write` |
+| `consumer` | Public-registry reference Worker gate | `contents: read` |
+| `promote` | npmjs channel dist-tags | `contents: read`, `id-token: write`; environment `npm-publish` |
+| `release` | GitHub Packages channel dist-tags, GitHub release | `contents: write`, `packages: write` |
+
+Every step of a job with `id-token: write` can mint the identity npmjs
+trusts. `publish` and `promote` therefore install no dependencies and run no
+package code: only npm and the dependency-free
+`scripts/verify-release-artifact.mjs` and `scripts/release-tag-order.mjs`.
+Keep it that way when editing them; the release self-test fails otherwise.
+Both install an exact npm (`OIDC_NPM_VERSION` in the workflow): trusted
+publishing needs npm 11.5.1 or later for `npm publish`, 11.21.0 or later for
+`npm dist-tag`, and Node 22.14.0 or later, on a GitHub-hosted runner.
+
+If the `npm-publish` environment has required reviewers, a release waits for
+approval twice: before `publish` and before `promote`.
+
+Before tagging, the preflight proves new-version absence on both registries
+and that the job token reads GitHub Packages. Existing artifacts on retry
+must have matching integrity. It cannot prove npmjs write access: OIDC does
+not authenticate `npm whoami` or `npm access`. A missing, expired or
+mismatched trusted publisher therefore fails at `npm publish`, after the
+immutable tag exists; see Recovery.
+
+### One-time npmjs.com setup
+
+For each of `@aotter/mantle-ui`, `@aotter/mantle` and `@aotter/mantle-admin`:
+npmjs.com → Packages → the package → Settings → Trusted publishing → GitHub
+Actions, with
+
+- Organization or user: `aotter`
+- Repository: `mantle`
+- Workflow filename: `release.yml`
+- Environment name: `npm-publish`
+- Allowed actions: publishing with `npm publish`, and **Allow npm dist-tag**
+
+Every field is case-sensitive and the environment name must match the
+workflow's exactly. A new configuration expires unless its first publish
+succeeds within 2 days, and an expired one cannot be edited, only deleted and
+recreated: create them shortly before the next release.
 
 Completion requires the Core tag SHA, all three npmjs/GPR packages, exact
 integrity, no workspace dependencies, a passing public-registry Worker gate,
@@ -273,6 +320,15 @@ packing, immutable tarball comparison, and the public-registry Worker gate.
 The controller tip must not rebuild an artifact whose identity is already
 published. Verify npm metadata still runs. The Worker gate stays skipped
 because the first run already passed it before promotion.
+
+When `npm publish` fails because the trusted publisher is missing, expired
+or does not match (workflow filename, environment name, allowed actions), the
+tag already exists and nothing is published. Fix the configuration on
+npmjs.com and dispatch the same version again from the same branch: the
+controller finds the tag, skips the source gates, packs, and publishes what
+is missing. The same holds when `npm dist-tag add` is refused in `promote`
+because **Allow npm dist-tag** is off: the packages are published and
+verified, and a second dispatch only promotes.
 
 Unpublish is reserved for actual secret/private-file exposure, never routine
 fixes. Infrastructure renames require their explicit config diff and live

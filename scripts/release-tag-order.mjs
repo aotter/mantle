@@ -80,7 +80,7 @@ if (process.argv[2] === "--self-test") {
   assert.match(workflow, /- name: Pack release tarballs\n        if: steps\.pkgs\.outputs\.published != 'true'/);
   assert.match(
     workflow,
-    /- name: Verify immutable npm artifacts\n        if: steps\.pkgs\.outputs\.published != 'true'/,
+    /- name: Verify immutable npm artifacts\n        if: needs\.prepare\.outputs\.published != 'true'/,
   );
   assert.match(
     workflow,
@@ -112,6 +112,44 @@ if (process.argv[2] === "--self-test") {
   assert.match(gprStep, /dist-tag add/);
   assert.doesNotMatch(workflow, /drop_temp_tag|dist-tag rm|npm unpublish/);
   assert.doesNotMatch(workflow, /remove-mantle-release|workflow_call/);
+
+  // npmjs is reached by trusted publishing only: no npm token, and a job that can mint the OIDC identity
+  // installs no dependencies and runs no package code
+  assert.doesNotMatch(workflow, /NPM_TOKEN|npm whoami --|npm access list/);
+  assert.match(workflow, /^permissions: \{\}$/m);
+  const jobs = workflow
+    .slice(workflow.indexOf("\njobs:\n"))
+    .split(/\n(?=  [a-z-]+:\n)/)
+    .slice(1);
+  const jobNames = jobs.map(job => job.match(/^  ([a-z-]+):/)[1]);
+  assert.deepEqual(jobNames, ["prepare", "publish", "mirror", "consumer", "promote", "release"]);
+  const needs = jobs.map(job =>
+    job
+      .match(/^    needs: \[(.+)\]$/m)?.[1]
+      .split(", ")
+      .at(-1),
+  );
+  assert.deepEqual(needs, [undefined, "prepare", "publish", "mirror", "consumer", "promote"], "jobs form one chain");
+  const oidcJobs = jobs.filter(job => /^      id-token: write/m.test(job));
+  assert.deepEqual(
+    oidcJobs.map(job => job.match(/^  ([a-z-]+):/)[1]),
+    ["publish", "promote"],
+  );
+  for (const job of oidcJobs) {
+    assert.match(job, /^    environment: npm-publish$/m);
+    assert.match(job, /npm install --global --ignore-scripts "npm@\$OIDC_NPM_VERSION"/);
+    const commands = job
+      .split("\n")
+      .filter(line => !/^\s*#/.test(line))
+      .join("\n");
+    assert.doesNotMatch(
+      commands,
+      /pnpm|\bbun\b|npx|playwright|check-worker-consumer|npm (ci|install(?! --global --ignore-scripts "npm@)|run|test|exec)/,
+    );
+  }
+  assert.match(jobs[1], /Create immutable Core tag[\s\S]*npm publish "\$tgz"/);
+  assert.match(jobs[4], /npm dist-tag add "\$pkg@\$VERSION" "\$tag" \\\n\s+--registry https:\/\/registry\.npmjs\.org/);
+  assert.doesNotMatch(jobs[2] + jobs[3] + jobs[5], /registry\.npmjs\.org\/:_authToken|npm publish "\$tgz"/);
   assert.equal(existsSync(new URL("../.github/workflows/remove-mantle-release-dist-tag.yml", import.meta.url)), false);
 
   console.log("release self-test passed");
