@@ -36,8 +36,38 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ### Upgrading to 0.2.2-alpha.2
 
-Pin the selected packages to `0.2.2-alpha.2` and regenerate. Existing configuration keeps working; long LIKE searches
-on PostgreSQL and bun-sqlite are now refused (see Fixes):
+Pin the selected packages to `0.2.2-alpha.2` and regenerate: output from an earlier version fails
+`mantle generate --check` as stale. This alpha removes design residue and has breaking changes; work through
+**Breaking** below, then the rest applies without changes.
+
+- **Breaking: generated-code plumbing moved.** The subpaths `authorization`, `binds`, `dialect/sqlite`,
+  `dialect/postgres`, `driver/postgres`, `driver/transaction-context`, `paging`, `publishing`, `scalars`, `store`,
+  `surface`, `sweep`, `translations`, `user-fields` and `validation` are now under `@aotter/mantle/internal/` and carry
+  no compatibility promise. Application code that imported one directly uses the documented entries instead; the
+  `UserFields` types are exported from `@aotter/mantle/contracts`.
+- **Breaking: removed exports and options.** `@aotter/mantle/json-body` and `@aotter/mantle/mcp-apps` (MCP App types
+  stay on `@aotter/mantle/mcp`); `sessionUserOf` (use `userOf`); the `fields` option on generated `rest(...)`,
+  `mcp(...)` and `web(...)` (the manifest's user fields apply as before); `mcp`'s `onRefusal` (read `onObservation`
+  events with `kind: "request-refused"`, which now carry `reason`); 23 diagnostic codes that were never raised.
+- **Breaking: the grammar accepts only what generates.** A `schedule` or lifecycle Trigger and `requires.guard` now
+  fail when the manifest is parsed, and in `mantle describe`, with the same guidance as before (wire `scheduled()`
+  yourself; check authorization in a handler). They previously failed at generation.
+- **Breaking: string inputs are well-formed text.** A string containing NUL or an unpaired surrogate is refused as
+  `INPUT_VALIDATION_FAILED` on every surface and dialect; SQLite and D1 previously accepted it. `maxLength` counts
+  code points; add `x-mantle-maxBytes` where a limit is in UTF-8 bytes.
+- **Breaking: `/admin/api` answers in the REST order.** An unknown path answers 404, a wrong method 405 with `Allow`
+  (including `OPTIONS`), and a malformed path 400, each before authentication; they were 401 or 403 for signed-out
+  or non-admin callers. For these three the error names `rest` instead of `admin`. See
+  [Native Admin](../guides/native-admin.md).
+- **Changed: MCP authorizes before it validates.** A tool's `requires` is checked before its input, so an
+  unauthorized call with invalid input reports the authorization refusal, and acquires no database handle.
+  `nativeRest` runs a route's `check`, and `authorize` when the route declares a target.
+- **MCP Apps.** `resolveMcpApps` from `@aotter/mantle/mcp/apps` returns contributors in one normal form, so an
+  application can wrap a resource without handling string-or-loader HTML itself. `adminMcpApps({ tools })` lets
+  Procedure tools render the Admin App. See [MCP Apps](../guides/mcp-apps.md).
+- **Procedures and SQL.** A step may take a `name`; a row conflict from a named step carries `step`. Refusals for a
+  View's `ORDER BY`, `CROSS JOIN` and comma joins now name the cause and the supported form (`JOIN … ON true`).
+  `uiSchema.nav.hidden: true` on a Schema with no sidebar entry is accepted.
 
 - **Upload card.** `mediaUploadCard({ tool, forward })` names the tool the card calls (default `upload_media`) and the
   argument names it repeats from the rendering call's input on each of its calls (for example `server`). Without them,
