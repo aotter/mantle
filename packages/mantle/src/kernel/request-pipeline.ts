@@ -28,6 +28,7 @@ import type { UserFields } from "./user-fields.js";
 
 /** The options every surface hands the pipeline. */
 export interface PipelineOptions extends GatewayOptions {
+  /** Host platform contract, versioned by `v`; stable within a version. */
   readonly gateway?: Gateway;
   readonly fields?: UserFields;
   readonly authorize?: Authorize;

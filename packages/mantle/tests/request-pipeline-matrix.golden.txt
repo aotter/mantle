@@ -835,10 +835,10 @@ gateway=on authorize=off caller=host-member-session shape=cross-origin target=wr
   mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:write
 gateway=on authorize=off caller=host-member-session shape=cross-origin target=scoped
   rest: deny:AUTH_DENIED [http 403 at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@rest:POST /api/scoped
-  mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:scoped
+  mcp: deny:AUTH_DENIED [http 200 tool-error at=@procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:scoped
 gateway=on authorize=off caller=host-member-session shape=cross-origin target=manage
   rest: deny:AUTH_DENIED [http 403 at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@rest:POST /api/manage
-  mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:manage
+  mcp: deny:AUTH_DENIED [http 200 tool-error at=@procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:manage
 gateway=on authorize=off caller=host-member-session shape=no-origin target=open
   rest: allow [http 200] db=1 authorize=0 resolver=0 event=allow@rest:GET /api/views/open
   mcp: allow [http 200 tool-result] db=1 authorize=0 resolver=0 event=allow@view:open
@@ -864,10 +864,10 @@ gateway=on authorize=off caller=host-member-session shape=no-origin target=write
   mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:write
 gateway=on authorize=off caller=host-member-session shape=no-origin target=scoped
   rest: deny:AUTH_DENIED [http 403 at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@rest:POST /api/scoped
-  mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:scoped
+  mcp: deny:AUTH_DENIED [http 200 tool-error at=@procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:scoped
 gateway=on authorize=off caller=host-member-session shape=no-origin target=manage
   rest: deny:AUTH_DENIED [http 403 at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@rest:POST /api/manage
-  mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:manage
+  mcp: deny:AUTH_DENIED [http 200 tool-error at=@procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:manage
 gateway=on authorize=off caller=host-member-snapshot shape=same-origin target=open
   rest: allow [http 200] db=1 authorize=0 resolver=0 event=allow@rest:GET /api/views/open
   mcp: allow [http 200 tool-result] db=1 authorize=0 resolver=0 event=allow@view:open
@@ -1183,7 +1183,7 @@ gateway=on authorize=off caller=host-admin-session shape=cross-origin target=wri
   mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:write
 gateway=on authorize=off caller=host-admin-session shape=cross-origin target=scoped
   rest: deny:AUTH_DENIED [http 403 at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@rest:POST /api/scoped
-  mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:scoped
+  mcp: deny:AUTH_DENIED [http 200 tool-error at=@procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:scoped
 gateway=on authorize=off caller=host-admin-session shape=cross-origin target=manage
   rest: deny:AUTH_DENIED [http 403 at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@rest:POST /api/manage
   mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:manage
@@ -1212,7 +1212,7 @@ gateway=on authorize=off caller=host-admin-session shape=no-origin target=write
   mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:write
 gateway=on authorize=off caller=host-admin-session shape=no-origin target=scoped
   rest: deny:AUTH_DENIED [http 403 at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@rest:POST /api/scoped
-  mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:scoped
+  mcp: deny:AUTH_DENIED [http 200 tool-error at=@procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:scoped
 gateway=on authorize=off caller=host-admin-session shape=no-origin target=manage
   rest: deny:AUTH_DENIED [http 403 at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@rest:POST /api/manage
   mcp: deny:AUTH_DENIED [http 200 tool-error at=@request:origin] db=0 authorize=0 resolver=0 event=deny:AUTH_DENIED@procedure:manage

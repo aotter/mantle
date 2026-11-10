@@ -179,6 +179,9 @@ async function invoke<Env, Database, Handlers>(
   if (observed) observe(options.onObservation, { ...observed, phase: "attempt", at: Date.now() });
   let outcome: "succeeded" | "failed" | "denied" = "succeeded", code: string | undefined;
   try {
+    // Frozen by the host contract (v1): a forwarded caller's guard answers before the Origin rule on MCP. Every other
+    // caller, and REST for every caller, passes the Origin rule first.
+    if (pipeline.host) pipeline.check(call);
     pipeline.enforceOrigin(request, call);
     // Application `authorize` already decided every call of the request. The generated guard runs here, before any
     // input is validated or a database handle acquired.
