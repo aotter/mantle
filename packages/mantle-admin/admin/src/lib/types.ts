@@ -235,7 +235,7 @@ export interface SiteInfo {
   /** Deprecated admin endpoint alias. */
   mcpUrl: string | null;
   /** What the deployment turned on; absent from an older server, which means all of it. */
-  capabilities?: { siteSettings: boolean; media: boolean; invitationEmail: boolean; statistics: boolean };
+  capabilities?: { siteSettings: boolean; media: boolean; invitationEmail: boolean; statistics: boolean; identity?: boolean };
   media?: {
     purposes?: MediaPurposePolicy[];
   };

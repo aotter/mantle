@@ -315,13 +315,13 @@ export function buildNavGroups(
         ? [
             // Media stays when it is off: its page is the setup guide
             { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
-            { title: t(language, "nav.members"), url: "/admin/members", icon: ContactRound },
+            ...(capabilities?.identity === false ? [] : [{ title: t(language, "nav.members"), url: "/admin/members", icon: ContactRound }]),
           ]
         : []),
       ...(admin
         ? [
             ...(capabilities?.siteSettings === false ? [] : [{ title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon }]),
-            { title: t(language, "nav.admin"), url: "/admin/admin", icon: Users },
+            ...(capabilities?.identity === false ? [] : [{ title: t(language, "nav.admin"), url: "/admin/admin", icon: Users }]),
           ]
         : []),
       ...itemsOf("more"),
