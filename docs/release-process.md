@@ -82,6 +82,9 @@ dist-tag DELETE only added failure and re-run state, and Actions
   changes only through promotion PRs and hotfix PRs (below); it is never pushed
   directly, rebased or force-updated. Both branches share one ruleset: PR, one
   approval, resolved threads and a current-base `Typecheck + tests` check.
+  On a PR into `main` that check is the whole Full checks suite, for every
+  author. On a PR into `develop` it runs for Dependabot only and is skipped,
+  which counts as passing, for everyone else.
 - Stable is the only release that moves `latest`. A prerelease channel keeps
   its last version when a later stable publishes.
 - Publish uses `--tag mantle-release`. `mantle-release` is an internal
@@ -142,8 +145,10 @@ dist-tag DELETE only added failure and re-run state, and Actions
    when its auth/kernel/generator trigger applies and before every alpha or beta.
    Before every release, alpha included, run Linux Full checks
    (`gh workflow run full-checks.yml --ref <version PR branch>`) on the frozen
-   version PR head, and link the green run from the version PR.
-5. Freeze the PR head for self review; CI must pass before merge. Merge into
+   version PR head, and link the green run from the version PR. A promotion
+   PR into `main` runs the same workflow by itself.
+5. Freeze the PR head for self review; that Full checks run must pass before
+   merge, since a PR into `develop` runs no CI of its own. Merge into
    `develop` with a merge commit for every version. For an alpha, dispatch
    release.yml from that merge with `version` (without v). For beta, RC and
    stable, continue with the promotion below. The controller refuses an

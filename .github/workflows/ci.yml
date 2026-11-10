@@ -1,11 +1,13 @@
 name: CI
 
-# ponytail: PR-only, and only for PRs nobody ran locally: forks and bots. Maintainer PRs merge on a local
-# `pnpm check` (exit code 0) plus review and fix forward; release.yml is the hard gate before publishing.
-# Drafts skip until ready_for_review — agent PRs iterate in draft.
-# Every base: a release line (0.2.x) and a PR stacked on another PR are merged as well, so they are tested as well.
+# ponytail: CI gates `main` only. A PR into `main` runs the whole suite for every author (full-checks.yml); a PR into
+# `develop` merges on a local `pnpm check` (exit code 0) plus review and is fixed forward.
+# The one exception is here: Dependabot PRs into `develop`. dependabot-automerge.yml approves and queues patch and
+# digest bumps, and nobody ran those locally, so these light jobs are what the auto-merge waits for.
+# For every other author the jobs skip, and a skipped required check counts as passing.
 on:
   pull_request:
+    branches: [develop]
     types: [opened, synchronize, reopened, ready_for_review]
 
 # Cancel superseded runs on the same ref. PR pushes that arrive in
@@ -22,7 +24,7 @@ jobs:
   lint:
     name: Typecheck + tests
     needs: [typecheck, tests]
-    if: ${{ always() && !github.event.pull_request.draft && !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) }}
+    if: ${{ always() && !github.event.pull_request.draft && github.event.pull_request.user.login == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Require both jobs
@@ -33,7 +35,7 @@ jobs:
 
   typecheck:
     name: Typecheck + gates
-    if: ${{ !github.event.pull_request.draft && !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) }}
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.user.login == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -76,7 +78,7 @@ jobs:
 
   tests:
     name: Package tests
-    if: ${{ !github.event.pull_request.draft && !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) }}
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.user.login == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

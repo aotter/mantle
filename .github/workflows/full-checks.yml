@@ -1,14 +1,36 @@
 name: Full checks
 
-# Manual: Actions → Full checks → Run workflow (on any branch; the dispatch entry comes from main). Run it before a release
-# or when a change may behave differently on Linux. Maintainers otherwise rely on local `pnpm check`.
+# The gate on `main`: every PR into `main` (promotion, hotfix) runs the whole suite, whoever opened it. Drafts run too.
+# Manual as well: Actions → Full checks → Run workflow (on any branch; the dispatch entry comes from main). Run it
+# before an alpha, which releases from `develop` and never passes this gate, or when a change may behave
+# differently on Linux. PRs into `develop` otherwise rely on local `pnpm check`.
 on:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: full-checks-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  # The ruleset shared by `main` and `develop` requires the status `Typecheck + tests`. ci.yml reports it for PRs into
+  # `develop`; this job reports it for PRs into `main`, where it means the whole suite passed.
+  gate:
+    name: Typecheck + tests
+    needs: [full-checks]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require full checks
+        env:
+          FULL_CHECKS: ${{ needs.full-checks.result }}
+        run: test "$FULL_CHECKS" = success
+
   full-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -41,6 +63,9 @@ jobs:
 
       - run: pnpm run check:format
       - run: pnpm build
+      - run: pnpm run check:boundaries
+      - run: pnpm run check:skills
+      - run: pnpm run check:plugin-manifests
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm check:startup
