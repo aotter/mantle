@@ -17,7 +17,8 @@
  */
 import { authorizeTarget } from "./authorization.js";
 import { isHostCaller } from "./caller-identity.js";
-import { forwarded, type Authorize, type Caller, type Gateway, type GatewayOptions, type RequestContext, type Target } from "./contracts.js";
+import { forwarded } from "./contracts.js";
+import type { Authorize, Caller, Gateway, GatewayOptions, RequestContext, Target } from "./contracts.js";
 import { checkOrigin, surfaceCaller, surfaceError } from "./surface-failure.js";
 import type { UserFields } from "./user-fields.js";
 
@@ -63,6 +64,9 @@ export const isRead = (call: Pick<Call, "view" | "readOnly">): boolean => call.v
 export const originChecked = (call: Pick<Call, "view" | "readOnly">, host: boolean): boolean =>
   !(call.view || host && call.readOnly === true);
 
+/** A refusal as a client reads it: the redacted wire error. */
+export type Diagnostic = ReturnType<typeof surfaceError>["error"];
+
 /** One request's pass through the steps; a surface opens it before matching and ends it with a `finish` step. */
 export interface Pipeline {
   /** Gateway mode: the application trusts forwarded host props and resolves no caller of its own. */
@@ -98,7 +102,7 @@ export interface Pipeline {
   /** Step 7 for a refusal: the access event, then the error envelope the caller's kind reads. */
   failure(error: unknown, where: string, challenge?: string): Promise<Response>;
   /** The error a tool result carries, in the same envelope as `failure`. */
-  diagnostic(error: unknown, where: string): Promise<ReturnType<typeof surfaceError>["error"]>;
+  diagnostic(error: unknown, where: string): Promise<Diagnostic>;
 }
 
 /** Open the pipeline for one request. Gateway observation loads only in gateway mode. */
@@ -144,8 +148,8 @@ export async function openPipeline(ctx: RequestContext | undefined, options: Pip
     },
     async diagnostic(error, where) {
       if (!isHost()) return surfaceError(error, where).error;
-      const body = await (await hostCallers()).hostFailure(error, caller, where).json() as { error: ReturnType<typeof surfaceError>["error"] };
-      return body.error;
+      const response = (await hostCallers()).hostFailure(error, caller, where);
+      return (await response.json() as { error: Diagnostic }).error;
     },
   };
 }
