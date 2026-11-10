@@ -149,8 +149,8 @@ test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 bef
   const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-origin-")),
     db = new Database(":memory:");
   let caller: any = { kind: "anonymous" };
-  const refusals: any[] = [],
-    observations: any[] = [];
+  const observations: any[] = [];
+  const refusals = () => observations.filter(event => event.kind === "request-refused");
   try {
     await writeGenerated(dir, files);
     db.exec(files["schema.sql"]!);
@@ -158,9 +158,6 @@ test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 bef
     const open = mcp({
       db: () => db,
       caller: () => caller,
-      onRefusal: (event: any) => {
-        refusals.push(event);
-      },
       onObservation: (event: any) => {
         observations.push(event);
       },
@@ -208,12 +205,9 @@ test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 bef
             for (const headers of [{}, { origin: "http://localhost:5173" }] as Record<string, string>[])
               expect((await call(open, "https://app.test" + path, headers, era)).status).toBe(200);
         }
-    // Each refusal is reported once to both callbacks.
-    expect(refusals).toHaveLength(8);
-    expect(refusals.every(event => event.reason === "origin" && event.status === 403)).toBe(true);
-    expect(
-      observations.filter(event => event.kind === "request-refused").map(event => [event.status, event.surface]),
-    ).toEqual(
+    // Each refusal is observed once, with its reason.
+    expect(refusals().every(event => event.reason === "origin" && event.status === 403)).toBe(true);
+    expect(refusals().map(event => [event.status, event.surface])).toEqual(
       ["public", "public", "admin", "admin", "public", "public", "admin", "admin"].map(surface => [403, surface]),
     );
     caller = { kind: "anonymous" };
@@ -230,7 +224,7 @@ test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 bef
         .status,
     ).toBe(403);
     expect((await call(open, "http://127.0.0.1:8787/mcp", { origin: "null" })).status).toBe(403);
-    expect(refusals).toHaveLength(14);
+    expect(refusals()).toHaveLength(14);
     // The refused POST body is read (bounded) before the 403, so the connection stays usable under wrangler dev.
     const unread = new Request("https://app.test/mcp", {
       method: "POST",
@@ -696,8 +690,7 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
   const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-parity-")),
     db = new Database(":memory:");
   let caller: any = fixtureCaller({ ...user, scopes: ["custom"] });
-  const observations: any[] = [],
-    refusals: any[] = [];
+  const observations: any[] = [];
   try {
     await writeGenerated(dir, files);
     db.exec(files["schema.sql"]!);
@@ -717,10 +710,6 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
           expect(Object.isFrozen(event.caller.scopes)).toBe(true);
         }
         return Promise.reject(new Error("ignored listener"));
-      },
-      onRefusal: (event: any) => {
-        refusals.push(event);
-        throw Error("ignored listener");
       },
     });
     const call = async (method: string, params: any = {}, path = "/mcp", headers: any = {}) => {
@@ -778,7 +767,46 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
     await call("tools/call", { name: "add_item", arguments: { title: "CSRF" } }, "/mcp", {
       origin: "https://evil.test",
     });
-    expect(refusals.map(event => event.reason)).toEqual(["credential", "credential", "origin"]);
+    expect(observations.filter(event => event.kind === "request-refused").map(event => event.reason)).toEqual([
+      "credential",
+      "credential",
+      "origin",
+    ]);
+    expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({ n: 1 });
+    // An Origin the endpoint admits still fails the session Origin rule on a tool call: observed as a refusal too.
+    const admitted: any[] = [];
+    const lenient = mcp({
+      db: () => db,
+      caller: () => caller,
+      allowedOrigins: ["https://evil.test"],
+      onObservation: (event: any) => {
+        admitted.push(event);
+      },
+    });
+    await lenient(
+      new Request("https://app.test/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          origin: "https://evil.test",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "add_item", arguments: { title: "CSRF" } },
+        }),
+      }),
+      {},
+    );
+    expect(admitted.filter(event => event.kind === "request-refused")).toEqual([
+      { kind: "request-refused", at: expect.any(Number), surface: "public", status: 403, reason: "origin" },
+    ]);
+    expect(admitted.find(event => event.phase === "completion")).toMatchObject({
+      outcome: "denied",
+      code: "AUTH_DENIED",
+    });
     expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({ n: 1 });
     for (const locale of [undefined, "constructor", "toString", "fr"]) {
       const response = await mcp({ db: () => db, caller: () => caller, locale })(
