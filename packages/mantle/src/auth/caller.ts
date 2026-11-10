@@ -14,8 +14,6 @@ const withUser = <C extends Caller>(caller: C, user: User): C => (users.set(call
 /** Display identity from the session this Caller already resolved; never an authority source. */
 /** The Better Auth user record the caller was resolved from (session, OAuth or service credential): name, email, image. */
 export const userOf = (caller: Caller): Readonly<User> | undefined => users.get(caller);
-/** @deprecated Use `userOf`; it covers every credential, not only sessions. */
-export const sessionUserOf = userOf;
 /** The admin plugin's ban, lapsed once `banExpires` has passed (as the plugin reads it at sign-in). */
 export const isBanned = (user: User) => !!user.banned && (user.banExpires == null || new Date(user.banExpires).getTime() > Date.now());
 /** The application's `betterAuth()` instance, as far as Caller resolution reads it. */
