@@ -242,27 +242,14 @@ function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View")
     throw new ManifestParseError(`${atom}.spec.requires must be an object`, idx);
   }
   const r = req as Record<string, unknown>;
-  rejectUnknownKeys(r, ["auth", "guard"], idx, "/spec/requires");
   if ("guard" in r) {
-    const guard = r["guard"];
-    if (typeof guard !== "object" || guard === null || Array.isArray(guard)) {
-      throw new ManifestParseError(`${atom}.spec.requires.guard must be an object`, idx);
-    }
-    const g = guard as Record<string, unknown>;
-    if (typeof g["procedure"] !== "string" || g["procedure"].length === 0) {
-      throw new ManifestParseError(
-        `${atom}.spec.requires.guard.procedure must be a non-empty Procedure name`,
-        idx,
-      );
-    }
-    const extra = Object.keys(g).find((key) => key !== "procedure");
-    if (extra !== undefined) {
-      throw new ManifestParseError(
-        `${atom}.spec.requires.guard.${extra} is not supported; guard accepts only \`procedure\``,
-        idx,
-      );
-    }
+    throw new ManifestParseError(
+      `${atom}.spec.requires.guard is not accepted. Dynamic authorization guards are unsupported. Write a custom handler that checks authorization before executing queries.`,
+      idx,
+      "/spec/requires/guard",
+    );
   }
+  rejectUnknownKeys(r, ["auth"], idx, "/spec/requires");
   if (!("auth" in r) || r["auth"] == null) return;
   const auth = r["auth"];
   if (typeof auth !== "object" || auth === null) {

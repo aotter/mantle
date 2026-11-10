@@ -21,11 +21,10 @@ export interface DescribeTarget {
     requires: Requirements;
   };
 }
-interface Requirements { all: readonly (string | { readonly "ctx.auth.scope": string })[]; guard?: string }
+interface Requirements { all: readonly (string | { readonly "ctx.auth.scope": string })[] }
 function requirements(d: TargetDefinition, surface: string): Requirements {
   const all = d.requires?.auth?.all ?? [];
-  return { all: surface === "admin" && !all.includes("ctx.admin") ? ["ctx.admin", ...all] : all,
-    ...(d.requires?.guard ? { guard: d.requires.guard.procedure } : {}) };
+  return { all: surface === "admin" && !all.includes("ctx.admin") ? ["ctx.admin", ...all] : all };
 }
 export interface AppDescription {
   schemaVersion: 1;
@@ -76,7 +75,6 @@ function policyDirection(before: PlanRestrict, after: PlanRestrict, scope: boole
 function requiresDirection(x: Requirements, y: Requirements): Direction {
   const directions: Direction[] = [];
   if (canonical(x.all) !== canonical(y.all)) directions.push(inclusion(x.all.map(canonical), y.all.map(canonical)));
-  if (x.guard !== y.guard) directions.push(!y.guard ? "widened" : !x.guard ? "narrowed" : "changed");
   return combine(directions);
 }
 /** Report widening on any reachable surface or dispatcher variant. */

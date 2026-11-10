@@ -9,6 +9,12 @@ amended 2026-07-15 for verified credentials and delegated scopes.
 
 **Related**: [ADR-0001](0001-four-atom-manifest-model.md)
 
+> **Amended 2026-11-10.** `requires.guard` is withdrawn. Generation had
+> refused it since 0.2.0; the parser now refuses it at `/spec/requires/guard`
+> with `INVALID_MANIFEST_ENVELOPE` and the same hint: write a custom handler
+> that checks authorization before executing queries. `requires` accepts only
+> `auth`. The guard paragraph below is decision history.
+
 ---
 
 ## Context

@@ -1,5 +1,5 @@
 # Characterization source for ADR-0019. It deliberately uses an alias,
-# an empty document, every v0.1 atom, every Trigger surface, auth, and a guard.
+# an empty document, every v0.1 atom, every Trigger surface and auth.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata:
@@ -36,20 +36,6 @@ spec:
   requires:
     auth:
       all: [ctx.auth, ctx.user]
-    guard: { procedure: authorize-order }
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata:
-  name: authorize-order
-spec:
-  input:
-    type: object
-    required: [customerId]
-    properties:
-      customerId: { type: string }
-  output: { type: object }
-  handler: { ref: authorizeOrder }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure

@@ -42,7 +42,6 @@ metadata: { name: product-list }
 spec:
   surface: public
   sql: 'SELECT id FROM "products"'
-  requires: { guard: { procedure: allow-product } }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -63,7 +62,6 @@ spec:
 
     if (!linked.ok) throw new Error("expected valid linked graph");
     expect(linked.value.schemas[1]?.translationParent?.manifest.metadata.name).toBe("products");
-    expect(linked.value.views[0]?.guard?.manifest.metadata.name).toBe("allow-product");
     expect(linked.value.procedures[1]?.collectionActionSchema?.manifest.metadata.name)
       .toBe("products");
     expect(linked.value.triggers[0]?.target.manifest.metadata.name).toBe("allow-product");

@@ -47,7 +47,7 @@ Each target’s `_meta` contains:
   includes every Schema available to its Store.
 - `surfaces` and `triggers`: every declared exposure and each Trigger’s id
   and source. Views include `admin` for developer previews.
-- `requires`: conjunctive predicates in `all` and an optional `guard` name.
+- `requires`: conjunctive predicates in `all`.
   Admin-only targets include the admin gate.
 - `variants`: each selectable target’s id, input schema, requirements, flags
   and row policies. Route restrictions contain terms common to all variants.
