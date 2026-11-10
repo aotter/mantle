@@ -14,7 +14,7 @@ worked examples see [SQL patterns](../guides/sql-patterns.md).
 | --- | --- |
 | Statements | `SELECT`, `INSERT … VALUES` / `INSERT … SELECT`, `UPDATE … SET … WHERE`, `DELETE … WHERE`, each with `RETURNING`; `WITH` (non-recursive) on a `SELECT` |
 | Upsert | `ON CONFLICT (<unique index columns>) DO NOTHING` / `DO UPDATE SET …`, with `excluded.<column>` |
-| Joins | `INNER JOIN`, `LEFT JOIN`; a comma join only for a row source (`json_each`, or PostgreSQL's below) |
+| Joins | `INNER JOIN`, `LEFT JOIN`, each with `ON`; `JOIN … ON true` for every pair (`CROSS JOIN` is refused); a comma join only for a row source (`json_each`, or PostgreSQL's below) |
 | Clauses | `WHERE`, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT` |
 | Predicates | `=`, `<>`, `!=`, `<`, `>`, `<=`, `>=`, `AND`, `OR`, `NOT`, `IS [NOT] NULL`, `IS [NOT] DISTINCT FROM`, `[NOT] BETWEEN`, `IN (list)`, `IN (subquery)`, `LIKE`, `[NOT] EXISTS (subquery)` |
 | Expressions | `+ - * / %`, `\|\|`, `->>` (JSON field), `CASE`, `COALESCE`, `NULLIF`, scalar subqueries, `CAST(… AS text \| int4 \| int8 \| float8 \| bool \| timestamptz \| date \| numeric \| interval)` |
@@ -23,6 +23,13 @@ worked examples see [SQL patterns](../guides/sql-patterns.md).
 | Scalar functions | `lower`, `upper`, `length`, `abs`, `round`, `substr`, `replace`, `trim`, `ltrim`, `rtrim`, `instr` |
 | Time | `now()`, `date_trunc('hour' \| 'day' \| 'week' \| 'month' \| 'year', …)`, `extract(year \| month \| day \| dow \| hour FROM …)` |
 | Mantle | `auth.uid()`, `input.<name>`, `mantle.search`, `mantle.search_rank`, `mantle.near`, `mantle.distance` ([features](features.md)) |
+
+To pair every row of one set with every row of another, write `JOIN … ON true`; `CROSS JOIN` and a comma join between
+two relations are refused (`SQL_SHAPE`). Each side keeps its own row policy, so a caller pairs only the rows it may read:
+
+```sql
+SELECT p.id AS person, i.id AS item FROM people p JOIN items i ON true
+```
 
 ## SQLite and D1 only
 

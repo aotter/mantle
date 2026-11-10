@@ -4,6 +4,12 @@ import { generateFromSources } from "../src/infrastructure/generateAuth.js";
 import { compilePlan, compileProgram, d1Dialect, postgresDialect } from "../src/build/compiler.js";
 import { wireScalars } from "../src/domain/wireScalars.js";
 import { dialect } from "../src/kernel/dialect/sqlite.js";
+import { Database } from "bun:sqlite";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { writeGenerated } from "./apps/link.js";
+import { userCaller } from "../src/kernel/user-caller.js";
 
 const doc = (kind: string, name: string, spec: object) =>
   JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind, metadata: { name }, spec });
@@ -283,6 +289,74 @@ test("a paged View's ORDER BY that cannot be its cursor, and OFFSET, are refused
           ),
         }),
       ]);
+  }
+});
+
+test("CROSS JOIN and a comma join name JOIN … ON true, which pairs every row under each side's row policy (#1976)", async () => {
+  const owned = (name: string) =>
+    doc("Schema", name, {
+      title: name,
+      lifecycle: "operational",
+      scope: "owner = auth.uid()",
+      indexes: [["owner"]],
+      schema: {
+        type: "object",
+        required: ["owner", "label"],
+        properties: { owner: { type: "string" }, label: { type: "string" } },
+      },
+    });
+  const text = (sql: string) =>
+    [owned("people"), owned("items"), doc("View", "pairs", { surface: "internal", sql })].join("\n---\n");
+  for (const target of ["bun-sqlite", "bun-postgres"] as const) {
+    const refused = async (sql: string) => {
+      const result = await generateFromSources({
+        target,
+        sources: { sources: [{ sourceId: "x.yaml", text: text(sql) }] },
+      });
+      return result.ok ? [] : result.diagnostics.map(d => `${d.code} ${d.message}`);
+    };
+    expect(await refused("SELECT p.id, i.id AS item FROM people p CROSS JOIN items i")).toEqual([
+      'SQL_SHAPE SQL 1:41 near "CROSS JOIN": a JOIN needs ON: CROSS JOIN is refused, write JOIN … ON true to pair every row of both sides (row policy applies to each)',
+    ]);
+    // the comma join points at the relation after the comma, not at the SELECT
+    expect(await refused("SELECT p.id, i.id AS item FROM people p, items i")).toEqual([
+      `SQL_SHAPE SQL 1:42 near "items": a comma join is refused (except ${target === "bun-postgres" ? "a row source over a column, and LATERAL" : "json_each"}): write JOIN … ON <condition>, or JOIN … ON true to pair every row of both sides`,
+    ]);
+    const result = await generateFromSources({
+      target,
+      sources: {
+        sources: [{ sourceId: "x.yaml", text: text("SELECT p.id, i.id AS item FROM people p JOIN items i ON true") }],
+      },
+    });
+    if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+    // a caller's read keeps only its own rows on both sides of the pairing
+    const p = target === "bun-postgres" ? "$1" : "?1";
+    expect(result.files["generated.ts"]).toContain(
+      `FROM people WHERE people.owner = ${p} ) AS p JOIN ( SELECT id, version, created_at, updated_at, author_id, label FROM items WHERE items.owner = ${p} ) AS i ON`,
+    );
+    if (target !== "bun-sqlite") continue;
+    const dir = await mkdtemp(join(tmpdir(), "mantle-pairs-")),
+      db = new Database(":memory:");
+    try {
+      await writeGenerated(dir, result.files);
+      db.exec(result.files["schema.sql"]!);
+      for (const table of ["people", "items"])
+        for (const [id, owner] of [
+          ["1", "a"],
+          ["2", "a"],
+          ["3", "b"],
+        ] as const)
+          db.query(`INSERT INTO ${table}(id,version,created_at,updated_at,owner,label) VALUES (?,1,0,0,?,'x')`).run(
+            id,
+            owner,
+          );
+      const { default: pairs } = await import(join(dir, "views/pairs.ts"));
+      const rows = (await pairs(db, userCaller({ id: "a" }, {}), {})) as { id: string; item: string }[];
+      expect(rows.map(r => `${r.id}x${r.item}`).sort()).toEqual(["1x1", "1x2", "2x1", "2x2"]);
+    } finally {
+      db.close();
+      await rm(dir, { recursive: true, force: true });
+    }
   }
 });
 
