@@ -417,3 +417,14 @@ test("readIdentity reads active admins and users without a session or SQL", asyn
     expect(await identity.user("b1")).toBeNull();
     expect(await identity.user("missing")).toBeNull();
 });
+test("no path variant reaches a Better Auth admin endpoint past the guard", async () => {
+    const a = await app(), member = fixtureCaller({ ...admin, role: "user", admin: false });
+    const guarded = async (path: string) => guardAuthAdminRequest(new Request(`http://localhost${path}`), () => member).then(() => false, () => true);
+    // an admin session, so Better Auth's own role check cannot be what refuses: 404 means its router has no such route
+    const routed = async (path: string) => (await a.auth.handler(new Request(`http://localhost${path}`, { headers: a.headers }))).status !== 404;
+    expect([await guarded("/api/auth/admin/list-users"), await routed("/api/auth/admin/list-users")]).toEqual([true, true]);
+    for (const path of ["/api/auth/Admin/list-users", "/api/auth/ADMIN/list-users", "/api/auth/admin/LIST-USERS", "/api/auth/%61dmin/list-users", "/api/auth/%2561dmin/list-users",
+        "/api/auth//admin/list-users", "/api/auth/admin//list-users", "/api//auth/admin/list-users", "/api/auth/admin/list-users/", "/api/auth/admin;x/list-users", "/api/auth/admin/list-users;x",
+        "/api/auth/admin%2Flist-users", "/api/auth/x/../admin/list-users", "/api/auth/admin/./list-users", "/API/auth/admin/list-users"])
+        expect({ path, guarded: await guarded(path), routed: await routed(path) }).not.toMatchObject({ guarded: false, routed: true });
+});
