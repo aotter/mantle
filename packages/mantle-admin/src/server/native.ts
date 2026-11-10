@@ -3,9 +3,13 @@ import { modeOf } from "@aotter/mantle/internal/user-fields";
 import { ContractError, isAdmin, deny, type Caller, type Row } from "@aotter/mantle/contracts";
 import { binds, bound, type LockProbe, type Recipe, type Step, type Bound, type Values } from "@aotter/mantle/internal/binds";
 import { query as readQuery } from "@aotter/mantle/internal/validation";
-import { invalid } from "@aotter/mantle/internal/surface";
 import { checkPageLimit, page, decodeNullableCursor, encodeCursor, validCursor, type CursorKind, type Pages } from "@aotter/mantle/internal/paging";
 import type {EntryPageQuery, EntryScalar} from "./entries.js";
+
+/** INPUT_VALIDATION_FAILED at `path`. */
+function invalid(message: string, path: string): never {
+    throw new ContractError("INPUT_VALIDATION_FAILED", message, path);
+}
 const selectMode = <T>(spec: {readonly caller:T;readonly trusted:T}, caller:Caller, d: Values):T => {
     const m = modeOf(caller) === 'trusted' ? spec.trusted : spec.caller;
     return d.scopedAll ? d.scopedAll(m, caller) : m;

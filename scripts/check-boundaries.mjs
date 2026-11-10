@@ -121,6 +121,54 @@ function checkUiControllerImports() {
   }
 }
 
+/**
+ * Admin's plumbing debt (#1971): each entry is a hand-written Admin module importing `@aotter/mantle/internal/*`, which
+ * no application can do with a compatibility promise. Every line is a candidate extension point; remove it when the
+ * developer API offers what Admin needs. An entry that no longer matches an import fails the check.
+ */
+const ADMIN_PLUMBING_DEBT = {
+  // The application's `authorize` with the SDK's deny/reject semantics. Admin applies it in its own request pipeline.
+  "packages/mantle-admin/src/server/authorization.ts": ["authorization"],
+  // Same, plus declared bind conversion of validated View and Procedure input before dispatch.
+  "packages/mantle-admin/src/server/index.ts": ["authorization", "surface"],
+  // The runtime half of generated `admin-bindings.ts`: caller-mode SQL, bind recipes, cursors and page limits.
+  "packages/mantle-admin/src/server/native.ts": ["binds", "paging", "user-fields", "validation"],
+  "packages/mantle-admin/src/server/entries.ts": ["binds"],
+  // The role-name syntax the member routes validate against.
+  "packages/mantle-admin/src/server/site.ts": ["user-fields"],
+};
+
+/**
+ * Layering (#1971): the first-party packages are applications of Core. Their hand-written sources import only subpaths
+ * Core exports outside `./internal/*` (the developer API and the host platform contract), so whatever Admin does an
+ * application can do. Tests are exempt; generated Admin bindings live in the application, not here.
+ */
+function checkFirstPartyLayering() {
+  const exported = Object.keys(JSON.parse(readFileSync(join(ROOT, "packages/mantle/package.json"), "utf8")).exports);
+  const isSource = path => /\.(?:ts|tsx|mts|mjs)$/.test(path) && !/\.test\.[a-z]+$/.test(path) && !/[\\/]tests?[\\/]/.test(path);
+  const used = new Set();
+  for (const pkg of ["packages/mantle-admin", "packages/mantle-ui"]) {
+    for (const file of listFiles(join(ROOT, pkg), isSource)) {
+      const name = rel(file).split(sep).join("/");
+      for (const specifier of importSpecifiers(file)) {
+        if (specifier !== "@aotter/mantle" && !specifier.startsWith("@aotter/mantle/")) continue;
+        const subpath = specifier === "@aotter/mantle" ? "." : `.${specifier.slice("@aotter/mantle".length)}`;
+        if (!exported.includes(subpath)) fail(file, `'${specifier}' is not an exported subpath of @aotter/mantle`);
+        else if (subpath.startsWith("./internal/")) {
+          const plumbing = subpath.slice("./internal/".length);
+          if (ADMIN_PLUMBING_DEBT[name]?.includes(plumbing)) used.add(`${name} ${plumbing}`);
+          else fail(file, `first-party packages use only the developer API: '${specifier}' is generated-code plumbing (see #1971)`);
+        }
+      }
+    }
+  }
+  for (const [name, plumbing] of Object.entries(ADMIN_PLUMBING_DEBT)) {
+    for (const module of plumbing) {
+      if (!used.has(`${name} ${module}`)) fail(join(ROOT, name), `plumbing allowance 'internal/${module}' is no longer used; remove it from ADMIN_PLUMBING_DEBT`);
+    }
+  }
+}
+
 function checkSkillDocsVersioned() {
   const files = listFiles(join(ROOT, "skills"), (path) =>
     path.endsWith("SKILL.md"),
@@ -265,6 +313,7 @@ checkCoreCloudflareFree();
 checkUiTokens();
 checkNextFolderImports();
 checkUiControllerImports();
+checkFirstPartyLayering();
 checkSkillDocsVersioned();
 checkRepositoryGuidance();
 

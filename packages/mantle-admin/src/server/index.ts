@@ -62,7 +62,7 @@ export interface IdentityMethods {
 export interface Options<Env, Database> extends GatewayOptions {
     authorize?: Authorize;
     gateway?: Gateway;
-    fields?: import("@aotter/mantle/internal/user-fields").UserFields;
+    fields?: import("@aotter/mantle/contracts").UserFields;
     locale?: string;
     /** Read-only developer preview bindings, including public Views. */
     developerViews?: readonly View<Database>[];
@@ -95,7 +95,7 @@ export interface Descriptor {
 }
 export interface Metadata {
     readonly accessTargets?: GatewayOptions["accessTargets"];
-    readonly userFields?: import("@aotter/mantle/internal/user-fields").UserFields;
+    readonly userFields?: import("@aotter/mantle/contracts").UserFields;
     /** Generated requires guards for metadata targets beyond callable Admin routes. */
     readonly allows?: (target: Target, caller: Caller) => boolean;
     readonly collections: readonly Descriptor[];

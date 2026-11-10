@@ -1,7 +1,6 @@
 import { binds } from "@aotter/mantle/internal/binds";
 /** Selected Admin entry transport over generated native Views and Procedures. No schema or SQL interpreter. */
 import { ContractError, type Target, type Row, type Caller } from "@aotter/mantle/contracts";
-import { invalid } from "@aotter/mantle/internal/surface";
 import { csv } from "./csv.js";
 import { json, type Context, type Route } from "./index.js";
 import {entryLocks,exactVersion,type EntryLocks,nativeEntryData,nativeEntryGet,nativeEntryPage,nativeEntryProcedure,nativeStatistics,type NativeCollection,type NativeProcedureAdapter} from "./native.js";
@@ -37,7 +36,7 @@ export interface EntrySchema<Database = unknown> {
     readonly values: (data: Row, patch?: boolean) => Row;
     readonly row: (row: Row) => Row;
 }
-const fail = (message: string): never => invalid(message, "admin/entries");
+const fail = (message: string): never => { throw new ContractError("INPUT_VALIDATION_FAILED", message, "admin/entries"); };
 const missing = () => new ContractError("NOT_FOUND", "No such entry.", "admin/entries");
 const conflict = (message: string) => new ContractError("CONFLICT", message, "admin/entries");
 /** Bind the OCC lock without rounding a native int8. */
