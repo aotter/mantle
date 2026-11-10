@@ -190,6 +190,102 @@ console.log(JSON.stringify(await generateFromSources({ target: "bun-postgres", s
   });
 }, 30_000);
 
+test("ORDER BY over a subquery, CTE or internal View without id names ORDER BY and the fix (#1975)", async () => {
+  const subquery = "ORDER BY over x, a subquery in FROM (or an internal View it reads), needs it to output id",
+    cte = "ORDER BY over x, a CTE (or an internal View it reads), needs it to output id";
+  const fix =
+    "Core appends x.id as the last ORDER BY key so the order is total. Select the row's id in it, or GROUP BY in this SELECT (Core then orders by the group keys).";
+  const ranked = doc("View", "ranked", { surface: "internal", sql: "SELECT title FROM notes" });
+  for (const target of ["bun-sqlite", "bun-postgres"] as const)
+    for (const [sql, refusal, extra] of [
+      ["SELECT x.title FROM (SELECT title FROM notes) x ORDER BY x.title", subquery],
+      ["SELECT x.n FROM (SELECT title, COUNT(*) AS n FROM notes GROUP BY title) x ORDER BY x.n", subquery],
+      ["WITH x AS (SELECT title FROM notes) SELECT x.title FROM x ORDER BY x.title", cte],
+      // an internal View read in FROM is a CTE on SQLite and a subquery on PostgreSQL
+      ["SELECT x.title FROM ranked x ORDER BY x.title", target === "bun-sqlite" ? cte : subquery, ranked],
+    ] as const) {
+      const text = [...base, ...(extra ? [extra] : []), doc("View", "ordered", { surface: "internal", sql })].join(
+        "\n---\n",
+      );
+      const result = await generateFromSources({ target, sources: { sources: [{ sourceId: "refused.yaml", text }] } });
+      expect(result.ok, `${target} ${sql}`).toBe(false);
+      if (!result.ok)
+        expect(result.diagnostics).toEqual([
+          {
+            code: "GENERATE_UNSUPPORTED",
+            path: "views/ordered",
+            message: `This View's caller SQL could not be lowered: ${refusal}: ${fix}`,
+          },
+        ]);
+    }
+  // On a paged surface the lowering's reason is the only diagnostic: no second, unrelated paging refusal.
+  for (const target of ["bun-sqlite", "bun-postgres"] as const)
+    for (const surface of ["public", "admin"] as const) {
+      const sql = "SELECT x.title FROM (SELECT title FROM notes) x ORDER BY x.title";
+      const text = [...base, doc("View", "ordered", { surface, sql })].join("\n---\n");
+      const result = await generateFromSources({ target, sources: { sources: [{ sourceId: "refused.yaml", text }] } });
+      expect(result.ok).toBe(false);
+      if (!result.ok)
+        expect(result.diagnostics).toEqual([
+          {
+            code: "GENERATE_UNSUPPORTED",
+            path: "views/ordered",
+            message: `This View's ${surface === "public" ? "public" : "caller"} SQL could not be lowered: ${subquery}: ${fix}`,
+          },
+        ]);
+    }
+  // selecting the id makes each of them generate
+  for (const target of ["bun-sqlite", "bun-postgres"] as const)
+    for (const sql of [
+      "SELECT x.id, x.title FROM (SELECT id, title FROM notes) x ORDER BY x.title",
+      "WITH x AS (SELECT id, title FROM notes) SELECT x.id, x.title FROM x ORDER BY x.title",
+    ]) {
+      const text = [...base, doc("View", "ordered", { surface: "internal", sql })].join("\n---\n");
+      const result = await generateFromSources({ target, sources: { sources: [{ sourceId: "ok.yaml", text }] } });
+      expect(result.ok, `${target} ${sql}`).toBe(true);
+    }
+});
+
+test("a paged View's ORDER BY that cannot be its cursor, and OFFSET, are refused with the form to use (#1975)", async () => {
+  const notColumn =
+    "ORDER BY key 1 is not a column: a paged View's cursor is its ORDER BY keys, so each is a Schema field, id or a GROUP BY key, selected or not. Order by the column itself; a computed order is accepted only in an internal View, which is not paged.";
+  for (const target of ["bun-sqlite", "bun-postgres"] as const) {
+    for (const [sql, message] of [
+      ["SELECT id, title FROM notes ORDER BY lower(title), id", notColumn],
+      ["SELECT id, title FROM notes ORDER BY CASE WHEN title IS NULL THEN 0 ELSE 1 END, id", notColumn],
+      [
+        "SELECT COUNT(*) AS n FROM notes ORDER BY 1",
+        "An aggregate without GROUP BY returns one row: remove its ORDER BY.",
+      ],
+    ] as const) {
+      const text = [...base, doc("View", "ordered", { surface: "public", sql })].join("\n---\n");
+      const result = await generateFromSources({ target, sources: { sources: [{ sourceId: "refused.yaml", text }] } });
+      expect(result.ok, `${target} ${sql}`).toBe(false);
+      if (!result.ok)
+        expect(result.diagnostics).toEqual([{ code: "GENERATE_UNSUPPORTED", path: "views/ordered", message }]);
+      // an internal View is not paged, so the same order generates
+      const internal = [...base, doc("View", "ordered", { surface: "internal", sql })].join("\n---\n");
+      const ok = await generateFromSources({ target, sources: { sources: [{ sourceId: "ok.yaml", text: internal }] } });
+      expect(ok.ok, `${target} internal ${sql}`).toBe(true);
+    }
+    const text = [
+      ...base,
+      doc("View", "ordered", { surface: "internal", sql: "SELECT id FROM notes ORDER BY id LIMIT 10 OFFSET 10" }),
+    ].join("\n---\n");
+    const result = await generateFromSources({ target, sources: { sources: [{ sourceId: "refused.yaml", text }] } });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.diagnostics).toEqual([
+        expect.objectContaining({
+          code: "SQL_UNSUPPORTED",
+          message: expect.stringContaining(
+            "OFFSET is refused: a View pages with its generated cursor (`limit`, then `cursor` from the previous page's `nextCursor`) over its ORDER BY keys",
+          ),
+        }),
+      ]);
+  }
+});
+
 test("date and timestamp literals that do not exist are refused at generate, as request input is", async () => {
   // The compiler checks literals with the request-time scalars; the refusal keeps the compiler's SQL_TYPE code and wording.
   for (const target of ["bun-sqlite", "bun-postgres"] as const)
@@ -211,7 +307,7 @@ test("date and timestamp literals that do not exist are refused at generate, as 
           {
             code: "GENERATE_UNSUPPORTED",
             path: "views/dated",
-            message: "Every reachable visibility mode must have canonical lowered SQL.",
+            message: `This View's caller SQL could not be lowered: ${message}`,
           },
         ]);
       const dialect = target === "bun-postgres" ? postgresDialect() : d1Dialect;

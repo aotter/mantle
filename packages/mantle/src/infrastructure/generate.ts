@@ -23,7 +23,7 @@ import { adminBindingsOf } from "./adminPaging.js";
 import { adminIndexes } from "../domain/adminOrder.js";
 import { publishingSql } from "../usecase/publishing.js";
 import { searchDiagnostics } from "../usecase/search.js";
-import { generate } from "../usecase/generate.js";
+import { generate, PROCEDURE_UNLOWERED, VIEW_UNLOWERED } from "../usecase/generate.js";
 import type { GenerateDiagnostic, GenerateResult, Target } from "../domain/generation.js";
 import { generatedFiles } from "../domain/entry.js";
 
@@ -347,31 +347,31 @@ export async function generateFromSources(
     locks: coreLocks(dialect, compiled.plan.schemas),
     paging,
   });
+  const unlowered = [VIEW_UNLOWERED, PROCEDURE_UNLOWERED];
+  // A View or Procedure the runtime cannot lower names only that; the lowering's own refusal says why.
+  const explain = (d: GenerateDiagnostic): GenerateDiagnostic => {
+    const at = `plan#/${d.path} (`;
+    const why = unlowered.includes(d.message)
+      ? warnings.find(w => w.startsWith(at) && /^\w+\): /.test(w.slice(at.length)))
+      : undefined;
+    if (!why) return d;
+    const mode = why.slice(at.length, why.indexOf("): ")),
+      reason = why.slice(why.indexOf("): ") + 3);
+    return {
+      ...d,
+      message:
+        d.message === VIEW_UNLOWERED
+          ? `This View's ${mode} SQL could not be lowered: ${reason}`
+          : `${d.message} ${reason}`,
+    };
+  };
   if (refusals.length) {
     const diagnostics = result.ok
       ? []
-      : result.diagnostics.filter(
-          d =>
-            !searchProblems.some(p => p.path === d.path) ||
-            ![
-              "Every reachable visibility mode must have canonical lowered SQL.",
-              "Both caller and trusted SQL must be lowered.",
-            ].includes(d.message),
-        );
-    return { ok: false, diagnostics: [...refusals, ...diagnostics] };
+      : result.diagnostics.filter(d => !searchProblems.some(p => p.path === d.path) || !unlowered.includes(d.message));
+    return { ok: false, diagnostics: [...refusals, ...diagnostics.map(explain)] };
   }
-  // A Procedure the runtime cannot lower names only that; the lowering's own refusal says why.
-  if (!result.ok)
-    return {
-      ...result,
-      diagnostics: result.diagnostics.map(d => {
-        const why =
-          d.message === "Both caller and trusted SQL must be lowered."
-            ? warnings.find(w => w.includes(`${d.path} (caller)`) || w.includes(`${d.path} (admin)`))
-            : undefined;
-        return why ? { ...d, message: `${d.message} ${why.slice(why.indexOf("): ") + 3)}` } : d;
-      }),
-    };
+  if (!result.ok) return { ...result, diagnostics: result.diagnostics.map(explain) };
   const accessTargets = Object.fromEntries(
     report.targets.map(({ _meta: m }) => {
       return [

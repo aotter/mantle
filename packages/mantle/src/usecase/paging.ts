@@ -34,7 +34,8 @@ export function emitPaging(
     if (boundary && (!proof || (!proof.types.length && !proof.single))) continue;
     // Internal bare queries remain available even when they cannot be safely paged.
     if (!proof || (!proof.types.length && !proof.single)) {
-      if (view.surface !== "internal")
+      // A View without lowered SQL was never proved: its refusal already gives the lowering's reason.
+      if (view.surface !== "internal" && lowered.views[name])
         refuse(
           path,
           proof?.reason ??

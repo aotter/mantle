@@ -392,6 +392,12 @@ const KEYWORD: Record<string, RegExp> = {
   GroupingSet: /\bGROUPING\s+SETS\b/i,
 };
 
+/** the refusal of a key every profile leaves out, where the generic one would not say what to write instead */
+const REFUSED_KEY: Record<string, string> = {
+  "SelectStmt.limitOffset":
+    "OFFSET is refused: a View pages with its generated cursor (`limit`, then `cursor` from the previous page's `nextCursor`) over its ORDER BY keys",
+};
+
 /** first source offset found in a subtree, so a refusal about a key can still point somewhere */
 function firstLoc(v: any): number | undefined {
   if (!v || typeof v !== "object") return undefined;
@@ -530,7 +536,12 @@ function shape(type: string, node: N, w: Walk, here: number | undefined): void {
   for (const [k, v] of Object.entries(node)) {
     if (k === "location" || k === "rexpr_list_start" || k === "rexpr_list_end") continue; // source positions, not structure
     if (!keys.has(k))
-      no("SQL_UNSUPPORTED", `${type}.${k} is not in the subset`, firstLoc(v) ?? here, KEYWORD[`${type}.${k}`]);
+      no(
+        "SQL_UNSUPPORTED",
+        REFUSED_KEY[`${type}.${k}`] ?? `${type}.${k} is not in the subset`,
+        firstLoc(v) ?? here,
+        KEYWORD[`${type}.${k}`],
+      );
     const e = w.ctx.p.enums[`${type}.${k}`];
     if (e && !e.includes(v as any))
       no(
