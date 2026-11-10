@@ -42,11 +42,11 @@ export async function procedure(db: Handle, steps: readonly Bound[], path: strin
       step = op ? steps[Number(op[1])] : undefined,
       probe = step?.row === true ? step.lock : undefined;
     // the batch rolled back, so a lock probe reads the state before it
-    if (probe) throw lockConflict(path, probe, await read(db, probe.sql, probe.binds));
+    if (probe) throw lockConflict(path, probe, await read(db, probe.sql, probe.binds), step!.step);
     throw unique(error)
       ? conflict(path, true, error)
       : op
-        ? conflict(path, false, error)
+        ? conflict(path, false, error, step?.step)
         : (checkConflict(path, error) ?? error);
   }
   return at.map(i => out[i]!.results);

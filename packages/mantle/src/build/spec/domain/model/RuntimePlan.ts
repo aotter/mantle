@@ -101,6 +101,8 @@ export interface LoweredStatement {
   readonly verb?: "insert" | "update" | "delete";
   /** A set op whose step says `onNoRows: conflict`: writing no row is CONFLICT (#1874). Omitted otherwise. */
   readonly onNoRows?: "conflict";
+  /** The authored step's `name` (#1974): its row conflict carries it as `fields.step`. Omitted otherwise. */
+  readonly step?: string;
   /** The policy AST has a RETURNING clause. */
   readonly returns?: true;
   /** A write's table, lower case (D1's unique-conflict op mapping). */

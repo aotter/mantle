@@ -166,7 +166,18 @@ export function lowerPlan(
           `plan#/procedures/${name}`,
           options.project && (ast => options.project!(ast, "procedure", name)),
         );
-        return x ? [[mode, x.map((s, i) => (steps[i]?.onNoRows ? { ...s, onNoRows: steps[i]!.onNoRows } : s))]] : [];
+        return x
+          ? [
+              [
+                mode,
+                x.map((s, i) => ({
+                  ...s,
+                  ...(steps[i]?.onNoRows ? { onNoRows: steps[i]!.onNoRows } : {}),
+                  ...(steps[i]?.name ? { step: steps[i]!.name } : {}),
+                })),
+              ],
+            ]
+          : [];
       }),
     );
     return Object.keys(lowered).length ? [[name, lowered]] : [];

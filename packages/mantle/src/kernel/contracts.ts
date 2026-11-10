@@ -153,11 +153,14 @@ export function deny(caller: Caller, allowed: boolean, path: string): void {
 /** A row statement that changed no row cannot tell why without leaking whether the row exists, so it says how to recover. */
 export const ROW_CONFLICT =
   "No row matched this change: it does not exist or is not visible to you, it changed since it was read, or its state no longer allows this change. Read it again before deciding whether to retry.";
-/** CONFLICT for a write the database refused: a unique-index clash (`fields.kind` "unique"), or a row statement that did not change exactly one row ("row"). */
-export const conflict = (path: string, unique: boolean, cause?: unknown): ContractError =>
+/**
+ * CONFLICT for a write the database refused: a unique-index clash (`fields.kind` "unique"), or a row statement that did not
+ * change exactly one row ("row"), with `fields.step` when the author named that step (#1974).
+ */
+export const conflict = (path: string, unique: boolean, cause?: unknown, step?: string): ContractError =>
   new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : ROW_CONFLICT, path, {
     cause,
-    fields: { kind: unique ? "unique" : "row" },
+    fields: { kind: unique ? "unique" : "row", ...(step ? { step } : {}) },
   });
 /** A guarded row write that changed no row (#1822): CONFLICT `kind: "lock"` when its probe found the row visible and held by a lock, else the row conflict, which reveals nothing. */
 export const lockConflict = (
@@ -169,12 +172,13 @@ export const lockConflict = (
     readonly required?: string;
   },
   rows: readonly Row[],
+  step?: string,
 ): ContractError => {
   const lock = rows[0]?.lock;
   // a published row would lose data `publish` requires: the input is wrong, not the row's state
   if (lock === "publishing.required" && probe.required)
     return new ContractError("INPUT_VALIDATION_FAILED", probe.required, path);
-  if (typeof lock !== "string" || !Object.hasOwn(probe.locks, lock)) return conflict(path, false);
+  if (typeof lock !== "string" || !Object.hasOwn(probe.locks, lock)) return conflict(path, false, undefined, step);
   const message = probe.locks[lock]!;
   return new ContractError("CONFLICT", message, path, {
     fields: { kind: "lock", schema: probe.schema, verb: probe.verb, lock, message },

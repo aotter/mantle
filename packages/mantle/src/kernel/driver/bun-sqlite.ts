@@ -57,8 +57,8 @@ export async function procedure(db: Handle, steps: readonly Bound[], path: strin
       }
       if (s.row && (changes < 1 || (changes > 1 && s.row !== "some")))
         throw s.row === true && s.lock
-          ? lockConflict(path, s.lock, handle.query(s.lock.sql).all(...s.lock.binds))
-          : conflict(path, false);
+          ? lockConflict(path, s.lock, handle.query(s.lock.sql).all(...s.lock.binds), s.step)
+          : conflict(path, false, undefined, s.step);
       return rows;
     });
   return available(db, () => (transactions.has(db) || steps.length === 1 ? execute(db) : db.transaction(execute)(db)));

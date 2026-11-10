@@ -220,22 +220,23 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
     const steps = h["steps"];
     if (!Array.isArray(steps) || steps.length === 0) {
       throw new ManifestParseError(
-        "Procedure.spec.handler.steps must be a non-empty list of steps, each { sql, onNoRows? }",
+        "Procedure.spec.handler.steps must be a non-empty list of steps, each { sql, onNoRows?, name? }",
         idx,
         "/spec/handler/steps",
       );
     }
+    const names = new Set<string>();
     for (const [i, step] of steps.entries()) {
       const at = `/spec/handler/steps/${i}`;
       if (typeof step !== "object" || step === null || Array.isArray(step)) {
         throw new ManifestParseError(
-          `Procedure.spec.handler.steps[${i}] must be an object { sql, onNoRows? }`,
+          `Procedure.spec.handler.steps[${i}] must be an object { sql, onNoRows?, name? }`,
           idx,
           at,
         );
       }
       rejectUnknownKeys(step as Record<string, unknown>, HANDLER_STEP_KEYS, idx, at);
-      const { sql, onNoRows } = step as Record<string, unknown>;
+      const { sql, onNoRows, name } = step as Record<string, unknown>;
       if (typeof sql !== "string" || sql.trim().length === 0) {
         throw new ManifestParseError(
           `Procedure.spec.handler.steps[${i}].sql is required (one statement)`,
@@ -249,6 +250,21 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
           idx,
           `${at}/onNoRows`,
         );
+      }
+      if (name !== undefined) {
+        if (typeof name !== "string" || !/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(name))
+          throw new ManifestParseError(
+            `Procedure.spec.handler.steps[${i}].name must be an identifier of at most 64 characters (letters, digits, _ and -, not starting with a digit or -); got ${JSON.stringify(name)}`,
+            idx,
+            `${at}/name`,
+          );
+        if (names.has(name))
+          throw new ManifestParseError(
+            `Procedure.spec.handler.steps[${i}].name '${name}' names another step of this Procedure`,
+            idx,
+            `${at}/name`,
+          );
+        names.add(name);
       }
     }
     return;

@@ -142,7 +142,7 @@ export function generate(input: GenerateInput): GenerateResult {
       row && s.probe
         ? `, lock: ${q({ sql: s.probe.sql, binds: probe, schema: plan.schemas[s.schema!]!.name, verb: s.verb, locks })}`
         : "";
-    return `{ sql: ${pooled(q(s.sql))}, binds: ${pooled(q(recipes))}${row ? ", row: true" : s.onNoRows ? ', row: "some"' : ""}${lock} }`;
+    return `{ sql: ${pooled(q(s.sql))}, binds: ${pooled(q(recipes))}${row ? ", row: true" : s.onNoRows ? ', row: "some"' : ""}${s.step ? `, step: ${q(s.step)}` : ""}${lock} }`;
   };
   const declarations: string[] = [],
     views: string[] = [],
