@@ -12,15 +12,16 @@ claim; each says what it ran on.
 
 ## The harness
 
-`packages/mantle/bench/` is contributor tooling and ships nothing. Its README has the methodology, the options, the
-`--app` contract for measuring another application, and what it does not measure.
+`pnpm bench` runs the native four-target conformance suite with its bare and external read benchmarks
+(`packages/mantle/scripts/verify-native.ts --bench`). It refuses to run unless `MANTLE_NEXT_QUIET_SLOT=1` and the
+checkout is committed and clean, and it prints one JSON line per target. It is contributor tooling and ships nothing.
 
 ```bash
 pnpm build
-pnpm bench                                    # cold, warm and counters; JSON under packages/mantle/bench/results/
-pnpm bench --label pr --json /tmp/pr.json     # one variant per checkout, on one machine
-pnpm bench:compare /tmp/develop.json /tmp/pr.json
+MANTLE_NEXT_QUIET_SLOT=1 pnpm bench
 ```
+
+The documents above that cite `packages/mantle/bench/` were produced by an earlier harness that has since been removed.
 
 To commit evidence, save the JSON under `docs/benchmarks/data/` named after the commit it measured, and keep the
 environment header and the no-production caveat in the document that quotes it.
