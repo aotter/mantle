@@ -1,6 +1,11 @@
 /**
  * Host platform contract v1. This fixture changes only together with a `v` bump.
  *
+ * Evolution rule: `hostCaller` refuses unknown top-level keys, so the contract evolves only by bumping `v`, never by
+ * adding an optional key. A `mantle describe` report without a `hostContract` field means the application accepts
+ * `v: 1` only; the core release that introduces a later version adds `hostContract` to its describe report, listing
+ * the versions it accepts.
+ *
  * Fixed `ctx.props.mantle` inputs and the exact outputs a host observes: the caller `hostCaller` builds, every refusal
  * it makes, and what REST, MCP and web answer and report to `onAccess` in gateway mode. The expectations live in
  * `host-contract.golden.json`; a generated target hash appears there as `<hash:target id>`.

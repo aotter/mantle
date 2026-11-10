@@ -9,6 +9,9 @@ import { identities, isHostCaller } from "./caller-identity.js";
 /**
  * The complete JSON supplied as ctx.props.mantle by a trusted gateway.
  * Host platform contract, versioned by `v`; stable within a version.
+ * Unknown top-level keys are refused, so the contract evolves only by bumping `v`; a describe report without
+ * `hostContract` accepts `v: 1` only, and the release introducing a later version adds `hostContract` to the report,
+ * listing the versions it accepts.
  */
 export interface HostProps {
   readonly v: 1;
