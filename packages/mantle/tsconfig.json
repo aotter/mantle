@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.lib.json",
-  "compilerOptions": { "noEmit": true, "rootDir": "." },
+  "compilerOptions": { "noEmit": true, "declaration": false, "rootDir": "." },
   "include": ["tests/*.test.ts", "compiler-tests/**/*.ts", "vitest.compiler.config.ts"],
   "exclude": ["tests/apps"]
 }

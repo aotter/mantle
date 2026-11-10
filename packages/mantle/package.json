@@ -21,8 +21,7 @@
     "@pgsql/types": "18.0.0",
     "libpg-query": "18.1.5",
     "pgsql-deparser": "18.3.12",
-    "yaml": "^2.9.1",
-    "zod": "catalog:"
+    "yaml": "^2.9.1"
   },
   "exports": {
     ".": "./dist/infrastructure/generate.js",
@@ -115,7 +114,8 @@
     "postgres": "3.4.9",
     "typescript": "catalog:",
     "wrangler": "4.153.0",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "description": "Agent-native app SDK and backend compiler: YAML manifests to native SQL (SQLite, Cloudflare D1, PostgreSQL) and typed TypeScript; optional REST and MCP.",
   "keywords": [
