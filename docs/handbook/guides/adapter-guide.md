@@ -8,4 +8,6 @@ A third-party driver must preserve result, binding, atomicity and uncertain-outc
 
 Users may choose another SQL executor, including WASM SQLite persisted to IndexedDB, at their own risk. Mantle supports bun:sqlite, D1, Bun.SQL and postgres.js; there is no bundled Durable Object adapter. The app owns any custom adapter and its tests. A third SQL engine requires forking the compiler and Store runtime, not installing a dialect plugin.
 
+Outside Workers, restrict the server's outbound network to the public internet when Admin's MCP media tools are mounted. `upload_media` with `sourceUrl` or `file` has the server fetch the URL; Mantle refuses private addresses and internal host names by their text but does not resolve DNS, so a public name that resolves to a private or metadata address is fetched. Workers cannot reach private addresses; on Bun, Node.js or a container, enforce it with the host's egress firewall or an outbound proxy. See [Admin media MCP tools](../reference/surface.md#admin-media-mcp-tools).
+
 No runtime performs DDL, introspection or schema checks. Install initial SQL and rehearse migrations explicitly; see [database ownership](../concepts/runtime-and-adapters.md).
