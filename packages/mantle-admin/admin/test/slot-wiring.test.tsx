@@ -186,10 +186,11 @@ describe("the pages mount their slots", () => {
   it("mounts every page slot where its page renders", () => {
     const src = (file: string) => readFileSync(resolve(import.meta.dirname, "../src", file), "utf8");
     const app = src("app/admin-app.tsx");
-    for (const name of ["CollectionList", "RecordView", "Home"]) expect(app, name).toMatch(new RegExp(`<Slot name="${name}"`));
+    // `\s+`: a formatter may put each JSX attribute on its own line
+    for (const name of ["CollectionList", "RecordView", "Home"]) expect(app, name).toMatch(new RegExp(`<Slot\\s+name="${name}"`));
     const edit = src("features/content/entry-edit-view.tsx");
-    for (const name of ["record\\.aside", "record\\.actions", "input"]) expect(edit, name).toMatch(new RegExp(`<Slot name=\\{`+"`"+`${name}:`));
-    expect(src("features/content/collection-view.tsx")).toMatch(/<Slot name=\{`list\.actions:/);
+    for (const name of ["record\\.aside", "record\\.actions", "input"]) expect(edit, name).toMatch(new RegExp(`<Slot\\s+name=\\{`+"`"+`${name}:`));
+    expect(src("features/content/collection-view.tsx")).toMatch(/<Slot\s+name=\{`list\.actions:/);
     // a list column goes through its Schema field's slot; a View column through its Schema field's, then its own
     expect(src("features/content/collection-view.tsx")).toContain("`cell:${collection?.name ?? \"\"}.${name}`");
     const view = src("features/ops/view-page.tsx");

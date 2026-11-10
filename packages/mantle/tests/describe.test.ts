@@ -104,7 +104,10 @@ test("Admin catalogue includes every literal built-in server route", async () =>
   const report = await describeApp(await fixture());
   for (const file of ["index", "entries", "site", "webmcp"]) {
     const source = await readFile(new URL(`../../mantle-admin/src/server/${file}.ts`, import.meta.url), "utf8");
-    for (const [, method, path] of source.matchAll(/method: "([A-Z]+)"(?: as const)?, path: "([^"]+)"/g)) {
+    // Whitespace-tolerant, and never empty: a layout change must not silently drop routes from the check.
+    const routes = [...source.matchAll(/method:\s*"([A-Z]+)"(?:\s+as\s+const)?,\s*path:\s*"([^"]+)"/g)];
+    expect(routes.length).toBeGreaterThan(0);
+    for (const [, method, path] of routes) {
       const id = `admin:${method} ${path!.replace(/\{([^}]+)\}/g, ":$1")}`;
       expect(report.targets.some(t => t._meta.id === id)).toBe(true);
     }
