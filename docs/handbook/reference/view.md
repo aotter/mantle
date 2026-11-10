@@ -40,4 +40,6 @@ Bare `views/<encoded-name>.ts` returns row arrays. Proved pageable exposed/inter
 
 Publishing Schema fields may be NULL in drafts even when required, so public View paging cannot order by them. `published_at` is accepted by Store ordering but rejected as a View paging key. Use `ORDER BY id`, or keep the business date in an operational Schema as an indexed, required non-null field.
 
+A public or admin View pages by its ORDER BY keys, so each is a column: a Schema field, `id` or a GROUP BY key. An internal View is not paged and may order by an expression. Core makes every ORDER BY total by appending the first relation's `id` as the last key. When the first relation in FROM is a subquery, a CTE or an internal View, it must output `id`; a grouped one cannot, so GROUP BY in the View's own SELECT, where Core appends the group keys instead.
+
 Internal Views have no public route/tool. Public and admin Views use selected REST/MCP/Admin bindings. `uiSchema.list` selects admin search/filter/display metadata; `uiSchema.nav.group/order/hidden` places an admin View in the sidebar ([sidebar](../guides/native-admin.md#sidebar)). See [surfaces](surface.md) for validation, paging and wire conversions and [typed queries](../guides/typed-queries.md) for a complete example.

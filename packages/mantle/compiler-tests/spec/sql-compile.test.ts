@@ -39,7 +39,12 @@ const kindOf = (sql: string): Kind => (/^\s*SELECT/i.test(sql) ? "view" : "proce
 
 // ponytail: one or two refusals per code plus the code-review regressions; the full dialect corpus lives in next/spike.
 const REFUSED: Refusal[] = [
-  ["SELECT id FROM items OFFSET 2", "SQL_UNSUPPORTED", "OFFSET", /limitOffset/],
+  [
+    "SELECT id FROM items OFFSET 2",
+    "SQL_UNSUPPORTED",
+    "OFFSET",
+    /OFFSET is refused: a View pages with its generated cursor/,
+  ],
   ["SELECT id FROM items WHERE id = $1", "SQL_UNSUPPORTED", "$1", /ParamRef/],
   ["CREATE TABLE t (a int)", "SQL_UNSUPPORTED", undefined, /CreateStmt/],
   ["SELECT sqlite_version()", "SQL_FUNCTION", "sqlite_version"],

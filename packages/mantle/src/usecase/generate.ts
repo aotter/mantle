@@ -57,6 +57,10 @@ const typeOf = (s: JsonSchema | undefined): string => {
       return "unknown";
   }
 };
+/** The refusals for a View or Procedure that has no lowered SQL; generateFromSources replaces each with the lowering's reason. */
+export const VIEW_UNLOWERED = "Every reachable visibility mode must have canonical lowered SQL.",
+  PROCEDURE_UNLOWERED = "Both caller and trusted SQL must be lowered.";
+
 export function generate(input: GenerateInput): GenerateResult {
   const { target, plan, lowered, viewKeys, newId, site, admin, paging } = input;
   const diagnostics: GenerateDiagnostic[] = [];
@@ -156,7 +160,7 @@ export function generate(input: GenerateInput): GenerateResult {
     const c = modes?.[mode],
       trusted = modes?.trusted;
     if (!c || (mode === "caller" && !trusted)) {
-      refuse(path, "Every reachable visibility mode must have canonical lowered SQL.");
+      refuse(path, VIEW_UNLOWERED);
       continue;
     }
     const keys = Object.hasOwn(viewKeys, name) ? viewKeys[name] : undefined;
@@ -205,7 +209,7 @@ export function generate(input: GenerateInput): GenerateResult {
     if (!("sql" in procedure.handler)) continue;
     const modes = lowered.procedures[name];
     if (!modes?.caller || !modes.trusted) {
-      refuse(path, "Both caller and trusted SQL must be lowered.");
+      refuse(path, PROCEDURE_UNLOWERED);
       continue;
     }
     if ([...modes.caller, ...modes.trusted].some(s => s.schema && plan.schemas[s.schema]?.publishing))

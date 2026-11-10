@@ -218,6 +218,13 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
     const group: SqlNode[] = s.groupClause ?? [],
       sorts: SqlNode[] = s.sortClause ?? [];
     const keys = sorts.map(k => resolve(k.SortBy.node));
+    if (sorts.length && reduced && !group.length)
+      return fail("An aggregate without GROUP BY returns one row: remove its ORDER BY.");
+    const computed = keys.findIndex(k => !k);
+    if (computed >= 0)
+      return fail(
+        `ORDER BY key ${computed + 1} is not a column: a paged View's cursor is its ORDER BY keys, so each is a Schema field, id or a GROUP BY key, selected or not. Order by the column itself; a computed order is accepted only in an internal View, which is not paged.`,
+      );
     if (keys.some(k => k && !k.notNull))
       return fail(
         `Nullable ORDER BY key '${keys.find(k => k && !k.notNull)!.name}': make the operational Schema field required and non-null, and order by the preserved side of a LEFT JOIN.`,

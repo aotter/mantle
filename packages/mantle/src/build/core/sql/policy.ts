@@ -625,7 +625,10 @@ function selectIn(n: N, c: C): N {
       ];
     else if (firstAlias || first?.RangeFunction) {
       if (first!.RangeSubselect && !outputsOf(first!.RangeSubselect.subquery.SelectStmt).includes("id"))
-        throw new Refused("SQL_SHAPE", `ordering ${firstAlias}, a subquery in FROM, needs the subquery to output id`);
+        throw new Refused(
+          "SQL_SHAPE",
+          `ORDER BY over ${firstAlias}, a subquery in FROM (or an internal View it reads), needs it to output id: Core appends ${firstAlias}.id as the last ORDER BY key so the order is total. Select the row's id in it, or GROUP BY in this SELECT (Core then orders by the group keys).`,
+        );
       const cte =
         first!.RangeVar?.mantle === "cte"
           ? [...c.ctes]
@@ -634,7 +637,10 @@ function selectIn(n: N, c: C): N {
               ?.get(first!.RangeVar.relname)
           : undefined;
       if (cte && !cteOutputs(cte).includes("id"))
-        throw new Refused("SQL_SHAPE", `ordering ${firstAlias}, a CTE, needs the CTE to output id`);
+        throw new Refused(
+          "SQL_SHAPE",
+          `ORDER BY over ${firstAlias}, a CTE (or an internal View it reads), needs it to output id: Core appends ${firstAlias}.id as the last ORDER BY key so the order is total. Select the row's id in it, or GROUP BY in this SELECT (Core then orders by the group keys).`,
+        );
       // a row source first in FROM has no table's id before it: its own key orders it (#1402)
       const extra = firstAlias ? [col(firstAlias, "id")] : [];
       // A JOIN can repeat the first relation's id, including inside a subquery or CTE.
