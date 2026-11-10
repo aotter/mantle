@@ -6,7 +6,7 @@
  *
  * 1. `select`: name the target, so a refusal that follows is observed against it.
  * 2. `resolveCaller`: forwarded host props, or the application's resolver with a read-only hint.
- * 3. `admit`: a host caller's target pin, freshness and dry-run support.
+ * 3. `admit`: a host caller's target pin, freshness and dry-run support (of the call's variant, if it names one).
  * 4. `enforceOrigin`: the cookie-session Origin rule.
  * 5. `guard`: the generated `requires` check, then application `authorize`.
  * 6. `dryRun`: answer the decision instead of dispatching; no database handle is acquired before this point.
@@ -52,6 +52,8 @@ export interface Call {
   readonly view: boolean;
   /** A Procedure the compiler proved read-only; ref handlers never qualify. */
   readonly readOnly?: boolean;
+  /** The variant of the access target a host caller's dry run is decided by, e.g. `procedure:<name>`. */
+  readonly variant?: string;
   /** What application `authorize` decides on; without it only `check` guards the call. */
   readonly target?: Target;
   /** The generated `requires` guard. */
@@ -96,7 +98,7 @@ export interface Pipeline {
   /** Step 2. Resolves once per request: forwarded props win, else `resolve` runs with the read-only hint. */
   resolveCaller<Env>(request: Request, env: Env, resolve: CallerResolver<Env>, readOnly: boolean): Promise<Caller>;
   /** Step 3. */
-  admit(call: Pick<Call, "id" | "view" | "readOnly">): Promise<void>;
+  admit(call: Pick<Call, "id" | "view" | "readOnly" | "variant">): Promise<void>;
   /** Step 4. */
   enforceOrigin(request: Request, call: Pick<Call, "view" | "readOnly">): void;
   /** Step 5, first half: the generated guard alone, for a surface that authorized the call earlier in the request. */
@@ -149,7 +151,7 @@ export async function openPipeline(ctx: RequestContext | undefined, options: Pip
     },
     async admit(call) {
       await access?.select(call.id, caller);
-      await access?.check(isRead(call));
+      await access?.check(isRead(call), call.variant);
     },
     enforceOrigin(request, call) {
       if (originChecked(call, isHost())) checkOrigin(request, caller!);
