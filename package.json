@@ -21,13 +21,15 @@
     "build": "pnpm -r --filter '@aotter/mantle*' build",
     "typecheck": "pnpm -r --filter '@aotter/mantle*' typecheck",
     "test": "pnpm -r --parallel --filter '@aotter/mantle*' test",
+    "format": "biome format --write",
+    "check:format": "biome format",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:skills": "node scripts/check-skills.mjs",
     "check:doc-examples": "node scripts/check-doc-examples.mjs",
     "check:doc-html": "node scripts/check-doc-html.mjs",
     "check:plugin-manifests": "node scripts/sync-plugin-manifests.mjs --check",
     "check:release": "node scripts/release-tag-order.mjs --self-test",
-    "check": "pnpm run check:boundaries && pnpm run check:skills && pnpm run check:doc-html && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm --filter @aotter/mantle exec bun scripts/check-size.ts && pnpm --filter @aotter/mantle exec bun scripts/check-package.ts && pnpm check:ui-size && pnpm check:doc-examples && pnpm check:oss-plugin && pnpm typecheck && MANTLE_NATIVE_TESTS=1 pnpm test && pnpm check:worker-consumer",
+    "check": "pnpm run check:boundaries && pnpm run check:format && pnpm run check:skills && pnpm run check:doc-html && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm --filter @aotter/mantle exec bun scripts/check-size.ts && pnpm --filter @aotter/mantle exec bun scripts/check-package.ts && pnpm check:ui-size && pnpm check:doc-examples && pnpm check:oss-plugin && pnpm typecheck && MANTLE_NATIVE_TESTS=1 pnpm test && pnpm check:worker-consumer",
     "check:worker-consumer": "node scripts/check-worker-consumer.mjs",
     "bench": "pnpm --filter @aotter/mantle bench",
     "check:ui-size": "node scripts/check-ui-size.mjs",
@@ -37,6 +39,7 @@
     "check:init-audit": "node scripts/check-init-audit.mjs"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.3",
     "typescript": "catalog:"
   },
   "packageManager": "pnpm@9.15.0",

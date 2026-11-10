@@ -55,6 +55,7 @@ jobs:
       - name: Build dist
         run: pnpm build
 
+      - run: pnpm run check:format
       - name: Check package boundaries
         run: pnpm run check:boundaries
 
