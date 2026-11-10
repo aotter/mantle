@@ -14,6 +14,10 @@
  *
  * Gateway mode lives here only: without `options.gateway` no caller is a host, and `select`, `admit`, `dryRun` and
  * the `finish` steps do nothing.
+ *
+ * What stays with a surface: REST's route matching and body decoding; MCP's transport Origin check, endpoint and
+ * credential-scope rules, batch pre-authorization and SDK plumbing (`mcp-handler.ts`); web's rendering, and its
+ * decoding of a page's path fields before `admit` (`web-serve.ts`).
  */
 import { authorizeTarget } from "./authorization.js";
 import { isHostCaller } from "./caller-identity.js";
