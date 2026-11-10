@@ -6,7 +6,17 @@ import ts from "typescript";
 const root = resolve(import.meta.dir, "../src");
 async function files(path: string): Promise<string[]> {
   const entries = await readdir(path, { withFileTypes: true });
-  return (await Promise.all(entries.map(entry => entry.isDirectory() ? files(resolve(path, entry.name)) : entry.name.endsWith(".ts") ? [resolve(path, entry.name)] : []))).flat();
+  return (
+    await Promise.all(
+      entries.map(entry =>
+        entry.isDirectory()
+          ? files(resolve(path, entry.name))
+          : entry.name.endsWith(".ts")
+            ? [resolve(path, entry.name)]
+            : [],
+      ),
+    )
+  ).flat();
 }
 test("kernel only imports transaction context from node", async () => {
   for (const file of await files(resolve(root, "kernel"))) {

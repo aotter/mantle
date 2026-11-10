@@ -20,9 +20,15 @@ describe("@aotter/mantle-admin/app", () => {
       const code = readFileSync(file, "utf8");
       expect(code).not.toContain("admin/src/app/media.tsx");
       const source = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-      for (const node of source.statements) if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text.startsWith(".")) {
-        visit(resolve(file, "..", node.moduleSpecifier.text));
-      }
+      for (const node of source.statements)
+        if (
+          (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+          node.moduleSpecifier &&
+          ts.isStringLiteral(node.moduleSpecifier) &&
+          node.moduleSpecifier.text.startsWith(".")
+        ) {
+          visit(resolve(file, "..", node.moduleSpecifier.text));
+        }
     };
     visit(resolve(pkg, "dist/admin-app/index.js"));
     expect([...visited].some(file => file.endsWith("/media.js"))).toBe(false);
@@ -42,11 +48,20 @@ describe("@aotter/mantle-admin/app", () => {
     expect(Object.keys(app).sort()).toEqual(["AdminLink", "MantleAdmin", "defineAdmin"]);
     expect(app.defineAdmin({})).toEqual({ meta: {}, pages: [], nav: { groups: {}, items: [] }, layers: {} });
     const page = (path: string) => ({ path, title: "T", element: null });
-    const errors: string[] = [], log = console.error;
-    console.error = (message: string) => { errors.push(message); };
+    const errors: string[] = [],
+      log = console.error;
+    console.error = (message: string) => {
+      errors.push(message);
+    };
     try {
-      expect(app.defineAdmin({}, { pages: [page("Budget"), page("a/b"), page("ok"), page("ok")] }).pages.map((p: { path: string }) => p.path)).toEqual(["ok"]);
-    } finally { console.error = log; }
+      expect(
+        app
+          .defineAdmin({}, { pages: [page("Budget"), page("a/b"), page("ok"), page("ok")] })
+          .pages.map((p: { path: string }) => p.path),
+      ).toEqual(["ok"]);
+    } finally {
+      console.error = log;
+    }
     expect(errors).toEqual([
       "defineAdmin: page path 'Budget' must be lowercase letters, digits and hyphens; the page is skipped.",
       "defineAdmin: page path 'a/b' must be lowercase letters, digits and hyphens; the page is skipped.",
@@ -59,13 +74,29 @@ describe("@aotter/mantle-admin/app", () => {
     const target = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")).exports["./hooks"];
     expect(target).toEqual({ types: "./dist/admin-app/hooks.d.ts", import: "./dist/admin-app/hooks.js" });
     const hooks = await import(resolve(pkg, target.import));
-    expect(Object.keys(hooks).sort()).toEqual(["AdminUnavailableError", "createAdminHooks", "mcpAppTransport", "useAdminSurface", "useBadges", "useCollectionTotal", "useEntries", "useEntry", "useHost", "useMe", "useOpenLink", "useOperation", "useView"]);
+    expect(Object.keys(hooks).sort()).toEqual([
+      "AdminUnavailableError",
+      "createAdminHooks",
+      "mcpAppTransport",
+      "useAdminSurface",
+      "useBadges",
+      "useCollectionTotal",
+      "useEntries",
+      "useEntry",
+      "useHost",
+      "useMe",
+      "useOpenLink",
+      "useOperation",
+      "useView",
+    ]);
     const context = (file: string, visited = new Set<string>()): string[] => {
       if (visited.has(file)) return [];
       visited.add(file);
       const code = readFileSync(resolve(pkg, "dist/admin-app", file), "utf8");
       const dependencies = [...code.matchAll(/from\s*"\.\/([\w-]+\.js)"/g)].map(match => match[1]!);
-      return [...new Set(dependencies.flatMap(next => next.startsWith("hooks-context-") ? [next] : context(next, visited)))];
+      return [
+        ...new Set(dependencies.flatMap(next => (next.startsWith("hooks-context-") ? [next] : context(next, visited)))),
+      ];
     };
     expect(context("hooks.js")).toHaveLength(1);
     expect(context("index.js")).toEqual(context("hooks.js"));
@@ -73,7 +104,9 @@ describe("@aotter/mantle-admin/app", () => {
   });
 
   it("ships no prebuilt SPA: the application builds Admin", () => {
-    const { exports } = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")) as { exports: Record<string, unknown> };
+    const { exports } = JSON.parse(readFileSync(resolve(pkg, "package.json"), "utf8")) as {
+      exports: Record<string, unknown>;
+    };
     expect(Object.keys(exports).filter(key => key.startsWith("./admin/"))).toEqual([]);
     expect(existsSync(resolve(pkg, "dist/admin"))).toBe(false);
   });
@@ -85,7 +118,7 @@ describe("@aotter/mantle-admin/app", () => {
       "interface Types {",
       '  readonly views: { readonly "pending-requests": { readonly input: { readonly q?: string }; readonly row: { readonly id: string; readonly amount: number } } };',
       '  readonly collections: { readonly requests: { readonly data: { readonly title: string; readonly status: "open" | "closed" } } };',
-      '  readonly operations: { readonly approve: { readonly input: { readonly id: string }; readonly output: { readonly ok: true } } };',
+      "  readonly operations: { readonly approve: { readonly input: { readonly id: string }; readonly output: { readonly ok: true } } };",
       "}",
       "const hooks = createAdminHooks<Types>();",
       "export function Component(): number {",
@@ -107,14 +140,14 @@ describe("@aotter/mantle-admin/app", () => {
       "  // @ts-expect-error a field the collection does not have",
       '  hooks.useEntries("requests", { filter: { field: "nope", value: "x" } });',
       "  // @ts-expect-error an operation input of the wrong type",
-      '  void run?.({ id: 1 });',
+      "  void run?.({ id: 1 });",
       "  const more: boolean = pending.hasMore && !pending.loadingMore && entries.hasMore;",
       "  pending.loadMore();",
       "  // @ts-expect-error pages are appended, there is no cursor to start from",
       '  hooks.useView("pending-requests", {}, { cursor: "c" });',
       "  // @ts-expect-error a collection that is not in the manifest",
       '  hooks.useCollectionTotal("nope");',
-      "  return (amount ?? 0) + (title ?? \"\").length + (more ? 1 : 0) + (pending.status === \"unavailable\" ? 1 : 0);",
+      '  return (amount ?? 0) + (title ?? "").length + (more ? 1 : 0) + (pending.status === "unavailable" ? 1 : 0);',
       "}",
       "export const host: AdminHost | null = null;",
       "export const transport = mcpAppTransport;",
@@ -123,7 +156,7 @@ describe("@aotter/mantle-admin/app", () => {
       "const typed: AdminMeta<Types> = {};",
       "export const composed: AdminDefinition = defineAdmin(typed, {",
       "  components: {",
-      "    Sidebar: (props) => props.renderDefault({ ...props, footer: AdminLink({ href: \"https://example.com\", children: \"Help\" }) }),",
+      '    Sidebar: (props) => props.renderDefault({ ...props, footer: AdminLink({ href: "https://example.com", children: "Help" }) }),',
       '    "cell:requests.title": ({ value, surface }) => `${surface}:${value.length}`,',
       '    "cell:view:pending-requests.amount": ({ value, row }) => `${value + row.amount}`,',
       '    "input:requests.status": ({ value, onChange }) => { onChange(value === "open" ? "closed" : "open"); return null; },',
@@ -131,23 +164,23 @@ describe("@aotter/mantle-admin/app", () => {
       '    "RecordView": ({ surface }) => { const onlyBrowser: "browser" = surface; return onlyBrowser; },',
       "  },",
       "  plugins: [{ components: { Home: (props) => props.renderDefault(props) } }],",
-      "  mcp: { csp: { connectDomains: [\"https://api.example.com\"] } },",
+      '  mcp: { csp: { connectDomains: ["https://api.example.com"] } },',
       "});",
       "export const sidebar: SidebarProps | undefined = undefined;",
-      '// @ts-expect-error a misspelt collection is not a slot',
+      "// @ts-expect-error a misspelt collection is not a slot",
       'defineAdmin(typed, { components: { "record.aside:request": () => null } });',
-      '// @ts-expect-error a misspelt field is not a slot',
+      "// @ts-expect-error a misspelt field is not a slot",
       'defineAdmin(typed, { components: { "cell:requests.titel": () => null } });',
-      '// @ts-expect-error a record input has no MCP surface branch',
+      "// @ts-expect-error a record input has no MCP surface branch",
       'defineAdmin(typed, { components: { "input:requests.status": ({ surface }) => surface === "mcp-app" ? null : "browser" } });',
-      '// @ts-expect-error a browser slot has no `surface`',
-      'defineAdmin(typed, { components: { Sidebar: ({ surface }) => String(surface) } });',
+      "// @ts-expect-error a browser slot has no `surface`",
+      "defineAdmin(typed, { components: { Sidebar: ({ surface }) => String(surface) } });",
       'import { MediaPicker, type MediaPickerProps, type MediaSelection } from "@aotter/mantle-admin/media";',
       'const selected: MediaSelection = { id: "asset", primaryUrl: null };',
       'export const picker: MediaPickerProps = { open: false, onOpenChange: () => {}, onSelect: asset => { const id: string = asset.id; void id; }, uploadPurpose: "card", readOnly: false };',
-      'export const pickerElement = MediaPicker(picker);',
-      '// @ts-expect-error the picker does not expose an internal library row',
-      'selected.variants;',
+      "export const pickerElement = MediaPicker(picker);",
+      "// @ts-expect-error the picker does not expose an internal library row",
+      "selected.variants;",
       "interface NavTypes extends Types {",
       '  readonly navGroups: "approvals" | "billing";',
       "}",
@@ -161,35 +194,35 @@ describe("@aotter/mantle-admin/app", () => {
       '    { group: "billing", title: "All", to: { collection: "requests" } },',
       "  ],",
       "} });",
-      "export const withPage: AdminDefinition = defineAdmin(navMeta, { nav: { groups: { approvals: { title: \"A\" }, billing: { title: \"B\" } } }, pages: [{ path: \"budget\", title: \"Budget\", header: { description: { en: \"Budget details\" }, actions: null }, element: null, nav: { group: \"billing\", order: 1 } }, { path: \"plain\", title: \"Plain\", element: null }] });",
-      '// @ts-expect-error a page is placed in a group the manifest or Admin has',
+      'export const withPage: AdminDefinition = defineAdmin(navMeta, { nav: { groups: { approvals: { title: "A" }, billing: { title: "B" } } }, pages: [{ path: "budget", title: "Budget", header: { description: { en: "Budget details" }, actions: null }, element: null, nav: { group: "billing", order: 1 } }, { path: "plain", title: "Plain", element: null }] });',
+      "// @ts-expect-error a page is placed in a group the manifest or Admin has",
       'defineAdmin(navMeta, { nav: { groups: { approvals: { title: "A" }, billing: { title: "B" } } }, pages: [{ path: "x", title: "X", element: null, nav: { group: "billng" } }] });',
       "// a manifest that uses only Admin's groups needs no declaration; the config stays optional",
       "export const plain: AdminDefinition = defineAdmin(typed);",
-      '// @ts-expect-error a group the manifest places items in is not declared',
+      "// @ts-expect-error a group the manifest places items in is not declared",
       "defineAdmin(navMeta, { nav: { groups: {} } });",
-      '// @ts-expect-error nav.groups is required while the manifest uses a group Admin does not have',
+      "// @ts-expect-error nav.groups is required while the manifest uses a group Admin does not have",
       "defineAdmin(navMeta, { nav: { items: [] } });",
-      '// @ts-expect-error so is the config',
+      "// @ts-expect-error so is the config",
       "defineAdmin(navMeta);",
-      '// @ts-expect-error a group title is text or a locale map',
+      "// @ts-expect-error a group title is text or a locale map",
       "defineAdmin(navMeta, { nav: { groups: { approvals: { title: 5 } } } });",
-      "const declared = { nav: { groups: { approvals: { title: \"A\" }, billing: { title: \"B\" } } } } as const;",
-      '// @ts-expect-error a collection that is not in the manifest',
+      'const declared = { nav: { groups: { approvals: { title: "A" }, billing: { title: "B" } } } } as const;',
+      "// @ts-expect-error a collection that is not in the manifest",
       'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { collection: "request" } }] } });',
-      '// @ts-expect-error a View that is not in the manifest',
+      "// @ts-expect-error a View that is not in the manifest",
       'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { view: "pending" } }] } });',
-      '// @ts-expect-error an input the View does not declare',
+      "// @ts-expect-error an input the View does not declare",
       'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { view: "pending-requests", input: { q: 1 } } }] } });',
-      '// @ts-expect-error a field the collection does not have',
+      "// @ts-expect-error a field the collection does not have",
       'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { collection: "requests", filter: { nope: "x" } } }] } });',
-      '// @ts-expect-error a value the field cannot hold',
+      "// @ts-expect-error a value the field cannot hold",
       'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { collection: "requests", filter: { status: "archived" } } }] } });',
-      '// @ts-expect-error the list filters on one field: a second key would be dropped',
+      "// @ts-expect-error the list filters on one field: a second key would be dropped",
       'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "reports", title: "x", to: { collection: "requests", filter: { status: "open", title: "late" } } }] } });',
-      '// @ts-expect-error Admin\'s own groups are not redeclared',
+      "// @ts-expect-error Admin's own groups are not redeclared",
       'defineAdmin(navMeta, { nav: { groups: { approvals: { title: "A" }, billing: { title: "B" }, more: { title: "Extras" } } } });',
-      '// @ts-expect-error a group that neither Admin nor the manifest has',
+      "// @ts-expect-error a group that neither Admin nor the manifest has",
       'defineAdmin(navMeta, { nav: { ...declared.nav, items: [{ group: "approval", title: "x", to: { collection: "requests" } }] } });',
       "const props: MantleAdminProps = { admin };",
       "// @ts-expect-error preview mode is internal to the canonical preview document",
@@ -198,14 +231,25 @@ describe("@aotter/mantle-admin/app", () => {
       "// @ts-expect-error metadata is required",
       "defineAdmin();",
     ].join("\n");
-    const options: ts.CompilerOptions = { module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, target: ts.ScriptTarget.ES2022, strict: true, noEmit: true, skipLibCheck: false, types: [] };
+    const options: ts.CompilerOptions = {
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      target: ts.ScriptTarget.ES2022,
+      strict: true,
+      noEmit: true,
+      skipLibCheck: false,
+      types: [],
+    };
     const host = ts.createCompilerHost(options);
     const { getSourceFile, fileExists, readFile } = host;
     host.fileExists = file => file === consumer || fileExists(file);
-    host.readFile = file => file === consumer ? source : readFile(file);
-    host.getSourceFile = (file, language) => file === consumer ? ts.createSourceFile(file, source, language) : getSourceFile(file, language);
+    host.readFile = file => (file === consumer ? source : readFile(file));
+    host.getSourceFile = (file, language) =>
+      file === consumer ? ts.createSourceFile(file, source, language) : getSourceFile(file, language);
     const program = ts.createProgram([consumer], options, host);
-    const diagnostics = ts.getPreEmitDiagnostics(program).map(d => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
+    const diagnostics = ts
+      .getPreEmitDiagnostics(program)
+      .map(d => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
     expect(diagnostics).toEqual([]);
   });
 });

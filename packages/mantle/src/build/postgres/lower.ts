@@ -10,17 +10,28 @@ import { pgType } from "./codec.js";
 import type { RawExpr } from "./print.js";
 import { searchLike } from "../../kernel/search.js";
 
-const fn = (f: string, args: N[], extra: Record<string, unknown> = {}): N => ({ FuncCall: { funcname: [S(f)], args, funcformat: "COERCE_EXPLICIT_CALL", ...extra } });
+const fn = (f: string, args: N[], extra: Record<string, unknown> = {}): N => ({
+  FuncCall: { funcname: [S(f)], args, funcformat: "COERCE_EXPLICIT_CALL", ...extra },
+});
 const str = (s: string): N => ({ A_Const: { sval: { sval: s } } });
 /** `CAST(x AS <Mantle type>)` in PostgreSQL's spelling of the type. */
 export function cast(x: N, type: string): N {
   const t = pgType(type);
   const m = /^numeric\((\d+), (\d+)\)$/.exec(t);
-  return { TypeCast: { arg: x, typeName: m ? { names: [S("numeric")], typmods: [num(Number(m[1])), num(Number(m[2]))], typemod: -1 } : { names: [S(t)], typemod: -1 } } };
+  return {
+    TypeCast: {
+      arg: x,
+      typeName: m
+        ? { names: [S("numeric")], typmods: [num(Number(m[1])), num(Number(m[2]))], typemod: -1 }
+        : { names: [S(t)], typemod: -1 },
+    },
+  };
 }
 const coalesce = (...args: N[]): N => ({ CoalesceExpr: { args } });
 const authored = (n: N, scope: LoweringScope) => (n.agg_filter ? { agg_filter: scope.tx(n.agg_filter) } : {});
-const by = (node: N): N => ({ SortBy: { node: structuredClone(node), sortby_dir: "SORTBY_DEFAULT", sortby_nulls: "SORTBY_NULLS_DEFAULT" } });
+const by = (node: N): N => ({
+  SortBy: { node: structuredClone(node), sortby_dir: "SORTBY_DEFAULT", sortby_nulls: "SORTBY_NULLS_DEFAULT" },
+});
 /** `'[]'::json`: json, not jsonb, so it matches json_agg's type. */
 const json = (text: string): N => ({ TypeCast: { arg: str(text), typeName: { names: [S("json")], typemod: -1 } } });
 
@@ -63,58 +74,119 @@ export function pgLowering(timeZone: string): PolicyLowering {
       const args: N[] = n.args ?? [];
       switch (f) {
         // in the site time zone, as D1 computes them
-        case "date_trunc": return fn("date_trunc", [args[0]!, scope.tx(args[1]), zone]);
-        case "extract": return sql(`CAST(extract(${strConst(args[0])} FROM __ts AT TIME ZONE ${lit(timeZone)}) AS int8)`, { __ts: scope.tx(args[1]) });
+        case "date_trunc":
+          return fn("date_trunc", [args[0]!, scope.tx(args[1]), zone]);
+        case "extract":
+          return sql(`CAST(extract(${strConst(args[0])} FROM __ts AT TIME ZONE ${lit(timeZone)}) AS int8)`, {
+            __ts: scope.tx(args[1]),
+          });
         // PostgreSQL leaves an aggregate's input order open; ordering by the value (an object by its key) keeps it deterministic.
         // ponytail: D1 aggregates in scan order, so the two engines may order an array differently; neither order is promised
         // json has no ordering of its own, so the order is jsonb's; a DISTINCT aggregate may order only by its argument
         // an author's FILTER and ORDER BY (ADR-0037) are kept; without an ORDER BY the order is the value's, as above
-        case "json_group_array": { const x = scope.tx(args[0]); return coalesce(fn("json_agg", [x], { ...(n.agg_distinct ? { agg_order: [by(x)], agg_distinct: true } : { agg_order: n.agg_order ? scope.tx(n.agg_order) : [by(fn("to_jsonb", [x]))] }), ...authored(n, scope) }), json("[]")); }
-        case "json_group_object": { const k = scope.tx(args[0]); return coalesce(fn("json_object_agg", [k, scope.tx(args[1])], { agg_order: n.agg_order ? scope.tx(n.agg_order) : [by(k)], ...authored(n, scope) }), json("{}")); }
-        case "json_array_length": return fn("jsonb_array_length", [cast(scope.tx(args[0]), "json")]);
-        case "instr": return fn("strpos", [scope.tx(args[0]), scope.tx(args[1])]);
+        case "json_group_array": {
+          const x = scope.tx(args[0]);
+          return coalesce(
+            fn("json_agg", [x], {
+              ...(n.agg_distinct
+                ? { agg_order: [by(x)], agg_distinct: true }
+                : { agg_order: n.agg_order ? scope.tx(n.agg_order) : [by(fn("to_jsonb", [x]))] }),
+              ...authored(n, scope),
+            }),
+            json("[]"),
+          );
+        }
+        case "json_group_object": {
+          const k = scope.tx(args[0]);
+          return coalesce(
+            fn("json_object_agg", [k, scope.tx(args[1])], {
+              agg_order: n.agg_order ? scope.tx(n.agg_order) : [by(k)],
+              ...authored(n, scope),
+            }),
+            json("{}"),
+          );
+        }
+        case "json_array_length":
+          return fn("jsonb_array_length", [cast(scope.tx(args[0]), "json")]);
+        case "instr":
+          return fn("strpos", [scope.tx(args[0]), scope.tx(args[1])]);
         // PostgreSQL rounds to a scale only as numeric
-        case "round": return args.length === 2 ? fn("round", [{ TypeCast: { arg: scope.tx(args[0]), typeName: { names: [S("numeric")], typemod: -1 } } }, scope.tx(args[1])]) : undefined;
+        case "round":
+          return args.length === 2
+            ? fn("round", [
+                { TypeCast: { arg: scope.tx(args[0]), typeName: { names: [S("numeric")], typemod: -1 } } },
+                scope.tx(args[1]),
+              ])
+            : undefined;
         case "mantle.search": {
           const alias = args[0]!.ColumnRef.fields[0].String.sval;
           const { schema, def } = scope.alias(alias);
           if (!def.search?.length) throw new Refused("SQL_FUNCTION", `${schema} declares no search fields`);
           scope.seen("search");
           // ponytail: ILIKE over the declared fields, a scan; a pg_trgm GIN index is the upgrade when a search shows in latency
-          return sql(searchLike(def.search.map((fld) => `${q(alias)}.${q(fld)}`), "__q", "ILIKE"), { __q: scope.tx(args[1]) });
+          return sql(
+            searchLike(
+              def.search.map(fld => `${q(alias)}.${q(fld)}`),
+              "__q",
+              "ILIKE",
+            ),
+            { __q: scope.tx(args[1]) },
+          );
         }
         case "mantle.search_rank": {
           const alias = args[0]!.ColumnRef.fields[0].String.sval;
           const { schema, def, searchQuery } = scope.alias(alias);
           if (!def.search?.length) throw new Refused("SQL_FUNCTION", `${schema} declares no search fields`);
-          if (!searchQuery) throw new Refused("SQL_FUNCTION", `mantle.search_rank(${alias}) needs a mantle.search(${alias}, ...) in the same query`);
+          if (!searchQuery)
+            throw new Refused(
+              "SQL_FUNCTION",
+              `mantle.search_rank(${alias}) needs a mantle.search(${alias}, ...) in the same query`,
+            );
           // ponytail: lower is better, as bm25 is on D1: minus the query's occurrences across the fields. A pg_trgm or tsvector rank is the upgrade
-          const count = (fld: string) => `coalesce((length(lower(${q(alias)}.${q(fld)})) - length(replace(lower(${q(alias)}.${q(fld)}), lower(__q), ''))) / greatest(length(__q), 1), 0)`;
+          const count = (fld: string) =>
+            `coalesce((length(lower(${q(alias)}.${q(fld)})) - length(replace(lower(${q(alias)}.${q(fld)}), lower(__q), ''))) / greatest(length(__q), 1), 0)`;
           return sql(`-(${def.search.map(count).join(" + ")})`, { __q: scope.tx(searchQuery) });
         }
-        case "mantle.near": case "mantle.distance": {
+        case "mantle.near":
+        case "mantle.distance": {
           const [ref, latN, lngN] = args;
-          const alias = ref!.ColumnRef.fields[0].String.sval, fld = ref!.ColumnRef.fields[1].String.sval;
+          const alias = ref!.ColumnRef.fields[0].String.sval,
+            fld = ref!.ColumnRef.fields[1].String.sval;
           const { schema, def } = scope.alias(alias);
           if (def.fields[fld] !== "geo") throw new Refused("SQL_FUNCTION", `${schema}.${fld} is not a geo field`);
-          const la = `${q(alias)}.${q(`${fld}_lat`)}`, ln = `${q(alias)}.${q(`${fld}_lng`)}`;
+          const la = `${q(alias)}.${q(`${fld}_lat`)}`,
+            ln = `${q(alias)}.${q(`${fld}_lng`)}`;
           const sub = { __lat: scope.tx(latN), __lng: scope.tx(lngN) };
           if (f === "mantle.distance") return sql(HAV(la, ln), sub);
           scope.seen("near");
           // ponytail: the box D1 reads from its R*Tree, here a plain range over the two columns; a GiST index is the upgrade
           const meters = Number(args[3]!.A_Const.ival?.ival ?? args[3]!.A_Const.fval?.fval);
-          const b = (box: string) => scope.param({ k: "dialect", box, lat: argOf(latN!, scope), lng: argOf(lngN!, scope), meters });
-          return sql(`${la} BETWEEN __b0 AND __b1 AND ${ln} BETWEEN __b2 AND __b3 AND ${HAV(la, ln)} <= ${meters}`,
-            { ...sub, __b0: b("minLat"), __b1: b("maxLat"), __b2: b("minLng"), __b3: b("maxLng") });
+          const b = (box: string) =>
+            scope.param({ k: "dialect", box, lat: argOf(latN!, scope), lng: argOf(lngN!, scope), meters });
+          return sql(`${la} BETWEEN __b0 AND __b1 AND ${ln} BETWEEN __b2 AND __b3 AND ${HAV(la, ln)} <= ${meters}`, {
+            ...sub,
+            __b0: b("minLat"),
+            __b1: b("maxLat"),
+            __b2: b("minLng"),
+            __b3: b("maxLng"),
+          });
         }
-        case "typeof": case "hex":
-        case "json_extract": case "json_set": case "json_insert": case "json_remove":
+        case "typeof":
+        case "hex":
+        case "json_extract":
+        case "json_set":
+        case "json_insert":
+        case "json_remove":
           throw new Refused("SQL_FUNCTION", `${f} is not supported by the PostgreSQL dialect`);
       }
       return undefined;
     },
-    call: (out) => ({ FuncCall: out }),
-    anyOf: (x, set, type) => sql(`__x = ANY(CAST(CAST(__set AS text) AS ${pgType(type === 'number' ? 'real' : 'text')}[]))`, { __x: x, __set: set }),
+    call: out => ({ FuncCall: out }),
+    anyOf: (x, set, type) =>
+      sql(`__x = ANY(CAST(CAST(__set AS text) AS ${pgType(type === "number" ? "real" : "text")}[]))`, {
+        __x: x,
+        __set: set,
+      }),
     cast(n, scope) {
       const t = n.typeName.names.at(-1).String.sval as string;
       const a = n.arg?.A_Const;
@@ -129,9 +201,14 @@ export function pgLowering(timeZone: string): PolicyLowering {
       }
       return { TypeCast: { ...n, arg: scope.tx(n.arg) } };
     },
-    sublink: (out) => ({ SubLink: out }),
+    sublink: out => ({ SubLink: out }),
     // 32 lower-case hex digits, the shape D1's ids have
-    newId: () => fn("replace", [{ TypeCast: { arg: fn("gen_random_uuid", []), typeName: { names: [S("text")], typemod: -1 } } }, str("-"), str("")]),
+    newId: () =>
+      fn("replace", [
+        { TypeCast: { arg: fn("gen_random_uuid", []), typeName: { names: [S("text")], typemod: -1 } } },
+        str("-"),
+        str(""),
+      ]),
     columns: () => [],
   };
 }

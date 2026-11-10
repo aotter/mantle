@@ -4,10 +4,7 @@ import type { SourceLocation, SourceSpan } from "../../kernel/diagnostic.js";
 import type { ParsedManifestEntry } from "./ManifestParser.js";
 
 /** Resolve the narrowest retained authored span for a parsed semantic path. */
-export function sourceLocationAt(
-  entry: ParsedManifestEntry,
-  path: string,
-): SourceLocation {
+export function sourceLocationAt(entry: ParsedManifestEntry, path: string): SourceLocation {
   let candidate = path;
   let span = entry.sourceSpans[candidate];
   while (!span && candidate !== "/") {
@@ -23,10 +20,7 @@ export function sourceLocationAt(
   };
 }
 
-export function collectSourceSpans(
-  root: Node | null,
-  lineCounter: LineCounter,
-): Readonly<Record<string, SourceSpan>> {
+export function collectSourceSpans(root: Node | null, lineCounter: LineCounter): Readonly<Record<string, SourceSpan>> {
   const spans: Record<string, SourceSpan> = {};
   const visit = (node: Node | null, path: string): void => {
     if (!node) return;
@@ -40,7 +34,7 @@ export function collectSourceSpans(
       }
     } else if (isSeq(node)) {
       node.items.forEach((item, index) =>
-        visit(isNode(item) ? item : null, path === "/" ? `/${index}` : `${path}/${index}`)
+        visit(isNode(item) ? item : null, path === "/" ? `/${index}` : `${path}/${index}`),
       );
     }
   };
@@ -55,12 +49,16 @@ export function sourceLocationForNode(
   doc: Document.Parsed,
   lineCounter: LineCounter,
 ): SourceLocation {
-  const parts = path === "/"
-    ? []
-    : path.slice(1).split("/").map((part) => {
-        const decoded = part.replace(/~1/g, "/").replace(/~0/g, "~");
-        return /^\d+$/.test(decoded) ? Number(decoded) : decoded;
-      });
+  const parts =
+    path === "/"
+      ? []
+      : path
+          .slice(1)
+          .split("/")
+          .map(part => {
+            const decoded = part.replace(/~1/g, "/").replace(/~0/g, "~");
+            return /^\d+$/.test(decoded) ? Number(decoded) : decoded;
+          });
   let range: readonly number[] | null | undefined;
   for (let length = parts.length; length >= 0 && !range; length--) {
     const node = length === 0 ? doc.contents : doc.getIn(parts.slice(0, length), true);
@@ -82,10 +80,7 @@ export function sourceLocation(
   return { sourceId, documentIndex, path, ...(span ? { span } : {}) };
 }
 
-function sourceSpan(
-  lineCounter: LineCounter,
-  range?: readonly number[] | null,
-): SourceSpan | undefined {
+function sourceSpan(lineCounter: LineCounter, range?: readonly number[] | null): SourceSpan | undefined {
   if (!range || range.length < 2) return undefined;
   const startOffset = range[0];
   const endOffset = range.length > 2 ? range[2] : range[1];

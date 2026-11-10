@@ -3,7 +3,12 @@ import type { ViewManifest } from "../model/ManifestGrammar.js";
 import { type SchemaAdminUiProblem } from "./SchemaAdminUiChecker.js";
 import { navPlacementProblems } from "../model/AdminNav.js";
 
-const problem = (pointer: string, value: unknown, expected: string, message: string): SchemaAdminUiProblem => ({ pointer, value, expected, message });
+const problem = (pointer: string, value: unknown, expected: string, message: string): SchemaAdminUiProblem => ({
+  pointer,
+  value,
+  expected,
+  message,
+});
 
 export interface ViewListPresentation {
   readonly columns: readonly string[];
@@ -25,56 +30,82 @@ export function checkViewAdminUi(view: ViewManifest): {
   const uiSchema = view.spec.uiSchema;
   if (uiSchema === undefined) return { list: EMPTY_VIEW_LIST, problems: [] };
   if (view.spec.surface !== "admin") {
-    return { list: EMPTY_VIEW_LIST, problems: [problem(
-      "/spec/uiSchema",
-      uiSchema,
-      "Admin UI configuration on a surface: admin View",
-      "View.spec.uiSchema is only supported for surface: admin Views.",
-    )] };
+    return {
+      list: EMPTY_VIEW_LIST,
+      problems: [
+        problem(
+          "/spec/uiSchema",
+          uiSchema,
+          "Admin UI configuration on a surface: admin View",
+          "View.spec.uiSchema is only supported for surface: admin Views.",
+        ),
+      ],
+    };
   }
   if (!uiSchema || typeof uiSchema !== "object" || Array.isArray(uiSchema)) {
-    return { list: EMPTY_VIEW_LIST, problems: [problem(
-      "/spec/uiSchema",
-      uiSchema,
-      "an object",
-      "View.spec.uiSchema must be an object.",
-    )] };
+    return {
+      list: EMPTY_VIEW_LIST,
+      problems: [problem("/spec/uiSchema", uiSchema, "an object", "View.spec.uiSchema must be an object.")],
+    };
   }
-  const unknownRoot = Object.keys(uiSchema).find((key) => key !== "list" && key !== "nav");
+  const unknownRoot = Object.keys(uiSchema).find(key => key !== "list" && key !== "nav");
   if (unknownRoot) {
-    return { list: EMPTY_VIEW_LIST, problems: [problem(
-      `/spec/uiSchema/${unknownRoot}`,
-      uiSchema[unknownRoot],
-      "list or nav",
-      `View.spec.uiSchema.${unknownRoot} is not supported.`,
-    )] };
+    return {
+      list: EMPTY_VIEW_LIST,
+      problems: [
+        problem(
+          `/spec/uiSchema/${unknownRoot}`,
+          uiSchema[unknownRoot],
+          "list or nav",
+          `View.spec.uiSchema.${unknownRoot} is not supported.`,
+        ),
+      ],
+    };
   }
   const nav = uiSchema["nav"];
   if (nav !== undefined) {
-    if (!nav || typeof nav !== "object" || Array.isArray(nav)) return { list: EMPTY_VIEW_LIST, problems: [problem("/spec/uiSchema/nav", nav, "an object", "View.spec.uiSchema.nav must be an object.")] };
+    if (!nav || typeof nav !== "object" || Array.isArray(nav))
+      return {
+        list: EMPTY_VIEW_LIST,
+        problems: [problem("/spec/uiSchema/nav", nav, "an object", "View.spec.uiSchema.nav must be an object.")],
+      };
     const bad = navPlacementProblems(nav as Record<string, unknown>);
-    if (bad) return { list: EMPTY_VIEW_LIST, problems: [problem(`/spec/uiSchema/nav/${bad[0]}`, (nav as Record<string, unknown>)[bad[0]], bad[1], `View.spec.uiSchema.nav.${bad[0]} must be ${bad[1]}.`)] };
+    if (bad)
+      return {
+        list: EMPTY_VIEW_LIST,
+        problems: [
+          problem(
+            `/spec/uiSchema/nav/${bad[0]}`,
+            (nav as Record<string, unknown>)[bad[0]],
+            bad[1],
+            `View.spec.uiSchema.nav.${bad[0]} must be ${bad[1]}.`,
+          ),
+        ],
+      };
   }
   const list = uiSchema["list"];
   if (list === undefined) return { list: EMPTY_VIEW_LIST, problems: [] };
   if (!list || typeof list !== "object" || Array.isArray(list)) {
-    return { list: EMPTY_VIEW_LIST, problems: [problem(
-      "/spec/uiSchema/list",
-      list,
-      "an object",
-      "View.spec.uiSchema.list must be an object.",
-    )] };
+    return {
+      list: EMPTY_VIEW_LIST,
+      problems: [problem("/spec/uiSchema/list", list, "an object", "View.spec.uiSchema.list must be an object.")],
+    };
   }
   const config = list as Record<string, unknown>;
   const allowed = new Set(["columns", "searchFields", "filterFields"]);
-  const unknown = Object.keys(config).find((key) => !allowed.has(key));
+  const unknown = Object.keys(config).find(key => !allowed.has(key));
   if (unknown) {
-    return { list: EMPTY_VIEW_LIST, problems: [problem(
-      `/spec/uiSchema/list/${unknown}`,
-      config[unknown],
-      "columns, searchFields, or filterFields",
-      `View.spec.uiSchema.list.${unknown} is not supported.`,
-    )] };
+    return {
+      list: EMPTY_VIEW_LIST,
+      problems: [
+        problem(
+          `/spec/uiSchema/list/${unknown}`,
+          config[unknown],
+          "columns, searchFields, or filterFields",
+          `View.spec.uiSchema.list.${unknown} is not supported.`,
+        ),
+      ],
+    };
   }
   const normalized: Record<keyof ViewListPresentation, readonly string[]> = {
     columns: [],
@@ -84,23 +115,34 @@ export function checkViewAdminUi(view: ViewManifest): {
   for (const key of Object.keys(normalized) as Array<keyof ViewListPresentation>) {
     const raw = config[key];
     if (raw === undefined) continue;
-    if (!Array.isArray(raw) || !raw.every((field) =>
-      typeof field === "string" && field.length > 0 && !/["\\\0]/.test(field)
-    )) {
-      return { list: EMPTY_VIEW_LIST, problems: [problem(
-        `/spec/uiSchema/list/${key}`,
-        raw,
-        "an array of non-empty View output field names",
-        `View.spec.uiSchema.list.${key} must be an array of field-name strings.`,
-      )] };
+    if (
+      !Array.isArray(raw) ||
+      !raw.every(field => typeof field === "string" && field.length > 0 && !/["\\\0]/.test(field))
+    ) {
+      return {
+        list: EMPTY_VIEW_LIST,
+        problems: [
+          problem(
+            `/spec/uiSchema/list/${key}`,
+            raw,
+            "an array of non-empty View output field names",
+            `View.spec.uiSchema.list.${key} must be an array of field-name strings.`,
+          ),
+        ],
+      };
     }
     if (new Set(raw).size !== raw.length) {
-      return { list: EMPTY_VIEW_LIST, problems: [problem(
-        `/spec/uiSchema/list/${key}`,
-        raw,
-        "field names without duplicates",
-        `View.spec.uiSchema.list.${key} must not repeat a field.`,
-      )] };
+      return {
+        list: EMPTY_VIEW_LIST,
+        problems: [
+          problem(
+            `/spec/uiSchema/list/${key}`,
+            raw,
+            "field names without duplicates",
+            `View.spec.uiSchema.list.${key} must not repeat a field.`,
+          ),
+        ],
+      };
     }
     normalized[key] = raw;
   }

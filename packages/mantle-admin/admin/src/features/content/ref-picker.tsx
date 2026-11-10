@@ -23,7 +23,12 @@ export function refOptionsQueryOptions(collection: string, term: string, scope?:
   return {
     queryKey: ["entries", "ref-options", collection, term, ...(scope ? [scope.field, scope.value] : [])] as const,
     queryFn: ({ signal }: { signal?: AbortSignal }) => {
-      const qs = new URLSearchParams({ collection, limit: String(REF_PICKER_LIMIT), sort: "updatedAt", direction: "desc" });
+      const qs = new URLSearchParams({
+        collection,
+        limit: String(REF_PICKER_LIMIT),
+        sort: "updatedAt",
+        direction: "desc",
+      });
       if (term) qs.set("search", term);
       if (scope) {
         qs.set("scope_field", scope.field);
@@ -65,7 +70,17 @@ function storedValue(row: EntryRow & { data?: Record<string, unknown> }, field: 
  * entries route as the list page and stores the referenced value (the id unless the ref names another key).
  * Convenience only: the server validates the value, and anything the caller cannot list keeps the text input.
  */
-export function RefPicker({ target, scope, value, onChange, onClear, label, language, canonical = null, fallback }: {
+export function RefPicker({
+  target,
+  scope,
+  value,
+  onChange,
+  onClear,
+  label,
+  language,
+  canonical = null,
+  fallback,
+}: {
   target: { schema: string; field: string };
   /** Lists only one parent's children (an operation bound to that parent); the stored value is still looked up unscoped. */
   scope?: { field: string; value: string } | undefined;
@@ -83,14 +98,36 @@ export function RefPicker({ target, scope, value, onChange, onClear, label, lang
     queryKey: ["collections"],
     queryFn: async () => (await api.get<{ collections: Collection[] }>("/collections")).collections,
   });
-  const collection = collections.data?.find((item) => item.name === target.schema);
+  const collection = collections.data?.find(item => item.name === target.schema);
   // the first page doubles as the probe: a refusal keeps the text input before anyone opens the list
   const probe = useQuery({ ...refOptionsQueryOptions(target.schema, "", scope), enabled: Boolean(collection) });
   if (!collection || refPickerUnavailable(probe.error)) return <>{fallback()}</>;
-  return <RefCombobox collection={collection} field={target.field} scope={scope} value={value} onChange={onChange} onClear={onClear} label={label} language={language} canonical={canonical} />;
+  return (
+    <RefCombobox
+      collection={collection}
+      field={target.field}
+      scope={scope}
+      value={value}
+      onChange={onChange}
+      onClear={onClear}
+      label={label}
+      language={language}
+      canonical={canonical}
+    />
+  );
 }
 
-function RefCombobox({ collection, field, scope, value, onChange, onClear, label, language, canonical }: {
+function RefCombobox({
+  collection,
+  field,
+  scope,
+  value,
+  onChange,
+  onClear,
+  label,
+  language,
+  canonical,
+}: {
   collection: Collection;
   field: string;
   scope: { field: string; value: string } | undefined;
@@ -110,7 +147,10 @@ function RefCombobox({ collection, field, scope, value, onChange, onClear, label
   const [pickError, setPickError] = React.useState(false);
   const search = React.useDeferredValue(term.trim());
   const name = resolveLocalizedText(collection.title, language, canonical) ?? collection.name;
-  const options = useQuery({ ...refOptionsQueryOptions(collection.name, search, scope), enabled: open || search === "" });
+  const options = useQuery({
+    ...refOptionsQueryOptions(collection.name, search, scope),
+    enabled: open || search === "",
+  });
   const stored = typeof value === "string" || typeof value === "number" ? String(value) : "";
   const lookup = useQuery({ ...refLookupQueryOptions(collection.name, field, stored), enabled: stored !== "" });
   const current = lookup.data?.items[0];
@@ -130,20 +170,35 @@ function RefCombobox({ collection, field, scope, value, onChange, onClear, label
       } finally {
         setPicking(false);
       }
-      if (next === undefined) { setPickError(true); return; }
+      if (next === undefined) {
+        setPickError(true);
+        return;
+      }
     }
     setPickError(false);
     onChange(next);
     setTerm("");
     setOpen(false);
   };
-  const clear = () => { onClear?.(); setTerm(""); setOpen(false); };
+  const clear = () => {
+    onClear?.();
+    setTerm("");
+    setOpen(false);
+  };
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown") { event.preventDefault(); setActive((index) => Math.min(index + 1, Math.max(items.length - 1, 0))); }
-    else if (event.key === "ArrowUp") { event.preventDefault(); setActive((index) => Math.max(index - 1, 0)); }
-    else if (event.key === "Home") { event.preventDefault(); setActive(0); }
-    else if (event.key === "End") { event.preventDefault(); setActive(Math.max(items.length - 1, 0)); }
-    else if (event.key === "Enter") {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActive(index => Math.min(index + 1, Math.max(items.length - 1, 0)));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive(index => Math.max(index - 1, 0));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setActive(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setActive(Math.max(items.length - 1, 0));
+    } else if (event.key === "Enter") {
       event.preventDefault();
       const row = items[active];
       if (row && !picking) void choose(row);
@@ -156,19 +211,36 @@ function RefCombobox({ collection, field, scope, value, onChange, onClear, label
     <Popover open={open} onOpenChange={setOpen}>
       <div className="flex items-center gap-2">
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" aria-haspopup="listbox" aria-label={label}
-            className="h-9 min-w-0 flex-1 justify-between font-normal" data-ref-picker={collection.name}>
+          <Button
+            type="button"
+            variant="outline"
+            aria-haspopup="listbox"
+            aria-label={label}
+            className="h-9 min-w-0 flex-1 justify-between font-normal"
+            data-ref-picker={collection.name}
+          >
             <span className={cn("truncate", !stored && "text-muted-foreground")}>
               {stored ? (currentTitle ?? stored) : t(language, "refPicker.choose", { name })}
             </span>
             <span className="flex shrink-0 items-center gap-2">
-              {stored && currentTitle ? <span className="font-mono text-xs text-muted-foreground" title={stored}>{idTail(stored)}</span> : null}
+              {stored && currentTitle ? (
+                <span className="font-mono text-xs text-muted-foreground" title={stored}>
+                  {idTail(stored)}
+                </span>
+              ) : null}
               <ChevronsUpDown className="size-4 text-muted-foreground" aria-hidden />
             </span>
           </Button>
         </PopoverTrigger>
         {stored && onClear ? (
-          <Button type="button" variant="ghost" size="icon-sm" onClick={clear} aria-label={t(language, "refPicker.clear", { name: label })} title={t(language, "refPicker.clear", { name: label })}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={clear}
+            aria-label={t(language, "refPicker.clear", { name: label })}
+            title={t(language, "refPicker.clear", { name: label })}
+          >
             <X aria-hidden />
           </Button>
         ) : null}
@@ -184,21 +256,48 @@ function RefCombobox({ collection, field, scope, value, onChange, onClear, label
           aria-label={t(language, "refPicker.search", { name })}
           placeholder={t(language, "refPicker.search", { name })}
           value={term}
-          onChange={(event) => setTerm(event.target.value)}
+          onChange={event => setTerm(event.target.value)}
           onKeyDown={onKeyDown}
         />
-        <RefOptionList id={listId} baseId={baseId} items={items} active={active} selected={stored} field={field}
-          collection={collection} language={language} label={label}
+        <RefOptionList
+          id={listId}
+          baseId={baseId}
+          items={items}
+          active={active}
+          selected={stored}
+          field={field}
+          collection={collection}
+          language={language}
+          label={label}
           status={options.isError ? "error" : options.data ? "ready" : "loading"}
-          onHover={setActive} onChoose={(row) => void choose(row)} />
-        {pickError ? <p role="alert" className="px-1 text-xs text-destructive">{t(language, "refPicker.error")}</p> : null}
+          onHover={setActive}
+          onChoose={row => void choose(row)}
+        />
+        {pickError ? (
+          <p role="alert" className="px-1 text-xs text-destructive">
+            {t(language, "refPicker.error")}
+          </p>
+        ) : null}
       </PopoverContent>
     </Popover>
   );
 }
 
 /** The listbox of candidate records; exported so its markup can be checked without opening a popover. */
-export function RefOptionList({ id, baseId, items, active, selected, field, collection, language, label, status, onHover, onChoose }: {
+export function RefOptionList({
+  id,
+  baseId,
+  items,
+  active,
+  selected,
+  field,
+  collection,
+  language,
+  label,
+  status,
+  onHover,
+  onChoose,
+}: {
   id: string;
   baseId: string;
   items: readonly EntryRow[];
@@ -213,8 +312,13 @@ export function RefOptionList({ id, baseId, items, active, selected, field, coll
   onChoose: (row: EntryRow) => void;
 }): React.ReactElement {
   if (status !== "ready" || items.length === 0) {
-    const message = status === "loading" ? "refPicker.loading" : status === "error" ? "refPicker.error" : "refPicker.empty";
-    return <p id={id} role="status" className="px-3 py-2 text-sm text-muted-foreground">{t(language, message)}</p>;
+    const message =
+      status === "loading" ? "refPicker.loading" : status === "error" ? "refPicker.error" : "refPicker.empty";
+    return (
+      <p id={id} role="status" className="px-3 py-2 text-sm text-muted-foreground">
+        {t(language, message)}
+      </p>
+    );
   }
   return (
     <ul id={id} role="listbox" aria-label={label} className="max-h-56 overflow-y-auto text-sm">
@@ -231,7 +335,7 @@ export function RefOptionList({ id, baseId, items, active, selected, field, coll
             className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-2 data-active:bg-accent"
             onMouseEnter={() => onHover(index)}
             // keep focus in the search box; the click picks
-            onMouseDown={(event) => event.preventDefault()}
+            onMouseDown={event => event.preventDefault()}
             onClick={() => onChoose(row)}
           >
             <span className="flex min-w-0 items-center gap-2">

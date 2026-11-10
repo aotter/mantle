@@ -20,32 +20,48 @@ const queues = new WeakMap<Handle, Promise<void>>();
 /** Only queued transactions make otherwise synchronous statements wait; a rejection cannot poison the queue. */
 function enqueue<T>(db: Handle, fn: () => T | PromiseLike<T>): Promise<T> {
   const result = (queues.get(db) ?? Promise.resolve()).then(fn);
-  const tail = result.then(() => {}, () => {});
+  const tail = result.then(
+    () => {},
+    () => {},
+  );
   queues.set(db, tail);
-  void tail.then(() => { if (queues.get(db) === tail) queues.delete(db); });
+  void tail.then(() => {
+    if (queues.get(db) === tail) queues.delete(db);
+  });
   return result;
 }
-const available = <T>(db: Handle, fn: () => T): T | Promise<T> => { guard(db); return queues.has(db) ? enqueue(db, fn) : fn(); };
-export const read = (db: Handle, sql: string, binds: unknown[]): any[] | Promise<any[]> => available(db, () => db.query(sql).all(...binds));
+const available = <T>(db: Handle, fn: () => T): T | Promise<T> => {
+  guard(db);
+  return queues.has(db) ? enqueue(db, fn) : fn();
+};
+export const read = (db: Handle, sql: string, binds: unknown[]): any[] | Promise<any[]> =>
+  available(db, () => db.query(sql).all(...binds));
 /** One statement is atomic on its own; several run in a transaction, and a row statement that does not change exactly one row rolls it back. A unique-index clash is CONFLICT. */
 export async function procedure(db: Handle, steps: readonly Bound[], path: string): Promise<Row[][]> {
-  const execute = (handle: Handle) => steps.map(s => {
-    const statement = handle.query(s.sql);
-    // a statement with columns (SELECT, RETURNING) gives rows, and their number is its affected count
-    let rows: Row[] = [], changes: number;
-    try {
-      rows = statement.columnNames.length ? statement.all(...s.binds) : [];
-      if (statement.columnNames.length) changes = rows.length;
-      else {
-        statement.run(...s.binds);
-        // Bun's run().changes includes FTS maintenance writes; SQLite changes() counts the authored statement only.
-        changes = s.row ? Number(handle.query("SELECT changes() AS n").all()[0]!.n) : 0;
+  const execute = (handle: Handle) =>
+    steps.map(s => {
+      const statement = handle.query(s.sql);
+      // a statement with columns (SELECT, RETURNING) gives rows, and their number is its affected count
+      let rows: Row[] = [],
+        changes: number;
+      try {
+        rows = statement.columnNames.length ? statement.all(...s.binds) : [];
+        if (statement.columnNames.length) changes = rows.length;
+        else {
+          statement.run(...s.binds);
+          // Bun's run().changes includes FTS maintenance writes; SQLite changes() counts the authored statement only.
+          changes = s.row ? Number(handle.query("SELECT changes() AS n").all()[0]!.n) : 0;
+        }
+      } catch (error) {
+        throw unique(error) ? conflict(path, true, error) : (checkConflict(path, error) ?? error);
       }
-    } catch (error) { throw unique(error) ? conflict(path, true, error) : checkConflict(path, error) ?? error; }
-    if (s.row && (changes < 1 || changes > 1 && s.row !== "some")) throw s.row === true && s.lock ? lockConflict(path, s.lock, handle.query(s.lock.sql).all(...s.lock.binds)) : conflict(path, false);
-    return rows;
-  });
-  return available(db, () => transactions.has(db) || steps.length === 1 ? execute(db) : db.transaction(execute)(db));
+      if (s.row && (changes < 1 || (changes > 1 && s.row !== "some")))
+        throw s.row === true && s.lock
+          ? lockConflict(path, s.lock, handle.query(s.lock.sql).all(...s.lock.binds))
+          : conflict(path, false);
+      return rows;
+    });
+  return available(db, () => (transactions.has(db) || steps.length === 1 ? execute(db) : db.transaction(execute)(db)));
 }
 
 export async function transaction<T>(db: Handle, fn: (tx: Handle) => Promise<T>): Promise<T> {
@@ -54,19 +70,33 @@ export async function transaction<T>(db: Handle, fn: (tx: Handle) => Promise<T>)
   return enqueue(db, async () => {
     db.exec("BEGIN IMMEDIATE");
     let active = true;
-    const tx: Handle = { query: sql => {
-      if (!active) throw new Error("Transaction has ended.");
-      return db.query(sql);
-    }, exec: db.exec.bind(db), transaction: db.transaction.bind(db) };
+    const tx: Handle = {
+      query: sql => {
+        if (!active) throw new Error("Transaction has ended.");
+        return db.query(sql);
+      },
+      exec: db.exec.bind(db),
+      transaction: db.transaction.bind(db),
+    };
     transactions.add(tx);
     const state = { outer: db as object | undefined, handle: tx as object | undefined };
-    try { const result = await context.run(state, () => fn(tx)); db.exec("COMMIT"); return result; }
-    catch (error) {
-      try { db.exec("ROLLBACK"); } catch (rollback) {
-        throw new ContractError("OUTCOME_UNKNOWN", "Rollback failed; reconcile before retrying.", "store/transaction", { cause: new AggregateError([error, rollback]) });
+    try {
+      const result = await context.run(state, () => fn(tx));
+      db.exec("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        db.exec("ROLLBACK");
+      } catch (rollback) {
+        throw new ContractError("OUTCOME_UNKNOWN", "Rollback failed; reconcile before retrying.", "store/transaction", {
+          cause: new AggregateError([error, rollback]),
+        });
       }
       throw error;
+    } finally {
+      active = false;
+      state.outer = undefined;
+      state.handle = undefined;
     }
-    finally { active = false; state.outer = undefined; state.handle = undefined; }
   });
 }

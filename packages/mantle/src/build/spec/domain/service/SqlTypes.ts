@@ -10,8 +10,13 @@ export const MAX_NUMERIC_P = 15;
 export function parseNumeric(type: string): { p: number; s: number } | undefined {
   const m = /^numeric\((\d+),\s*(\d+)\)$/.exec(type);
   if (!m) return undefined;
-  const p = +m[1]!, s = +m[2]!;
-  if (p < 1 || p > MAX_NUMERIC_P || s > p) throw new SqlRefusal('SQL_TYPE', `numeric(${p}, ${s}) is refused: precision is 1 to ${MAX_NUMERIC_P}, scale at most precision`);
+  const p = +m[1]!,
+    s = +m[2]!;
+  if (p < 1 || p > MAX_NUMERIC_P || s > p)
+    throw new SqlRefusal(
+      "SQL_TYPE",
+      `numeric(${p}, ${s}) is refused: precision is 1 to ${MAX_NUMERIC_P}, scale at most precision`,
+    );
   return { p, s };
 }
 
@@ -20,27 +25,39 @@ export function parseNumeric(type: string): { p: number; s: number } | undefined
  * microseconds) stays a safe integer, which is how an instant is bound.
  */
 export const MAX_TTL_SECONDS = Math.floor(Number.MAX_SAFE_INTEGER / 2_000_000);
-export const isTtlSeconds = (x: unknown): x is number => Number.isSafeInteger(x) && (x as number) >= 0 && (x as number) <= MAX_TTL_SECONDS;
+export const isTtlSeconds = (x: unknown): x is number =>
+  Number.isSafeInteger(x) && (x as number) >= 0 && (x as number) <= MAX_TTL_SECONDS;
 
 /** PostgreSQL `interval` literal -> microseconds. Only second, minute and hour: day and longer are calendar units. */
 const UNIT_US: Record<string, number> = Object.fromEntries(
-  (['second seconds sec secs s', 'minute minutes min mins m', 'hour hours hr hrs h'] as const).flatMap((names, i) => names.split(' ').map((u) => [u, [1e6, 6e7, 3.6e9][i]!])),
+  (["second seconds sec secs s", "minute minutes min mins m", "hour hours hr hrs h"] as const).flatMap((names, i) =>
+    names.split(" ").map(u => [u, [1e6, 6e7, 3.6e9][i]!]),
+  ),
 );
-const TYPMOD_UNIT: Record<number, string> = { 1024: 'hour', 2048: 'minute', 4096: 'second' };
+const TYPMOD_UNIT: Record<number, string> = { 1024: "hour", 2048: "minute", 4096: "second" };
 export function intervalMicros(text: string, typmod?: number): number {
   let m = /^\s*(-?\d+(?:\.\d+)?)\s*([a-z]+)\s*$/i.exec(text);
-  if (!m && typmod !== undefined && TYPMOD_UNIT[typmod] && /^\s*-?\d+(\.\d+)?\s*$/.test(text)) m = [text, text.trim(), TYPMOD_UNIT[typmod]] as any;
-  if (!m) throw new SqlRefusal('SQL_TYPE', `interval '${text}' is not supported: write a number and second, minute or hour`);
+  if (!m && typmod !== undefined && TYPMOD_UNIT[typmod] && /^\s*-?\d+(\.\d+)?\s*$/.test(text))
+    m = [text, text.trim(), TYPMOD_UNIT[typmod]] as any;
+  if (!m)
+    throw new SqlRefusal("SQL_TYPE", `interval '${text}' is not supported: write a number and second, minute or hour`);
   const unit = UNIT_US[m[2]!.toLowerCase()];
-  if (!unit && /^(days?|weeks?|months?|mons?|years?|y)$/i.test(m[2]!)) throw new SqlRefusal('SQL_TYPE', `interval unit '${m[2]}' is a calendar unit (a day is 23 or 25 hours across daylight saving): bind the boundary as an input instead`);
-  if (!unit) throw new SqlRefusal('SQL_TYPE', `interval '${text}' is not supported: write a number and second, minute or hour`);
+  if (!unit && /^(days?|weeks?|months?|mons?|years?|y)$/i.test(m[2]!))
+    throw new SqlRefusal(
+      "SQL_TYPE",
+      `interval unit '${m[2]}' is a calendar unit (a day is 23 or 25 hours across daylight saving): bind the boundary as an input instead`,
+    );
+  if (!unit)
+    throw new SqlRefusal("SQL_TYPE", `interval '${text}' is not supported: write a number and second, minute or hour`);
   // exact, in integers: a value finer than a microsecond is refused (each engine would round it its own way)
-  const [, sign, whole, frac = ''] = /^(-?)(\d+)(?:\.(\d+))?$/.exec(m[1]!)!;
-  const scale = 10n ** BigInt(frac.length), fraction = BigInt(frac || '0') * BigInt(unit);
-  if (fraction % scale !== 0n) throw new SqlRefusal('SQL_TYPE', `interval '${text}' is finer than a microsecond`);
+  const [, sign, whole, frac = ""] = /^(-?)(\d+)(?:\.(\d+))?$/.exec(m[1]!)!;
+  const scale = 10n ** BigInt(frac.length),
+    fraction = BigInt(frac || "0") * BigInt(unit);
+  if (fraction % scale !== 0n) throw new SqlRefusal("SQL_TYPE", `interval '${text}' is finer than a microsecond`);
   const micros = (sign ? -1 : 1) * Number(BigInt(whole!) * BigInt(unit) + fraction / scale);
   // D1 stores microseconds as a double: past 2^53 two different intervals would compare equal
-  if (!Number.isSafeInteger(micros)) throw new SqlRefusal('SQL_TYPE', `interval '${text}' is longer than ${Number.MAX_SAFE_INTEGER} microseconds`);
+  if (!Number.isSafeInteger(micros))
+    throw new SqlRefusal("SQL_TYPE", `interval '${text}' is longer than ${Number.MAX_SAFE_INTEGER} microseconds`);
   return micros;
 }
 
@@ -50,9 +67,9 @@ export const geoTreeName = (schema: string, field: string) => `_mantle_geo_${sch
 
 /** JSON Schema property to Mantle type, as the CLI types a column or an input. `numeric(p,s)` has no manifest spelling yet. */
 export function fieldType(p: JsonSchema): string {
-  const types = [...new Set([p.type].flat().filter((x) => x !== "null"))];
+  const types = [...new Set([p.type].flat().filter(x => x !== "null"))];
   // integer or number is one number; any other union keeps each value's own JSON type
-  if (types.length > 1) return types.every((x) => x === "integer" || x === "number") ? "real" : "json";
+  if (types.length > 1) return types.every(x => x === "integer" || x === "number") ? "real" : "json";
   const t = types[0];
   if (p.format === "geo") return "geo";
   if (!t && enumOptions(p)) return "text"; // a string enum or a oneOf of string consts
@@ -62,5 +79,7 @@ export function fieldType(p: JsonSchema): string {
 
 /** A JSON Schema's top-level properties as columns or inputs: SQL folds unquoted identifiers, so keys are lower case. */
 export function fieldTypes(schema: JsonSchema | undefined): Record<string, string> {
-  return Object.fromEntries(Object.entries(schema?.properties ?? {}).map(([name, p]) => [name.toLowerCase(), fieldType(p)]));
+  return Object.fromEntries(
+    Object.entries(schema?.properties ?? {}).map(([name, p]) => [name.toLowerCase(), fieldType(p)]),
+  );
 }

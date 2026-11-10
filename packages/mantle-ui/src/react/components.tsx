@@ -24,19 +24,21 @@ export interface FieldLabelProps {
   readonly fieldValue?: (field: string, value: unknown) => ReactNode;
 }
 
-export function EntityPreview(props: FieldLabelProps & {
-  readonly entry: EntrySnapshot;
-  /** Fields to show, in order. Defaults to every data field. */
-  readonly fields?: readonly string[];
-  readonly labels?: Pick<InteractionLabels, "reviewedEntry" | "version" | "empty">;
-}): ReactNode {
+export function EntityPreview(
+  props: FieldLabelProps & {
+    readonly entry: EntrySnapshot;
+    /** Fields to show, in order. Defaults to every data field. */
+    readonly fields?: readonly string[];
+    readonly labels?: Pick<InteractionLabels, "reviewedEntry" | "version" | "empty">;
+  },
+): ReactNode {
   const labels = props.labels ?? defaultInteractionLabels;
   const label = props.fieldLabel ?? ((field: string) => field);
-  const fields = props.fields ?? Object.keys(props.entry.data).filter((field) => field !== "version");
+  const fields = props.fields ?? Object.keys(props.entry.data).filter(field => field !== "version");
   return (
     <section data-slot="entity-preview" aria-label={labels.reviewedEntry} className="rounded-md border p-3 text-sm">
       <dl className="grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-3 gap-y-1">
-        {fields.map((field) => (
+        {fields.map(field => (
           <div key={field} className="contents">
             <dt className="text-muted-foreground">{label(field)}</dt>
             <dd className="min-w-0 break-words">{show(props, field, props.entry.data[field], labels.empty)}</dd>
@@ -49,11 +51,13 @@ export function EntityPreview(props: FieldLabelProps & {
   );
 }
 
-export function ChangeDiff(props: FieldLabelProps & {
-  readonly changes: readonly FieldChange[];
-  readonly caption?: string;
-  readonly labels?: Pick<InteractionLabels, "changes" | "field" | "before" | "after" | "empty">;
-}): ReactNode {
+export function ChangeDiff(
+  props: FieldLabelProps & {
+    readonly changes: readonly FieldChange[];
+    readonly caption?: string;
+    readonly labels?: Pick<InteractionLabels, "changes" | "field" | "before" | "after" | "empty">;
+  },
+): ReactNode {
   const labels = props.labels ?? defaultInteractionLabels;
   const label = props.fieldLabel ?? ((field: string) => field);
   if (props.changes.length === 0) return null;
@@ -62,16 +66,26 @@ export function ChangeDiff(props: FieldLabelProps & {
       <caption className="text-muted-foreground mb-1 text-left">{props.caption ?? labels.changes}</caption>
       <thead>
         <tr className="text-muted-foreground text-left">
-          <th scope="col" className="font-medium">{labels.field}</th>
-          <th scope="col" className="font-medium">{labels.before}</th>
-          <th scope="col" className="font-medium">{labels.after}</th>
+          <th scope="col" className="font-medium">
+            {labels.field}
+          </th>
+          <th scope="col" className="font-medium">
+            {labels.before}
+          </th>
+          <th scope="col" className="font-medium">
+            {labels.after}
+          </th>
         </tr>
       </thead>
       <tbody>
-        {props.changes.map((change) => (
+        {props.changes.map(change => (
           <tr key={change.field} className="border-t align-top">
-            <th scope="row" className="py-1 pr-2 text-left font-normal break-words">{label(change.field)}</th>
-            <td className="py-1 pr-2 break-all line-through decoration-muted-foreground/60">{show(props, change.field, change.before, labels.empty)}</td>
+            <th scope="row" className="py-1 pr-2 text-left font-normal break-words">
+              {label(change.field)}
+            </th>
+            <td className="py-1 pr-2 break-all line-through decoration-muted-foreground/60">
+              {show(props, change.field, change.before, labels.empty)}
+            </td>
             <td className="py-1 break-all">{show(props, change.field, change.after, labels.empty)}</td>
           </tr>
         ))}
@@ -81,12 +95,14 @@ export function ChangeDiff(props: FieldLabelProps & {
 }
 
 /** What the person has to know or do next, per phase, with its one action. */
-export function OperationStatus(props: FieldLabelProps & {
-  readonly renderDiagnostic?: (diagnostic: InteractionDiagnostic) => ReactNode;
-  readonly controller: InteractionController;
-  readonly state: InteractionState;
-  readonly labels?: InteractionLabels;
-}): ReactNode {
+export function OperationStatus(
+  props: FieldLabelProps & {
+    readonly renderDiagnostic?: (diagnostic: InteractionDiagnostic) => ReactNode;
+    readonly controller: InteractionController;
+    readonly state: InteractionState;
+    readonly labels?: InteractionLabels;
+  },
+): ReactNode {
   const { controller, state } = props;
   const labels = props.labels ?? defaultInteractionLabels;
   const label = props.fieldLabel ?? ((field: string) => field);
@@ -103,35 +119,70 @@ export function OperationStatus(props: FieldLabelProps & {
     </div>
   );
   const button = (text: string, onClick: () => void) => (
-    <button type="button" onClick={onClick} disabled={state.reading} className="rounded-md border px-3 py-1 text-sm font-medium">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={state.reading}
+      className="rounded-md border px-3 py-1 text-sm font-medium"
+    >
       {text}
     </button>
   );
-  const diagnostics = state.diagnostics.length > 0
-    ? <ul className="mt-1 list-disc pl-5">{state.diagnostics.map((diagnostic, index) => <li key={index}>{props.renderDiagnostic ? props.renderDiagnostic(diagnostic) : diagnostic.message}</li>)}</ul>
-    : null;
+  const diagnostics =
+    state.diagnostics.length > 0 ? (
+      <ul className="mt-1 list-disc pl-5">
+        {state.diagnostics.map((diagnostic, index) => (
+          <li key={index}>{props.renderDiagnostic ? props.renderDiagnostic(diagnostic) : diagnostic.message}</li>
+        ))}
+      </ul>
+    ) : null;
   switch (state.phase) {
     case "loading":
       return notice("info", labels.loading);
     case "unreadable":
-      return notice("error", labels.unreadable, button(labels.reread, () => void controller.reread()));
+      return notice(
+        "error",
+        labels.unreadable,
+        button(labels.reread, () => void controller.reread()),
+      );
     case "changedSinceList":
-      return notice("warning", labels.changedSinceList, button(labels.reviewLatest, () => controller.review()), (
+      return notice(
+        "warning",
+        labels.changedSinceList,
+        button(labels.reviewLatest, () => controller.review()),
         <>
-          {state.contested.length > 0
-            ? <p className="mt-1 font-medium">{labels.contested} {state.contested.map(label).join(", ")}</p>
-            : null}
-          <ChangeDiff changes={controller.latestChanges()} caption={labels.latestChanges} labels={labels} fieldLabel={props.fieldLabel} fieldValue={props.fieldValue} />
-        </>
-      ));
+          {state.contested.length > 0 ? (
+            <p className="mt-1 font-medium">
+              {labels.contested} {state.contested.map(label).join(", ")}
+            </p>
+          ) : null}
+          <ChangeDiff
+            changes={controller.latestChanges()}
+            caption={labels.latestChanges}
+            labels={labels}
+            fieldLabel={props.fieldLabel}
+            fieldValue={props.fieldValue}
+          />
+        </>,
+      );
     case "conflict":
       return state.canRead
-        ? notice("error", labels.conflict, button(labels.reread, () => void controller.reread()), diagnostics)
+        ? notice(
+            "error",
+            labels.conflict,
+            button(labels.reread, () => void controller.reread()),
+            diagnostics,
+          )
         : notice("error", labels.conflictReopen, undefined, diagnostics);
     case "uncertain":
-      return notice("error", labels.uncertain, !state.canRead
-        ? button(labels.acknowledgeUncertain, () => controller.acknowledgeUncertain())
-        : button(labels.reread, () => void controller.reread()), diagnostics);
+      return notice(
+        "error",
+        labels.uncertain,
+        !state.canRead
+          ? button(labels.acknowledgeUncertain, () => controller.acknowledgeUncertain())
+          : button(labels.reread, () => void controller.reread()),
+        diagnostics,
+      );
     case "failed":
       return notice("error", labels.failed, undefined, diagnostics);
     case "cancelled":
@@ -162,21 +213,23 @@ export function OperationOutcome(props: {
  * host renders the editable inputs as `children` and wires them to
  * `controller.edit`; everything else comes from the controller.
  */
-export function OperationPanel(props: FieldLabelProps & {
-  readonly renderDiagnostic?: (diagnostic: InteractionDiagnostic) => ReactNode;
-  readonly controller: InteractionController;
-  readonly title: ReactNode;
-  readonly description?: ReactNode;
-  readonly children?: ReactNode;
-  readonly labels?: InteractionLabels;
-  /** Fields of the reviewed entry to preview; omit to hide the preview. */
-  readonly previewFields?: readonly string[];
-  readonly renderResult?: (result: unknown) => ReactNode;
-  /** Called when the person closes the panel after it finished or was cancelled. */
-  readonly onClose?: () => void;
-  /** Called after Cancel; a dialog closes here. Defaults to showing "Cancelled". */
-  readonly onCancel?: () => void;
-}): ReactNode {
+export function OperationPanel(
+  props: FieldLabelProps & {
+    readonly renderDiagnostic?: (diagnostic: InteractionDiagnostic) => ReactNode;
+    readonly controller: InteractionController;
+    readonly title: ReactNode;
+    readonly description?: ReactNode;
+    readonly children?: ReactNode;
+    readonly labels?: InteractionLabels;
+    /** Fields of the reviewed entry to preview; omit to hide the preview. */
+    readonly previewFields?: readonly string[];
+    readonly renderResult?: (result: unknown) => ReactNode;
+    /** Called when the person closes the panel after it finished or was cancelled. */
+    readonly onClose?: () => void;
+    /** Called after Cancel; a dialog closes here. Defaults to showing "Cancelled". */
+    readonly onCancel?: () => void;
+  },
+): ReactNode {
   const { controller } = props;
   const state = useInteraction(controller);
   const labels = props.labels ?? defaultInteractionLabels;
@@ -193,11 +246,15 @@ export function OperationPanel(props: FieldLabelProps & {
       // Submit from script, never through the browser's form submission:
       // MCP hosts commonly sandbox Apps with `allow-scripts` but without
       // `allow-forms`, where a form submission is blocked outright.
-      onSubmit={(event) => event.preventDefault()}
-      onKeyDown={(event) => {
+      onSubmit={event => event.preventDefault()}
+      onKeyDown={event => {
         const target = event.target as HTMLElement;
         if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-        if (target.tagName !== "INPUT" || ["checkbox", "radio", "button", "submit"].includes((target as HTMLInputElement).type)) return;
+        if (
+          target.tagName !== "INPUT" ||
+          ["checkbox", "radio", "button", "submit"].includes((target as HTMLInputElement).type)
+        )
+          return;
         event.preventDefault();
         if (canSubmit) void controller.submit();
       }}
@@ -219,24 +276,49 @@ export function OperationPanel(props: FieldLabelProps & {
           </dl>
         </section>
       ) : null}
-      {props.previewFields && state.reviewed
-        ? <EntityPreview entry={state.reviewed} fields={props.previewFields} labels={labels} fieldLabel={props.fieldLabel} fieldValue={props.fieldValue} />
-        : null}
-      <fieldset disabled={busy || done} className="grid gap-3">{props.children}</fieldset>
-      <ChangeDiff changes={controller.changes()} labels={labels} fieldLabel={props.fieldLabel} fieldValue={props.fieldValue} />
+      {props.previewFields && state.reviewed ? (
+        <EntityPreview
+          entry={state.reviewed}
+          fields={props.previewFields}
+          labels={labels}
+          fieldLabel={props.fieldLabel}
+          fieldValue={props.fieldValue}
+        />
+      ) : null}
+      <fieldset disabled={busy || done} className="grid gap-3">
+        {props.children}
+      </fieldset>
+      <ChangeDiff
+        changes={controller.changes()}
+        labels={labels}
+        fieldLabel={props.fieldLabel}
+        fieldValue={props.fieldValue}
+      />
       {/* One live region that stays mounted, so screen readers announce each step. */}
       <div aria-live="polite" className="grid gap-2">
-        <OperationStatus controller={controller} state={state} labels={labels} renderDiagnostic={props.renderDiagnostic} fieldLabel={props.fieldLabel} fieldValue={props.fieldValue} />
+        <OperationStatus
+          controller={controller}
+          state={state}
+          labels={labels}
+          renderDiagnostic={props.renderDiagnostic}
+          fieldLabel={props.fieldLabel}
+          fieldValue={props.fieldValue}
+        />
         <OperationOutcome state={state} labels={labels} renderResult={props.renderResult} />
       </div>
       <footer className="flex justify-end gap-2">
         {done ? (
-          <button type="button" onClick={props.onClose} className="rounded-md border px-3 py-2 text-sm font-medium">{labels.close}</button>
+          <button type="button" onClick={props.onClose} className="rounded-md border px-3 py-2 text-sm font-medium">
+            {labels.close}
+          </button>
         ) : (
           <>
             <button
               type="button"
-              onClick={() => { controller.cancel(); props.onCancel?.(); }}
+              onClick={() => {
+                controller.cancel();
+                props.onCancel?.();
+              }}
               // A write in flight cannot be taken back; closing then would
               // hide whether it landed.
               disabled={state.phase === "submitting"}
@@ -260,7 +342,9 @@ export function OperationPanel(props: FieldLabelProps & {
 }
 
 function show(props: FieldLabelProps, field: string, value: unknown, empty: string): ReactNode {
-  return props.fieldValue && value !== undefined && value !== null && value !== "" ? props.fieldValue(field, value) : formatValue(value, empty);
+  return props.fieldValue && value !== undefined && value !== null && value !== ""
+    ? props.fieldValue(field, value)
+    : formatValue(value, empty);
 }
 
 function formatValue(value: unknown, empty: string): string {

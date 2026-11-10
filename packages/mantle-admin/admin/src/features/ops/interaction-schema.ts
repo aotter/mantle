@@ -16,7 +16,7 @@ export function operationFormSchema(schema: JsonSchema, hiddenFields: readonly s
   return {
     ...schema,
     properties,
-    required: (schema.required ?? []).filter((name) => !hidden.has(name)),
+    required: (schema.required ?? []).filter(name => !hidden.has(name)),
   };
 }
 
@@ -41,7 +41,8 @@ export function workbenchParentScope(
 
 /** The scope's value as the input takes it: a number for a numeric input, a string otherwise; any other type binds nothing. */
 function inputValue(property: JsonSchema, value: string): string | number | undefined {
-  const types = property.type === undefined ? ["string"] : Array.isArray(property.type) ? property.type : [property.type];
+  const types =
+    property.type === undefined ? ["string"] : Array.isArray(property.type) ? property.type : [property.type];
   if (types.includes("string")) return value;
   const number = Number(value);
   if (types.includes("integer") && Number.isSafeInteger(number) && value.trim() !== "") return number;
@@ -55,10 +56,15 @@ function inputValue(property: JsonSchema, value: string): string | number | unde
  * that name whose `x-mantle-ref` names another Schema or key, or whose type cannot hold the parent's value, is not that
  * parent and stays the person's; so does every other input.
  */
-export function parentScopeInteraction(input: JsonSchema, scope: ParentScope | undefined): {
-  interaction: AdminOperationInteraction;
-  row: Record<string, unknown>;
-} | undefined {
+export function parentScopeInteraction(
+  input: JsonSchema,
+  scope: ParentScope | undefined,
+):
+  | {
+      interaction: AdminOperationInteraction;
+      row: Record<string, unknown>;
+    }
+  | undefined {
   const property = scope ? input.properties?.[scope.field] : undefined;
   if (!scope || !property) return undefined;
   const ref = mantleRefOf(property);
@@ -88,10 +94,11 @@ export function parentRefScopes(
   if (!interaction || !row) return scopes;
   for (const [name, property] of Object.entries(input.properties ?? {})) {
     const ref = mantleRefOf(property);
-    const child = ref && collections?.find((collection) => collection.name === ref.schema);
+    const child = ref && collections?.find(collection => collection.name === ref.schema);
     if (!child?.parent || !isFoldedFieldChild(child, interaction.collection)) continue;
     const value = row[child.parent.parentField];
-    if ((typeof value === "string" && value !== "") || typeof value === "number") scopes[name] = { field: child.parent.childField, value: String(value) };
+    if ((typeof value === "string" && value !== "") || typeof value === "number")
+      scopes[name] = { field: child.parent.childField, value: String(value) };
   }
   return scopes;
 }

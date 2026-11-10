@@ -6,11 +6,19 @@ export function refuseDeclarations({ plan }: Pick<GenerateInput, "plan">, diagno
   const refuse = (path: string, message: string) => diagnostics.push({ code: "GENERATE_UNSUPPORTED", path, message });
   for (const [name, schema] of Object.entries(plan.schemas)) {
     const parent = schema.translates && plan.schemas[schema.translates.parent.toLowerCase()];
-    if (parent?.scope && schema.scope !== parent.scope) refuse(`schemas/${name}/translates`, `Scoped translation parent '${schema.translates!.parent}' requires the same child scope column '${parent.scope}'. Different or missing child scope columns cannot be correlated safely.`);
+    if (parent?.scope && schema.scope !== parent.scope)
+      refuse(
+        `schemas/${name}/translates`,
+        `Scoped translation parent '${schema.translates!.parent}' requires the same child scope column '${parent.scope}'. Different or missing child scope columns cannot be correlated safely.`,
+      );
   }
   for (const [name, view] of Object.entries(plan.views)) {
-    for (const [key, column] of Object.entries(viewOutputs(view, plan.schemas, new Map(), true).columns)) if (plan.schemas[column.schema]?.fields[column.field] === "geo") {
-      refuse(`views/${name}/columns/${key}`, "Native geo projection is unsupported. Select the latitude and longitude columns explicitly.");
-    }
+    for (const [key, column] of Object.entries(viewOutputs(view, plan.schemas, new Map(), true).columns))
+      if (plan.schemas[column.schema]?.fields[column.field] === "geo") {
+        refuse(
+          `views/${name}/columns/${key}`,
+          "Native geo projection is unsupported. Select the latitude and longitude columns explicitly.",
+        );
+      }
   }
 }

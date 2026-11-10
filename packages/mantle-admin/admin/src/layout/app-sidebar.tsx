@@ -25,7 +25,7 @@ export function AppSidebar({ brand, groups, footer }: SidebarProps): React.React
   // the workspace entry is the overview flow
   const pathname = location.pathname === "/admin/dev" ? "/admin/dev/overview/flow" : location.pathname;
   const search = location.search;
-  const links = groups.flatMap((g) => g.items.filter((item): item is NavLink => !isCollapsible(item)));
+  const links = groups.flatMap(g => g.items.filter((item): item is NavLink => !isCollapsible(item)));
   return (
     <Sidebar
       side={direction === "rtl" ? "right" : "left"}
@@ -37,7 +37,11 @@ export function AppSidebar({ brand, groups, footer }: SidebarProps): React.React
     >
       <SidebarHeader className="h-14 justify-center border-b border-sidebar-border px-2 py-0">
         <div className="flex min-w-0 items-center gap-1">
-          {brand.href === "/admin/dev" ? <AppTitle {...brand} /> : <Slot name="Brand" Default={AppTitle} props={brand} />}
+          {brand.href === "/admin/dev" ? (
+            <AppTitle {...brand} />
+          ) : (
+            <Slot name="Brand" Default={AppTitle} props={brand} />
+          )}
           <SidebarTrigger
             className="shrink-0 group-data-[collapsible=icon]:mx-auto"
             aria-label={t(language, "common.toggleSidebar")}
@@ -45,15 +49,11 @@ export function AppSidebar({ brand, groups, footer }: SidebarProps): React.React
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {groups.filter((group) => group.items.length > 0).map((group, idx) => (
-          <NavGroup
-            key={group.title ?? `g-${idx}`}
-            group={group}
-            links={links}
-            pathname={pathname}
-            search={search}
-          />
-        ))}
+        {groups
+          .filter(group => group.items.length > 0)
+          .map((group, idx) => (
+            <NavGroup key={group.title ?? `g-${idx}`} group={group} links={links} pathname={pathname} search={search} />
+          ))}
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border">
         {footer}

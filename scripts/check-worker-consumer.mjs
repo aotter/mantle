@@ -14,7 +14,11 @@ if (process.argv.length !== 2 && !(registry && process.argv.length === 4)) {
 const env = { ...process.env, WRANGLER_SEND_METRICS: "false" };
 const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, env, stdio: "inherit", timeout: 300_000 });
 if (!registry) {
-  run(process.execPath, [join(root, "scripts/check-packed-consumer.mjs"), "--project", reference, "--", "pnpm", "check"], root);
+  run(
+    process.execPath,
+    [join(root, "scripts/check-packed-consumer.mjs"), "--project", reference, "--", "pnpm", "check"],
+    root,
+  );
 } else {
   const temp = mkdtempSync(join(tmpdir(), "mantle-registry-consumer-"));
   try {
@@ -27,7 +31,7 @@ if (!registry) {
     }
     writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
     run("pnpm", ["install", "--no-frozen-lockfile"], temp);
-    for (const name of Object.keys(pkg.dependencies).filter((name) => name.startsWith("@aotter/mantle"))) {
+    for (const name of Object.keys(pkg.dependencies).filter(name => name.startsWith("@aotter/mantle"))) {
       const installed = JSON.parse(readFileSync(join(temp, "node_modules", name, "package.json"), "utf8"));
       if (installed.version !== version) throw new Error(`Unexpected ${name}@${installed.version}`);
     }

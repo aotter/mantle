@@ -12,14 +12,7 @@ import { Badge } from "@aotter/mantle-ui/kit";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@aotter/mantle-ui/kit";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@aotter/mantle-ui/kit";
 import { EmptyState, ErrorBox, LoadMore, PageHeader, SectionCard } from "../../ui/page";
 import { IdValue } from "../../ui/id-value";
 
@@ -31,13 +24,15 @@ export function MembersView(): React.ReactElement {
   const { search: locationSearch } = useAdminLocation();
   const params = new URLSearchParams(locationSearch);
   const search = params.get("search")?.trim() ?? "";
-  const members = useInfiniteQuery(pagedQueryOptions(["members", search], (cursor) => {
-    const query = new URLSearchParams({ limit: String(MEMBER_PAGE_SIZE) });
-    if (search) query.set("search", search);
-    if (cursor) query.set("cursor", cursor);
-    return api.get<MemberListResult>(`/members?${query.toString()}`);
-  }));
-  const items = members.data?.pages.flatMap((page) => page.items) ?? [];
+  const members = useInfiniteQuery(
+    pagedQueryOptions(["members", search], cursor => {
+      const query = new URLSearchParams({ limit: String(MEMBER_PAGE_SIZE) });
+      if (search) query.set("search", search);
+      if (cursor) query.set("cursor", cursor);
+      return api.get<MemberListResult>(`/members?${query.toString()}`);
+    }),
+  );
+  const items = members.data?.pages.flatMap(page => page.items) ?? [];
   const promote = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: AdminRole }) =>
       api.patch(`/admin/${encodeURIComponent(userId)}/role`, { role }),
@@ -49,10 +44,7 @@ export function MembersView(): React.ReactElement {
 
   return (
     <div>
-      <PageHeader
-        title={t(language, "members.page.title")}
-        description={t(language, "members.page.body")}
-      />
+      <PageHeader title={t(language, "members.page.title")} description={t(language, "members.page.body")} />
       <MemberSearch search={search} />
       {promote.isError ? <ErrorBox error={promote.error} /> : null}
       {members.isLoading ? <Skeleton className="h-64 w-full" /> : null}
@@ -80,9 +72,11 @@ export function MembersView(): React.ReactElement {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((member) => (
+                {items.map(member => (
                   <TableRow key={member.id}>
-                    <TableCell><IdValue value={member.id} language={language} /></TableCell>
+                    <TableCell>
+                      <IdValue value={member.id} language={language} />
+                    </TableCell>
                     <TableCell className="font-medium">{member.name}</TableCell>
                     <TableCell>{member.email}</TableCell>
                     <TableCell>
@@ -90,7 +84,13 @@ export function MembersView(): React.ReactElement {
                         {t(language, member.emailVerified ? "members.verified" : "members.unverified")}
                       </Badge>
                     </TableCell>
-                    <TableCell>{(member.role ?? "").split(",").map(role => role.trim()).filter(Boolean).join(", ") || t(language, "admin.role.none")}</TableCell>
+                    <TableCell>
+                      {(member.role ?? "")
+                        .split(",")
+                        .map(role => role.trim())
+                        .filter(Boolean)
+                        .join(", ") || t(language, "admin.role.none")}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatTimestampMs(Date.parse(member.createdAt)) ?? "-"}
                     </TableCell>
@@ -98,7 +98,12 @@ export function MembersView(): React.ReactElement {
                       <Button
                         variant="outline"
                         disabled={promote.isPending}
-                        onClick={() => promote.mutate({ userId: member.id, role: members.data?.pages[0]?.adminRoles?.[0] ?? "admin" })}
+                        onClick={() =>
+                          promote.mutate({
+                            userId: member.id,
+                            role: members.data?.pages[0]?.adminRoles?.[0] ?? "admin",
+                          })
+                        }
                         aria-label={`${t(language, "members.promote")}: ${member.name}`}
                       >
                         {t(language, "members.promote")}
@@ -125,17 +130,20 @@ function MemberSearch({ search }: { search: string }): React.ReactElement {
     <form
       className="mb-4 flex max-w-xl gap-2"
       role="search"
-      onSubmit={(event) => {
+      onSubmit={event => {
         event.preventDefault();
         navigate(membersHref(draft.trim()));
       }}
     >
       <label className="relative block flex-1" aria-label={t(language, "members.searchPlaceholder")}>
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
         <Input
           className="h-9 ps-9"
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={event => setDraft(event.target.value)}
           placeholder={t(language, "members.searchPlaceholder")}
         />
       </label>

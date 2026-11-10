@@ -5,12 +5,7 @@ import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { t } from "../../app/i18n";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { api, ApiError, refusalOf } from "../../lib/api";
-import type {
-  MediaLibraryItem,
-  MediaLibraryListResult,
-  MediaPurposePolicy,
-  SiteInfo,
-} from "../../lib/types";
+import type { MediaLibraryItem, MediaLibraryListResult, MediaPurposePolicy, SiteInfo } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
@@ -21,8 +16,7 @@ import { uploadMediaAsset } from "./media-upload";
 import { pagedQueryOptions } from "../../lib/queries";
 import { formatTimestampMs } from "../content/field-render";
 
-const MEDIA_SETUP_GUIDE_URL =
-  "https://developers.cloudflare.com/r2/get-started/workers-api/";
+const MEDIA_SETUP_GUIDE_URL = "https://developers.cloudflare.com/r2/get-started/workers-api/";
 const MEDIA_SETUP_PROMPT = `Enable Mantle's generated site/media capability for this app. Declare siteDefaults with media purposes, run mantle generate --site <module>, and apply the deployment schema. For Cloudflare, use r2MediaStorage from @aotter/mantle/media/r2 with an app-owned R2 binding, signer, endpoint and publicBase; keep S3 credentials in Worker secrets. Pass that storage as the generated admin handler's media option. Deploy and verify /admin/api/site capabilities and the upload, direct PUT, commit and delete flows.`;
 
 /** Full-page media library for committed assets. */
@@ -45,13 +39,7 @@ export function MediaLibraryView(): React.ReactElement {
         title={t(language, "media.title")}
         description={t(language, "media.description")}
       />
-      <MediaBrowser
-        language={language}
-        purposes={purposes}
-        searchTerm={searchTerm}
-        emptyIcon={Images}
-        showSearch
-      />
+      <MediaBrowser language={language} purposes={purposes} searchTerm={searchTerm} emptyIcon={Images} showSearch />
     </div>
   );
 }
@@ -79,13 +67,15 @@ export function MediaBrowser({
   preferredPurpose?: string;
 }): React.ReactElement {
   const queryClient = useQueryClient();
-  const page1 = useInfiniteQuery(pagedQueryOptions(["media", searchTerm], (cursor) => {
-    const qs = new URLSearchParams({ limit: "60" });
-    if (searchTerm) qs.set("search", searchTerm);
-    if (cursor) qs.set("cursor", cursor);
-    return api.get<MediaLibraryListResult>(`/media?${qs.toString()}`);
-  }));
-  const items = page1.data?.pages.flatMap((page) => page.items) ?? [];
+  const page1 = useInfiniteQuery(
+    pagedQueryOptions(["media", searchTerm], cursor => {
+      const qs = new URLSearchParams({ limit: "60" });
+      if (searchTerm) qs.set("search", searchTerm);
+      if (cursor) qs.set("cursor", cursor);
+      return api.get<MediaLibraryListResult>(`/media?${qs.toString()}`);
+    }),
+  );
+  const items = page1.data?.pages.flatMap(page => page.items) ?? [];
   const mediaNotConfigured = isMediaNotConfigured(page1.error);
 
   const [uploading, setUploading] = React.useState(false);
@@ -99,7 +89,7 @@ export function MediaBrowser({
   }, [queryClient]);
 
   async function uploadFiles(files: FileList | File[]): Promise<void> {
-    const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    const list = Array.from(files).filter(f => f.type.startsWith("image/"));
     if (list.length === 0) return;
     setUploading(true);
     setUploadError(null);
@@ -109,12 +99,10 @@ export function MediaBrowser({
       // and the operator should see how many failed rather than a single
       // opaque error hiding partial success (#F4).
       const results = await Promise.allSettled(
-        list.map((file) => uploadMediaAsset({ file, purposes, preferredPurpose, language })),
+        list.map(file => uploadMediaAsset({ file, purposes, preferredPurpose, language })),
       );
-      const succeeded = results.filter((r) => r.status === "fulfilled").length;
-      const failures = results.filter(
-        (r): r is PromiseRejectedResult => r.status === "rejected",
-      );
+      const succeeded = results.filter(r => r.status === "fulfilled").length;
+      const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
       // Refresh if ANY upload succeeded so the new assets appear.
       if (succeeded > 0) refresh();
       if (failures.length > 0) {
@@ -141,13 +129,13 @@ export function MediaBrowser({
     <>
       {showSearch ? <MediaSearch searchTerm={searchTerm} language={language} onSearch={onSearch} /> : null}
       <div
-        onDragOver={(e) => {
+        onDragOver={e => {
           if (!canUpload) return;
           e.preventDefault();
           setDragging(true);
         }}
         onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
+        onDrop={e => {
           if (!canUpload) return;
           e.preventDefault();
           setDragging(false);
@@ -176,7 +164,7 @@ export function MediaBrowser({
             accept="image/*"
             multiple
             className="hidden"
-            onChange={(e) => {
+            onChange={e => {
               if (e.currentTarget.files) void uploadFiles(e.currentTarget.files);
             }}
           />
@@ -192,27 +180,19 @@ export function MediaBrowser({
             icon={emptyIcon}
             title={t(language, "media.empty.title")}
             description={
-              searchTerm
-                ? t(language, "media.empty.search", { search: searchTerm })
-                : t(language, "media.empty.all")
+              searchTerm ? t(language, "media.empty.search", { search: searchTerm }) : t(language, "media.empty.all")
             }
           />
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {items.map((item) => (
-              <MediaTile
-                key={item.id}
-                item={item}
-                language={language}
-                onChanged={refresh}
-                onPick={onPick}
-              />
+            {items.map(item => (
+              <MediaTile key={item.id} item={item} language={language} onChanged={refresh} onPick={onPick} />
             ))}
           </div>
         )}
 
         <LoadMore query={page1} count={items.length} language={language} />
-        </div>
+      </div>
     </>
   );
 }
@@ -280,13 +260,11 @@ function MediaTile({
   const dirty = alt !== (item.alt ?? "") || caption !== (item.caption ?? "");
 
   const save = useMutation({
-    mutationFn: () =>
-      api.patch<MediaLibraryItem>(`/media/${encodeURIComponent(item.id)}`, { alt, caption }),
+    mutationFn: () => api.patch<MediaLibraryItem>(`/media/${encodeURIComponent(item.id)}`, { alt, caption }),
     onSuccess: onChanged,
   });
   const remove = useMutation({
-    mutationFn: () =>
-      api.delete<{ deleted: boolean }>(`/media/${encodeURIComponent(item.id)}`),
+    mutationFn: () => api.delete<{ deleted: boolean }>(`/media/${encodeURIComponent(item.id)}`),
     onSuccess: onChanged,
   });
 
@@ -311,12 +289,7 @@ function MediaTile({
     <div className="flex flex-col overflow-hidden rounded-lg border bg-card">
       <div className="relative aspect-square bg-muted/40">
         {item.primaryUrl ? (
-          <img
-            src={item.primaryUrl}
-            alt={item.alt ?? ""}
-            loading="lazy"
-            className="size-full object-cover"
-          />
+          <img src={item.primaryUrl} alt={item.alt ?? ""} loading="lazy" className="size-full object-cover" />
         ) : (
           <div className="flex size-full items-center justify-center text-muted-foreground">
             <Images className="size-6" aria-hidden />
@@ -359,13 +332,13 @@ function MediaTile({
               value={alt}
               placeholder={t(language, "media.altPlaceholder")}
               aria-label={t(language, "media.alt")}
-              onChange={(e) => setAlt(e.target.value)}
+              onChange={e => setAlt(e.target.value)}
             />
             <Input
               value={caption}
               placeholder={t(language, "media.captionPlaceholder")}
               aria-label={t(language, "media.caption")}
-              onChange={(e) => setCaption(e.target.value)}
+              onChange={e => setCaption(e.target.value)}
             />
             <div className="mt-1 flex items-center justify-between gap-2">
               <div className="flex items-center gap-1">
@@ -404,8 +377,8 @@ function MediaTile({
                 {save.isPending
                   ? t(language, "media.saving")
                   : save.isSuccess && !dirty
-                  ? t(language, "media.saved")
-                  : t(language, "media.save")}
+                    ? t(language, "media.saved")
+                    : t(language, "media.save")}
               </Button>
             </div>
             {save.isError ? <ErrorBox error={save.error} /> : null}
@@ -436,10 +409,13 @@ function MediaSearch({
     <form
       className="mb-4 max-w-xl"
       role="search"
-      onSubmit={(e) => {
+      onSubmit={e => {
         e.preventDefault();
         const next = draft.trim();
-        if (onSearch) { onSearch(next); return; }
+        if (onSearch) {
+          onSearch(next);
+          return;
+        }
         const p = new URLSearchParams();
         if (next) p.set("search", next);
         const suffix = p.toString();
@@ -449,11 +425,14 @@ function MediaSearch({
       }}
     >
       <label className="relative block">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
         <Input
           className="pl-9"
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={e => setDraft(e.target.value)}
           placeholder={t(language, "media.searchPlaceholder")}
           aria-label={t(language, "media.searchPlaceholder")}
         />
@@ -465,7 +444,7 @@ function MediaSearch({
 function MediaSkeleton(): React.ReactElement {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-      {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+      {[0, 1, 2, 3, 4, 5, 6, 7].map(i => (
         <div key={i} className="overflow-hidden rounded-lg border">
           <Skeleton className="aspect-square rounded-none" />
           <div className="space-y-2 p-3">

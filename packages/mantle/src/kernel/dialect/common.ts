@@ -1,7 +1,11 @@
 /** What SQLite and PostgreSQL spell identically, defined once; each dialect module re-exports it. */
 
 /** A (possibly schema-qualified) name, quoted. */
-export const ident = (name: string): string => name.split(".").map(part => `"${part.replaceAll('"', '""')}"`).join(".");
+export const ident = (name: string): string =>
+  name
+    .split(".")
+    .map(part => `"${part.replaceAll('"', '""')}"`)
+    .join(".");
 /** A literal piece of text for a LIKE pattern: `\`, `%` and `_` match themselves. Pair with `likeEscape`. */
 export const escapeLike = (value: string): string => value.replace(/[\\%_]/g, "\\$&");
 export const likeEscape = " ESCAPE '\\'";
@@ -11,9 +15,13 @@ export const likeEscape = " ESCAPE '\\'";
  * members by name, so a bundle that uses a few carries only those). A generated bundle imports one dialect; nothing branches on it.
  */
 export interface Dialect {
-  readonly userRefs?: import('../binds.js').Values['userRefs'];
-  readonly anyOf?: (column: string, placeholder: string, type: 'string' | 'number') => string;
-  readonly scopeInsert?: (scopes: readonly { readonly column: string; readonly field: string; readonly type: 'string' | 'number' }[], caller: import('../contracts.js').Caller, set: object) => object;
+  readonly userRefs?: import("../binds.js").Values["userRefs"];
+  readonly anyOf?: (column: string, placeholder: string, type: "string" | "number") => string;
+  readonly scopeInsert?: (
+    scopes: readonly { readonly column: string; readonly field: string; readonly type: "string" | "number" }[],
+    caller: import("../contracts.js").Caller,
+    set: object,
+  ) => object;
   /** The `n`th (1-based) numbered placeholder. */
   param(n: number): string;
   ident(name: string): string;

@@ -12,11 +12,17 @@ export function propertyLabel(
   language: AdminLanguage,
   canonical: string | null,
 ): string {
-  return resolveLocalizedText(schema?.title, language, canonical) ?? (Object.prototype.hasOwnProperty.call(NATIVE_LABEL, name) ? NATIVE_LABEL[name]!(language) : undefined) ?? fieldLabel(name);
+  return (
+    resolveLocalizedText(schema?.title, language, canonical) ??
+    (Object.prototype.hasOwnProperty.call(NATIVE_LABEL, name) ? NATIVE_LABEL[name]!(language) : undefined) ??
+    fieldLabel(name)
+  );
 }
 
 /** The entry's own timestamps, which no JSON Schema titles, as a list or a View names them. */
 const NATIVE_LABEL: Readonly<Record<string, (language: AdminLanguage) => string>> = {
-  createdAt: (l) => t(l, "collection.table.created"), created_at: (l) => t(l, "collection.table.created"),
-  updatedAt: (l) => t(l, "collection.table.updated"), updated_at: (l) => t(l, "collection.table.updated"),
+  createdAt: l => t(l, "collection.table.created"),
+  created_at: l => t(l, "collection.table.created"),
+  updatedAt: l => t(l, "collection.table.updated"),
+  updated_at: l => t(l, "collection.table.updated"),
 };

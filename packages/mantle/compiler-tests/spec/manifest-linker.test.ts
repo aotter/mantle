@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
-import {
-  linkManifestSet,
-  parseManifestSources,
-  type ParsedManifestSet,
-} from "../compiler.js";
+import { linkManifestSet, parseManifestSources, type ParsedManifestSet } from "../compiler.js";
 
 describe("linkManifestSet", () => {
   it("resolves graph references into one sealed value", () => {
-    const linked = linkManifestSet(parse(`
+    const linked = linkManifestSet(
+      parse(`
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: products }
@@ -58,24 +55,27 @@ metadata: { name: product-created }
 spec:
   source: { kind: mcp, surface: admin }
   target: { procedure: allow-product }
-`));
+`),
+    );
 
     if (!linked.ok) throw new Error("expected valid linked graph");
     expect(linked.value.schemas[1]?.translationParent?.manifest.metadata.name).toBe("products");
-    expect(linked.value.procedures[1]?.collectionActionSchema?.manifest.metadata.name)
-      .toBe("products");
+    expect(linked.value.procedures[1]?.collectionActionSchema?.manifest.metadata.name).toBe("products");
     expect(linked.value.triggers[0]?.target.manifest.metadata.name).toBe("allow-product");
     expect(Object.isFrozen(linked.value)).toBe(true);
   });
 
   it("withholds a value and preserves every duplicate source span", () => {
-    const source = (sourceId: string) => ({ sourceId, text: `apiVersion: cms.mantle.aotter.net/v2
+    const source = (sourceId: string) => ({
+      sourceId,
+      text: `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
 spec:
   title: Posts
   schema: { type: object, properties: {} }
-` });
+`,
+    });
     const parsed = parseManifestSources({
       sources: [source("memory:first"), source("memory:second")],
     });
@@ -86,7 +86,7 @@ spec:
     expect(linked.ok).toBe(false);
     expect("value" in linked).toBe(false);
     expect(linked.diagnostics).toHaveLength(2);
-    expect(linked.diagnostics.map((diagnostic) => diagnostic.source)).toEqual([
+    expect(linked.diagnostics.map(diagnostic => diagnostic.source)).toEqual([
       expect.objectContaining({
         sourceId: "memory:first",
         documentIndex: 0,
@@ -103,7 +103,8 @@ spec:
   });
 
   it("rejects View names that collide after MCP name mangling", () => {
-    const linked = linkManifestSet(parse(`
+    const linked = linkManifestSet(
+      parse(`
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: orders }
@@ -120,18 +121,22 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: open_orders }
 spec: { surface: public, sql: 'SELECT id FROM "orders"' }
-`));
+`),
+    );
 
     expect(linked.ok).toBe(false);
-    expect(linked.diagnostics).toContainEqual(expect.objectContaining({
-      code: "MCP_TOOL_NAME_COLLISION",
-      path: "/metadata/name",
-      source: expect.objectContaining({ sourceId: "memory:link" }),
-    }));
+    expect(linked.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MCP_TOOL_NAME_COLLISION",
+        path: "/metadata/name",
+        source: expect.objectContaining({ sourceId: "memory:link" }),
+      }),
+    );
   });
 
   it("warns when an MCP-exposed Procedure has no description, without withholding the link", () => {
-    const linked = linkManifestSet(parse(`
+    const linked = linkManifestSet(
+      parse(`
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: suspend-tenant }
@@ -184,21 +189,25 @@ metadata: { name: http-only-http }
 spec:
   source: { kind: http, method: POST, path: /api/http-only }
   target: { procedure: http-only }
-`));
+`),
+    );
 
     expect(linked.ok).toBe(true);
-    const warnings = linked.diagnostics.filter((d) => d.code === "MCP_TOOL_DESCRIPTION_MISSING");
-    expect(warnings).toEqual([expect.objectContaining({
-      severity: "warning",
-      path: "/spec/description",
-      message: expect.stringContaining("'suspend-tenant'"),
-    })]);
+    const warnings = linked.diagnostics.filter(d => d.code === "MCP_TOOL_DESCRIPTION_MISSING");
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        severity: "warning",
+        path: "/spec/description",
+        message: expect.stringContaining("'suspend-tenant'"),
+      }),
+    ]);
     expect(warnings[0]?.message).toContain("admin surface");
     expect(warnings[0]?.message).toContain("'suspend-tenant-admin'");
   });
 
   it("accepts declared MCP tool annotations and rejects a read-only claim over a writing sql handler", () => {
-    const declared = linkManifestSet(parse(`
+    const declared = linkManifestSet(
+      parse(`
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: measure-usage }
@@ -208,12 +217,14 @@ spec:
   input: { type: object }
   output: { type: object }
   handler: { ref: measure-usage }
-`));
+`),
+    );
     expect(declared.ok).toBe(true);
     if (!declared.ok) throw Error("expected a linked MCP declaration");
     expect(declared.value?.procedures[0]?.manifest.spec.mcp).toEqual({ readOnlyHint: true, openWorldHint: true });
 
-    expect(() => parse(`
+    expect(() =>
+      parse(`
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: bad-hint }
@@ -222,8 +233,10 @@ spec:
   input: { type: object }
   output: { type: object }
   handler: { ref: bad-hint }
-`)).toThrow(/mcp\.readOnlyHint must be a boolean/);
-    expect(() => parse(`
+`),
+    ).toThrow(/mcp\.readOnlyHint must be a boolean/);
+    expect(() =>
+      parse(`
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: bad-key }
@@ -232,9 +245,11 @@ spec:
   input: { type: object }
   output: { type: object }
   handler: { ref: bad-key }
-`)).toThrow(/idempotentHint/);
+`),
+    ).toThrow(/idempotentHint/);
 
-    const lying = linkManifestSet(parse(`
+    const lying = linkManifestSet(
+      parse(`
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: quotas }
@@ -251,14 +266,18 @@ spec:
   input: { type: object, required: [id, expectedVersion], properties: { id: { type: string }, expectedVersion: { type: number }, limit: { type: number } } }
   output: { type: object }
   handler: { sql: 'UPDATE "quotas" SET "limit" = input.limit WHERE id = input.id' }
-`));
+`),
+    );
     expect(lying.ok).toBe(false);
-    expect(lying.diagnostics).toContainEqual(expect.objectContaining({
-      code: "INVALID_MANIFEST_ENVELOPE",
-      path: "/spec/mcp/readOnlyHint",
-    }));
+    expect(lying.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "INVALID_MANIFEST_ENVELOPE",
+        path: "/spec/mcp/readOnlyHint",
+      }),
+    );
 
-    const gentle = linkManifestSet(parse(`
+    const gentle = linkManifestSet(
+      parse(`
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: quotas }
@@ -275,12 +294,16 @@ spec:
   input: { type: object, required: [id], properties: { id: { type: string } } }
   output: { type: object }
   handler: { sql: 'DELETE FROM "quotas" WHERE id = input.id' }
-`));
-    expect(gentle.diagnostics).toContainEqual(expect.objectContaining({
-      code: "INVALID_MANIFEST_ENVELOPE",
-      path: "/spec/mcp/destructiveHint",
-    }));
-    expect(() => parse(`
+`),
+    );
+    expect(gentle.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "INVALID_MANIFEST_ENVELOPE",
+        path: "/spec/mcp/destructiveHint",
+      }),
+    );
+    expect(() =>
+      parse(`
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: both }
@@ -289,11 +312,13 @@ spec:
   input: { type: object }
   output: { type: object }
   handler: { ref: both }
-`)).toThrow(/both readOnlyHint/);
+`),
+    ).toThrow(/both readOnlyHint/);
   });
 
   it("rejects duplicate MCP bindings that would lose Trigger identity", () => {
-    const linked = linkManifestSet(parse(`
+    const linked = linkManifestSet(
+      parse(`
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: lookup }
@@ -315,14 +340,17 @@ metadata: { name: lookup-second }
 spec:
   source: { kind: mcp, surface: public }
   target: { procedure: lookup }
-`));
+`),
+    );
 
     expect(linked.ok).toBe(false);
-    expect(linked.diagnostics).toContainEqual(expect.objectContaining({
-      code: "MCP_TOOL_NAME_COLLISION",
-      path: "/spec/source",
-      value: "lookup",
-    }));
+    expect(linked.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MCP_TOOL_NAME_COLLISION",
+        path: "/spec/source",
+        value: "lookup",
+      }),
+    );
   });
 });
 
@@ -331,7 +359,7 @@ function parse(text: string): ParsedManifestSet {
     sources: [{ sourceId: "memory:link", text: text.trimStart() }],
   });
   if (!parsed.ok) {
-    throw new Error(parsed.diagnostics.map((diagnostic) => diagnostic.message).join("\n"));
+    throw new Error(parsed.diagnostics.map(diagnostic => diagnostic.message).join("\n"));
   }
   return parsed.value;
 }

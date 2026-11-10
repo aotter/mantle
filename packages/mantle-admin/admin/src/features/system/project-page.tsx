@@ -10,7 +10,14 @@ import { NotFoundView } from "./not-found-view";
 export function ProjectPage({ path }: { path: string }): React.ReactElement {
   const { language } = usePreferences();
   const site = useQuery(siteQueryOptions());
-  const page = useProjectNav().pages?.find((p) => p.path === path);
+  const page = useProjectNav().pages?.find(p => p.path === path);
   if (!page) return <NotFoundView path={`/admin/p/${path}`} />;
-  return <CustomPage page={page} surface="browser" language={language} canonicalLocale={site.data?.canonicalLocale ?? null} />;
+  return (
+    <CustomPage
+      page={page}
+      surface="browser"
+      language={language}
+      canonicalLocale={site.data?.canonicalLocale ?? null}
+    />
+  );
 }

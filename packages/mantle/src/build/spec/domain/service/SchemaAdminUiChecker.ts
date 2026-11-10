@@ -47,82 +47,91 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
   const uiSchema = schema.spec.uiSchema;
   if (uiSchema === undefined) return { filter: null, list: EMPTY_LIST, nav: null, problems: [] };
   const roots = uiSchema as Record<string, unknown>;
-  const unknownRoot = Object.keys(roots).find((key) => !SCHEMA_UI_ROOTS.has(key));
+  const unknownRoot = Object.keys(roots).find(key => !SCHEMA_UI_ROOTS.has(key));
   if (unknownRoot) {
-    return invalid(problem(
-      `/spec/uiSchema/${unknownRoot}`,
-      roots[unknownRoot],
-      "fields, list, or nav",
-      `Schema.spec.uiSchema.${unknownRoot} is not supported.`,
-    ));
+    return invalid(
+      problem(
+        `/spec/uiSchema/${unknownRoot}`,
+        roots[unknownRoot],
+        "fields, list, or nav",
+        `Schema.spec.uiSchema.${unknownRoot} is not supported.`,
+      ),
+    );
   }
 
   const list = roots["list"];
   if (list !== undefined && (!list || typeof list !== "object" || Array.isArray(list))) {
-    return invalid(problem(
-      "/spec/uiSchema/list",
-      list,
-      "an object",
-      "Schema.spec.uiSchema.list must be an object.",
-    ));
+    return invalid(problem("/spec/uiSchema/list", list, "an object", "Schema.spec.uiSchema.list must be an object."));
   }
 
   const config = (list ?? {}) as Record<string, unknown>;
   if (list !== undefined) {
-    const unknownList = Object.keys(config).find((key) => !SCHEMA_LIST_KEYS.has(key));
+    const unknownList = Object.keys(config).find(key => !SCHEMA_LIST_KEYS.has(key));
     if (unknownList) {
-      return invalid(problem(
-        `/spec/uiSchema/list/${unknownList}`,
-        config[unknownList],
-        "filterField, primaryField, or columns",
-        `Schema.spec.uiSchema.list.${unknownList} is not supported.`,
-      ));
+      return invalid(
+        problem(
+          `/spec/uiSchema/list/${unknownList}`,
+          config[unknownList],
+          "filterField, primaryField, or columns",
+          `Schema.spec.uiSchema.list.${unknownList} is not supported.`,
+        ),
+      );
     }
   }
-  const filterResult = list === undefined
-    ? { filter: null as SchemaListFilter | null }
-    : checkListFilter(schema, config);
+  const filterResult =
+    list === undefined ? { filter: null as SchemaListFilter | null } : checkListFilter(schema, config);
   if (filterResult.problem) return invalid(filterResult.problem);
 
   const primaryField = config["primaryField"];
   const columns = config["columns"];
   const declaresPresentation = primaryField !== undefined || columns !== undefined;
   if (declaresPresentation && (schema.spec.lifecycle ?? "publishing") !== "operational") {
-    return invalid(problem(
-      "/spec/uiSchema/list",
-      list,
-      "list presentation fields on an operational Schema",
-      "Schema list primaryField/columns are supported only for lifecycle: operational Schemas; a publishing Schema's Admin list shows its title field and status.",
-    ));
+    return invalid(
+      problem(
+        "/spec/uiSchema/list",
+        list,
+        "list presentation fields on an operational Schema",
+        "Schema list primaryField/columns are supported only for lifecycle: operational Schemas; a publishing Schema's Admin list shows its title field and status.",
+      ),
+    );
   }
 
   if (primaryField !== undefined && (typeof primaryField !== "string" || !primaryField)) {
-    return invalid(problem(
-      "/spec/uiSchema/list/primaryField",
-      primaryField,
-      "a non-empty top-level scalar field name",
-      "Schema.spec.uiSchema.list.primaryField must be a field-name string.",
-    ));
+    return invalid(
+      problem(
+        "/spec/uiSchema/list/primaryField",
+        primaryField,
+        "a non-empty top-level scalar field name",
+        "Schema.spec.uiSchema.list.primaryField must be a field-name string.",
+      ),
+    );
   }
-  if (columns !== undefined && (!Array.isArray(columns) || !columns.every((field) => typeof field === "string" && field.length > 0))) {
-    return invalid(problem(
-      "/spec/uiSchema/list/columns",
-      columns,
-      "an array of non-empty top-level field names",
-      "Schema.spec.uiSchema.list.columns must be an array of field-name strings.",
-    ));
+  if (
+    columns !== undefined &&
+    (!Array.isArray(columns) || !columns.every(field => typeof field === "string" && field.length > 0))
+  ) {
+    return invalid(
+      problem(
+        "/spec/uiSchema/list/columns",
+        columns,
+        "an array of non-empty top-level field names",
+        "Schema.spec.uiSchema.list.columns must be an array of field-name strings.",
+      ),
+    );
   }
 
   const normalizedPrimary = typeof primaryField === "string" ? primaryField : null;
-  const normalizedColumns = Array.isArray(columns) ? columns as string[] : [];
+  const normalizedColumns = Array.isArray(columns) ? (columns as string[]) : [];
   const fields = [...(normalizedPrimary ? [normalizedPrimary] : []), ...normalizedColumns];
   if (new Set(fields).size !== fields.length) {
-    return invalid(problem(
-      "/spec/uiSchema/list/columns",
-      columns,
-      "field names without duplicates or the primaryField",
-      "Schema list primaryField/columns must not repeat a field.",
-    ));
+    return invalid(
+      problem(
+        "/spec/uiSchema/list/columns",
+        columns,
+        "field names without duplicates or the primaryField",
+        "Schema list primaryField/columns must not repeat a field.",
+      ),
+    );
   }
   for (const field of fields) {
     // Native entry columns carry no `properties` entry but are listable, so a
@@ -131,20 +140,24 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
     if (field !== normalizedPrimary && NATIVE_LIST_FIELDS.has(field)) continue;
     const property = schema.spec.schema.properties?.[field];
     if (!property) {
-      return invalid(problem(
-        `/spec/uiSchema/list/${field === normalizedPrimary ? "primaryField" : "columns"}`,
-        field,
-        "a top-level key in spec.schema.properties or a native entry column",
-        `Schema '${schema.metadata.name}' list presentation references unknown field '${field}'.`,
-      ));
+      return invalid(
+        problem(
+          `/spec/uiSchema/list/${field === normalizedPrimary ? "primaryField" : "columns"}`,
+          field,
+          "a top-level key in spec.schema.properties or a native entry column",
+          `Schema '${schema.metadata.name}' list presentation references unknown field '${field}'.`,
+        ),
+      );
     }
     if (field === normalizedPrimary && !isScalar(property)) {
-      return invalid(problem(
-        "/spec/uiSchema/list/primaryField",
-        field,
-        "a top-level scalar Schema property",
-        `Schema '${schema.metadata.name}' list primaryField '${field}' must be scalar.`,
-      ));
+      return invalid(
+        problem(
+          "/spec/uiSchema/list/primaryField",
+          field,
+          "a top-level scalar Schema property",
+          `Schema '${schema.metadata.name}' list primaryField '${field}' must be scalar.`,
+        ),
+      );
     }
   }
 
@@ -166,95 +179,108 @@ export function checkFormUiSchema(
 ): readonly SchemaAdminUiProblem[] {
   if (uiSchema === undefined) return [];
   if (!uiSchema || typeof uiSchema !== "object" || Array.isArray(uiSchema)) {
-    return [problem(
-      "/spec/uiSchema",
-      uiSchema,
-      "an object",
-      `${owner}.spec.uiSchema must be an object.`,
-    )];
+    return [problem("/spec/uiSchema", uiSchema, "an object", `${owner}.spec.uiSchema must be an object.`)];
   }
   const config = uiSchema as Record<string, unknown>;
   if (owner === "Procedure") {
-    const unknownRoot = Object.keys(config).find((key) => key !== "collectionAction" && key !== "fields");
+    const unknownRoot = Object.keys(config).find(key => key !== "collectionAction" && key !== "fields");
     if (unknownRoot) {
-      return [problem(
-        `/spec/uiSchema/${unknownRoot}`,
-        config[unknownRoot],
-        "collectionAction or fields",
-        `Procedure.spec.uiSchema.${unknownRoot} is not supported.`,
-      )];
+      return [
+        problem(
+          `/spec/uiSchema/${unknownRoot}`,
+          config[unknownRoot],
+          "collectionAction or fields",
+          `Procedure.spec.uiSchema.${unknownRoot} is not supported.`,
+        ),
+      ];
     }
   }
   const collectionAction = config["collectionAction"];
   if (collectionAction !== undefined && owner !== "Procedure") {
-    return [problem(
-      "/spec/uiSchema/collectionAction",
-      collectionAction,
-      "a Procedure-only Admin collection name",
-      "Schema.spec.uiSchema.collectionAction is not supported.",
-    )];
+    return [
+      problem(
+        "/spec/uiSchema/collectionAction",
+        collectionAction,
+        "a Procedure-only Admin collection name",
+        "Schema.spec.uiSchema.collectionAction is not supported.",
+      ),
+    ];
   }
   if (collectionAction !== undefined && (typeof collectionAction !== "string" || !collectionAction)) {
-    return [problem(
-      "/spec/uiSchema/collectionAction",
-      collectionAction,
-      "a non-empty Schema name",
-      "Procedure.spec.uiSchema.collectionAction must be a Schema-name string.",
-    )];
+    return [
+      problem(
+        "/spec/uiSchema/collectionAction",
+        collectionAction,
+        "a non-empty Schema name",
+        "Procedure.spec.uiSchema.collectionAction must be a Schema-name string.",
+      ),
+    ];
   }
   const fields = config["fields"];
   if (fields === undefined) return [];
   if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
-    return [problem(
-      "/spec/uiSchema/fields",
-      fields,
-      "an object keyed by top-level input field",
-      `${owner}.spec.uiSchema.fields must be an object.`,
-    )];
+    return [
+      problem(
+        "/spec/uiSchema/fields",
+        fields,
+        "an object keyed by top-level input field",
+        `${owner}.spec.uiSchema.fields must be an object.`,
+      ),
+    ];
   }
   for (const [field, rawConfig] of Object.entries(fields)) {
     const property = schema.properties?.[field];
     if (!property) {
-      return [problem(
-        `/spec/uiSchema/fields/${field}`,
-        field,
-        "an exact top-level key in the JSON Schema properties",
-        `${owner}.spec.uiSchema.fields references unknown field '${field}'.`,
-      )];
+      return [
+        problem(
+          `/spec/uiSchema/fields/${field}`,
+          field,
+          "an exact top-level key in the JSON Schema properties",
+          `${owner}.spec.uiSchema.fields references unknown field '${field}'.`,
+        ),
+      ];
     }
     if (!rawConfig || typeof rawConfig !== "object" || Array.isArray(rawConfig)) {
-      return [problem(
-        `/spec/uiSchema/fields/${field}`,
-        rawConfig,
-        "an object with widget: textarea",
-        `${owner}.spec.uiSchema.fields.${field} must be an object.`,
-      )];
+      return [
+        problem(
+          `/spec/uiSchema/fields/${field}`,
+          rawConfig,
+          "an object with widget: textarea",
+          `${owner}.spec.uiSchema.fields.${field} must be an object.`,
+        ),
+      ];
     }
     const config = rawConfig as Record<string, unknown>;
-    const unknownKey = Object.keys(config).find((key) => key !== "widget");
+    const unknownKey = Object.keys(config).find(key => key !== "widget");
     if (unknownKey) {
-      return [problem(
-        `/spec/uiSchema/fields/${field}/${unknownKey}`,
-        config[unknownKey],
-        "widget",
-        `${owner}.spec.uiSchema.fields.${field}.${unknownKey} is not supported.`,
-      )];
+      return [
+        problem(
+          `/spec/uiSchema/fields/${field}/${unknownKey}`,
+          config[unknownKey],
+          "widget",
+          `${owner}.spec.uiSchema.fields.${field}.${unknownKey} is not supported.`,
+        ),
+      ];
     }
     if (config["widget"] !== "textarea") {
-      return [problem(
-        `/spec/uiSchema/fields/${field}/widget`,
-        config["widget"],
-        '"textarea"',
-        `${owner}.spec.uiSchema.fields.${field}.widget must be 'textarea'.`,
-      )];
+      return [
+        problem(
+          `/spec/uiSchema/fields/${field}/widget`,
+          config["widget"],
+          '"textarea"',
+          `${owner}.spec.uiSchema.fields.${field}.widget must be 'textarea'.`,
+        ),
+      ];
     }
     if (!isString(property)) {
-      return [problem(
-        `/spec/uiSchema/fields/${field}/widget`,
-        field,
-        "a top-level string property",
-        `${owner}.spec.uiSchema.fields.${field}.widget can only target a string field.`,
-      )];
+      return [
+        problem(
+          `/spec/uiSchema/fields/${field}/widget`,
+          field,
+          "a top-level string property",
+          `${owner}.spec.uiSchema.fields.${field}.widget can only target a string field.`,
+        ),
+      ];
     }
   }
   return [];
@@ -267,47 +293,62 @@ function checkListFilter(
   const field = list["filterField"];
   if (field === undefined) return { filter: null };
   if (typeof field !== "string" || !field) {
-    return { problem: problem(
-      "/spec/uiSchema/list/filterField",
-      field,
-      "a non-empty top-level field name",
-      "Schema.spec.uiSchema.list.filterField must be a field-name string.",
-    ), filter: null };
+    return {
+      problem: problem(
+        "/spec/uiSchema/list/filterField",
+        field,
+        "a non-empty top-level field name",
+        "Schema.spec.uiSchema.list.filterField must be a field-name string.",
+      ),
+      filter: null,
+    };
   }
   if ((schema.spec.lifecycle ?? "publishing") !== "operational") {
-    return { problem: problem(
-      "/spec/uiSchema/list/filterField",
-      field,
-      "a filter on an operational Schema",
-      "Schema list filter tabs are supported only for lifecycle: operational Schemas.",
-    ), filter: null };
+    return {
+      problem: problem(
+        "/spec/uiSchema/list/filterField",
+        field,
+        "a filter on an operational Schema",
+        "Schema list filter tabs are supported only for lifecycle: operational Schemas.",
+      ),
+      filter: null,
+    };
   }
   const property = schema.spec.schema.properties?.[field];
-  const values = enumOptions(property)?.map((o) => o.value);
+  const values = enumOptions(property)?.map(o => o.value);
   if (!property) {
-    return { problem: problem(
-      "/spec/uiSchema/list/filterField",
-      field,
-      "an exact top-level key in spec.schema.properties",
-      `Schema '${schema.metadata.name}' list filter references unknown field '${field}'.`,
-    ), filter: null };
+    return {
+      problem: problem(
+        "/spec/uiSchema/list/filterField",
+        field,
+        "an exact top-level key in spec.schema.properties",
+        `Schema '${schema.metadata.name}' list filter references unknown field '${field}'.`,
+      ),
+      filter: null,
+    };
   }
   if (!values?.length) {
-    return { problem: problem(
-      "/spec/uiSchema/list/filterField",
-      field,
-      "a field with a non-empty string enum, or a oneOf of string consts",
-      `Schema '${schema.metadata.name}' list filter field '${field}' must declare string enum values.`,
-    ), filter: null };
+    return {
+      problem: problem(
+        "/spec/uiSchema/list/filterField",
+        field,
+        "a field with a non-empty string enum, or a oneOf of string consts",
+        `Schema '${schema.metadata.name}' list filter field '${field}' must declare string enum values.`,
+      ),
+      filter: null,
+    };
   }
   const indexed = checkSchemaIndexes(schema).declarations.some(({ fields }) => fields[0]?.name === field);
   if (!indexed) {
-    return { problem: problem(
-      "/spec/uiSchema/list/filterField",
-      field,
-      "the first field of a declared index tuple",
-      `Schema '${schema.metadata.name}' list filter field '${field}' needs a left-prefix index.`,
-    ), filter: null };
+    return {
+      problem: problem(
+        "/spec/uiSchema/list/filterField",
+        field,
+        "the first field of a declared index tuple",
+        `Schema '${schema.metadata.name}' list filter field '${field}' needs a left-prefix index.`,
+      ),
+      filter: null,
+    };
   }
   return { filter: { field, values } };
 }
@@ -320,17 +361,21 @@ function checkNav(
   if (!nav || typeof nav !== "object" || Array.isArray(nav)) {
     return {
       nav: null,
-      problem: problem(
-        "/spec/uiSchema/nav",
-        nav,
-        "an object",
-        "Schema.spec.uiSchema.nav must be an object.",
-      ),
+      problem: problem("/spec/uiSchema/nav", nav, "an object", "Schema.spec.uiSchema.nav must be an object."),
     };
   }
   const config = nav as Record<string, unknown>;
   const bad = navPlacementProblems(config, ["standalone", "parentField"]);
-  if (bad) return { nav: null, problem: problem(`/spec/uiSchema/nav/${bad[0]}`, config[bad[0]], bad[1], `Schema.spec.uiSchema.nav.${bad[0]} must be ${bad[1]}.`) };
+  if (bad)
+    return {
+      nav: null,
+      problem: problem(
+        `/spec/uiSchema/nav/${bad[0]}`,
+        config[bad[0]],
+        bad[1],
+        `Schema.spec.uiSchema.nav.${bad[0]} must be ${bad[1]}.`,
+      ),
+    };
 
   const standalone = config["standalone"];
   if (standalone !== undefined && typeof standalone !== "boolean") {
@@ -361,19 +406,23 @@ function checkNav(
   // without standalone, parentField only chooses which required reference folds the Schema (any required reference)
   if (parentField !== undefined && standalone !== true) {
     const required = new Set(schema.spec.schema.required ?? []);
-    const ok = !schema.spec.translates && required.has(parentField as string)
-      && resolveMantleRef(schema.spec.schema.properties?.[parentField as string]) !== null;
-    return ok ? { nav: null } : {
-      nav: null,
-      problem: problem(
-        "/spec/uiSchema/nav/parentField",
-        parentField,
-        "a required x-mantle-ref field of a Schema that is not a translates child",
-        schema.spec.translates
-          ? `Schema '${schema.metadata.name}' cannot declare nav.parentField because it is a translates child.`
-          : `Schema '${schema.metadata.name}' nav.parentField must name a required x-mantle-ref field.`,
-      ),
-    };
+    const ok =
+      !schema.spec.translates &&
+      required.has(parentField as string) &&
+      resolveMantleRef(schema.spec.schema.properties?.[parentField as string]) !== null;
+    return ok
+      ? { nav: null }
+      : {
+          nav: null,
+          problem: problem(
+            "/spec/uiSchema/nav/parentField",
+            parentField,
+            "a required x-mantle-ref field of a Schema that is not a translates child",
+            schema.spec.translates
+              ? `Schema '${schema.metadata.name}' cannot declare nav.parentField because it is a translates child.`
+              : `Schema '${schema.metadata.name}' nav.parentField must name a required x-mantle-ref field.`,
+          ),
+        };
   }
 
   if (standalone !== true) return { nav: null };
@@ -423,14 +472,14 @@ function checkNav(
 
   // ambiguous: the graph-time check reports it with the candidates and the line that keeps today's choice
   if (typeof parentField !== "string") return { nav: null };
-  const matched = eligible.find((item) => item.field === parentField);
+  const matched = eligible.find(item => item.field === parentField);
   if (!matched) {
     return {
       nav: null,
       problem: problem(
         "/spec/uiSchema/nav/parentField",
         parentField,
-        `one of ${eligible.map((item) => item.field).join(", ")}`,
+        `one of ${eligible.map(item => item.field).join(", ")}`,
         `Schema '${schema.metadata.name}' nav.parentField must name a required x-mantle-ref field.`,
       ),
     };
@@ -469,8 +518,9 @@ export function checkSchemaNavTargets(
   const { nav, problems } = checkSchemaAdminUi(schema);
   if (problems.length > 0 || schema.spec.translates) return null;
   const declared = declaredParentField(schema);
-  const target = nav?.parentCollection
-    ?? (declared === undefined ? undefined : resolveMantleRef(schema.spec.schema.properties?.[declared])?.schema);
+  const target =
+    nav?.parentCollection ??
+    (declared === undefined ? undefined : resolveMantleRef(schema.spec.schema.properties?.[declared])?.schema);
   if (declared === undefined && target !== undefined && yieldsFold(schemasByName.get(target), schema.metadata.name)) {
     return problem(
       "/spec/uiSchema/nav/standalone",
@@ -492,7 +542,7 @@ export function checkSchemaNavTargets(
     if (eligible.length < 2) return null;
     const names = eligible.join(", ");
     // the line that keeps the current choice only exists when that choice would not close a parent cycle
-    const keep = eligible.find((field) => !closesParentCycle(schema, field, schemasByName));
+    const keep = eligible.find(field => !closesParentCycle(schema, field, schemasByName));
     return problem(
       "/spec/uiSchema/nav/parentField",
       undefined,
@@ -502,18 +552,26 @@ export function checkSchemaNavTargets(
   }
   return closesParentCycle(schema, declared, schemasByName)
     ? problem(
-      "/spec/uiSchema/nav/parentField",
-      declared,
-      "a reference whose parent chain does not lead back to this Schema",
-      `Schema '${schema.metadata.name}' nav.parentField '${declared}' creates a parent cycle.`,
-    )
+        "/spec/uiSchema/nav/parentField",
+        declared,
+        "a reference whose parent chain does not lead back to this Schema",
+        `Schema '${schema.metadata.name}' nav.parentField '${declared}' creates a parent cycle.`,
+      )
     : null;
 }
 
 /** Whether folding `schema` under `field`'s Schema leads back to `schema` through the parents the Admin descriptor resolves. */
-function closesParentCycle(schema: SchemaManifest, field: string, schemasByName: ReadonlyMap<string, SchemaManifest>): boolean {
+function closesParentCycle(
+  schema: SchemaManifest,
+  field: string,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+): boolean {
   const seen = new Set<string>();
-  for (let at = resolveMantleRef(schema.spec.schema.properties?.[field])?.schema; at !== undefined && !seen.has(at); at = foldParentOf(schemasByName.get(at), schemasByName)) {
+  for (
+    let at = resolveMantleRef(schema.spec.schema.properties?.[field])?.schema;
+    at !== undefined && !seen.has(at);
+    at = foldParentOf(schemasByName.get(at), schemasByName)
+  ) {
     if (at === schema.metadata.name) return true;
     seen.add(at);
   }
@@ -521,7 +579,9 @@ function closesParentCycle(schema: SchemaManifest, field: string, schemasByName:
 }
 
 function declaredParentField(schema: SchemaManifest): string | undefined {
-  const nav = (schema.spec.uiSchema as Record<string, unknown> | undefined)?.["nav"] as Record<string, unknown> | undefined;
+  const nav = (schema.spec.uiSchema as Record<string, unknown> | undefined)?.["nav"] as
+    | Record<string, unknown>
+    | undefined;
   return typeof nav?.["parentField"] === "string" ? nav["parentField"] : undefined;
 }
 
@@ -531,7 +591,7 @@ const yieldsFold = (parent: SchemaManifest | undefined, child: string): boolean 
 
 /** @internal Whether a Schema's declared nav.parentField references `name`; the Admin descriptor and the checker both drop such a Schema as an inferred parent of `name`. */
 export function declaresFoldUnder(body: JsonSchema, uiSchema: unknown, name: string): boolean {
-  const field = ((uiSchema as Record<string, Record<string, unknown> | undefined> | undefined)?.["nav"])?.["parentField"];
+  const field = (uiSchema as Record<string, Record<string, unknown> | undefined> | undefined)?.["nav"]?.["parentField"];
   return typeof field === "string" && resolveMantleRef(body.properties?.[field])?.schema === name;
 }
 
@@ -539,49 +599,57 @@ const isFoldParent = (s: SchemaManifest | undefined): boolean => !!s && !s.spec.
 
 /** Required `id` references to existing non-translates Schemas, in declaration order (the Admin descriptor's default parent is the first). */
 function eligibleIdRefs(schema: SchemaManifest, schemasByName: ReadonlyMap<string, SchemaManifest>): string[] {
-  return requiredMantleRefFields(schema.spec.schema).filter((r) => inferredParent(schema, r.collection, schemasByName)).map((r) => r.field);
+  return requiredMantleRefFields(schema.spec.schema)
+    .filter(r => inferredParent(schema, r.collection, schemasByName))
+    .map(r => r.field);
 }
 
 /** Whether `name` can be `schema`'s inferred fold parent: an existing non-translates Schema that does not explicitly fold under `schema`. */
-const inferredParent = (schema: SchemaManifest, name: string, schemasByName: ReadonlyMap<string, SchemaManifest>): boolean =>
-  isFoldParent(schemasByName.get(name)) && !yieldsFold(schemasByName.get(name), schema.metadata.name);
+const inferredParent = (
+  schema: SchemaManifest,
+  name: string,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+): boolean => isFoldParent(schemasByName.get(name)) && !yieldsFold(schemasByName.get(name), schema.metadata.name);
 
 /** The Schema a collection folds under, as the Admin descriptor resolves it. */
-function foldParentOf(schema: SchemaManifest | undefined, schemasByName: ReadonlyMap<string, SchemaManifest>): string | undefined {
+function foldParentOf(
+  schema: SchemaManifest | undefined,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+): string | undefined {
   if (!schema || schema.spec.translates) return undefined;
-  const field = foldParentField(schema.spec.schema, declaredParentField(schema), (name) => inferredParent(schema, name, schemasByName));
+  const field = foldParentField(schema.spec.schema, declaredParentField(schema), name =>
+    inferredParent(schema, name, schemasByName),
+  );
   return field === undefined ? undefined : resolveMantleRef(schema.spec.schema.properties?.[field])?.schema;
 }
 
 /** @internal The field a collection folds under its parent by, shared by the Admin descriptor and the cycle check:
  *  the declared nav.parentField, else the first required `id` reference, else the first required reference, each to a Schema `isParent` accepts
  *  (callers reject a Schema whose own declared nav.parentField points back, see `declaresFoldUnder`). */
-export function foldParentField(body: JsonSchema, declared: string | undefined, isParent: (name: string) => boolean): string | undefined {
+export function foldParentField(
+  body: JsonSchema,
+  declared: string | undefined,
+  isParent: (name: string) => boolean,
+): string | undefined {
   const props = body.properties ?? {};
   const required = new Set(body.required ?? []);
-  const refs = Object.keys(props).filter((f) => required.has(f) && isParent(resolveMantleRef(props[f])?.schema ?? ""));
-  return declared ?? requiredMantleRefFields(body).find((r) => isParent(r.collection))?.field ?? refs[0];
+  const refs = Object.keys(props).filter(f => required.has(f) && isParent(resolveMantleRef(props[f])?.schema ?? ""));
+  return declared ?? requiredMantleRefFields(body).find(r => isParent(r.collection))?.field ?? refs[0];
 }
 
 const NATIVE_LIST_FIELDS: ReadonlySet<string> = new Set(RESERVED_ENTRY_COLUMNS);
 
 function isScalar(schema: JsonSchema): boolean {
   const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
-  return types.some((type) => SCALAR_TYPES.has(type)) &&
-    types.every((type) => type === "null" || SCALAR_TYPES.has(type));
+  return types.some(type => SCALAR_TYPES.has(type)) && types.every(type => type === "null" || SCALAR_TYPES.has(type));
 }
 
 function isString(schema: JsonSchema): boolean {
   const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
-  return types.includes("string") && types.every((type) => type === "string" || type === "null");
+  return types.includes("string") && types.every(type => type === "string" || type === "null");
 }
 
-function problem(
-  pointer: string,
-  value: unknown,
-  expected: string,
-  message: string,
-): SchemaAdminUiProblem {
+function problem(pointer: string, value: unknown, expected: string, message: string): SchemaAdminUiProblem {
   return { pointer, value, expected, message };
 }
 

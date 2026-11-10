@@ -9,7 +9,9 @@ export type ViewRefresh = string | { readonly view: string; readonly input: obje
 /** `useView`'s key is `["view", name, "hook", surface, input, limit]`; Admin's own View page is `["view", name, search]`. */
 const matches = (query: Query, refresh: Exclude<ViewRefresh, string>): boolean => {
   const key = query.queryKey;
-  return key[0] === "view" && key[1] === refresh.view && key[2] === "hook" && hashKey([key[4]]) === hashKey([refresh.input]);
+  return (
+    key[0] === "view" && key[1] === refresh.view && key[2] === "hook" && hashKey([key[4]]) === hashKey([refresh.input])
+  );
 };
 
 /**
@@ -19,12 +21,16 @@ const matches = (query: Query, refresh: Exclude<ViewRefresh, string>): boolean =
  */
 export const invalidateAfterWrite = async (client: QueryClient, views?: readonly ViewRefresh[]): Promise<void> => {
   if (!views) {
-    await Promise.all(AFFECTED.map((key) => client.invalidateQueries({ queryKey: [key] })));
+    await Promise.all(AFFECTED.map(key => client.invalidateQueries({ queryKey: [key] })));
     return;
   }
   void client.invalidateQueries({ queryKey: ["view"], refetchType: "none" });
   await Promise.all([
-    ...AFFECTED.filter((key) => key !== "view").map((key) => client.invalidateQueries({ queryKey: [key] })),
-    ...views.map((view) => client.invalidateQueries(typeof view === "string" ? { queryKey: ["view", view] } : { predicate: (query) => matches(query, view) })),
+    ...AFFECTED.filter(key => key !== "view").map(key => client.invalidateQueries({ queryKey: [key] })),
+    ...views.map(view =>
+      client.invalidateQueries(
+        typeof view === "string" ? { queryKey: ["view", view] } : { predicate: query => matches(query, view) },
+      ),
+    ),
   ]);
 };

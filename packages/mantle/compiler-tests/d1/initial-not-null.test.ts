@@ -7,7 +7,15 @@ import { notNullColumns } from "../../src/build/spec/domain/index.js";
 const schema = (extra: object = {}): StorageSchema => ({
   fields: { title: "text", note: "text", maybe: "text", spot: "geo" },
   names: { title: "title", note: "note", maybe: "maybe", spot: "spot" },
-  schema: { required: ["title", "maybe", "spot"], properties: { title: { type: "string" }, note: { type: "string" }, maybe: { type: ["string", "null"] }, spot: { type: "object" } } },
+  schema: {
+    required: ["title", "maybe", "spot"],
+    properties: {
+      title: { type: "string" },
+      note: { type: "string" },
+      maybe: { type: ["string", "null"] },
+      spot: { type: "object" },
+    },
+  },
   ...extra,
 });
 
@@ -16,11 +24,18 @@ it("an operational Schema's required, non-null fields are NOT NULL in the initia
   const sqlite = new DatabaseSync(":memory:");
   try {
     for (const sql of initialStorageSql({ items: schema() })) sqlite.exec(sql);
-    const insert = (cols: string, vals: string) => Promise.resolve().then(()=>sqlite.exec(`INSERT INTO items (id, created_at, ${cols}) VALUES ('a', 0, ${vals})`));
-    await expect(insert("note, maybe, spot_lat, spot_lng", "'n', NULL, 1, 2")).rejects.toThrow(/NOT NULL constraint failed: items.title/);
-    await expect(insert("title, spot_lat, spot_lng", "'t', NULL, 2")).rejects.toThrow(/NOT NULL constraint failed: items.spot_lat/);
+    const insert = (cols: string, vals: string) =>
+      Promise.resolve().then(() => sqlite.exec(`INSERT INTO items (id, created_at, ${cols}) VALUES ('a', 0, ${vals})`));
+    await expect(insert("note, maybe, spot_lat, spot_lng", "'n', NULL, 1, 2")).rejects.toThrow(
+      /NOT NULL constraint failed: items.title/,
+    );
+    await expect(insert("title, spot_lat, spot_lng", "'t', NULL, 2")).rejects.toThrow(
+      /NOT NULL constraint failed: items.spot_lat/,
+    );
     await insert("title, spot_lat, spot_lng", "'t', 1, 2"); // a non-required and a nullable field may stay NULL
-  } finally { sqlite.close(); }
+  } finally {
+    sqlite.close();
+  }
   const pg = postgresSql({ items: schema() }).join("\n");
   expect(pg).toContain('"title" text COLLATE "C" NOT NULL');
   expect(pg).toContain('"spot_lat" float8 NOT NULL');
@@ -30,7 +45,11 @@ it("an operational Schema's required, non-null fields are NOT NULL in the initia
 
 it("a publishing Schema keeps its drafts incomplete", () => {
   expect(notNullColumns(schema({ publishing: true })).size).toBe(0);
-  const create = initialStorageSql({ items: schema({ publishing: true }) }).find((s) => s.startsWith(`CREATE TABLE IF NOT EXISTS "items"`));
+  const create = initialStorageSql({ items: schema({ publishing: true }) }).find(s =>
+    s.startsWith(`CREATE TABLE IF NOT EXISTS "items"`),
+  );
   expect(create).toMatch(/"title" TEXT[,)]/);
-  expect(postgresSql({ items: schema({ publishing: true }) }).join("\n")).not.toContain('"title" text COLLATE "C" NOT NULL');
+  expect(postgresSql({ items: schema({ publishing: true }) }).join("\n")).not.toContain(
+    '"title" text COLLATE "C" NOT NULL',
+  );
 });

@@ -32,7 +32,12 @@ export interface Route<Database, Handlers = never, Env = unknown> {
   readonly check?: (caller: Caller) => void;
   /** A selected native surface can preserve the Request and return its own Response. */
   readonly handle?: (
-    request: Request, env: Env, getDb: () => Database, caller: Caller, params: Record<string, string>, handlers: Handlers,
+    request: Request,
+    env: Env,
+    getDb: () => Database,
+    caller: Caller,
+    params: Record<string, string>,
+    handlers: Handlers,
     input?: Record<string, unknown>,
   ) => Promise<unknown>;
   /** Selected raw APIs may declare a different body limit; JSON routes default to one million bytes. */
@@ -52,7 +57,11 @@ export interface Route<Database, Handlers = never, Env = unknown> {
 export type Fetch<Env> = (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined>;
 /** A surface's own dispatch of a matched route, called once the pipeline admitted the caller and guarded the call. */
 export type Send<Env, Database, Handlers> = (
-  route: Route<Database, Handlers, Env>, request: Request, env: Env, caller: Caller, params: Record<string, string>,
+  route: Route<Database, Handlers, Env>,
+  request: Request,
+  env: Env,
+  caller: Caller,
+  params: Record<string, string>,
   pipeline: Pipeline,
 ) => Promise<Response>;
 
@@ -66,7 +75,9 @@ export async function body(request: Request, limit = DEFAULT_BODY_LIMIT): Promis
 
 /** Shared matching/auth/error envelope; selected dispatch is supplied by the surface. */
 function router<Env, Database, Handlers>(
-  routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database>, send: Send<Env, Database, Handlers>,
+  routes: readonly Route<Database, Handlers, Env>[],
+  options: Options<Env, Database>,
+  send: Send<Env, Database, Handlers>,
 ): Fetch<Env> {
   let handle: Fetch<Env> | undefined;
   return async (request, env, ctx) => {
@@ -77,7 +88,8 @@ function router<Env, Database, Handlers>(
 
 /** Generated REST routes retain the native View/Procedure dispatch. */
 export function rest<Env, Database, Handlers = never>(
-  routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database> & { handlers?: Handlers },
+  routes: readonly Route<Database, Handlers, Env>[],
+  options: Options<Env, Database> & { handlers?: Handlers },
 ): Fetch<Env> {
   return router(routes, options, async (route, request, env, caller, params, pipeline) => {
     const { dispatch } = await import("./rest-dispatch.js");
@@ -87,16 +99,25 @@ export function rest<Env, Database, Handlers = never>(
 
 /** A selected surface's raw/JSON handlers; its branches are absent from ordinary REST bundles. */
 export function nativeRest<Env, Database, Handlers = never>(
-  routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database> & { handlers?: Handlers },
+  routes: readonly Route<Database, Handlers, Env>[],
+  options: Options<Env, Database> & { handlers?: Handlers },
 ): Fetch<Env> {
   return router(routes, options, async (route, request, env, caller, params, pipeline) => {
     const limit = route.bodyLimit ?? DEFAULT_BODY_LIMIT;
     if (Number(request.headers.get("content-length")) > limit) fail(`Request body exceeds ${limit} bytes.`);
     const bodiless = route.rawBody || ["GET", "HEAD", "OPTIONS"].includes(request.method);
     const input = bodiless ? undefined : await body(request, route.bodyLimit);
-    if (pipeline.dryRun) throw new ContractError("DRY_RUN_UNSUPPORTED", "Opaque native route.", route.id, { status: 412 });
-    let initialized = false, db: Database;
-    const getDb = () => { if (!initialized) { db = options.db(env); initialized = true; } return db; };
+    if (pipeline.dryRun)
+      throw new ContractError("DRY_RUN_UNSUPPORTED", "Opaque native route.", route.id, { status: 412 });
+    let initialized = false,
+      db: Database;
+    const getDb = () => {
+      if (!initialized) {
+        db = options.db(env);
+        initialized = true;
+      }
+      return db;
+    };
     const output = await route.handle!(request, env, getDb, caller, params, options.handlers as Handlers, input);
     return output instanceof Response ? output : Response.json(output, { headers });
   });

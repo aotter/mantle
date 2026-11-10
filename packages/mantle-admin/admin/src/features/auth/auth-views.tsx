@@ -2,12 +2,7 @@ import * as React from "react";
 import type { OAuthConsentInfo, OAuthConsentRequest } from "../../../../src/types/auth.js";
 import { useQuery } from "@tanstack/react-query";
 import { AuthCard } from "@aotter/mantle-ui/kit";
-import {
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@aotter/mantle-ui/kit";
+import { CardContent, CardDescription, CardHeader, CardTitle } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
 import { SignInButton, SignInFlow } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
@@ -91,13 +86,17 @@ export function SignInView(): React.ReactElement {
           <Skeleton className="h-9 w-full" />
         ) : (
           // Mounted once the list has loaded, failed or come back empty, so a method an application adds still shows.
-          <Slot name="SignIn" Default={SignInMethods} props={{
-            methods: methods.data ?? [],
-            returnTo: ret,
-            oauthQuery: oauthQuery || undefined,
-            emailAutoComplete: "email",
-            onSignedIn: navigateAfterSignIn,
-          }} />
+          <Slot
+            name="SignIn"
+            Default={SignInMethods}
+            props={{
+              methods: methods.data ?? [],
+              returnTo: ret,
+              oauthQuery: oauthQuery || undefined,
+              emailAutoComplete: "email",
+              onSignedIn: navigateAfterSignIn,
+            }}
+          />
         )}
       </CardContent>
     </AuthCard>
@@ -110,13 +109,20 @@ function navigateAfterSignIn(next: string): void {
 }
 
 /** The built-in `SignIn` slot: one section per method. */
-function SignInMethods({ methods, returnTo, oauthQuery, emailAutoComplete, onSignedIn }: SignInProps): React.ReactElement {
+function SignInMethods({
+  methods,
+  returnTo,
+  oauthQuery,
+  emailAutoComplete,
+  onSignedIn,
+}: SignInProps): React.ReactElement {
   const { language } = usePreferences();
-  if (methods.length === 0) return <p className="text-sm text-muted-foreground">{t(language, "auth.signIn.noMethods")}</p>;
+  if (methods.length === 0)
+    return <p className="text-sm text-muted-foreground">{t(language, "auth.signIn.noMethods")}</p>;
   // Wrap so each section's `first:` selectors target the first method in the list, not the first child of the card.
   return (
     <div>
-      {methods.map((m) => (
+      {methods.map(m => (
         <MethodSection
           key={m.kind === "social" ? `social:${m.provider}` : m.kind === "oauth" ? `oauth:${m.providerId}` : m.kind}
           method={m}
@@ -139,7 +145,7 @@ export function OAuthConsentView(): React.ReactElement {
     queryFn: async () => {
       const response = await fetch(`/oauth/consent/data${window.location.search}`);
       if (response.status === 401) return redirectToSignIn();
-      const body = await response.json() as { consent: OAuthConsentRequest | null };
+      const body = (await response.json()) as { consent: OAuthConsentRequest | null };
       if (response.status === 400) return null;
       if (!response.ok) throw new Error(t(language, "common.failedToLoad"));
       return body.consent;
@@ -177,24 +183,32 @@ export function OAuthConsentView(): React.ReactElement {
         <dl className="mb-6 space-y-3 text-sm">
           <div>
             <dt className="text-muted-foreground">{t(language, "oauth.consent.redirect")}</dt>
-            <dd className="break-all font-medium">{destination.origin === "null" ? destination.protocol : destination.origin}</dd>
+            <dd className="break-all font-medium">
+              {destination.origin === "null" ? destination.protocol : destination.origin}
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">{t(language, "oauth.consent.scopes")}</dt>
             <dd>
               <ul className="mt-2 flex flex-wrap gap-2">
-                {consent.data.scopes.map(scope => <li key={scope} className="rounded-md border bg-muted px-2 py-1 font-mono text-xs">{scope}</li>)}
+                {consent.data.scopes.map(scope => (
+                  <li key={scope} className="rounded-md border bg-muted px-2 py-1 font-mono text-xs">
+                    {scope}
+                  </li>
+                ))}
               </ul>
             </dd>
           </div>
         </dl>
-        {consent.data.scopes.includes("offline_access") && <p className="mb-6 text-sm text-muted-foreground">{t(language, "oauth.consent.offline")}</p>}
+        {consent.data.scopes.includes("offline_access") && (
+          <p className="mb-6 text-sm text-muted-foreground">{t(language, "oauth.consent.offline")}</p>
+        )}
         <form
           method="post"
           action="/oauth/consent"
           className="flex gap-2 max-sm:flex-col"
           aria-busy={submitting !== null || undefined}
-          onSubmit={(event) => {
+          onSubmit={event => {
             const submitter = event.nativeEvent.submitter as HTMLButtonElement | null;
             if (submitter?.value !== "approve" && submitter?.value !== "deny") return;
             if (decision.current) decision.current.value = submitter.value;
@@ -260,7 +274,9 @@ export function ConnectedAppsView(): React.ReactElement {
         title={t(language, "oauth.connectedApps")}
         description={t(language, "oauth.apps.body")}
       />
-      {consents.isError ? <ErrorBox error={consents.error} /> : (
+      {consents.isError ? (
+        <ErrorBox error={consents.error} />
+      ) : (
         <SectionCard>
           {consents.isLoading ? (
             <div className="space-y-3" aria-busy="true">
@@ -271,19 +287,16 @@ export function ConnectedAppsView(): React.ReactElement {
             <p className="text-sm text-muted-foreground">{t(language, "oauth.apps.empty")}</p>
           ) : (
             <div className="divide-y">
-              {consents.data?.map((consent) => (
-                <section key={consent.id} className="flex flex-wrap items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
+              {consents.data?.map(consent => (
+                <section
+                  key={consent.id}
+                  className="flex flex-wrap items-center justify-between gap-4 py-4 first:pt-0 last:pb-0"
+                >
                   <div className="min-w-0">
                     <h2 className="font-medium">{consent.clientName}</h2>
-                    <code className="mt-1 block break-all text-xs text-muted-foreground">
-                      {consent.clientId}
-                    </code>
+                    <code className="mt-1 block break-all text-xs text-muted-foreground">{consent.clientId}</code>
                   </div>
-                  <form
-                    method="post"
-                    action="/oauth/consents/revoke"
-                    onSubmit={() => setSubmitting(consent.id)}
-                  >
+                  <form method="post" action="/oauth/consents/revoke" onSubmit={() => setSubmitting(consent.id)}>
                     <input type="hidden" name="consent_id" value={consent.id} />
                     <SignInButton
                       type="submit"
@@ -357,7 +370,14 @@ function MethodSection({
         />
       );
     case "email-otp":
-      return <EmailOtpSection returnTo={returnTo} oauthQuery={oauthQuery} emailAutoComplete={emailAutoComplete} onSignedIn={onSignedIn} />;
+      return (
+        <EmailOtpSection
+          returnTo={returnTo}
+          oauthQuery={oauthQuery}
+          emailAutoComplete={emailAutoComplete}
+          onSignedIn={onSignedIn}
+        />
+      );
     case "passkey":
       // Listed for the `SignIn` slot: Admin ships no passkey sign-in of its own; the application renders it.
       return null;
@@ -432,9 +452,7 @@ function RedirectSignInSection({
 }: {
   endpoint: string;
   body: Record<string, string>;
-  buttonKey:
-    | "auth.signIn.method.social.button"
-    | "auth.signIn.method.oauth.button";
+  buttonKey: "auth.signIn.method.social.button" | "auth.signIn.method.oauth.button";
   displayName: string;
 }): React.ReactElement {
   const { language } = usePreferences();
@@ -464,7 +482,11 @@ function RedirectSignInSection({
       <SignInButton busy={busy} onClick={() => void start()} className="w-full">
         {t(language, buttonKey, { provider: displayName })}
       </SignInButton>
-      {error ? <p className="mt-2 text-xs text-destructive" role="alert">{error}</p> : null}
+      {error ? (
+        <p className="mt-2 text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -490,13 +512,13 @@ function EmailOtpSection({
         emailLabel: t(language, "auth.signIn.method.email-otp.emailLabel"),
         emailPlaceholder: t(language, "auth.signIn.method.email-otp.emailPlaceholder"),
         sendButton: t(language, "auth.signIn.method.email-otp.sendButton"),
-        sentTo: (email) => t(language, "auth.signIn.method.email-otp.sentTo", { email }),
+        sentTo: email => t(language, "auth.signIn.method.email-otp.sentTo", { email }),
         otpLabel: t(language, "auth.signIn.method.email-otp.otpLabel"),
         verifyButton: t(language, "auth.signIn.method.email-otp.verifyButton"),
         useAnotherEmail: t(language, "auth.signIn.method.email-otp.back"),
         requestFailed: t(language, "auth.signIn.requestFailed"),
       }}
-      onSendCode={async (email) => {
+      onSendCode={async email => {
         const res = await fetch(`${AUTH_BASE}/email-otp/send-verification-otp`, {
           method: "POST",
           credentials: "include",
@@ -535,13 +557,7 @@ function EmailOtpSection({
   );
 }
 
-function MagicLinkSection({
-  returnTo,
-  oauthQuery,
-}: {
-  returnTo: string;
-  oauthQuery?: string;
-}): React.ReactElement {
+function MagicLinkSection({ returnTo, oauthQuery }: { returnTo: string; oauthQuery?: string }): React.ReactElement {
   const { language } = usePreferences();
   const [email, setEmail] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -588,17 +604,11 @@ function MagicLinkSection({
 
   return (
     <div className={SECTION_DIVIDED}>
-      <p className="mb-2 text-sm text-muted-foreground">
-        {t(language, "auth.signIn.method.magic-link.body")}
-      </p>
+      <p className="mb-2 text-sm text-muted-foreground">{t(language, "auth.signIn.method.magic-link.body")}</p>
       {sent ? (
         <div className="space-y-2">
-          <p className="text-sm text-foreground">
-            {t(language, "auth.signIn.method.magic-link.sentTo", { email })}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {t(language, "auth.signIn.method.magic-link.clickHint")}
-          </p>
+          <p className="text-sm text-foreground">{t(language, "auth.signIn.method.magic-link.sentTo", { email })}</p>
+          <p className="text-xs text-muted-foreground">{t(language, "auth.signIn.method.magic-link.clickHint")}</p>
           <button
             type="button"
             onClick={() => {
@@ -619,7 +629,7 @@ function MagicLinkSection({
             id="signin-mlink-email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.currentTarget.value)}
+            onChange={e => setEmail(e.currentTarget.value)}
             placeholder={t(language, "auth.signIn.method.magic-link.emailPlaceholder")}
             required
             autoComplete="email"
@@ -630,7 +640,9 @@ function MagicLinkSection({
         </form>
       )}
       {error ? (
-        <p className="mt-2 text-xs text-destructive" role="alert">{error}</p>
+        <p className="mt-2 text-xs text-destructive" role="alert">
+          {error}
+        </p>
       ) : null}
     </div>
   );
@@ -638,9 +650,5 @@ function MagicLinkSection({
 
 function UnknownMethodSection({ kind }: { kind: string }): React.ReactElement {
   const { language } = usePreferences();
-  return (
-    <p className="mt-4 text-xs text-muted-foreground">
-      {t(language, "auth.signIn.unknownMethod", { kind })}
-    </p>
-  );
+  return <p className="mt-4 text-xs text-muted-foreground">{t(language, "auth.signIn.unknownMethod", { kind })}</p>;
 }

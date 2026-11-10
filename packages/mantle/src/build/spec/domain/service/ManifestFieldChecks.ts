@@ -107,31 +107,18 @@ export class ManifestParseError extends Error {
     /** JSON Pointer into the manifest (e.g. `/spec/output`). */
     public readonly pointer?: string,
     public readonly code: DiagnosticCode = "INVALID_MANIFEST_ENVELOPE",
-    public readonly details?: Pick<
-      Diagnostic,
-      "value" | "expected" | "candidates" | "suggestion"
-    >,
+    public readonly details?: Pick<Diagnostic, "value" | "expected" | "candidates" | "suggestion">,
   ) {
     super(docIndex != null ? `[doc ${docIndex}] ${message}` : message);
     this.name = "ManifestParseError";
   }
 }
 
-export const KNOWN_KINDS: ReadonlySet<ManifestKind> = new Set([
-  "Schema",
-  "View",
-  "Procedure",
-  "Trigger",
-]);
+export const KNOWN_KINDS: ReadonlySet<ManifestKind> = new Set(["Schema", "View", "Procedure", "Trigger"]);
 
 export const V01_TRIGGER_SOURCE_KINDS: ReadonlySet<string> = new Set(["http", "mcp"]);
 
-export const V01_HTTP_METHODS: ReadonlySet<HttpMethod> = new Set([
-  "POST",
-  "PUT",
-  "PATCH",
-  "DELETE",
-]);
+export const V01_HTTP_METHODS: ReadonlySet<HttpMethod> = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export const V01_MCP_TRIGGER_SURFACES: ReadonlySet<string> = new Set(MCP_TRIGGER_SURFACES);
 export const V01_VIEW_SURFACES: ReadonlySet<string> = new Set(VIEW_SURFACES);
@@ -143,7 +130,7 @@ export function rejectUnknownKeys(
   idx: number,
   pointer: string,
 ): void {
-  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
+  const unknown = Object.keys(value).find(key => !allowed.includes(key));
   if (unknown !== undefined) {
     const unknownPointer = pointer === "/" ? `/${unknown}` : `${pointer}/${unknown}`;
     throw new ManifestParseError(

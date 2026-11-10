@@ -22,12 +22,7 @@ export type ApiVersion = typeof API_VERSION;
 export type MediaMcpHint = "media" | "media-image" | "media-video" | "media-file";
 
 export function isMediaMcpHint(value: unknown): value is MediaMcpHint {
-  return (
-    value === "media" ||
-    value === "media-image" ||
-    value === "media-video" ||
-    value === "media-file"
-  );
+  return value === "media" || value === "media-image" || value === "media-video" || value === "media-file";
 }
 
 /** Loose JSON Schema shape — we don't constrain it at the type level.
@@ -99,11 +94,14 @@ export const MANTLE_REF_KEYWORD = "x-mantle-ref" as const;
  * A property's string options: its `enum`, or a `oneOf` whose every branch is a string `const` (the standard way to give each
  * option a `title`). Undefined when the property is neither.
  */
-export function enumOptions(property: JsonSchema | undefined): { readonly value: string; readonly title?: LocalizedText }[] | undefined {
-  if (property?.enum?.length && property.enum.every((v) => typeof v === "string")) return property.enum.map((value) => ({ value: value as string }));
+export function enumOptions(
+  property: JsonSchema | undefined,
+): { readonly value: string; readonly title?: LocalizedText }[] | undefined {
+  if (property?.enum?.length && property.enum.every(v => typeof v === "string"))
+    return property.enum.map(value => ({ value: value as string }));
   const branches = property?.oneOf;
-  if (!branches?.length || !branches.every((b) => typeof b.const === "string")) return undefined;
-  return branches.map((b) => ({ value: b.const as string, ...(b.title !== undefined ? { title: b.title } : {}) }));
+  if (!branches?.length || !branches.every(b => typeof b.const === "string")) return undefined;
+  return branches.map(b => ({ value: b.const as string, ...(b.title !== undefined ? { title: b.title } : {}) }));
 }
 
 /** Object form of `x-mantle-ref`: which Schema the value points at, and
@@ -436,7 +434,10 @@ export const HANDLER_STEP_KEYS = ["sql", "onNoRows"] as const;
 /** The program `steps` compile as: the statements in order, each on its own lines. `lines[i]` is the 0-based line step i starts
  *  on, so a diagnostic in the program points back into its step. A step's own trailing `;` is dropped; after a step ending in a
  *  `--` comment the separator goes on the next line, where the comment cannot swallow it. */
-export function stepProgram(steps: readonly HandlerStep[]): { readonly sql: string; readonly lines: readonly number[] } {
+export function stepProgram(steps: readonly HandlerStep[]): {
+  readonly sql: string;
+  readonly lines: readonly number[];
+} {
   let sql = "";
   const lines: number[] = [];
   for (const [i, step] of steps.entries()) {
@@ -455,11 +456,7 @@ export interface AuthorizationRequirements {
   readonly auth?: { readonly all: readonly AuthPredicate[] };
 }
 
-export type AuthPredicate =
-  | CtxUserPredicate
-  | "ctx.admin"
-  | CtxAuthPredicate
-  | CtxAuthScopePredicate;
+export type AuthPredicate = CtxUserPredicate | "ctx.admin" | CtxAuthPredicate | CtxAuthScopePredicate;
 export type CtxUserPredicate = "ctx.user";
 /** Requires any verified credential normalized into HandlerContext.auth. */
 export type CtxAuthPredicate = "ctx.auth";
@@ -521,14 +518,7 @@ export type Manifest = SchemaManifest | ViewManifest | ProcedureManifest | Trigg
  *  than `json_extract`) and by the type emitter (to surface them on
  *  every Entry interface). Adding a new reserved column is a grammar
  *  revise — touch this constant + every consumer. */
-export const RESERVED_ENTRY_COLUMNS = [
-  "id",
-  "status",
-  "version",
-  "createdAt",
-  "updatedAt",
-  "authorId",
-] as const;
+export const RESERVED_ENTRY_COLUMNS = ["id", "status", "version", "createdAt", "updatedAt", "authorId"] as const;
 
 /**
  * Reserved Procedure input wire names. `expectedVersion` is the observed

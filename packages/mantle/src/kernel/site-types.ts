@@ -1,5 +1,10 @@
 /** Optional site/media DTOs; asset times keep the 0.2 millisecond wire shape. */
-export interface SiteIcon { readonly src: string; readonly mimeType?: string; readonly sizes?: readonly string[]; readonly theme?: "light" | "dark" }
+export interface SiteIcon {
+  readonly src: string;
+  readonly mimeType?: string;
+  readonly sizes?: readonly string[];
+  readonly theme?: "light" | "dark";
+}
 export interface MediaPurposePolicy {
   readonly name: string;
   readonly required: readonly string[];
@@ -12,8 +17,25 @@ export interface MediaPurposePolicy {
    */
   readonly visibility?: "public" | "private";
 }
-export interface SiteDefaults { readonly brand?: string; readonly title?: string; readonly description?: string; readonly origin?: string; readonly locales?: readonly string[]; readonly icons?: readonly SiteIcon[]; readonly media?: { readonly purposes?: readonly MediaPurposePolicy[] } }
-export interface SiteConfig { readonly brand: string; readonly title: string; readonly description: string; readonly origin: string; readonly locales: readonly string[]; readonly canonicalLocale: string | null; readonly icons: readonly SiteIcon[]; readonly media: { readonly purposes: readonly MediaPurposePolicy[] } }
+export interface SiteDefaults {
+  readonly brand?: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly origin?: string;
+  readonly locales?: readonly string[];
+  readonly icons?: readonly SiteIcon[];
+  readonly media?: { readonly purposes?: readonly MediaPurposePolicy[] };
+}
+export interface SiteConfig {
+  readonly brand: string;
+  readonly title: string;
+  readonly description: string;
+  readonly origin: string;
+  readonly locales: readonly string[];
+  readonly canonicalLocale: string | null;
+  readonly icons: readonly SiteIcon[];
+  readonly media: { readonly purposes: readonly MediaPurposePolicy[] };
+}
 export interface SiteSettings {
   readonly brand?: string;
   readonly title?: string;
@@ -69,11 +91,23 @@ export interface MediaStorage {
     readonly uploadGroupId: string;
     readonly purpose: string;
     readonly filename: string;
-    readonly variants: readonly { readonly mimeType: string; readonly byteSize: number; readonly maxBytes: number; readonly role: MediaVariantRole }[];
+    readonly variants: readonly {
+      readonly mimeType: string;
+      readonly byteSize: number;
+      readonly maxBytes: number;
+      readonly role: MediaVariantRole;
+    }[];
     readonly now: number;
     readonly expiresAt: number;
   }): Promise<{
-    readonly capabilities: readonly { readonly mimeType: string; readonly role: MediaVariantRole; readonly method: "PUT"; readonly uploadUrl: string; readonly storageKey: string; readonly requiredHeaders?: Readonly<Record<string, string>> }[];
+    readonly capabilities: readonly {
+      readonly mimeType: string;
+      readonly role: MediaVariantRole;
+      readonly method: "PUT";
+      readonly uploadUrl: string;
+      readonly storageKey: string;
+      readonly requiredHeaders?: Readonly<Record<string, string>>;
+    }[];
   }>;
   /**
    * Checks every uploaded object's type and size (`MEDIA_OBJECT_NOT_FOUND`, `MEDIA_MIME_REJECTED`, `MEDIA_VARIANT_SIZE_EXCEEDED`), all or
@@ -83,7 +117,12 @@ export interface MediaStorage {
   commitUpload(args: {
     readonly uploadGroupId: string;
     readonly filename: string;
-    readonly variants: readonly { readonly mimeType: string; readonly role: MediaVariantRole; readonly storageKey: string; readonly maxBytes: number }[];
+    readonly variants: readonly {
+      readonly mimeType: string;
+      readonly role: MediaVariantRole;
+      readonly storageKey: string;
+      readonly maxBytes: number;
+    }[];
     readonly alt?: string;
     readonly caption?: string;
     readonly now: number;
@@ -105,13 +144,23 @@ export interface MediaLibrary {
   /** `{ filename, purpose, variants: [{ mimeType, byteSize, role }], alt?, caption? }` against the site's media purposes. */
   createUpload(request: unknown): Promise<{
     readonly uploadGroupId: string;
-    readonly capabilities: readonly { readonly mimeType: string; readonly role: MediaVariantRole; readonly method: "PUT"; readonly uploadUrl: string; readonly requiredHeaders?: Readonly<Record<string, string>> }[];
+    readonly capabilities: readonly {
+      readonly mimeType: string;
+      readonly role: MediaVariantRole;
+      readonly method: "PUT";
+      readonly uploadUrl: string;
+      readonly requiredHeaders?: Readonly<Record<string, string>>;
+    }[];
     readonly expiresAt: number;
   }>;
   /** An unknown or expired group is `MEDIA_UPLOAD_EXPIRED`; one another server created is `MEDIA_NOT_OWNED`, as is its asset id in the calls below. */
   commitUpload(uploadGroupId: string, request?: unknown): Promise<MediaAsset>;
   /** Newest first; `search` matches the exact id, or text in alt or caption (up to 48 characters; a longer one matches the id alone). */
-  list(query: { readonly limit?: number; readonly cursor?: string; readonly search?: string }): Promise<{ readonly rows: readonly MediaAsset[]; readonly nextCursor?: string }>;
+  list(query: {
+    readonly limit?: number;
+    readonly cursor?: string;
+    readonly search?: string;
+  }): Promise<{ readonly rows: readonly MediaAsset[]; readonly nextCursor?: string }>;
   get(id: string): Promise<MediaAsset>;
   /** `{ alt?, caption? }`: an omitted field is unchanged, an empty string clears it. */
   update(id: string, request: unknown): Promise<MediaAsset>;
@@ -120,7 +169,14 @@ export interface MediaLibrary {
    * for `expiresIn` seconds (default 300), with `expiresAt` in milliseconds. A private storage without `signRead` is
    * `MEDIA_NOT_CONFIGURED`.
    */
-  signRead(id: string, expiresIn?: number): Promise<{ readonly id: string; readonly variants: readonly { readonly mimeType: string; readonly role: MediaVariantRole; readonly url: string }[]; readonly expiresAt?: number }>;
+  signRead(
+    id: string,
+    expiresIn?: number,
+  ): Promise<{
+    readonly id: string;
+    readonly variants: readonly { readonly mimeType: string; readonly role: MediaVariantRole; readonly url: string }[];
+    readonly expiresAt?: number;
+  }>;
   /** The objects first, then the row, so a partial failure can be retried with the same id. */
   delete(id: string): Promise<{ readonly deleted: true; readonly variantsRemoved: number }>;
 }

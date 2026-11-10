@@ -150,9 +150,7 @@ export interface Diagnostic {
  * Build a Diagnostic with a derived default `message`. Call sites may supply
  * contextual prose, but the structured fields remain authoritative.
  */
-export function makeDiagnostic(
-  input: Omit<Diagnostic, "message"> & { message?: string },
-): Diagnostic {
+export function makeDiagnostic(input: Omit<Diagnostic, "message"> & { message?: string }): Diagnostic {
   const { code, phase, severity, path, source, value, expected, candidates, suggestion } = input;
   let msg = input.message;
   if (!msg) {
@@ -178,7 +176,8 @@ export function makeDiagnostic(
 
 /** Phase-stamping helpers — equivalent to `makeDiagnostic({...input, phase})`
  *  but read cleaner at call sites. */
-export const validateDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "validate" });
+export const validateDiagnostic = (input: PhaselessInput): Diagnostic =>
+  makeDiagnostic({ ...input, phase: "validate" });
 export const runtimeDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "runtime" });
 
 type PhaselessInput = Omit<Diagnostic, "phase" | "message"> & { message?: string };

@@ -12,7 +12,15 @@ export function shortenId(value: string): string {
   return value.length > 16 ? `${value.slice(0, 7)}…${value.slice(-6)}` : value;
 }
 
-export function IdValue({ value, language, href }: { value: string; language: AdminLanguage; href?: string }): React.ReactElement {
+export function IdValue({
+  value,
+  language,
+  href,
+}: {
+  value: string;
+  language: AdminLanguage;
+  href?: string;
+}): React.ReactElement {
   const [copied, setCopied] = React.useState(false);
 
   async function copy(): Promise<void> {
@@ -28,7 +36,9 @@ export function IdValue({ value, language, href }: { value: string; language: Ad
   return (
     <span className="group inline-flex items-center gap-1 font-mono text-xs text-muted-foreground">
       {href ? (
-        <a href={href} className="hover:text-foreground hover:underline" title={value}>{shortenId(value)}</a>
+        <a href={href} className="hover:text-foreground hover:underline" title={value}>
+          {shortenId(value)}
+        </a>
       ) : (
         <span title={value}>{shortenId(value)}</span>
       )}

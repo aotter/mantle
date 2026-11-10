@@ -5,11 +5,7 @@ import { cn } from "../lib/utils";
 
 export const MAIN_CONTENT_ID = "content";
 
-export function SkipToMain({
-  className,
-}: {
-  className?: string;
-}): React.ReactElement {
+export function SkipToMain({ className }: { className?: string }): React.ReactElement {
   const { language } = usePreferences();
   return (
     <a

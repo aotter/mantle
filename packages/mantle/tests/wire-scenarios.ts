@@ -1,15 +1,24 @@
 /** One independent client-wire oracle, shared by native SQLite, PostgreSQL and local D1. */
-import assert from 'node:assert/strict';
+import assert from "node:assert/strict";
 export const integerCases = [
- ['safe', '9007199254740991', 9007199254740991], ['unsafe', '9007199254740993', '9007199254740993'],
- ['negative', '-9007199254740993', '-9007199254740993'], ['min', '-9223372036854775808', '-9223372036854775808'],
- ['max', '9223372036854775807', '9223372036854775807'], ['zero', '0', 0],
+  ["safe", "9007199254740991", 9007199254740991],
+  ["unsafe", "9007199254740993", "9007199254740993"],
+  ["negative", "-9007199254740993", "-9007199254740993"],
+  ["min", "-9223372036854775808", "-9223372036854775808"],
+  ["max", "9223372036854775807", "9223372036854775807"],
+  ["zero", "0", 0],
 ] as const;
 
 export const cases = [
- ['a',{nested:[1,true]},true],['b',[1,'x'],false],['c','hello',true],['d',42,false],['e',false,true],['f',null,false],['g',undefined,null],
+  ["a", { nested: [1, true] }, true],
+  ["b", [1, "x"], false],
+  ["c", "hello", true],
+  ["d", 42, false],
+  ["e", false, true],
+  ["f", null, false],
+  ["g", undefined, null],
 ] as const;
-export const source=`apiVersion: cms.mantle.aotter.net/v2
+export const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: wire_records}
 spec:
@@ -61,45 +70,122 @@ kind: Trigger
 metadata: {name: read-native-http}
 spec: {source: {kind: http, method: POST, path: /api/native-query}, target: {procedure: read-native}}
 `;
-export function seed(pg:boolean):string {
- return cases.map(([id,payload,flag])=>`INSERT INTO wire_records(id,version,created_at,updated_at,payload,flag,quantity) VALUES('${id}',1,${pg?'now(),now()':'0,0'},${payload===undefined?'NULL':"'"+JSON.stringify(payload)+"'"},${flag===null?'NULL':pg?String(flag):Number(flag)},${id==='g'?'NULL':2});`).join('\n') + integerCases.map(([id,value])=>`INSERT INTO wire_records(id,version,created_at,updated_at,quantity) VALUES('${id}',${value},${pg?'now(),now()':'0,0'},${value});`).join('\n');
+export function seed(pg: boolean): string {
+  return (
+    cases
+      .map(
+        ([id, payload, flag]) =>
+          `INSERT INTO wire_records(id,version,created_at,updated_at,payload,flag,quantity) VALUES('${id}',1,${pg ? "now(),now()" : "0,0"},${payload === undefined ? "NULL" : "'" + JSON.stringify(payload) + "'"},${flag === null ? "NULL" : pg ? String(flag) : Number(flag)},${id === "g" ? "NULL" : 2});`,
+      )
+      .join("\n") +
+    integerCases
+      .map(
+        ([id, value]) =>
+          `INSERT INTO wire_records(id,version,created_at,updated_at,quantity) VALUES('${id}',${value},${pg ? "now(),now()" : "0,0"},${value});`,
+      )
+      .join("\n")
+  );
 }
-export async function verifyWire(fetch:(request:Request)=>Promise<Response|undefined>,bare:(id:string)=>Promise<any[]>,count:()=>number,sqlite:boolean,malformed=false):Promise<void> {
- const call=async(name:string,args:unknown)=>{
-  const response=(await fetch(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}})})))!;
-  const body=await response.text();return {response,data:JSON.parse(body.startsWith('event:')?body.split('data: ')[1]!.split('\n')[0]!:body)};
- };
- for(const [id,payload,flag] of cases) {
-  const native=(await bare(id))[0];const expectedPayload=payload??null;
-  assert.deepEqual(native.dataAlias,sqlite&&payload!==undefined?JSON.stringify(payload):expectedPayload);
-  assert.equal(native.enabledAlias,sqlite&&flag!==null?Number(flag):flag);
-  const beforeRest=count(),rest=(await fetch(new Request('https://app.test/api/views/wire-records?id='+id)))!;
-  assert.equal(count()-beforeRest,1);assert.equal(rest.status,200);const row=(await rest.json() as any).rows[0];
-  assert.deepEqual(row.dataAlias,expectedPayload);assert.equal(row.enabledAlias,flag);assert.equal(row.computedJson,native.computedJson);assert.equal(row.quantityAlias,id==='g'?null:2);assert.equal(row.versionAlias,1);assert.equal(row.computedInteger,native.computedInteger);
-  const beforeMcp=count(),mcp=await call('wire_records',{id});assert.equal(count()-beforeMcp,1);assert.equal(mcp.response.status,200);
-  assert.deepEqual(mcp.data.result.structuredContent.rows[0],row);assert.deepEqual(JSON.parse(mcp.data.result.content[0].text).rows[0],row);
-  assert.deepEqual(native.dataAlias,sqlite&&payload!==undefined?JSON.stringify(payload):expectedPayload);
- }
- for(const [id,,expected] of integerCases) {
-  const before=count(),rest=(await fetch(new Request('https://app.test/api/views/wire-records?id='+id)))!;
-  assert.equal(rest.status,200);assert.equal(count()-before,1);
-  const row=(await rest.json() as any).rows[0];assert.equal(row.quantityAlias,expected);assert.equal(row.versionAlias,expected);
-  const beforeMcp=count(),mcp=await call('wire_records',{id});assert.equal(count()-beforeMcp,1);
-  assert.deepEqual(mcp.data.result.structuredContent.rows[0],row);
- }
- for(const args of [{id:'a',limit:0},{}]) {
-  const before=count(),rest=(await fetch(new Request('https://app.test/api/views/wire-records?'+new URLSearchParams(args as any))))!;assert.equal(rest.status,400);assert.equal(count(),before);
-  const mcp=await call('wire_records',args);assert.equal(mcp.data.result.isError,true);assert.equal(count(),before);
- }
- const native=(await bare('a'))[0],expectedNative={results:[[{payload:native.dataAlias,flag:native.enabledAlias}]]};
- assert.deepEqual((await call('read_native',{id:'a',version:1})).data.result.structuredContent,expectedNative);
- const http=(await fetch(new Request('https://app.test/api/native-query',{method:'POST',headers:{'content-type':'application/json'},body:'{"id":"a","version":2}'})))!;assert.deepEqual(await http.json(),expectedNative);
- const expectedRef={flag:0,payload:'[1]'},before=count();
- assert.deepEqual((await call('echo_native',{})).data.result.structuredContent,expectedRef);
- assert.deepEqual(await (await fetch(new Request('https://app.test/api/native',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})))!.json(),expectedRef);assert.equal(count(),before);
- if(malformed) {
-  const native=(await bare('z'))[0];assert.equal(native.dataAlias,'private-invalid-json');
-  const response=(await fetch(new Request('https://app.test/api/views/wire-records?id=z')))!;assert.equal(response.status,500);const body=await response.text();assert.match(body,/INTERNAL_ERROR/);assert.ok(!body.includes('private-invalid-json'));
-  const mcp=await call('wire_records',{id:'z'});assert.equal(mcp.data.result.isError,true);assert.match(mcp.data.result.content[0].text,/INTERNAL_ERROR/);assert.ok(!mcp.data.result.content[0].text.includes('private-invalid-json'));
- }
+export async function verifyWire(
+  fetch: (request: Request) => Promise<Response | undefined>,
+  bare: (id: string) => Promise<any[]>,
+  count: () => number,
+  sqlite: boolean,
+  malformed = false,
+): Promise<void> {
+  const call = async (name: string, args: unknown) => {
+    const response = (await fetch(
+      new Request("https://app.test/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+      }),
+    ))!;
+    const body = await response.text();
+    return { response, data: JSON.parse(body.startsWith("event:") ? body.split("data: ")[1]!.split("\n")[0]! : body) };
+  };
+  for (const [id, payload, flag] of cases) {
+    const native = (await bare(id))[0];
+    const expectedPayload = payload ?? null;
+    assert.deepEqual(native.dataAlias, sqlite && payload !== undefined ? JSON.stringify(payload) : expectedPayload);
+    assert.equal(native.enabledAlias, sqlite && flag !== null ? Number(flag) : flag);
+    const beforeRest = count(),
+      rest = (await fetch(new Request("https://app.test/api/views/wire-records?id=" + id)))!;
+    assert.equal(count() - beforeRest, 1);
+    assert.equal(rest.status, 200);
+    const row = ((await rest.json()) as any).rows[0];
+    assert.deepEqual(row.dataAlias, expectedPayload);
+    assert.equal(row.enabledAlias, flag);
+    assert.equal(row.computedJson, native.computedJson);
+    assert.equal(row.quantityAlias, id === "g" ? null : 2);
+    assert.equal(row.versionAlias, 1);
+    assert.equal(row.computedInteger, native.computedInteger);
+    const beforeMcp = count(),
+      mcp = await call("wire_records", { id });
+    assert.equal(count() - beforeMcp, 1);
+    assert.equal(mcp.response.status, 200);
+    assert.deepEqual(mcp.data.result.structuredContent.rows[0], row);
+    assert.deepEqual(JSON.parse(mcp.data.result.content[0].text).rows[0], row);
+    assert.deepEqual(native.dataAlias, sqlite && payload !== undefined ? JSON.stringify(payload) : expectedPayload);
+  }
+  for (const [id, , expected] of integerCases) {
+    const before = count(),
+      rest = (await fetch(new Request("https://app.test/api/views/wire-records?id=" + id)))!;
+    assert.equal(rest.status, 200);
+    assert.equal(count() - before, 1);
+    const row = ((await rest.json()) as any).rows[0];
+    assert.equal(row.quantityAlias, expected);
+    assert.equal(row.versionAlias, expected);
+    const beforeMcp = count(),
+      mcp = await call("wire_records", { id });
+    assert.equal(count() - beforeMcp, 1);
+    assert.deepEqual(mcp.data.result.structuredContent.rows[0], row);
+  }
+  for (const args of [{ id: "a", limit: 0 }, {}]) {
+    const before = count(),
+      rest = (await fetch(new Request("https://app.test/api/views/wire-records?" + new URLSearchParams(args as any))))!;
+    assert.equal(rest.status, 400);
+    assert.equal(count(), before);
+    const mcp = await call("wire_records", args);
+    assert.equal(mcp.data.result.isError, true);
+    assert.equal(count(), before);
+  }
+  const native = (await bare("a"))[0],
+    expectedNative = { results: [[{ payload: native.dataAlias, flag: native.enabledAlias }]] };
+  assert.deepEqual((await call("read_native", { id: "a", version: 1 })).data.result.structuredContent, expectedNative);
+  const http = (await fetch(
+    new Request("https://app.test/api/native-query", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"id":"a","version":2}',
+    }),
+  ))!;
+  assert.deepEqual(await http.json(), expectedNative);
+  const expectedRef = { flag: 0, payload: "[1]" },
+    before = count();
+  assert.deepEqual((await call("echo_native", {})).data.result.structuredContent, expectedRef);
+  assert.deepEqual(
+    await (await fetch(
+      new Request("https://app.test/api/native", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }),
+    ))!.json(),
+    expectedRef,
+  );
+  assert.equal(count(), before);
+  if (malformed) {
+    const native = (await bare("z"))[0];
+    assert.equal(native.dataAlias, "private-invalid-json");
+    const response = (await fetch(new Request("https://app.test/api/views/wire-records?id=z")))!;
+    assert.equal(response.status, 500);
+    const body = await response.text();
+    assert.match(body, /INTERNAL_ERROR/);
+    assert.ok(!body.includes("private-invalid-json"));
+    const mcp = await call("wire_records", { id: "z" });
+    assert.equal(mcp.data.result.isError, true);
+    assert.match(mcp.data.result.content[0].text, /INTERNAL_ERROR/);
+    assert.ok(!mcp.data.result.content[0].text.includes("private-invalid-json"));
+  }
 }

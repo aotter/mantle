@@ -4,7 +4,12 @@ import type { Recipe } from "../kernel/binds.js";
 
 const KINDS = new Set(["uid", "admin", "user", "now", "cutoff", "const", "input", "version", "scoped"]);
 /** @internal */
-export function recipesOf(statement: Pick<LoweredStatement,"binds">, fields: readonly string[], refuse: (message: string) => void, values?: Set<string>): Recipe[] {
+export function recipesOf(
+  statement: Pick<LoweredStatement, "binds">,
+  fields: readonly string[],
+  refuse: (message: string) => void,
+  values?: Set<string>,
+): Recipe[] {
   const field = (bound: unknown) => {
     const name = fields.find(field => field.toLowerCase() === String(bound).toLowerCase());
     if (name === undefined) refuse(`Input bind '${bound}' has no declared field.`);
@@ -17,6 +22,10 @@ export function recipesOf(statement: Pick<LoweredStatement,"binds">, fields: rea
     if (b.k !== "input") return b as Recipe;
     if (b.type === "date" || b.type === "timestamptz") values?.add(b.type === "date" ? "date" : "timestamp");
     // only a date-time, a date or JSON is converted at bind time (`encode` in kernel/binds)
-    return { k: "input", name: field(b.name), ...(b.type === "timestamptz" || b.type === "date" || b.type === "json" ? { type: b.type } : {}) };
+    return {
+      k: "input",
+      name: field(b.name),
+      ...(b.type === "timestamptz" || b.type === "date" || b.type === "json" ? { type: b.type } : {}),
+    };
   });
 }

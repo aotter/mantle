@@ -11,7 +11,7 @@ import type { RelationPosition } from "./positions.js";
 export type { Compiled, Mode } from "./policy.js";
 
 export interface CompileContext {
-  readonly restrict?: PolicyOpts['restrict'];
+  readonly restrict?: PolicyOpts["restrict"];
   readonly dialect: MantleDialect;
   readonly schemas: Readonly<Record<string, StorageSchema>>;
   /** `schemaColumns(schemas)`, when the caller checks many programs against one plan. */
@@ -30,15 +30,47 @@ export interface CompileContext {
 
 /** Check every statement of a program with the dialect, then inject policy. A refused IR is `INPUT_VALIDATION_FAILED`. */
 export function compileProgram(stmts: readonly SqlNode[], ctx: CompileContext): Compiled[] {
-  const diagnostics = ctx.dialect.check({ grammar: PG_GRAMMAR, stmts } satisfies SqlPlan, { schemas: ctx.schemas, ...(ctx.columns ? { columns: ctx.columns } : {}), inputs: ctx.inputs, kind: ctx.kind, public: ctx.mode === "public" });
+  const diagnostics = ctx.dialect.check({ grammar: PG_GRAMMAR, stmts } satisfies SqlPlan, {
+    schemas: ctx.schemas,
+    ...(ctx.columns ? { columns: ctx.columns } : {}),
+    inputs: ctx.inputs,
+    kind: ctx.kind,
+    public: ctx.mode === "public",
+  });
   if (diagnostics.length)
-    throw new DiagnosticError(diagnostics.map((d) => runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: `${d.code}: ${d.message}` })));
-  const opts: PolicyOpts = { restrict: ctx.restrict, schemas: ctx.schemas, inputs: ctx.inputs, mode: ctx.mode, lockVersion: ctx.lockVersion, seen: ctx.seen, uncheckedRefs: ctx.uncheckedRefs, lower: ctx.dialect.lowering, nativeOrder: ctx.dialect.nativeOrder };
+    throw new DiagnosticError(
+      diagnostics.map(d =>
+        runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "store",
+          message: `${d.code}: ${d.message}`,
+        }),
+      ),
+    );
+  const opts: PolicyOpts = {
+    restrict: ctx.restrict,
+    schemas: ctx.schemas,
+    inputs: ctx.inputs,
+    mode: ctx.mode,
+    lockVersion: ctx.lockVersion,
+    seen: ctx.seen,
+    uncheckedRefs: ctx.uncheckedRefs,
+    lower: ctx.dialect.lowering,
+    nativeOrder: ctx.dialect.nativeOrder,
+  };
   return stmts.map((stmt, i) => {
     const c = applyPolicy(stmt, opts);
     // a Schema whose published entries are protected takes row ops only (ADR-0032 decision 2, ADR-0034 decision 4)
     if (c.kind === "set" && c.schema && ctx.schemas[c.schema]?.publishing)
-      throw new DiagnosticError(runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: `SQL_SHAPE: a set op on ${c.schema} is refused: its lifecycle is publishing, so published entries are protected and writes take row ops only` }));
+      throw new DiagnosticError(
+        runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "store",
+          message: `SQL_SHAPE: a set op on ${c.schema} is refused: its lifecycle is publishing, so published entries are protected and writes take row ops only`,
+        }),
+      );
     return c;
   });
 }

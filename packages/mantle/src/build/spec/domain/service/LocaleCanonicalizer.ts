@@ -50,9 +50,10 @@ export function toCanonicalLocale(input: string): string {
  * Preserves input order in `valid`; canonicalizes each entry; dedupes
  * the result so `["zh-tw", "zh-TW"]` collapses to `["zh-TW"]`.
  */
-export function canonicalizeLocaleList(
-  inputs: ReadonlyArray<string>,
-): { readonly valid: string[]; readonly invalid: string[] } {
+export function canonicalizeLocaleList(inputs: ReadonlyArray<string>): {
+  readonly valid: string[];
+  readonly invalid: string[];
+} {
   const valid: string[] = [];
   const invalid: string[] = [];
   const seen = new Set<string>();
@@ -70,8 +71,6 @@ export function canonicalizeLocaleList(
   return { valid, invalid };
 }
 
-export function containsScriptSubtagLocale(
-  inputs: ReadonlyArray<string>,
-): boolean {
-  return inputs.some((raw) => SCRIPT_SUBTAG_SHAPE.test(raw));
+export function containsScriptSubtagLocale(inputs: ReadonlyArray<string>): boolean {
+  return inputs.some(raw => SCRIPT_SUBTAG_SHAPE.test(raw));
 }

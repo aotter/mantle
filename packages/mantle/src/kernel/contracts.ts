@@ -6,10 +6,15 @@ export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
 /** The declared user fields an entry's `fields` option takes, and the values a Caller carries for them. */
 export type { AllValues, UserField, UserFields, UserValue } from "./user-fields.js";
 
-export interface Gateway { readonly tenant: string }
-export interface RequestContext { readonly props?: unknown }
+export interface Gateway {
+  readonly tenant: string;
+}
+export interface RequestContext {
+  readonly props?: unknown;
+}
 /** Gateway mode or the one execution prop carrying forwarded authority. */
-export const forwarded = (ctx?: RequestContext, gateway?: Gateway): boolean => !!(gateway || ctx?.props && Object.hasOwn(ctx.props, "mantle"));
+export const forwarded = (ctx?: RequestContext, gateway?: Gateway): boolean =>
+  !!(gateway || (ctx?.props && Object.hasOwn(ctx.props, "mantle")));
 /** Generated gateway metadata is loaded only after a forwarded request. */
 export interface AccessTarget {
   readonly targetHash: string;
@@ -57,11 +62,19 @@ type IdentityCaller = {
 export type Caller =
   | { readonly kind: "anonymous" }
   | (IdentityCaller & { readonly kind: "user" })
-  | (IdentityCaller & { readonly kind: "host"; readonly authenticatedAs: "snapshot" | "fresh"; readonly requestId: string })
+  | (IdentityCaller & {
+      readonly kind: "host";
+      readonly authenticatedAs: "snapshot" | "fresh";
+      readonly requestId: string;
+    })
   | { readonly kind: "system"; readonly reason: string };
 
 /** A selected boundary's application authorization target. */
-export type Target = { kind: "view" | "procedure" | "schema"; name: string; action?: "read" | "create" | "update" | "delete" };
+export type Target = {
+  kind: "view" | "procedure" | "schema";
+  name: string;
+  action?: "read" | "create" | "update" | "delete";
+};
 export type Authorize = (target: Target, caller: Caller) => boolean | Promise<boolean>;
 
 /** Privilege never follows a member role name. Only the original verified identity carries the admin layer. */
@@ -71,15 +84,30 @@ export const isUser = (caller: Caller): boolean => caller.kind === "user" || isA
 export const hasAdminRole = (caller: Caller, name: string): boolean => isAdmin(caller) && hasRole(caller, name);
 
 /** Only the core transport failures; other codes carry their own status, and unknown codes remain server errors. */
-export const statusOf = (code: string): number => ({ __proto__: null,
-  INPUT_VALIDATION_FAILED: 400, UNAUTHENTICATED: 401, AUTH_DENIED: 403, NOT_FOUND: 404,
-  METHOD_NOT_ALLOWED: 405, CONFLICT: 409, OUTCOME_UNKNOWN: 503,
-} as Record<string, number | null>)[code] ?? 500;
+export const statusOf = (code: string): number =>
+  (
+    ({
+      __proto__: null,
+      INPUT_VALIDATION_FAILED: 400,
+      UNAUTHENTICATED: 401,
+      AUTH_DENIED: 403,
+      NOT_FOUND: 404,
+      METHOD_NOT_ALLOWED: 405,
+      CONFLICT: 409,
+      OUTCOME_UNKNOWN: 503,
+    }) as Record<string, number | null>
+  )[code] ?? 500;
 
 /** Redact native errors at the selected boundary; the bare query preserves their identity. */
-export function wire(error: unknown): { status: number; error: { code: string; message: string; path: string; [field: string]: unknown } } {
-  const status = error instanceof ContractError ? error.status ?? statusOf(error.code) : 500;
-  if (status !== 500) { const { code, message, path, fields } = error as ContractError; return { status, error: { code, message, path, ...fields } }; }
+export function wire(error: unknown): {
+  status: number;
+  error: { code: string; message: string; path: string; [field: string]: unknown };
+} {
+  const status = error instanceof ContractError ? (error.status ?? statusOf(error.code)) : 500;
+  if (status !== 500) {
+    const { code, message, path, fields } = error as ContractError;
+    return { status, error: { code, message, path, ...fields } };
+  }
   return { status, error: { code: "INTERNAL_ERROR", message: "An internal error occurred.", path: "" } };
 }
 
@@ -91,14 +119,23 @@ export function wireRows(rows: readonly Row[], fields: WireColumns = []): readon
   if (!fields.length) return rows;
   return rows.map(row => {
     const result = { ...row };
-    for (const [key, type] of fields) if (Object.hasOwn(row, key) && row[key] != null) {
-      const value = row[key];
-      if (type === "json") {
-        try { result[key] = JSON.parse(value as string); }
-        catch { throw new ContractError("INVALID_STORED_JSON", "Persisted JSON could not be parsed."); }
-      } else result[key] = type === "bool" ? value === true || value === 1
-        : typeof value === "number" || Number.isSafeInteger(Number(value)) ? Number(value) : String(value);
-    }
+    for (const [key, type] of fields)
+      if (Object.hasOwn(row, key) && row[key] != null) {
+        const value = row[key];
+        if (type === "json") {
+          try {
+            result[key] = JSON.parse(value as string);
+          } catch {
+            throw new ContractError("INVALID_STORED_JSON", "Persisted JSON could not be parsed.");
+          }
+        } else
+          result[key] =
+            type === "bool"
+              ? value === true || value === 1
+              : typeof value === "number" || Number.isSafeInteger(Number(value))
+                ? Number(value)
+                : String(value);
+      }
     return result;
   });
 }
@@ -106,32 +143,64 @@ export function wireRows(rows: readonly Row[], fields: WireColumns = []): readon
 export type Output = { readonly results: ReadonlyArray<ReadonlyArray<Row>> };
 /** Deny unless `allowed`: a user is AUTH_DENIED, anyone else UNAUTHENTICATED. */
 export function deny(caller: Caller, allowed: boolean, path: string): void {
-  if (!allowed) throw new ContractError("subject" in caller ? "AUTH_DENIED" : "UNAUTHENTICATED", "Authorization predicate not satisfied.", path);
+  if (!allowed)
+    throw new ContractError(
+      "subject" in caller ? "AUTH_DENIED" : "UNAUTHENTICATED",
+      "Authorization predicate not satisfied.",
+      path,
+    );
 }
 /** A row statement that changed no row cannot tell why without leaking whether the row exists, so it says how to recover. */
-export const ROW_CONFLICT = "No row matched this change: it does not exist or is not visible to you, it changed since it was read, or its state no longer allows this change. Read it again before deciding whether to retry.";
+export const ROW_CONFLICT =
+  "No row matched this change: it does not exist or is not visible to you, it changed since it was read, or its state no longer allows this change. Read it again before deciding whether to retry.";
 /** CONFLICT for a write the database refused: a unique-index clash (`fields.kind` "unique"), or a row statement that did not change exactly one row ("row"). */
 export const conflict = (path: string, unique: boolean, cause?: unknown): ContractError =>
-  new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : ROW_CONFLICT, path, { cause, fields: { kind: unique ? "unique" : "row" } });
+  new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : ROW_CONFLICT, path, {
+    cause,
+    fields: { kind: unique ? "unique" : "row" },
+  });
 /** A guarded row write that changed no row (#1822): CONFLICT `kind: "lock"` when its probe found the row visible and held by a lock, else the row conflict, which reveals nothing. */
-export const lockConflict = (path: string, probe: { readonly schema: string; readonly verb: string; readonly locks: Readonly<Record<string, string>>; readonly required?: string }, rows: readonly Row[]): ContractError => {
+export const lockConflict = (
+  path: string,
+  probe: {
+    readonly schema: string;
+    readonly verb: string;
+    readonly locks: Readonly<Record<string, string>>;
+    readonly required?: string;
+  },
+  rows: readonly Row[],
+): ContractError => {
   const lock = rows[0]?.lock;
   // a published row would lose data `publish` requires: the input is wrong, not the row's state
-  if (lock === "publishing.required" && probe.required) return new ContractError("INPUT_VALIDATION_FAILED", probe.required, path);
+  if (lock === "publishing.required" && probe.required)
+    return new ContractError("INPUT_VALIDATION_FAILED", probe.required, path);
   if (typeof lock !== "string" || !Object.hasOwn(probe.locks, lock)) return conflict(path, false);
   const message = probe.locks[lock]!;
-  return new ContractError("CONFLICT", message, path, { fields: { kind: "lock", schema: probe.schema, verb: probe.verb, lock, message } });
+  return new ContractError("CONFLICT", message, path, {
+    fields: { kind: "lock", schema: probe.schema, verb: probe.verb, lock, message },
+  });
 };
 /** A Schema `checks` violation (Mantle's SQLite check trigger, or PostgreSQL SQLSTATE 23514) is a CONFLICT naming the check. */
 export const checkConflict = (path: string, error: unknown): ContractError | undefined => {
-  const message = (error as Error)?.message ?? "", marker = /MANTLE_CHECK ([^:\n]+): (.+)/.exec(message);
+  const message = (error as Error)?.message ?? "",
+    marker = /MANTLE_CHECK ([^:\n]+): (.+)/.exec(message);
   if (!/MANTLE_CHECK /.test(message)) return undefined;
   // D1 appends its own `: SQLITE_CONSTRAINT (extended: …)`; it stays in `cause`, not in what a client reads.
   return schemaCheckFailed(path, error, marker?.[1], marker?.[2]?.replace(/: SQLITE_CONSTRAINT.*$/, ""));
 };
 /** One message on every target, built from the parsed fields; the driver's own text stays in `cause`. */
-export const schemaCheckFailed = (path: string, cause: unknown, schema: string | undefined, check: string | undefined): ContractError =>
-  new ContractError("CONFLICT", schema && check ? `A check of the Schema failed: ${schema}: ${check}` : "A check of the Schema failed.", path, { cause, fields: { kind: "check", schema, check } });
+export const schemaCheckFailed = (
+  path: string,
+  cause: unknown,
+  schema: string | undefined,
+  check: string | undefined,
+): ContractError =>
+  new ContractError(
+    "CONFLICT",
+    schema && check ? `A check of the Schema failed: ${schema}: ${check}` : "A check of the Schema failed.",
+    path,
+    { cause, fields: { kind: "check", schema, check } },
+  );
 
 /** One result of `unsafe`: the rows (typed by the generated function), plus the affected count. */
 export type PostgresResult = any[] & { readonly count: number | null };

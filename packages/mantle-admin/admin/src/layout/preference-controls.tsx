@@ -7,12 +7,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@aotter/mantle-ui/kit";
-import {
-  ADMIN_LANGUAGES,
-  usePreferences,
-  type AdminLanguage,
-  type AdminTheme,
-} from "../app/preferences";
+import { ADMIN_LANGUAGES, usePreferences, type AdminLanguage, type AdminTheme } from "../app/preferences";
 import { t } from "../app/i18n";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
@@ -20,8 +15,7 @@ import { cn } from "../lib/utils";
 
 export function LanguagePreferenceDropdown({ compact = false }: { compact?: boolean }): React.ReactElement {
   const { language, setLanguage } = usePreferences();
-  const current =
-    ADMIN_LANGUAGES.find((item) => item.value === language) ?? ADMIN_LANGUAGES[0];
+  const current = ADMIN_LANGUAGES.find(item => item.value === language) ?? ADMIN_LANGUAGES[0];
 
   return (
     <DropdownMenu>
@@ -46,22 +40,13 @@ export function LanguagePreferenceDropdown({ compact = false }: { compact?: bool
         <TooltipContent>{t(language, "preferences.language")}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="max-h-[min(28rem,80vh)] w-52 overflow-y-auto">
-        <DropdownMenuLabel>
-          {t(language, "preferences.language")}
-        </DropdownMenuLabel>
-        {ADMIN_LANGUAGES.map((item) => (
-          <DropdownMenuItem
-            key={item.value}
-            onSelect={() => setLanguage(item.value)}
-            className="justify-between"
-          >
+        <DropdownMenuLabel>{t(language, "preferences.language")}</DropdownMenuLabel>
+        {ADMIN_LANGUAGES.map(item => (
+          <DropdownMenuItem key={item.value} onSelect={() => setLanguage(item.value)} className="justify-between">
             <span>{item.nativeLabel}</span>
             <Check
               aria-hidden
-              className={cn(
-                "size-4 text-primary",
-                item.value === language ? "opacity-100" : "opacity-0",
-              )}
+              className={cn("size-4 text-primary", item.value === language ? "opacity-100" : "opacity-0")}
             />
           </DropdownMenuItem>
         ))}
@@ -72,7 +57,7 @@ export function LanguagePreferenceDropdown({ compact = false }: { compact?: bool
 
 export function ThemePreferenceDropdown({ compact = false }: { compact?: boolean }): React.ReactElement {
   const { language, theme, setTheme } = usePreferences();
-  const current = themeOptions(language).find((item) => item.value === theme);
+  const current = themeOptions(language).find(item => item.value === theme);
   const Icon = current?.icon ?? Monitor;
 
   return (
@@ -98,27 +83,18 @@ export function ThemePreferenceDropdown({ compact = false }: { compact?: boolean
         <TooltipContent>{t(language, "preferences.appearance")}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuLabel>
-          {t(language, "preferences.appearance")}
-        </DropdownMenuLabel>
-        {themeOptions(language).map((item) => {
+        <DropdownMenuLabel>{t(language, "preferences.appearance")}</DropdownMenuLabel>
+        {themeOptions(language).map(item => {
           const ItemIcon = item.icon;
           return (
-            <DropdownMenuItem
-              key={item.value}
-              onSelect={() => setTheme(item.value)}
-              className="justify-between"
-            >
+            <DropdownMenuItem key={item.value} onSelect={() => setTheme(item.value)} className="justify-between">
               <span className="flex items-center gap-2">
                 <ItemIcon className="size-4" aria-hidden />
                 {item.label}
               </span>
               <Check
                 aria-hidden
-                className={cn(
-                  "size-4 text-primary",
-                  item.value === theme ? "opacity-100" : "opacity-0",
-                )}
+                className={cn("size-4 text-primary", item.value === theme ? "opacity-100" : "opacity-0")}
               />
             </DropdownMenuItem>
           );

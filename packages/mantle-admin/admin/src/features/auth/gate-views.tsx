@@ -40,11 +40,7 @@ export function GateError({ error }: { error: unknown }): React.ReactElement {
   );
 }
 
-export function AccessDeniedView({
-  login,
-}: {
-  login: string | null;
-}): React.ReactElement {
+export function AccessDeniedView({ login }: { login: string | null }): React.ReactElement {
   const { language } = usePreferences();
   return (
     <AuthCard action={<ThemeToggle />} wide>
@@ -62,12 +58,8 @@ export function AccessDeniedView({
         ) : null}
       </CardHeader>
       <CardContent className="text-center">
-        <p className="mb-1 text-sm text-muted-foreground">
-          {t(language, "auth.accessDenied.noAdmin")}
-        </p>
-        <p className="mb-6 text-sm text-muted-foreground">
-          {t(language, "auth.accessDenied.askOwner")}
-        </p>
+        <p className="mb-1 text-sm text-muted-foreground">{t(language, "auth.accessDenied.noAdmin")}</p>
+        <p className="mb-6 text-sm text-muted-foreground">{t(language, "auth.accessDenied.askOwner")}</p>
         <Button variant="outline" className="mb-2 w-full" asChild>
           <a href="/admin/connected-apps">{t(language, "oauth.connectedApps")}</a>
         </Button>
@@ -79,4 +71,3 @@ export function AccessDeniedView({
     </AuthCard>
   );
 }
-

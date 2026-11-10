@@ -11,8 +11,17 @@ const sources = items.flatMap(item => item.files.map(file => ({ item, file, text
 function specifiers(name: string, text: string): string[] {
   const found: string[] = [];
   const visit = (node: ts.Node): void => {
-    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) found.push(node.moduleSpecifier.text);
-    if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === "require"))) {
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    )
+      found.push(node.moduleSpecifier.text);
+    if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require"))
+    ) {
       const [first] = node.arguments;
       found.push(first && ts.isStringLiteralLike(first) ? first.text : "<dynamic>");
     }
@@ -48,7 +57,8 @@ describe("registry items", () => {
     ];
     expect(bothItems.length).toBeGreaterThan(0);
     for (const { item, text, file } of sources.filter(({ item }) => bothItems.includes(item))) {
-      for (const [label, pattern] of forbidden) expect(pattern.test(text), `${file.path} (${item.name}) contains ${label}`).toBe(false);
+      for (const [label, pattern] of forbidden)
+        expect(pattern.test(text), `${file.path} (${item.name}) contains ${label}`).toBe(false);
     }
   });
 
@@ -56,18 +66,28 @@ describe("registry items", () => {
     for (const { item, file, text } of sources) {
       // shadcn's `add` drops a comment before the first import, so the header follows the imports
       const header = /\/\*\*([\s\S]*?Surface:[\s\S]*?)\*\//.exec(text)?.[1] ?? "";
-      expect(text.indexOf("Surface:"), `${file.path} header after the imports`).toBeGreaterThan(text.lastIndexOf("\nimport "));
+      expect(text.indexOf("Surface:"), `${file.path} header after the imports`).toBeGreaterThan(
+        text.lastIndexOf("\nimport "),
+      );
       expect(/Surface: (both|browser)\b/.exec(header)?.[1], `${file.path} header`).toBe(item.meta.surface);
-      expect(/Slots: (.+)/.exec(header)?.[1]?.split(",").map(slot => slot.trim()), `${file.path} header slots`).toEqual([...item.meta.slots]);
+      expect(
+        /Slots: (.+)/
+          .exec(header)?.[1]
+          ?.split(",")
+          .map(slot => slot.trim()),
+        `${file.path} header slots`,
+      ).toEqual([...item.meta.slots]);
       expect(item.meta.slots.length).toBeGreaterThan(0);
-      for (const slot of item.meta.slots) expect(slotSurface(slot), `${item.name}: slot ${slot}`).toBe(item.meta.surface);
+      for (const slot of item.meta.slots)
+        expect(slotSurface(slot), `${item.name}: slot ${slot}`).toBe(item.meta.surface);
     }
   });
 
   it("typecheck as the components of defineAdmin against the built package", () => {
     const dir = resolve(pkg, "test/__registry");
     const virtual = new Map<string, string>();
-    const imports: string[] = [], components: string[] = [];
+    const imports: string[] = [],
+      components: string[] = [];
     for (const { item, file, text } of sources) {
       const exported = /export function (\w+)/.exec(text)![1]!;
       virtual.set(resolve(dir, basename(file.path)), text);
@@ -75,16 +95,37 @@ describe("registry items", () => {
       for (const slot of item.meta.slots) components.push(`  ${JSON.stringify(sampleKey(slot))}: ${exported},`);
     }
     const consumer = resolve(dir, "consumer.ts");
-    virtual.set(consumer, [`import { defineAdmin } from "@aotter/mantle-admin/app";`, ...imports, `export default defineAdmin({}, { components: {`, ...components, "} });"].join("\n"));
-    const options: ts.CompilerOptions = { module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, strict: true, noEmit: true, skipLibCheck: false, types: [] };
+    virtual.set(
+      consumer,
+      [
+        `import { defineAdmin } from "@aotter/mantle-admin/app";`,
+        ...imports,
+        `export default defineAdmin({}, { components: {`,
+        ...components,
+        "} });",
+      ].join("\n"),
+    );
+    const options: ts.CompilerOptions = {
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      target: ts.ScriptTarget.ES2022,
+      jsx: ts.JsxEmit.ReactJSX,
+      strict: true,
+      noEmit: true,
+      skipLibCheck: false,
+      types: [],
+    };
     const host = ts.createCompilerHost(options);
     const { getSourceFile, fileExists, readFile, directoryExists } = host;
     host.directoryExists = file => file === dir || (directoryExists?.(file) ?? false);
     host.fileExists = file => virtual.has(file) || fileExists(file);
     host.readFile = file => virtual.get(file) ?? readFile(file);
-    host.getSourceFile = (file, language) => virtual.has(file) ? ts.createSourceFile(file, virtual.get(file)!, language) : getSourceFile(file, language);
+    host.getSourceFile = (file, language) =>
+      virtual.has(file) ? ts.createSourceFile(file, virtual.get(file)!, language) : getSourceFile(file, language);
     const program = ts.createProgram([...virtual.keys()], options, host);
-    const diagnostics = ts.getPreEmitDiagnostics(program).map(d => `${d.file ? basename(d.file.fileName) : ""}: ${ts.flattenDiagnosticMessageText(d.messageText, "\n")}`);
+    const diagnostics = ts
+      .getPreEmitDiagnostics(program)
+      .map(d => `${d.file ? basename(d.file.fileName) : ""}: ${ts.flattenDiagnosticMessageText(d.messageText, "\n")}`);
     expect(diagnostics).toEqual([]);
   });
 

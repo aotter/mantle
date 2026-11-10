@@ -9,13 +9,13 @@ export function developerSelectionHref(
   return `${pathname}${search.size ? `?${search}` : ""}`;
 }
 
-export function developerDetailHref(
-  selectedId: string,
-  extra: Record<string, string | null> = {},
-): string {
-  const pathname = selectedId.startsWith("Schema:") ? "/admin/dev/model/schemas"
-    : selectedId.startsWith("View:") ? "/admin/dev/model/views"
-    : selectedId.startsWith("Trigger:") ? "/admin/dev/logic/triggers"
-    : "/admin/dev/logic/procedures";
+export function developerDetailHref(selectedId: string, extra: Record<string, string | null> = {}): string {
+  const pathname = selectedId.startsWith("Schema:")
+    ? "/admin/dev/model/schemas"
+    : selectedId.startsWith("View:")
+      ? "/admin/dev/model/views"
+      : selectedId.startsWith("Trigger:")
+        ? "/admin/dev/logic/triggers"
+        : "/admin/dev/logic/procedures";
   return developerSelectionHref(pathname, selectedId, extra);
 }

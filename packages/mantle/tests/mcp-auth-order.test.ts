@@ -4,13 +4,38 @@ import { fixtureCaller } from "./apps/fixtures.js";
 
 test("OAuth linking scope hints do not become required API scopes", async () => {
   let caller: import("../src/kernel/contracts.js").Caller = { kind: "anonymous" };
-  const tools: Tool<null>[] = [{ name: "read", surface: "public", closed: true, scopes: ["read"], description: "Read", inputSchema: { type: "object" }, validate: () => ({}), page: async () => ({ rows: [] }) }];
+  const tools: Tool<null>[] = [
+    {
+      name: "read",
+      surface: "public",
+      closed: true,
+      scopes: ["read"],
+      description: "Read",
+      inputSchema: { type: "object" },
+      validate: () => ({}),
+      page: async () => ({ rows: [] }),
+    },
+  ];
   const handle = mcp(tools, { db: () => null, caller: () => caller, authorizationScopes: ["offline_access", "mcp"] });
-  const request = () => new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "read", arguments: {} } }) });
+  const request = () =>
+    new Request("https://app.test/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "read", arguments: {} } }),
+    });
   const challenge = await handle(request(), {});
   expect(challenge!.status).toBe(401);
   expect(challenge!.headers.get("www-authenticate")).toContain('scope="mcp offline_access"');
-  caller = fixtureCaller({ kind: "user", subject: "u", role: null, admin: false, scopes: ["mcp", "read"], credential: "oauth", credentialId: null, clientId: null });
+  caller = fixtureCaller({
+    kind: "user",
+    subject: "u",
+    role: null,
+    admin: false,
+    scopes: ["mcp", "read"],
+    credential: "oauth",
+    credentialId: null,
+    clientId: null,
+  });
   expect((await handle(request(), {}))!.status).toBe(200);
   caller = fixtureCaller({ ...caller, scopes: ["mcp"] });
   const missing = await handle(request(), {});
@@ -48,11 +73,33 @@ test("admin probes resolve authority before loading the SDK or reading a body", 
 
 test("app-composed tools need an explicit read catalogue for cached cookie authority", async () => {
   const tools: Tool<null>[] = [
-    { name: "view", surface: "public", description: "View", inputSchema: { type: "object" }, validate: () => ({}), page: async () => ({ rows: [] }) },
-    { name: "write", surface: "public", description: "Write", inputSchema: { type: "object" }, validate: () => ({}), ...{ readOnly: true }, annotations: { readOnlyHint: true }, run: async () => ({}) },
+    {
+      name: "view",
+      surface: "public",
+      description: "View",
+      inputSchema: { type: "object" },
+      validate: () => ({}),
+      page: async () => ({ rows: [] }),
+    },
+    {
+      name: "write",
+      surface: "public",
+      description: "Write",
+      inputSchema: { type: "object" },
+      validate: () => ({}),
+      ...{ readOnly: true },
+      annotations: { readOnlyHint: true },
+      run: async () => ({}),
+    },
   ];
   let readOnly: boolean | undefined;
-  const options = { db: () => null, caller: (_request: Request, _env: unknown, authority: { readOnly: boolean }) => { readOnly = authority.readOnly; return { kind: "anonymous" } as const; } };
+  const options = {
+    db: () => null,
+    caller: (_request: Request, _env: unknown, authority: { readOnly: boolean }) => {
+      readOnly = authority.readOnly;
+      return { kind: "anonymous" } as const;
+    },
+  };
   for (const [reads, name, headers, expected] of [
     [[], "view", { cookie: "fixture=x" }, false],
     [[], "write", { cookie: "fixture=x" }, false],
@@ -61,7 +108,14 @@ test("app-composed tools need an explicit read catalogue for cached cookie autho
     [[{ name: "view", surface: "public" }], "view", {}, false],
   ] as const) {
     const handle = mcp(tools, options, reads);
-    const response = await handle(new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } }) }), {});
+    const response = await handle(
+      new Request("https://app.test/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } }),
+      }),
+      {},
+    );
     expect(response?.status).toBe(200);
     await response?.text();
     expect(readOnly).toBe(expected);

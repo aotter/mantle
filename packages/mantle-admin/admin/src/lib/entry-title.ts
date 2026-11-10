@@ -44,7 +44,12 @@ export function entryTitle(
     const properties = collection.schema.properties ?? {};
     for (const key of collection.schema.required ?? []) {
       const fieldSchema = properties[key];
-      if (!fieldSchema || ([fieldSchema.type].flat().find(type => type !== "null") ?? (fieldSchema.properties ? "object" : fieldSchema.items ? "array" : "string")) !== "string") continue;
+      if (
+        !fieldSchema ||
+        ([fieldSchema.type].flat().find(type => type !== "null") ??
+          (fieldSchema.properties ? "object" : fieldSchema.items ? "array" : "string")) !== "string"
+      )
+        continue;
       const value = data[key];
       if (typeof value === "string" && value.trim()) return value;
     }

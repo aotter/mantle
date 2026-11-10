@@ -1,32 +1,13 @@
 import * as React from "react";
-import {
-  Check,
-  ChevronsUpDown,
-  Languages,
-  Monitor,
-  Pilcrow,
-  Search,
-  type LucideIcon,
-} from "lucide-react";
-import {
-  ADMIN_LANGUAGES,
-  directionForLanguage,
-  usePreferences,
-  type AdminLanguage,
-} from "../../app/preferences";
+import { Check, ChevronsUpDown, Languages, Monitor, Pilcrow, Search, type LucideIcon } from "lucide-react";
+import { ADMIN_LANGUAGES, directionForLanguage, usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { PageHeader, SectionCard } from "../../ui/page";
 import { cn } from "../../lib/utils";
 import { themeOptions } from "../../layout/preference-controls";
 
 export function PreferencesView(): React.ReactElement {
-  const {
-    language,
-    direction,
-    theme,
-    setLanguage,
-    setTheme,
-  } = usePreferences();
+  const { language, direction, theme, setLanguage, setTheme } = usePreferences();
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -43,10 +24,7 @@ export function PreferencesView(): React.ReactElement {
             title={t(language, "preferences.language")}
             body={t(language, "preferences.page.languageBody")}
           />
-          <LanguageSearchSelect
-            language={language}
-            onChange={setLanguage}
-          />
+          <LanguageSearchSelect language={language} onChange={setLanguage} />
         </SectionCard>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -57,7 +35,7 @@ export function PreferencesView(): React.ReactElement {
               body={t(language, "preferences.page.appearanceBody")}
             />
             <div className="mt-4 grid gap-2">
-              {themeOptions(language).map((item) => (
+              {themeOptions(language).map(item => (
                 <PreferenceOptionButton
                   key={item.value}
                   selected={item.value === theme}
@@ -78,9 +56,7 @@ export function PreferencesView(): React.ReactElement {
             />
             <div className="mt-4 rounded-lg border border-border/70 bg-background/30 px-3 py-2 text-sm">
               <span className="text-muted-foreground">
-                {direction === "rtl"
-                  ? t(language, "preferences.rtl")
-                  : t(language, "preferences.ltr")}
+                {direction === "rtl" ? t(language, "preferences.rtl") : t(language, "preferences.ltr")}
               </span>
             </div>
           </SectionCard>
@@ -99,18 +75,11 @@ function LanguageSearchSelect({
 }): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const current =
-    ADMIN_LANGUAGES.find((item) => item.value === language) ?? ADMIN_LANGUAGES[0];
+  const current = ADMIN_LANGUAGES.find(item => item.value === language) ?? ADMIN_LANGUAGES[0];
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = normalizedQuery
-    ? ADMIN_LANGUAGES.filter((item) =>
-        [
-          item.nativeLabel,
-          item.label,
-          item.value,
-          item.htmlLang,
-          item.direction,
-        ]
+    ? ADMIN_LANGUAGES.filter(item =>
+        [item.nativeLabel, item.label, item.value, item.htmlLang, item.direction]
           .join(" ")
           .toLowerCase()
           .includes(normalizedQuery),
@@ -121,14 +90,12 @@ function LanguageSearchSelect({
     <div className="relative mt-4">
       <button
         type="button"
-        onClick={() => setOpen((next) => !next)}
+        onClick={() => setOpen(next => !next)}
         className="flex w-full items-center justify-between gap-3 rounded-lg border border-border/70 bg-background/30 px-3 py-2 text-start text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
         aria-expanded={open}
       >
         <span className="min-w-0">
-          <span className="block truncate font-medium text-foreground">
-            {current.nativeLabel}
-          </span>
+          <span className="block truncate font-medium text-foreground">{current.nativeLabel}</span>
           <span className="block truncate text-xs text-muted-foreground">
             {current.label} · {current.value} · {directionForLanguage(current.value).toUpperCase()}
           </span>
@@ -143,8 +110,8 @@ function LanguageSearchSelect({
             <input
               autoFocus
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
+              onChange={event => setQuery(event.target.value)}
+              onKeyDown={event => {
                 if (event.key === "Escape") setOpen(false);
               }}
               placeholder={t(language, "preferences.language.search")}
@@ -157,7 +124,7 @@ function LanguageSearchSelect({
                 {t(language, "preferences.language.noResults")}
               </div>
             ) : (
-              filtered.map((item) => (
+              filtered.map(item => (
                 <button
                   key={item.value}
                   type="button"
@@ -174,9 +141,7 @@ function LanguageSearchSelect({
                   )}
                 >
                   <span className="min-w-0">
-                    <span className="block truncate font-medium">
-                      {item.nativeLabel}
-                    </span>
+                    <span className="block truncate font-medium">{item.nativeLabel}</span>
                     <span className="block truncate text-xs opacity-75">
                       {item.label} · {item.value} · {item.direction.toUpperCase()}
                     </span>
@@ -246,10 +211,7 @@ function PreferenceOptionButton({
         {Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
         <span className="truncate">{children}</span>
       </span>
-      <Check
-        className={cn("size-4 shrink-0 text-primary", selected ? "opacity-100" : "opacity-0")}
-        aria-hidden
-      />
+      <Check className={cn("size-4 shrink-0 text-primary", selected ? "opacity-100" : "opacity-0")} aria-hidden />
     </button>
   );
 }

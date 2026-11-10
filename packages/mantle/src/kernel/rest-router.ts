@@ -13,7 +13,9 @@ const anonymous = () => ({ kind: "anonymous" }) as const;
 
 /** Shared matching/auth/error envelope; selected dispatch is supplied by the surface. */
 export function router<Env, Database, Handlers>(
-  routes: readonly Route<Database, Handlers, Env>[], options: Options<Env, Database>, send: Send<Env, Database, Handlers>,
+  routes: readonly Route<Database, Handlers, Env>[],
+  options: Options<Env, Database>,
+  send: Send<Env, Database, Handlers>,
 ): Fetch<Env> {
   return draining(async (request, env, ctx) => {
     const pipeline = await openPipeline(ctx, options);
@@ -39,7 +41,9 @@ export function router<Env, Database, Handlers>(
         const call: Call = {
           id: route.id ?? `rest:${route.method} ${decodeURIComponent(path).replace(/\/$/, "")}`,
           view: view && SAFE_METHODS.includes(request.method),
-          readOnly: route.readOnly, target: route.target, check: route.check,
+          readOnly: route.readOnly,
+          target: route.target,
+          check: route.check,
         };
         const caller = await pipeline.resolveCaller(request, env, options.caller ?? anonymous, call.view);
         await pipeline.admit(call);

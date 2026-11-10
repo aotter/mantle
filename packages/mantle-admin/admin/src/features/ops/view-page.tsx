@@ -9,14 +9,7 @@ import { pagedQueryOptions, viewsManifestQueryOptions } from "../../lib/queries"
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, JsonSchema, SiteInfo, ViewManifestInfo } from "../../lib/types";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@aotter/mantle-ui/kit";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { EmptyState, ErrorBox, LoadMore, PageHeader, SectionCard } from "../../ui/page";
 import { Button } from "@aotter/mantle-ui/kit";
@@ -53,7 +46,10 @@ export async function fetchView(
     ...(signal ? { signal } : {}),
   });
   const body = (await res.json().catch(() => null)) as ViewQueryResult | { error?: { message?: string } } | null;
-  if (!res.ok || !body || !("rows" in body)) throw new Error(body && "error" in body && body.error?.message ? body.error.message : `${res.status} ${res.statusText}`);
+  if (!res.ok || !body || !("rows" in body))
+    throw new Error(
+      body && "error" in body && body.error?.message ? body.error.message : `${res.status} ${res.statusText}`,
+    );
   return body;
 }
 
@@ -62,7 +58,10 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   const { language } = usePreferences();
   const { navigate } = useAdminRouter();
   const location = useAdminLocation();
-  const exportFile = useMutation({ mutationFn: (path: string) => downloadAdminFile(path), meta: { invalidates: false } });
+  const exportFile = useMutation({
+    mutationFn: (path: string) => downloadAdminFile(path),
+    meta: { invalidates: false },
+  });
   const urlParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
   const collectionsQuery = useQuery<Collection[]>({
@@ -78,11 +77,16 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   });
   const canonical = site.data?.canonicalLocale ?? null;
 
-  const view = viewsQuery.data?.find((v) => v.name === name);
+  const view = viewsQuery.data?.find(v => v.name === name);
   // an output that reads a Schema field unchanged is labelled and formatted as that field
   const columnSchema = (column: string) => {
     const source = view?.columns?.[column];
-    return source ? withNativeSchema(source.field, collectionsQuery.data?.find((c) => c.name === source.schema)?.schema?.properties?.[source.field]) : undefined;
+    return source
+      ? withNativeSchema(
+          source.field,
+          collectionsQuery.data?.find(c => c.name === source.schema)?.schema?.properties?.[source.field],
+        )
+      : undefined;
   };
 
   // a field's title names only an output under the field's own name: `sum(price) AS total` reads as Total, formatted as a price
@@ -98,7 +102,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   const canQuery = hasRequiredViewParams(view?.input, urlParams);
 
   const query = useInfiniteQuery({
-    ...pagedQueryOptions(["view", name, location.search], async (cursor) => {
+    ...pagedQueryOptions(["view", name, location.search], async cursor => {
       const page = await fetchView(name, { ...Object.fromEntries(urlParams), cursor, limit: VIEW_PAGE_SIZE });
       return { rows: page.rows, next_cursor: page.nextCursor ?? null };
     }),
@@ -117,7 +121,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
     );
   }
 
-  const rows = query.data?.pages.flatMap((page) => page.rows) ?? [];
+  const rows = query.data?.pages.flatMap(page => page.rows) ?? [];
   const columns = viewColumns(view, rows);
   const viewTitle = resolveLocalizedText(view.title, language, canonical) ?? fieldLabel(view.name);
   const exportHref = viewExportHref(name, urlParams);
@@ -127,7 +131,10 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
       <PageHeader
         eyebrow={<Badge variant="secondary">{t(language, "views.adminReport")}</Badge>}
         title={viewTitle}
-        description={resolveLocalizedText(view.description, language, canonical) ?? t(language, "views.page.body", { schema: view.name })}
+        description={
+          resolveLocalizedText(view.description, language, canonical) ??
+          t(language, "views.page.body", { schema: view.name })
+        }
         actions={
           <Button
             type="button"
@@ -158,7 +165,9 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           />
           <Button
             type="button"
-            onClick={() => { navigate(viewParamsHref(name, urlParams, view.input!, params)); }}
+            onClick={() => {
+              navigate(viewParamsHref(name, urlParams, view.input!, params));
+            }}
             disabled={query.isFetching}
           >
             <Search className="size-4" aria-hidden />
@@ -167,36 +176,48 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
         </SectionCard>
       ) : null}
 
-      {(view.list.searchFields.length > 0 || view.list.filterFields.length > 0) ? (
+      {view.list.searchFields.length > 0 || view.list.filterFields.length > 0 ? (
         <ListQueryToolbar
           key={location.search}
           language={language}
           searchable={view.list.searchFields.length > 0}
           searchValue={urlParams.get("search") ?? ""}
-          filters={view.list.filterFields.map((field) => {
+          filters={view.list.filterFields.map(field => {
             // a filter on an output with options is tabs, as on a collection list; its links start from the first page
             const options = enumOptions(columnSchema(field));
             const href = (value?: string) => {
               const next = new URLSearchParams(urlParams);
               next.delete("cursor");
-              if (value) next.set(`filter.${field}`, value); else next.delete(`filter.${field}`);
+              if (value) next.set(`filter.${field}`, value);
+              else next.delete(`filter.${field}`);
               return viewHref(name, next);
             };
             return {
               name: field,
               label: propertyLabel(field, labelSchema(field), language, canonical),
               value: urlParams.get(`filter.${field}`) ?? "",
-              ...(options ? { allHref: href(), options: options.map((o) => ({ value: o.value, label: optionLabel(columnSchema(field), o.value, language, canonical), href: href(o.value) })) } : {}),
+              ...(options
+                ? {
+                    allHref: href(),
+                    options: options.map(o => ({
+                      value: o.value,
+                      label: optionLabel(columnSchema(field), o.value, language, canonical),
+                      href: href(o.value),
+                    })),
+                  }
+                : {}),
             };
           })}
           onSubmit={({ search, filters }) => {
             // a new search starts from the first page: the cursors belong to the old one
             const next = new URLSearchParams(urlParams);
             next.delete("cursor");
-            if (search) next.set("search", search); else next.delete("search");
+            if (search) next.set("search", search);
+            else next.delete("search");
             for (const field of view.list.filterFields) {
               const value = filters[field] ?? "";
-              if (value) next.set(`filter.${field}`, value); else next.delete(`filter.${field}`);
+              if (value) next.set(`filter.${field}`, value);
+              else next.delete(`filter.${field}`);
             }
             navigate(viewHref(name, next));
           }}
@@ -214,22 +235,31 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
         <Table>
           <TableHeader>
             <TableRow>
-              {columns.map((col) => (
-                <TableHead key={col}>
-                  {propertyLabel(col, labelSchema(col), language, canonical)}
-                </TableHead>
+              {columns.map(col => (
+                <TableHead key={col}>{propertyLabel(col, labelSchema(col), language, canonical)}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row, index) => (
               <TableRow key={typeof row["id"] === "string" ? row["id"] : index}>
-                {columns.map((col) => {
+                {columns.map(col => {
                   const schema = columnSchema(col);
                   const value = row[col];
                   return (
                     <TableCell key={col} className="text-muted-foreground">
-                      <DataCell names={[...(view?.columns?.[col] ? [`cell:${view.columns[col].schema}.${view.columns[col].field}`] : []), `cell:view:${name}.${col}`]} field={col} value={value} row={row} property={schema} />
+                      <DataCell
+                        names={[
+                          ...(view?.columns?.[col]
+                            ? [`cell:${view.columns[col].schema}.${view.columns[col].field}`]
+                            : []),
+                          `cell:view:${name}.${col}`,
+                        ]}
+                        field={col}
+                        value={value}
+                        row={row}
+                        property={schema}
+                      />
                     </TableCell>
                   );
                 })}
@@ -243,16 +273,13 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   );
 }
 
-export function readViewParams(
-  schema: JsonSchema | null | undefined,
-  query: URLSearchParams,
-): Record<string, unknown> {
+export function readViewParams(schema: JsonSchema | null | undefined, query: URLSearchParams): Record<string, unknown> {
   const values: Record<string, unknown> = {};
   for (const [name, property] of Object.entries(schema?.properties ?? {})) {
     const raw = query.get(name);
     if (raw === null) continue;
     // `type: ["integer", "null"]` is an integer that may be left out
-    const type = [property.type].flat().find((t) => t !== "null");
+    const type = [property.type].flat().find(t => t !== "null");
     if (type === "integer" || type === "number") values[name] = Number(raw);
     else if (type === "boolean") values[name] = raw === "true";
     else values[name] = raw;
@@ -260,11 +287,8 @@ export function readViewParams(
   return values;
 }
 
-function hasRequiredViewParams(
-  schema: JsonSchema | null | undefined,
-  query: URLSearchParams,
-): boolean {
-  return (schema?.required ?? []).every((name) => query.has(name));
+function hasRequiredViewParams(schema: JsonSchema | null | undefined, query: URLSearchParams): boolean {
+  return (schema?.required ?? []).every(name => query.has(name));
 }
 
 function viewParamsHref(

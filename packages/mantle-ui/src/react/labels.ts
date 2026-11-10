@@ -50,8 +50,10 @@ export const defaultInteractionLabels: InteractionLabels = {
   changedSinceList: "This record changed since the list was loaded; review the current version.",
   reviewLatest: "Review newer version",
   contested: "Someone else also changed fields you edited:",
-  conflict: "This entry changed before your update was saved. Nothing was saved. Load the latest version and review it again.",
-  conflictReopen: "This entry changed before your update was saved. Nothing was saved. Close this, then open the action again from the refreshed list.",
+  conflict:
+    "This entry changed before your update was saved. Nothing was saved. Load the latest version and review it again.",
+  conflictReopen:
+    "This entry changed before your update was saved. Nothing was saved. Close this, then open the action again from the refreshed list.",
   uncertain: "We could not confirm whether this was saved. Check the latest version before trying again.",
   reread: "Load latest version",
   acknowledgeUncertain: "I checked; continue",

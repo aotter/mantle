@@ -22,7 +22,9 @@ export function AdminHooksProvider(props: React.PropsWithChildren<AdminHooksProp
   const value = React.useMemo(() => ({ meta, transport }), [meta, transport]);
   return (
     <AdminHooksContext.Provider value={value}>
-      <SurfaceProvider surface={transport.surface} host={transport.host} layers={layers}>{props.children}</SurfaceProvider>
+      <SurfaceProvider surface={transport.surface} host={transport.host} layers={layers}>
+        {props.children}
+      </SurfaceProvider>
     </AdminHooksContext.Provider>
   );
 }

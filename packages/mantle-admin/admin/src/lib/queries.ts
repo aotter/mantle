@@ -3,7 +3,15 @@ import { api } from "./api";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
 import { foldedChildScopeValue, isFoldedFieldChild } from "./collection-nav";
 import type { SignInMethod } from "../app/slot-props";
-import type { EntryDocument, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, SiteInfo, AdminOperation, ViewManifestInfo } from "./types";
+import type {
+  EntryDocument,
+  DeveloperConsoleSnapshot,
+  EntryEditorPayload,
+  ListEntriesResult,
+  SiteInfo,
+  AdminOperation,
+  ViewManifestInfo,
+} from "./types";
 import { AUTH_BASE } from "./auth";
 
 export const COLLECTION_PAGE_SIZE = 50;
@@ -20,10 +28,7 @@ export interface EntriesQueryArgs {
   sortDirection: "asc" | "desc";
 }
 
-export function entriesQueryArgsFromSearch(
-  collectionName: string,
-  search: string | URLSearchParams,
-): EntriesQueryArgs {
+export function entriesQueryArgsFromSearch(collectionName: string, search: string | URLSearchParams): EntriesQueryArgs {
   const params = typeof search === "string" ? new URLSearchParams(search) : search;
   return {
     collectionName,
@@ -61,24 +66,36 @@ export function entriesQuerySearchParams(args: EntriesQueryArgs, cursor?: string
  * A cursor-paged list as one infinite query: the cursor is the page param, not state, so an invalidation
  * (`invalidateAfterWrite`) refetches every page loaded, and a page in flight never lands in another list.
  */
-export function pagedQueryOptions<Page extends { next_cursor: string | null }>(queryKey: readonly unknown[], load: (cursor: string | undefined) => Promise<Page>) {
+export function pagedQueryOptions<Page extends { next_cursor: string | null }>(
+  queryKey: readonly unknown[],
+  load: (cursor: string | undefined) => Promise<Page>,
+) {
   return infiniteQueryOptions({
     queryKey,
     // No AbortSignal: a query that reads it is cancelled when its last observer unmounts, so a page that remounts
     // while loading would fetch twice. A superseded refetch's result is discarded either way.
     queryFn: ({ pageParam }) => load(pageParam),
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (page) => page.next_cursor ?? undefined,
+    getNextPageParam: page => page.next_cursor ?? undefined,
   });
 }
 
 export function entriesQueryOptions(args: EntriesQueryArgs) {
-  return pagedQueryOptions([
-    "entries", args.collectionName, args.status ?? "all", args.searchTerm,
-    args.filterField ?? "no-filter", args.filterValue ?? "no-value",
-    args.scopeField ?? "no-scope-field", args.scopeValue ?? "no-scope-value",
-    args.sortField, args.sortDirection,
-  ], (cursor) => api.get<ListEntriesResult>(`/entries?${entriesQuerySearchParams(args, cursor)}`));
+  return pagedQueryOptions(
+    [
+      "entries",
+      args.collectionName,
+      args.status ?? "all",
+      args.searchTerm,
+      args.filterField ?? "no-filter",
+      args.filterValue ?? "no-value",
+      args.scopeField ?? "no-scope-field",
+      args.scopeValue ?? "no-scope-value",
+      args.sortField,
+      args.sortDirection,
+    ],
+    cursor => api.get<ListEntriesResult>(`/entries?${entriesQuerySearchParams(args, cursor)}`),
+  );
 }
 
 export function entryEditorQueryOptions(collectionName: string, entryId: string) {
@@ -98,9 +115,10 @@ export function entryApiPath(collection: string, id: string, suffix = ""): strin
 }
 
 export function entryLandingChildQueryOptions(payload: EntryEditorPayload) {
-  const child = payload.related.find((section) =>
-    section.relationship.kind === "field" &&
-    isFoldedFieldChild(section.collection, payload.collection.name, section.relationship.childField)
+  const child = payload.related.find(
+    section =>
+      section.relationship.kind === "field" &&
+      isFoldedFieldChild(section.collection, payload.collection.name, section.relationship.childField),
   );
   const scopeValue = child ? foldedChildScopeValue(child.relationship) : null;
   if (!child || scopeValue === null) return null;
@@ -113,7 +131,8 @@ export function entryLandingChildQueryOptions(payload: EntryEditorPayload) {
 
 export function withNavigationTools(catalog: AdminToolCatalog): AdminToolCatalog {
   const tools = [...catalog.tools, ...navigationTools];
-  if (new Set(tools.map(tool => tool.name)).size !== tools.length) throw new Error("Admin navigation tool name collision.");
+  if (new Set(tools.map(tool => tool.name)).size !== tools.length)
+    throw new Error("Admin navigation tool name collision.");
   return { ...catalog, tools };
 }
 

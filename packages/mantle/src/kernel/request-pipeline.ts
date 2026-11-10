@@ -35,7 +35,11 @@ export interface PipelineOptions extends GatewayOptions {
 }
 
 /** An application's caller resolver; `authority.readOnly` lets it serve a read from cached session authority. */
-export type CallerResolver<Env> = (request: Request, env: Env, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>;
+export type CallerResolver<Env> = (
+  request: Request,
+  env: Env,
+  authority: { readonly readOnly: boolean },
+) => Caller | Promise<Caller>;
 
 /** What a surface matched: one View read or Procedure call. */
 export interface Call {
@@ -55,8 +59,11 @@ export interface Call {
 }
 
 /** A View target: it pages, and has neither a Procedure nor an opaque handler. */
-export const isView = (target: { readonly page?: unknown; readonly run?: unknown; readonly handle?: unknown }): boolean =>
-  !!target.page && !target.run && !target.handle;
+export const isView = (target: {
+  readonly page?: unknown;
+  readonly run?: unknown;
+  readonly handle?: unknown;
+}): boolean => !!target.page && !target.run && !target.handle;
 
 /** Is this call a read: a View, or a Procedure the compiler proved read-only. A snapshot host caller may make it. */
 export const isRead = (call: Pick<Call, "view" | "readOnly">): boolean => call.view || call.readOnly === true;
@@ -67,7 +74,7 @@ export const isRead = (call: Pick<Call, "view" | "readOnly">): boolean => call.v
  * its gateway already authenticated the request, so only its writes must.
  */
 export const originChecked = (call: Pick<Call, "view" | "readOnly">, host: boolean): boolean =>
-  !(call.view || host && call.readOnly === true);
+  !(call.view || (host && call.readOnly === true));
 
 /** A refusal as a client reads it: the redacted wire error. */
 export type Diagnostic = ReturnType<typeof surfaceError>["error"];
@@ -118,18 +125,27 @@ export async function openPipeline(ctx: RequestContext | undefined, options: Pip
   const isHost = () => !!options.gateway && !!caller && isHostCaller(caller);
   /** Forwarded props are the only authority in gateway mode, and a contract violation anywhere else. */
   const resolveForwarded = async () => {
-    if (!caller && forwarded(ctx, options.gateway)) caller = (await hostCallers()).gatewayCaller(ctx, options.gateway, options.fields);
+    if (!caller && forwarded(ctx, options.gateway))
+      caller = (await hostCallers()).gatewayCaller(ctx, options.gateway, options.fields);
   };
   return {
     gateway: !!options.gateway,
-    get caller() { return caller; },
-    get host() { return isHost(); },
-    get dryRun() { return !!access?.dryRun; },
-    async select(id) { await access?.select(id, caller); },
+    get caller() {
+      return caller;
+    },
+    get host() {
+      return isHost();
+    },
+    get dryRun() {
+      return !!access?.dryRun;
+    },
+    async select(id) {
+      await access?.select(id, caller);
+    },
     resolveForwarded,
     async resolveCaller(request, env, resolve, readOnly) {
       await resolveForwarded();
-      return caller ??= await surfaceCaller(request, env, resolve, readOnly);
+      return (caller ??= await surfaceCaller(request, env, resolve, readOnly));
     },
     async admit(call) {
       await access?.select(call.id, caller);
@@ -138,15 +154,21 @@ export async function openPipeline(ctx: RequestContext | undefined, options: Pip
     enforceOrigin(request, call) {
       if (originChecked(call, isHost())) checkOrigin(request, caller!);
     },
-    check(call) { call.check?.(caller!); },
+    check(call) {
+      call.check?.(caller!);
+    },
     async guard(call) {
       call.check?.(caller!);
       if (options.authorize && call.target) await authorizeTarget(options.authorize, call.target, caller!);
     },
     dryRunResult: () => ({ dryRun: true, event: access!.finish() }),
     dryRunResponse: () => access!.response(),
-    finish(error) { access?.finish(error); },
-    async finishResponse(response) { await access?.finishResponse(response); },
+    finish(error) {
+      access?.finish(error);
+    },
+    async finishResponse(response) {
+      await access?.finishResponse(response);
+    },
     async failure(error, where, challenge) {
       access?.finish(error);
       return (await hostCallers()).hostFailure(error, caller, where, challenge);
@@ -154,7 +176,7 @@ export async function openPipeline(ctx: RequestContext | undefined, options: Pip
     async diagnostic(error, where) {
       if (!isHost()) return surfaceError(error, where).error;
       const response = (await hostCallers()).hostFailure(error, caller, where);
-      return (await response.json() as { error: Diagnostic }).error;
+      return ((await response.json()) as { error: Diagnostic }).error;
     },
   };
 }

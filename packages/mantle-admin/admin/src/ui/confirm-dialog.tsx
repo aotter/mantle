@@ -21,20 +21,20 @@ interface PendingConfirm extends ConfirmOptions {
   resolve: (value: boolean) => void;
 }
 
-const ConfirmContext = React.createContext<
-  ((options: ConfirmOptions) => Promise<boolean>) | null
->(null);
+const ConfirmContext = React.createContext<((options: ConfirmOptions) => Promise<boolean>) | null>(null);
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }): React.ReactElement {
   const { language } = usePreferences();
   const [pending, setPending] = React.useState<PendingConfirm | null>(null);
   const confirm = React.useCallback(
     (options: ConfirmOptions) =>
-      new Promise<boolean>((resolve) => setPending((previous) => {
-        // a newer question replaces one still open, which reads as cancelled
-        previous?.resolve(false);
-        return { ...options, resolve };
-      })),
+      new Promise<boolean>(resolve =>
+        setPending(previous => {
+          // a newer question replaces one still open, which reads as cancelled
+          previous?.resolve(false);
+          return { ...options, resolve };
+        }),
+      ),
     [],
   );
   const settle = (result: boolean): void => {
@@ -45,16 +45,14 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }): Re
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
-      <AlertDialog open={pending != null} onOpenChange={(open) => !open && settle(false)}>
+      <AlertDialog open={pending != null} onOpenChange={open => !open && settle(false)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t(language, "confirm.title")}</AlertDialogTitle>
             <AlertDialogDescription>{pending?.description}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => settle(false)}>
-              {t(language, "confirm.cancel")}
-            </AlertDialogCancel>
+            <AlertDialogCancel onClick={() => settle(false)}>{t(language, "confirm.cancel")}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => settle(true)}>
               {t(language, "confirm.confirm")}
             </AlertDialogAction>

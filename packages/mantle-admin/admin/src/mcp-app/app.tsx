@@ -3,7 +3,15 @@ import { createInteractionController, type InteractionController } from "@aotter
 import { OperationPanel } from "@aotter/mantle-ui";
 import { SchemaFields, applyFieldEdits } from "@aotter/mantle-ui/kit";
 import { useInteraction } from "@aotter/mantle-ui";
-import { nativeTimestamp, propertyLabel, renderDataValue, resolveLocalizedText, timestampHint, withNativeSchema, type FieldSchema } from "@aotter/mantle-ui";
+import {
+  nativeTimestamp,
+  propertyLabel,
+  renderDataValue,
+  resolveLocalizedText,
+  timestampHint,
+  withNativeSchema,
+  type FieldSchema,
+} from "@aotter/mantle-ui";
 import {
   actionsFor,
   diagnosticsOf,
@@ -31,31 +39,63 @@ type Row = Readonly<Record<string, unknown>>;
 /** A View column's label: its field's title in the host's language, the entry's own timestamps in the App's, else the name humanized, as Admin. */
 function columnLabel(name: string, schema: FieldSchema | undefined, language: string, labels: AppLabels): string {
   const native = nativeTimestamp(name);
-  return resolveLocalizedText(schema?.title, language) == null && native ? labels[native] : propertyLabel(name, schema, language);
+  return resolveLocalizedText(schema?.title, language) == null && native
+    ? labels[native]
+    : propertyLabel(name, schema, language);
 }
 
 /**
  * A value as the App shows it: a date-time in the host's language and time zone, an http(s) link opened through the host
  * (`ui/open-link`, as the sandbox blocks navigation), anything else as Admin shows it.
  */
-export function appValue(schema: FieldSchema | undefined, value: unknown, language: string, timeZone?: string, openLink?: HostApi["openLink"]): ReactNode {
-  const time = timestampHint(schema) && typeof value === "number" ? value : schema?.format === "date-time" && typeof value === "string" ? Date.parse(value) : NaN;
+export function appValue(
+  schema: FieldSchema | undefined,
+  value: unknown,
+  language: string,
+  timeZone?: string,
+  openLink?: HostApi["openLink"],
+): ReactNode {
+  const time =
+    timestampHint(schema) && typeof value === "number"
+      ? value
+      : schema?.format === "date-time" && typeof value === "string"
+        ? Date.parse(value)
+        : NaN;
   if (Number.isFinite(time)) {
     try {
-      const text = new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short", ...(timeZone ? { timeZone } : {}) }).format(time);
+      const text = new Intl.DateTimeFormat(language, {
+        dateStyle: "short",
+        timeStyle: "short",
+        ...(timeZone ? { timeZone } : {}),
+      }).format(time);
       return typeof value === "string" ? <time dateTime={value}>{text}</time> : text;
     } catch {
       // an unknown language tag: Admin's own formatting
     }
   }
   if (openLink && schema?.format === "uri" && typeof value === "string" && web(value)) {
-    return <a href={value} className="underline" onClick={(event) => { event.preventDefault(); void openLink(value); }}>{value}</a>;
+    return (
+      <a
+        href={value}
+        className="underline"
+        onClick={event => {
+          event.preventDefault();
+          void openLink(value);
+        }}
+      >
+        {value}
+      </a>
+    );
   }
   return renderDataValue(schema, value, language);
 }
 
 /** What a cell needs of the App around it, so the `cell:view:` slots' props stay the public ones. */
-const CellEnv = createContext<{ readonly language: string; readonly timeZone: string | undefined; readonly openLink: HostApi["openLink"] | undefined }>({ language: "en", timeZone: undefined, openLink: undefined });
+const CellEnv = createContext<{
+  readonly language: string;
+  readonly timeZone: string | undefined;
+  readonly openLink: HostApi["openLink"] | undefined;
+}>({ language: "en", timeZone: undefined, openLink: undefined });
 
 /** The built-in cell: the value as the App shows it. */
 function AppCell({ value, property }: CellProps): ReactNode {
@@ -64,7 +104,17 @@ function AppCell({ value, property }: CellProps): ReactNode {
 }
 
 /** One column's value, through the application's `cell:view:` components for the View. */
-function ViewCell({ tool, column, row, property }: { tool: string | null; column: string; row: Row; property: FieldSchema | undefined }): ReactNode {
+function ViewCell({
+  tool,
+  column,
+  row,
+  property,
+}: {
+  tool: string | null;
+  column: string;
+  row: Row;
+  property: FieldSchema | undefined;
+}): ReactNode {
   const names = useViewCellNames(tool ?? "", column);
   return <Slot name={names} Default={AppCell} props={{ value: row[column], row, property }} />;
 }
@@ -103,8 +153,11 @@ export function MantleApp(props: {
   const language = props.locale ?? "en";
   const tool = props.result ? toolOf(props.result, props.hostTool) : null;
   // a View the catalog does not describe still shows its rows, with nothing to open
-  const view = tool && Object.prototype.hasOwnProperty.call(props.catalog.views, tool) ? props.catalog.views[tool]! : BARE_VIEW;
-  const [pages, dispatch] = useReducer(pagesReducer, undefined, () => pagesReducer(NO_PAGES, { type: "reset", result: props.result }));
+  const view =
+    tool && Object.prototype.hasOwnProperty.call(props.catalog.views, tool) ? props.catalog.views[tool]! : BARE_VIEW;
+  const [pages, dispatch] = useReducer(pagesReducer, undefined, () =>
+    pagesReducer(NO_PAGES, { type: "reset", result: props.result }),
+  );
   const { rows, cursor, more } = pages;
   const [stale, setStale] = useState(false);
   const [open, setOpen] = useState<{ row: Row; action: AppRowAction } | null>(null);
@@ -137,8 +190,12 @@ export function MantleApp(props: {
     }
   };
 
-  if (!props.result) return <p className="text-muted-foreground p-4 text-sm">{props.cancelled ? labels.viewCancelled : labels.waiting}</p>;
-  const page = tool && props.pages && Object.prototype.hasOwnProperty.call(props.pages, tool) ? props.pages[tool] : undefined;
+  if (!props.result)
+    return (
+      <p className="text-muted-foreground p-4 text-sm">{props.cancelled ? labels.viewCancelled : labels.waiting}</p>
+    );
+  const page =
+    tool && props.pages && Object.prototype.hasOwnProperty.call(props.pages, tool) ? props.pages[tool] : undefined;
   // a Procedure's result has no rows: its page is shown for any result that is not a failure
   if (!rows && page !== undefined && !props.result.isError) return <div data-slot="app-page">{page}</div>;
   if (!rows) {
@@ -160,19 +217,33 @@ export function MantleApp(props: {
         labels={labels}
         locale={props.locale}
         onClose={() => setOpen(null)}
-        onDone={() => { void refresh(); }}
+        onDone={() => {
+          void refresh();
+        }}
         // the model reads the change at its next turn; the App never speaks for the user (`ui/message`)
-        onSucceeded={() => { void props.host.updateModelContext({
-          content: [{ type: "text", text: `${open.action.capability} succeeded on row ${String(open.row["id"])}.` }],
-          structuredContent: { tool: open.action.capability, id: String(open.row["id"]), outcome: "succeeded" },
-        }); }}
+        onSucceeded={() => {
+          void props.host.updateModelContext({
+            content: [{ type: "text", text: `${open.action.capability} succeeded on row ${String(open.row["id"])}.` }],
+            structuredContent: { tool: open.action.capability, id: String(open.row["id"]), outcome: "succeeded" },
+          });
+        }}
       />
     );
   }
   // the page reads its own data through the hooks, so a View's rows are not shown beside it
   if (page !== undefined) return <div data-slot="app-page">{page}</div>;
-  const notice = stale ? <p role="status" className="text-destructive px-3 pt-3 text-sm">{labels.refreshFailed}</p> : null;
-  if (rows.length === 0) return <>{notice}<p className="text-muted-foreground p-4 text-sm">{labels.nothing}</p></>;
+  const notice = stale ? (
+    <p role="status" className="text-destructive px-3 pt-3 text-sm">
+      {labels.refreshFailed}
+    </p>
+  ) : null;
+  if (rows.length === 0)
+    return (
+      <>
+        {notice}
+        <p className="text-muted-foreground p-4 text-sm">{labels.nothing}</p>
+      </>
+    );
   const columns = columnsOf(view, rows);
   return (
     <CellEnv.Provider value={{ language, timeZone: props.timeZone, openLink }}>
@@ -184,16 +255,25 @@ export function MantleApp(props: {
           return (
             <li key={id ?? index} className="grid gap-2 rounded-md border p-3 text-sm">
               <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-3 gap-y-1">
-                {columns.map((field) => (
+                {columns.map(field => (
                   <div key={field} className="contents">
-                    <dt className="text-muted-foreground">{columnLabel(field, view.columns[field], language, labels)}</dt>
-                    <dd className="break-words"><ViewCell tool={tool} column={field} row={row} property={withNativeSchema(field, view.columns[field])} /></dd>
+                    <dt className="text-muted-foreground">
+                      {columnLabel(field, view.columns[field], language, labels)}
+                    </dt>
+                    <dd className="break-words">
+                      <ViewCell
+                        tool={tool}
+                        column={field}
+                        row={row}
+                        property={withNativeSchema(field, view.columns[field])}
+                      />
+                    </dd>
                   </div>
                 ))}
               </dl>
               {actions.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {actions.map((action) => {
+                  {actions.map(action => {
                     const title = resolveLocalizedText(action.title, language) ?? action.capability;
                     return (
                       <button
@@ -214,7 +294,17 @@ export function MantleApp(props: {
           );
         })}
       </ul>
-      {call ? <MoreRows count={rows.length} hasMore={cursor !== undefined} more={more} labels={labels} onMore={() => { void loadMore(); }} /> : null}
+      {call ? (
+        <MoreRows
+          count={rows.length}
+          hasMore={cursor !== undefined}
+          more={more}
+          labels={labels}
+          onMore={() => {
+            void loadMore();
+          }}
+        />
+      ) : null}
     </CellEnv.Provider>
   );
 }
@@ -235,22 +325,64 @@ type PagesAction =
 
 /** A new or refreshed result replaces the list and ends any load in flight: its page, when it arrives, is for a list that is gone. */
 export function pagesReducer(state: Pages, action: PagesAction): Pages {
-  if (action.type === "reset") return { rows: action.result ? rowsOf(action.result) : null, cursor: action.result ? nextCursorOf(action.result) : undefined, more: "idle", generation: state.generation + 1 };
+  if (action.type === "reset")
+    return {
+      rows: action.result ? rowsOf(action.result) : null,
+      cursor: action.result ? nextCursorOf(action.result) : undefined,
+      more: "idle",
+      generation: state.generation + 1,
+    };
   if (action.type === "loading") return { ...state, more: "loading" };
   if (action.generation !== state.generation) return state;
   if (action.type === "failed") return { ...state, more: "failed" };
   const next = rowsOf(action.result);
-  return next ? { ...state, rows: [...(state.rows ?? []), ...next], cursor: nextCursorOf(action.result), more: "idle" } : { ...state, more: "failed" };
+  return next
+    ? { ...state, rows: [...(state.rows ?? []), ...next], cursor: nextCursorOf(action.result), more: "idle" }
+    : { ...state, more: "failed" };
 }
 
 /** "Load more" under the rows: busy while loading; `useLoadMore` announces the rows added and keeps focus. */
-function MoreRows(props: { readonly count: number; readonly hasMore: boolean; readonly more: Pages["more"]; readonly labels: AppLabels; readonly onMore: () => void }): ReactNode {
-  const { box, status, start } = useLoadMore({ count: props.count, hasMore: props.hasMore, loading: props.more === "loading", message: (added) => props.labels.rowsLoaded.replace("{count}", String(added)) });
+function MoreRows(props: {
+  readonly count: number;
+  readonly hasMore: boolean;
+  readonly more: Pages["more"];
+  readonly labels: AppLabels;
+  readonly onMore: () => void;
+}): ReactNode {
+  const { box, status, start } = useLoadMore({
+    count: props.count,
+    hasMore: props.hasMore,
+    loading: props.more === "loading",
+    message: added => props.labels.rowsLoaded.replace("{count}", String(added)),
+  });
   return (
-    <div ref={box} tabIndex={-1} aria-busy={props.more === "loading"} className="grid justify-items-start gap-2 px-3 pb-3 outline-none">
-      <span role="status" className="sr-only">{status}</span>
-      {props.more === "failed" ? <p role="alert" className="text-destructive text-sm">{props.labels.loadMoreFailed}</p> : null}
-      {props.hasMore ? <button type="button" className="rounded-md border px-3 py-1 text-sm font-medium" disabled={props.more === "loading"} onClick={() => { start(); props.onMore(); }}>{props.labels.loadMore}</button> : null}
+    <div
+      ref={box}
+      tabIndex={-1}
+      aria-busy={props.more === "loading"}
+      className="grid justify-items-start gap-2 px-3 pb-3 outline-none"
+    >
+      <span role="status" className="sr-only">
+        {status}
+      </span>
+      {props.more === "failed" ? (
+        <p role="alert" className="text-destructive text-sm">
+          {props.labels.loadMoreFailed}
+        </p>
+      ) : null}
+      {props.hasMore ? (
+        <button
+          type="button"
+          className="rounded-md border px-3 py-1 text-sm font-medium"
+          disabled={props.more === "loading"}
+          onClick={() => {
+            start();
+            props.onMore();
+          }}
+        >
+          {props.labels.loadMore}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -258,7 +390,9 @@ function MoreRows(props: { readonly count: number; readonly hasMore: boolean; re
 /** The View's declared list columns, else what the rows carry but the id and version, as Admin's report shows them. */
 function columnsOf(view: AppCatalogView, rows: readonly Row[]): string[] {
   if (view.list.columns.length) return [...view.list.columns];
-  return [...new Set(rows.flatMap((row) => Object.keys(row)))].filter((field) => field !== "id" && field !== "version").slice(0, 6);
+  return [...new Set(rows.flatMap(row => Object.keys(row)))]
+    .filter(field => field !== "id" && field !== "version")
+    .slice(0, 6);
 }
 
 function RowAction(props: {
@@ -285,7 +419,7 @@ function RowAction(props: {
           // reopens the action from the refreshed list
           invoke: (values, signal) => invokeTool(call, action.capability, values, signal),
           // One key per opened action, so a retry after an uncertain write reuses it.
-          initialInput: Object.fromEntries(automatic.map((field) => [field, crypto.randomUUID()])),
+          initialInput: Object.fromEntries(automatic.map(field => [field, crypto.randomUUID()])),
           automatic,
         }),
       };
@@ -294,7 +428,11 @@ function RowAction(props: {
     }
   });
   if ("error" in created) {
-    return <p role="alert" className="text-destructive p-4 text-sm">{String(created.error)}</p>;
+    return (
+      <p role="alert" className="text-destructive p-4 text-sm">
+        {String(created.error)}
+      </p>
+    );
   }
   return <RowActionPanel {...props} controller={created.controller} automatic={automatic} />;
 }
@@ -313,7 +451,9 @@ function RowActionPanel(props: {
   const state = useInteraction(controller);
   const submitted = useRef(false);
   const refreshed = useRef(false);
-  useEffect(() => { void controller.open(); }, [controller]);
+  useEffect(() => {
+    void controller.open();
+  }, [controller]);
   useEffect(() => {
     if (state.phase === "submitting") submitted.current = true;
     if (state.phase === "succeeded" && !refreshed.current) {
@@ -341,7 +481,7 @@ function RowActionPanel(props: {
   // the form's own zone: a native date input reads and writes the iframe's local time
   const fieldValue = (field: string, value: unknown) => renderDataValue(properties[field], value, language);
   const hidden = hiddenInputs(action);
-  const visible = Object.keys(properties).some((name) => !hidden.includes(name));
+  const visible = Object.keys(properties).some(name => !hidden.includes(name));
   return (
     // room for a Select's list or the date picker, which open over the panel inside the host's frame
     <div className="min-h-[28rem] p-3">
@@ -360,7 +500,7 @@ function RowActionPanel(props: {
             schema={action.inputSchema as FieldSchema}
             uiSchema={action.uiSchema ?? null}
             value={state.draft}
-            onChange={(next) => applyFieldEdits(controller, state.draft, next)}
+            onChange={next => applyFieldEdits(controller, state.draft, next)}
             language={language}
             hiddenRootFields={hidden}
             labels={props.labels.fields}

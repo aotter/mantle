@@ -46,7 +46,8 @@ interface PreferencesContextValue {
 const PreferencesContext = React.createContext<PreferencesContextValue | null>(null);
 
 export function PreferencesProvider({
-  children, initialLanguage,
+  children,
+  initialLanguage,
 }: React.PropsWithChildren<{ initialLanguage: AdminLanguage }>): React.ReactElement {
   const [language, setLanguageState] = React.useState(initialLanguage);
   const direction = directionForLanguage(language);
@@ -58,11 +59,13 @@ export function PreferencesProvider({
   const languageRequest = React.useRef(0);
   const setLanguage = React.useCallback((next: AdminLanguage) => {
     const request = ++languageRequest.current;
-    void loadLanguage(next).then(() => {
-      if (request !== languageRequest.current) return;
-      writeStorage(LANGUAGE_STORAGE_KEY, next);
-      setLanguageState(next);
-    }).catch(error => console.error("Admin language could not be loaded", error));
+    void loadLanguage(next)
+      .then(() => {
+        if (request !== languageRequest.current) return;
+        writeStorage(LANGUAGE_STORAGE_KEY, next);
+        setLanguageState(next);
+      })
+      .catch(error => console.error("Admin language could not be loaded", error));
   }, []);
 
   const setTheme = React.useCallback((next: AdminTheme) => {
@@ -80,8 +83,7 @@ export function PreferencesProvider({
   }, []);
 
   React.useEffect(() => {
-    document.documentElement.lang =
-      ADMIN_LANGUAGES.find((l) => l.value === language)?.htmlLang ?? "en";
+    document.documentElement.lang = ADMIN_LANGUAGES.find(l => l.value === language)?.htmlLang ?? "en";
     document.documentElement.dir = direction;
   }, [language, direction]);
 
@@ -110,11 +112,7 @@ export function PreferencesProvider({
     [language, direction, theme, resolvedTheme, setLanguage, setTheme],
   );
 
-  return (
-    <PreferencesContext.Provider value={value}>
-      {children}
-    </PreferencesContext.Provider>
-  );
+  return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }
 
 export function usePreferences(): PreferencesContextValue {
@@ -135,7 +133,8 @@ export function readInitialLanguage(): AdminLanguage {
 }
 
 function readInitialTheme(): AdminTheme {
-  const hostTheme = typeof document === "undefined" ? undefined : document.documentElement.getAttribute("data-mantle-theme");
+  const hostTheme =
+    typeof document === "undefined" ? undefined : document.documentElement.getAttribute("data-mantle-theme");
   if (hostTheme === "light" || hostTheme === "dark") return hostTheme;
   const stored = readStorage(THEME_STORAGE_KEY);
   if (stored === "light" || stored === "dark" || stored === "system") return stored;
@@ -143,8 +142,7 @@ function readInitialTheme(): AdminTheme {
 }
 
 function systemPrefersDark(): boolean {
-  return typeof matchMedia !== "undefined" &&
-    matchMedia("(prefers-color-scheme: dark)").matches;
+  return typeof matchMedia !== "undefined" && matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
 /** `.dark` and `data-theme` mark the same theme, as in an MCP host. */
@@ -174,7 +172,7 @@ function writeStorage(key: string, value: string): void {
 }
 
 function isAdminLanguage(value: string | null): value is AdminLanguage {
-  return ADMIN_LANGUAGES.some((l) => l.value === value);
+  return ADMIN_LANGUAGES.some(l => l.value === value);
 }
 
 export function normalizeLanguage(value: string | null | undefined): AdminLanguage {
@@ -207,5 +205,5 @@ export function normalizeLanguage(value: string | null | undefined): AdminLangua
 }
 
 export function directionForLanguage(language: AdminLanguage): AdminDirection {
-  return ADMIN_LANGUAGES.find((l) => l.value === language)?.direction ?? "ltr";
+  return ADMIN_LANGUAGES.find(l => l.value === language)?.direction ?? "ltr";
 }

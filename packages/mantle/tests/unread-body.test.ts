@@ -6,11 +6,22 @@ import { mcp } from "../src/kernel/mcp.js";
 
 // A response sent over an unread POST body makes local `wrangler dev` break the connection, and the next request fails with
 // "Network connection lost". Every surface answers a refusal before it reads the body, so each must drain it once it has answered.
-const post = (path: string, body = "x".repeat(2048), headers: Record<string, string> = {}) => new Request(`https://app.test${path}`, { method: "POST", headers, body });
+const post = (path: string, body = "x".repeat(2048), headers: Record<string, string> = {}) =>
+  new Request(`https://app.test${path}`, { method: "POST", headers, body });
 
 test("a refused REST request leaves no unread body", async () => {
-  const route: Route<null> = { method: "POST", pattern: /^\/api\/x$/, keys: [], handle: async () => ({ ok: true }) } as Route<null>;
-  const refuse = nativeRest([route], { db: () => null, caller: () => { throw new ContractError("UNAUTHENTICATED", "Sign in.", "rest"); } });
+  const route: Route<null> = {
+    method: "POST",
+    pattern: /^\/api\/x$/,
+    keys: [],
+    handle: async () => ({ ok: true }),
+  } as Route<null>;
+  const refuse = nativeRest([route], {
+    db: () => null,
+    caller: () => {
+      throw new ContractError("UNAUTHENTICATED", "Sign in.", "rest");
+    },
+  });
   const denied = post("/api/x");
   expect((await refuse(denied, {}))!.status).toBe(401);
   expect(denied.bodyUsed).toBe(true);
@@ -29,11 +40,17 @@ test("a refused MCP request leaves no unread body", async () => {
   expect(denied.bodyUsed).toBe(true);
 });
 
-const answer = (request: Request) => draining(async (_request: Request) => new Response(null, { status: 401 }))(request);
+const answer = (request: Request) =>
+  draining(async (_request: Request) => new Response(null, { status: 401 }))(request);
 
 test("the drain is bounded in bytes and skips what the app already consumed", async () => {
   let pulled = 0;
-  const stream = new ReadableStream<Uint8Array>({ pull(controller) { pulled++; controller.enqueue(new Uint8Array(600 * 1024)); } });
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulled++;
+      controller.enqueue(new Uint8Array(600 * 1024));
+    },
+  });
   await answer(new Request("https://app.test/x", { method: "POST", body: stream, duplex: "half" } as RequestInit));
   expect(pulled).toBeLessThan(5);
   const used = post("/x");
@@ -43,11 +60,19 @@ test("the drain is bounded in bytes and skips what the app already consumed", as
 });
 
 test("a stalled upload cannot withhold the answer, and a throwing handler still drains", async () => {
-  const stalled = new Request("https://app.test/x", { method: "POST", body: new ReadableStream<Uint8Array>({ pull: () => new Promise(() => {}) }), duplex: "half" } as RequestInit);
+  const stalled = new Request("https://app.test/x", {
+    method: "POST",
+    body: new ReadableStream<Uint8Array>({ pull: () => new Promise(() => {}) }),
+    duplex: "half",
+  } as RequestInit);
   const started = Date.now();
   expect((await answer(stalled)).status).toBe(401);
   expect(Date.now() - started).toBeLessThan(3000);
   const thrown = post("/x");
-  await expect(draining(async (_request: Request) => { throw new Error("boom"); })(thrown)).rejects.toThrow("boom");
+  await expect(
+    draining(async (_request: Request) => {
+      throw new Error("boom");
+    })(thrown),
+  ).rejects.toThrow("boom");
   expect(thrown.bodyUsed).toBe(true);
 });

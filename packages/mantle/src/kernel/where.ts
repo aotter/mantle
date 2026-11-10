@@ -21,21 +21,32 @@ const COMPARE = { gt: ">", gte: ">=", lt: "<", lte: "<=" } as const;
  * `like` takes a finished pattern (`escapeLike` the literal parts).
  * @internal
  */
-export function condition(d: Pick<Dialect, "like" | "likeEscape">, column: string, operator: Operator, value: unknown, bind: (value: unknown) => string, insensitive = false): string {
+export function condition(
+  d: Pick<Dialect, "like" | "likeEscape">,
+  column: string,
+  operator: Operator,
+  value: unknown,
+  bind: (value: unknown) => string,
+  insensitive = false,
+): string {
   const lhs = insensitive ? `LOWER(${column})` : column;
-  const rhs = (v: unknown) => insensitive ? `LOWER(${bind(v)})` : bind(v);
+  const rhs = (v: unknown) => (insensitive ? `LOWER(${bind(v)})` : bind(v));
   switch (operator) {
-    case "in": case "notIn": {
+    case "in":
+    case "notIn": {
       const list = Array.isArray(value) ? value : [value];
       if (!list.length) return operator === "in" ? "1 = 0" : "1 = 1";
       return `${lhs} ${operator === "in" ? "IN" : "NOT IN"} (${list.map(rhs).join(", ")})`;
     }
     case "like":
-      if (typeof value === "string" && likeTooLong(value)) throw new ContractError("INPUT_VALIDATION_FAILED", LIKE_TOO_LONG, "where");
+      if (typeof value === "string" && likeTooLong(value))
+        throw new ContractError("INPUT_VALIDATION_FAILED", LIKE_TOO_LONG, "where");
       return `${column} ${d.like(insensitive)} ${bind(value)}${d.likeEscape}`;
-    case "eq": case "ne":
+    case "eq":
+    case "ne":
       if (value === null) return `${column} IS ${operator === "eq" ? "" : "NOT "}NULL`;
       return `${lhs} ${operator === "eq" ? "=" : "<>"} ${rhs(value)}`;
-    default: return `${column} ${COMPARE[operator]} ${bind(value)}`;
+    default:
+      return `${column} ${COMPARE[operator]} ${bind(value)}`;
   }
 }

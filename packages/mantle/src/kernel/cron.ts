@@ -3,7 +3,13 @@ const PART = /^(\*|\d+|[A-Za-z]{3})(?:-(\d+|[A-Za-z]{3}))?(?:\/(\d+))?$/;
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 /** label, lowest, highest, names (by value from `lowest`) */
-const FIELDS: readonly (readonly [string, number, number, readonly string[] | null])[] = [["minute", 0, 59, null], ["hour", 0, 23, null], ["day of month", 1, 31, null], ["month", 1, 12, MONTHS], ["weekday", 0, 6, DAYS]];
+const FIELDS: readonly (readonly [string, number, number, readonly string[] | null])[] = [
+  ["minute", 0, 59, null],
+  ["hour", 0, 23, null],
+  ["day of month", 1, 31, null],
+  ["month", 1, 12, MONTHS],
+  ["weekday", 0, 6, DAYS],
+];
 
 export function toCloudflareCron(cron: string): string {
   const refuse = (why: string): never => {
@@ -26,8 +32,9 @@ export function toCloudflareCron(cron: string): string {
       if (at < 0) refuse(`'${token}' is not a valid ${label}`);
       return at + min;
     };
-    const day = (token: string | undefined) => (i === 4 && token !== undefined && /^\d+$/.test(token) ? String(Number(token) + 1) : token);
-    const out = field.split(",").map((p) => {
+    const day = (token: string | undefined) =>
+      i === 4 && token !== undefined && /^\d+$/.test(token) ? String(Number(token) + 1) : token;
+    const out = field.split(",").map(p => {
       const [, start, end, step] = PART.exec(p) ?? refuse(`'${p}' is not a number, name, *, range or step`);
       if (start === "*") {
         if (end) refuse(`'${p}' is not a range`);

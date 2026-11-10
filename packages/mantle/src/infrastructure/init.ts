@@ -7,8 +7,13 @@ import { docsRoot, packageRoot } from "./help.js";
 const LOCAL = new Set(["node_modules", ".wrangler", ".dev.vars", "pnpm-lock.yaml", "generated", "dist"]);
 
 function files(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => LOCAL.has(entry.name) ? []
-    : entry.isDirectory() ? files(join(directory, entry.name)).map(file => join(entry.name, file)) : [entry.name]);
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry =>
+    LOCAL.has(entry.name)
+      ? []
+      : entry.isDirectory()
+        ? files(join(directory, entry.name)).map(file => join(entry.name, file))
+        : [entry.name],
+  );
 }
 
 export function init(destination: string, dryRun = false): string {
@@ -16,20 +21,29 @@ export function init(destination: string, dryRun = false): string {
   const sdk = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")) as { version: string };
   const target = resolve(destination);
   // A packed shell carries `gitignore` (npm drops .gitignore); a workspace checkout has .gitignore itself.
-  const all = files(shell).map(file => file === "gitignore" ? ".gitignore" : file);
-  const source = (file: string) => file === ".gitignore" && !existsSync(join(shell, file)) ? join(shell, "gitignore") : join(shell, file);
+  const all = files(shell).map(file => (file === "gitignore" ? ".gitignore" : file));
+  const source = (file: string) =>
+    file === ".gitignore" && !existsSync(join(shell, file)) ? join(shell, "gitignore") : join(shell, file);
   const existing = all.filter(file => existsSync(join(target, file)));
-  if (existing.length) throw new Error(`mantle init writes the app shell once and never overwrites. These files already exist in ${target}:\n${existing.map(f => `  ${f}`).join("\n")}\nMove them aside or run mantle init in an empty directory; to use generated code inside an existing app, skip init and run mantle help typed-queries.`);
+  if (existing.length)
+    throw new Error(
+      `mantle init writes the app shell once and never overwrites. These files already exist in ${target}:\n${existing.map(f => `  ${f}`).join("\n")}\nMove them aside or run mantle init in an empty directory; to use generated code inside an existing app, skip init and run mantle help typed-queries.`,
+    );
   const notes: string[] = [];
   for (const file of all) {
     let text = readFileSync(source(file), "utf8");
     // Pin the shell's Mantle packages to the installed SDK.
     if (file === "package.json") {
       const pkg = JSON.parse(text);
-      for (const name of Object.keys(pkg.dependencies)) if (name.startsWith("@aotter/mantle")) pkg.dependencies[name] = sdk.version;
+      for (const name of Object.keys(pkg.dependencies))
+        if (name.startsWith("@aotter/mantle")) pkg.dependencies[name] = sdk.version;
       text = JSON.stringify(pkg, null, 2) + "\n";
     }
-    if (!file.endsWith(".md")) text.split("\n").forEach((line, index) => { if (line.includes("AGENT:")) notes.push(`  ${file}:${index + 1}: ${line.slice(line.indexOf("AGENT:") + 6).trim()}`); });
+    if (!file.endsWith(".md"))
+      text.split("\n").forEach((line, index) => {
+        if (line.includes("AGENT:"))
+          notes.push(`  ${file}:${index + 1}: ${line.slice(line.indexOf("AGENT:") + 6).trim()}`);
+      });
     if (dryRun) continue;
     mkdirSync(dirname(join(target, file)), { recursive: true });
     writeFileSync(join(target, file), text, { flag: "wx" });
@@ -38,7 +52,8 @@ export function init(destination: string, dryRun = false): string {
   const where = relative(process.cwd(), target) || ".";
   return [
     `${dryRun ? "Would write" : "Wrote"} the Mantle ${sdk.version} app shell to ${where}:`,
-    ...all.map(file => `  ${file}`), "  manifests/",
+    ...all.map(file => `  ${file}`),
+    "  manifests/",
     "",
     "AGENT: the app must fill in these before it is done (each is marked in the file):",
     "  manifests/*.yaml: the app's Schemas, Views, Procedures and Triggers (mantle help four-atoms)",
