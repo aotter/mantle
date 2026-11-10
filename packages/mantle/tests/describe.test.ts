@@ -197,19 +197,7 @@ test("internal to public, new triggers and removing trustedOnly widen and change
   expect(diffApp(await describeApp(pub), await describeApp(second))).toContainEqual(expect.objectContaining({ id, field: "triggers", direction: "widened" }));
 });
 
-test("removing ref or SQL guards and loosening auth requirements widen", async () => {
-  for (const sqlGuard of [false, true]) {
-    const guard = `---\n${H}kind: Procedure\nmetadata: {name: gate}\nspec:\n  input: {type: object}\n  output: {type: object}\n  handler: {ref: gate}\n`;
-    const text = await fixtureText();
-    const a = await compile(text.replace("requires: {auth: {all: [ctx.admin]}}\n  restrict: {orders:", "requires: {auth: {all: [ctx.admin]}, guard: {procedure: gate}}\n  restrict: {orders:") + guard);
-    const b = await compile(text + guard);
-    if (sqlGuard) {
-      (a.procedures.gate as any).handler = { sql: { grammar: 180004, stmts: [{ SelectStmt: {} }] }, source: "SELECT 1" };
-      (b.procedures.gate as any).handler = (a.procedures.gate as any).handler;
-    }
-    expect(target(await describeApp(a), "view:regional-orders").requires.guard).toBe("gate");
-    expect(diffApp(await describeApp(a), await describeApp(b))).toContainEqual(expect.objectContaining({ id: "view:regional-orders", field: "requires", direction: "widened" }));
-  }
+test("loosening auth requirements widens", async () => {
   const a = copy(await fixture()), b = copy(a);
   a.procedures["rename-order"].requires.auth.all.push("ctx.user");
   expect(diffApp(await describeApp(a), await describeApp(b))).toContainEqual(expect.objectContaining({ id: "procedure:rename-order", field: "requires", direction: "widened" }));
@@ -231,15 +219,6 @@ test("ref handlers conservatively report all possible read scopes", async () => 
   plan.schemas.notes.scope = "author_id";
   plan.procedures.custom = { input: { type: "object" }, output: { type: "object" }, inputs: {}, handler: { ref: "custom" } };
   const m = target(await describeApp(plan), "procedure:custom");
-});
-
-test("guard restrict terms appear in guarded fields and remain on guarded targets", async () => {
-  const plan = copy(await fixture());
-  plan.procedures.g = { ...copy(plan).procedures["rename-order"], restrict: { orders: { terms: [{ column: "tier", field: "tier", type: "string" }] } } };
-  plan.views["notes-list"].requires = { auth: { all: ["ctx.admin"] }, guard: { procedure: "g" } };
-  const report = await describeApp(plan), m = target(report, "view:notes-list");
-  expect(m.restrict.orders!.terms).toEqual([{ column: "tier", field: "tier", type: "string" }]);
-  expect(m.readOnly).toBe(false);
 });
 
 test("dispatcher restrictions stay per variant and any variant loosening widens", async () => {

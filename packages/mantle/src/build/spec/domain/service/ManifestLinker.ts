@@ -23,13 +23,10 @@ export interface LinkedSchema extends ResolvedManifestReference<ParsedSchema> {
   readonly translationParent?: ResolvedManifestReference<ParsedSchema>;
 }
 
-export interface LinkedView extends ResolvedManifestReference<ParsedView> {
-  readonly guard?: ResolvedManifestReference<ParsedProcedure>;
-}
+export type LinkedView = ResolvedManifestReference<ParsedView>;
 
 export interface LinkedProcedure extends ResolvedManifestReference<ParsedProcedure> {
   readonly collectionActionSchema?: ResolvedManifestReference<ParsedSchema>;
-  readonly guard?: ResolvedManifestReference<ParsedProcedure>;
 }
 
 export interface LinkedTrigger extends ResolvedManifestReference<ParsedTrigger> {
@@ -83,19 +80,11 @@ export function linkManifestSet(
       ? { translationParent: resolveSchema(manifest.spec.translates.parent) }
       : {}),
   }));
-  const views = graph.views.map((manifest) => Object.freeze({
-    ...resolve(manifest as ParsedView),
-    ...(manifest.spec.requires?.guard
-      ? { guard: resolveProcedure(manifest.spec.requires.guard.procedure) }
-      : {}),
-  }));
+  const views = graph.views.map((manifest) => Object.freeze(resolve(manifest as ParsedView)));
   const procedures = graph.procedures.map((manifest) => Object.freeze({
     ...resolve(manifest as ParsedProcedure),
     ...(typeof manifest.spec.uiSchema?.["collectionAction"] === "string"
       ? { collectionActionSchema: resolveSchema(manifest.spec.uiSchema["collectionAction"] as string) }
-      : {}),
-    ...(manifest.spec.requires?.guard
-      ? { guard: resolveProcedure(manifest.spec.requires.guard.procedure) }
       : {}),
   }));
   const triggers = graph.triggers.map((manifest) => Object.freeze({

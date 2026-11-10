@@ -29,13 +29,13 @@ The native 0.2 SDK compiles the closed v2 grammar for four targets. Generation d
 Each unsupported declaration produces `GENERATE_UNSUPPORTED`, its manifest path,
 and the following hint. Invalid grammar/SQL retains the compiler's own diagnostic
 codes and paths. Multiple declarations produce multiple diagnostics.
-`schedule` and `lifecycle` Trigger sources are not grammar: they fail validation
-with `INVALID_MANIFEST_ENVELOPE` and the hint to wire `scheduled()` yourself or
-write a custom handler.
+`schedule` and `lifecycle` Trigger sources and `requires.guard` are not grammar:
+they fail validation with `INVALID_MANIFEST_ENVELOPE` and the hint to wire
+`scheduled()` yourself or write a custom handler (for a guard, one that checks
+authorization before executing queries).
 
 | Declaration | Do instead |
 | --- | --- |
-| `requires.guard` on a View or Procedure | Write a custom handler that checks authorization before executing queries. |
 | A View projecting a native `geo` value | Select the latitude and longitude columns explicitly. |
 | Dynamic or repeated View output names | Give each SELECT output a unique explicit alias. |
 | Declared date/date-time outputs without one SELECT item per output | Expand the SELECT list explicitly. |

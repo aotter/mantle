@@ -179,8 +179,7 @@ export async function generateFromSources(request: GenerateRequest, schema?: () 
     return why ? { ...d, message: `${d.message} ${why.slice(why.indexOf("): ") + 3)}` } : d;
   }) };
   const accessTargets = Object.fromEntries(report.targets.map(({ _meta: m }) => {
-    const policy = ({ opaque, requires }: typeof m | typeof m.variants[number]) => ({ opaque, ...(requires.guard ? {guard: requires.guard} : {}) });
-    return [m.id, { targetHash: m.targetHash, ...policy(m), ...(m.variants.length ? { variants: m.variants.map(v => ({ id: v.id, ...policy(v) })) } : {}) }];
+    return [m.id, { targetHash: m.targetHash, opaque: m.opaque, ...(m.variants.length ? { variants: m.variants.map(v => ({ id: v.id, opaque: v.opaque })) } : {}) }];
   }));
   const gatewayFiles = generatedFiles({ "access-targets.ts": `import type { AccessTarget } from "@aotter/mantle/contracts";\nexport const targets: Readonly<Record<string, AccessTarget>> = ${JSON.stringify(accessTargets)};\n` });
   const ddl = [...(postgres ? postgresSchema : sqliteSchema)(compiled.plan.schemas), ...publishingSql(compiled.plan.schemas, !postgres), ...(request.admin ? adminIndexes(compiled.plan.schemas, !postgres) : []), ...(schema?.() ?? [])];

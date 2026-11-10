@@ -333,7 +333,7 @@ export interface ViewManifestSpec {
    *  predicate check. When present, ALL predicates must hold; the
    *  runtime enforces with `evaluateAuthAll`. Closed predicate
    *  vocabulary: `ctx.user`, `ctx.admin`, `ctx.auth`, and
-   *  `ctx.auth.scope`; an optional guard names one consumer Procedure. */
+   *  `ctx.auth.scope`. */
   readonly requires?: AuthorizationRequirements;
   /** Extra row terms per Schema this target reads (ADR-0046): AND-ed onto that Schema's scope; never widens. */
   readonly restrict?: Readonly<Record<string, string>>;
@@ -363,8 +363,7 @@ export interface ProcedureManifestSpec {
    *  field (replaces the pre-#430 hack of reading
    *  `spec.input.description`). */
   readonly description?: LocalizedText;
-  /** Authorization via `requires.auth.all` plus one optional
-   *  `requires.guard.procedure`; static predicates are closed to
+  /** Authorization via `requires.auth.all`; static predicates are closed to
    *  `ctx.user`, `ctx.admin`, `ctx.auth`, and `ctx.auth.scope`. */
   readonly requires?: AuthorizationRequirements;
   /** Extra row terms per Schema this target reads (ADR-0046): AND-ed onto that Schema's scope; never widens. */
@@ -454,10 +453,6 @@ export function stepProgram(steps: readonly HandlerStep[]): { readonly sql: stri
  */
 export interface AuthorizationRequirements {
   readonly auth?: { readonly all: readonly AuthPredicate[] };
-  /** Dynamic, consumer-owned authorization check. The named Procedure
-   *  receives the target's validated input/params and the same
-   *  HandlerContext before the target executes. */
-  readonly guard?: { readonly procedure: string };
 }
 
 export type AuthPredicate =

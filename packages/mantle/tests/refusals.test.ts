@@ -28,16 +28,11 @@ for (const [kind, source, hint] of [["schedule", "{kind: schedule, cron: '0 * * 
   });
 }
 
-test("guards are refused on every View and Procedure", async () => {
-  const requires = { guard: { procedure: "guard" } };
-  const result = await diagnostics([
-    doc("Procedure", "guard", { input: { type: "object" }, output: { type: "object" }, handler: { ref: "guard" } }),
-    doc("View", "guarded", { surface: "internal", requires, sql: "SELECT id FROM notes" }),
-    doc("Procedure", "guarded-procedure", { ...procedure, requires }),
-  ]);
-  const guards = result.filter(d => d.path.endsWith("/requires/guard"));
-  expect(guards.map(d => d.path)).toEqual(["views/guarded/requires/guard", "procedures/guarded-procedure/requires/guard"]);
-  for (const d of guards) expect(d.message).toContain("Write a custom handler that checks authorization before executing queries.");
+test("requires.guard fails each View and Procedure that declares it", async () => {
+  const requires = { guard: { procedure: "read" } };
+  const result = await diagnostics([doc("View", "guarded", { surface: "internal", requires, sql: "SELECT id FROM notes" }), doc("Procedure", "guarded-procedure", { ...procedure, requires })]);
+  const hint = "Dynamic authorization guards are unsupported. Write a custom handler that checks authorization before executing queries.";
+  expect(result).toEqual([["View", 2], ["Procedure", 3]].map(([kind, index]) => ({ code: "INVALID_MANIFEST_ENVELOPE", path: "/spec/requires/guard", message: `[doc ${index}] ${kind}.spec.requires.guard is not accepted. ${hint}` })));
 });
 
 test("each native geo View output is refused with an explicit scalar alternative", async () => {
@@ -65,7 +60,7 @@ test("unmatched date-time SELECT outputs give an actionable expansion hint", () 
 
 
 test("a noncanonical input cast and another refused declaration are reported together", () => {
-  const text = [doc("Schema", "local", localized), doc("View", "bad-cast", { surface: "internal", requires:{guard:{procedure:"guard"}}, input: { type: "object", properties: { payload: { type: "object" } } }, sql: "SELECT input.payload AS value" }), doc("Procedure","guard",{input:{type:"object"},output:{type:"object"},handler:{ref:"guard"}})].join("\n---\n");
+  const text = [doc("Schema", "local", localized), doc("View", "bad-cast", { surface: "internal", input: { type: "object", properties: { payload: { type: "object" } } }, sql: "SELECT input.payload AS value" }), doc("Schema", "places", { ...schema, schema: { type: "object", properties: { point: { type: "object", format: "geo" } } } }), doc("View", "places", { surface: "internal", sql: "SELECT point FROM places" })].join("\n---\n");
   // The compiler normally supplies canonical casts. Corrupt one lowering in an isolated process.
   // The source generator imports the compiler from src/build; the published dist bundles it into one module.
   const lowered = new URL("../src/build/core/sql/lowered.ts", import.meta.url).href;
@@ -82,7 +77,7 @@ console.log(JSON.stringify(await generateFromSources({ target: "bun-postgres", s
   const result = JSON.parse(execFileSync(process.execPath, ["-e", script], { encoding: "utf8" }));
   expect(result.ok).toBe(false);
   expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "views/bad-cast", message: "Input $1 must appear only as CAST($1 AS jsonb). Wrap each occurrence in CAST($1 AS jsonb)." });
-  expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "views/bad-cast/requires/guard", message: "Dynamic authorization guards are unsupported. Write a custom handler that checks authorization before executing queries." });
+  expect(result.diagnostics).toContainEqual({ code: "GENERATE_UNSUPPORTED", path: "views/places/columns/point", message: "Native geo projection is unsupported. Select the latitude and longitude columns explicitly." });
 }, 30_000);
 
 test("date and timestamp literals that do not exist are refused at generate, as request input is", async () => {

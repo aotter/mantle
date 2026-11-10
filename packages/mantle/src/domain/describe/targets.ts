@@ -48,7 +48,7 @@ export function inspectSql(value: unknown): { schemas: string[]; readSchemas: st
   return { schemas: [...schemas].sort(), readSchemas: [...readSchemas].sort(), readOnly, writes };
 }
 
-/** Guards run together; dispatcher variants do not. */
+/** A target's own terms merge conjunctively; dispatcher variants do not. */
 function mergeRestrict(policies: PlanRestrict[], conjunctive: boolean): PlanRestrict {
   return Object.fromEntries([...new Set(policies.flatMap(p => Object.keys(p)))].sort().map(schema => {
     const rows = policies.map(p => p[schema] ?? { terms: [] });
@@ -59,37 +59,20 @@ function mergeRestrict(policies: PlanRestrict[], conjunctive: boolean): PlanRest
   }));
 }
 
-/** Follow guards to a fixed point. */
-function inspectBehavior(plan: RuntimePlan, ir: unknown, opaque: boolean, requires?: AuthorizationRequirements, restrict?: PlanRestrict, writes?: { schema: string; operation: string }[]) {
+function inspectBehavior(plan: RuntimePlan, ir: unknown, opaque: boolean, restrict?: PlanRestrict, writes?: { schema: string; operation: string }[]) {
   const inspected = inspectSql(ir);
   if (writes) {
     inspected.writes = [...writes];
     inspected.schemas.push(...writes.map(w => w.schema));
     inspected.readSchemas.push(...writes.filter(w => w.operation !== "create").map(w => w.schema));
   }
-  const dependencies: unknown[] = [], policies = [restrict ?? {}];
-  const procedures = new Set<string>();
-  const visit = (name: string): void => {
-    if (procedures.has(name)) return;
-    procedures.add(name);
-    const p = plan.procedures[name];
-    if (!p) throw new TypeError(`Unknown dependency '${name}'.`);
-    dependencies.push({ procedure: name, declaration: p });
-    policies.push(p.restrict ?? {});
-    opaque ||= "ref" in p.handler;
-    const g = inspectSql("sql" in p.handler ? p.handler.sql.stmts : undefined);
-    inspected.schemas.push(...g.schemas); inspected.readSchemas.push(...g.readSchemas); inspected.writes.push(...g.writes);
-    inspected.readOnly &&= g.readOnly;
-    if (p.requires?.guard) visit(p.requires.guard.procedure);
-  };
-  if (requires?.guard) visit(requires.guard.procedure);
   const related = (names: string[]) => {
     const all = new Set(opaque ? Object.keys(plan.schemas) : names);
     for (const name of all) { const parent = plan.schemas[name]?.translates?.parent.toLowerCase(); if (parent) all.add(parent); }
     return [...all].sort();
   };
   return { ...inspected, schemas: related(inspected.schemas), readSchemas: related(inspected.readSchemas), opaque,
-    restrict: mergeRestrict(policies, true), dependencies };
+    restrict: mergeRestrict([restrict ?? {}], true), dependencies: [] as unknown[] };
 }
 
 const objectInput: JsonSchema = { type: "object", properties: {} };
@@ -112,7 +95,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
       const view = kind === "view" ? plan.views[name]! : undefined;
       const proc = kind === "procedure" ? plan.procedures[name]! : undefined;
       const ir = view?.stmts ?? (proc && "sql" in proc.handler ? proc.handler.sql.stmts : undefined);
-      const inspected = inspectBehavior(plan, ir, !!proc && "ref" in proc.handler, p.requires, p.restrict);
+      const inspected = inspectBehavior(plan, ir, !!proc && "ref" in proc.handler, p.restrict);
       const tool = tools.find(t => t.kind === kind && t.source === name);
       const title = resolveLocalizedText(p.title, "en", "en") ?? name;
       const triggers = Object.entries(plan.triggers).filter(([, t]) => kind === "procedure" && t.procedure === name).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([id, t]) => ({ id, source: t.source }));
@@ -153,7 +136,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
   for (const [schema, s] of Object.entries(plan.schemas).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) if (s.publishing) for (const [verb, from, to] of publishingTransitions) {
     addRoute(`procedure:${s.name}.${verb}`, [], publishingInput);
     const d = out.at(-1)!;
-    const inspected = inspectBehavior(plan, undefined, false, undefined, undefined, [{ schema, operation: verb === "publish" ? "publish" : "update" }]);
+    const inspected = inspectBehavior(plan, undefined, false, undefined, [{ schema, operation: verb === "publish" ? "publish" : "update" }]);
     Object.assign(d, { kind: "procedure", name: mcpToolNameSegment(`${verb}_${s.name}`), surface: "admin", surfaces: ["admin"], requires: { auth: { all: ["ctx.admin"] } },
       schemas: [...new Set([schema, ...inspected.schemas])].sort(), readSchemas: [...new Set([schema, ...inspected.readSchemas])].sort(), opaque: inspected.opaque,
       behavior: { schema, verb, from, to, dependencies: inspected.dependencies } });
@@ -174,7 +157,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
     const d = out.at(-1)!;
     if (generic) {
       const operation = route === "POST /entries" ? "create" : route === "DELETE /entries/:id" ? "delete" : route.startsWith("GET ") ? undefined : route.endsWith("/publish") ? "publish" : "update";
-      const inspected = inspectBehavior(plan, undefined, false, undefined, undefined, operation ? Object.keys(plan.schemas).map(schema => ({ schema, operation })) : []);
+      const inspected = inspectBehavior(plan, undefined, false, undefined, operation ? Object.keys(plan.schemas).map(schema => ({ schema, operation })) : []);
       d.schemas = Object.keys(plan.schemas).sort(); d.readSchemas = d.schemas; d.opaque = inspected.opaque;
       d.behavior = { schemas: plan.schemas, dependencies: inspected.dependencies };
     }

@@ -103,7 +103,7 @@ The app owns role/database configuration, statement timeouts, pool lifetime and 
 
 Generation emits a `Handlers` interface. Pass implementations at `store(db, caller, { handlers })` and to selected surfaces. `requires` is checked before the ref handler receives `(ctx, input)`; `ctx` contains `{ caller, db, store }` bound to the actual Caller and transaction. Missing implementations fail typechecking; a missing runtime key is `HANDLER_NOT_REGISTERED`. Handler failures propagate unchanged. Handlers own business rules, side effects and explicit transaction boundaries.
 
-Lifecycle and schedule Trigger sources fail validation, and generation rejects dynamic authorization guards. Use app-owned handlers and scheduling. HTTP/MCP Triggers expose declared Procedures.
+Lifecycle and schedule Trigger sources and dynamic authorization guards (`requires.guard`) fail validation. Use app-owned handlers and scheduling. HTTP/MCP Triggers expose declared Procedures.
 
 ## TTL maintenance
 

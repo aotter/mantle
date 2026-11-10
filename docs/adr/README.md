@@ -11,7 +11,7 @@ historical presets, runtime plans or driver choices as current APIs.
 | # | Title | Status |
 |---|---|---|
 | [0001](0001-four-atom-manifest-model.md) | Four-atom manifest model (Schema / View / Procedure / Trigger). Folds POC ADR-0005 (grammar discipline) and POC ADR-0006 (multi-doc YAML). | Accepted; fixed-file contract superseded; Trigger sources narrowed to `http`/`mcp` (amended 2026-11-10) |
-| [0002](0002-closed-enums-for-bindings.md) | Closed enums for `x-mantle-bind` and `ctx.*` predicates. | Accepted (refreshed) |
+| [0002](0002-closed-enums-for-bindings.md) | Closed enums for `x-mantle-bind` and `ctx.*` predicates. | Accepted (refreshed); `requires.guard` withdrawn (amended 2026-11-10) |
 | [0007](0007-ai-as-primary-author.md) | AI is the primary author of consumer projects; SDK contract is three pre-serve feedback loops, runtime diagnostics, and coder/operator role surfaces. | Accepted + amended |
 | [0008](0008-structured-diagnostic-shape.md) | Diagnostic shape for validate/boot/runtime failures, with a reserved consumer-test phase; measured harnesses keep purpose-shaped reports. | Accepted + amended |
 | [0009](0009-consumer-supplied-manifests.md) | Historical generated-array workflow; consumer source ownership continues in ADR-0019. | Superseded by 0019 |

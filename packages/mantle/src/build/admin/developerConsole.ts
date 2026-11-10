@@ -46,7 +46,7 @@ export function developerConsole(plan: RuntimePlan) {
     "ref" in h ? { kind: "ref" as const, ref: h.ref } : { kind: "sql" as const, statement: h.source, flow: procedureFlow(h.sql.stmts, relationsOf) };
   const procedures = Object.entries(plan.procedures).sort(([a], [b]) => a.localeCompare(b)).map(([name, p]) => ({
     name, title: p.title ?? null, description: p.description ?? null, audience: procedureAudience(name), input: p.input, output: p.output,
-    authorization: p.requires?.auth?.all ?? [], guard: p.requires?.guard?.procedure ?? null, handler: handlerOf(p.handler),
+    authorization: p.requires?.auth?.all ?? [], guard: null, handler: handlerOf(p.handler),
     manifest: { ...p, handler: "ref" in p.handler ? p.handler : p.handler.steps ? { steps: p.handler.steps } : { source: p.handler.source } },
   }));
   const triggers = Object.entries(plan.triggers).sort(([a], [b]) => a.localeCompare(b)).map(([name, t]) => ({
@@ -66,12 +66,10 @@ export function developerConsole(plan: RuntimePlan) {
     ]),
     ...views.flatMap(([name, v]) => [
       ...[...relationsOf(v.stmts).reads].flatMap((key) => (schemaName(key) ? [relation(`View:${name}:from:${schemaName(key)}`, "view-source", `View:${name}`, `Schema:${schemaName(key)}`, "/spec/sql", schemaName(key)!)] : [])),
-      ...(v.requires?.guard ? [relation(`View:${name}:guard:${v.requires.guard.procedure}`, "authorization-guard", `View:${name}`, `Procedure:${v.requires.guard.procedure}`, "/spec/requires/guard/procedure", v.requires.guard.procedure)] : []),
     ]),
     ...Object.entries(plan.procedures).flatMap(([name, p]) => [
       // what the Procedure writes: its SQL's targets, or the target a `ref` handler declares
       ...("sql" in p.handler ? [...relationsOf(p.handler.sql.stmts).writes].map(schemaName) : [p.target && schemaName(p.target.schema.toLowerCase())]).flatMap((s) => (s ? [relation(`Procedure:${name}:writes:${s}`, "procedure-schema", `Procedure:${name}`, `Schema:${s}`, "sql" in p.handler ? "/spec/handler/sql" : "/spec/target/schema", s)] : [])),
-      ...(p.requires?.guard ? [relation(`Procedure:${name}:guard:${p.requires.guard.procedure}`, "authorization-guard", `Procedure:${name}`, `Procedure:${p.requires.guard.procedure}`, "/spec/requires/guard/procedure", p.requires.guard.procedure)] : []),
     ]),
     ...Object.entries(plan.triggers).map(([name, t]) => relation(`Trigger:${name}:target:${t.procedure}`, "trigger-target", `Trigger:${name}`, `Procedure:${t.procedure}`, "/spec/target/procedure", t.procedure)),
   ].sort((a, b) => a.id.localeCompare(b.id));
@@ -99,7 +97,7 @@ export function developerConsole(plan: RuntimePlan) {
       })),
       views: views.map(([name, v]) => ({
         name, title: v.title ?? null, surface: v.surface, query: { kind: "sql" as const, statement: v.source, ...(v.input ? { params: v.input } : {}) },
-        authorization: v.requires?.auth?.all ?? [], guard: v.requires?.guard?.procedure ?? null, manifest: (({ stmts: _ir, ...rest }) => rest)(v),
+        authorization: v.requires?.auth?.all ?? [], guard: null, manifest: (({ stmts: _ir, ...rest }) => rest)(v),
       })),
     },
     logic: { triggers, procedures },
