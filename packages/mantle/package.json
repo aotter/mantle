@@ -50,7 +50,6 @@
     "./publishing": "./dist/kernel/publishing.js",
     "./rest": "./dist/kernel/rest.js",
     "./mcp": "./dist/kernel/mcp.js",
-    "./mcp-apps": "./dist/kernel/mcp-apps.js",
     "./web": "./dist/kernel/web.js",
     "./validation": "./dist/kernel/validation.js",
     "./site": "./dist/kernel/site.js",
@@ -65,7 +64,6 @@
     "./auth/admin": "./dist/auth/admin.js",
     "./bun/assets": "./dist/bun/assets.js",
     "./surface": "./dist/kernel/surface.js",
-    "./json-body": "./dist/kernel/json-body.js",
     "./generate/auth": "./dist/infrastructure/generateAuth.js",
     "./package.json": "./package.json",
     "./describe": "./dist/domain/describe/public.js"
