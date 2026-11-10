@@ -148,8 +148,10 @@ dist-tag DELETE only added failure and re-run state.
    PR into `main` runs the same workflow by itself.
 5. Freeze the PR head for self review; that Full checks run must pass before
    merge, since a PR into `develop` runs no CI of its own. Merge into
-   `develop` with a merge commit for every version. For an alpha, dispatch
-   release.yml from that merge with `version` (without v). For beta, RC and
+   `develop` by rebase or with a merge commit: the controller needs the tip to
+   be the commit GitHub records as that PR's merge, which both produce. A
+   promotion into `main` is different and always takes a merge commit (below).
+   For an alpha, dispatch release.yml from that tip with `version` (without v). For beta, RC and
    stable, continue with the promotion below. The controller refuses an
    untagged source that is no longer the expected branch tip.
 
@@ -185,7 +187,7 @@ contains what `main` publishes and promotions never conflict.
    Every gate item passes with linked evidence or is explicitly deferred
    there, and no `release-gate` issue stays open against the version.
    Beta and RC need the gate defined, not passed.
-2. Merge the version PR into `develop` with a merge commit; note its SHA.
+2. Merge the version PR into `develop`; note the SHA of the resulting tip.
 3. Pin the promotion head at that SHA so later `develop` merges cannot ride
    along, then open the promotion PR against `main`:
 

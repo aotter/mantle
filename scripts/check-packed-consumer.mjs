@@ -44,6 +44,9 @@ if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
     rejected = error.message.includes("exact tarball");
   }
   if (!rejected) throw new Error("packed-consumer provenance self-test accepted a registry install");
+  if (before(0).length !== 0 || before(14, Date.UTC(2026, 0, 15))[0] !== "--before=2026-01-01T00:00:00.000Z") {
+    throw new Error("packed-consumer release-age self-test failed");
+  }
   const source = join(tmpdir(), "source");
   if (!isWithin(source, join(source, "output")) || isWithin(source, join(tmpdir(), "output"))) {
     throw new Error("packed-consumer output boundary self-test failed");
@@ -131,7 +134,7 @@ try {
   }
   if (npm) {
     addNpmOverrides(join(consumer, "package.json"), tarballs);
-    run("npm", ["install", "--no-audit", "--no-fund", "--prefer-online"], consumer, false, env);
+    install("npm", ["install", "--no-audit", "--no-fund", "--prefer-online", ...before()], consumer, env);
     const lock = JSON.parse(readFileSync(join(consumer, "package-lock.json"), "utf8"));
     for (const [name, tarball] of tarballs) {
       const resolved = lock.packages?.[`node_modules/${name}`]?.resolved;
@@ -144,7 +147,7 @@ try {
     }
   } else {
     addOverrides(join(consumer, "package.json"), tarballs);
-    run("pnpm", ["install", "--no-frozen-lockfile"], consumer, false, env);
+    install("pnpm", ["install", "--no-frozen-lockfile"], consumer, env);
     const lockfile = readFileSync(join(consumer, "pnpm-lock.yaml"), "utf8");
     assertExactTarballResolutions(lockfile, tarballs);
   }
@@ -274,6 +277,36 @@ function addIfDirectory(found, name, path) {
   const paths = found.get(name) ?? [];
   if (!paths.includes(path)) paths.push(path);
   found.set(name, paths);
+}
+
+/**
+ * The consumer installs without a lockfile, as a user copying the example would, so it resolves whatever the registry
+ * serves at that minute. Two guards keep a release from depending on that minute:
+ * - npm resolves only versions published at least MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS ago (default 14, the Dependabot
+ *   cooldown; 0 turns it off). The Mantle tarballs are files, so the cutoff never applies to them.
+ * - an install that fails is tried again, since a dependency published a moment ago may name a peer that is not
+ *   on the registry yet.
+ * ponytail: pnpm 9 has no release-age setting, so the pnpm path only retries; set `minimumReleaseAge` there once the
+ * repository's pnpm supports it.
+ */
+function before(days = Number(process.env.MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS ?? 14), now = Date.now()) {
+  if (!Number.isFinite(days) || days < 0)
+    throw new Error("MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS takes a number of days");
+  return days === 0 ? [] : [`--before=${new Date(now - days * 86_400_000).toISOString()}`];
+}
+
+function install(command, args, cwd, env, attempts = 3, waitMs = 60_000) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return run(command, args, cwd, false, env);
+    } catch (error) {
+      if (attempt === attempts) throw error;
+      console.error(
+        `[packed-consumer] ${command} install failed (attempt ${attempt} of ${attempts}); retrying in ${waitMs / 1000}s`,
+      );
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, waitMs);
+    }
+  }
 }
 
 function run(command, args, cwd, quiet = false, extraEnv = {}) {
