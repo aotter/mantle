@@ -1,49 +1,59 @@
-/** Selected web authorization loads on a request, outside the ordinary web startup graph. */
-import { web, type View, type WebOptions, type WebHandler } from "./web.js";
-import { gatewayCaller, hostFailure } from "./host-caller.js";
-import { accessRequest } from "./host-access.js";
-import { authorizeTarget } from "./authorization.js";
-import { forwarded, ContractError, type Caller, type RequestContext } from "./contracts.js";
+/**
+ * A selected web surface (gateway mode or application `authorize`) loads on a request, outside the ordinary web
+ * startup graph. It resolves the caller before rendering, renders through the ordinary site, and then settles what
+ * the site rendered: a refused View read fails the request even where the renderer would answer an empty result.
+ */
+import { ContractError, type RequestContext } from "./contracts.js";
+import { openPipeline } from "./request-pipeline.js";
+import { callerResolver, serve } from "./web-serve.js";
+import type { PageEntry, View, WebHandler, WebOptions } from "./web.js";
 
-export function gatewayWeb<Database, E>(options: WebOptions<Database, E>, table: readonly (readonly [string, View<Database>])[]): WebHandler<E> {
-  const run = async (method: "fetch" | "head", request: Request, env?: E, ctx?: RequestContext): Promise<Response | string | undefined> => {
-    let caller: Caller | undefined, failure: unknown, ran = false;
-    const access = options.gateway ? accessRequest(ctx, options) : undefined;
+type ErrorBody = { error?: { code: string; path?: string; field?: string } } | null;
+
+export function selectedWeb<Database, E>(
+  options: WebOptions<Database, E>, views: Map<string, View<Database>>, pages: PageEntry[],
+): WebHandler<E> {
+  const site = serve(options, views, pages);
+  const resolver = callerResolver(options.caller);
+  /** The View an index request is observed against: the first page that lists one. */
+  const listed = Object.values(options.pages).find(page => page.list)?.list;
+
+  const run = async (method: "fetch" | "head", request: Request, env?: E, ctx?: RequestContext) => {
+    const pipeline = await openPipeline(ctx, options);
     try {
       const pathname = new URL(request.url).pathname, path = method === "fetch" ? pathname.replace(/\.md$/, "") : pathname;
-      const page = Object.entries(options.pages).sort(([a], [b]) => (a.match(/\{[^{}]+\}/g)?.length ?? 0) - (b.match(/\{[^{}]+\}/g)?.length ?? 0)).find(([template]) => new RegExp("^" + template.split(/(\{[^{}]+\})/).map(part => part.startsWith("{") ? "[^/]+" : part.replace(/[.*+?^$()|[\]\\]/g, "\\$&")).join("") + "$").test(path))?.[1];
+      const page = pages.find(entry => entry.pattern.test(path))?.page;
       const index = pathname === "/llms.txt" || pathname === "/sitemap.xml";
-      if (method === "fetch" ? !["GET", "HEAD"].includes(request.method) || !index && (!pathname.endsWith(".md") || !page?.markdown) : !page) return method === "head" ? "" : undefined;
-      const name = page?.view ?? Object.values(options.pages).find(p => p.list)?.list;
-      await access?.select(name ? `view:${name}` : "web");
-      caller = forwarded(ctx, options.gateway) ? gatewayCaller(ctx, options.gateway, options.fields) : typeof options.caller === "function" ? await options.caller(request, env as E, {readOnly:true}) : options.caller ?? {kind:"anonymous"};
-      const site = web<Database, E>({...options, gateway: undefined, authorize: undefined, onAccess: undefined, caller}, table.map(([name, view]) => [name, {...view, page: async (...args) => {
-        try {
-          ran = true;
-          await access?.select(`view:${name}`, caller);
-          await access?.check(true);
-          view.check?.(caller!);
-          if (options.authorize) await authorizeTarget(options.authorize, {kind:"view",name}, caller!);
-          if (access?.dryRun) return {rows: []};
-          return view.page(...args);
-        } catch (error) { failure = error; throw error; }
-      }}] as const));
-      // The ordinary renderer validates query/path fields; wrapped pages decide before any SQL.
-      const result = await site[method](request, env, options.gateway ? undefined : ctx);
-      if (failure) throw failure;
+      const served = method === "fetch"
+        ? ["GET", "HEAD"].includes(request.method) && (index || pathname.endsWith(".md") && !!page?.markdown)
+        : !!page;
+      if (!served) return method === "head" ? "" : undefined;
+      const name = page?.view ?? listed;
+      await pipeline.select(name ? `view:${name}` : "web");
+      const caller = await pipeline.resolveCaller(request, env as E, resolver, true);
+      const visit = site.visit(request, pipeline, caller);
+      // The ordinary renderer validates query/path fields; each View read is decided before any SQL.
+      const opened = async () => visit;
+      const result = method === "fetch" ? await site.render(request, opened) : await site.renderHead(request, opened);
+      if (visit.failure) throw visit.failure;
       if (result === undefined) return;
-      if (access && result instanceof Response && result.status >= 400) {
-        const payload = await result.clone().json().catch(() => null) as {error?:{code:string;path?:string;field?:string}} | null;
-        if (payload?.error) throw new ContractError(payload.error.code, "", payload.error.path, {status:result.status, fields:payload.error.field ? {field:payload.error.field} : undefined});
+      // A host observes the renderer's own refusal (a malformed path field, say) by its code.
+      if (pipeline.gateway && result instanceof Response && result.status >= 400) {
+        const payload = await result.clone().json().catch(() => null) as ErrorBody;
+        const fields = payload?.error?.field ? { field: payload.error.field } : undefined;
+        if (payload?.error) throw new ContractError(payload.error.code, "", payload.error.path, { status: result.status, fields });
       }
-      if (!ran) return result;
-      if (access?.dryRun) { const response = access.response(); return method === "fetch" ? response : ""; }
-      access?.finish();
+      if (!visit.ran) return result;
+      if (pipeline.dryRun) {
+        const response = pipeline.dryRunResponse();
+        return method === "fetch" ? response : "";
+      }
+      pipeline.finish();
       return result;
     } catch (error) {
-      access?.finish(error);
+      pipeline.finish(error);
       if (method === "head") throw error;
-      return hostFailure(error, caller, "web");
+      return pipeline.failure(error, "web");
     }
   };
   return {
