@@ -3,7 +3,7 @@
  * Z or offset; a day that does not exist (2026-02-30) is refused rather than rolled over. SQLite stores microseconds
  * and days; PostgreSQL receives the canonical text, so it keeps every microsecond.
  */
-import { ContractError } from "./contracts.js";
+import { ContractError } from "./contract-error.js";
 
 export function encodeTimestamptz(v: string | Date): number {
   if (v instanceof Date) {

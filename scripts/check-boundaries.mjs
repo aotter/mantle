@@ -74,13 +74,15 @@ function checkCoreCloudflareFree() {
  * `auth` may not import Better Auth, one that is not `mcp` may not import the MCP SDK, and so on.
  */
 function checkNextFolderImports() {
+  // Pure kernel leaves (no I/O, no runtime state, relative imports only among themselves) the compiler shares instead of copying.
+  const compilerLeaves = ["kernel/contract-error.js", "kernel/scalars.js", "kernel/search.js", "kernel/user-field-name.js"];
   const folders = {testing:["kernel"],kernel:[],auth:["kernel"],bun:["kernel"],domain:["build","kernel"],usecase:["build","domain","kernel"],infrastructure:["build","domain","usecase","kernel"],build:[]};
   const root = join(ROOT,"packages/mantle/src");
   for (const [folder,reach] of Object.entries(folders)) for (const file of listFiles(join(root,folder),p=>p.endsWith(".ts"))) {
     for (const spec of importSpecifiers(file)) {
       if (spec.startsWith(".")) {
         const target = relative(root,join(dirname(file),spec)).split(sep)[0];
-        if (target !== folder && !reach.includes(target) && !(folder === "build" && relative(root,join(dirname(file),spec)) === "kernel/user-field-name.js")) fail(file,`src/${folder} may reach only ${[folder,...reach].join(", ")}: '${spec}'`);
+        if (target !== folder && !reach.includes(target) && !(folder === "build" && compilerLeaves.includes(relative(root,join(dirname(file),spec)).split(sep).join("/")))) fail(file,`src/${folder} may reach only ${[folder,...reach].join(", ")}: '${spec}'`);
       } else if (/^(?:better-auth(?:\/|$)|@better-auth\/)/.test(spec)) {
         if (folder !== "auth" && !/infrastructure\/(?:authSchema|generateAuth)\.ts$/.test(rel(file))) fail(file,`optional Auth belongs to the selected auth entry: '${spec}'`);
       } else if (spec.startsWith("@modelcontextprotocol/")) {
