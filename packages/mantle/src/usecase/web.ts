@@ -13,7 +13,7 @@ export function emitWeb(plan: RuntimePlan, lowered: PlanLowered, target: Target)
     return `[${q(name)}, { ${check.length ? `check: (caller) => {${check.join("")}}, ` : ""}${acceptsEmpty(v.input) ? "" : "unlisted: true, "}query: input${i}, page: async (db, caller, input, paging) => (await import("./paged/views/${encodeURIComponent(name)}.js")).default(db, caller, input, paging)${convert?`, convert: ${convert}`:""}${booleans.length?`, booleans: ${q(booleans)}`:""} }]`;
   });
   return {"web.ts": [
-    ...(plan.access ? ['import { userBinds } from "@aotter/mantle/user-fields";'] : []),
+    ...(plan.access ? ['import { userBinds } from "@aotter/mantle/internal/user-fields";'] : []),
     ...([...Object.values(plan.views)].some(v => v.requires?.auth?.all.length) ? ['import { deny, isAdmin, isUser } from "@aotter/mantle/contracts";'] : []),
     ...views.flatMap(([n],i)=>[`import { query as input${i} } from "./validation/views/${encodeURIComponent(n)}.js";`,`import type { Row as Row${i} } from "./views/${encodeURIComponent(n)}.js";`]),
     'import { web as site, type Options, type Page } from "@aotter/mantle/web";',

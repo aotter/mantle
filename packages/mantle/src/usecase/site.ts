@@ -1,7 +1,7 @@
 /** Generate the optional site/media module and deployment DDL, never runtime preparation. */
 import { assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired, type SiteDefaults } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
-import { driverFor, isSqlite, q } from "../domain/entry.js";
+import { driverFor, isSqlite, q, driverModule } from "../domain/entry.js";
 /** The site's media purposes with each `required` slot expanded to its comma-separated MIME types, as the library checks them. */
 export const mediaPolicies = (defaults: SiteDefaults | undefined) => defaults?.media?.purposes?.map(p=>({...p,required:expandPolicyRequired(p.required).map(slot=>slot.join(","))})) ?? [];
 export function emitSite(target: Target, defaults: SiteDefaults | undefined, refuse: (path:string,message:string)=>void, schemaNames: readonly string[]): Record<string,string> {
@@ -17,8 +17,8 @@ export function emitSite(target: Target, defaults: SiteDefaults | undefined, ref
   return {"site.ts":`import { createSite } from "${root}/site";
 import type { Caller } from "${root}/contracts";
 import type { ${pg ? "Postgres" : "Handle"} as Database } from "${root}/${pg ? "contracts" : `driver/${driver}`}";
-import * as DRIVER from "${root}/driver/${driver}";
-import { param, escapeLike, likeEscape, like } from "${root}/dialect/${pg ? "postgres" : "sqlite"}";
+import * as DRIVER from "${driverModule(target)}";
+import { param, escapeLike, likeEscape, like } from "${root}/internal/dialect/${pg ? "postgres" : "sqlite"}";
 export const siteDefaults = ${q(defaults)} as const;
 /** The site's media purposes, expanded; the library and upload_media check against them. */
 export const policies = ${q(policies)} as const;

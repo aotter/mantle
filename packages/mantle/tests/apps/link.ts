@@ -1,11 +1,16 @@
-/** Shared helpers: generate a fixture app and run its code from source. Generated code imports `@aotter/mantle/<kernel module>`; here those are the sources. */
+/**
+ * Shared helpers: generate a fixture app and run its code from source. Generated code imports
+ * `@aotter/mantle/<kernel module>` and `@aotter/mantle/internal/<kernel module>`; here those are the sources.
+ */
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { generateFromSources } from "../../src/infrastructure/generate.js";
 import type { Target } from "../../src/domain/model.js";
 
 type Sources = { sourceId: string; text: string }[];
-export const link = (code: string) => code.replace(/"@aotter\/mantle\/([^"]+)"/g, (_, path) => JSON.stringify(resolve(import.meta.dir, "../../src/kernel", path + ".ts")));
+// `internal/<module>` is the plumbing namespace of the exports map; the kernel sources are not moved.
+export const link = (code: string) => code.replace(/"@aotter\/mantle\/(?:internal\/)?([^"]+)"/g,
+  (_, path) => JSON.stringify(resolve(import.meta.dir, "../../src/kernel", path + ".ts")));
 /** Fixture manifests by file name (the purchase app by default). */
 export const loadFixtureSources = (...names: string[]): Promise<Sources> =>
   Promise.all((names.length ? names : ["purchase.yaml"]).map(async name => ({ sourceId: name, text: await readFile(resolve(import.meta.dir, name), "utf8") })));

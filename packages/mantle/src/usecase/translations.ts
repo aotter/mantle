@@ -7,7 +7,7 @@ import { renderTerm } from "../kernel/store.js";
 import {dialect as SQLITE} from "../kernel/dialect/sqlite.js";
 import {dialect as POSTGRES} from "../kernel/dialect/postgres.js";
 import {declaredType} from "../domain/columns.js";
-import { driverFor, isSqlite, q } from "../domain/entry.js";
+import { driverFor, isSqlite, q, driverModule } from "../domain/entry.js";
 /** The parent is checked by the same atomic UPDATE that publishes the child. */
 export function publishedParent(plan: RuntimePlan, child: PlanSchema, d: Dialect, recipes: object[], trusted: boolean): string {
   const tr=child.translates!,parent=plan.schemas[tr.parent.toLowerCase()]!,on=tr.on.toLowerCase();
@@ -22,7 +22,7 @@ export function emitTranslations(plan:RuntimePlan,target:Target):Record<string,s
   const user = userReferences(plan,isSqlite(target));
   const children=Object.values(plan.schemas).filter(s=>s.translates);
   if(!Object.values(plan.schemas).some(s=>s.localized))return {};
-  if(!children.length)return {"translations.ts":'export {toCanonicalLocale} from "@aotter/mantle/translations";\n'};
+  if(!children.length)return {"translations.ts":'export {toCanonicalLocale} from "@aotter/mantle/internal/translations";\n'};
   const parents=[...new Set(children.map(s=>s.translates!.parent.toLowerCase()))], declarations:string[]=[],descriptors:string[]=[];
   const driver=driverFor(target);
   for(const parent of parents) {
@@ -43,11 +43,11 @@ export function emitTranslations(plan:RuntimePlan,target:Target):Record<string,s
   }
   return {"translations.ts":`${user.code ? user.code+"\n" : ""}import {ContractError,type Caller${driver==="postgres"?",type Unsafe as Database":""}} from "@aotter/mantle/contracts";
 ${driver!=="postgres"?`import type {Handle as Database} from "@aotter/mantle/driver/${driver}";`:""}
-import {read} from "@aotter/mantle/driver/${driver}";
-import {binds,encode} from "@aotter/mantle/binds";
-import {param,ident${driver==="postgres"?",cast":""},timestamp,date} from "@aotter/mantle/dialect/${driver==="postgres"?"postgres":"sqlite"}";
+import {read} from "${driverModule(target)}";
+import {binds,encode} from "@aotter/mantle/internal/binds";
+import {param,ident${driver==="postgres"?",cast":""},timestamp,date} from "@aotter/mantle/internal/dialect/${driver==="postgres"?"postgres":"sqlite"}";
 import type {Tables} from "./generated.js";
-export {toCanonicalLocale} from "@aotter/mantle/translations";
+export {toCanonicalLocale} from "@aotter/mantle/internal/translations";
 export interface TranslationParents {${declarations.join("\n")}}
 const descriptors={${descriptors.join(",")}} as const;
 /** Only pass the current parent page (up to 500); reads are bounded to its keys. */

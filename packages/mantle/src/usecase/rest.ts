@@ -11,7 +11,7 @@ export function emitRest(plan: RuntimePlan, lowered: PlanLowered, target: Target
     const lines = authLines(requires, path, binds, !target.endsWith("postgres"), trustedOnly);
     return lines.length ? `, check: (caller) => {${lines.join("")}}` : "";
   };
-  const userImport = plan.access ? ['import { userBinds } from "@aotter/mantle/user-fields";'] : [];
+  const userImport = plan.access ? ['import { userBinds } from "@aotter/mantle/internal/user-fields";'] : [];
   const refs = Object.values(plan.procedures).some(p=>"ref" in p.handler);
   const imports = [...userImport, 'import { rest as serve, type Options } from "@aotter/mantle/rest";', databaseImport(target), ...(refs ? ['import { store, type Handlers } from "./generated.js";'] : [])];
   if (Object.values(plan.procedures).some(p => p.trustedOnly) || [...Object.values(plan.views), ...Object.values(plan.procedures)].some(p => p.requires?.auth?.all.length)) imports.push('import { deny, isAdmin, isUser } from "@aotter/mantle/contracts";');

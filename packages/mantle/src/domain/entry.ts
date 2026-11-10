@@ -17,6 +17,15 @@ export const isSqlite = (target: string): boolean => target === "bun-sqlite" || 
 export const viewImports = (name: string, index: number, query = "query"): string[] => [`const page${index}: typeof import("./paged/views/${encodeURIComponent(name)}.js").default = async (...args) => (await import("./paged/views/${encodeURIComponent(name)}.js")).default(...args);`, `import { query as ${query}${index} } from "./validation/views/${encodeURIComponent(name)}.js";`];
 /** A generated host handle import, shared by the optional boundaries. @internal */
 export const driverFor = (target: string): "bun-sqlite" | "d1" | "postgres" => target === "bun-sqlite" ? "bun-sqlite" : target === "cloudflare-d1" ? "d1" : "postgres";
+/**
+ * A target's driver module. The SQLite drivers also export the documented `Handle` contract, so they stay public;
+ * PostgreSQL's handle type is `Postgres` in contracts, so its driver is generated-code plumbing (`internal/*`, no compatibility promise).
+ * @internal
+ */
+export const driverModule = (target: string): string => {
+  const driver = driverFor(target);
+  return driver === "postgres" ? "@aotter/mantle/internal/driver/postgres" : `@aotter/mantle/driver/${driver}`;
+};
 export const databaseImport = (target: string): string => driverFor(target) === "postgres" ? 'import type { Postgres as Database } from "@aotter/mantle/contracts";' : `import type { Handle as Database } from "@aotter/mantle/driver/${driverFor(target)}";`;
 
 /** Shared source ownership marker; only newly emitted files are wrapped. */

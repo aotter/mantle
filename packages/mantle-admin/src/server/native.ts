@@ -1,10 +1,10 @@
-import { modeOf } from "@aotter/mantle/user-fields";
+import { modeOf } from "@aotter/mantle/internal/user-fields";
 /** Selected generated native adapters: constants and compiled predicates, never a manifest interpreter. */
 import { ContractError, isAdmin, deny, type Caller, type Row } from "@aotter/mantle/contracts";
-import { binds, bound, type LockProbe, type Recipe, type Step, type Bound, type Values } from "@aotter/mantle/binds";
-import { query as readQuery } from "@aotter/mantle/validation";
-import { invalid } from "@aotter/mantle/surface";
-import { checkPageLimit, page, decodeNullableCursor, encodeCursor, validCursor, type CursorKind, type Pages } from "@aotter/mantle/paging";
+import { binds, bound, type LockProbe, type Recipe, type Step, type Bound, type Values } from "@aotter/mantle/internal/binds";
+import { query as readQuery } from "@aotter/mantle/internal/validation";
+import { invalid } from "@aotter/mantle/internal/surface";
+import { checkPageLimit, page, decodeNullableCursor, encodeCursor, validCursor, type CursorKind, type Pages } from "@aotter/mantle/internal/paging";
 import type {EntryPageQuery, EntryScalar} from "./entries.js";
 const selectMode = <T>(spec: {readonly caller:T;readonly trusted:T}, caller:Caller, d: Values):T => {
     const m = modeOf(caller) === 'trusted' ? spec.trusted : spec.caller;

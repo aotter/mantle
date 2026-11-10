@@ -1,5 +1,5 @@
 /** Request-only filtering of generated Admin metadata. */
-import { authorized } from "@aotter/mantle/authorization";
+import { authorized } from "@aotter/mantle/internal/authorization";
 import type { Authorize, Caller, Target } from "@aotter/mantle/contracts";
 import type { Metadata, View, Operation } from "./index.js";
 

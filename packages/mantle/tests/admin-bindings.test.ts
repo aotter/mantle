@@ -195,7 +195,7 @@ import {admin} from '@aotter/mantle-admin/server';
 const b=adminBindings();
 admin(b.metadata,b.views,b.operations,{db:()=>null!,caller:()=>({kind:'anonymous' as const})});
 `);roots.push(scopedConsumer);
- const kernel=resolve(import.meta.dir,"../src/kernel"),admin=resolve(import.meta.dir,"../../mantle-admin/src/server"),paths={"@aotter/mantle/*":[kernel+"/*.ts"],"@aotter/mantle/contracts":[kernel+"/contracts.ts"],"@aotter/mantle/rest":[process.env.MANTLE_ADMIN_SOURCE_REST??kernel+"/rest.ts"],"@aotter/mantle-admin/server":[admin+"/index.ts"],"@aotter/mantle-admin/server/*":[admin+"/*.ts"]};
+ const kernel=resolve(import.meta.dir,"../src/kernel"),admin=resolve(import.meta.dir,"../../mantle-admin/src/server"),paths={"@aotter/mantle/internal/*":[kernel+"/*.ts"],"@aotter/mantle/*":[kernel+"/*.ts"],"@aotter/mantle/contracts":[kernel+"/contracts.ts"],"@aotter/mantle/rest":[process.env.MANTLE_ADMIN_SOURCE_REST??kernel+"/rest.ts"],"@aotter/mantle-admin/server":[admin+"/index.ts"],"@aotter/mantle-admin/server/*":[admin+"/*.ts"]};
  const program=ts.createProgram(roots,{strict:true,noEmit:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,skipLibCheck:true,paths,types:["node","bun-types"],typeRoots:[resolve(import.meta.dir,"../node_modules/@types"),resolve(import.meta.dir,"../node_modules")]});expect(ts.getPreEmitDiagnostics(program).map(d=>`${d.file?.fileName} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText," ")}`).join("\n")).toBe("");
  }finally{await rm(dir,{recursive:true,force:true});}
 },30000);
