@@ -30,7 +30,6 @@ export interface Options<Env, Database> extends GatewayOptions {
   discovery?: "authorized" | "all";
   /** Host platform contract, versioned by `v`; stable within a version. */
   gateway?: Gateway;
-  fields?: import("./user-fields.js").UserFields;
   db: (env: Env) => Database;
   caller?: (request: Request, env: Env, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>;
   locale?: string;
@@ -138,7 +137,8 @@ export type Tools<Env, Database, Handlers = never> =
 /** The selected MCP routes; all request work loads only when an MCP request arrives. */
 export function mcp<Env, Database, Handlers = never>(
   tools: Tools<Env, Database, Handlers>,
-  options: Options<Env, Database> & { handlers?: Handlers },
+  options: Options<Env, Database> &
+    Pick<import("./request-pipeline.js").PipelineOptions, "fields"> & { handlers?: Handlers },
   reads: readonly { readonly name: string; readonly surface: string }[] = [],
 ): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
   let serve: ReturnType<typeof import("./mcp-handler.js").handler<Env, Database, Handlers>> | undefined;

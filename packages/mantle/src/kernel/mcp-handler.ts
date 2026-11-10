@@ -9,7 +9,7 @@ import type { Tool, Tools, Options } from "./mcp.js";
 import { linkSurface, type McpAppRender, type McpAppsSource } from "./mcp-apps.js";
 import { resolveMcpApps } from "./mcp-app-pages.js";
 import { serveTools } from "./mcp-server.js";
-import { isView, openPipeline, type Call, type Pipeline } from "./request-pipeline.js";
+import { isView, openPipeline, type Call, type Pipeline, type PipelineOptions } from "./request-pipeline.js";
 
 type Surface = "public" | "admin";
 type AppLinks = ReturnType<typeof linkSurface>;
@@ -41,7 +41,7 @@ interface Refusal {
 /** The handler for `/mcp` (public tools) and `/mcp/admin` (tools for `admin` roles); other paths are undefined. */
 export function handler<Env, Database, Handlers>(
   tools: Tools<Env, Database, Handlers>,
-  options: Options<Env, Database> & { handlers?: Handlers },
+  options: Options<Env, Database> & Pick<PipelineOptions, "fields"> & { handlers?: Handlers },
   apps: Partial<Record<string, AppLinks>> = {},
   reads: ReadCatalogue = [],
 ): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {

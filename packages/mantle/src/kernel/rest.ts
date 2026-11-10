@@ -1,7 +1,7 @@
 /** REST request handling for a generated route table: matching, body and parameter decoding, dispatch and errors. */
 import type { Caller, Target, Authorize, Gateway, RequestContext, GatewayOptions } from "./contracts.js";
 import { ContractError } from "./contract-error.js";
-import type { CallerResolver, Pipeline } from "./request-pipeline.js";
+import type { CallerResolver, Pipeline, PipelineOptions } from "./request-pipeline.js";
 import { invalid, type Conversions } from "./surface.js";
 /** The routers' path grammar, for Admin's router: its mount, route patterns and the canonical request path. */
 export { ADMIN_API_BASE, canonicalPath, routeSource } from "./route-pattern.js";
@@ -12,7 +12,6 @@ export interface Options<Env, Database> extends GatewayOptions {
   authorize?: Authorize;
   /** Host platform contract, versioned by `v`; stable within a version. */
   gateway?: Gateway;
-  fields?: import("./user-fields.js").UserFields;
   db: (env: Env) => Database;
   caller?: CallerResolver<Env>;
 }
@@ -76,7 +75,7 @@ export async function body(request: Request, limit = DEFAULT_BODY_LIMIT): Promis
 /** Shared matching/auth/error envelope; selected dispatch is supplied by the surface. */
 function router<Env, Database, Handlers>(
   routes: readonly Route<Database, Handlers, Env>[],
-  options: Options<Env, Database>,
+  options: Options<Env, Database> & Pick<PipelineOptions, "fields"> & { handlers?: Handlers },
   send: Send<Env, Database, Handlers>,
 ): Fetch<Env> {
   let handle: Fetch<Env> | undefined;
@@ -86,10 +85,10 @@ function router<Env, Database, Handlers>(
   };
 }
 
-/** Generated REST routes retain the native View/Procedure dispatch. */
+/** Generated REST routes retain the native View/Procedure dispatch. Generated code supplies the manifest's `fields`. */
 export function rest<Env, Database, Handlers = never>(
   routes: readonly Route<Database, Handlers, Env>[],
-  options: Options<Env, Database> & { handlers?: Handlers },
+  options: Options<Env, Database> & Pick<PipelineOptions, "fields"> & { handlers?: Handlers },
 ): Fetch<Env> {
   return router(routes, options, async (route, request, env, caller, params, pipeline) => {
     const { dispatch } = await import("./rest-dispatch.js");
@@ -100,7 +99,7 @@ export function rest<Env, Database, Handlers = never>(
 /** A selected surface's raw/JSON handlers; its branches are absent from ordinary REST bundles. */
 export function nativeRest<Env, Database, Handlers = never>(
   routes: readonly Route<Database, Handlers, Env>[],
-  options: Options<Env, Database> & { handlers?: Handlers },
+  options: Options<Env, Database> & Pick<PipelineOptions, "fields"> & { handlers?: Handlers },
 ): Fetch<Env> {
   return router(routes, options, async (route, request, env, caller, params, pipeline) => {
     const limit = route.bodyLimit ?? DEFAULT_BODY_LIMIT;
