@@ -12,7 +12,7 @@ import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
 import { AGGREGATES, NATIVE_COLUMNS, NATIVE_NOT_NULL, notNullColumns, viewCacheProblem, checkShapeProblem, lockIndexProblem, lockShapeProblem, storageColumnClash, storageColumns, type SqlContext, type SqlDiagnostic, type SqlNode, type SqlPlan } from "../../domain/model/SqlIr.js";
 import { parseManifestSources, type ManifestSourceSet } from "../../domain/service/ManifestParser.js";
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
-import * as d1 from "../../../d1/compile/index.js";
+import { d1Dialect as d1 } from "../../../d1/dialect.js";
 import { compileSql, relationNames, statementCount, type SqlDialect } from "./compileSql.js";
 import { parseRowTemplate, type UserFieldSpec } from "../../domain/model/UserFields.js";
 import { registerUserField } from "../../domain/service/UserReferences.js";

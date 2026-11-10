@@ -2,7 +2,7 @@ import { describeApp } from "../src/domain/describe/index.js";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { compilePlan, viewOutputs, type LoweredStatement } from "../src/build/compiler.js";
-import * as postgresCompile from "../src/build/postgres/compile/index.js";
+import { postgresDialect } from "../src/build/postgres/dialect.js";
 import { generateFromSources } from "../src/infrastructure/generateAuth.js";
 import { coreNewId } from "../src/infrastructure/generate.js";
 import { generate } from "../src/usecase/generate.js";
@@ -62,7 +62,7 @@ async function canonical(target: Target, text = source) {
   const { lowerPlan } = await import(new URL("../src/build/core/sql/lowered.ts", import.meta.url).href);
   const dialectModule = await import(new URL(sqlite ? "../src/build/d1/dialect.ts" : "../src/build/postgres/dialect.ts", import.meta.url).href);
   const dialect = sqlite ? dialectModule.d1Dialect : dialectModule.postgresDialect();
-  const compiled = await compilePlan({ sources: [{ sourceId: "notes.yaml", text }] }, sqlite ? undefined : postgresCompile);
+  const compiled = await compilePlan({ sources: [{ sourceId: "notes.yaml", text }] }, sqlite ? undefined : postgresDialect());
   if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
   const { lowered } = lowerPlan(compiled.plan, dialect);
   return { target, description: await describeApp(compiled.plan), plan: compiled.plan, lowered, newId: coreNewId(dialect, compiled.plan.schemas), viewKeys: Object.fromEntries(Object.entries(compiled.plan.views).map(([name, view]) => [name, viewOutputs(view, compiled.plan.schemas).keys])) };

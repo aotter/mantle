@@ -1,6 +1,6 @@
 import { describeApp } from "../domain/describe/index.js";
 /** Build-time assembly only. None of these imports enter generated applications. */
-import { compilePlan, lockCondition, viewOutputs, sqliteCompiler, postgresCompiler, d1Dialect, postgresDialect, lowerPlan, sqliteSchema, postgresSchema, type ManifestSourceSet, type LoweredStatement, type RuntimePlan, type SqlNode } from "../build/compiler.js";
+import { compilePlan, lockCondition, viewOutputs, d1Dialect, postgresDialect, lowerPlan, sqliteSchema, postgresSchema, type ManifestSourceSet, type LoweredStatement, type RuntimePlan, type SqlNode } from "../build/compiler.js";
 import { wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { boundaryType, outputType } from "../domain/columns.js";
 import { castCursor, provePaging, type PagingProof } from "../domain/paging.js";
@@ -117,10 +117,9 @@ export interface GenerateRequest { readonly target: Target; readonly admin?: boo
 
 export async function generateFromSources(request: GenerateRequest, schema?: () => readonly string[]): Promise<GenerateResult> {
   const postgres = request.target.endsWith("postgres");
-  const compiler = postgres ? postgresCompiler : sqliteCompiler;
-  const compiled = await compilePlan(request.sources, compiler, "operational");
-  if (!compiled.ok) return { ok: false, diagnostics: compiled.diagnostics.map(({ code, path, message }) => ({ code, path, message })) };
   const dialect = postgres ? postgresDialect() : d1Dialect;
+  const compiled = await compilePlan(request.sources, dialect, "operational");
+  if (!compiled.ok) return { ok: false, diagnostics: compiled.diagnostics.map(({ code, path, message }) => ({ code, path, message })) };
   const wire = postgres ? postgresDialect_ : sqliteDialect;
   const viewKeys = Object.fromEntries(Object.entries(compiled.plan.views).map(([name, view]) => {
     const output = viewOutputs(view, compiled.plan.schemas);

@@ -37,10 +37,10 @@ try {
   } else if (command === "describe") {
     const target = positionals.shift();
     if (!target || !targets.includes(target as Target) || !positionals.length) throw new Error(usage);
-    const { compilePlan, sqliteCompiler, postgresCompiler } = await import("../build/compiler.js");
+    const { compilePlan, d1Dialect, postgresDialect } = await import("../build/compiler.js");
     const { describeApp, diffApp } = await import("../domain/describe/index.js");
     const sources = await Promise.all(positionals.map(async path => ({ sourceId: path, text: await readFile(path, "utf8") })));
-    const compiled = await compilePlan({ sources }, target.endsWith("postgres") ? postgresCompiler : sqliteCompiler, "operational");
+    const compiled = await compilePlan({ sources }, target.endsWith("postgres") ? postgresDialect() : d1Dialect, "operational");
     if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics, null, 2));
     const report = await describeApp(compiled.plan);
     if (values.diff) {

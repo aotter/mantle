@@ -8,8 +8,9 @@ import {generateOrThrow,writeGenerated} from "./apps/link.js";
 import {wireRows,checkOrigin} from "../src/kernel/contracts.js";
 import {outputConversions} from "../src/domain/columns.js";
 import {compilePlan} from "../src/build/compiler.js";
-import * as postgresCompiler from "../src/build/postgres/compile/index.js";
-import * as sqliteCompiler from "../src/build/d1/compile/index.js";
+import { postgresDialect } from "../src/build/postgres/dialect.js";
+import { d1Dialect as sqliteCompiler } from "../src/build/d1/dialect.js";
+const postgresCompiler = postgresDialect();
 
 const source=`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema

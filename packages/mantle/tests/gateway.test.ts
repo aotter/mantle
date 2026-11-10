@@ -252,11 +252,11 @@ test('forwarded pinning, dry runs and access decisions share one boundary', asyn
 });
 
 test('MCP media writes refuse dry runs before acquiring a database or running tools', async () => {
-  const { compilePlan, sqliteCompiler } = await import('../src/build/compiler.js');
+  const { compilePlan, d1Dialect } = await import('../src/build/compiler.js');
   const { describeApp } = await import('../dist/domain/describe/index.js');
   const { mediaDefinitions } = await import('../src/domain/generated-tools.js');
   const { handler } = await import('../src/kernel/mcp-handler.js');
-  const compiled = await compilePlan({sources:[{sourceId:'gateway.yaml',text:gatewaySource}]},sqliteCompiler,'operational');
+  const compiled = await compilePlan({sources:[{sourceId:'gateway.yaml',text:gatewaySource}]},d1Dialect,'operational');
   if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
   const report = await describeApp(compiled.plan);
   const targets = Object.fromEntries(report.targets.map(t => [t._meta.id,t._meta]));

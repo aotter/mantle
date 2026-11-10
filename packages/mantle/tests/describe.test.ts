@@ -4,11 +4,11 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeApp, diffApp, targetHash } from "../dist/domain/describe/index.js";
-import { compilePlan, sqliteCompiler, type RuntimePlan } from "../src/build/compiler.js";
+import { compilePlan, d1Dialect, type RuntimePlan } from "../src/build/compiler.js";
 
 async function fixture(): Promise<RuntimePlan> {
   const text = await readFile(new URL("apps/user-fields.yaml", import.meta.url), "utf8");
-  const result = await compilePlan({ sources: [{ sourceId: "fixture", text }] }, sqliteCompiler, "operational");
+  const result = await compilePlan({ sources: [{ sourceId: "fixture", text }] }, d1Dialect, "operational");
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   return result.plan;
 }
@@ -73,7 +73,7 @@ test("CLI JSON equals describeApp and --diff writes nothing into the project", a
     const cli = new URL("../dist/infrastructure/cli.js", import.meta.url).pathname;
     const manifest = new URL("apps/user-fields.yaml", import.meta.url).pathname;
     const sources = { sources: [{ sourceId: manifest, text: await readFile(manifest, "utf8") }] };
-    const compiled = await compilePlan(sources, sqliteCompiler, "operational");
+    const compiled = await compilePlan(sources, d1Dialect, "operational");
     if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
     const report = await describeApp(compiled.plan);
     expect(() => execFileSync("node", [cli, "describe", manifest], { cwd: dir, stdio: "pipe" })).toThrow("mantle describe <target>");
@@ -113,7 +113,7 @@ test("Admin catalogue includes every literal built-in server route", async () =>
 
 const H = "apiVersion: cms.mantle.aotter.net/v2\n";
 async function compile(text: string): Promise<RuntimePlan> {
-  const result = await compilePlan({ sources: [{ sourceId: "regression", text }] }, sqliteCompiler, "operational");
+  const result = await compilePlan({ sources: [{ sourceId: "regression", text }] }, d1Dialect, "operational");
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   return result.plan;
 }

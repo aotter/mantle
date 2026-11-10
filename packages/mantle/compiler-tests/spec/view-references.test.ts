@@ -2,7 +2,8 @@
 /** ADR-0037 decision 3: a View reads an internal View; its native CTE retains policy and every check. */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { compilePlan } from "../compiler.js";
-import * as pgCompile from "../../src/build/postgres/compile/index.js";
+import { postgresDialect as pgDialect } from "../../src/build/postgres/dialect.js";
+const pgCompile = pgDialect();
 
 const doc = (kind: string, name: string, spec: string) => `apiVersion: cms.mantle.aotter.net/v2\nkind: ${kind}\nmetadata: { name: ${name} }\nspec:\n${spec}`;
 const NOTES = doc("Schema", "notes", `  title: Notes

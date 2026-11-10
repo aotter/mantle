@@ -6,18 +6,14 @@
 import type { SqlContext, SqlDiagnostic, SqlNode, SqlPlan } from "../../domain/model/SqlIr.js";
 import { PG_GRAMMAR } from "../../domain/model/SqlIr.js";
 import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
-import * as d1 from "../../../d1/compile/index.js";
+import { d1Dialect as d1 } from "../../../d1/dialect.js";
+import type { MantleDialect } from "../../../core/dialect.js";
 import { parsePgSql } from "./PgQueryParser.js";
 import { refuseForEveryDialect } from "./frontEnd.js";
 import { refuseUserReferences, USER_REF_SCOPE_ONLY } from "../../domain/service/UserReferences.js";
 
-/** A dialect's compile side, as `<dialect>/compile` exports it (ADR-0035 decision 3). */
-export interface SqlDialect {
-  readonly name: string;
-  readonly version: string;
-  /** Throws the first refusal as a `SqlRefusal` with its source offset. */
-  accepts(stmts: SqlNode[], context: SqlContext & { source: string }, locations: (number | undefined)[]): void;
-}
+/** A dialect's compile side (ADR-0035 decision 3). */
+export type SqlDialect = Pick<MantleDialect, "name" | "version" | "accepts">;
 
 /** Relations outside lexical CTE scope: the compiler orders named Views by these dependencies. */
 export async function relationNames(sql: string): Promise<Set<string>> {

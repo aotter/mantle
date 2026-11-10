@@ -19,6 +19,8 @@ export interface MantleDialect {
   /** What a plan compiled for this dialect records (`RuntimePlan.dialect`); boot refuses any other. */
   readonly name: string;
   readonly version: string;
+  /** Compile side (ADR-0035 decision 3): throws the first refusal of a parsed program as a `SqlRefusal` with its source offset. */
+  accepts(stmts: SqlNode[], context: SqlContext & { source: string }, locations: (number | undefined)[]): void;
   /** The dialect's refusals of a program's IR. Run on every program: the runtime never trusts an IR. */
   check(plan: SqlPlan, context: SqlContext): readonly SqlDiagnostic[];
   readonly lowering: PolicyLowering;

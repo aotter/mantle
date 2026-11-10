@@ -13,8 +13,6 @@ export type { SiteDefaults } from "./spec/domain/model/SiteConfig.js";
 export { lowerPlan } from "./core/sql/lowered.js";
 export { d1Dialect } from "./d1/dialect.js";
 export { postgresDialect } from "./postgres/dialect.js";
-export * as sqliteCompiler from "./d1/compile/index.js";
-export * as postgresCompiler from "./postgres/compile/index.js";
 export { initialStorageSql as sqliteSchema } from "./d1/storage.js";
 export { initialStorageSql as postgresSchema } from "./postgres/storage.js";
 export { collectionOf, isPrimaryCollection, adminIndexColumns } from "./admin/collections.js";
