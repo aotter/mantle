@@ -3,7 +3,7 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describeApp, matchTarget } from '../dist/domain/describe/index.js';
-import { compilePlan, sqliteCompiler } from '../src/build/compiler.js';
+import { compilePlan, d1Dialect } from '../src/build/compiler.js';
 import { generateFromSources } from '../src/infrastructure/generate.js';
 import { writeGenerated } from './apps/link.js';
 import { mantleProps } from './gateway-fixture.js';
@@ -57,7 +57,7 @@ test('matchTarget resolves what the generated REST and MCP routers resolve, for 
 }, 120_000);
 
 test('REST precedence is the router order, not manifest order or parameter count alone', async () => {
-  const compiled = await compilePlan({ sources: [{ sourceId: 'precedence.yaml', text: precedence }] }, sqliteCompiler, 'operational');
+  const compiled = await compilePlan({ sources: [{ sourceId: 'precedence.yaml', text: precedence }] }, d1Dialect, 'operational');
   if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
   const describe = await describeApp(compiled.plan);
   const id = (method: string, path: string) => matchTarget(describe, { surface: 'rest', method, path })?.id ?? null;
@@ -93,7 +93,7 @@ test('only whole {name} segments are parameters; Trigger paths that describe cou
   expect(routeSource('/x/{rest*}', '/admin/api', true)).toEqual({ source: '^/admin/api/x/(.*)/?$', keys: ['rest'] });
   const compile = (paths: [string, string][]) => compilePlan({ sources: [{ sourceId: 'paths.yaml', text: paths.flatMap(([method, path], i) => [
     `apiVersion: cms.mantle.aotter.net/v2\nkind: Procedure\nmetadata: { name: p${i} }\nspec:\n  input: { type: object }\n  output: { type: object }\n  handler: { ref: app.p${i} }`,
-    `apiVersion: cms.mantle.aotter.net/v2\nkind: Trigger\nmetadata: { name: p${i}-http }\nspec:\n  source: { kind: http, method: ${method}, path: '${path}' }\n  target: { procedure: p${i} }`]).join('\n---\n') }] }, sqliteCompiler, 'operational');
+    `apiVersion: cms.mantle.aotter.net/v2\nkind: Trigger\nmetadata: { name: p${i}-http }\nspec:\n  source: { kind: http, method: ${method}, path: '${path}' }\n  target: { procedure: p${i} }`]).join('\n---\n') }] }, d1Dialect, 'operational');
   const codes = async (paths: [string, string][]) => { const r = await compile(paths); return r.ok ? [] : r.diagnostics.map(d => d.code); };
   for (const path of ['/api/items/:id', '/api/items/a{id}', '/api/items/{id', '/api/items/id}'])
     expect(await codes([['POST', path]])).toContain('TRIGGER_PATH_INVALID');

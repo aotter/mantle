@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { PG_GRAMMAR, compilePlan } from "../compiler.js";
-import * as pgCompile from "../../src/build/postgres/compile/index.js";
+import { postgresDialect as pgDialect } from "../../src/build/postgres/dialect.js";
+const pgCompile = pgDialect();
 
 const fixture = readFileSync(fileURLToPath(new URL("./fixtures/pipeline/valid.yaml", import.meta.url)), "utf8");
 

@@ -13,7 +13,7 @@ import { isAdmin, hasAdminRole } from '../src/kernel/contracts.js';
 import { generateOrThrow, writeGenerated } from './apps/link.js';
 import { hostCaller } from '../src/kernel/host-caller.js';
 import { mantleProps } from './gateway-fixture.js';
-import { compilePlan, compileProgram, d1Dialect, postgresCompiler, postgresDialect, rowPolicy, sqliteCompiler } from '../src/build/compiler.js';
+import { compilePlan, compileProgram, d1Dialect, postgresDialect, rowPolicy } from '../src/build/compiler.js';
 await mkdir(resolve(import.meta.dir, 'apps/.generated'), { recursive: true });
 const fields = { region: { type: 'string' as const, multiple: true }, tier: { type: 'string' as const, multiple: false } };
 test('row mode is required and caller visibility is admin visibility', () => {
@@ -64,7 +64,7 @@ test('restricted Procedure INSERT variants refuse caller compilation while trust
   try {
     db.exec((await generateOrThrow('bun-sqlite', [{ sourceId: 'orders.yaml', text: schema }]))['schema.sql']!);
     for (const postgres of [false, true]) for (const restrict of [{ orders: "region IN auth.user('region')" }]) for (const sql of sqls) {
-      const result = await compilePlan({ sources: [{ sourceId: 'insert.yaml', text: schema+'\n---\n'+procedure(sql, restrict) }] }, postgres ? postgresCompiler : sqliteCompiler, 'operational');
+      const result = await compilePlan({ sources: [{ sourceId: 'insert.yaml', text: schema+'\n---\n'+procedure(sql, restrict) }] }, postgres ? postgresDialect() : d1Dialect, 'operational');
       if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
       const p = result.plan.procedures.seed!;
       if (!('sql' in p.handler)) throw Error('Expected SQL Procedure');
@@ -184,7 +184,7 @@ test('a restricted INSERT into a Schema without a field scope still fails genera
 test('upsert SET refuses restrict columns with the same diagnostic as UPDATE', async () => {
   for (const mode of ['caller','admin'] as const) for (const postgres of [false, true]) for (const sql of ["UPDATE orders SET region = 'JP' WHERE id = 'one' RETURNING id", "INSERT INTO orders(region,tier) VALUES ('TW','gold') ON CONFLICT(id) DO UPDATE SET region=excluded.region RETURNING id"]) {
     const p = JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind: 'Procedure', metadata: { name: 'move' }, spec: { title: 'Move', input: { type: 'object', additionalProperties: false }, output: { type: 'object' }, restrict: { orders: "region IN auth.user('region')" }, handler: { sql } } });
-    const result = await compilePlan({ sources: [{ sourceId: 'upsert.yaml', text: schema+'\n---\n'+p }] }, postgres ? postgresCompiler : sqliteCompiler, 'operational');
+    const result = await compilePlan({ sources: [{ sourceId: 'upsert.yaml', text: schema+'\n---\n'+p }] }, postgres ? postgresDialect() : d1Dialect, 'operational');
     if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
     const proc = result.plan.procedures.move!;
     if (!('sql' in proc.handler)) throw Error('Expected SQL Procedure');

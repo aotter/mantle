@@ -3,7 +3,7 @@ import {mkdtemp,rm,writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {compilePlan,type RuntimePlan} from "../src/build/compiler.js";
-import * as compiler from "../src/build/d1/compile/index.js";
+import { d1Dialect as compiler } from "../src/build/d1/dialect.js";
 import {collectionOf,developerConsole,lookupLocalRef,rowPreconditions} from "../src/build/compiler.js";
 import {appCatalog} from "../src/build/compiler.js";
 import {emitAdminDescriptors} from "../src/usecase/adminDescriptors.js";

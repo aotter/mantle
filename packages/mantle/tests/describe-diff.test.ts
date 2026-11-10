@@ -2,10 +2,10 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 const { describeApp, diffApp, targetHash } = await import("../src/domain/describe/index.js");
-const { compilePlan, sqliteCompiler } = await import("../src/build/compiler.js");
+const { compilePlan, d1Dialect } = await import("../src/build/compiler.js");
 const H = "apiVersion: cms.mantle.aotter.net/v2\n";
 async function compile(text: string) {
-  const r = await compilePlan({ sources: [{ sourceId: "x", text }] }, sqliteCompiler, "operational");
+  const r = await compilePlan({ sources: [{ sourceId: "x", text }] }, d1Dialect, "operational");
   if (!r.ok) throw Error(JSON.stringify(r.diagnostics.filter((d: any) => d.severity === "error")));
   return r.plan;
 }

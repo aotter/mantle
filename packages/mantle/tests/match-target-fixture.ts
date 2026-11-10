@@ -2,7 +2,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describeApp, type AppDescription } from '../dist/domain/describe/index.js';
-import { compilePlan, postgresCompiler, sqliteCompiler } from '../src/build/compiler.js';
+import { compilePlan, postgresDialect, d1Dialect } from '../src/build/compiler.js';
 
 const root = resolve(import.meta.dir, '../../..'), fixtures = resolve(import.meta.dir, 'apps');
 const manifest = (kind: string, name: string, spec: object) => JSON.stringify({ apiVersion: 'cms.mantle.aotter.net/v2', kind, metadata: { name }, spec });
@@ -50,7 +50,7 @@ export const variants = (template: string) => [fill(template), fill(template) + 
 /** The app's generation target and exactly the JSON `mantle describe` prints for it. */
 export async function describeOf(name: string, sources: { sourceId: string; text: string }[]) {
   const target = name === 'rest' ? 'bun-postgres' as const : 'bun-sqlite' as const;
-  const compiled = await compilePlan({ sources }, target === 'bun-postgres' ? postgresCompiler : sqliteCompiler, 'operational');
+  const compiled = await compilePlan({ sources }, target === 'bun-postgres' ? postgresDialect() : d1Dialect, 'operational');
   if (!compiled.ok) throw Error(name + JSON.stringify(compiled.diagnostics));
   return { target, describe: JSON.parse(JSON.stringify(await describeApp(compiled.plan))) as AppDescription };
 }

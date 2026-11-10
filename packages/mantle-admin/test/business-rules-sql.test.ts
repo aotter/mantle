@@ -1,6 +1,7 @@
 import { beforeAll, expect, it } from 'vitest';
 import { compileSql } from '../../mantle/src/build/spec/infrastructure/sql/compileSql';
-import * as pg from '../../mantle/src/build/postgres/compile/index';
+import { postgresDialect } from '../../mantle/src/build/postgres/dialect';
+const pg = postgresDialect();
 import { procedureFlow } from '../../mantle/src/build/admin/procedureFlow';
 import { businessRules } from '../admin/src/features/logic/business-rules';
 import type { DeveloperAtom, DeveloperSchemaModel } from '../admin/src/lib/types';
