@@ -103,6 +103,14 @@ pnpm install --frozen-lockfile
 pnpm check
 ```
 
+Formatting is owned by Biome: run `pnpm format`, and `pnpm check` fails on
+unformatted source. Brevity is measured in logic, not characters: "one line"
+and "shortest diff" mean the least logic, never the fewest physical lines or
+the shortest identifiers. Startup budgets are measured on minified output, so
+readable names and layout are free; the one exception is the runtime kernel,
+where object property names and string literals survive minification and do
+cost bytes.
+
 `pnpm check` runs the boundary, skill, plugin-manifest and release
 self-checks, builds, compiles the documented examples, typechecks, tests the
 workspace and runs the reference service from exact packed tarballs. Use
