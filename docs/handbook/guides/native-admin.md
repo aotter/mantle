@@ -82,8 +82,13 @@ Browser pages: a collection at `/admin/c/<schema>`, an admin View at `/admin/vie
 ## HTTP routes
 
 All paths below start with `/admin/api` and require an admin session; mutations
-also require the shared same-origin check. Mount `entries(...)` for collection
-routes. Send JSON with `Content-Type: application/json`.
+also require the shared same-origin check. Without a session a route answers 401
+`UNAUTHENTICATED`, and a signed-in caller without an admin session 403 `AUTH_DENIED`
+with `minimumRole`. The path and method are checked first, for every caller: a
+path no route matches is 404 `NOT_FOUND`, a method the path does not take is 405
+`METHOD_NOT_ALLOWED` with `Allow`, and a malformed path (an encoded `/`, `\` or
+NUL, or a bad escape) is 400 `INPUT_VALIDATION_FAILED`. Mount `entries(...)` for
+collection routes. Send JSON with `Content-Type: application/json`.
 
 These routes serve Admin's console with its session cookie; they are not a client API. A REST client reads back what it
 wrote through the app's own Views with HTTP Triggers (`mantle help trigger`).
