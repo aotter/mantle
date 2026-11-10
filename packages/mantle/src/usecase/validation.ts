@@ -5,7 +5,7 @@ import { publishingInput } from "./publishing.js";
 import { equal } from "../kernel/validation.js";
 const pointer = (key: string) => key.replace(/~/g, "~0").replace(/\//g, "~1");
 const supported = new Set([
-  ..."$defs $ref $schema $id type nullable properties required additionalProperties items enum const format pattern minLength maxLength minimum maximum exclusiveMinimum exclusiveMaximum multipleOf minItems maxItems title description default readOnly writeOnly examples deprecated x-mantle-ref x-mcp-hint".split(
+  ..."$defs $ref $schema $id type nullable properties required additionalProperties items enum const format pattern minLength maxLength minimum maximum exclusiveMinimum exclusiveMaximum multipleOf minItems maxItems x-mantle-maxBytes title description default readOnly writeOnly examples deprecated x-mantle-ref x-mcp-hint".split(
     " ",
   ),
   ...INPUT_RULE_KEYWORDS,
@@ -172,6 +172,7 @@ export function advertised(
 }
 const bounds = [
   ["string", "[...value].length", { minLength: "<", maxLength: ">" }],
+  ["string", "bytes(value)", { "x-mantle-maxBytes": ">" }],
   ["number", "value", { minimum: "<", maximum: ">", exclusiveMinimum: "<=", exclusiveMaximum: ">=" }],
   ["array", "value.length", { minItems: "<", maxItems: ">" }],
 ] as const;
@@ -219,7 +220,9 @@ export function emitValidation(
         functions: string[] = [],
         formats = new Set<string>(),
         patterns = new Map<string, string>();
-      let equality = false;
+      let equality = false,
+        wellFormed = false,
+        measured = false;
       const resolve = (ref: string): JsonSchema => {
         const found = lookup(root, ref);
         if (!found) refuse(base, "Input ref must be a valid local JSON pointer.");
@@ -244,6 +247,11 @@ export function emitValidation(
         const only = types.length === 1 ? types[0] : undefined;
         const guard = (type: string, test = `(${condition(type)})`) =>
           only === type || (type === "number" && only === "integer") ? "" : test + " && ";
+        // Every string a schema admits is well-formed text without NUL; an enum or const already names the strings it takes.
+        if ((types.includes("string") || !types.length) && schema.enum === undefined && schema.const === undefined) {
+          wellFormed = true;
+          lines.push(`${only === "string" ? "" : 'if (typeof value === "string") '}text(value,path);`);
+        }
         if (schema.enum) {
           if (!finite(schema.enum)) refuse(base, "Input enum numbers must be finite; JSON has no Infinity or NaN.");
           equality = true;
@@ -257,6 +265,12 @@ export function emitValidation(
         for (const key of ["minLength", "maxLength", "minItems", "maxItems"] as const)
           if (schema[key] !== undefined && (!Number.isSafeInteger(schema[key]) || schema[key]! < 0))
             refuse(base, `${key} must be a non-negative safe integer.`);
+        const maxBytes = schema["x-mantle-maxBytes"];
+        if (maxBytes !== undefined) {
+          if (!Number.isSafeInteger(maxBytes) || maxBytes < 1)
+            refuse(base, "x-mantle-maxBytes must be a positive safe integer.");
+          measured = true;
+        }
         for (const key of ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"] as const)
           if (schema[key] !== undefined && (typeof schema[key] !== "number" || !Number.isFinite(schema[key])))
             refuse(base, `${key} must be a finite number.`);
@@ -372,6 +386,8 @@ export function emitValidation(
       const helpers = [
         ...(functions.length ? ["fail"] : []),
         ...(equality ? ["equal"] : []),
+        ...(wellFormed ? ["text"] : []),
+        ...(measured ? ["bytes"] : []),
         ...(fields ? ["query as read"] : []),
       ];
       const code = `${helpers.length ? `import { ${helpers.join(", ")} } from "@aotter/mantle/internal/validation";\n` : ""}${formats.size ? `import { ${[...formats].join(", ")} } from "@aotter/mantle/internal/scalars";\n` : ""}${[...patterns].map(([pattern, name]) => `const ${name} = new RegExp(${q(pattern)});\n`).join("")}${functions.join("\n")}

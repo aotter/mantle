@@ -115,6 +115,41 @@ test("numeric validation keywords must be finite numbers, never generated source
     expect(() => emitValidation(plan(input as unknown as JsonSchema))).toThrow(/must be/);
 });
 
+test("x-mantle-maxBytes bounds the UTF-8 length; every string is well-formed text without NUL", async () => {
+  const { validate } = await checked({
+    type: "object",
+    properties: {
+      title: { type: "string", maxLength: 10, "x-mantle-maxBytes": 12 },
+      either: { type: ["string", "integer"] },
+      any: {},
+      list: { type: "array", items: { type: "string" } },
+      map: { type: "object", additionalProperties: { type: "string" } },
+      choice: { enum: ["a", "b"] },
+    },
+  });
+  // 3 astral code points are 12 bytes, the limit; 7 two-byte code points are under maxLength but over it
+  expect(validate({ title: "😀😀😀", either: 1, any: 2, list: ["😀"], map: { k: "v" } })).toBeTruthy();
+  error(() => validate({ title: "é".repeat(7) }), "procedures/save/input/title", "Value violates x-mantle-maxBytes.");
+  const bad = "Expected text without NUL or an unpaired surrogate.";
+  for (const [input, path] of [
+    [{ title: "a\u0000" }, "/title"],
+    [{ title: "\uDC00" }, "/title"],
+    [{ either: "\uD83D" }, "/either"],
+    [{ any: "a\u0000" }, "/any"],
+    [{ list: ["ok", "\u0000"] }, "/list/1"],
+    [{ map: { k: "\uD800x" } }, "/map/k"],
+  ] as const)
+    error(() => validate(input), `procedures/save/input${path}`, bad);
+  // an enum or const names the strings it takes
+  error(() => validate({ choice: "a\u0000" }), "procedures/save/input/choice", "Value is not in enum.");
+  expect(() => emitValidation(plan({ type: "string", "x-mantle-maxBytes": 0 }))).toThrow(
+    "x-mantle-maxBytes must be a positive safe integer.",
+  );
+  // MCP hosts accept an x- keyword in a tool's input schema, as they do x-mcp-hint: it is advertised unchanged
+  const input: JsonSchema = { type: "object", properties: { title: { type: "string", "x-mantle-maxBytes": 12 } } };
+  expect(advertised(input, "Save.").inputSchema).toBe(input);
+});
+
 test("string bounds count Unicode code points", async () => {
   const { validate } = await checked({
     type: "object",
@@ -402,7 +437,7 @@ test("patterns are compiled once per module", () => {
   )["validation/procedures/save.ts"]!;
   expect(source.match(/new RegExp\(/g)).toHaveLength(2);
   expect(source).toStartWith(
-    'import { fail } from "@aotter/mantle/internal/validation";\nconst pattern0 = new RegExp("^a");\nconst pattern1 = new RegExp("^c");\n',
+    'import { fail, text } from "@aotter/mantle/internal/validation";\nconst pattern0 = new RegExp("^a");\nconst pattern1 = new RegExp("^c");\n',
   );
 });
 

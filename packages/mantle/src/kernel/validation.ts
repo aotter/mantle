@@ -5,6 +5,13 @@ import { invalid } from "./surface.js";
 export function fail(path: string, message: string): never {
   return invalid(message, path);
 }
+/** Refuses U+0000 and an unpaired surrogate: PostgreSQL text cannot store NUL, and neither is UTF-8 text. */
+export function text(value: string, path: string): void {
+  // With the u flag a surrogate pair is one astral code point, so \p{Cs} matches only an unpaired half.
+  if (/\0|\p{Cs}/u.test(value)) fail(path, "Expected text without NUL or an unpaired surrogate.");
+}
+/** The UTF-8 length `x-mantle-maxBytes` bounds. */
+export const bytes = (value: string): number => new TextEncoder().encode(value).length;
 /** JSON equality for `enum`. */
 export function equal(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -37,6 +44,7 @@ export function transition(path: string, raw: unknown): Record<string, unknown> 
   for (const key of keys) if (!Object.hasOwn(object, key)) fail(path + "/" + key, "Required field is missing.");
   is(object.id, path + "/id", "string");
   if (object.id === "") fail(path + "/id", "Value violates minLength.");
+  text(object.id as string, path + "/id");
   is(object.expectedVersion, path + "/expectedVersion", "integer");
   if ((object.expectedVersion as number) < 1) fail(path + "/expectedVersion", "Value violates minimum.");
   for (const key of Object.keys(object)) if (!keys.includes(key)) fail(path + "/" + pointer(key), "Unknown field.");

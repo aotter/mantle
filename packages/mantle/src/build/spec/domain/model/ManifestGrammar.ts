@@ -48,6 +48,8 @@ export type JsonSchema = {
   readonly pattern?: string;
   readonly minLength?: number;
   readonly maxLength?: number;
+  /** Custom: the most UTF-8 bytes a string input may encode to (`maxLength` counts code points). */
+  readonly "x-mantle-maxBytes"?: number;
   readonly minimum?: number;
   readonly maximum?: number;
   readonly minItems?: number;
