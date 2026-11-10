@@ -4,17 +4,11 @@ import {
   manifestPath,
   type ManifestFilePaths,
 } from "./ManifestPathDiagnoser.js";
-import {
-  bootDiagnostic,
-  validateDiagnostic,
-  type Diagnostic,
-  type Phase,
-} from "../../kernel/diagnostic.js";
+import { validateDiagnostic, type Diagnostic } from "../../kernel/diagnostic.js";
 
 /** Cross-Schema translation references. Atom-local translation shape lives in the parser. */
 export function checkTranslatesReferences(
   schemas: readonly SchemaManifest[],
-  phase: Extract<Phase, "validate" | "boot">,
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
@@ -27,7 +21,7 @@ export function checkTranslatesReferences(
     const parent = schemasByName.get(translates.parent);
     if (!parent) {
       out.push(
-        emit(phase, {
+        validateDiagnostic({
           code: "TRANSLATES_PARENT_UNKNOWN",
           severity: "error",
           path: path("/spec/translates/parent"),
@@ -41,7 +35,7 @@ export function checkTranslatesReferences(
       continue;
     }
     if (s.spec.ttl || parent.spec.ttl) {
-      out.push(emit(phase, {
+      out.push(validateDiagnostic({
         code: "SCHEMA_TTL_TRANSLATION_UNSUPPORTED",
         severity: "error",
         path: path("/spec/translates"),
@@ -51,7 +45,7 @@ export function checkTranslatesReferences(
     }
     if (parent.spec.localized === true) {
       out.push(
-        emit(phase, {
+        validateDiagnostic({
           code: "TRANSLATES_PARENT_IS_LOCALIZED",
           severity: "error",
           path: path("/spec/translates/parent"),
@@ -64,7 +58,7 @@ export function checkTranslatesReferences(
     const parentProps = propertyKeys(parent);
     if (!parentProps.has(translates.on)) {
       out.push(
-        emit(phase, {
+        validateDiagnostic({
           code: "TRANSLATES_FIELD_NOT_IN_PARENT",
           severity: "error",
           path: path("/spec/translates/on"),
@@ -78,13 +72,6 @@ export function checkTranslatesReferences(
     }
   }
   return out;
-}
-
-function emit(
-  phase: Extract<Phase, "validate" | "boot">,
-  payload: Parameters<typeof validateDiagnostic>[0],
-): Diagnostic {
-  return phase === "validate" ? validateDiagnostic(payload) : bootDiagnostic(payload);
 }
 
 function propertyKeys(s: SchemaManifest): Set<string> {
