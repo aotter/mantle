@@ -36,9 +36,10 @@ export type Pages<A extends App, P extends Record<string, Page<A>>> = {
       : never
     : never;
 };
+/** Options of a generated `web(...)`: it supplies the manifest's `fields` itself. */
 export type Options<A extends App, Database, P extends Record<string, Page<A>>, E> = Omit<
   WebOptions<Database, E>,
-  "pages"
+  "pages" | "fields"
 > & { pages: P & Pages<A, P> };
 /** One page of a View's rows. */
 export type ViewPage = { rows: Record<string, unknown>[]; nextCursor?: string };

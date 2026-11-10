@@ -3,7 +3,7 @@ import { ContractError } from "./contracts.js";
 import { decode, invalid } from "./surface.js";
 import { draining } from "./drain.js";
 import { canonicalPath } from "./route-pattern.js";
-import { isView, openPipeline, type Call } from "./request-pipeline.js";
+import { isView, openPipeline, type Call, type PipelineOptions } from "./request-pipeline.js";
 import type { Fetch, Options, Route, Send } from "./rest.js";
 
 const SAFE_METHODS = ["GET", "HEAD"];
@@ -14,7 +14,7 @@ const anonymous = () => ({ kind: "anonymous" }) as const;
 /** Shared matching/auth/error envelope; selected dispatch is supplied by the surface. */
 export function router<Env, Database, Handlers>(
   routes: readonly Route<Database, Handlers, Env>[],
-  options: Options<Env, Database>,
+  options: Options<Env, Database> & Pick<PipelineOptions, "fields">,
   send: Send<Env, Database, Handlers>,
 ): Fetch<Env> {
   return draining(async (request, env, ctx) => {

@@ -261,6 +261,8 @@ test("public View and exact URL input names are typechecked on every target", as
       await writeFile(
         check,
         `import {web} from './web.js';
+import {rest} from './rest.js';
+import {mcp} from './mcp.js';
 const base={db:null as any,caller:{kind:'anonymous'} as const,origin:'https://site.test',title:'Blog',description:'Summary'};
 web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'posts',markdown:'body'}}});
 // @ts-expect-error unknown view
@@ -279,6 +281,12 @@ web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'post-by-slug'}}})
 web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'posts-matching'}}});
 // @ts-expect-error unknown markdown column
 web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',markdown:'unknown'}}});
+// @ts-expect-error a generated entry supplies the manifest's user fields itself
+web({...base,fields:{},pages:{'/posts':{view:'posts'}}});
+// @ts-expect-error a generated entry supplies the manifest's user fields itself
+rest({db:()=>null as any,fields:{}});
+// @ts-expect-error a generated entry supplies the manifest's user fields itself
+mcp({db:()=>null as any,handlers:{},fields:{}});
 `,
       );
       roots.push(check);
