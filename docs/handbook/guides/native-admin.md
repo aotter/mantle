@@ -682,7 +682,9 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
 
 - `Schema.spec.uiSchema.nav` and admin `View.spec.uiSchema.nav` take `group` (a group id), `order` (an integer;
   ascending; entries without one follow in that default order, collections before Views) and
-  `hidden: true` (out of the sidebar, still at its URL).
+  `hidden: true` (out of the sidebar, still at its URL). A Schema with no sidebar entry of its own (a child folded under
+  its parent, or a translation on its parent's language tabs) accepts `hidden: true`, which changes nothing; `group`,
+  `order` and `hidden: false` there are refused with `SCHEMA_UI_INVALID`.
 - Built-in groups need no declaration: `content`, `operations`, `reports`, `more`. A project declares every other
   group once, in `src/admin.tsx`: `defineAdmin(admin, { nav: { groups } })`, each with a title (text or
   `{ locale: text }`) and an `order` among the built-in groups' content 10, operations 20 and reports 30 (default 50);

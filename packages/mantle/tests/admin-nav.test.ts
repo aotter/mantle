@@ -105,9 +105,16 @@ const locales = (nav: object) =>
   });
 
 test("generate refuses placement on a Schema with no sidebar entry of its own", async () => {
+  // hidden: true keeps it out of a sidebar it is not in (#1977); every other placement would be silently ignored
   expect(codes(await run([schema("quotes"), child({ group: "operations", hidden: true })]))).toEqual([
     "SCHEMA_UI_INVALID schemas/lines/uiSchema/nav/group",
+  ]);
+  // hidden: false asks for a sidebar entry that cannot exist
+  expect(codes(await run([schema("quotes"), child({ hidden: false })]))).toEqual([
     "SCHEMA_UI_INVALID schemas/lines/uiSchema/nav/hidden",
+  ]);
+  expect(codes(await run([posts, locales({ hidden: true, order: 1 })]))).toEqual([
+    "SCHEMA_UI_INVALID schemas/postlocales/uiSchema/nav/order",
   ]);
   const folded = await run([schema("quotes"), child({ order: 1 })]);
   expect(folded.ok ? "" : folded.diagnostics[0]!.message).toContain("nav.standalone: true");
@@ -115,6 +122,28 @@ test("generate refuses placement on a Schema with no sidebar entry of its own", 
   expect(codes(await run([posts, locales({ order: 1 })]))).toEqual([
     "SCHEMA_UI_INVALID schemas/postlocales/uiSchema/nav/order",
   ]);
+});
+
+test("nav.hidden: true on a folded child or a translation is accepted and changes nothing but the echoed uiSchema (#1977)", async () => {
+  const hidden = await run([
+    schema("quotes", { hidden: true }),
+    child({ hidden: true }),
+    posts,
+    locales({ hidden: true }),
+  ]);
+  const plain = await run([schema("quotes", { hidden: true }), child({}), posts, locales({})]);
+  if (!hidden.ok || !plain.ok) throw Error(JSON.stringify([hidden, plain]));
+  // the descriptors and the developer console echo the authored uiSchema; nothing else differs
+  const echo = (files: Readonly<Record<string, string>>) =>
+    Object.fromEntries(
+      Object.entries(files).map(([file, code]) => [
+        file,
+        code
+          .replaceAll('"uiSchema":{"nav":{"hidden":true}}', '"uiSchema":{"nav":{}}')
+          .replace(/"targetHash":"[0-9a-f]{64}"/g, ""),
+      ]),
+    );
+  expect(echo(hidden.files)).toEqual(echo(plain.files));
 });
 
 test("a child folded by a unique-field reference is not told to use standalone, which the checker refuses", async () => {

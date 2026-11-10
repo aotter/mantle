@@ -28,10 +28,11 @@ export function emitAdminDescriptors(
   ];
   for (const [path, ui, s] of placed) {
     const nav = (ui?.["nav"] ?? {}) as Record<string, unknown>;
-    // a child folded under its parent, or a translation on its parent's language tabs, has no sidebar entry to place
+    // a child folded under its parent, or a translation on its parent's language tabs, has no sidebar entry to place;
+    // `hidden: true` keeps it out of a sidebar it is not in, so it is accepted and changes nothing (#1977)
     if (s && !isPrimaryCollection(s, schemaList))
       for (const key of ["group", "order", "hidden"])
-        if (nav[key] !== undefined)
+        if (nav[key] !== undefined && !(key === "hidden" && nav[key] === true))
           diagnostics.push({
             code: "SCHEMA_UI_INVALID",
             path: `${path}/uiSchema/nav/${key}`,
