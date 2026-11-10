@@ -7,13 +7,15 @@ import { nativeRest, rest, type Route } from "../src/kernel/rest.js";
 import { web, type View } from "../src/kernel/web.js";
 import { fixtureCaller } from "./apps/fixtures.js";
 
-const member: Caller = fixtureCaller({ kind: "user", subject: "member", role: null, scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null });
+const member: Caller = fixtureCaller({
+  kind: "user", subject: "member", role: null, scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null,
+});
 const adminOnly = (path: string) => (caller: Caller) => deny(caller, isAdmin(caller), path);
 
 test("one function says what a read is, and one decides the Origin rule", () => {
   expect(isView({ page: () => {} })).toBe(true);
-  for (const target of [{}, { run: () => {} }, { handle: () => {} }, { page: () => {}, run: () => {} }, { page: () => {}, handle: () => {} }])
-    expect(isView(target)).toBe(false);
+  const page = () => {}, run = () => {}, handle = () => {};
+  for (const target of [{}, { run }, { handle }, { page, run }, { page, handle }]) expect(isView(target)).toBe(false);
 
   expect(isRead({ view: true })).toBe(true);
   expect(isRead({ view: false, readOnly: true })).toBe(true);
@@ -56,7 +58,9 @@ test("REST, MCP and web run the generated guard, then authorize, before any data
     method: "POST", pattern: /^\/api\/work$/, target, check: () => { viaRest.note("check", undefined); },
     validate: raw => viaRest.note("validate", raw as Record<string, unknown>), run: async () => viaRest.note("run", {}),
   };
-  const api = rest([route], { db: () => viaRest.note("db", null), caller: viaRest.caller(member), authorize: () => viaRest.note("authorize", true) });
+  const api = rest([route], {
+    db: () => viaRest.note("db", null), caller: viaRest.caller(member), authorize: () => viaRest.note("authorize", true),
+  });
   expect((await api(new Request("https://app.test/api/work", { method: "POST", body: "{}" }), {}))!.status).toBe(200);
   expect(viaRest.steps).toEqual(["caller", "check", "authorize", "validate", "db", "run"]);
 
@@ -69,7 +73,8 @@ test("REST, MCP and web run the generated guard, then authorize, before any data
       run: async () => viaMcp.note("run", {}),
     };
     const tools = mcp([tool], {
-      db: () => viaMcp.note("db", null), caller: viaMcp.caller(member), ...(authorize ? { authorize: () => viaMcp.note("authorize", true) } : {}),
+      db: () => viaMcp.note("db", null), caller: viaMcp.caller(member),
+      ...(authorize ? { authorize: () => viaMcp.note("authorize", true) } : {}),
     });
     expect((await rpcResult((await tools(rpc("work"), {}))!)).isError).toBeUndefined();
     expect(viaMcp.steps).toEqual(["caller", ...(authorize ? ["check", "authorize"] : []), "check", "validate", "db", "run"]);
@@ -98,7 +103,8 @@ test("an MCP call refused by its guard never validates input or acquires a datab
       validate: () => { touched++; throw new ContractError("INPUT_VALIDATION_FAILED", "Bad input.", "procedures/manage"); },
       run: async () => { touched++; return {}; },
     };
-    const tools = mcp([tool], { db: () => { touched++; return null; }, caller: () => member, ...(authorize ? { authorize: () => true } : {}) });
+    const db = () => { touched++; return null; };
+    const tools = mcp([tool], { db, caller: () => member, ...(authorize ? { authorize: () => true } : {}) });
     const response = (await tools(rpc("manage", { bad: true }), {}))!;
     if (authorize) {
       // Application authorize answers before the SDK runs, as an HTTP refusal.
@@ -116,10 +122,11 @@ test("an MCP call refused by its guard never validates input or acquires a datab
 
 test("nativeRest guards a route that declares check or target, before its handler", async () => {
   let handled = 0, authorized = 0;
+  const handle = async () => { handled++; return {}; };
   const routes: Route<null>[] = [
-    { method: "POST", pattern: /^\/guarded$/, check: adminOnly("native/guarded"), handle: async () => { handled++; return {}; } },
-    { method: "POST", pattern: /^\/targeted$/, target: { kind: "procedure", name: "targeted" }, handle: async () => { handled++; return {}; } },
-    { method: "POST", pattern: /^\/plain$/, handle: async () => { handled++; return {}; } },
+    { method: "POST", pattern: /^\/guarded$/, check: adminOnly("native/guarded"), handle },
+    { method: "POST", pattern: /^\/targeted$/, target: { kind: "procedure", name: "targeted" }, handle },
+    { method: "POST", pattern: /^\/plain$/, handle },
   ];
   const api = nativeRest(routes, { db: () => null, caller: () => member, authorize: () => { authorized++; return false; } });
   const post = (path: string) => api(new Request("https://app.test" + path, { method: "POST", body: "{}" }), {});

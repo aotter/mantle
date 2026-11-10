@@ -120,7 +120,7 @@ async function httpOutcome(response: Response | undefined): Promise<Outcome> {
     const result = payload.result;
     if (result?.isError) {
       const diagnostic = result.structuredContent?.diagnostics?.[0] ?? JSON.parse(result.content[0].text).diagnostics[0];
-      return denied({ code: diagnostic.code, where: diagnostic.path ?? (diagnostic.target ? `@${diagnostic.target}` : "") }, `${transport} tool-error`);
+      return denied(errorOf({ error: diagnostic })!, `${transport} tool-error`);
     }
     if (result?.structuredContent?.dryRun === true) return { decision: "dry-run", detail: `${transport} tool-result` };
     return { decision: "allow", detail: `${transport} tool-result` };
@@ -162,7 +162,13 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
       };
       const getDb = () => { acquired++; return db; };
       // A getter counts the web surface's use of its handle the way `db()` counts REST and MCP acquisitions.
-      const webDb = new Proxy(db, { get: (target, key) => { if (key === "query" || key === "prepare") acquired++; const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value; } });
+      const webDb = new Proxy(db, {
+        get(target, key) {
+          if (key === "query" || key === "prepare") acquired++;
+          const value = Reflect.get(target, key);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
       return {
         rest: rest({ ...shared, db: getDb }),
         mcp: mcp({ ...shared, db: getDb, allowedOrigins: [ORIGIN, "https://other.test"] }),
@@ -178,7 +184,8 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
 
     const lines: string[] = [], divergent: string[] = [], acquiredBeforeDenial: string[] = [];
     const run = async (gateway: boolean, authorization: Authorization, callerName: string, shapeName: string, target: TargetCase) => {
-      const cell = `gateway=${gateway ? "on" : "off"} authorize=${authorization} caller=${callerName} shape=${shapeName} target=${target.name}`;
+      const mode = `gateway=${gateway ? "on" : "off"} authorize=${authorization}`;
+      const cell = `${mode} caller=${callerName} shape=${shapeName} target=${target.name}`;
       const props = gateway ? hostCallers[callerName] : undefined;
       const session = gateway ? props?.credential === "session" : "credential" in current && current.credential === "session";
       const headers = { ...shapes[shapeName], ...(session ? { cookie: "session=fixture" } : {}) };
@@ -187,7 +194,10 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
         if (!gateway) return undefined;
         if (!props) return { props: {} };
         const contract: Partial<HostProps> = mantleProps(props);
-        if (props.layer === "member") { delete (contract as { target?: string }).target; delete (contract as { targetHash?: string }).targetHash; }
+        if (props.layer === "member") {
+          delete (contract as { target?: string }).target;
+          delete (contract as { targetHash?: string }).targetHash;
+        }
         return { props: { mantle: await pinned(contract, accessTargets, id) } };
       };
       const surfaces = mounted(gateway, authorization);
@@ -196,10 +206,13 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
         acquired = 0; authorizations = 0; resolutions = 0; events.length = 0;
         const outcome = await call();
         await new Promise(resolve => setTimeout(resolve, 0));
-        const event = events.map(event => `${event.outcome}${event.reason ? `:${event.reason}` : ""}@${event.target}${event.dryRun ? " dry" : ""}`).join(",") || "none";
+        const observed = events.map(event =>
+          `${event.outcome}${event.reason ? `:${event.reason}` : ""}@${event.target}${event.dryRun ? " dry" : ""}`);
+        const event = observed.join(",") || "none";
         decisions.push(outcome.decision);
         if (outcome.decision.startsWith("deny:") && acquired > 0) acquiredBeforeDenial.push(`${cell} ${surface}`);
-        parts.push(`  ${surface}: ${outcome.decision} [${outcome.detail}] db=${acquired > 0 ? 1 : 0} authorize=${authorizations} resolver=${resolutions} event=${event}`);
+        const effects = `db=${acquired > 0 ? 1 : 0} authorize=${authorizations} resolver=${resolutions} event=${event}`;
+        parts.push(`  ${surface}: ${outcome.decision} [${outcome.detail}] ${effects}`);
       };
       if (target.rest) {
         const method = target.kind === "view" ? "GET" : "POST";
@@ -208,7 +221,8 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
       }
       if (target.mcp) {
         const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: target.name, arguments: {} } });
-        const request = new Request(ORIGIN + target.mcp, { method: "POST", body, headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers } });
+        const transport = { "content-type": "application/json", accept: "application/json, text/event-stream" };
+        const request = new Request(ORIGIN + target.mcp, { method: "POST", body, headers: { ...transport, ...headers } });
         await observe("mcp", async () => httpOutcome(await surfaces.mcp(request, {}, await context(`${target.kind}:${target.name}`))));
       }
       if (target.web) {
@@ -216,7 +230,10 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
         await observe("web", async () => httpOutcome(await surfaces.web.fetch(page(), {}, await context(`view:${target.name}`))));
         // `head` renders tags for an HTML shell: it answers a string, or rejects.
         let head: string;
-        try { head = (await surfaces.web.head(new Request(ORIGIN + target.web, { headers }), {}, await context(`view:${target.name}`))) ? "tags" : "empty"; }
+        try {
+          const tags = await surfaces.web.head(new Request(ORIGIN + target.web, { headers }), {}, await context(`view:${target.name}`));
+          head = tags ? "tags" : "empty";
+        }
         catch (error) { head = `throws:${(error as { code?: string }).code ?? "Error"}`; }
         parts.push(`  web.head: ${head}`);
       }
@@ -227,11 +244,13 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
     for (const authorization of ["off", "allow", "deny"] as const) {
       for (const [callerName, caller] of Object.entries(localCallers)) {
         current = caller;
-        for (const shapeName of Object.keys(shapes)) for (const target of targets) await run(false, authorization, callerName, shapeName, target);
+        for (const shapeName of Object.keys(shapes))
+          for (const target of targets) await run(false, authorization, callerName, shapeName, target);
       }
       current = { kind: "anonymous" };
       for (const callerName of Object.keys(hostCallers)) {
-        for (const shapeName of Object.keys(shapes)) for (const target of targets) await run(true, authorization, callerName, shapeName, target);
+        for (const shapeName of Object.keys(shapes))
+          for (const target of targets) await run(true, authorization, callerName, shapeName, target);
       }
     }
 
