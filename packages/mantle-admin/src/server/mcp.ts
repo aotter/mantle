@@ -1,7 +1,7 @@
 /** The Admin App is an ordinary contributor to the SDK's public MCP Apps hook. */
 import { ContractError } from "@aotter/mantle/contracts";
 import { declaredMeta } from "../app/declared-meta.js";
-import type { McpApps, McpAppsSource, McpAppPage, McpAppRender, McpAppResource } from "@aotter/mantle/mcp";
+import type { McpAppPage, McpAppRender, McpAppResource, NormalMcpAppResource, NormalMcpApps } from "@aotter/mantle/mcp";
 import type { MediaStorage } from "@aotter/mantle/site";
 /** An archived resources/read page, including its embedded catalogue; application-owned, never caller rows or credentials. */
 export interface AdminMcpSnapshot extends McpAppPage {
@@ -72,9 +72,17 @@ const builtApp = (file: string) => async ({ env, request }: McpAppRender): Promi
         return withCsp(await bun.file(file).text());
     throw new Error("The Admin MCP App has no loader here: bind ASSETS, run on Bun, or pass `html`.");
 };
-export function adminMcpApps(options: AdminMcpOptions & { readonly uri: string }): McpApps;
-export function adminMcpApps(options: AdminMcpOptions): McpAppsSource;
-export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
+/** A contributor resolved per request, after the endpoint's caller gate; its resources are in normal form. */
+export type AdminMcpAppsLoader = (context: Pick<McpAppRender, "env" | "request">) => Promise<NormalMcpApps>;
+/**
+ * The Admin App as an MCP Apps contributor. Every resource it returns is in normal form: `html` is an async loader that
+ * resolves to a page. With an explicit `uri` the contributor is static; without one it usually resolves per request, so
+ * the build's content-hash URI can be read from the deployed asset. To wrap what it returns without telling the two
+ * apart, resolve it with `resolveMcpApps` from `@aotter/mantle/mcp/apps`.
+ */
+export function adminMcpApps(options: AdminMcpOptions & { readonly uri: string }): NormalMcpApps;
+export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcpAppsLoader;
+export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcpAppsLoader {
     if (options.uri !== undefined && !/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(options.uri))
         throw new ContractError("INPUT_VALIDATION_FAILED", "Admin App resources use ui://mantle-admin/….", "mcp/apps");
     const renders = options.renders ?? Object.keys(options.catalogue.views);
@@ -86,7 +94,7 @@ export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
         return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, start => start + script) : script + html;
     };
     const previousUris = new Set<string>();
-    const previous = (options.previous ?? []).map((snapshot, index): McpAppResource => {
+    const previous = (options.previous ?? []).map((snapshot, index): NormalMcpAppResource => {
         const script = /<script type="application\/json" id="mantle-catalog">([\s\S]*?)<\/script>/;
         const found = script.exec(snapshot.html);
         let catalogue: AdminMcpOptions["catalogue"] | undefined;
@@ -103,10 +111,11 @@ export function adminMcpApps(options: AdminMcpOptions): McpAppsSource {
             html: async render => ({ html: embed(base, render, archivedCatalogue), ...(snapshot.csp ? { csp: snapshot.csp } : {}) }) };
     });
     // `alias`: the current build also answers at its content-hash URI, as a page that claims no renderer
-    const contribute = (uri: string, html: McpAppResource["html"], alias?: string): McpApps => {
+    const contribute = (uri: string, html: McpAppResource["html"], alias?: string): NormalMcpApps => {
+        // Core's normaliser, loaded on `resources/read` only: a string or a loader, a string or a page.
         const page = async (render: McpAppRender) => {
-            const loaded = typeof html === "string" ? html : await html(render), page = typeof loaded === "string" ? { html: loaded } : loaded;
-            return { ...page, html: embed(page.html, render) };
+            const loaded = await (await import("@aotter/mantle/mcp/apps")).mcpAppPageLoader(html)(render);
+            return { ...loaded, html: embed(loaded.html, render) };
         };
         const domain = options.domain !== undefined ? { domain: options.domain } : {};
         const title = options.title ?? "Admin";
@@ -179,7 +188,7 @@ export interface MediaUploadCardOptions<Env = never> {
  * straight to storage and commits it. Register it beside `adminMcpApps(...)` when `mcp(...)` has `media`. The page loads
  * on `resources/read` only.
  */
-export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env>): McpApps {
+export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env>): NormalMcpApps {
     const uri = options.uri ?? "ui://mantle-admin/upload", tool = options.tool ?? "upload_media", forward = options.forward ?? [];
     // `<` escaped: the config sits in a script element
     const config = tool === "upload_media" && !forward.length ? "" :

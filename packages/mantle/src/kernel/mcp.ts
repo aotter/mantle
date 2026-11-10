@@ -6,7 +6,7 @@ import { linkApps, linkSurface, resourcesOf, type McpAppsSource } from "./mcp-ap
 type Call = typeof import("./mcp-call.js");
 export const callTool: Call["callTool"] = async (...args) => (await import("./mcp-call.js")).callTool(...args);
 export const callToolLazy: Call["callToolLazy"] = async (...args) => (await import("./mcp-call.js")).callToolLazy(...args);
-export type { McpApps, McpAppsSource, McpAppResource, McpAppRender, McpAppPage, McpAppCsp } from "./mcp-apps.js";
+export type { McpApps, McpAppsSource, McpAppResource, McpAppRender, McpAppPage, McpAppCsp, NormalMcpApps, NormalMcpAppResource } from "./mcp-apps.js";
 
 /** Options of a generated `mcp(...)`; it adds required `handlers` when the app declares ref Procedures. */
 export interface Options<Env, Database> extends GatewayOptions {

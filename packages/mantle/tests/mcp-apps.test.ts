@@ -357,3 +357,31 @@ test("a tool's meta merges with its App links and may not contradict them", asyn
   refused(apps({ ui: { visibility: ["model", "app"] } }, { appOnly: ["public_rows"] }), "contradicts");
   apps({ ui: { visibility: ["app"] } }, { appOnly: ["public_rows"] })();
 });
+
+test("resolveMcpApps returns every source shape in one normal form, which an application wraps and hands back", async () => {
+  const { resolveMcpApps } = await import("../src/kernel/mcp-app-pages.js");
+  const context = { env: { build: "b1" }, request: new Request("https://app.test/mcp/") };
+  const sources = [
+    { resources: [{ uri: "ui://app/string", name: "string", html: "<p>string</p>" }] },
+    () => ({ resources: [{ uri: "ui://app/loader", name: "loader", html: () => "<p>loader</p>" }] }),
+    async ({ env }: { env: unknown }) => ({ resources: [{ uri: "ui://app/page", name: "page", renders: ["public_rows"],
+      html: async () => ({ html: `<p>${(env as { build: string }).build}</p>`, csp: { connectDomains: ["https://api.test"] } }) }] }),
+  ];
+  const normal = await resolveMcpApps(sources, context);
+  const render = { ...context, tools: new Set<string>() };
+  expect(await Promise.all(normal.resources.map(resource => resource.html(render)))).toEqual([
+    { html: "<p>string</p>" }, { html: "<p>loader</p>" }, { html: "<p>b1</p>", csp: { connectDomains: ["https://api.test"] } },
+  ]);
+  expect(normal.resources.map(resource => [resource.uri, resource.renders])).toEqual([
+    ["ui://app/string", undefined], ["ui://app/loader", undefined], ["ui://app/page", ["public_rows"]],
+  ]);
+  // The wrapper an application writes: observe each page read, with no shape checks of its own.
+  const read: string[] = [];
+  const api = handle({ public: async source => ({ resources: (await resolveMcpApps(sources, source)).resources.map(resource => ({
+    ...resource, html: async page => { read.push(resource.uri); return resource.html(page); },
+  })) }) });
+  const result = await call(api, "resources/read", { uri: "ui://app/page" });
+  expect(result.result.contents[0].text).toBe("<p>undefined</p>");
+  expect(result.result.contents[0]._meta.ui.csp).toEqual({ connectDomains: ["https://api.test"] });
+  expect(read).toEqual(["ui://app/page"]);
+});

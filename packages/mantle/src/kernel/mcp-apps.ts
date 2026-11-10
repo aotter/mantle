@@ -46,6 +46,16 @@ export interface McpApps {
 /** An application-owned contributor resolved after the endpoint's caller gate. */
 export type McpAppsSource = McpApps | ((context: Pick<McpAppRender, "env" | "request">) => McpApps | Promise<McpApps>);
 
+/** The normal form of a resource: its HTML is always an async loader that resolves to a page. */
+export interface NormalMcpAppResource extends Omit<McpAppResource, "html"> {
+  readonly html: (render: McpAppRender) => Promise<McpAppPage>;
+}
+
+/** Contributors in normal form: what the endpoint reads, and what `resolveMcpApps` and first-party contributors return. */
+export interface NormalMcpApps {
+  readonly resources: readonly NormalMcpAppResource[];
+}
+
 /** Flatten contributors; `mcp(...)` reads static resources getters once at construction. */
 export const resourcesOf = (apps: McpApps | readonly McpApps[]): McpApps => ({ resources: (Array.isArray(apps) ? apps : [apps]).flatMap(app => app.resources) });
 

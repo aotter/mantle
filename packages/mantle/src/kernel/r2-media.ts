@@ -33,7 +33,8 @@ const fail = (code: string, message: string, options?: ErrorOptions) => mediaErr
 const ext = (mimeType: string) => EXT[mimeType] ?? "bin";
 const cancel = (o?: { body: ReadableStream } | null) => o?.body.cancel().catch(() => undefined);
 
-export function r2MediaStorage({ bucket, signer, endpoint, publicBase }: R2MediaStorageOptions): MediaStorage {
+/** Returns every optional member of `MediaStorage` (`uploadOrigin`, `signRead`), so a wrapper calls them without checks. */
+export function r2MediaStorage({ bucket, signer, endpoint, publicBase }: R2MediaStorageOptions): Required<MediaStorage> {
   if (!publicBase && publicBase !== null) throw fail("MEDIA_NOT_CONFIGURED", "R2 media storage needs publicBase, the bucket's public URL, or null for a private bucket");
   const base = publicBase?.replace(/\/+$/, "");
   const s3 = endpoint.replace(/\/+$/, "");
