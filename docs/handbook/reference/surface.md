@@ -33,7 +33,12 @@ also export `query(URLSearchParams)` returning `{ input, limit?, cursor? }`.
 REST and MCP use the same generated checks, with no runtime schema interpreter.
 Supported checks are types/unions and nullable, required/properties/additionalProperties,
 arrays/items and length bounds, enum, `const`, local `$defs`/`$ref`, string length/pattern,
-numeric bounds/`multipleOf`, and the formats `date`, `date-time`, `email` and `uri`. The deliberately permissive
+numeric bounds/`multipleOf`, and the formats `date`, `date-time`, `email` and `uri`. `minLength` and `maxLength`
+count code points, so 200 four-byte characters pass `maxLength: 256`; `x-mantle-maxBytes: <positive integer>` on a
+string bounds its UTF-8 length instead, or as well (a `pattern`'s backtracking bound also accepts it). Every string
+input, at any depth, must be well-formed text without NUL (U+0000): a NUL or an unpaired surrogate fails with
+`INPUT_VALIDATION_FAILED` at its path on every dialect, since PostgreSQL `text` cannot store NUL. An `enum` or `const`
+compares as written. Stored rows and outputs are not checked. The deliberately permissive
 email check requires exactly one `@`, non-empty local and domain parts, and no
 whitespace; it does not require a dot, verify deliverability, or implement full
 RFC mailbox syntax. `uri` means an absolute `http:` or `https:` URL, stricter than

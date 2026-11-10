@@ -391,6 +391,18 @@ export function validateJsonSchema(
         "JSON_SCHEMA_LIMIT_EXCEEDED",
       );
     }
+    const maxBytes = value["x-mantle-maxBytes"];
+    if (
+      maxBytes !== undefined &&
+      (!Number.isSafeInteger(maxBytes) || (maxBytes as number) < 1 || ![value["type"]].flat().includes("string"))
+    )
+      throw new ManifestParseError(
+        `${kind} '${name}' x-mantle-maxBytes at ${pointer} must be a positive integer on a string schema (type: string)`,
+        idx,
+        `${pointer}/x-mantle-maxBytes`,
+        "JSON_SCHEMA_UNSUPPORTED",
+        { value: maxBytes, expected: "a positive integer, the most UTF-8 bytes the string may encode to" },
+      );
     if (value["pattern"] !== undefined) {
       const problem = typeof value["pattern"] === "string" ? unsafePattern(value["pattern"]) : "a pattern is a string";
       if (problem) {
@@ -421,8 +433,12 @@ export function validateJsonSchema(
       }
       // Adjacent variable quantifiers (`a*a*a*`), the unanchored retry at every start offset and chained alternations backtrack
       const { exponent, branches } = patternCost(value["pattern"] as string);
-      const maxLength = value["maxLength"];
-      const bounded = typeof maxLength === "number" && Number.isInteger(maxLength) && maxLength >= 0;
+      // A string of n UTF-8 bytes has at most n UTF-16 code units, so x-mantle-maxBytes bounds it as maxLength does.
+      const bounds = [value["maxLength"], maxBytes].filter(
+        (n): n is number => typeof n === "number" && Number.isInteger(n) && n >= 0,
+      );
+      const maxLength = bounds.length ? Math.min(...bounds) : undefined;
+      const bounded = maxLength !== undefined;
       if (branches * (exponent === 0 ? 1 : bounded ? maxLength ** exponent : Infinity) > MAX_PATTERN_WORK) {
         const limit = maxPatternLength(exponent, branches);
         const cost = `${branches === 1 ? "" : `${branches} alternative paths × `}maxLength^${exponent}`;

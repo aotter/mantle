@@ -1030,4 +1030,39 @@ spec:
       /maxLength of at most 3162\b/,
     );
   });
+  it("takes x-mantle-maxBytes as the bound when it is the smaller one", () => {
+    expect(input(`{ type: string, x-mantle-maxBytes: 3162, pattern: '^[^@]+@[^@]+$' }`)).toEqual([]);
+    expect(input(`{ type: string, maxLength: 9999, x-mantle-maxBytes: 3162, pattern: '^[^@]+@[^@]+$' }`)).toEqual([]);
+    expect(input(`{ type: string, x-mantle-maxBytes: 3163, pattern: '^[^@]+@[^@]+$' }`)[0]?.code).toBe(
+      "INVALID_PATTERN",
+    );
+  });
+});
+
+describe("x-mantle-maxBytes", () => {
+  const input = (s: string) =>
+    parseManifests(`apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: bounded }
+spec:
+  input: { type: object, properties: { s: ${s} } }
+  output: { type: object }
+  handler: { ref: bounded }
+`).diagnostics;
+  it("is a positive integer on a string schema", () => {
+    expect(input(`{ type: string, x-mantle-maxBytes: 1 }`)).toEqual([]);
+    expect(input(`{ type: [string, "null"], x-mantle-maxBytes: 256 }`)).toEqual([]);
+    for (const s of [
+      `{ type: string, x-mantle-maxBytes: 0 }`,
+      `{ type: string, x-mantle-maxBytes: 1.5 }`,
+      `{ type: string, x-mantle-maxBytes: "8" }`,
+      `{ type: integer, x-mantle-maxBytes: 8 }`,
+      `{ x-mantle-maxBytes: 8 }`,
+    ])
+      expect(input(s)[0], s).toMatchObject({
+        code: "JSON_SCHEMA_UNSUPPORTED",
+        path: "manifest:doc/0#/spec/input/properties/s/x-mantle-maxBytes",
+        message: expect.stringContaining("x-mantle-maxBytes at /spec/input/properties/s must be a positive integer"),
+      });
+  });
 });
