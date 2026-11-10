@@ -909,7 +909,13 @@ const check: Record<string, Checker> = {
       no("SQL_UNSUPPORTED", "only IN (subquery)", at);
   },
   JoinExpr: (n, _c, _p, at) => {
-    if (!n.quals) no("SQL_SHAPE", "a JOIN needs ON", at, /\bCROSS\s+JOIN\b|\bJOIN\b/i);
+    if (!n.quals)
+      no(
+        "SQL_SHAPE",
+        "a JOIN needs ON: CROSS JOIN is refused, write JOIN … ON true to pair every row of both sides (row policy applies to each)",
+        at,
+        /\bCROSS\s+JOIN\b|\bJOIN\b/i,
+      );
   },
   RangeFunction: (n, ctx, _p, at) => {
     const fs: N[] = n.functions;
@@ -986,13 +992,14 @@ const check: Record<string, Checker> = {
       no("SQL_SHAPE", "DISTINCT with ORDER BY is refused: the appended id key would change what is distinct", at);
     if (n.valuesLists && (path.at(-2) !== "InsertStmt" || n.valuesLists.length !== 1))
       no("SQL_SHAPE", "VALUES is one row, in INSERT only", firstLoc(n.valuesLists) ?? at);
-    if ((n.fromClause ?? []).slice(1).some((f: N) => !f.RangeFunction && !(reference && f.RangeSubselect?.lateral)))
+    const comma = (n.fromClause ?? [])
+      .slice(1)
+      .find((f: N) => !f.RangeFunction && !(reference && f.RangeSubselect?.lateral));
+    if (comma)
       no(
         "SQL_SHAPE",
-        reference
-          ? "a comma join is refused (except a row source over a column, and LATERAL)"
-          : "a comma join is refused (except json_each)",
-        at,
+        `a comma join is refused (except ${reference ? "a row source over a column, and LATERAL" : "json_each"}): write JOIN … ON <condition>, or JOIN … ON true to pair every row of both sides`,
+        firstLoc(comma) ?? at,
       );
     // Core keys a paged row source by its ordinality (policy.ts), so one without an alias and WITH ORDINALITY would lose rows between pages
     if (reference && n.sortClause && !n.groupClause) {
