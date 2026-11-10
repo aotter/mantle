@@ -125,6 +125,12 @@ const adminApps = [
 Register the array on `apps.admin`. Leaving Admin's default ownership of all Views
 while another resource claims one is an error, independent of registration order.
 
+`renders` names catalogue Views. To have the Admin App also render a Procedure's result, or
+a tool of your own, list it in `tools`: `adminMcpApps({ catalogue, tools: ['approve_request'] })`.
+The App shows the page that declares it (`pages: [{ ..., mcp: { renders: 'approve-request' } }]`
+in `defineAdmin`), or the result's rows when it has any. The endpoint refuses a name it does
+not serve.
+
 An HTML loader receives `{ tools, env, request }`: `tools` is the same tool names this caller's
 `tools/list` returns on the endpoint (with `authorize` configured, only those
 it allows), so the HTML it renders names no tool the caller cannot see; `env` is
@@ -235,6 +241,36 @@ const snapshot = { uri: resource.uri, title: resource.title, ...page,
 // This application's policy: retain the last two deployed pages for future builds.
 writeFileSync(path, JSON.stringify([...previous.filter(p => p.uri !== snapshot.uri), snapshot].slice(-2)) + '\n');
 ```
+
+To observe every page as a host reads it (to audit reads, or to store the page a
+deployment actually served), wrap the contributor. `resolveMcpApps` returns it in normal
+form, so the wrapper needs no option on `adminMcpApps` and no shape checks:
+
+```ts
+import { resolveMcpApps } from '@aotter/mantle/mcp/apps';
+import { adminMcpApps, type AdminMcpSnapshot } from '@aotter/mantle-admin/mcp';
+import { appDefinition } from './mcp-app-definition.ts';
+
+declare const keep: (snapshot: AdminMcpSnapshot) => Promise<void>;
+
+const admin = adminMcpApps(appDefinition);
+export const observedAdmin = async (context: { env: unknown; request: Request }) => ({
+  resources: (await resolveMcpApps(admin, context)).resources.map(resource => ({
+    ...resource,
+    html: async (render: Parameters<typeof resource.html>[0]) => {
+      const page = await resource.html(render);
+      await keep({ uri: resource.uri, ...page,
+        ...(resource.title === undefined ? {} : { title: resource.title }),
+        ...(resource.domain === undefined ? {} : { domain: resource.domain }) });
+      return page;
+    },
+  })),
+});
+```
+
+Pass `observedAdmin` as `apps.admin`. A page read this way embeds the catalogue of the
+caller who read it; keep it for `previous` only when that caller sees every tool, and
+otherwise archive with the script above.
 
 This archives static UI/catalogue metadata, never rows, cookies or OAuth tokens.
 Custom loaders must archive their actual immutable resource, including CSP/domain,

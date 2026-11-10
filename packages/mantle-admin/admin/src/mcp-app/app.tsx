@@ -91,7 +91,10 @@ export function MantleApp(props: {
   readonly locale?: string;
   /** The host's IANA time zone, for date-times. */
   readonly timeZone?: string;
-  /** The application's pages declared for a View (`pages[].mcp`), by that View's tool: shown instead of the rows when the host's tool is theirs. */
+  /**
+   * The application's pages declared for a tool (`pages[].mcp`), by tool name: shown instead of a View's rows, or for a
+   * Procedure's result, when the host's tool is theirs.
+   */
   readonly pages?: Readonly<Record<string, ReactNode>>;
 }): ReactNode {
   const { call, capabilities } = props.host;
@@ -135,6 +138,9 @@ export function MantleApp(props: {
   };
 
   if (!props.result) return <p className="text-muted-foreground p-4 text-sm">{props.cancelled ? labels.viewCancelled : labels.waiting}</p>;
+  const page = tool && props.pages && Object.prototype.hasOwnProperty.call(props.pages, tool) ? props.pages[tool] : undefined;
+  // a Procedure's result has no rows: its page is shown for any result that is not a failure
+  if (!rows && page !== undefined && !props.result.isError) return <div data-slot="app-page">{page}</div>;
   if (!rows) {
     const failure = diagnosticsOf(props.result)[0]?.message;
     return (
@@ -164,7 +170,7 @@ export function MantleApp(props: {
     );
   }
   // the page reads its own data through the hooks, so a View's rows are not shown beside it
-  if (tool && props.pages && Object.prototype.hasOwnProperty.call(props.pages, tool)) return <div data-slot="app-page">{props.pages[tool]}</div>;
+  if (page !== undefined) return <div data-slot="app-page">{page}</div>;
   const notice = stale ? <p role="status" className="text-destructive px-3 pt-3 text-sm">{labels.refreshFailed}</p> : null;
   if (rows.length === 0) return <>{notice}<p className="text-muted-foreground p-4 text-sm">{labels.nothing}</p></>;
   const columns = columnsOf(view, rows);

@@ -182,12 +182,13 @@ export interface AdminPage<T extends AdminTypes = AdminTypes> {
   /** Without `nav` the page keeps its route and stays out of the sidebar. */
   readonly nav?: { readonly group: BuiltInNavGroup | CustomGroup<T>; readonly order?: number };
   /**
-   * Also the page of an MCP App: when the host called this admin View's tool, the App shows `element` instead of the View's rows,
-   * in the `mcp-app` surface (browser-only hooks read `unavailable`, links go through the host). `renders` names an admin View that
-   * has an MCP tool; `tsc` refuses any other name. The page reads its data through the hooks, so in a host without server tools it
-   * shows what its components make of `unavailable`. When several pages name one View, the first is shown.
+   * Also the page of an MCP App: when the host called this tool, the App shows `element` instead of a View's rows, or for
+   * a Procedure's result, in the `mcp-app` surface (browser-only hooks read `unavailable`, links go through the host).
+   * `renders` names an admin View that has an MCP tool, or an admin operation whose tool `adminMcpApps({ tools })` lists;
+   * `tsc` refuses any other name. The page reads its data through the hooks, so in a host without server tools it shows
+   * what its components make of `unavailable`. When several pages name one tool, the first is shown.
    */
-  readonly mcp?: { readonly renders: McpViews<T> };
+  readonly mcp?: { readonly renders: McpViews<T> | Name<keyof T["operations"]> };
 }
 
 /** Declare a project group for every `uiSchema.nav.group` the manifest uses; `tsc` refuses a missing one, and refuses Admin's own group ids. */

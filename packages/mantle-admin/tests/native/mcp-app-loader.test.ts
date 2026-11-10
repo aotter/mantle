@@ -140,6 +140,11 @@ test("a Bun build changed in the same process gets a new revision URI behind the
     expect(second[1]!.uri).not.toBe(first[1]!.uri);
   } finally { rmSync(dir, { recursive: true, force: true }); }
   expect(() => adminMcpApps({ catalogue, renders: ["unknown"] })).toThrow("unknown View");
+  // `tools` adds Procedures and the application's own tools beside the catalogue's Views, which `renders` still names
+  const withTools = adminMcpApps({ catalogue, uri: "ui://mantle-admin/explicit/build-3", html: "<head></head>", tools: ["approve_request", "pending"] });
+  expect(withTools.resources[0]!.renders).toEqual(["pending", "approve_request"]);
+  expect(adminMcpApps({ catalogue, uri: "ui://mantle-admin/explicit/build-3", html: "<head></head>", renders: [], tools: ["approve_request"] }).resources[0]!.renders).toEqual(["approve_request"]);
+  expect(() => adminMcpApps({ catalogue, renders: ["approve_request"] })).toThrow("Name a Procedure or your own tool in `tools`");
   const custom = adminMcpApps({ catalogue, uri: "ui://mantle-admin/explicit/build-2", html: "<head></head>", renders: [] });
   expect(custom.resources[0]!.renders).toEqual([]);
   expect(custom.resources[0]!.uri).toBe("ui://mantle-admin/explicit/build-2");

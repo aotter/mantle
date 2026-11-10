@@ -105,6 +105,18 @@ describe("MantleApp", () => {
     expect(render({ pages, result: { ...failed, _meta: { [APP_TOOL_META_KEY]: "pending" } } })).toContain("Not allowed.");
   });
 
+  it("shows a page declared for a Procedure's tool for its result, which has no rows; a refusal is still shown", () => {
+    const pages = { approve_request: <p>approved-page</p> };
+    const done: ToolResult = { structuredContent: { results: [[{ id: "r1" }]] }, _meta: { [APP_TOOL_META_KEY]: "approve_request" } };
+    expect(render({ pages, result: done })).toContain("approved-page");
+    // without a page there is nothing to show for a result that has no rows
+    expect(render({ result: done })).not.toContain("approved-page");
+    const failed: ToolResult = { isError: true, content: [{ type: "text", text: JSON.stringify({ diagnostics: [{ code: "FORBIDDEN", message: "Not allowed." }] }) }] };
+    const refused = render({ pages, result: { ...failed, _meta: { [APP_TOOL_META_KEY]: "approve_request" } } });
+    expect(refused).toContain("Not allowed.");
+    expect(refused).not.toContain("approved-page");
+  });
+
   it("speaks the host's locale, in its own strings and in the plan's titles", () => {
     const html = render({ locale: "zh-TW" });
     expect(html).toContain("總額");
