@@ -1,0 +1,5327 @@
+{
+  "caller member plain": {
+    "caller": {
+      "kind": "user",
+      "subject": "person",
+      "role": "editor,content-admin",
+      "admin": false,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "scopes": [],
+      "credential": "oauth",
+      "credentialId": null,
+      "clientId": null,
+      "authenticatedAs": "fresh",
+      "requestId": "request-1",
+      "dryRun": false
+    },
+    "keys": [
+      "admin",
+      "authenticatedAs",
+      "clientId",
+      "credential",
+      "credentialId",
+      "dryRun",
+      "fields",
+      "kind",
+      "requestId",
+      "role",
+      "roles",
+      "scopes",
+      "subject",
+      "target",
+      "targetHash"
+    ],
+    "frozen": true,
+    "brand": {
+      "admin": false,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "hasContentAdmin": true
+    },
+    "copy": {
+      "admin": false,
+      "fields": {}
+    }
+  },
+  "caller member snapshot": {
+    "caller": {
+      "kind": "user",
+      "subject": "person",
+      "role": "editor,content-admin",
+      "admin": false,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "scopes": [],
+      "credential": "oauth",
+      "credentialId": null,
+      "clientId": null,
+      "authenticatedAs": "snapshot",
+      "requestId": "request-1",
+      "target": "view:public-records",
+      "targetHash": "hash-1",
+      "dryRun": false
+    },
+    "keys": [
+      "admin",
+      "authenticatedAs",
+      "clientId",
+      "credential",
+      "credentialId",
+      "dryRun",
+      "fields",
+      "kind",
+      "requestId",
+      "role",
+      "roles",
+      "scopes",
+      "subject",
+      "target",
+      "targetHash"
+    ],
+    "frozen": true,
+    "brand": {
+      "admin": false,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "hasContentAdmin": true
+    },
+    "copy": {
+      "admin": false,
+      "fields": {}
+    }
+  },
+  "caller member session": {
+    "caller": {
+      "kind": "user",
+      "subject": "person",
+      "role": "editor,content-admin",
+      "admin": false,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "scopes": [],
+      "credential": "session",
+      "credentialId": null,
+      "clientId": null,
+      "authenticatedAs": "fresh",
+      "requestId": "request-1",
+      "target": "view:public-records",
+      "targetHash": "hash-1",
+      "dryRun": false
+    },
+    "keys": [
+      "admin",
+      "authenticatedAs",
+      "clientId",
+      "credential",
+      "credentialId",
+      "dryRun",
+      "fields",
+      "kind",
+      "requestId",
+      "role",
+      "roles",
+      "scopes",
+      "subject",
+      "target",
+      "targetHash"
+    ],
+    "frozen": true,
+    "brand": {
+      "admin": false,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "hasContentAdmin": true
+    },
+    "copy": {
+      "admin": false,
+      "fields": {}
+    }
+  },
+  "caller member dry-run": {
+    "caller": {
+      "kind": "user",
+      "subject": "person",
+      "role": "editor,content-admin",
+      "admin": false,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "scopes": [],
+      "credential": "oauth",
+      "credentialId": null,
+      "clientId": null,
+      "authenticatedAs": "fresh",
+      "requestId": "request-1",
+      "target": "view:public-records",
+      "targetHash": "hash-1",
+      "dryRun": true
+    },
+    "keys": [
+      "admin",
+      "authenticatedAs",
+      "clientId",
+      "credential",
+      "credentialId",
+      "dryRun",
+      "fields",
+      "kind",
+      "requestId",
+      "role",
+      "roles",
+      "scopes",
+      "subject",
+      "target",
+      "targetHash"
+    ],
+    "frozen": true,
+    "brand": {
+      "admin": false,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "hasContentAdmin": true
+    },
+    "copy": {
+      "admin": false,
+      "fields": {}
+    }
+  },
+  "caller member all-values": {
+    "caller": {
+      "kind": "user",
+      "subject": "person",
+      "role": "editor,content-admin",
+      "admin": false,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": {
+          "all": true
+        },
+        "stores": [
+          "A"
+        ]
+      },
+      "scopes": [],
+      "credential": "oauth",
+      "credentialId": null,
+      "clientId": null,
+      "authenticatedAs": "fresh",
+      "requestId": "request-1",
+      "target": "view:public-records",
+      "targetHash": "hash-1",
+      "dryRun": false
+    },
+    "keys": [
+      "admin",
+      "authenticatedAs",
+      "clientId",
+      "credential",
+      "credentialId",
+      "dryRun",
+      "fields",
+      "kind",
+      "requestId",
+      "role",
+      "roles",
+      "scopes",
+      "subject",
+      "target",
+      "targetHash"
+    ],
+    "frozen": true,
+    "brand": {
+      "admin": false,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": {
+          "all": true
+        },
+        "stores": [
+          "A"
+        ]
+      },
+      "hasContentAdmin": true
+    },
+    "copy": {
+      "admin": false,
+      "fields": {}
+    }
+  },
+  "caller admin plain": {
+    "caller": {
+      "kind": "host",
+      "subject": "host:person",
+      "role": "editor,content-admin",
+      "admin": true,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "scopes": [],
+      "credential": "oauth",
+      "credentialId": null,
+      "clientId": null,
+      "authenticatedAs": "fresh",
+      "requestId": "request-1",
+      "target": "view:public-records",
+      "targetHash": "hash-1",
+      "dryRun": false
+    },
+    "keys": [
+      "admin",
+      "authenticatedAs",
+      "clientId",
+      "credential",
+      "credentialId",
+      "dryRun",
+      "fields",
+      "kind",
+      "requestId",
+      "role",
+      "roles",
+      "scopes",
+      "subject",
+      "target",
+      "targetHash"
+    ],
+    "frozen": true,
+    "brand": {
+      "admin": true,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "hasContentAdmin": true
+    },
+    "copy": {
+      "admin": false,
+      "fields": {}
+    }
+  },
+  "caller admin snapshot": {
+    "caller": {
+      "kind": "host",
+      "subject": "host:person",
+      "role": "editor,content-admin",
+      "admin": true,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "scopes": [],
+      "credential": "oauth",
+      "credentialId": null,
+      "clientId": null,
+      "authenticatedAs": "snapshot",
+      "requestId": "request-1",
+      "target": "view:public-records",
+      "targetHash": "hash-1",
+      "dryRun": false
+    },
+    "keys": [
+      "admin",
+      "authenticatedAs",
+      "clientId",
+      "credential",
+      "credentialId",
+      "dryRun",
+      "fields",
+      "kind",
+      "requestId",
+      "role",
+      "roles",
+      "scopes",
+      "subject",
+      "target",
+      "targetHash"
+    ],
+    "frozen": true,
+    "brand": {
+      "admin": true,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "hasContentAdmin": true
+    },
+    "copy": {
+      "admin": false,
+      "fields": {}
+    }
+  },
+  "caller admin session": {
+    "caller": {
+      "kind": "host",
+      "subject": "host:person",
+      "role": "editor,content-admin",
+      "admin": true,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "scopes": [],
+      "credential": "session",
+      "credentialId": null,
+      "clientId": null,
+      "authenticatedAs": "fresh",
+      "requestId": "request-1",
+      "target": "view:public-records",
+      "targetHash": "hash-1",
+      "dryRun": false
+    },
+    "keys": [
+      "admin",
+      "authenticatedAs",
+      "clientId",
+      "credential",
+      "credentialId",
+      "dryRun",
+      "fields",
+      "kind",
+      "requestId",
+      "role",
+      "roles",
+      "scopes",
+      "subject",
+      "target",
+      "targetHash"
+    ],
+    "frozen": true,
+    "brand": {
+      "admin": true,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "hasContentAdmin": true
+    },
+    "copy": {
+      "admin": false,
+      "fields": {}
+    }
+  },
+  "caller admin dry-run": {
+    "caller": {
+      "kind": "host",
+      "subject": "host:person",
+      "role": "editor,content-admin",
+      "admin": true,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "scopes": [],
+      "credential": "oauth",
+      "credentialId": null,
+      "clientId": null,
+      "authenticatedAs": "fresh",
+      "requestId": "request-1",
+      "target": "view:public-records",
+      "targetHash": "hash-1",
+      "dryRun": true
+    },
+    "keys": [
+      "admin",
+      "authenticatedAs",
+      "clientId",
+      "credential",
+      "credentialId",
+      "dryRun",
+      "fields",
+      "kind",
+      "requestId",
+      "role",
+      "roles",
+      "scopes",
+      "subject",
+      "target",
+      "targetHash"
+    ],
+    "frozen": true,
+    "brand": {
+      "admin": true,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": [
+          "TW"
+        ],
+        "stores": [
+          "A"
+        ]
+      },
+      "hasContentAdmin": true
+    },
+    "copy": {
+      "admin": false,
+      "fields": {}
+    }
+  },
+  "caller admin all-values": {
+    "caller": {
+      "kind": "host",
+      "subject": "host:person",
+      "role": "editor,content-admin",
+      "admin": true,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": {
+          "all": true
+        },
+        "stores": [
+          "A"
+        ]
+      },
+      "scopes": [],
+      "credential": "oauth",
+      "credentialId": null,
+      "clientId": null,
+      "authenticatedAs": "fresh",
+      "requestId": "request-1",
+      "target": "view:public-records",
+      "targetHash": "hash-1",
+      "dryRun": false
+    },
+    "keys": [
+      "admin",
+      "authenticatedAs",
+      "clientId",
+      "credential",
+      "credentialId",
+      "dryRun",
+      "fields",
+      "kind",
+      "requestId",
+      "role",
+      "roles",
+      "scopes",
+      "subject",
+      "target",
+      "targetHash"
+    ],
+    "frozen": true,
+    "brand": {
+      "admin": true,
+      "roles": [
+        "editor",
+        "content-admin"
+      ],
+      "fields": {
+        "region": {
+          "all": true
+        },
+        "stores": [
+          "A"
+        ]
+      },
+      "hasContentAdmin": true
+    },
+    "copy": {
+      "admin": false,
+      "fields": {}
+    }
+  },
+  "refusal: not an object": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Expected host contract v1.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: an array": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Expected host contract v1.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: a class instance": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Expected host contract v1.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: unknown key": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: v 2": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: v missing": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: tenant mismatch": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: tenant empty": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: layer owner": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: authenticatedAs stale": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: credential api-key": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: requestId missing": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: requestId empty": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: requestId NUL": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: user missing": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: user an array": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: target empty": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Invalid 'target'.",
+    "path": "",
+    "fields": {
+      "field": "target"
+    }
+  },
+  "refusal: target not text": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Invalid 'target'.",
+    "path": "",
+    "fields": {
+      "field": "target"
+    }
+  },
+  "refusal: targetHash not text": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Invalid 'targetHash'.",
+    "path": "",
+    "fields": {
+      "field": "targetHash"
+    }
+  },
+  "refusal: dryRun not boolean": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Invalid 'dryRun'.",
+    "path": "",
+    "fields": {
+      "field": "dryRun"
+    }
+  },
+  "refusal: admin without target": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Admin callers require 'target'.",
+    "path": "",
+    "fields": {
+      "field": "target"
+    }
+  },
+  "refusal: admin without targetHash": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Admin callers require 'targetHash'.",
+    "path": "",
+    "fields": {
+      "field": "targetHash"
+    }
+  },
+  "refusal: user id empty": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Invalid user id.",
+    "path": "",
+    "fields": {
+      "field": "id"
+    }
+  },
+  "refusal: user id not text": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Invalid user id.",
+    "path": "",
+    "fields": {
+      "field": "id"
+    }
+  },
+  "refusal: subject prefix host:": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "User subjects must be non-empty strings without reserved prefixes.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: subject prefix SYSTEM:": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "User subjects must be non-empty strings without reserved prefixes.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: role invalid": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Invalid role 'Bad-role'.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: field outside enum": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "User field 'region' is outside its enum.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: field wrong type": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "User field 'stores' must contain string values.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: field all with extra key": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "User field 'region' must contain string values.",
+    "path": "",
+    "fields": null
+  },
+  "rest allow admin read": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "rows": [
+          {
+            "id": "<row 1>",
+            "region": "TW",
+            "store": "A",
+            "title": "first"
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest allow member read": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "rows": [
+          {
+            "id": "<row 1>",
+            "region": "TW",
+            "store": "A",
+            "title": "first"
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest TARGET_MISMATCH": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "TARGET_MISMATCH",
+          "target": "rest:GET /api/views/public-records"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "TARGET_MISMATCH",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest TARGET_HASH_MISMATCH": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "TARGET_HASH_MISMATCH",
+          "target": "rest:GET /api/views/public-records"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "TARGET_HASH_MISMATCH",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest STALE_CALLER snapshot write": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "STALE_CALLER",
+          "target": "rest:POST /api/write"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/write",
+        "targetHash": "<hash:rest:POST /api/write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "STALE_CALLER",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest dry run write": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "dryRun": true,
+        "event": {
+          "v": 1,
+          "requestId": "request-1",
+          "target": "rest:POST /api/write",
+          "targetHash": "<hash:rest:POST /api/write>",
+          "caller": {
+            "kind": "host",
+            "subject": "host:person",
+            "layer": "admin"
+          },
+          "outcome": "allow",
+          "dryRun": true
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/write",
+        "targetHash": "<hash:rest:POST /api/write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": true
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest DRY_RUN_UNSUPPORTED ref handler": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "DRY_RUN_UNSUPPORTED",
+          "target": "rest:POST /api/touch"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/touch",
+        "targetHash": "<hash:rest:POST /api/touch>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "DRY_RUN_UNSUPPORTED",
+        "dryRun": true
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest deny member write": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "AUTH_DENIED",
+          "target": "procedures/write/requires/auth/all/0"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/write",
+        "targetHash": "<hash:rest:POST /api/write>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest error invalid input": {
+    "answer": {
+      "status": 400,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "INPUT_VALIDATION_FAILED",
+          "target": "rest"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/write",
+        "targetHash": "<hash:rest:POST /api/write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest error invalid input dry run": {
+    "answer": {
+      "status": 400,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "INPUT_VALIDATION_FAILED",
+          "target": "procedures/write/input/title"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/write",
+        "targetHash": "<hash:rest:POST /api/write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED",
+        "dryRun": true
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest HOST_CONTRACT unknown key": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest HOST_CONTRACT admin without target": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "field": "target"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "target",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest HOST_CONTRACT missing user field": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "field": "region"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest origin session write": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "AUTH_DENIED",
+          "target": "request:origin"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/write",
+        "targetHash": "<hash:rest:POST /api/write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest 401 answered as 403": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "AUTH_DENIED"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/touch",
+        "targetHash": "<hash:rest:POST /api/touch>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest allow write": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "results": [
+          [
+            {
+              "id": "<row 1>",
+              "title": "changed"
+            }
+          ]
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/write",
+        "targetHash": "<hash:rest:POST /api/write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow admin read": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow member read": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp TARGET_MISMATCH": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "TARGET_MISMATCH",
+          "target": "view:public-records"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "TARGET_MISMATCH",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp TARGET_HASH_MISMATCH": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "TARGET_HASH_MISMATCH",
+          "target": "view:public-records"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "TARGET_HASH_MISMATCH",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp STALE_CALLER snapshot write": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "STALE_CALLER",
+          "target": "procedure:write"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "STALE_CALLER",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp dry run write": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "dryRun": true,
+            "event": {
+              "v": 1,
+              "requestId": "request-1",
+              "target": "procedure:write",
+              "targetHash": "<hash:procedure:write>",
+              "caller": {
+                "kind": "host",
+                "subject": "host:person",
+                "layer": "admin"
+              },
+              "outcome": "allow",
+              "dryRun": true
+            }
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": true
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp DRY_RUN_UNSUPPORTED ref handler": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "DRY_RUN_UNSUPPORTED",
+          "target": "procedure:touch"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:touch",
+        "targetHash": "<hash:procedure:touch>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "DRY_RUN_UNSUPPORTED",
+        "dryRun": true
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp deny member write": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": null,
+          "diagnostics": [
+            {
+              "code": "AUTH_DENIED",
+              "target": "procedures/write/requires/auth/all/0"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp deny member on admin endpoint": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "AUTH_DENIED",
+          "target": "mcp/admin"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:admin-records",
+        "targetHash": "<hash:view:admin-records>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp error invalid input": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": null,
+          "diagnostics": [
+            {
+              "code": "INPUT_VALIDATION_FAILED",
+              "target": "procedures/write/input/title"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp error unknown tool": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "error": {
+          "code": -32602,
+          "message": "No tool named \"missing\" exists in the current catalogue (catalogue version 71c7e718)."
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp deny tools/list": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "AUTH_DENIED",
+          "target": "mcp"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp HOST_CONTRACT unknown key": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp HOST_CONTRACT missing user field": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "HOST_CONTRACT",
+                "field": "region"
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "HOST_CONTRACT",
+              "field": "region"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp origin session write": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": null,
+          "diagnostics": [
+            {
+              "code": "AUTH_DENIED",
+              "target": "request:origin"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp origin session write, member refused by requires": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": null,
+          "diagnostics": [
+            {
+              "code": "AUTH_DENIED",
+              "target": "procedures/write/requires/auth/all/0"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp 401 answered as AUTH_DENIED": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": null,
+          "diagnostics": [
+            {
+              "code": "AUTH_DENIED"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:touch",
+        "targetHash": "<hash:procedure:touch>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow write": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "results": [
+              [
+                {
+                  "id": "<row 1>",
+                  "title": "changed"
+                }
+              ]
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web allow admin page": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": "changed"
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web allow member sitemap": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>https://app.test/records</loc></url></urlset>"
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web allow snapshot llms.txt": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": "# Records\n\n> Records\n\n## Pages\n\n- [changed](https://app.test/records): \n\n"
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web TARGET_MISMATCH": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "TARGET_MISMATCH",
+          "target": "view:public-records"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "TARGET_MISMATCH",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web TARGET_HASH_MISMATCH": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "TARGET_HASH_MISMATCH",
+          "target": "view:public-records"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "TARGET_HASH_MISMATCH",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web dry run": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "dryRun": true,
+        "event": {
+          "v": 1,
+          "requestId": "request-1",
+          "target": "view:public-records",
+          "targetHash": "<hash:view:public-records>",
+          "caller": {
+            "kind": "host",
+            "subject": "host:person",
+            "layer": "admin"
+          },
+          "outcome": "allow",
+          "dryRun": true
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": true
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web HOST_CONTRACT unknown key": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web HOST_CONTRACT missing user field": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "field": "region"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web unserved path": {
+    "answer": "unserved",
+    "events": [],
+    "frozen": []
+  },
+  "web head allow": {
+    "answer": {
+      "tags": "<link rel=\"canonical\" href=\"https://app.test/records\"><link rel=\"alternate\" type=\"text/markdown\" href=\"https://app.test/records.md\">"
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web head dry run": {
+    "answer": {
+      "tags": ""
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": true
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web head TARGET_MISMATCH": {
+    "answer": {
+      "throws": {
+        "code": "TARGET_MISMATCH",
+        "status": 412,
+        "path": "view:public-records"
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "TARGET_MISMATCH",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web head HOST_CONTRACT": {
+    "answer": {
+      "throws": {
+        "code": "HOST_CONTRACT",
+        "status": 412,
+        "path": ""
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest no ctx": {
+    "answer": {
+      "status": 401,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "UNAUTHENTICATED",
+          "message": "Rows scoped by 'region' require an authenticated caller.",
+          "path": ""
+        }
+      }
+    },
+    "events": [],
+    "frozen": []
+  },
+  "rest empty props": {
+    "answer": {
+      "status": 401,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "UNAUTHENTICATED",
+          "message": "Rows scoped by 'region' require an authenticated caller.",
+          "path": ""
+        }
+      }
+    },
+    "events": [],
+    "frozen": []
+  },
+  "rest no props, write": {
+    "answer": {
+      "status": 401,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "UNAUTHENTICATED",
+          "message": "Authorization predicate not satisfied.",
+          "path": "procedures/write/requires/auth/all/0"
+        }
+      }
+    },
+    "events": [],
+    "frozen": []
+  },
+  "mcp no props": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "UNAUTHENTICATED",
+                "message": "Rows scoped by 'region' require an authenticated caller.",
+                "path": ""
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "UNAUTHENTICATED",
+              "message": "Rows scoped by 'region' require an authenticated caller.",
+              "path": ""
+            }
+          ]
+        }
+      }
+    },
+    "events": [],
+    "frozen": []
+  },
+  "mcp no props, admin endpoint": {
+    "answer": {
+      "status": 401,
+      "wwwAuthenticate": "Bearer scope=\"mcp\", resource_metadata=\"https://app.test/.well-known/oauth-protected-resource/mcp\"",
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "UNAUTHENTICATED",
+          "message": "Authentication is required.",
+          "path": "mcp"
+        }
+      }
+    },
+    "events": [],
+    "frozen": []
+  },
+  "web no props": {
+    "answer": {
+      "status": 401,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "UNAUTHENTICATED",
+          "message": "Rows scoped by 'region' require an authenticated caller.",
+          "path": ""
+        }
+      }
+    },
+    "events": [],
+    "frozen": []
+  },
+  "rest allow member with matched target": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "rows": [
+          {
+            "id": "<row 1>",
+            "region": "TW",
+            "store": "A",
+            "title": "changed"
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow member with matched target": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest allow snapshot read": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "rows": [
+          {
+            "id": "<row 1>",
+            "region": "TW",
+            "store": "A",
+            "title": "changed"
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow snapshot read": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest STALE_CALLER snapshot write, path parameter": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "STALE_CALLER",
+          "target": "rest:POST /api/records/:id/rename"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/records/:id/rename",
+        "targetHash": "<hash:rest:POST /api/records/:id/rename>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "STALE_CALLER",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest STALE_CALLER snapshot ref handler": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "STALE_CALLER",
+          "target": "rest:POST /api/touch"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/touch",
+        "targetHash": "<hash:rest:POST /api/touch>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "STALE_CALLER",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp STALE_CALLER snapshot ref handler": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "STALE_CALLER",
+          "target": "procedure:touch"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:touch",
+        "targetHash": "<hash:procedure:touch>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "STALE_CALLER",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow admin endpoint without initialize": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:admin-records",
+        "targetHash": "<hash:view:admin-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp batch refused": {
+    "answer": {
+      "status": 400,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "INPUT_VALIDATION_FAILED",
+          "target": "mcp"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp deny resources/list": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "AUTH_DENIED",
+          "target": "mcp"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp initialize": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": null,
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest user field: region all": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "rows": [
+          {
+            "id": "<row 2>",
+            "region": "JP",
+            "store": "A",
+            "title": "second"
+          },
+          {
+            "id": "<row 1>",
+            "region": "TW",
+            "store": "A",
+            "title": "changed"
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region all": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 2>",
+                "region": "JP",
+                "store": "A",
+                "title": "second"
+              },
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web user field: region all": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": "second"
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest user field: region and stores all": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "rows": [
+          {
+            "id": "<row 2>",
+            "region": "JP",
+            "store": "A",
+            "title": "second"
+          },
+          {
+            "id": "<row 1>",
+            "region": "TW",
+            "store": "A",
+            "title": "changed"
+          },
+          {
+            "id": "<row 3>",
+            "region": "TW",
+            "store": "B",
+            "title": "third"
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region and stores all": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 2>",
+                "region": "JP",
+                "store": "A",
+                "title": "second"
+              },
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              },
+              {
+                "id": "<row 3>",
+                "region": "TW",
+                "store": "B",
+                "title": "third"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web user field: region and stores all": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": "second"
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest user field: region scalar": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "rows": [
+          {
+            "id": "<row 1>",
+            "region": "TW",
+            "store": "A",
+            "title": "changed"
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region scalar": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web user field: region scalar": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": "changed"
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest user field: region outside enum": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region outside enum": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web user field: region outside enum": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest user field: region missing": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "field": "region"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region missing": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "HOST_CONTRACT",
+                "field": "region"
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "HOST_CONTRACT",
+              "field": "region"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web user field: region missing": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "field": "region"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest user field: region empty": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "field": "region"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region empty": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "HOST_CONTRACT",
+                "field": "region"
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "HOST_CONTRACT",
+              "field": "region"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web user field: region empty": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "field": "region"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest user field: stores missing": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "field": "stores"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "stores",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: stores missing": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "HOST_CONTRACT",
+                "field": "stores"
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "HOST_CONTRACT",
+              "field": "stores"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "stores",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web user field: stores missing": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "field": "stores"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "stores",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest user field: region number": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region number": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web user field: region number": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest restrict term: listed value": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "rows": [
+          {
+            "id": "<row 1>",
+            "title": "changed"
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/restricted-records",
+        "targetHash": "<hash:rest:GET /api/views/restricted-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest restrict term: all refused": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "AUTH_DENIED"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/views/restricted-records",
+        "targetHash": "<hash:rest:GET /api/views/restricted-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp restrict term: all refused": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "AUTH_DENIED"
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "AUTH_DENIED"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:restricted-records",
+        "targetHash": "<hash:view:restricted-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest snapshot peek": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "ok": true
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/peek",
+        "targetHash": "hash of rest:POST /api/peek",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp snapshot peek": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "ok": true
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:peek",
+        "targetHash": "hash of procedure:peek",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest snapshot poke": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "STALE_CALLER",
+          "target": "rest:POST /api/poke"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:POST /api/poke",
+        "targetHash": "hash of rest:POST /api/poke",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "STALE_CALLER",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp snapshot poke": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "STALE_CALLER",
+          "target": "procedure:poke"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:poke",
+        "targetHash": "hash of procedure:poke",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "STALE_CALLER",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "describe targets": [
+    {
+      "name": "admin_DELETE__admin_invitations__id",
+      "_meta": {
+        "id": "admin:DELETE /admin/invitations/:id",
+        "targetHash": "<hash:admin:DELETE /admin/invitations/:id>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_DELETE__entries__id",
+      "_meta": {
+        "id": "admin:DELETE /entries/:id",
+        "targetHash": "<hash:admin:DELETE /entries/:id>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_DELETE__media__id",
+      "_meta": {
+        "id": "admin:DELETE /media/:id",
+        "targetHash": "<hash:admin:DELETE /media/:id>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__admin",
+      "_meta": {
+        "id": "admin:GET /admin",
+        "targetHash": "<hash:admin:GET /admin>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__bootstrap",
+      "_meta": {
+        "id": "admin:GET /bootstrap",
+        "targetHash": "<hash:admin:GET /bootstrap>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__collections",
+      "_meta": {
+        "id": "admin:GET /collections",
+        "targetHash": "<hash:admin:GET /collections>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__collections__name_statistics",
+      "_meta": {
+        "id": "admin:GET /collections/:name/statistics",
+        "targetHash": "<hash:admin:GET /collections/:name/statistics>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__developer-console",
+      "_meta": {
+        "id": "admin:GET /developer-console",
+        "targetHash": "<hash:admin:GET /developer-console>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__developer_views__name",
+      "_meta": {
+        "id": "admin:GET /developer/views/:name",
+        "targetHash": "<hash:admin:GET /developer/views/:name>",
+        "readOnly": true,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {
+          "records": {
+            "terms": []
+          }
+        }
+      }
+    },
+    {
+      "name": "admin_GET__entries",
+      "_meta": {
+        "id": "admin:GET /entries",
+        "targetHash": "<hash:admin:GET /entries>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__entries__id",
+      "_meta": {
+        "id": "admin:GET /entries/:id",
+        "targetHash": "<hash:admin:GET /entries/:id>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__entries_export",
+      "_meta": {
+        "id": "admin:GET /entries/export",
+        "targetHash": "<hash:admin:GET /entries/export>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__me",
+      "_meta": {
+        "id": "admin:GET /me",
+        "targetHash": "<hash:admin:GET /me>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__media",
+      "_meta": {
+        "id": "admin:GET /media",
+        "targetHash": "<hash:admin:GET /media>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__media__id",
+      "_meta": {
+        "id": "admin:GET /media/:id",
+        "targetHash": "<hash:admin:GET /media/:id>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__members",
+      "_meta": {
+        "id": "admin:GET /members",
+        "targetHash": "<hash:admin:GET /members>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__operations",
+      "_meta": {
+        "id": "admin:GET /operations",
+        "targetHash": "<hash:admin:GET /operations>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__site",
+      "_meta": {
+        "id": "admin:GET /site",
+        "targetHash": "<hash:admin:GET /site>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__site-settings",
+      "_meta": {
+        "id": "admin:GET /site-settings",
+        "targetHash": "<hash:admin:GET /site-settings>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__view-batch",
+      "_meta": {
+        "id": "admin:GET /view-batch",
+        "targetHash": "<hash:admin:GET /view-batch>",
+        "readOnly": true,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__views-manifest",
+      "_meta": {
+        "id": "admin:GET /views-manifest",
+        "targetHash": "<hash:admin:GET /views-manifest>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__views__name",
+      "_meta": {
+        "id": "admin:GET /views/:name",
+        "targetHash": "<hash:admin:GET /views/:name>",
+        "readOnly": true,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__views__name_export",
+      "_meta": {
+        "id": "admin:GET /views/:name/export",
+        "targetHash": "<hash:admin:GET /views/:name/export>",
+        "readOnly": true,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_GET__webmcp",
+      "_meta": {
+        "id": "admin:GET /webmcp",
+        "targetHash": "<hash:admin:GET /webmcp>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_PATCH__admin__id_role",
+      "_meta": {
+        "id": "admin:PATCH /admin/:id/role",
+        "targetHash": "<hash:admin:PATCH /admin/:id/role>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_PATCH__entries__id",
+      "_meta": {
+        "id": "admin:PATCH /entries/:id",
+        "targetHash": "<hash:admin:PATCH /entries/:id>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_PATCH__media__id",
+      "_meta": {
+        "id": "admin:PATCH /media/:id",
+        "targetHash": "<hash:admin:PATCH /media/:id>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_PATCH__site-settings",
+      "_meta": {
+        "id": "admin:PATCH /site-settings",
+        "targetHash": "<hash:admin:PATCH /site-settings>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_POST__admin_invitations",
+      "_meta": {
+        "id": "admin:POST /admin/invitations",
+        "targetHash": "<hash:admin:POST /admin/invitations>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_POST__entries",
+      "_meta": {
+        "id": "admin:POST /entries",
+        "targetHash": "<hash:admin:POST /entries>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_POST__entries__id_archive",
+      "_meta": {
+        "id": "admin:POST /entries/:id/archive",
+        "targetHash": "<hash:admin:POST /entries/:id/archive>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_POST__entries__id_publish",
+      "_meta": {
+        "id": "admin:POST /entries/:id/publish",
+        "targetHash": "<hash:admin:POST /entries/:id/publish>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_POST__entries__id_unpublish",
+      "_meta": {
+        "id": "admin:POST /entries/:id/unpublish",
+        "targetHash": "<hash:admin:POST /entries/:id/unpublish>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_POST__media_uploads",
+      "_meta": {
+        "id": "admin:POST /media/uploads",
+        "targetHash": "<hash:admin:POST /media/uploads>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_POST__media_uploads__groupId_commit",
+      "_meta": {
+        "id": "admin:POST /media/uploads/:groupId/commit",
+        "targetHash": "<hash:admin:POST /media/uploads/:groupId/commit>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_POST__operations__name",
+      "_meta": {
+        "id": "admin:POST /operations/:name",
+        "targetHash": "<hash:admin:POST /operations/:name>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_POST__webmcp__tool",
+      "_meta": {
+        "id": "admin:POST /webmcp/:tool",
+        "targetHash": "<hash:admin:POST /webmcp/:tool>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "commit_media_upload",
+      "_meta": {
+        "id": "admin:tool:commit_media_upload",
+        "targetHash": "<hash:admin:tool:commit_media_upload>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "create_media_upload",
+      "_meta": {
+        "id": "admin:tool:create_media_upload",
+        "targetHash": "<hash:admin:tool:create_media_upload>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "delete_media",
+      "_meta": {
+        "id": "admin:tool:delete_media",
+        "targetHash": "<hash:admin:tool:delete_media>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "delete_media_asset",
+      "_meta": {
+        "id": "admin:tool:delete_media_asset",
+        "targetHash": "<hash:admin:tool:delete_media_asset>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "find_media",
+      "_meta": {
+        "id": "admin:tool:find_media",
+        "targetHash": "<hash:admin:tool:find_media>",
+        "readOnly": true,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "get_media_asset",
+      "_meta": {
+        "id": "admin:tool:get_media_asset",
+        "targetHash": "<hash:admin:tool:get_media_asset>",
+        "readOnly": true,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "get_media_upload_policy",
+      "_meta": {
+        "id": "admin:tool:get_media_upload_policy",
+        "targetHash": "<hash:admin:tool:get_media_upload_policy>",
+        "readOnly": true,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "list_media_assets",
+      "_meta": {
+        "id": "admin:tool:list_media_assets",
+        "targetHash": "<hash:admin:tool:list_media_assets>",
+        "readOnly": true,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "update_media",
+      "_meta": {
+        "id": "admin:tool:update_media",
+        "targetHash": "<hash:admin:tool:update_media>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "update_media_asset",
+      "_meta": {
+        "id": "admin:tool:update_media_asset",
+        "targetHash": "<hash:admin:tool:update_media_asset>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "upload_media",
+      "_meta": {
+        "id": "admin:tool:upload_media",
+        "targetHash": "<hash:admin:tool:upload_media>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "rename",
+      "_meta": {
+        "id": "procedure:rename",
+        "targetHash": "<hash:procedure:rename>",
+        "readOnly": false,
+        "surfaces": [
+          "rest"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "touch",
+      "_meta": {
+        "id": "procedure:touch",
+        "targetHash": "<hash:procedure:touch>",
+        "readOnly": false,
+        "surfaces": [
+          "admin",
+          "public",
+          "rest"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "write",
+      "_meta": {
+        "id": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "readOnly": false,
+        "surfaces": [
+          "admin",
+          "public",
+          "rest"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "rest_GET__api_views_public-records",
+      "_meta": {
+        "id": "rest:GET /api/views/public-records",
+        "targetHash": "<hash:rest:GET /api/views/public-records>",
+        "readOnly": true,
+        "surfaces": [
+          "rest"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "rest_GET__api_views_restricted-records",
+      "_meta": {
+        "id": "rest:GET /api/views/restricted-records",
+        "targetHash": "<hash:rest:GET /api/views/restricted-records>",
+        "readOnly": true,
+        "surfaces": [
+          "rest"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "rest_POST__api_records__id_rename",
+      "_meta": {
+        "id": "rest:POST /api/records/:id/rename",
+        "targetHash": "<hash:rest:POST /api/records/:id/rename>",
+        "readOnly": false,
+        "surfaces": [
+          "rest"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "rest_POST__api_touch",
+      "_meta": {
+        "id": "rest:POST /api/touch",
+        "targetHash": "<hash:rest:POST /api/touch>",
+        "readOnly": false,
+        "surfaces": [
+          "rest"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "rest_POST__api_write",
+      "_meta": {
+        "id": "rest:POST /api/write",
+        "targetHash": "<hash:rest:POST /api/write>",
+        "readOnly": false,
+        "surfaces": [
+          "rest"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "admin_records",
+      "_meta": {
+        "id": "view:admin-records",
+        "targetHash": "<hash:view:admin-records>",
+        "readOnly": true,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "public_records",
+      "_meta": {
+        "id": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "readOnly": true,
+        "surfaces": [
+          "admin",
+          "public",
+          "rest"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {}
+      }
+    },
+    {
+      "name": "restricted_records",
+      "_meta": {
+        "id": "view:restricted-records",
+        "targetHash": "<hash:view:restricted-records>",
+        "readOnly": true,
+        "surfaces": [
+          "admin",
+          "public",
+          "rest"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "matchTarget": {
+    "GET /api/views/public-records": "rest:GET /api/views/public-records",
+    "GET /api/views/public-records/": "rest:GET /api/views/public-records",
+    "GET /api/views/%70ublic-records": "rest:GET /api/views/public-records",
+    "GET //api/views/public-records": null,
+    "GET /api/views/public-records//": null,
+    "GET /API/VIEWS/PUBLIC-RECORDS": null,
+    "GET /api/views/public-records/extra": null,
+    "GET /api/views/restricted-records": "rest:GET /api/views/restricted-records",
+    "GET /api/views/restricted-records/": "rest:GET /api/views/restricted-records",
+    "GET /api/views/%72estricted-records": "rest:GET /api/views/restricted-records",
+    "GET //api/views/restricted-records": null,
+    "GET /api/views/restricted-records//": null,
+    "GET /API/VIEWS/RESTRICTED-RECORDS": null,
+    "GET /api/views/restricted-records/extra": null,
+    "POST /api/records/abc/rename": "rest:POST /api/records/:id/rename",
+    "POST /api/records/abc/rename/": "rest:POST /api/records/:id/rename",
+    "POST /api/records/abc/%72ename": "rest:POST /api/records/:id/rename",
+    "POST /api/records/a%20b/rename": "rest:POST /api/records/:id/rename",
+    "POST /api/records/caf%C3%A9/rename": "rest:POST /api/records/:id/rename",
+    "POST /api/records/a%2Fb/rename": "rest:POST /api/records/:id/rename",
+    "POST //api/records/abc/rename": null,
+    "POST /api/records/abc/rename//": null,
+    "POST /API/RECORDS/ABC/RENAME": null,
+    "POST /api/records/abc/rename/extra": null,
+    "POST /api/records/%zz/rename": null,
+    "POST /api/records//rename": null,
+    "POST /api/touch": "rest:POST /api/touch",
+    "POST /api/touch/": "rest:POST /api/touch",
+    "POST /api/%74ouch": "rest:POST /api/touch",
+    "POST //api/touch": null,
+    "POST /api/touch//": null,
+    "POST /API/TOUCH": null,
+    "POST /api/touch/extra": null,
+    "POST /api/write": "rest:POST /api/write",
+    "POST /api/write/": "rest:POST /api/write",
+    "POST /api/%77rite": "rest:POST /api/write",
+    "POST //api/write": null,
+    "POST /api/write//": null,
+    "POST /API/WRITE": null,
+    "POST /api/write/extra": null
+  }
+}
