@@ -255,6 +255,14 @@ describe("sidebar placement (uiSchema.nav and defineAdmin nav)", () => {
     expect(JSON.stringify(groups)).not.toContain("/admin/c/audit");
   });
 
+  it("leaves a hidden parent and its hidden folded child out, exactly as without the child's placement (#1977)", () => {
+    const parent = collection("quotes", "operational", { hidden: true }),
+      child = (nav?: object) => ({ ...(collection("lines", "operational", nav) as object), parent: { collection: "quotes", parentField: "id", childField: "quoteId" } }) as never;
+    const groups = buildNavGroups([parent, child({ hidden: true }), collection("customers", "operational")], [], "en", null, false);
+    expect(groups).toEqual(buildNavGroups([parent, child(), collection("customers", "operational")], [], "en", null, false));
+    expect(shape(groups).slice(1)).toEqual([["Records", ["customers"]]]);
+  });
+
   it("shows no empty Content heading once a project moves every collection out of it", () => {
     const groups = buildNavGroups([collection("posts", "publishing", { group: "editorial" })], [], "en", null, false, false, undefined, { groups: { editorial: { title: "Editorial" } }, items: [] });
     expect(shape(groups).slice(1)).toEqual([["Editorial", ["posts"]]]);
