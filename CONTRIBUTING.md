@@ -118,20 +118,24 @@ package filters while iterating. PostgreSQL tests skip unless `MANTLE_PG_URL`
 names a disposable database; native Bun conformance is separate
 (`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14).
 
-Maintainers merge on a local `pnpm check` (judge by its exit code) plus review; CI does not gate their PRs, and a
-failure found later is fixed forward. PR CI runs only for PRs from outside the organization (forks, bots).
-PR CI builds once in each of two parallel jobs: typecheck plus boundaries,
+CI gates `main` only. A PR into `main` (promotion or hotfix) runs the **Full checks** workflow for every author,
+and its `Typecheck + tests` status passes only when the whole suite does. A PR into `develop` merges on a local
+`pnpm check` (judge by its exit code) plus review; CI runs nothing for it, and a failure found later is fixed forward.
+The exception is Dependabot: its PRs into `develop` run the light PR CI (`.github/workflows/ci.yml`), because patch and
+digest bumps merge automatically once it is green.
+That PR CI builds once in each of two parallel jobs: typecheck plus boundaries,
 skills, plugin manifests, startup graphs/budgets and release/packed-consumer
 self-tests; and the three packages’ tests running concurrently. Both jobs use
 the pnpm store cache and must pass the combined required status.
-PR tests skip PostgreSQL; Full checks retains PostgreSQL-backed coverage.
+Its tests skip PostgreSQL; Full checks retains PostgreSQL-backed coverage.
 Build typechecks library sources; `pnpm typecheck` checks the remaining test,
 app, example and config roots (including their imports). Run build first.
 Build before running package tests locally; `pnpm test` does not rebuild or pack.
 Package and upload bytes are reports; cold-start checks remain gates.
 
-Run the **Full checks** workflow (`.github/workflows/full-checks.yml`) by hand
-(Actions → Full checks → Run workflow on the branch) before every release, alpha included, or when a change to drivers, auth,
+Full checks (`.github/workflows/full-checks.yml`) also runs by hand
+(Actions → Full checks → Run workflow on the branch). Do that before every release, alpha included (an alpha releases
+from `develop` and never passes the `main` gate), or when a change to drivers, auth,
 generator output or Admin UI may behave differently on Linux. It runs native
 four-target and Wrangler/D1 integrations, packed-consumer checks, doc examples,
 OSS plugin validation, the two Chrome sandbox-boundary tests (design preview

@@ -3,7 +3,8 @@
 # do not prove that a raised dependency floor or new behavior is intentional.
 #
 # Sequencing: dependabot opens its PR against `develop` (see
-# `.github/dependabot.yml`); CI runs via `ci.yml`; once CI is green
+# `.github/dependabot.yml`); CI runs via `ci.yml`, whose jobs run for
+# Dependabot PRs into `develop` only; once CI is green
 # `gh pr merge --auto` queues the merge.
 #
 # Lockfile note: unlike mantle-starters, this repo's dependabot setup
