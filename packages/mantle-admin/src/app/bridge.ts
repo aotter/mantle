@@ -52,7 +52,8 @@ type Row = Readonly<Record<string, unknown>>;
 export function readCatalog(doc: Pick<Document, "getElementById"> = document): AppCatalog {
   try {
     const parsed = JSON.parse(doc.getElementById(APP_CATALOG_ID)?.textContent ?? "") as unknown;
-    if (isRecord(parsed) && isRecord(parsed["views"]) && isRecord(parsed["actions"])) return parsed as unknown as AppCatalog;
+    if (isRecord(parsed) && isRecord(parsed["views"]) && isRecord(parsed["actions"]))
+      return parsed as unknown as AppCatalog;
   } catch {
     // no catalog: nothing to render with it
   }
@@ -62,7 +63,7 @@ export function readCatalog(doc: Pick<Document, "getElementById"> = document): A
 /** The tool a result came from: the server names it, else the host's tool info. */
 export function toolOf(result: ToolResult, hostTool?: string): string | null {
   const named = result._meta?.[APP_TOOL_META_KEY];
-  return typeof named === "string" ? named : hostTool ?? null;
+  return typeof named === "string" ? named : (hostTool ?? null);
 }
 
 /** A View result's rows; null for a failure or any other result. */
@@ -82,8 +83,10 @@ export function nextCursorOf(result: ToolResult): string | undefined {
 export function diagnosticsOf(result: ToolResult): InteractionDiagnostic[] {
   const output = outputOf(result);
   return isRecord(output) && Array.isArray(output["diagnostics"])
-    ? output["diagnostics"].filter((item): item is InteractionDiagnostic =>
-      isRecord(item) && typeof item["code"] === "string" && typeof item["message"] === "string")
+    ? output["diagnostics"].filter(
+        (item): item is InteractionDiagnostic =>
+          isRecord(item) && typeof item["code"] === "string" && typeof item["message"] === "string",
+      )
     : [];
 }
 
@@ -93,9 +96,13 @@ export function diagnosticsOf(result: ToolResult): InteractionDiagnostic[] {
  */
 export function outputOf(result: ToolResult): unknown {
   if (result.structuredContent !== undefined) return result.structuredContent;
-  const text = result.content?.find((item) => item.type === "text")?.text;
+  const text = result.content?.find(item => item.type === "text")?.text;
   if (text === undefined) return undefined;
-  try { return JSON.parse(text) as unknown; } catch { return text; }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
 }
 
 /**
@@ -103,7 +110,12 @@ export function outputOf(result: ToolResult): unknown {
  * runtime's `{ diagnostics }`; a thrown call (transport, host, protocol) is
  * rethrown, so the controller treats the write as uncertain.
  */
-export async function invokeTool(call: CallTool, name: string, args: Record<string, unknown>, signal: AbortSignal): Promise<InvokeOutcome> {
+export async function invokeTool(
+  call: CallTool,
+  name: string,
+  args: Record<string, unknown>,
+  signal: AbortSignal,
+): Promise<InvokeOutcome> {
   const result = await call(name, args, signal);
   if (!result.isError) return { ok: true, data: outputOf(result) };
   const diagnostics = diagnosticsOf(result);
@@ -132,7 +144,7 @@ export function idempotencyInputs(action: AppRowAction): string[] {
 /** The row actions a row can open: it carries an id, and its version when the action locks one. */
 export function actionsFor(catalog: AppCatalog, view: AppCatalogView, row: Row): AppRowAction[] {
   if (typeof row["id"] !== "string") return [];
-  return view.actions.flatMap((name) => {
+  return view.actions.flatMap(name => {
     const action = Object.prototype.hasOwnProperty.call(catalog.actions, name) ? catalog.actions[name]! : undefined;
     return action && (!action.version || typeof row["version"] === "number") ? [action] : [];
   });

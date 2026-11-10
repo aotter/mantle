@@ -14,15 +14,40 @@ const project = join(root, "docs/examples/reference-service");
 const wrangler = `wrangler@${JSON.parse(readFileSync(join(project, "package.json"), "utf8")).devDependencies.wrangler}`;
 
 if (process.argv[2] !== "--serve") {
-  const steps = ["npm ci --ignore-scripts --no-audit --no-fund", "npm run generate", "npm run build", "rm -rf node_modules", `node '${import.meta.filename}' --serve`];
-  execFileSync(process.execPath, [join(root, "scripts/check-packed-consumer.mjs"), "--pm", "npm", "--project", project, "--", "sh", "-c", steps.join(" && ")],
-    { cwd: root, stdio: "inherit", timeout: 900_000 });
+  const steps = [
+    "npm ci --ignore-scripts --no-audit --no-fund",
+    "npm run generate",
+    "npm run build",
+    "rm -rf node_modules",
+    `node '${import.meta.filename}' --serve`,
+  ];
+  execFileSync(
+    process.execPath,
+    [
+      join(root, "scripts/check-packed-consumer.mjs"),
+      "--pm",
+      "npm",
+      "--project",
+      project,
+      "--",
+      "sh",
+      "-c",
+      steps.join(" && "),
+    ],
+    { cwd: root, stdio: "inherit", timeout: 900_000 },
+  );
   process.exit(0);
 }
 
 // --serve: in the built consumer, without node_modules.
 if (existsSync("node_modules")) throw new Error("node_modules must be gone before serving");
-for (const file of ["dist/worker/index.js", "dist/client/admin/index.html", "dist/client/admin/preview.html", "dist/client/admin/mcp-app.html", "dist/client/admin/host-bridge.js"]) {
+for (const file of [
+  "dist/worker/index.js",
+  "dist/client/admin/index.html",
+  "dist/client/admin/preview.html",
+  "dist/client/admin/mcp-app.html",
+  "dist/client/admin/host-bridge.js",
+]) {
   if (!existsSync(file)) throw new Error(`the build did not write ${file}`);
 }
 const config = JSON.parse(readFileSync("wrangler.jsonc", "utf8"));
@@ -31,19 +56,50 @@ writeFileSync("wrangler.serve.json", JSON.stringify(config));
 const state = mkdtempSync(join(tmpdir(), "mantle-admin-build-"));
 const env = { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" };
 const npx = (...args) => ["npx", "--yes", wrangler, ...args, "--config", "wrangler.serve.json", "--persist-to", state];
-const [d1, ...ddl] = npx("d1", "execute", config.d1_databases[0].database_name, "--local", "--file", "generated/schema.sql");
+const [d1, ...ddl] = npx(
+  "d1",
+  "execute",
+  config.d1_databases[0].database_name,
+  "--local",
+  "--file",
+  "generated/schema.sql",
+);
 execFileSync(d1, ddl, { stdio: "inherit", env });
-const port = 18000 + Math.floor(Math.random() * 1000), origin = `http://127.0.0.1:${port}`;
-const [command, ...args] = npx("dev", "--local", "--ip", "127.0.0.1", "--port", String(port), "--inspector-port", "0",
-  "--var", `PUBLIC_ORIGIN:${origin}`, "--var", "ADMIN_EMAIL:owner@example.test", "--var", "BETTER_AUTH_SECRET:local-smoke-secret-0123456789abcdef");
+const port = 18000 + Math.floor(Math.random() * 1000),
+  origin = `http://127.0.0.1:${port}`;
+const [command, ...args] = npx(
+  "dev",
+  "--local",
+  "--ip",
+  "127.0.0.1",
+  "--port",
+  String(port),
+  "--inspector-port",
+  "0",
+  "--var",
+  `PUBLIC_ORIGIN:${origin}`,
+  "--var",
+  "ADMIN_EMAIL:owner@example.test",
+  "--var",
+  "BETTER_AUTH_SECRET:local-smoke-secret-0123456789abcdef",
+);
 const server = spawn(command, args, { env, stdio: ["ignore", "pipe", "pipe"], detached: true });
 let logs = "";
-server.stdout.on("data", chunk => { logs += chunk; });
-server.stderr.on("data", chunk => { logs += chunk; });
+server.stdout.on("data", chunk => {
+  logs += chunk;
+});
+server.stderr.on("data", chunk => {
+  logs += chunk;
+});
 try {
   for (let attempt = 0; ; attempt++) {
     if (server.exitCode !== null) throw new Error(`wrangler exited ${server.exitCode}`);
-    try { await fetch(`${origin}/api/auth/ok`); break; } catch { /* starting */ }
+    try {
+      await fetch(`${origin}/api/auth/ok`);
+      break;
+    } catch {
+      /* starting */
+    }
     if (attempt > 480) throw new Error("the Worker did not start");
     await new Promise(done => setTimeout(done, 250));
   }
@@ -59,12 +115,17 @@ try {
   const script = /<script type="module" crossorigin src="([^"]+)"/.exec(html)?.[1];
   const style = /<link rel="stylesheet" crossorigin href="([^"]+)"/.exec(html)?.[1];
   if (!script || !style) throw new Error(`no entry script or stylesheet in the shell:\n${html.slice(0, 500)}`);
-  for (const path of [script, style, "preview.html", "mcp-app.html", "host-bridge.js", "theme.js"]) await expect200(path);
+  for (const path of [script, style, "preview.html", "mcp-app.html", "host-bridge.js", "theme.js"])
+    await expect200(path);
   console.log("ok - built with npm ci --ignore-scripts; Worker and Admin served without node_modules");
 } catch (error) {
   console.error(logs.slice(-4000));
   throw error;
 } finally {
-  try { process.kill(-server.pid, "SIGKILL"); } catch { /* already gone */ }
+  try {
+    process.kill(-server.pid, "SIGKILL");
+  } catch {
+    /* already gone */
+  }
   rmSync(state, { recursive: true, force: true });
 }

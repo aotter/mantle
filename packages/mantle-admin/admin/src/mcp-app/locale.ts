@@ -24,7 +24,16 @@ export interface AppLabels {
 
 const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
   "en": {
-    fields: { emptyOption: "No value", clearOption: "Not set", chooseOption: "Choose…", boolean: "Enabled", dateTimeSelect: "Select date and time", dateTimeTime: "Time", removeItem: "Remove item", addItem: "Add item" },
+    fields: {
+      emptyOption: "No value",
+      clearOption: "Not set",
+      chooseOption: "Choose…",
+      boolean: "Enabled",
+      dateTimeSelect: "Select date and time",
+      dateTimeTime: "Time",
+      removeItem: "Remove item",
+      addItem: "Add item",
+    },
     created: "Created",
     updated: "Updated",
     interaction: {
@@ -47,8 +56,10 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
       changedSinceList: "This record changed since the list was loaded; review the current version.",
       reviewLatest: "Review newer version",
       contested: "Someone else also changed fields you edited:",
-      conflict: "This entry changed before your update was saved. Nothing was saved. Load the latest version and review it again.",
-      conflictReopen: "This entry changed before your update was saved. Nothing was saved. Close this, then open the action again from the refreshed list.",
+      conflict:
+        "This entry changed before your update was saved. Nothing was saved. Load the latest version and review it again.",
+      conflictReopen:
+        "This entry changed before your update was saved. Nothing was saved. Close this, then open the action again from the refreshed list.",
       uncertain: "We could not confirm whether this was saved. Check the latest version before trying again.",
       reread: "Load latest version",
       acknowledgeUncertain: "I checked; continue",
@@ -68,7 +79,16 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     exitFullscreen: "Exit full screen",
   },
   "zh-TW": {
-    fields: { emptyOption: "無值", clearOption: "未設定", chooseOption: "請選擇…", boolean: "啟用", dateTimeSelect: "選擇日期與時間", dateTimeTime: "時間", removeItem: "移除項目", addItem: "新增項目" },
+    fields: {
+      emptyOption: "無值",
+      clearOption: "未設定",
+      chooseOption: "請選擇…",
+      boolean: "啟用",
+      dateTimeSelect: "選擇日期與時間",
+      dateTimeTime: "時間",
+      removeItem: "移除項目",
+      addItem: "新增項目",
+    },
     created: "建立時間",
     updated: "更新時間",
     interaction: {
@@ -112,7 +132,16 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     exitFullscreen: "結束全螢幕",
   },
   "zh-CN": {
-    fields: { emptyOption: "无值", clearOption: "未设置", chooseOption: "请选择…", boolean: "启用", dateTimeSelect: "选择日期与时间", dateTimeTime: "时间", removeItem: "移除项目", addItem: "新增项目" },
+    fields: {
+      emptyOption: "无值",
+      clearOption: "未设置",
+      chooseOption: "请选择…",
+      boolean: "启用",
+      dateTimeSelect: "选择日期与时间",
+      dateTimeTime: "时间",
+      removeItem: "移除项目",
+      addItem: "新增项目",
+    },
     created: "创建时间",
     updated: "更新时间",
     interaction: {

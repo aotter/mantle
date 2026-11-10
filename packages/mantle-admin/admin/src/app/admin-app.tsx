@@ -1,4 +1,10 @@
-import { entriesQueryArgsFromSearch, entriesQuerySearchParams, entriesQueryOptions, viewsManifestQueryOptions, withNavigationTools } from "../lib/queries";
+import {
+  entriesQueryArgsFromSearch,
+  entriesQuerySearchParams,
+  entriesQueryOptions,
+  viewsManifestQueryOptions,
+  withNavigationTools,
+} from "../lib/queries";
 import { canRenderAdmin } from "./frame-policy";
 import { usePreferences } from "./preferences";
 import { t } from "./i18n";
@@ -21,22 +27,40 @@ const OAuthConsentView = React.lazy(() => auth().then(module => ({ default: modu
 const ConnectedAppsPage = React.lazy(() => auth().then(module => ({ default: module.ConnectedAppsPage })));
 const ConnectedAppsView = React.lazy(() => auth().then(module => ({ default: module.ConnectedAppsView })));
 import { HomeView } from "../features/console/home-view";
-const CollectionView = React.lazy(() => import("../features/content/collection-view").then(module => ({ default: module.CollectionView })));
+const CollectionView = React.lazy(() =>
+  import("../features/content/collection-view").then(module => ({ default: module.CollectionView })),
+);
 import { Slot } from "./slots";
 import type { CollectionListProps, RecordViewProps } from "./slot-props";
 import { hasFoldedChildCollections } from "../lib/collection-nav";
 import { NotFoundView } from "../features/system/not-found-view";
 
-const EntryEditView = React.lazy(() => import("../features/content/entry-edit-view").then(module => ({ default: module.EntryEditView })));
-const ParentEntryWorkbench = React.lazy(() => import("../features/content/parent-entry-workbench").then(module => ({ default: module.ParentEntryWorkbench })));
-const MediaLibraryView = React.lazy(() => import("../features/media/media-library-view").then(module => ({ default: module.MediaLibraryView })));
-const OperationsView = React.lazy(() => import("../features/ops/operations-view").then(module => ({ default: module.OperationsView })));
+const EntryEditView = React.lazy(() =>
+  import("../features/content/entry-edit-view").then(module => ({ default: module.EntryEditView })),
+);
+const ParentEntryWorkbench = React.lazy(() =>
+  import("../features/content/parent-entry-workbench").then(module => ({ default: module.ParentEntryWorkbench })),
+);
+const MediaLibraryView = React.lazy(() =>
+  import("../features/media/media-library-view").then(module => ({ default: module.MediaLibraryView })),
+);
+const OperationsView = React.lazy(() =>
+  import("../features/ops/operations-view").then(module => ({ default: module.OperationsView })),
+);
 const ViewPage = React.lazy(() => import("../features/ops/view-page").then(module => ({ default: module.ViewPage })));
 import { ProjectPage } from "../features/system/project-page";
-const PreferencesView = React.lazy(() => import("../features/system/preferences-view").then(module => ({ default: module.PreferencesView })));
-const SettingsView = React.lazy(() => import("../features/system/settings-view").then(module => ({ default: module.SettingsView })));
-const AdminView = React.lazy(() => import("../features/system/admin-view").then(module => ({ default: module.AdminView })));
-const MembersView = React.lazy(() => import("../features/system/members-view").then(module => ({ default: module.MembersView })));
+const PreferencesView = React.lazy(() =>
+  import("../features/system/preferences-view").then(module => ({ default: module.PreferencesView })),
+);
+const SettingsView = React.lazy(() =>
+  import("../features/system/settings-view").then(module => ({ default: module.SettingsView })),
+);
+const AdminView = React.lazy(() =>
+  import("../features/system/admin-view").then(module => ({ default: module.AdminView })),
+);
+const MembersView = React.lazy(() =>
+  import("../features/system/members-view").then(module => ({ default: module.MembersView })),
+);
 
 const DeveloperWorkspace = React.lazy(() => import("../features/logic/developer-workspace"));
 
@@ -52,18 +76,43 @@ export function AdminApp({ preview = false }: { preview?: boolean } = {}): React
   // Static asset URLs can bypass the server's frame-ancestors headers.
   if (typeof window !== "undefined" && !canRenderAdmin(window, preview)) return null;
 
-  if (preview && window.__MANTLE_ADMIN_PREVIEW__?.mode === "design" && !(location.pathname === "/admin/dev" || location.pathname.startsWith("/admin/dev/")) && location.pathname !== "/admin/preferences") {
-    return <div className="p-6"><h1 className="text-xl font-semibold">Design workspace</h1><p className="mt-2">This design surface has no running service or business data. The host must provide a runtime surface to use Content Admin.</p><a className="mt-4 inline-block underline" href="/admin/dev">Return to the developer workspace</a></div>;
+  if (
+    preview &&
+    window.__MANTLE_ADMIN_PREVIEW__?.mode === "design" &&
+    !(location.pathname === "/admin/dev" || location.pathname.startsWith("/admin/dev/")) &&
+    location.pathname !== "/admin/preferences"
+  ) {
+    return (
+      <div className="p-6">
+        <h1 className="text-xl font-semibold">Design workspace</h1>
+        <p className="mt-2">
+          This design surface has no running service or business data. The host must provide a runtime surface to use
+          Content Admin.
+        </p>
+        <a className="mt-4 inline-block underline" href="/admin/dev">
+          Return to the developer workspace
+        </a>
+      </div>
+    );
   }
 
   if (preview && ["/admin/sign-in", "/admin/connected-apps", ...CONSENT_PATHS].includes(location.pathname)) {
     return <PreviewAccountNotice />;
   }
 
-  if (CONSENT_PATHS.includes(location.pathname)) return <React.Suspense fallback={<GateLoading />}><OAuthConsentView /></React.Suspense>;
+  if (CONSENT_PATHS.includes(location.pathname))
+    return (
+      <React.Suspense fallback={<GateLoading />}>
+        <OAuthConsentView />
+      </React.Suspense>
+    );
 
   if (location.pathname === "/admin/sign-in") {
-    return <React.Suspense fallback={<GateLoading />}><SignInView /></React.Suspense>;
+    return (
+      <React.Suspense fallback={<GateLoading />}>
+        <SignInView />
+      </React.Suspense>
+    );
   }
 
   return <Gate path={location.pathname} search={location.search} preview={preview} />;
@@ -71,7 +120,12 @@ export function AdminApp({ preview = false }: { preview?: boolean } = {}): React
 
 function PreviewAccountNotice(): React.ReactElement {
   const { language } = usePreferences();
-  return <div className="p-6"><h1 className="text-xl font-semibold">{t(language, "preview.accountTitle")}</h1><p className="mt-2">{t(language, "preview.accountBody")}</p></div>;
+  return (
+    <div className="p-6">
+      <h1 className="text-xl font-semibold">{t(language, "preview.accountTitle")}</h1>
+      <p className="mt-2">{t(language, "preview.accountBody")}</p>
+    </div>
+  );
 }
 
 interface BootstrapPayload {
@@ -96,13 +150,20 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
       if (!useBootstrap) return api.get<AdminUser>("/me");
       const args = entriesQueryArgsFromSearch(decodeURIComponent(collectionMatch![1]!), search);
       const data = await api.get<BootstrapPayload>(`/bootstrap?${entriesQuerySearchParams(args)}`);
-      if (data.entries) queryClient.setQueryData(entriesQueryOptions(args).queryKey, { pages: [data.entries], pageParams: [undefined] });
+      if (data.entries)
+        queryClient.setQueryData(entriesQueryOptions(args).queryKey, {
+          pages: [data.entries],
+          pageParams: [undefined],
+        });
       queryClient.setQueryData(["collections"], data.collections);
       queryClient.setQueryData(["site"], data.site);
       queryClient.setQueryData(["operations"], data.operations);
       queryClient.setQueryData(["views-manifest"], data.views);
       queryClient.setQueryData(["admin-webmcp"], withNavigationTools(data.webmcp));
-      queryClient.setQueryData(["collection-metadata"], { collections: data.collections, allCollections: data.allCollections });
+      queryClient.setQueryData(["collection-metadata"], {
+        collections: data.collections,
+        allCollections: data.allCollections,
+      });
       return data.me;
     },
     retry: false,
@@ -117,7 +178,12 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   if (is401) return preview ? <GateError error={me.error} /> : <GateLoading />;
 
   if (me.isError && me.error instanceof ApiError && me.error.status === 403) {
-    if (path === "/admin/connected-apps") return <React.Suspense fallback={<GateLoading />}><ConnectedAppsPage /></React.Suspense>;
+    if (path === "/admin/connected-apps")
+      return (
+        <React.Suspense fallback={<GateLoading />}>
+          <ConnectedAppsPage />
+        </React.Suspense>
+      );
     const body = (me.error.body ?? {}) as { login?: string | null };
     return <AccessDeniedView login={body.login ?? null} />;
   }
@@ -131,7 +197,11 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   if (collectionMatch) {
     return (
       <AuthenticatedLayout>
-        <Slot name="CollectionList" Default={CollectionPage} props={{ collection: decodeURIComponent(collectionMatch[1]!) }} />
+        <Slot
+          name="CollectionList"
+          Default={CollectionPage}
+          props={{ collection: decodeURIComponent(collectionMatch[1]!) }}
+        />
       </AuthenticatedLayout>
     );
   }
@@ -140,7 +210,14 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   if (entryEditMatch) {
     return (
       <AuthenticatedLayout>
-        <Slot name="RecordView" Default={RecordPage} props={{ collection: decodeURIComponent(entryEditMatch[1]!), entryId: decodeURIComponent(entryEditMatch[2]!) }} />
+        <Slot
+          name="RecordView"
+          Default={RecordPage}
+          props={{
+            collection: decodeURIComponent(entryEditMatch[1]!),
+            entryId: decodeURIComponent(entryEditMatch[2]!),
+          }}
+        />
       </AuthenticatedLayout>
     );
   }
@@ -166,7 +243,12 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
     );
   }
 
-  if (path === "/admin/operations") return <AuthenticatedLayout><OperationsView /></AuthenticatedLayout>;
+  if (path === "/admin/operations")
+    return (
+      <AuthenticatedLayout>
+        <OperationsView />
+      </AuthenticatedLayout>
+    );
 
   if (path === "/admin/media") {
     return (
@@ -217,7 +299,11 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   }
 
   if (path.startsWith("/admin/dev")) {
-    return <React.Suspense fallback={<GateLoading />}><DeveloperWorkspace path={path} /></React.Suspense>;
+    return (
+      <React.Suspense fallback={<GateLoading />}>
+        <DeveloperWorkspace path={path} />
+      </React.Suspense>
+    );
   }
 
   const pageMatch = path.match(/^\/admin\/p\/([a-z0-9-]+)\/?$/);
@@ -245,13 +331,7 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   );
 }
 
-function EntryLanding({
-  collectionName,
-  entryId,
-}: {
-  collectionName: string;
-  entryId: string;
-}): React.ReactElement {
+function EntryLanding({ collectionName, entryId }: { collectionName: string; entryId: string }): React.ReactElement {
   const collectionsQuery = useQuery<Collection[]>({
     queryKey: ["collections"],
     queryFn: async () => {
@@ -285,9 +365,15 @@ function Landing(): React.ReactElement {
   });
   const views = useQuery<ViewManifestInfo[]>({ ...viewsManifestQueryOptions(), enabled: !!project.home });
   const url = landingUrl(project, collections.data ?? [], views.data ?? []);
-  React.useEffect(() => { if (url) navigate(url, { replace: true }); }, [url, navigate]);
+  React.useEffect(() => {
+    if (url) navigate(url, { replace: true });
+  }, [url, navigate]);
   if (project.home && (url || collections.isPending || views.isPending)) return <GateLoading />;
-  return <AuthenticatedLayout><HomePage /></AuthenticatedLayout>;
+  return (
+    <AuthenticatedLayout>
+      <HomePage />
+    </AuthenticatedLayout>
+  );
 }
 
 function HomePage(): React.ReactElement {

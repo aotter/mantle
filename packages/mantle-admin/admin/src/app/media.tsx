@@ -49,11 +49,19 @@ function OpenMediaPicker({ onOpenChange, onSelect, uploadPurpose }: MediaPickerP
           <DialogTitle>{t(language, "media.pickTitle")}</DialogTitle>
           <DialogDescription>{t(language, "media.pickDescription")}</DialogDescription>
         </DialogHeader>
-        <MediaBrowser language={language} purposes={purposes} preferredPurpose={uploadPurpose} searchTerm={search}
-          emptyIcon={Images} showSearch onSearch={setSearch} onPick={item => {
+        <MediaBrowser
+          language={language}
+          purposes={purposes}
+          preferredPurpose={uploadPurpose}
+          searchTerm={search}
+          emptyIcon={Images}
+          showSearch
+          onSearch={setSearch}
+          onPick={item => {
             onSelect({ id: item.id, primaryUrl: item.primaryUrl ?? null });
             onOpenChange(false);
-          }} />
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

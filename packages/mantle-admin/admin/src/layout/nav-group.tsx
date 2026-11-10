@@ -1,11 +1,7 @@
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@aotter/mantle-ui/kit";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@aotter/mantle-ui/kit";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,13 +27,7 @@ import { usePreferences } from "../app/preferences";
 import { useBadges } from "../app/hooks";
 import { t } from "../app/i18n";
 import { entriesQueryArgsFromSearch, entriesQueryOptions } from "../lib/queries";
-import {
-  isCollapsible,
-  type NavCollapsible,
-  type NavGroupData,
-  type NavItem,
-  type NavLink,
-} from "./types";
+import { isCollapsible, type NavCollapsible, type NavGroupData, type NavItem, type NavLink } from "./types";
 
 interface NavGroupProps {
   group: NavGroupData;
@@ -47,24 +37,13 @@ interface NavGroupProps {
   search: string;
 }
 
-export function NavGroup({
-  group,
-  links,
-  pathname,
-  search,
-}: NavGroupProps): React.ReactElement {
+export function NavGroup({ group, links, pathname, search }: NavGroupProps): React.ReactElement {
   return (
     <SidebarGroup>
       {group.title && <SidebarGroupLabel title={group.title}>{group.title}</SidebarGroupLabel>}
       <SidebarMenu>
-        {group.items.map((item) => (
-          <NavGroupItem
-            key={navKey(item)}
-            item={item}
-            links={links}
-            pathname={pathname}
-            search={search}
-          />
+        {group.items.map(item => (
+          <NavGroupItem key={navKey(item)} item={item} links={links} pathname={pathname} search={search} />
         ))}
       </SidebarMenu>
     </SidebarGroup>
@@ -91,21 +70,9 @@ function NavGroupItem({
     return <NavLinkItem item={item} links={links} pathname={pathname} search={search} />;
   }
   if (state === "collapsed" && !isMobile) {
-    return (
-      <NavCollapsibleDropdown
-        item={item}
-        pathname={pathname}
-        search={search}
-      />
-    );
+    return <NavCollapsibleDropdown item={item} pathname={pathname} search={search} />;
   }
-  return (
-    <NavCollapsibleExpanded
-      item={item}
-      pathname={pathname}
-      search={search}
-    />
-  );
+  return <NavCollapsibleExpanded item={item} pathname={pathname} search={search} />;
 }
 
 function NavLinkItem({
@@ -131,12 +98,12 @@ function NavLinkItem({
           onClick={() => setOpenMobile(false)}
           onPointerEnter={prefetch}
           onFocus={prefetch}
-          {...(item.external
-            ? { target: "_blank", rel: "noreferrer" }
-            : null)}
+          {...(item.external ? { target: "_blank", rel: "noreferrer" } : null)}
         >
           {item.icon && <item.icon aria-hidden />}
-          <span data-sidebar-label className="flex-1 truncate">{item.title}</span>
+          <span data-sidebar-label className="flex-1 truncate">
+            {item.title}
+          </span>
           <NavMarker item={item} />
           {item.badge && <NavBadge item={item} links={links} />}
         </a>
@@ -151,15 +118,44 @@ function NavLinkItem({
  */
 function NavBadge({ item, links }: { item: NavLink; links: ReadonlyArray<NavLink> }): React.ReactElement | null {
   const { language } = usePreferences();
-  const refs = links.flatMap((link) => (link.badge ? [link.badge] : []));
+  const refs = links.flatMap(link => (link.badge ? [link.badge] : []));
   const states = useBadges(refs);
-  const state = states[refs.findIndex((ref) => ref.view === item.badge!.view && ref.field === item.badge!.field)];
+  const state = states[refs.findIndex(ref => ref.view === item.badge!.view && ref.field === item.badge!.field)];
   if (!state || state.status === "unavailable") return null;
   const base = "ms-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs tabular-nums";
-  if (state.status === "loading") return <span data-sidebar-label data-badge="loading" role="status" aria-label={t(language, "nav.badgeLoading")} className={cn(base, "animate-pulse bg-muted text-transparent")}>0</span>;
-  if (state.status === "error") return <span data-sidebar-label data-badge="error" title={t(language, "nav.badgeError")} className={cn(base, "text-muted-foreground")}>!</span>;
+  if (state.status === "loading")
+    return (
+      <span
+        data-sidebar-label
+        data-badge="loading"
+        role="status"
+        aria-label={t(language, "nav.badgeLoading")}
+        className={cn(base, "animate-pulse bg-muted text-transparent")}
+      >
+        0
+      </span>
+    );
+  if (state.status === "error")
+    return (
+      <span
+        data-sidebar-label
+        data-badge="error"
+        title={t(language, "nav.badgeError")}
+        className={cn(base, "text-muted-foreground")}
+      >
+        !
+      </span>
+    );
   const zero = state.count === 0;
-  return <span data-sidebar-label data-badge={zero ? "zero" : "count"} className={cn(base, zero ? "text-muted-foreground" : "bg-primary text-primary-foreground")}>{state.count! > 99 ? "99+" : state.count}</span>;
+  return (
+    <span
+      data-sidebar-label
+      data-badge={zero ? "zero" : "count"}
+      className={cn(base, zero ? "text-muted-foreground" : "bg-primary text-primary-foreground")}
+    >
+      {state.count! > 99 ? "99+" : state.count}
+    </span>
+  );
 }
 
 function NavCollapsibleExpanded({
@@ -177,17 +173,14 @@ function NavCollapsibleExpanded({
     if (groupActive) setOpen(true);
   }, [groupActive]);
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      className="group/collapsible"
-      asChild
-    >
+    <Collapsible open={open} onOpenChange={setOpen} className="group/collapsible" asChild>
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton isActive={groupActive}>
             {item.icon && <item.icon aria-hidden />}
-            <span data-sidebar-label className="flex-1 truncate" title={item.title}>{item.title}</span>
+            <span data-sidebar-label className="flex-1 truncate" title={item.title}>
+              {item.title}
+            </span>
             <NavMarker item={item} />
             <ChevronRight
               aria-hidden
@@ -198,14 +191,8 @@ function NavCollapsibleExpanded({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SidebarMenuSub>
-            {item.items.map((sub) => (
-              <NavSubLink
-                key={sub.url}
-                link={sub}
-                siblings={item.items}
-                pathname={pathname}
-                search={search}
-              />
+            {item.items.map(sub => (
+              <NavSubLink key={sub.url} link={sub} siblings={item.items} pathname={pathname} search={search} />
             ))}
           </SidebarMenuSub>
         </CollapsibleContent>
@@ -231,7 +218,13 @@ function NavSubLink({
   return (
     <SidebarMenuSubItem>
       <SidebarMenuSubButton asChild isActive={active}>
-        <a href={link.url} title={link.title} onClick={() => setOpenMobile(false)} onPointerEnter={prefetch} onFocus={prefetch}>
+        <a
+          href={link.url}
+          title={link.title}
+          onClick={() => setOpenMobile(false)}
+          onPointerEnter={prefetch}
+          onFocus={prefetch}
+        >
           {link.icon && <link.icon aria-hidden />}
           <span>{link.title}</span>
         </a>
@@ -260,18 +253,16 @@ function NavCollapsibleDropdown({
             tooltip={item.markerLabel ? `${item.title} · ${item.markerLabel}` : item.title}
           >
             {item.icon && <item.icon aria-hidden />}
-            <span data-sidebar-label title={item.title}>{item.title}</span>
+            <span data-sidebar-label title={item.title}>
+              {item.title}
+            </span>
             <ChevronRight aria-hidden data-sidebar-label className="ms-auto" />
           </SidebarMenuButton>
         </DropdownMenuTrigger>
-        <DropdownMenuContent
-          side={direction === "rtl" ? "left" : "right"}
-          align="start"
-          sideOffset={4}
-        >
+        <DropdownMenuContent side={direction === "rtl" ? "left" : "right"} align="start" sideOffset={4}>
           <DropdownMenuLabel>{item.title}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {item.items.map((sub) => (
+          {item.items.map(sub => (
             <NavDropdownLink key={sub.url} link={sub} active={isSubLinkActive(sub, item.items, pathname, search)} />
           ))}
         </DropdownMenuContent>
@@ -297,9 +288,9 @@ function useCollectionPrefetch(url: string): () => void {
     const target = new URL(url, "http://admin.local");
     const match = target.pathname.match(/^\/admin\/c\/([^/]+)\/?$/);
     if (!match) return;
-    void queryClient.prefetchInfiniteQuery(entriesQueryOptions(
-      entriesQueryArgsFromSearch(decodeURIComponent(match[1]!), target.searchParams),
-    ));
+    void queryClient.prefetchInfiniteQuery(
+      entriesQueryOptions(entriesQueryArgsFromSearch(decodeURIComponent(match[1]!), target.searchParams)),
+    );
   }, [queryClient, url]);
 }
 
@@ -307,7 +298,10 @@ function NavMarker({ item }: { item: NavLink | NavCollapsible }): React.ReactEle
   if (!item.marker) return null;
   const Marker = item.marker;
   const icon = (
-    <span data-sidebar-label className="inline-flex text-primary group-data-[active=true]/menu-button:text-sidebar-accent-foreground">
+    <span
+      data-sidebar-label
+      className="inline-flex text-primary group-data-[active=true]/menu-button:text-sidebar-accent-foreground"
+    >
       <Marker aria-hidden className="size-3.5" />
     </span>
   );
@@ -320,14 +314,13 @@ function NavMarker({ item }: { item: NavLink | NavCollapsible }): React.ReactEle
   );
 }
 
-export function isLinkActive(
-  link: NavLink,
-  pathname: string,
-  search: string,
-  collectionDescendant = false,
-): boolean {
+export function isLinkActive(link: NavLink, pathname: string, search: string, collectionDescendant = false): boolean {
   const url = new URL(link.url, "http://x");
-  if (url.pathname !== pathname && !(collectionDescendant && url.pathname.startsWith("/admin/c/") && pathname.startsWith(`${url.pathname}/`))) return false;
+  if (
+    url.pathname !== pathname &&
+    !(collectionDescendant && url.pathname.startsWith("/admin/c/") && pathname.startsWith(`${url.pathname}/`))
+  )
+    return false;
   // If the link includes any query string, every param it sets must match.
   if (!url.search) return true;
   const want = new URLSearchParams(url.search);
@@ -346,7 +339,7 @@ export function isSubLinkActive(
 ): boolean {
   if (!isLinkActive(link, pathname, search, true)) return false;
   if (new URL(link.url, "http://x").search) return true;
-  return !siblings.some((sibling) => {
+  return !siblings.some(sibling => {
     if (sibling.url === link.url || !new URL(sibling.url, "http://x").search) return false;
     return isLinkActive(sibling, pathname, search, true);
   });
@@ -356,13 +349,9 @@ export function isSubLinkActive(
 // pathname — regardless of query params. Lets a base path like /admin/c/posts
 // (no `?status`) keep its parent group active, even though no individual
 // sub-link with `?status=…` is the exact current URL.
-export function isGroupActive(
-  item: NavCollapsible,
-  pathname: string,
-  search: string,
-): boolean {
-  if (item.items.some((sub) => isLinkActive(sub, pathname, search, true))) return true;
-  return item.items.some((sub) => {
+export function isGroupActive(item: NavCollapsible, pathname: string, search: string): boolean {
+  if (item.items.some(sub => isLinkActive(sub, pathname, search, true))) return true;
+  return item.items.some(sub => {
     const url = new URL(sub.url, "http://x");
     return url.pathname === pathname;
   });

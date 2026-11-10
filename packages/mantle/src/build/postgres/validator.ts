@@ -11,9 +11,12 @@ import { PROFILES, validateIr as referenceIr, validateProgram as referenceProgra
 const REFUSED: Record<string, string> = {
   typeof: "typeof() is SQLite's; PostgreSQL has pg_typeof() with other names",
   hex: "hex() is SQLite's; PostgreSQL's encode() is not on the allowlist",
-  json_each: "json_each() is SQLite's: use jsonb_array_elements_text(x) WITH ORDINALITY AS j(value, n) for an array, or jsonb_each_text(x) WITH ORDINALITY AS j(key, value, n) for an object, in FROM",
+  json_each:
+    "json_each() is SQLite's: use jsonb_array_elements_text(x) WITH ORDINALITY AS j(value, n) for an array, or jsonb_each_text(x) WITH ORDINALITY AS j(key, value, n) for an object, in FROM",
   json_extract: "json_extract() is SQLite's: use x ->> 'key', x ->> 0 or x #>> '{a,b}'",
-  json_set: "json_set() is SQLite's: build the value with jsonb_build_object() or jsonb_build_array()", json_insert: "json_insert() is SQLite's: build the value with jsonb_build_object() or jsonb_build_array()", json_remove: "json_remove() is SQLite's: use x - 'key' to drop a key",
+  json_set: "json_set() is SQLite's: build the value with jsonb_build_object() or jsonb_build_array()",
+  json_insert: "json_insert() is SQLite's: build the value with jsonb_build_object() or jsonb_build_array()",
+  json_remove: "json_remove() is SQLite's: use x - 'key' to drop a key",
 };
 /** A `$` path as ->>'s key: SQLite reads it as a path, PostgreSQL as a key named `$.a`, silently NULL. */
 const DOLLAR_PATH = /^\$(?:[.[]|$)/;
@@ -24,13 +27,26 @@ function refuse(stmts: N[]): void {
     if (!v || typeof v !== "object") return;
     const a = v.A_Expr;
     const key = a?.rexpr?.A_Const?.sval?.sval;
-    if (a?.kind === "AEXPR_OP" && ["->>", "->"].includes(a.name?.at(-1)?.String?.sval) && typeof key === "string" && DOLLAR_PATH.test(key))
-      throw new SqlRefusal("SQL_UNSUPPORTED", `'${key}' is a SQLite JSON path: PostgreSQL reads it as a key named ${key}. Use x ->> 'key', x ->> 0 or x #>> '{a,b}'`, a.rexpr.A_Const.location ?? a.location);
+    if (
+      a?.kind === "AEXPR_OP" &&
+      ["->>", "->"].includes(a.name?.at(-1)?.String?.sval) &&
+      typeof key === "string" &&
+      DOLLAR_PATH.test(key)
+    )
+      throw new SqlRefusal(
+        "SQL_UNSUPPORTED",
+        `'${key}' is a SQLite JSON path: PostgreSQL reads it as a key named ${key}. Use x ->> 'key', x ->> 0 or x #>> '{a,b}'`,
+        a.rexpr.A_Const.location ?? a.location,
+      );
     const f = v.FuncCall;
     if (f) {
-      const name = f.funcname.map((x: N) => x.String?.sval).join(".").replace(/^pg_catalog\./, "");
+      const name = f.funcname
+        .map((x: N) => x.String?.sval)
+        .join(".")
+        .replace(/^pg_catalog\./, "");
       if (REFUSED[name]) throw new SqlRefusal("SQL_FUNCTION", REFUSED[name], f.location);
-      if (name === "json_array_length" && f.args?.length !== 1) throw new SqlRefusal("SQL_FUNCTION", "json_array_length() takes one argument on PostgreSQL", f.location);
+      if (name === "json_array_length" && f.args?.length !== 1)
+        throw new SqlRefusal("SQL_FUNCTION", "json_array_length() takes one argument on PostgreSQL", f.location);
     }
     Object.values(v).forEach(walk);
   };
@@ -38,7 +54,11 @@ function refuse(stmts: N[]): void {
 }
 
 /** The compile side: PostgreSQL's refusals first, so a SQLite spelling is answered with its PostgreSQL one, then the reference profile. */
-export function validateProgram(stmts: N[], ctx: SqlContext & { source?: string }, locs: (number | undefined)[] = []): void {
+export function validateProgram(
+  stmts: N[],
+  ctx: SqlContext & { source?: string },
+  locs: (number | undefined)[] = [],
+): void {
   refuse(stmts);
   referenceProgram(stmts, ctx, locs, PROFILES.reference);
 }

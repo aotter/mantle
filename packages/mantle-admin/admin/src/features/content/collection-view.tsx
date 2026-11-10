@@ -43,14 +43,7 @@ import { Checkbox } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
 import { Popover, PopoverContent, PopoverTrigger } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@aotter/mantle-ui/kit";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@aotter/mantle-ui/kit";
 import { useConfirm } from "../../ui/confirm-dialog";
 import { CollapsibleDescription, EmptyState, ErrorBox, LoadMore, PageHeader } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
@@ -58,12 +51,7 @@ import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { formatTimestampMs, idTail } from "./field-render";
-import {
-  boundOperationsFor,
-  CollectionOperations,
-  collectionOperationsFor,
-  RowOperationsMenu,
-} from "./row-operations";
+import { boundOperationsFor, CollectionOperations, collectionOperationsFor, RowOperationsMenu } from "./row-operations";
 import { workbenchParentScope } from "../ops/interaction-schema";
 import { renderDataValue, withNativeSchema } from "../../lib/render-data-value";
 import { DataCell } from "../../ui/data-cell";
@@ -108,10 +96,13 @@ function CollectionList({
   const { navigate } = useAdminRouter();
   const location = useAdminLocation();
   const queryClient = useQueryClient();
-  const exportFile = useMutation({ mutationFn: (path: string) => {
-    if (!collection) throw new Error("Collection metadata is unavailable.");
-    return downloadAdminFile(path);
-  }, meta: { invalidates: false } });
+  const exportFile = useMutation({
+    mutationFn: (path: string) => {
+      if (!collection) throw new Error("Collection metadata is unavailable.");
+      return downloadAdminFile(path);
+    },
+    meta: { invalidates: false },
+  });
   const params = new URLSearchParams(location.search);
   const status = params.get("status") ?? undefined;
   const searchTerm = params.get("search")?.trim() ?? "";
@@ -128,7 +119,7 @@ function CollectionList({
       return res.collections;
     },
   });
-  const collection = collectionsQuery.data?.find((c) => c.name === collectionName);
+  const collection = collectionsQuery.data?.find(c => c.name === collectionName);
   const appliesParentQuery = collection === undefined || collection.nav?.standalone === true;
   const parentFilter = scope?.value ?? (appliesParentQuery ? parentQuery : undefined);
   const resolvedScopeField = scope?.field ?? (parentFilter ? collection?.nav?.parentField : undefined);
@@ -168,8 +159,8 @@ function CollectionList({
   });
   // every page loaded, with the referenced titles of each (a page's titles are only those its rows reference)
   const displayedEntries = entries.data && {
-    items: entries.data.pages.flatMap((page) => page.items),
-    ref_titles: mergeRefTitles(entries.data.pages.map((page) => page.ref_titles)),
+    items: entries.data.pages.flatMap(page => page.items),
+    ref_titles: mergeRefTitles(entries.data.pages.map(page => page.ref_titles)),
   };
   const isLoadingEntries = entries.isFetching && !displayedEntries;
 
@@ -177,7 +168,7 @@ function CollectionList({
   const clearSelection = React.useCallback(() => setSelected(new Set()), []);
 
   const heading = collection
-    ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name
+    ? (resolveLocalizedText(collection.title, language, canonical) ?? collection.name)
     : collectionName;
   const isOperationalCollection = collection?.lifecycle !== "publishing";
   const isReadOnlyCollection = collection?.schema?.readOnly === true;
@@ -185,8 +176,8 @@ function CollectionList({
   const canCreateDraft = me.data?.admin === true && !isOperationalCollection && !isReadOnlyCollection;
   const showSelection = canManageContent && !isReadOnlyCollection;
   // the list always ends with its own sortable updated-at column, so a declared `updatedAt` is not shown twice
-  const dataColumns = isOperationalCollection ? (collection?.list?.columns ?? []).filter((c) => c !== "updatedAt") : [];
-  const collectionFilter = isOperationalCollection ? collection?.filter ?? null : null;
+  const dataColumns = isOperationalCollection ? (collection?.list?.columns ?? []).filter(c => c !== "updatedAt") : [];
+  const collectionFilter = isOperationalCollection ? (collection?.filter ?? null) : null;
   // an older descriptor without the field keeps the generic wording
   const searchesIdOnly = collection?.searchableFields?.length === 0;
   const listPath = pathBase ?? `/admin/c/${encodeURIComponent(collectionName)}`;
@@ -202,46 +193,48 @@ function CollectionList({
   };
   const listHref = (state: Parameters<typeof collectionHref>[1] = {}) =>
     collectionHref(listPath, { ...listState, ...state });
-  const listQueryFilter = collectionFilter ? {
-    name: collectionFilter.field,
-    label: propertyLabel(
-      collectionFilter.field,
-      collection?.schema?.properties?.[collectionFilter.field],
-      language,
-      canonical,
-    ),
-    value: filterField === collectionFilter.field ? filterValue : "",
-    allHref: listHref({ searchTerm, sortField, sortDirection, filterField: undefined, filterValue: undefined }),
-    options: collectionFilter.values.map((value) => ({
-      value,
-      label: optionLabel(collection?.schema?.properties?.[collectionFilter.field], value, language, canonical),
-      href: listHref({
-        searchTerm,
-        filterField: collectionFilter.field,
-        filterValue: value,
-        sortField,
-        sortDirection,
-      }),
-    })),
-  } : collection && !isOperationalCollection ? {
-    name: "status",
-    label: t(language, "collection.table.status"),
-    value: status,
-    allHref: listHref({ searchTerm, sortField, sortDirection, status: undefined }),
-    options: PUBLISHING_STATUSES.map((value) => ({
-      value,
-      label: statusLabel(language, value),
-      href: listHref({
-        status: value,
-        searchTerm,
-        sortField,
-        sortDirection,
-      }),
-    })),
-  } : null;
-  const titleField = isOperationalCollection
-    ? collection?.list?.primaryField ?? null
-    : null;
+  const listQueryFilter = collectionFilter
+    ? {
+        name: collectionFilter.field,
+        label: propertyLabel(
+          collectionFilter.field,
+          collection?.schema?.properties?.[collectionFilter.field],
+          language,
+          canonical,
+        ),
+        value: filterField === collectionFilter.field ? filterValue : "",
+        allHref: listHref({ searchTerm, sortField, sortDirection, filterField: undefined, filterValue: undefined }),
+        options: collectionFilter.values.map(value => ({
+          value,
+          label: optionLabel(collection?.schema?.properties?.[collectionFilter.field], value, language, canonical),
+          href: listHref({
+            searchTerm,
+            filterField: collectionFilter.field,
+            filterValue: value,
+            sortField,
+            sortDirection,
+          }),
+        })),
+      }
+    : collection && !isOperationalCollection
+      ? {
+          name: "status",
+          label: t(language, "collection.table.status"),
+          value: status,
+          allHref: listHref({ searchTerm, sortField, sortDirection, status: undefined }),
+          options: PUBLISHING_STATUSES.map(value => ({
+            value,
+            label: statusLabel(language, value),
+            href: listHref({
+              status: value,
+              searchTerm,
+              sortField,
+              sortDirection,
+            }),
+          })),
+        }
+      : null;
+  const titleField = isOperationalCollection ? (collection?.list?.primaryField ?? null) : null;
   const titleColumnLabel = titleField
     ? propertyLabel(titleField, collection?.schema?.properties?.[titleField], language, canonical)
     : t(language, "collection.table.title");
@@ -262,8 +255,7 @@ function CollectionList({
     onSuccess: clearSelection,
   });
   const deleteMutation = useMutation({
-    mutationFn: (id: string) =>
-      api.delete<{ removed: boolean }>(entryApiPath(collectionName, id)),
+    mutationFn: (id: string) => api.delete<{ removed: boolean }>(entryApiPath(collectionName, id)),
     onSuccess: clearSelection,
   });
   // POST an empty draft and land in the schema-driven editor — no
@@ -272,11 +264,9 @@ function CollectionList({
     mutationFn: () =>
       api.post<EntryEditorPayload>("/entries", {
         collection: collectionName,
-        data: resolvedScopeField && resolvedScopeValue
-          ? { [resolvedScopeField]: resolvedScopeValue }
-          : {},
+        data: resolvedScopeField && resolvedScopeValue ? { [resolvedScopeField]: resolvedScopeValue } : {},
       }),
-    onSuccess: (payload) => {
+    onSuccess: payload => {
       const path = hasFoldedChildCollections(collectionsQuery.data ?? [], collectionName)
         ? entryEditPath(collectionName, payload.entry.id)
         : entryLandingPath(collectionName, payload.entry.id);
@@ -311,15 +301,9 @@ function CollectionList({
         {t(language, "collection.export")}
       </Button>
       {collection && canCreateDraft ? (
-        <Button
-          type="button"
-          onClick={() => createMutation.mutate()}
-          disabled={createMutation.isPending}
-        >
+        <Button type="button" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
           <Plus className="size-4" aria-hidden />
-          {createMutation.isPending
-            ? t(language, "crud.saving")
-            : t(language, "collection.create")}
+          {createMutation.isPending ? t(language, "crud.saving") : t(language, "collection.create")}
         </Button>
       ) : null}
       <CollectionOperations
@@ -329,24 +313,29 @@ function CollectionList({
         canonical={canonical}
         onSuccess={clearSelection}
       />
-      <Slot name={`list.actions:${collectionName}`} Default={Empty} props={{ collection: collectionName, selection: [] }} />
+      <Slot
+        name={`list.actions:${collectionName}`}
+        Default={Empty}
+        props={{ collection: collectionName, selection: [] }}
+      />
     </div>
   );
-  const header = layout === "page" ? (
-    <PageHeader
-      eyebrow={
-        <>
-          <a href="/admin" className="hover:underline">
-            {t(language, "collection.breadcrumb")}
-          </a>
-          <span className="mx-2 text-foreground/30">/</span>
-          <span className="text-foreground/70">{heading}</span>
-        </>
-      }
-      title={heading}
-      description={renderCollectionDescription(collection, language, canonical)}
-    />
-  ) : null;
+  const header =
+    layout === "page" ? (
+      <PageHeader
+        eyebrow={
+          <>
+            <a href="/admin" className="hover:underline">
+              {t(language, "collection.breadcrumb")}
+            </a>
+            <span className="mx-2 text-foreground/30">/</span>
+            <span className="text-foreground/70">{heading}</span>
+          </>
+        }
+        title={heading}
+        description={renderCollectionDescription(collection, language, canonical)}
+      />
+    ) : null;
 
   return (
     <div>
@@ -361,26 +350,30 @@ function CollectionList({
           searchValue={searchTerm}
           searchPlaceholder={searchesIdOnly ? t(language, "collection.searchIdPlaceholder") : undefined}
           filters={listQueryFilter ? [listQueryFilter] : []}
-          leading={collection.nav?.standalone && !scope ? (
-            <ParentScopeFilter
-              collection={collection}
-              selectedId={parentFilter}
-              language={language}
-              canonical={canonical}
-              onSelect={(id) => navigate(listHref({ parent: id }))}
-            />
-          ) : undefined}
+          leading={
+            collection.nav?.standalone && !scope ? (
+              <ParentScopeFilter
+                collection={collection}
+                selectedId={parentFilter}
+                language={language}
+                canonical={canonical}
+                onSelect={id => navigate(listHref({ parent: id }))}
+              />
+            ) : undefined
+          }
           actions={headerActions}
           onSubmit={({ search, filters }) => {
             const nextFilter = collectionFilter ? filters[collectionFilter.field] : undefined;
-            navigate(listHref({
-              status: isOperationalCollection ? status : filters.status || undefined,
-              searchTerm: search,
-              filterField: nextFilter ? collectionFilter?.field : undefined,
-              filterValue: nextFilter || undefined,
-              sortField,
-              sortDirection,
-            }));
+            navigate(
+              listHref({
+                status: isOperationalCollection ? status : filters.status || undefined,
+                searchTerm: search,
+                filterField: nextFilter ? collectionFilter?.field : undefined,
+                filterValue: nextFilter || undefined,
+                sortField,
+                sortDirection,
+              }),
+            );
           }}
         />
       ) : null}
@@ -393,15 +386,17 @@ function CollectionList({
           title={t(language, "collection.empty.title")}
           description={
             searchTerm
-              ? t(language, searchesIdOnly ? "collection.empty.searchIdOnly" : "collection.empty.search", { search: searchTerm })
-              : filterValue
-              ? t(language, "collection.empty.withStatus", {
-                  collection: heading,
-                  status: fieldLabel(filterValue),
+              ? t(language, searchesIdOnly ? "collection.empty.searchIdOnly" : "collection.empty.search", {
+                  search: searchTerm,
                 })
-              : status
-              ? t(language, "collection.empty.withStatus", { collection: heading, status })
-              : t(language, "collection.empty.all", { collection: heading })
+              : filterValue
+                ? t(language, "collection.empty.withStatus", {
+                    collection: heading,
+                    status: fieldLabel(filterValue),
+                  })
+                : status
+                  ? t(language, "collection.empty.withStatus", { collection: heading, status })
+                  : t(language, "collection.empty.all", { collection: heading })
           }
         />
       )}
@@ -424,14 +419,14 @@ function CollectionList({
                     <Checkbox
                       aria-label={t(language, "collection.table.selectAll")}
                       checked={
-                        displayedEntries.items.every((row) => selected.has(row.id))
+                        displayedEntries.items.every(row => selected.has(row.id))
                           ? true
-                          : displayedEntries.items.some((row) => selected.has(row.id))
+                          : displayedEntries.items.some(row => selected.has(row.id))
                             ? "indeterminate"
                             : false
                       }
-                      onCheckedChange={(checked) => {
-                        setSelected((prev) => {
+                      onCheckedChange={checked => {
+                        setSelected(prev => {
                           const next = new Set(prev);
                           for (const row of displayedEntries.items) {
                             if (typeof row.version !== "number" || !Number.isSafeInteger(row.version)) continue;
@@ -453,31 +448,35 @@ function CollectionList({
                   href={sortHref(listPath, listState, "id", sortField, sortDirection)}
                 />
                 {!isOperationalCollection || titleField ? (
-                  titleField && collection?.sortableFields?.includes(titleField)
-                    ? <SortableTableHead
-                        label={titleColumnLabel}
-                        field={titleField}
-                        activeField={sortField}
-                        direction={sortDirection}
-                        href={sortHref(listPath, listState, titleField, sortField, sortDirection)}
-                      />
-                    : <TableHead>{titleColumnLabel}</TableHead>
+                  titleField && collection?.sortableFields?.includes(titleField) ? (
+                    <SortableTableHead
+                      label={titleColumnLabel}
+                      field={titleField}
+                      activeField={sortField}
+                      direction={sortDirection}
+                      href={sortHref(listPath, listState, titleField, sortField, sortDirection)}
+                    />
+                  ) : (
+                    <TableHead>{titleColumnLabel}</TableHead>
+                  )
                 ) : null}
                 {isOperationalCollection ? (
-                  dataColumns.map((name) => (
-                    collection?.sortableFields?.includes(name)
-                      ? <SortableTableHead
-                          key={name}
-                          label={propertyLabel(name, collection?.schema?.properties?.[name], language, canonical)}
-                          field={name}
-                          activeField={sortField}
-                          direction={sortDirection}
-                          href={sortHref(listPath, listState, name, sortField, sortDirection)}
-                        />
-                      : <TableHead key={name}>
-                          {propertyLabel(name, collection?.schema?.properties?.[name], language, canonical)}
-                        </TableHead>
-                  ))
+                  dataColumns.map(name =>
+                    collection?.sortableFields?.includes(name) ? (
+                      <SortableTableHead
+                        key={name}
+                        label={propertyLabel(name, collection?.schema?.properties?.[name], language, canonical)}
+                        field={name}
+                        activeField={sortField}
+                        direction={sortDirection}
+                        href={sortHref(listPath, listState, name, sortField, sortDirection)}
+                      />
+                    ) : (
+                      <TableHead key={name}>
+                        {propertyLabel(name, collection?.schema?.properties?.[name], language, canonical)}
+                      </TableHead>
+                    ),
+                  )
                 ) : (
                   <>
                     <SortableTableHead
@@ -511,7 +510,7 @@ function CollectionList({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {displayedEntries.items.map((row) => (
+              {displayedEntries.items.map(row => (
                 <EntryRowDisplay
                   key={row.id}
                   row={row}
@@ -524,23 +523,21 @@ function CollectionList({
                   boundOperations={boundOperations}
                   onOperationSuccess={clearSelection}
                   selected={selected.has(row.id)}
-                  onToggleSelect={(checked) => {
-                    setSelected((prev) => {
+                  onToggleSelect={checked => {
+                    setSelected(prev => {
                       const next = new Set(prev);
                       if (checked) next.add(row.id);
                       else next.delete(row.id);
                       return next;
                     });
                   }}
-                  onRename={(title) => titleMutation.mutateAsync({ id: row.id, title, version: row.version })}
+                  onRename={title => titleMutation.mutateAsync({ id: row.id, title, version: row.version })}
                   onDelete={() => deleteMutation.mutateAsync(row.id)}
                   busy={
                     (titleMutation.isPending && titleMutation.variables?.id === row.id) ||
                     (deleteMutation.isPending && deleteMutation.variables === row.id)
                   }
-                  canEdit={
-                    !isReadOnlyCollection && canManageContent
-                  }
+                  canEdit={!isReadOnlyCollection && canManageContent}
                   canDelete={canManageContent && !isReadOnlyCollection}
                 />
               ))}
@@ -592,7 +589,7 @@ function BulkActionBar({
       description: t(language, "collection.bulk.deleteConfirm", { count: String(selectedIds.length) }),
     });
     if (!ok) return;
-    void runBulk((id) => api.delete(entryApiPath(collection?.name ?? "", id)));
+    void runBulk(id => api.delete(entryApiPath(collection?.name ?? "", id)));
   }
 
   return (
@@ -601,7 +598,11 @@ function BulkActionBar({
         {t(language, "collection.bulk.selectedCount", { count: String(selectedIds.length) })}
       </span>
       <div className="ml-auto flex items-center gap-2">
-        <Slot name={`list.actions:${collection?.name ?? ""}`} Default={Empty} props={{ collection: collection?.name ?? "", selection: selectedIds }} />
+        <Slot
+          name={`list.actions:${collection?.name ?? ""}`}
+          Default={Empty}
+          props={{ collection: collection?.name ?? "", selection: selectedIds }}
+        />
         {canPublish ? (
           <>
             <Button
@@ -609,9 +610,7 @@ function BulkActionBar({
               variant="secondary"
               size="sm"
               disabled={pending}
-              onClick={() =>
-                void runBulk((id) => api.post(entryApiPath(collection!.name, id, "/publish"), {}))
-              }
+              onClick={() => void runBulk(id => api.post(entryApiPath(collection!.name, id, "/publish"), {}))}
             >
               {t(language, "collection.bulk.publish")}
             </Button>
@@ -620,21 +619,13 @@ function BulkActionBar({
               variant="secondary"
               size="sm"
               disabled={pending}
-              onClick={() =>
-                void runBulk((id) => api.post(entryApiPath(collection!.name, id, "/unpublish"), {}))
-              }
+              onClick={() => void runBulk(id => api.post(entryApiPath(collection!.name, id, "/unpublish"), {}))}
             >
               {t(language, "collection.bulk.unpublish")}
             </Button>
           </>
         ) : null}
-        <Button
-          type="button"
-          variant="destructive"
-          size="sm"
-          disabled={pending}
-          onClick={() => void bulkDelete()}
-        >
+        <Button type="button" variant="destructive" size="sm" disabled={pending} onClick={() => void bulkDelete()}>
           {t(language, "collection.bulk.delete")}
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={onClear}>
@@ -657,7 +648,9 @@ function renderCollectionDescription(
   language: AdminLanguage,
   canonical: string | null,
 ): React.ReactNode {
-  const resolvedTitle = collection ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name : "";
+  const resolvedTitle = collection
+    ? (resolveLocalizedText(collection.title, language, canonical) ?? collection.name)
+    : "";
   const raw = resolveLocalizedText(collection?.description, language, canonical)?.trim();
   const summaryKey = collectionSummaryKey(collection);
   if (!raw) return t(language, summaryKey, { name: resolvedTitle });
@@ -725,9 +718,8 @@ function sortHref(
   return collectionHref(path, {
     ...state,
     sortField: field,
-    sortDirection: activeField === field
-      ? (direction === "asc" ? "desc" : "asc")
-      : (field === "updatedAt" ? "desc" : "asc"),
+    sortDirection:
+      activeField === field ? (direction === "asc" ? "desc" : "asc") : field === "updatedAt" ? "desc" : "asc",
   });
 }
 
@@ -760,7 +752,8 @@ function SortableTableHead({
 /** The referenced titles of every page loaded, field by field. */
 export function mergeRefTitles(pages: ReadonlyArray<RefTitles | undefined>): RefTitles {
   const all: Record<string, RefTitles[string]> = {};
-  for (const titles of pages) for (const [field, byValue] of Object.entries(titles ?? {})) all[field] = { ...all[field], ...byValue };
+  for (const titles of pages)
+    for (const [field, byValue] of Object.entries(titles ?? {})) all[field] = { ...all[field], ...byValue };
   return all;
 }
 
@@ -788,10 +781,10 @@ function ParentScopeFilter({
       return res.collections;
     },
   });
-  const parentCollection = collectionsQuery.data?.find((item) => item.name === parentName);
+  const parentCollection = collectionsQuery.data?.find(item => item.name === parentName);
   const parentLabel = parentCollection
-    ? resolveLocalizedText(parentCollection.title, language, canonical) ?? parentCollection.name
-    : parentName ?? parentField;
+    ? (resolveLocalizedText(parentCollection.title, language, canonical) ?? parentCollection.name)
+    : (parentName ?? parentField);
   const selected = useQuery<EntryEditorPayload>({
     queryKey: ["entry-editor", selectedId],
     queryFn: () => api.get<EntryEditorPayload>(entryApiPath(parentName!, selectedId!)),
@@ -815,10 +808,10 @@ function ParentScopeFilter({
     ? renderTitleText(
         (parentCollection?.list?.primaryField
           ? selected.data.entry.data[parentCollection.list.primaryField]
-          : undefined)
-          ?? selected.data.entry.data.title
-          ?? selected.data.entry.data.name
-          ?? selected.data.entry.id,
+          : undefined) ??
+          selected.data.entry.data.title ??
+          selected.data.entry.data.name ??
+          selected.data.entry.id,
         language,
       )
     : undefined;
@@ -840,40 +833,48 @@ function ParentScopeFilter({
           aria-label={t(language, "collection.parentFilterPlaceholder", { name: parentLabel })}
           value={term}
           placeholder={t(language, "collection.parentFilterPlaceholder", { name: parentLabel })}
-          onChange={(event) => setTerm(event.target.value)}
+          onChange={event => setTerm(event.target.value)}
         />
         {selectedId ? (
-          <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={() => {
-            onSelect(undefined);
-            setOpen(false);
-          }}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="justify-start"
+            onClick={() => {
+              onSelect(undefined);
+              setOpen(false);
+            }}
+          >
             <X aria-hidden />
             {t(language, "collection.parentFilterClear")}
           </Button>
         ) : null}
         {options.data ? (
           <ul className="max-h-56 overflow-y-auto text-sm">
-          {options.data.items.length === 0 ? (
-            <li className="px-3 py-2 text-muted-foreground">{t(language, "collection.empty.title")}</li>
-          ) : options.data.items.map((row) => {
-            const label = listRowTitle(row, parentCollection, language);
-            return (
-              <li key={row.id}>
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left hover:bg-accent"
-                  onClick={() => {
-                    onSelect(row.id);
-                    setTerm("");
-                    setOpen(false);
-                  }}
-                >
-                  <span className="truncate">{label || row.id}</span>
-                  <span className="font-mono text-xs text-muted-foreground">{idTail(row.id)}</span>
-                </button>
-              </li>
-            );
-          })}
+            {options.data.items.length === 0 ? (
+              <li className="px-3 py-2 text-muted-foreground">{t(language, "collection.empty.title")}</li>
+            ) : (
+              options.data.items.map(row => {
+                const label = listRowTitle(row, parentCollection, language);
+                return (
+                  <li key={row.id}>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left hover:bg-accent"
+                      onClick={() => {
+                        onSelect(row.id);
+                        setTerm("");
+                        setOpen(false);
+                      }}
+                    >
+                      <span className="truncate">{label || row.id}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{idTail(row.id)}</span>
+                    </button>
+                  </li>
+                );
+              })
+            )}
           </ul>
         ) : null}
       </PopoverContent>
@@ -884,11 +885,8 @@ function ParentScopeFilter({
 function EntriesSkeleton(): React.ReactElement {
   return (
     <div className="overflow-hidden rounded-lg border">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div
-          key={i}
-          className="flex items-center gap-4 border-b p-3 last:border-b-0"
-        >
+      {[0, 1, 2, 3, 4].map(i => (
+        <div key={i} className="flex items-center gap-4 border-b p-3 last:border-b-0">
           <Skeleton className="h-3 w-16" />
           <Skeleton className="h-3 flex-1" />
           <Skeleton className="h-6 w-20 rounded-full" />
@@ -954,8 +952,9 @@ function EntryRowDisplay({
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const prefetchEntry = React.useCallback(() => {
-    void queryClient.fetchQuery(entryEditorQueryOptions(row.collection, row.id))
-      .then((payload) => {
+    void queryClient
+      .fetchQuery(entryEditorQueryOptions(row.collection, row.id))
+      .then(payload => {
         const childQuery = entryLandingChildQueryOptions(payload);
         if (childQuery) return queryClient.prefetchInfiniteQuery(childQuery);
       })
@@ -1022,78 +1021,110 @@ function EntryRowDisplay({
             aria-label={t(language, "collection.table.selectRow", { name: itemName })}
             disabled={!supportedVersion}
             checked={selected}
-            onCheckedChange={(checked) => onToggleSelect(checked === true)}
+            onCheckedChange={checked => onToggleSelect(checked === true)}
           />
         </TableCell>
       ) : null}
       <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
         <IdValue value={String(row.id)} language={language} />
       </TableCell>
-      {!isOperational || primaryField ? <TableCell className="max-w-[28rem]">
-        <div className="min-w-44 md:min-w-64">
-          {isOperational ? (
-            isIdField(primaryField ?? "", primarySchema) && typeof primaryValue === "string"
-              ? <IdValue value={primaryValue} language={language} href={entryLandingPath(row.collection, row.id)} />
-              : <a
+      {!isOperational || primaryField ? (
+        <TableCell className="max-w-[28rem]">
+          <div className="min-w-44 md:min-w-64">
+            {isOperational ? (
+              isIdField(primaryField ?? "", primarySchema) && typeof primaryValue === "string" ? (
+                <IdValue value={primaryValue} language={language} href={entryLandingPath(row.collection, row.id)} />
+              ) : (
+                <a
                   href={entryLandingPath(row.collection, row.id)}
                   className="block truncate font-medium hover:underline"
                   title={itemName}
                 >
                   {renderDataValue(primarySchema, primaryValue, language, canonical)}
                 </a>
-          ) : editing ? (
-            <div className="flex items-center gap-1">
-              <Input
-                className="h-8 min-w-0 flex-1"
-                value={draftTitle}
-                autoFocus
-                disabled={busy}
-                onChange={(event) => setDraftTitle(event.target.value)}
-                onBlur={() => void saveTitle()}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void saveTitle();
-                  if (event.key === "Escape") {
+              )
+            ) : editing ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  className="h-8 min-w-0 flex-1"
+                  value={draftTitle}
+                  autoFocus
+                  disabled={busy}
+                  onChange={event => setDraftTitle(event.target.value)}
+                  onBlur={() => void saveTitle()}
+                  onKeyDown={event => {
+                    if (event.key === "Enter") void saveTitle();
+                    if (event.key === "Escape") {
+                      setDraftTitle(itemName);
+                      setEditing(false);
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  title={t(language, "crud.saveTitle")}
+                  disabled={busy}
+                  onMouseDown={event => event.preventDefault()}
+                  onClick={() => void saveTitle()}
+                >
+                  <Check className="size-3.5" aria-hidden />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  title={t(language, "crud.cancelTitle")}
+                  disabled={busy}
+                  onMouseDown={event => event.preventDefault()}
+                  onClick={() => {
                     setDraftTitle(itemName);
                     setEditing(false);
-                  }
-                }}
-              />
-              <Button type="button" variant="ghost" size="icon-sm" title={t(language, "crud.saveTitle")} disabled={busy} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveTitle()}>
-                <Check className="size-3.5" aria-hidden />
-              </Button>
-              <Button type="button" variant="ghost" size="icon-sm" title={t(language, "crud.cancelTitle")} disabled={busy} onMouseDown={(event) => event.preventDefault()} onClick={() => { setDraftTitle(itemName); setEditing(false); }}>
-                <X className="size-3.5" aria-hidden />
-              </Button>
-            </div>
-          ) : canEdit ? (
-            <button
-              type="button"
-              className="group inline-flex max-w-full items-center gap-2 text-left"
-              onClick={() => setEditing(true)}
-              title={itemName}
-            >
-              <span className="truncate">{renderTitle(row.title, language)}</span>
-              <PencilLine className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" aria-hidden />
-            </button>
-          ) : (
-            <a
-              href={entryLandingPath(row.collection, row.id)}
-              className="block truncate font-medium hover:underline"
-              title={itemName}
-            >
-              {renderTitle(row.title, language)}
-            </a>
-          )}
-          {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
-        </div>
-      </TableCell> : null}
+                  }}
+                >
+                  <X className="size-3.5" aria-hidden />
+                </Button>
+              </div>
+            ) : canEdit ? (
+              <button
+                type="button"
+                className="group inline-flex max-w-full items-center gap-2 text-left"
+                onClick={() => setEditing(true)}
+                title={itemName}
+              >
+                <span className="truncate">{renderTitle(row.title, language)}</span>
+                <PencilLine
+                  className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60"
+                  aria-hidden
+                />
+              </button>
+            ) : (
+              <a
+                href={entryLandingPath(row.collection, row.id)}
+                className="block truncate font-medium hover:underline"
+                title={itemName}
+              >
+                {renderTitle(row.title, language)}
+              </a>
+            )}
+            {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+          </div>
+        </TableCell>
+      ) : null}
       {dataColumns ? (
-        dataColumns.map((name) => {
+        dataColumns.map(name => {
           const schema = withNativeSchema(name, collection?.schema?.properties?.[name]);
           const value = row.data_preview?.[name];
           return (
             <TableCell key={name} className="text-muted-foreground">
-              <DataCell names={[`cell:${collection?.name ?? ""}.${name}`]} field={name} value={value} row={row.data_preview ?? {}} property={schema} />
+              <DataCell
+                names={[`cell:${collection?.name ?? ""}.${name}`]}
+                field={name}
+                value={value}
+                row={row.data_preview ?? {}}
+                property={schema}
+              />
             </TableCell>
           );
         })
@@ -1105,17 +1136,13 @@ function EntryRowDisplay({
           {collection && (collection.localized || collection.hasTranslations) ? (
             <TableCell>
               {collection.hasTranslations ? (
-                <LocaleStatusBadges
-                  locales={siteLocales}
-                  available={row.translation_locales}
-                  language={language}
-                />
-              ) : <LocaleBadge locale={row.locale} />}
+                <LocaleStatusBadges locales={siteLocales} available={row.translation_locales} language={language} />
+              ) : (
+                <LocaleBadge locale={row.locale} />
+              )}
             </TableCell>
           ) : null}
-          <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
-            v{row.version}
-          </TableCell>
+          <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">v{row.version}</TableCell>
         </>
       )}
       <TableCell className="hidden text-muted-foreground md:table-cell">
@@ -1145,7 +1172,20 @@ function EntryRowDisplay({
             </Button>
           )}
           {canDelete ? (
-            <Button type="button" variant="ghost" size="icon-sm" title={deleteLock ? deleteLock.lock === PUBLISHING_LOCK ? t(language, "crud.unpublishToDelete") : t(language, "entryEdit.locked", { message: deleteLock.message }) : t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy || !!deleteLock} onClick={() => void remove()}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              title={
+                deleteLock
+                  ? deleteLock.lock === PUBLISHING_LOCK
+                    ? t(language, "crud.unpublishToDelete")
+                    : t(language, "entryEdit.locked", { message: deleteLock.message })
+                  : t(language, "crud.deleteTooltip", { name: itemName })
+              }
+              disabled={busy || !!deleteLock}
+              onClick={() => void remove()}
+            >
               <Trash2 className="size-3.5" aria-hidden />
             </Button>
           ) : null}
@@ -1160,23 +1200,16 @@ function EntryRowDisplay({
           />
         </div>
         <span className="sr-only">
-          {collection ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name : ""}
+          {collection ? (resolveLocalizedText(collection.title, language, canonical) ?? collection.name) : ""}
         </span>
       </TableCell>
     </TableRow>
   );
 }
 
-function renderTitle(
-  title: unknown,
-  language: AdminLanguage,
-): React.ReactNode {
+function renderTitle(title: unknown, language: AdminLanguage): React.ReactNode {
   if (title == null || title === "") {
-    return (
-      <span className="text-muted-foreground">
-        {t(language, "collection.untitled")}
-      </span>
-    );
+    return <span className="text-muted-foreground">{t(language, "collection.untitled")}</span>;
   }
   if (typeof title === "string") return title;
   return <span className="font-mono text-xs">{JSON.stringify(title)}</span>;

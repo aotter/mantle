@@ -20,18 +20,30 @@ function DefaultCell({ value, property, field }: DefaultCellProps): React.ReactE
   const canonical = useQuery(siteQueryOptions()).data?.canonicalLocale ?? null;
   const schema = property as JsonSchema | undefined;
   const target = useRefTarget(field ?? "", value);
-  return <>{target && typeof value === "string"
-    ? <RefLink target={target} value={value} />
-    : isIdField(field ?? "", schema) && typeof value === "string"
-    ? <IdValue value={value} language={language} />
-    : renderDataValue(schema, value, language, canonical)}</>;
+  return (
+    <>
+      {target && typeof value === "string" ? (
+        <RefLink target={target} value={value} />
+      ) : isIdField(field ?? "", schema) && typeof value === "string" ? (
+        <IdValue value={value} language={language} />
+      ) : (
+        renderDataValue(schema, value, language, canonical)
+      )}
+    </>
+  );
 }
 
 /**
  * One value of a list or report, as Admin shows it unless the application's `cell:` slots replace it. `names` are the
  * slots that apply, the first nearest the built-in: a Schema field, then a View column.
  */
-export function DataCell({ names, field, value, row, property }: {
+export function DataCell({
+  names,
+  field,
+  value,
+  row,
+  property,
+}: {
   names: readonly string[];
   field: string;
   value: unknown;

@@ -26,18 +26,11 @@ function englishEmail(subject: string, lines: readonly string[]): EmailContent {
 }
 
 export function signInCodeEmail(code: string): EmailContent {
-  return englishEmail(`Your Mantle sign-in code: ${code}`, [
-    `Your one-time code is ${code}.`,
-    "It expires shortly.",
-  ]);
+  return englishEmail(`Your Mantle sign-in code: ${code}`, [`Your one-time code is ${code}.`, "It expires shortly."]);
 }
 
 export function signInLinkEmail(url: string): EmailContent {
-  return englishEmail("Your Mantle sign-in link", [
-    "Use this link to sign in:",
-    url,
-    "The link expires shortly.",
-  ]);
+  return englishEmail("Your Mantle sign-in link", ["Use this link to sign in:", url, "The link expires shortly."]);
 }
 
 export function adminInvitationEmail(role: string, signInUrl: string): EmailContent {

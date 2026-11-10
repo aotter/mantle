@@ -16,28 +16,30 @@ import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const packages = JSON.parse(execFileSync(
-  "pnpm",
-  ["--filter", "@aotter/mantle*", "list", "--depth", "-1", "--json"],
-  { cwd: root, encoding: "utf8" },
-)).filter((pkg) => !pkg.private).map((pkg) => [pkg.name, pkg.path]);
+const packages = JSON.parse(
+  execFileSync("pnpm", ["--filter", "@aotter/mantle*", "list", "--depth", "-1", "--json"], {
+    cwd: root,
+    encoding: "utf8",
+  }),
+)
+  .filter(pkg => !pkg.private)
+  .map(pkg => [pkg.name, pkg.path]);
 const separator = process.argv.indexOf("--");
 const args = separator < 0 ? process.argv.slice(2) : process.argv.slice(2, separator);
 // --pm npm | pnpm@<exact>: install the consumer (no lockfile either way) and run the command with that package
 // manager instead of the pnpm on PATH, as a user copying an example would.
 const pmAt = args.indexOf("--pm");
 const pm = pmAt < 0 ? null : args.splice(pmAt, 2)[1];
-if (pm !== null && pm !== "npm" && !/^pnpm@\d+\.\d+\.\d+$/.test(pm ?? "")) throw new Error("--pm takes npm or pnpm@<exact version>");
+if (pm !== null && pm !== "npm" && !/^pnpm@\d+\.\d+\.\d+$/.test(pm ?? ""))
+  throw new Error("--pm takes npm or pnpm@<exact version>");
 const npm = pm === "npm";
 const command = separator < 0 ? [] : process.argv.slice(separator + 1);
-const help = args.some((arg) => arg === "-h" || arg === "--help");
+const help = args.some(arg => arg === "-h" || arg === "--help");
 
 if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
   let rejected = false;
   try {
-    assertExactTarballResolutions("version: 0.0.11-alpha.63", new Map([
-      ["@aotter/mantle", "/tmp/exact-mantle.tgz"],
-    ]));
+    assertExactTarballResolutions("version: 0.0.11-alpha.63", new Map([["@aotter/mantle", "/tmp/exact-mantle.tgz"]]));
   } catch (error) {
     rejected = error.message.includes("exact tarball");
   }
@@ -48,8 +50,16 @@ if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
   }
   const archived = archiveProject(join(root, "docs/examples/reference-service"));
   const entries = execFileSync("tar", ["-tf", "-"], { input: archived.bytes, encoding: "utf8" }).split("\n");
-  if (!entries.includes("package.json") || entries.some((entry) => entry.includes("node_modules/") || /^(?:generated|dist)\//.test(entry) || entry === "worker-configuration.d.ts")) {
-    throw new Error("packed-consumer reference archive must contain authored source without dependencies or generated/build output");
+  if (
+    !entries.includes("package.json") ||
+    entries.some(
+      entry =>
+        entry.includes("node_modules/") || /^(?:generated|dist)\//.test(entry) || entry === "worker-configuration.d.ts",
+    )
+  ) {
+    throw new Error(
+      "packed-consumer reference archive must contain authored source without dependencies or generated/build output",
+    );
   }
   const probe = join(tmpdir(), "packed-consumer-peer-rules.json");
   writeFileSync(probe, `${JSON.stringify({ name: "probe", private: true }, null, 2)}\n`);
@@ -63,19 +73,16 @@ if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
   process.exit(0);
 }
 if (help) {
-  console.log("Usage: node scripts/check-packed-consumer.mjs [--pm npm|pnpm@<version>] --project <path> [--output <path>] -- <command> [args...]");
+  console.log(
+    "Usage: node scripts/check-packed-consumer.mjs [--pm npm|pnpm@<version>] --project <path> [--output <path>] -- <command> [args...]",
+  );
   process.exit(0);
 }
-const output = args.length === 4 && args[2] === "--output" && args[3]
-  ? resolve(root, args[3])
-  : null;
-if (
-  (args.length !== 2 && !output)
-  || args[0] !== "--project"
-  || !args[1]
-  || command.length === 0
-) {
-  throw new Error("Usage: node scripts/check-packed-consumer.mjs [--pm npm|pnpm@<version>] --project <path> [--output <path>] -- <command> [args...]");
+const output = args.length === 4 && args[2] === "--output" && args[3] ? resolve(root, args[3]) : null;
+if ((args.length !== 2 && !output) || args[0] !== "--project" || !args[1] || command.length === 0) {
+  throw new Error(
+    "Usage: node scripts/check-packed-consumer.mjs [--pm npm|pnpm@<version>] --project <path> [--output <path>] -- <command> [args...]",
+  );
 }
 const project = resolve(root, args[1]);
 if (!statSync(project, { throwIfNoEntry: false })?.isDirectory()) {
@@ -118,7 +125,7 @@ try {
     // That exact pnpm, first on PATH for both the install and the command.
     const tool = join(temp, "tool");
     mkdirSync(tool);
-    writeFileSync(join(tool, "package.json"), "{\"private\":true}\n");
+    writeFileSync(join(tool, "package.json"), '{"private":true}\n');
     run("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", pm], tool, true, env);
     env.PATH = `${join(tool, "node_modules", ".bin")}${delimiter}${process.env.PATH}`;
   }
@@ -128,7 +135,10 @@ try {
     const lock = JSON.parse(readFileSync(join(consumer, "package-lock.json"), "utf8"));
     for (const [name, tarball] of tarballs) {
       const resolved = lock.packages?.[`node_modules/${name}`]?.resolved;
-      if (!resolved?.startsWith("file:") || realpathSync(resolve(consumer, resolved.slice(5))) !== realpathSync(tarball)) {
+      if (
+        !resolved?.startsWith("file:") ||
+        realpathSync(resolve(consumer, resolved.slice(5))) !== realpathSync(tarball)
+      ) {
         throw new Error(`consumer lock did not resolve ${name} from its exact tarball (got ${resolved})`);
       }
     }
@@ -139,7 +149,10 @@ try {
     assertExactTarballResolutions(lockfile, tarballs);
   }
 
-  const installed = findInstalled(consumer, packages.map(([name]) => name));
+  const installed = findInstalled(
+    consumer,
+    packages.map(([name]) => name),
+  );
   let installedCount = 0;
   for (const [name] of packages) {
     const paths = installed.get(name) ?? [];
@@ -160,17 +173,21 @@ try {
 
   run(command[0], command.slice(1), consumer, false, env);
   complete = true;
-  console.log(JSON.stringify({
-    core_sha: coreSha,
-    consumer_sha: consumerSha,
-    consumer: basename(project),
-    consumer_path: prefix || ".",
-    package_manager: pm ?? "pnpm",
-    package_version: version,
-    run_artifact_sha256: Object.fromEntries(
-      [...tarballs].map(([name, path]) => [name, sha256(path)]),
+  console.log(
+    JSON.stringify(
+      {
+        core_sha: coreSha,
+        consumer_sha: consumerSha,
+        consumer: basename(project),
+        consumer_path: prefix || ".",
+        package_manager: pm ?? "pnpm",
+        package_version: version,
+        run_artifact_sha256: Object.fromEntries([...tarballs].map(([name, path]) => [name, sha256(path)])),
+      },
+      null,
+      2,
     ),
-  }, null, 2));
+  );
 } finally {
   if (!output || !complete) rmSync(temp, { recursive: true, force: true });
 }
@@ -188,18 +205,19 @@ function addOverrides(path, tarballs) {
   // Disposable consumer only — registry peer checks stay.
   manifest.pnpm.peerDependencyRules = {
     ...(manifest.pnpm.peerDependencyRules ?? {}),
-    allowAny: [...new Set([
-      ...(manifest.pnpm.peerDependencyRules?.allowAny ?? []),
-      ...tarballs.keys(),
-    ])],
+    allowAny: [...new Set([...(manifest.pnpm.peerDependencyRules?.allowAny ?? []), ...tarballs.keys()])],
   };
   writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
   // pnpm 10+ ignores the package.json "pnpm" field and reads these from pnpm-workspace.yaml.
   const workspace = join(dirname(path), "pnpm-workspace.yaml");
   if (!existsSync(workspace)) return;
   const yaml = readFileSync(workspace, "utf8");
-  if (/^(overrides|peerDependencyRules):/m.test(yaml)) throw new Error(`${workspace} already has overrides; merge them by hand`);
-  writeFileSync(workspace, `${yaml.trimEnd()}\noverrides: ${JSON.stringify(manifest.pnpm.overrides)}\npeerDependencyRules: ${JSON.stringify(manifest.pnpm.peerDependencyRules)}\n`);
+  if (/^(overrides|peerDependencyRules):/m.test(yaml))
+    throw new Error(`${workspace} already has overrides; merge them by hand`);
+  writeFileSync(
+    workspace,
+    `${yaml.trimEnd()}\noverrides: ${JSON.stringify(manifest.pnpm.overrides)}\npeerDependencyRules: ${JSON.stringify(manifest.pnpm.peerDependencyRules)}\n`,
+  );
 }
 
 // npm: a direct dependency and its override must carry the same spec, so both point at the tarball.
@@ -289,8 +307,12 @@ function isWithin(parent, child) {
 
 function archiveProject(directory) {
   const top = execFileSync("git", ["-C", directory, "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-  const prefix = execFileSync("git", ["-C", directory, "rev-parse", "--show-prefix"], { encoding: "utf8" }).trim().replace(/\/$/, "");
-  const bytes = execFileSync("git", ["-C", top, "archive", prefix ? `HEAD:${prefix}` : "HEAD"], { maxBuffer: 64 * 1024 * 1024 });
+  const prefix = execFileSync("git", ["-C", directory, "rev-parse", "--show-prefix"], { encoding: "utf8" })
+    .trim()
+    .replace(/\/$/, "");
+  const bytes = execFileSync("git", ["-C", top, "archive", prefix ? `HEAD:${prefix}` : "HEAD"], {
+    maxBuffer: 64 * 1024 * 1024,
+  });
   return { prefix, bytes };
 }
 

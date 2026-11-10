@@ -153,10 +153,23 @@ const UNCERTAIN_CODES: ReadonlySet<string> = new Set([
   "INTERNAL_ERROR",
 ]);
 const EDITABLE: ReadonlySet<InteractionPhase> = new Set([
-  "idle", "loading", "unreadable", "ready", "changedSinceList", "failed", "conflict", "uncertain",
+  "idle",
+  "loading",
+  "unreadable",
+  "ready",
+  "changedSinceList",
+  "failed",
+  "conflict",
+  "uncertain",
 ]);
 const SUBMITTABLE: ReadonlySet<InteractionPhase> = new Set(["ready", "failed"]);
-const REREADABLE: ReadonlySet<InteractionPhase> = new Set(["unreadable", "changedSinceList", "failed", "conflict", "uncertain"]);
+const REREADABLE: ReadonlySet<InteractionPhase> = new Set([
+  "unreadable",
+  "changedSinceList",
+  "failed",
+  "conflict",
+  "uncertain",
+]);
 const REFRESHABLE: ReadonlySet<InteractionPhase> = new Set(["unreadable", "ready", "changedSinceList", "failed"]);
 
 export function createInteractionController(options: InteractionControllerOptions): InteractionController {
@@ -164,12 +177,14 @@ export function createInteractionController(options: InteractionControllerOption
   const versionInput = interaction.version;
   const locks = versionInput !== undefined;
   for (const { input, field } of interaction.bind) {
-    if (!row || !(field in row)) throw new TypeError(`Input '${input}' is bound to row field '${field}', which the row does not carry.`);
+    if (!row || !(field in row))
+      throw new TypeError(`Input '${input}' is bound to row field '${field}', which the row does not carry.`);
   }
   const bound = Object.freeze(Object.fromEntries(interaction.bind.map(({ input, field }) => [input, row![field]])));
-  const listSnapshot: EntrySnapshot | null = row && typeof row["id"] === "string" && typeof row["version"] === "number"
-    ? Object.freeze({ id: row["id"], version: row["version"], data: Object.freeze({ ...row }) })
-    : null;
+  const listSnapshot: EntrySnapshot | null =
+    row && typeof row["id"] === "string" && typeof row["version"] === "number"
+      ? Object.freeze({ id: row["id"], version: row["version"], data: Object.freeze({ ...row }) })
+      : null;
   if (locks && !read && !listSnapshot) {
     throw new TypeError("An operation that locks a version needs a `read` or a row carrying id and version.");
   }
@@ -205,13 +220,21 @@ export function createInteractionController(options: InteractionControllerOption
     const next = { ...state, ...patch };
     state = Object.freeze({
       ...next,
-      dirty: next.touched.some((field) => !automatic.has(field)) && diff(shown(next.draft), next.reviewed?.data ?? {}).length > 0,
+      dirty:
+        next.touched.some(field => !automatic.has(field)) &&
+        diff(shown(next.draft), next.reviewed?.data ?? {}).length > 0,
       contested: contestedFields(next),
     });
     // A listener's failure is reported, never allowed to interrupt a
     // transition or the other listeners.
     for (const listener of [...listeners]) {
-      try { listener(); } catch (error) { queueMicrotask(() => { throw error; }); }
+      try {
+        listener();
+      } catch (error) {
+        queueMicrotask(() => {
+          throw error;
+        });
+      }
     }
   };
   const begin = () => {
@@ -280,7 +303,7 @@ export function createInteractionController(options: InteractionControllerOption
 
     async refresh() {
       if (!REFRESHABLE.has(state.phase)) return;
-      await readInto((fresh) => {
+      await readInto(fresh => {
         if (state.phase === "unreadable") return confirm(fresh);
         if (state.latest && fresh.version < state.latest.version) return {};
         if (!state.reviewed) return { reviewed: fresh };
@@ -297,19 +320,25 @@ export function createInteractionController(options: InteractionControllerOption
       const latest = state.latest;
       // Untouched prefilled fields follow the newer entry; the person's own
       // edits stay, and `contested` has already shown where they collide.
-      const draft = Object.fromEntries(Object.entries(state.draft).map(([field, value]) =>
-        state.touched.includes(field) || !(field in latest.data) ? [field, value] : [field, latest.data[field]]));
+      const draft = Object.fromEntries(
+        Object.entries(state.draft).map(([field, value]) =>
+          state.touched.includes(field) || !(field in latest.data) ? [field, value] : [field, latest.data[field]],
+        ),
+      );
       set({ phase: "ready", reviewed: latest, latest: null, draft: Object.freeze(draft), diagnostics: [] });
     },
 
     async reread() {
       if (!REREADABLE.has(state.phase)) return;
       const from = state.phase;
-      await readInto((fresh) => {
-        const next = confirm(fresh);
-        // A refusal that did not come from a moved version stays visible.
-        return from === "conflict" && next.phase === "ready" ? { ...next, phase: "failed" } : next;
-      }, { phase: from === "uncertain" ? "uncertain" : "unreadable" });
+      await readInto(
+        fresh => {
+          const next = confirm(fresh);
+          // A refusal that did not come from a moved version stays visible.
+          return from === "conflict" && next.phase === "ready" ? { ...next, phase: "failed" } : next;
+        },
+        { phase: from === "uncertain" ? "uncertain" : "unreadable" },
+      );
     },
 
     acknowledgeUncertain() {
@@ -340,11 +369,13 @@ export function createInteractionController(options: InteractionControllerOption
         return;
       }
       const { diagnostics } = outcome;
-      const phase: InteractionPhase = diagnostics.some(isUncertain) ? "uncertain"
-        // Only a version lock makes a conflict recoverable by review; any
-        // other CONFLICT (a unique key, a state rule, a Schema lock) is a refusal to fix.
-        : locks && diagnostics.some((diagnostic) => diagnostic.code === "CONFLICT" && diagnostic.kind !== "lock") ? "conflict"
-        : "failed";
+      const phase: InteractionPhase = diagnostics.some(isUncertain)
+        ? "uncertain"
+        : // Only a version lock makes a conflict recoverable by review; any
+          // other CONFLICT (a unique key, a state rule, a Schema lock) is a refusal to fix.
+          locks && diagnostics.some(diagnostic => diagnostic.code === "CONFLICT" && diagnostic.kind !== "lock")
+          ? "conflict"
+          : "failed";
       set({ phase, diagnostics });
     },
 
@@ -361,28 +392,32 @@ export function createInteractionController(options: InteractionControllerOption
     latestChanges() {
       if (!state.reviewed || !state.latest) return [];
       return comparable(state.reviewed, state.latest)
-        .filter((field) => !same(state.reviewed!.data[field], state.latest!.data[field]))
-        .map((field) => ({ field, before: state.reviewed!.data[field], after: state.latest!.data[field] }));
+        .filter(field => !same(state.reviewed!.data[field], state.latest!.data[field]))
+        .map(field => ({ field, before: state.reviewed!.data[field], after: state.latest!.data[field] }));
     },
   };
 }
 
 function isUncertain(diagnostic: InteractionDiagnostic): boolean {
-  return UNCERTAIN_CODES.has(diagnostic.code)
-    || diagnostic.failure?.outcome === "unknown"
-    || diagnostic.failure?.outcome === "partial";
+  return (
+    UNCERTAIN_CODES.has(diagnostic.code) ||
+    diagnostic.failure?.outcome === "unknown" ||
+    diagnostic.failure?.outcome === "partial"
+  );
 }
 
 function contestedFields(state: InteractionState): string[] {
   if (!state.reviewed || !state.latest) return [];
   const fields = new Set(comparable(state.reviewed, state.latest));
-  return state.touched.filter((field) => fields.has(field) && !same(state.reviewed!.data[field], state.latest!.data[field]));
+  return state.touched.filter(
+    field => fields.has(field) && !same(state.reviewed!.data[field], state.latest!.data[field]),
+  );
 }
 
 /** Fields both snapshots carry. A list row is a projection, so a field it
  *  lacks is unknown, not changed. */
 function comparable(reviewed: EntrySnapshot, latest: EntrySnapshot): string[] {
-  return Object.keys(latest.data).filter((field) => field !== "version" && field in reviewed.data);
+  return Object.keys(latest.data).filter(field => field !== "version" && field in reviewed.data);
 }
 
 function diff(draft: Readonly<Record<string, unknown>>, before: Readonly<Record<string, unknown>>): FieldChange[] {
@@ -398,8 +433,10 @@ function same(a: unknown, b: unknown): boolean {
   if (Array.isArray(a) !== Array.isArray(b)) return false;
   const keysA = Object.keys(a);
   const keysB = Object.keys(b);
-  return keysA.length === keysB.length
-    && keysA.every((key) => same((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]));
+  return (
+    keysA.length === keysB.length &&
+    keysA.every(key => same((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]))
+  );
 }
 
 function freeze(entry: EntrySnapshot): EntrySnapshot {

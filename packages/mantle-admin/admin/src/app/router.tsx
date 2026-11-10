@@ -72,7 +72,10 @@ export function createNavigator(win: Pick<Window, "location" | "history">, show:
   /** Asks, unless a newer attempt has started meanwhile: only the latest answer acts. */
   const confirmed = (ask: LeaveCheck): Promise<boolean> => {
     const mine = ++attempt;
-    return ask().then((leave) => leave && mine === attempt, () => false);
+    return ask().then(
+      leave => leave && mine === attempt,
+      () => false,
+    );
   };
   return {
     /** Takes the current entry's index, or stamps it: before the first navigation, once mounted. */
@@ -83,7 +86,9 @@ export function createNavigator(win: Pick<Window, "location" | "history">, show:
     },
     block(next: LeaveCheck): () => void {
       check = next;
-      return () => { if (check === next) check = null; };
+      return () => {
+        if (check === next) check = null;
+      };
     },
     navigate(href: string, opts: { replace?: boolean } = {}): Promise<boolean> {
       const ask = check;
@@ -92,7 +97,7 @@ export function createNavigator(win: Pick<Window, "location" | "history">, show:
         go(href, opts.replace ?? false);
         return Promise.resolve(true);
       }
-      return confirmed(ask).then((leave) => {
+      return confirmed(ask).then(leave => {
         if (leave) go(href, opts.replace ?? false);
         return leave;
       });
@@ -116,7 +121,7 @@ export function createNavigator(win: Pick<Window, "location" | "history">, show:
       }
       const delta = target - index;
       win.history.go(-delta);
-      void confirmed(ask).then((leave) => {
+      void confirmed(ask).then(leave => {
         if (!leave) return;
         redoTo = index + delta;
         win.history.go(delta);
@@ -125,17 +130,20 @@ export function createNavigator(win: Pick<Window, "location" | "history">, show:
   };
 }
 
-const serverNavigator = { start: () => {}, block: () => () => {}, navigate: () => Promise.resolve(false), popped: () => {} };
+const serverNavigator = {
+  start: () => {},
+  block: () => () => {},
+  navigate: () => Promise.resolve(false),
+  popped: () => {},
+};
 
-export function AdminRouterProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}): React.ReactElement {
+export function AdminRouterProvider({ children }: { children: React.ReactNode }): React.ReactElement {
   const [location, setLocation] = React.useState<AdminLocation>(readLocation);
-  const [navigator] = React.useState(() => typeof window === "undefined"
-    ? serverNavigator
-    : createNavigator(window, (next) => flushSync(() => setLocation(next))));
+  const [navigator] = React.useState(() =>
+    typeof window === "undefined"
+      ? serverNavigator
+      : createNavigator(window, next => flushSync(() => setLocation(next))),
+  );
   const navigate = navigator.navigate;
 
   React.useEffect(() => {
@@ -174,11 +182,7 @@ export function AdminRouterProvider({
     [location, navigate, navigator],
   );
 
-  return (
-    <AdminRouterContext.Provider value={value}>
-      {children}
-    </AdminRouterContext.Provider>
-  );
+  return <AdminRouterContext.Provider value={value}>{children}</AdminRouterContext.Provider>;
 }
 
 export function useAdminRouter(): AdminRouterContextValue {
@@ -200,12 +204,18 @@ export function useAdminLocation(): AdminLocation {
 export function useLeaveGuard(active: boolean, ask: LeaveCheck): void {
   const { block } = useAdminRouter();
   const latest = React.useRef(ask);
-  React.useEffect(() => { latest.current = ask; });
-  React.useEffect(() => active ? guardLeaving(window, block, () => latest.current()) : undefined, [active, block]);
+  React.useEffect(() => {
+    latest.current = ask;
+  });
+  React.useEffect(() => (active ? guardLeaving(window, block, () => latest.current()) : undefined), [active, block]);
 }
 
 /** The guard `useLeaveGuard` holds while active; returns its release. */
-export function guardLeaving(win: Pick<Window, "addEventListener" | "removeEventListener">, block: (check: LeaveCheck) => () => void, ask: LeaveCheck): () => void {
+export function guardLeaving(
+  win: Pick<Window, "addEventListener" | "removeEventListener">,
+  block: (check: LeaveCheck) => () => void,
+  ask: LeaveCheck,
+): () => void {
   const onBeforeUnload = (event: Event): void => {
     event.preventDefault();
     // older browsers show the prompt only when returnValue is set

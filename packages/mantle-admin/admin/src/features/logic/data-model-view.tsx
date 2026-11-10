@@ -1,15 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Check,
-  Copy,
-  KeyRound,
-  Languages,
-  Link2,
-  ListTree,
-  Search,
-  type LucideIcon,
-} from "lucide-react";
+import { Check, Copy, KeyRound, Languages, Link2, ListTree, Search, type LucideIcon } from "lucide-react";
 
 import { t } from "../../app/i18n";
 import type { AdminLanguage } from "../../app/preferences";
@@ -17,11 +8,7 @@ import { usePreferences } from "../../app/preferences";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { developerConsoleQueryOptions } from "../../lib/queries";
-import type {
-  DeveloperSchemaModel,
-  DeveloperViewModel,
-  JsonSchema,
-} from "../../lib/types";
+import type { DeveloperSchemaModel, DeveloperViewModel, JsonSchema } from "../../lib/types";
 import { mantleRefOf } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { ErrorBox } from "../../ui/page";
@@ -87,17 +74,43 @@ export function schemaFieldMarkers(
 ): SchemaFieldMarker[] {
   const sourceId = `Schema:${model.name}`;
   return [
-    ...(field.reference ? [{ kind: "reference" as const, target: field.reference, sourceId, pointer: `${field.pointer}/x-mantle-ref` }] : []),
-    ...(model.translates?.on === field.path ? [{ kind: "translation" as const, target: `${model.translates.parent}.${field.path}`, direction: "outgoing" as const, sourceId, pointer: "/spec/translates" }] : []),
-    ...schemas.flatMap((schema) => schema.translates?.parent === model.name && schema.translates.on === field.path
-      ? [{ kind: "translation" as const, target: `${schema.name}.${field.path}`, direction: "incoming" as const, sourceId: `Schema:${schema.name}`, pointer: "/spec/translates" }]
+    ...(field.reference
+      ? [{ kind: "reference" as const, target: field.reference, sourceId, pointer: `${field.pointer}/x-mantle-ref` }]
       : []),
-    ...model.uniqueIndexes.flatMap((fields, index) => fields.includes(field.path)
-      ? [{ kind: "unique" as const, index, fields, sourceId, pointer: `/spec/uniqueIndexes/${index}` }]
+    ...(model.translates?.on === field.path
+      ? [
+          {
+            kind: "translation" as const,
+            target: `${model.translates.parent}.${field.path}`,
+            direction: "outgoing" as const,
+            sourceId,
+            pointer: "/spec/translates",
+          },
+        ]
       : []),
-    ...model.indexes.flatMap((fields, index) => fields.includes(field.path)
-      ? [{ kind: "index" as const, index, fields, sourceId, pointer: `/spec/indexes/${index}` }]
-      : []),
+    ...schemas.flatMap(schema =>
+      schema.translates?.parent === model.name && schema.translates.on === field.path
+        ? [
+            {
+              kind: "translation" as const,
+              target: `${schema.name}.${field.path}`,
+              direction: "incoming" as const,
+              sourceId: `Schema:${schema.name}`,
+              pointer: "/spec/translates",
+            },
+          ]
+        : [],
+    ),
+    ...model.uniqueIndexes.flatMap((fields, index) =>
+      fields.includes(field.path)
+        ? [{ kind: "unique" as const, index, fields, sourceId, pointer: `/spec/uniqueIndexes/${index}` }]
+        : [],
+    ),
+    ...model.indexes.flatMap((fields, index) =>
+      fields.includes(field.path)
+        ? [{ kind: "index" as const, index, fields, sourceId, pointer: `/spec/indexes/${index}` }]
+        : [],
+    ),
   ];
 }
 
@@ -132,7 +145,7 @@ function schemaConstraints(schema: JsonSchema): string[] {
 }
 
 function displayValue(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
+  return typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
 }
 
 export function DataModelView(): React.ReactElement {
@@ -143,22 +156,33 @@ export function DataModelView(): React.ReactElement {
   const snapshot = useQuery(developerConsoleQueryOptions());
   const params = new URLSearchParams(location.search);
   const requestedId = params.get("selected");
-  const kind = location.pathname.endsWith("/views") || (location.pathname === "/admin/dev/model" && requestedId?.startsWith("View:")) ? "View" : "Schema";
+  const kind =
+    location.pathname.endsWith("/views") ||
+    (location.pathname === "/admin/dev/model" && requestedId?.startsWith("View:"))
+      ? "View"
+      : "Schema";
   const route = kind === "View" ? "/admin/dev/model/views" : "/admin/dev/model/schemas";
   const items: ModelItem[] = snapshot.data
     ? kind === "View"
-      ? snapshot.data.dataModel.views.map((model) => ({ kind, id: `View:${model.name}`, model }))
-      : snapshot.data.dataModel.schemas.map((model) => ({ kind, id: `Schema:${model.name}`, model }))
+      ? snapshot.data.dataModel.views.map(model => ({ kind, id: `View:${model.name}`, model }))
+      : snapshot.data.dataModel.schemas.map(model => ({ kind, id: `Schema:${model.name}`, model }))
     : [];
-  const selected = items.find((item) => item.id === requestedId) ?? items[0] ?? null;
+  const selected = items.find(item => item.id === requestedId) ?? items[0] ?? null;
   const requestedTab = params.get("tab");
-  const tab: ModelTab = requestedTab === "raw" || requestedTab === "manifest" || requestedTab === "data" ? requestedTab : "definition";
+  const tab: ModelTab =
+    requestedTab === "raw" || requestedTab === "manifest" || requestedTab === "data" ? requestedTab : "definition";
   const manifestFocus = tab === "manifest" ? params.get("pointer") : null;
   const query = search.trim().toLowerCase();
   const visibleItems = query
-    ? items.filter((item) => `${item.kind} ${item.model.name} ${resolveLocalizedText(item.model.title, language) ?? ""}`.toLowerCase().includes(query))
+    ? items.filter(item =>
+        `${item.kind} ${item.model.name} ${resolveLocalizedText(item.model.title, language) ?? ""}`
+          .toLowerCase()
+          .includes(query),
+      )
     : items;
-  const select = (id: string): void => { void navigate(developerSelectionHref(route, id)); };
+  const select = (id: string): void => {
+    void navigate(developerSelectionHref(route, id));
+  };
   const openManifest = (id: string, pointer: string): void => {
     navigate(developerSelectionHref(route, id, { tab: "manifest", pointer }));
   };
@@ -167,33 +191,93 @@ export function DataModelView(): React.ReactElement {
     navigate(developerSelectionHref(route, selected!.id, next === "definition" ? undefined : { tab: next }));
   };
 
-  if (snapshot.isError) return <div className="p-6"><ErrorBox error={snapshot.error} /></div>;
+  if (snapshot.isError)
+    return (
+      <div className="p-6">
+        <ErrorBox error={snapshot.error} />
+      </div>
+    );
   if (snapshot.isLoading) return <Skeleton className="h-full w-full rounded-none" />;
   if (!snapshot.data || !selected) return <></>;
 
   return (
-    <DeveloperExplorer label={t(language, "model.title")} sidebarLabel={t(language, "model.objects")} sidebar={<ModelSidebar items={visibleItems} selectedId={selected.id} search={search} onSearch={setSearch} onSelect={select} />} selectedId={selected.id} graph={snapshot.data.graph}>
-      {selected.kind === "Schema"
-        ? <SchemaDefinition model={selected.model} schemas={snapshot.data.dataModel.schemas} tab={tab} manifestFocus={manifestFocus} onTabChange={selectTab} onOpenManifest={openManifest} />
-        : <ViewDefinition model={selected.model} tab={tab} manifestFocus={manifestFocus} onTabChange={selectTab} />}
+    <DeveloperExplorer
+      label={t(language, "model.title")}
+      sidebarLabel={t(language, "model.objects")}
+      sidebar={
+        <ModelSidebar
+          items={visibleItems}
+          selectedId={selected.id}
+          search={search}
+          onSearch={setSearch}
+          onSelect={select}
+        />
+      }
+      selectedId={selected.id}
+      graph={snapshot.data.graph}
+    >
+      {selected.kind === "Schema" ? (
+        <SchemaDefinition
+          model={selected.model}
+          schemas={snapshot.data.dataModel.schemas}
+          tab={tab}
+          manifestFocus={manifestFocus}
+          onTabChange={selectTab}
+          onOpenManifest={openManifest}
+        />
+      ) : (
+        <ViewDefinition model={selected.model} tab={tab} manifestFocus={manifestFocus} onTabChange={selectTab} />
+      )}
     </DeveloperExplorer>
   );
 }
 
-function ModelSidebar({ items, selectedId, search, onSearch, onSelect }: { items: ModelItem[]; selectedId: string; search: string; onSearch: (value: string) => void; onSelect: (id: string) => void }): React.ReactElement {
+function ModelSidebar({
+  items,
+  selectedId,
+  search,
+  onSearch,
+  onSelect,
+}: {
+  items: ModelItem[];
+  selectedId: string;
+  search: string;
+  onSearch: (value: string) => void;
+  onSelect: (id: string) => void;
+}): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <aside className="flex h-full min-h-0 flex-col border-e bg-sidebar text-sidebar-foreground" aria-label={t(language, "model.objects")}>
+    <aside
+      className="flex h-full min-h-0 flex-col border-e bg-sidebar text-sidebar-foreground"
+      aria-label={t(language, "model.objects")}
+    >
       <SidebarHeader className="border-b border-sidebar-border">
         <label className="relative">
-          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Search
+            className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
           <span className="sr-only">{t(language, "model.search")}</span>
-          <SidebarInput value={search} onChange={(event) => onSearch(event.currentTarget.value)} placeholder={t(language, "model.search")} className="ps-8" />
+          <SidebarInput
+            value={search}
+            onChange={event => onSearch(event.currentTarget.value)}
+            placeholder={t(language, "model.search")}
+            className="ps-8"
+          />
         </label>
       </SidebarHeader>
       <SidebarContent className="gap-0 p-2">
-        {items.map((item) => (
-          <button key={item.id} type="button" onClick={() => onSelect(item.id)} aria-pressed={item.id === selectedId} className={cn("block h-8 w-full truncate rounded-md px-2 text-start font-mono text-xs hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring", item.id === selectedId && "bg-sidebar-accent font-medium text-sidebar-accent-foreground")}>
+        {items.map(item => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSelect(item.id)}
+            aria-pressed={item.id === selectedId}
+            className={cn(
+              "block h-8 w-full truncate rounded-md px-2 text-start font-mono text-xs hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+              item.id === selectedId && "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
+            )}
+          >
             {item.model.name}
           </button>
         ))}
@@ -211,17 +295,47 @@ function DefinitionHeader({ name, title }: { name: string; title: string | null 
   );
 }
 
-function SchemaDefinition({ model, schemas, tab, manifestFocus, onTabChange, onOpenManifest }: { model: DeveloperSchemaModel; schemas: readonly DeveloperSchemaModel[]; tab: ModelTab; manifestFocus: string | null; onTabChange: (tab: string) => void; onOpenManifest: (id: string, pointer: string) => void }): React.ReactElement {
+function SchemaDefinition({
+  model,
+  schemas,
+  tab,
+  manifestFocus,
+  onTabChange,
+  onOpenManifest,
+}: {
+  model: DeveloperSchemaModel;
+  schemas: readonly DeveloperSchemaModel[];
+  tab: ModelTab;
+  manifestFocus: string | null;
+  onTabChange: (tab: string) => void;
+  onOpenManifest: (id: string, pointer: string) => void;
+}): React.ReactElement {
   const { language } = usePreferences();
   const fields = flattenSchemaFields(model.schema);
   return (
     <>
       <DefinitionHeader name={model.name} title={resolveLocalizedText(model.title, language)} />
-      <DefinitionTabs definitionLabel={t(language, "model.fields")} rawLabel={t(language, "model.rawSchema")} rawValue={model.schema} manifestValue={model.manifest} tab={tab} manifestFocus={manifestFocus} onTabChange={onTabChange} data={<SchemaDataPreview key={model.name} model={model} />}>
+      <DefinitionTabs
+        definitionLabel={t(language, "model.fields")}
+        rawLabel={t(language, "model.rawSchema")}
+        rawValue={model.schema}
+        manifestValue={model.manifest}
+        tab={tab}
+        manifestFocus={manifestFocus}
+        onTabChange={onTabChange}
+        data={<SchemaDataPreview key={model.name} model={model} />}
+      >
         <Table>
-          <TableHeader><TableRow><TableHead className="ps-5">{t(language, "model.path")}</TableHead><TableHead>{t(language, "model.type")}</TableHead><TableHead>{t(language, "model.required")}</TableHead><TableHead>{t(language, "model.constraints")}</TableHead></TableRow></TableHeader>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="ps-5">{t(language, "model.path")}</TableHead>
+              <TableHead>{t(language, "model.type")}</TableHead>
+              <TableHead>{t(language, "model.required")}</TableHead>
+              <TableHead>{t(language, "model.constraints")}</TableHead>
+            </TableRow>
+          </TableHeader>
           <TableBody>
-            {fields.map((field) => (
+            {fields.map(field => (
               <TableRow key={field.path}>
                 <TableCell className="ps-5">
                   <div className="flex items-center gap-2">
@@ -229,9 +343,15 @@ function SchemaDefinition({ model, schemas, tab, manifestFocus, onTabChange, onO
                     <FieldMarkers markers={schemaFieldMarkers(field, model, schemas)} onOpenManifest={onOpenManifest} />
                   </div>
                 </TableCell>
-                <TableCell><Badge variant="secondary" className="font-mono text-[10px]">{field.type}</Badge></TableCell>
+                <TableCell>
+                  <Badge variant="secondary" className="font-mono text-[10px]">
+                    {field.type}
+                  </Badge>
+                </TableCell>
                 <TableCell>{field.required ? t(language, "common.yes") : "—"}</TableCell>
-                <TableCell className="max-w-md whitespace-normal text-xs text-muted-foreground">{field.constraints.length ? field.constraints.join(" · ") : "—"}</TableCell>
+                <TableCell className="max-w-md whitespace-normal text-xs text-muted-foreground">
+                  {field.constraints.length ? field.constraints.join(" · ") : "—"}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -242,39 +362,106 @@ function SchemaDefinition({ model, schemas, tab, manifestFocus, onTabChange, onO
   );
 }
 
-function FieldMarkers({ markers, onOpenManifest }: { markers: readonly SchemaFieldMarker[]; onOpenManifest: (id: string, pointer: string) => void }): React.ReactElement {
+function FieldMarkers({
+  markers,
+  onOpenManifest,
+}: {
+  markers: readonly SchemaFieldMarker[];
+  onOpenManifest: (id: string, pointer: string) => void;
+}): React.ReactElement {
   const { language } = usePreferences();
-  return <span className="inline-flex items-center gap-1">{markers.map((marker) => {
-    const presentation = markerPresentation(language, marker);
-    const Icon = presentation.icon;
-    return (
-      <Tooltip key={`${marker.kind}:${marker.sourceId}:${marker.pointer}`}>
-        <TooltipTrigger asChild>
-          <button type="button" className={cn("inline-flex h-5 items-center gap-1 rounded border px-1 font-mono text-[9px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", presentation.tone)} aria-label={presentation.label} onClick={() => onOpenManifest(marker.sourceId, marker.pointer)}>
-            <Icon className="size-3" aria-hidden />
-            {presentation.short ? <span>{presentation.short}</span> : null}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>{presentation.label}</TooltipContent>
-      </Tooltip>
-    );
-  })}</span>;
+  return (
+    <span className="inline-flex items-center gap-1">
+      {markers.map(marker => {
+        const presentation = markerPresentation(language, marker);
+        const Icon = presentation.icon;
+        return (
+          <Tooltip key={`${marker.kind}:${marker.sourceId}:${marker.pointer}`}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex h-5 items-center gap-1 rounded border px-1 font-mono text-[9px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  presentation.tone,
+                )}
+                aria-label={presentation.label}
+                onClick={() => onOpenManifest(marker.sourceId, marker.pointer)}
+              >
+                <Icon className="size-3" aria-hidden />
+                {presentation.short ? <span>{presentation.short}</span> : null}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{presentation.label}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </span>
+  );
 }
 
-function markerPresentation(language: AdminLanguage, marker: SchemaFieldMarker): { icon: LucideIcon; label: string; short: string | null; tone: string } {
-  if (marker.kind === "reference") return { icon: Link2, label: t(language, "model.marker.reference", { target: marker.target }), short: null, tone: "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300" };
-  if (marker.kind === "translation") return { icon: Languages, label: t(language, marker.direction === "outgoing" ? "model.marker.translationParent" : "model.marker.translationChild", { target: marker.target }), short: null, tone: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300" };
-  if (marker.kind === "unique") return { icon: KeyRound, label: t(language, "model.marker.unique", { index: String(marker.index + 1), fields: marker.fields.join(" + ") }), short: `UQ${marker.index + 1}`, tone: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300" };
-  return { icon: ListTree, label: t(language, "model.marker.index", { index: String(marker.index + 1), fields: marker.fields.join(" + ") }), short: `IDX${marker.index + 1}`, tone: "border-border bg-muted/60 text-muted-foreground" };
+function markerPresentation(
+  language: AdminLanguage,
+  marker: SchemaFieldMarker,
+): { icon: LucideIcon; label: string; short: string | null; tone: string } {
+  if (marker.kind === "reference")
+    return {
+      icon: Link2,
+      label: t(language, "model.marker.reference", { target: marker.target }),
+      short: null,
+      tone: "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+    };
+  if (marker.kind === "translation")
+    return {
+      icon: Languages,
+      label: t(
+        language,
+        marker.direction === "outgoing" ? "model.marker.translationParent" : "model.marker.translationChild",
+        { target: marker.target },
+      ),
+      short: null,
+      tone: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+    };
+  if (marker.kind === "unique")
+    return {
+      icon: KeyRound,
+      label: t(language, "model.marker.unique", { index: String(marker.index + 1), fields: marker.fields.join(" + ") }),
+      short: `UQ${marker.index + 1}`,
+      tone: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    };
+  return {
+    icon: ListTree,
+    label: t(language, "model.marker.index", { index: String(marker.index + 1), fields: marker.fields.join(" + ") }),
+    short: `IDX${marker.index + 1}`,
+    tone: "border-border bg-muted/60 text-muted-foreground",
+  };
 }
 
-function ViewDefinition({ model, tab, manifestFocus, onTabChange }: { model: DeveloperViewModel; tab: ModelTab; manifestFocus: string | null; onTabChange: (tab: string) => void }): React.ReactElement {
+function ViewDefinition({
+  model,
+  tab,
+  manifestFocus,
+  onTabChange,
+}: {
+  model: DeveloperViewModel;
+  tab: ModelTab;
+  manifestFocus: string | null;
+  onTabChange: (tab: string) => void;
+}): React.ReactElement {
   const { language } = usePreferences();
   const query = model.query;
   return (
     <>
       <DefinitionHeader name={model.name} title={resolveLocalizedText(model.title, language)} />
-      <DefinitionTabs definitionLabel={t(language, "model.queryKind")} rawLabel={t(language, "model.rawQuery")} rawValue={query} manifestValue={model.manifest} tab={tab} manifestFocus={manifestFocus} onTabChange={onTabChange} data={<ViewDataPreview key={model.name} model={model} />}>
+      <DefinitionTabs
+        definitionLabel={t(language, "model.queryKind")}
+        rawLabel={t(language, "model.rawQuery")}
+        rawValue={query}
+        manifestValue={model.manifest}
+        tab={tab}
+        manifestFocus={manifestFocus}
+        onTabChange={onTabChange}
+        data={<ViewDataPreview key={model.name} model={model} />}
+      >
         <div className="space-y-5 p-5">
           <CodeBlock value={query.statement} />
           {query.params ? <RawSection label={t(language, "model.params")} value={query.params} /> : null}
@@ -285,33 +472,90 @@ function ViewDefinition({ model, tab, manifestFocus, onTabChange }: { model: Dev
 }
 
 export function FactGrid({ entries }: { entries: Array<[string, string]> }): React.ReactElement {
-  return <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">{entries.map(([label, value]) => <React.Fragment key={label}><dt className="text-muted-foreground">{label}</dt><dd className="break-words font-mono text-foreground">{value}</dd></React.Fragment>)}</dl>;
+  return (
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
+      {entries.map(([label, value]) => (
+        <React.Fragment key={label}>
+          <dt className="text-muted-foreground">{label}</dt>
+          <dd className="break-words font-mono text-foreground">{value}</dd>
+        </React.Fragment>
+      ))}
+    </dl>
+  );
 }
 
-function DefinitionTabs({ definitionLabel, rawLabel, rawValue, manifestValue, tab, manifestFocus, onTabChange, data, children }: { definitionLabel: string; rawLabel: string; rawValue: unknown; manifestValue: unknown; tab: ModelTab; manifestFocus: string | null; onTabChange: (tab: string) => void; data: React.ReactNode; children: React.ReactNode }): React.ReactElement {
+function DefinitionTabs({
+  definitionLabel,
+  rawLabel,
+  rawValue,
+  manifestValue,
+  tab,
+  manifestFocus,
+  onTabChange,
+  data,
+  children,
+}: {
+  definitionLabel: string;
+  rawLabel: string;
+  rawValue: unknown;
+  manifestValue: unknown;
+  tab: ModelTab;
+  manifestFocus: string | null;
+  onTabChange: (tab: string) => void;
+  data: React.ReactNode;
+  children: React.ReactNode;
+}): React.ReactElement {
   const { language } = usePreferences();
   return (
     <Tabs value={tab} onValueChange={onTabChange} className="gap-0">
       <TabsList variant="line" className="h-10 w-full justify-start rounded-none border-b px-5">
-        <TabsTrigger value="definition" className="flex-none px-3">{definitionLabel}</TabsTrigger>
-        <TabsTrigger value="raw" className="flex-none px-3">{rawLabel}</TabsTrigger>
-        <TabsTrigger value="manifest" className="flex-none px-3">{t(language, "model.manifest")}</TabsTrigger>
-        <TabsTrigger value="data" className="flex-none px-3">{t(language, "model.liveData")}</TabsTrigger>
+        <TabsTrigger value="definition" className="flex-none px-3">
+          {definitionLabel}
+        </TabsTrigger>
+        <TabsTrigger value="raw" className="flex-none px-3">
+          {rawLabel}
+        </TabsTrigger>
+        <TabsTrigger value="manifest" className="flex-none px-3">
+          {t(language, "model.manifest")}
+        </TabsTrigger>
+        <TabsTrigger value="data" className="flex-none px-3">
+          {t(language, "model.liveData")}
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="definition">{children}</TabsContent>
-      <TabsContent value="raw"><CodeTab value={rawValue} label={rawLabel} /></TabsContent>
-      <TabsContent value="manifest"><CodeTab value={manifestValue} label={t(language, "model.compiledManifest")} focus={manifestFocus} /></TabsContent>
+      <TabsContent value="raw">
+        <CodeTab value={rawValue} label={rawLabel} />
+      </TabsContent>
+      <TabsContent value="manifest">
+        <CodeTab value={manifestValue} label={t(language, "model.compiledManifest")} focus={manifestFocus} />
+      </TabsContent>
       <TabsContent value="data">{data}</TabsContent>
     </Tabs>
   );
 }
 
-export function CodeTab({ value, label, focus }: { value: unknown; label: string; focus?: string | null }): React.ReactElement {
+export function CodeTab({
+  value,
+  label,
+  focus,
+}: {
+  value: unknown;
+  label: string;
+  focus?: string | null;
+}): React.ReactElement {
   const raw = JSON.stringify(value, null, 2) ?? "";
   return (
     <div className="space-y-3 p-5">
-      {focus ? <div className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2"><div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div><code className="mt-1 block break-all text-xs font-medium text-foreground">{focus}</code></div> : null}
-      <div className="relative"><JsonCopyButton value={raw} label={label} /><CodeBlock value={raw} className="max-h-none pe-12" /></div>
+      {focus ? (
+        <div className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2">
+          <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
+          <code className="mt-1 block break-all text-xs font-medium text-foreground">{focus}</code>
+        </div>
+      ) : null}
+      <div className="relative">
+        <JsonCopyButton value={raw} label={label} />
+        <CodeBlock value={raw} className="max-h-none pe-12" />
+      </div>
     </div>
   );
 }
@@ -329,16 +573,38 @@ function JsonCopyButton({ value, label }: { value: string; label: string }): Rea
     }
   }
   return (
-    <Button type="button" variant="secondary" size="icon-sm" className="absolute end-2 top-2 z-10 shadow-sm" onClick={() => void copy()} aria-label={`${t(language, "common.copy")} ${label}`} aria-pressed={copied}>
+    <Button
+      type="button"
+      variant="secondary"
+      size="icon-sm"
+      className="absolute end-2 top-2 z-10 shadow-sm"
+      onClick={() => void copy()}
+      aria-label={`${t(language, "common.copy")} ${label}`}
+      aria-pressed={copied}
+    >
       {copied ? <Check className="text-[color:var(--success)]" aria-hidden /> : <Copy aria-hidden />}
     </Button>
   );
 }
 
 function RawSection({ label, value }: { label: string; value: unknown }): React.ReactElement {
-  return <section><h3 className="mb-2 text-sm font-medium">{label}</h3><CodeBlock value={JSON.stringify(value, null, 2) ?? ""} /></section>;
+  return (
+    <section>
+      <h3 className="mb-2 text-sm font-medium">{label}</h3>
+      <CodeBlock value={JSON.stringify(value, null, 2) ?? ""} />
+    </section>
+  );
 }
 
 export function CodeBlock({ value, className }: { value: string; className?: string }): React.ReactElement {
-  return <pre className={cn("max-h-72 overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-[11px] leading-5", className)}><code>{value}</code></pre>;
+  return (
+    <pre
+      className={cn(
+        "max-h-72 overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-[11px] leading-5",
+        className,
+      )}
+    >
+      <code>{value}</code>
+    </pre>
+  );
 }

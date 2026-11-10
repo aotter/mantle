@@ -1,5 +1,12 @@
 import * as React from "react";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData, type UseInfiniteQueryResult } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+  type UseInfiniteQueryResult,
+} from "@tanstack/react-query";
 import type { AdminBadge, AdminTypes } from "./define-admin";
 import { useAdminContext } from "./hooks-context";
 import { MAX_BADGE_VIEWS, createMcpAppTransport } from "./transport";
@@ -49,7 +56,10 @@ export interface AdminHost {
   /** `ui/message`: a user message in the conversation. */
   sendMessage(text: string): Promise<boolean>;
   /** `ui/update-model-context`: what the model should know at its next turn. */
-  updateModelContext(params: { readonly content?: readonly { readonly type: "text"; readonly text: string }[]; readonly structuredContent?: Readonly<Record<string, unknown>> }): Promise<boolean>;
+  updateModelContext(params: {
+    readonly content?: readonly { readonly type: "text"; readonly text: string }[];
+    readonly structuredContent?: Readonly<Record<string, unknown>>;
+  }): Promise<boolean>;
   /** `ui/request-display-mode`: the mode granted, or null when the host offers none other. */
   requestDisplayMode(mode: "inline" | "fullscreen" | "pip"): Promise<"inline" | "fullscreen" | "pip" | null>;
 }
@@ -83,8 +93,26 @@ export interface AdminTransport {
   /** Whether this surface can write: an MCP host without server tools is read-only. */
   readonly writable: boolean;
   /** Each read takes the query's `signal`: a cancelled refetch (a newer write's, an unmount) stops its request where the surface can. */
-  view(name: string, input: Row, page: { readonly limit?: number | undefined; readonly cursor?: string | undefined; readonly signal?: AbortSignal | undefined }, rowNames?: { readonly [column: string]: string }): Promise<Reply<{ readonly rows: readonly Row[]; readonly nextCursor?: string }>>;
-  entries(collection: string, options: { readonly filter?: { readonly field: string; readonly value: string } | undefined; readonly search?: string | undefined; readonly limit?: number | undefined; readonly cursor?: string | undefined; readonly signal?: AbortSignal | undefined }): Promise<Reply<{ readonly items: readonly AdminEntry<Row>[]; readonly nextCursor?: string }>>;
+  view(
+    name: string,
+    input: Row,
+    page: {
+      readonly limit?: number | undefined;
+      readonly cursor?: string | undefined;
+      readonly signal?: AbortSignal | undefined;
+    },
+    rowNames?: { readonly [column: string]: string },
+  ): Promise<Reply<{ readonly rows: readonly Row[]; readonly nextCursor?: string }>>;
+  entries(
+    collection: string,
+    options: {
+      readonly filter?: { readonly field: string; readonly value: string } | undefined;
+      readonly search?: string | undefined;
+      readonly limit?: number | undefined;
+      readonly cursor?: string | undefined;
+      readonly signal?: AbortSignal | undefined;
+    },
+  ): Promise<Reply<{ readonly items: readonly AdminEntry<Row>[]; readonly nextCursor?: string }>>;
   entry(collection: string, id: string, read?: ReadOptions): Promise<Reply<AdminEntry<Row>>>;
   total(collection: string, read?: ReadOptions): Promise<Reply<number>>;
   me(read?: ReadOptions): Promise<Reply<AdminMe>>;
@@ -177,16 +205,29 @@ export interface OperationState<I, O> {
  */
 export interface AdminHooks<T extends AdminTypes> {
   /** `GET /admin/api/views/{name}`, or the View's admin MCP tool in a host. All pages loaded so far, appended in order: `loadMore()` fetches the next. */
-  useView<N extends keyof T["views"] & string>(name: N, input: T["views"][N]["input"], options?: ViewOptions): ViewState<T["views"][N]["row"]>;
+  useView<N extends keyof T["views"] & string>(
+    name: N,
+    input: T["views"][N]["input"],
+    options?: ViewOptions,
+  ): ViewState<T["views"][N]["row"]>;
   /** `GET /admin/api/entries`, appended page by page like `useView`. Browser only. */
-  useEntries<N extends keyof T["collections"] & string>(collection: N, options?: EntriesOptions<T["collections"][N]["data"]>): EntriesState<T["collections"][N]["data"]>;
+  useEntries<N extends keyof T["collections"] & string>(
+    collection: N,
+    options?: EntriesOptions<T["collections"][N]["data"]>,
+  ): EntriesState<T["collections"][N]["data"]>;
   /** `GET /admin/api/entries/{id}`. Browser only. */
-  useEntry<N extends keyof T["collections"] & string>(collection: N, id: string): EntryState<T["collections"][N]["data"]>;
+  useEntry<N extends keyof T["collections"] & string>(
+    collection: N,
+    id: string,
+  ): EntryState<T["collections"][N]["data"]>;
   /**
    * `POST /admin/api/operations/{name}`, or the operation's admin MCP tool in a host. A success refreshes Views, entries and
    * totals, once; `refresh` narrows the Views read again to the ones named.
    */
-  useOperation<N extends keyof T["operations"] & string>(name: N, options?: OperationOptions<T>): OperationState<T["operations"][N]["input"], T["operations"][N]["output"]>;
+  useOperation<N extends keyof T["operations"] & string>(
+    name: N,
+    options?: OperationOptions<T>,
+  ): OperationState<T["operations"][N]["input"], T["operations"][N]["output"]>;
   /** The `total` of `GET /admin/api/collections/{name}/statistics`. Browser only. */
   useCollectionTotal(collection: keyof T["collections"] & string): TotalState;
   /** `GET /admin/api/me`. Browser only. */
@@ -203,19 +244,28 @@ const statusOf = (query: { isPending: boolean; isError: boolean }, reply: Reply<
   query.isError ? "error" : query.isPending ? "loading" : reply?.status === "unavailable" ? "unavailable" : "ready";
 
 /** The accumulating state of an infinite query over a transport's `Reply` pages. */
-function useAccumulated<Page extends { readonly nextCursor?: string }, Item>(query: UseInfiniteQueryResult<InfiniteData<Reply<Page>>>, pick: (page: Page) => readonly Item[]) {
+function useAccumulated<Page extends { readonly nextCursor?: string }, Item>(
+  query: UseInfiniteQueryResult<InfiniteData<Reply<Page>>>,
+  pick: (page: Page) => readonly Item[],
+) {
   const first = query.data?.pages[0];
-  const list = React.useMemo(() => (query.data?.pages ?? []).flatMap(reply => reply.status === "ok" ? pick(reply.data) : []), [query.data]);
+  const list = React.useMemo(
+    () => (query.data?.pages ?? []).flatMap(reply => (reply.status === "ok" ? pick(reply.data) : [])),
+    [query.data],
+  );
   return {
     list,
     status: statusOf(query, first),
     hasMore: query.hasNextPage,
     // a refetch in flight (after a write) is not cancelled for the next page
-    loadMore: () => { if (query.hasNextPage && !query.isFetching) void query.fetchNextPage({ cancelRefetch: false }); },
+    loadMore: () => {
+      if (query.hasNextPage && !query.isFetching) void query.fetchNextPage({ cancelRefetch: false });
+    },
     loadingMore: query.isFetchingNextPage,
   };
 }
-const nextPage = (reply: Reply<{ readonly nextCursor?: string }>): string | undefined => reply.status === "ok" ? reply.data.nextCursor : undefined;
+const nextPage = (reply: Reply<{ readonly nextCursor?: string }>): string | undefined =>
+  reply.status === "ok" ? reply.data.nextCursor : undefined;
 
 const implementation = {
   useView(name: string, input: object, options: ViewOptions = {}): ViewState<object> {
@@ -224,7 +274,8 @@ const implementation = {
     const query = useInfiniteQuery({
       queryKey: ["view", name, "hook", transport.surface, input, options.limit],
       initialPageParam: undefined as string | undefined,
-      queryFn: ({ pageParam }) => transport.view(name, input as Row, { limit: options.limit, cursor: pageParam }, rowNames),
+      queryFn: ({ pageParam }) =>
+        transport.view(name, input as Row, { limit: options.limit, cursor: pageParam }, rowNames),
       getNextPageParam: nextPage,
     });
     const { list, ...state } = useAccumulated(query, page => page.rows);
@@ -243,10 +294,16 @@ const implementation = {
   },
   useEntry(collection: string, id: string): EntryState<object> {
     const { transport } = useAdminContext();
-    const query = useQuery({ queryKey: ["entry-editor", collection, id, "hook", transport.surface], queryFn: () => transport.entry(collection, id) });
+    const query = useQuery({
+      queryKey: ["entry-editor", collection, id, "hook", transport.surface],
+      queryFn: () => transport.entry(collection, id),
+    });
     return { entry: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
   },
-  useOperation(name: string, options: { readonly refresh?: readonly ViewRefresh[] } = {}): OperationState<object, unknown> {
+  useOperation(
+    name: string,
+    options: { readonly refresh?: readonly ViewRefresh[] } = {},
+  ): OperationState<object, unknown> {
     const { transport } = useAdminContext();
     const client = useQueryClient();
     const { refresh } = options;
@@ -259,14 +316,19 @@ const implementation = {
       // the shared cache: what Admin shows and what the application's own components read both refetch. The hook
       // refreshes on whichever client it runs under (an MCP App's has no global handler), so Admin's global
       // `MutationCache` handler skips it: one refetch per write, not a second one cancelling the first.
-      onSuccess: () => { void invalidateAfterWrite(client, refresh); },
+      onSuccess: () => {
+        void invalidateAfterWrite(client, refresh);
+      },
       meta: { invalidates: false },
     });
     return { run: transport.writable ? mutation.mutateAsync : undefined, pending: mutation.isPending };
   },
   useCollectionTotal(collection: string): TotalState {
     const { transport } = useAdminContext();
-    const query = useQuery({ queryKey: ["collection-statistics", collection, "total", transport.surface], queryFn: () => transport.total(collection) });
+    const query = useQuery({
+      queryKey: ["collection-statistics", collection, "total", transport.surface],
+      queryFn: () => transport.total(collection),
+    });
     return { total: query.data?.status === "ok" ? query.data.data : undefined, status: statusOf(query, query.data) };
   },
   useMe(): MeState {
@@ -280,14 +342,19 @@ const implementation = {
     const names = [...new Set(refs.map(ref => ref.view))].slice(0, MAX_BADGE_VIEWS);
     // the user is in the key: another identity never reads this one's counts
     const userId = me.data?.status === "ok" ? me.data.data.userId : undefined;
-    const query = useQuery({ queryKey: ["badges", userId, transport.surface, names], queryFn: () => transport.badges(names), enabled: names.length > 0 && userId !== undefined });
+    const query = useQuery({
+      queryKey: ["badges", userId, transport.surface, names],
+      queryFn: () => transport.badges(names),
+      enabled: names.length > 0 && userId !== undefined,
+    });
     return refs.map((ref): BadgeState => {
       if (!names.includes(ref.view)) return { count: undefined, status: "unavailable" };
       if (me.isError || query.isError) return { count: undefined, status: "error" };
-      if (me.isPending || query.isPending || userId === undefined) return { count: undefined, status: me.data?.status === "unavailable" ? "unavailable" : "loading" };
+      if (me.isPending || query.isPending || userId === undefined)
+        return { count: undefined, status: me.data?.status === "unavailable" ? "unavailable" : "loading" };
       const answer = query.data?.status === "ok" ? query.data.data[ref.view] : undefined;
       if (!answer || "unavailable" in answer) return { count: undefined, status: "unavailable" };
-      const count = "rows" in answer ? answer.rows.length ? Number(answer.rows[0]![ref.field]) : 0 : NaN;
+      const count = "rows" in answer ? (answer.rows.length ? Number(answer.rows[0]![ref.field]) : 0) : NaN;
       return Number.isFinite(count) ? { count, status: "ready" } : { count: undefined, status: "error" };
     });
   },
@@ -300,9 +367,12 @@ export function createAdminHooks<T extends AdminTypes = AdminTypes>(): AdminHook
 
 /** Untyped hooks for code that has no generated types, such as a component ejected from the default Admin. */
 export const useView: AdminHooks<AdminTypes>["useView"] = implementation.useView as AdminHooks<AdminTypes>["useView"];
-export const useEntries: AdminHooks<AdminTypes>["useEntries"] = implementation.useEntries as AdminHooks<AdminTypes>["useEntries"];
-export const useEntry: AdminHooks<AdminTypes>["useEntry"] = implementation.useEntry as AdminHooks<AdminTypes>["useEntry"];
-export const useOperation: AdminHooks<AdminTypes>["useOperation"] = implementation.useOperation as AdminHooks<AdminTypes>["useOperation"];
+export const useEntries: AdminHooks<AdminTypes>["useEntries"] =
+  implementation.useEntries as AdminHooks<AdminTypes>["useEntries"];
+export const useEntry: AdminHooks<AdminTypes>["useEntry"] =
+  implementation.useEntry as AdminHooks<AdminTypes>["useEntry"];
+export const useOperation: AdminHooks<AdminTypes>["useOperation"] =
+  implementation.useOperation as AdminHooks<AdminTypes>["useOperation"];
 export const useCollectionTotal: AdminHooks<AdminTypes>["useCollectionTotal"] = implementation.useCollectionTotal;
 export const useMe: AdminHooks<AdminTypes>["useMe"] = implementation.useMe;
 export const useBadges: AdminHooks<AdminTypes>["useBadges"] = implementation.useBadges;

@@ -1,6 +1,12 @@
 /** Trigger.spec and its sources: http and mcp. */
 import type { HttpMethod, TriggerManifest } from "../model/ManifestGrammar.js";
-import { ManifestParseError, V01_HTTP_METHODS, V01_MCP_TRIGGER_SURFACES, V01_TRIGGER_SOURCE_KINDS, rejectUnknownKeys } from "./ManifestFieldChecks.js";
+import {
+  ManifestParseError,
+  V01_HTTP_METHODS,
+  V01_MCP_TRIGGER_SURFACES,
+  V01_TRIGGER_SOURCE_KINDS,
+  rejectUnknownKeys,
+} from "./ManifestFieldChecks.js";
 
 function validateHttpSource(source: Record<string, unknown>, idx: number): void {
   rejectUnknownKeys(source, ["kind", "method", "path"], idx, "/spec/source");

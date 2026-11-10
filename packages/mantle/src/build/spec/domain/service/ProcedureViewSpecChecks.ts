@@ -1,7 +1,23 @@
 /** View.spec and Procedure.spec: input, cache, handler binding, and the `requires` authorization predicate. */
 import type { DiagnosticCode } from "../../kernel/diagnostic.js";
-import { HANDLER_STEP_KEYS, PROCEDURE_MCP_ANNOTATION_KEYS, PROCEDURE_TARGET_KEYS, VIEW_INPUT_RESERVED, stepProgram, type AuthPredicate, type HandlerStep, type JsonSchema, type ProcedureManifest, type ViewManifest } from "../model/ManifestGrammar.js";
-import { ManifestParseError, V01_VIEW_SURFACES, rejectUnknownKeys, validateLocalizedText } from "./ManifestFieldChecks.js";
+import {
+  HANDLER_STEP_KEYS,
+  PROCEDURE_MCP_ANNOTATION_KEYS,
+  PROCEDURE_TARGET_KEYS,
+  VIEW_INPUT_RESERVED,
+  stepProgram,
+  type AuthPredicate,
+  type HandlerStep,
+  type JsonSchema,
+  type ProcedureManifest,
+  type ViewManifest,
+} from "../model/ManifestGrammar.js";
+import {
+  ManifestParseError,
+  V01_VIEW_SURFACES,
+  rejectUnknownKeys,
+  validateLocalizedText,
+} from "./ManifestFieldChecks.js";
 import { checkFormUiSchema, checkViewAdminUi } from "./SchemaAdminUiChecker.js";
 import { validateJsonSchema } from "./SchemaSpecChecks.js";
 
@@ -105,7 +121,11 @@ export function validateProcedureSpec(m: ProcedureManifest, idx: number): Proced
   if (s["mcp"] !== undefined) {
     const mcp = s["mcp"];
     if (typeof mcp !== "object" || mcp === null || Array.isArray(mcp)) {
-      throw new ManifestParseError("Procedure.spec.mcp must be an object of boolean tool annotations", idx, "/spec/mcp");
+      throw new ManifestParseError(
+        "Procedure.spec.mcp must be an object of boolean tool annotations",
+        idx,
+        "/spec/mcp",
+      );
     }
     rejectUnknownKeys(mcp as Record<string, unknown>, [...PROCEDURE_MCP_ANNOTATION_KEYS], idx, "/spec/mcp");
     for (const key of PROCEDURE_MCP_ANNOTATION_KEYS) {
@@ -116,24 +136,16 @@ export function validateProcedureSpec(m: ProcedureManifest, idx: number): Proced
     }
     const hints = mcp as { readOnlyHint?: boolean; destructiveHint?: boolean };
     if (hints.readOnlyHint === true && hints.destructiveHint === true) {
-      throw new ManifestParseError("Procedure.spec.mcp cannot be both readOnlyHint: true and destructiveHint: true", idx, "/spec/mcp");
+      throw new ManifestParseError(
+        "Procedure.spec.mcp cannot be both readOnlyHint: true and destructiveHint: true",
+        idx,
+        "/spec/mcp",
+      );
     }
   }
   if (s["target"] !== undefined) validateProcedureTargetShape(s["target"], idx);
-  validateLocalizedText(
-    s["title"],
-    idx,
-    "/spec/title",
-    "Procedure.spec.title",
-    false,
-  );
-  validateLocalizedText(
-    s["description"],
-    idx,
-    "/spec/description",
-    "Procedure.spec.description",
-    false,
-  );
+  validateLocalizedText(s["title"], idx, "/spec/title", "Procedure.spec.title", false);
+  validateLocalizedText(s["description"], idx, "/spec/description", "Procedure.spec.description", false);
   if (typeof s["input"] !== "object" || s["input"] === null) {
     throw new ManifestParseError("Procedure.spec.input is required (JSON Schema)", idx, "/spec/input");
   }
@@ -189,7 +201,7 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
   // The numbered form never shipped in a stable release (#1775); it was replaced before 0.2.1 (#1874).
   if ("mustWrite" in h) {
     throw new ManifestParseError(
-      "Procedure.spec.handler.mustWrite was replaced by handler.steps[].onNoRows: conflict (#1874). Write the program as steps, one statement each, and mark the set op that must write: handler: { steps: [{ sql: \"INSERT INTO … SELECT … WHERE …\", onNoRows: conflict }, { sql: \"UPDATE …\" }] }",
+      'Procedure.spec.handler.mustWrite was replaced by handler.steps[].onNoRows: conflict (#1874). Write the program as steps, one statement each, and mark the set op that must write: handler: { steps: [{ sql: "INSERT INTO … SELECT … WHERE …", onNoRows: conflict }, { sql: "UPDATE …" }] }',
       idx,
       "/spec/handler/mustWrite",
     );
@@ -207,20 +219,36 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
   if (key === "steps") {
     const steps = h["steps"];
     if (!Array.isArray(steps) || steps.length === 0) {
-      throw new ManifestParseError("Procedure.spec.handler.steps must be a non-empty list of steps, each { sql, onNoRows? }", idx, "/spec/handler/steps");
+      throw new ManifestParseError(
+        "Procedure.spec.handler.steps must be a non-empty list of steps, each { sql, onNoRows? }",
+        idx,
+        "/spec/handler/steps",
+      );
     }
     for (const [i, step] of steps.entries()) {
       const at = `/spec/handler/steps/${i}`;
       if (typeof step !== "object" || step === null || Array.isArray(step)) {
-        throw new ManifestParseError(`Procedure.spec.handler.steps[${i}] must be an object { sql, onNoRows? }`, idx, at);
+        throw new ManifestParseError(
+          `Procedure.spec.handler.steps[${i}] must be an object { sql, onNoRows? }`,
+          idx,
+          at,
+        );
       }
       rejectUnknownKeys(step as Record<string, unknown>, HANDLER_STEP_KEYS, idx, at);
       const { sql, onNoRows } = step as Record<string, unknown>;
       if (typeof sql !== "string" || sql.trim().length === 0) {
-        throw new ManifestParseError(`Procedure.spec.handler.steps[${i}].sql is required (one statement)`, idx, `${at}/sql`);
+        throw new ManifestParseError(
+          `Procedure.spec.handler.steps[${i}].sql is required (one statement)`,
+          idx,
+          `${at}/sql`,
+        );
       }
       if (onNoRows !== undefined && onNoRows !== "conflict") {
-        throw new ManifestParseError(`Procedure.spec.handler.steps[${i}].onNoRows must be \`conflict\`; got ${JSON.stringify(onNoRows)}`, idx, `${at}/onNoRows`);
+        throw new ManifestParseError(
+          `Procedure.spec.handler.steps[${i}].onNoRows must be \`conflict\`; got ${JSON.stringify(onNoRows)}`,
+          idx,
+          `${at}/onNoRows`,
+        );
       }
     }
     return;
@@ -258,35 +286,19 @@ function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View")
   const a = auth as Record<string, unknown>;
   rejectUnknownKeys(a, ["all"], idx, "/spec/requires/auth");
   if (!("all" in a)) {
-    throw new ManifestParseError(
-      `${atom}.spec.requires.auth must declare \`all\` (v0.1)`,
-      idx,
-    );
+    throw new ManifestParseError(`${atom}.spec.requires.auth must declare \`all\` (v0.1)`, idx);
   }
   const all = a["all"];
   if (!Array.isArray(all) || all.length === 0) {
-    throw new ManifestParseError(
-      `${atom}.spec.requires.auth.all must be a non-empty array`,
-      idx,
-    );
+    throw new ManifestParseError(`${atom}.spec.requires.auth.all must be a non-empty array`, idx);
   }
   for (let i = 0; i < all.length; i++) {
-    validateAuthPredicate(
-      all[i],
-      idx,
-      `${atom}.spec.requires.auth.all[${i}]`,
-      `/spec/requires/auth/all/${i}`,
-    );
+    validateAuthPredicate(all[i], idx, `${atom}.spec.requires.auth.all[${i}]`, `/spec/requires/auth/all/${i}`);
   }
 }
 
-function validateAuthPredicate(
-  p: unknown,
-  idx: number,
-  path: string,
-  pointer: string,
-): asserts p is AuthPredicate {
-  if (p === "ctx.staff" || typeof p === "object" && p !== null && "ctx.staff" in p)
+function validateAuthPredicate(p: unknown, idx: number, path: string, pointer: string): asserts p is AuthPredicate {
+  if (p === "ctx.staff" || (typeof p === "object" && p !== null && "ctx.staff" in p))
     throw new ManifestParseError(`${path}: 'ctx.staff' was renamed to 'ctx.admin'; replace it with 'ctx.admin'.`, idx);
   if (p === "ctx.user" || p === "ctx.auth" || p === "ctx.admin") return;
   if (typeof p === "object" && p !== null && !Array.isArray(p)) {
@@ -295,10 +307,7 @@ function validateAuthPredicate(
       rejectUnknownKeys(o, ["ctx.auth.scope"], idx, pointer);
       const scope = o["ctx.auth.scope"];
       if (typeof scope !== "string" || scope.length === 0) {
-        throw new ManifestParseError(
-          `${path}: 'ctx.auth.scope' value must be a non-empty string`,
-          idx,
-        );
+        throw new ManifestParseError(`${path}: 'ctx.auth.scope' value must be a non-empty string`, idx);
       }
       return;
     }

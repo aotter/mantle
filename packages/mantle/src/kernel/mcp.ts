@@ -5,8 +5,18 @@ import { linkApps, linkSurface, resourcesOf, type McpAppsSource } from "./mcp-ap
 // ponytail: a lazy forwarder keeps the public export without pulling paging and call code into every Worker's startup graph.
 type Call = typeof import("./mcp-call.js");
 export const callTool: Call["callTool"] = async (...args) => (await import("./mcp-call.js")).callTool(...args);
-export const callToolLazy: Call["callToolLazy"] = async (...args) => (await import("./mcp-call.js")).callToolLazy(...args);
-export type { McpApps, McpAppsSource, McpAppResource, McpAppRender, McpAppPage, McpAppCsp, NormalMcpApps, NormalMcpAppResource } from "./mcp-apps.js";
+export const callToolLazy: Call["callToolLazy"] = async (...args) =>
+  (await import("./mcp-call.js")).callToolLazy(...args);
+export type {
+  McpApps,
+  McpAppsSource,
+  McpAppResource,
+  McpAppRender,
+  McpAppPage,
+  McpAppCsp,
+  NormalMcpApps,
+  NormalMcpAppResource,
+} from "./mcp-apps.js";
 
 /** Options of a generated `mcp(...)`; it adds required `handlers` when the app declares ref Procedures. */
 export interface Options<Env, Database> extends GatewayOptions {
@@ -25,7 +35,12 @@ export interface Options<Env, Database> extends GatewayOptions {
   caller?: (request: Request, env: Env, authority: { readonly readOnly: boolean }) => Caller | Promise<Caller>;
   locale?: string;
   instructions?: string;
-  serverInfo?: { name?: string; title?: string; version?: string; icons?: { src: string; mimeType?: string; sizes?: string[]; theme?: "light" | "dark" }[] };
+  serverInfo?: {
+    name?: string;
+    title?: string;
+    version?: string;
+    icons?: { src: string; mimeType?: string; sizes?: string[]; theme?: "light" | "dark" }[];
+  };
   requiredScopes?: readonly string[];
   /** Additional scopes requested by an unauthenticated OAuth challenge (for example offline_access), not an API scope floor. */
   authorizationScopes?: readonly string[];
@@ -37,13 +52,34 @@ export interface Options<Env, Database> extends GatewayOptions {
   /** Tools per `tools/list` page: the result carries `nextCursor` while more remain. Unset, one page lists every tool. */
   toolsPageSize?: number;
 }
-export interface CallerRefusal { readonly at: number; readonly status: 401 | 403; readonly reason: "origin" | "credential"; }
+export interface CallerRefusal {
+  readonly at: number;
+  readonly status: 401 | 403;
+  readonly reason: "origin" | "credential";
+}
 export type McpObservation =
-  | { readonly kind: "request-refused"; readonly at: number; readonly surface: "public" | "admin"; readonly status: 401 | 403 }
-  | { readonly kind: "invocation"; readonly at: number; readonly surface: "public" | "admin"; readonly invocationId: string; readonly tool: string; readonly caller: Caller } & (
-    | { readonly phase: "attempt" }
-    | { readonly phase: "completion"; readonly outcome: "succeeded" | "failed" | "denied"; readonly durationMs: number; readonly code?: string }
-  );
+  | {
+      readonly kind: "request-refused";
+      readonly at: number;
+      readonly surface: "public" | "admin";
+      readonly status: 401 | 403;
+    }
+  | ({
+      readonly kind: "invocation";
+      readonly at: number;
+      readonly surface: "public" | "admin";
+      readonly invocationId: string;
+      readonly tool: string;
+      readonly caller: Caller;
+    } & (
+      | { readonly phase: "attempt" }
+      | {
+          readonly phase: "completion";
+          readonly outcome: "succeeded" | "failed" | "denied";
+          readonly durationMs: number;
+          readonly code?: string;
+        }
+    ));
 type LocalizedText = string | Readonly<Record<string, string>>;
 type Paging = { limit?: number; cursor?: string };
 /** One tool: a paged View (`page`) or a Procedure (`run`, a write), on the public or admin surface. */
@@ -57,7 +93,12 @@ export interface Tool<Database, Handlers = never> {
   readonly title?: LocalizedText;
   readonly description: LocalizedText;
   readonly outputSchema?: unknown;
-  readonly annotations?: { readonly readOnlyHint?: boolean; readonly destructiveHint?: boolean; readonly openWorldHint?: boolean; readonly idempotentHint?: boolean };
+  readonly annotations?: {
+    readonly readOnlyHint?: boolean;
+    readonly destructiveHint?: boolean;
+    readonly openWorldHint?: boolean;
+    readonly idempotentHint?: boolean;
+  };
   readonly inputSchema: unknown;
   /** The listed definition's version; results carry it so a model holding an older definition can tell. */
   readonly version?: string;
@@ -87,10 +128,19 @@ export interface ToolCall {
 }
 
 /** Request-bound tool tables keep native environment bindings outside the cached App catalogue. */
-export type Tools<Env, Database, Handlers = never> = readonly Tool<Database, Handlers>[] | ((request: Request, env: Env) => readonly Tool<Database, Handlers>[] | Promise<readonly Tool<Database, Handlers>[]>);
+export type Tools<Env, Database, Handlers = never> =
+  | readonly Tool<Database, Handlers>[]
+  | ((
+      request: Request,
+      env: Env,
+    ) => readonly Tool<Database, Handlers>[] | Promise<readonly Tool<Database, Handlers>[]>);
 
 /** The selected MCP routes; all request work loads only when an MCP request arrives. */
-export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database, Handlers>, options: Options<Env, Database> & { handlers?: Handlers }, reads: readonly { readonly name: string; readonly surface: string }[] = []): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
+export function mcp<Env, Database, Handlers = never>(
+  tools: Tools<Env, Database, Handlers>,
+  options: Options<Env, Database> & { handlers?: Handlers },
+  reads: readonly { readonly name: string; readonly surface: string }[] = [],
+): (request: Request, env: Env, ctx?: RequestContext) => Promise<Response | undefined> {
   let serve: ReturnType<typeof import("./mcp-handler.js").handler<Env, Database, Handlers>> | undefined;
   // Check known static App configuration now; factories wait for the request caller gate.
   const linked: Partial<Record<string, ReturnType<typeof linkSurface>>> = {};
@@ -99,15 +149,19 @@ export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database,
     const declared = options.apps?.[surface];
     if (declared) {
       // Read each static contributor's resources getter once, including mixed arrays.
-      const sources = ((Array.isArray(declared) ? declared : [declared]) as readonly McpAppsSource[])
-        .map(source => typeof source === "function" ? source : resourcesOf(source));
+      const sources = ((Array.isArray(declared) ? declared : [declared]) as readonly McpAppsSource[]).map(source =>
+        typeof source === "function" ? source : resourcesOf(source),
+      );
       const fixed = resourcesOf(sources.filter(source => typeof source !== "function"));
       const dynamic = sources.some(source => typeof source === "function");
       apps[surface] = dynamic ? sources : fixed;
       // Known static conflicts still fail before any request or dynamic factory runs.
       if (typeof tools === "function") linkApps(fixed);
       else {
-        const current = linkSurface(fixed, tools.filter(tool => tool.surface === surface));
+        const current = linkSurface(
+          fixed,
+          tools.filter(tool => tool.surface === surface),
+        );
         if (!dynamic) linked[surface] = current;
       }
     }
@@ -123,10 +177,25 @@ export function mcp<Env, Database, Handlers = never>(tools: Tools<Env, Database,
 
 /** `allowedOrigins` as the hostnames the official SDK compares; a bad entry fails here, not on each request. */
 function originHostnames(origins: readonly string[] = []): readonly string[] {
-  return Object.freeze(origins.map(origin => {
-    let url: URL | undefined;
-    try { url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(origin) ? origin : `http://${origin}`); } catch {}
-    if (origin.includes("*") || !url?.hostname || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new TypeError(`mcp allowedOrigins: "${origin}" is not an origin (https://host[:port]) or a host[:port]; wildcards never match.`);
-    return url.hostname;
-  }));
+  return Object.freeze(
+    origins.map(origin => {
+      let url: URL | undefined;
+      try {
+        url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(origin) ? origin : `http://${origin}`);
+      } catch {}
+      if (
+        origin.includes("*") ||
+        !url?.hostname ||
+        url.username ||
+        url.password ||
+        url.pathname !== "/" ||
+        url.search ||
+        url.hash
+      )
+        throw new TypeError(
+          `mcp allowedOrigins: "${origin}" is not an origin (https://host[:port]) or a host[:port]; wildcards never match.`,
+        );
+      return url.hostname;
+    }),
+  );
 }

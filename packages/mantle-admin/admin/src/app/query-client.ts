@@ -6,9 +6,14 @@ export const queryClient = new QueryClient({
   mutationCache: new MutationCache({
     // The one refresh after an Admin write. `meta: { invalidates: false }` skips it: a download changes nothing, and
     // `useOperation` refreshes on its own client. A caller that also invalidates here would refetch twice.
-    onSuccess: (_data, _variables, _context, mutation): void => { if (mutation.meta?.["invalidates"] !== false) void invalidateAfterWrite(queryClient); },
+    onSuccess: (_data, _variables, _context, mutation): void => {
+      if (mutation.meta?.["invalidates"] !== false) void invalidateAfterWrite(queryClient);
+    },
     // a Schema lock that appeared after the read (#1822): re-read, so the list and editor show it and disable the write
-    onError: (error): void => { const refusal = error instanceof ApiError ? refusalOf(error.body) : undefined; if (refusal?.code === "CONFLICT" && refusal.kind === "lock") void invalidateAfterWrite(queryClient); },
+    onError: (error): void => {
+      const refusal = error instanceof ApiError ? refusalOf(error.body) : undefined;
+      if (refusal?.code === "CONFLICT" && refusal.kind === "lock") void invalidateAfterWrite(queryClient);
+    },
   }),
   defaultOptions: {
     queries: {

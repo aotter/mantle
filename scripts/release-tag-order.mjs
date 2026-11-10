@@ -22,18 +22,22 @@ if (process.argv[2] === "--self-test") {
   assert.equal(decide("old", "new", ancestor), "preserve");
   assert.throws(() => decide("left", "right", ancestor), /not comparable/);
 
-  const workflow = readFileSync(
-    new URL("../.github/workflows/release.yml", import.meta.url),
-    "utf8",
-  );
-  const steps = [...workflow.matchAll(/^      - name: (.+)$/gm)].map((match) => match[1]);
+  const workflow = readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+  const steps = [...workflow.matchAll(/^      - name: (.+)$/gm)].map(match => match[1]);
   const ordered = [
-    "Check Core source", "Check native hosts",
+    "Check Core source",
+    "Check native hosts",
     "Record published packages",
-    "Pack release tarballs", "Verify release credentials", "Create immutable Core tag",
-    "Publish to npmjs", "Verify immutable npm artifacts", "Mirror to GitHub Packages",
+    "Pack release tarballs",
+    "Verify release credentials",
+    "Create immutable Core tag",
+    "Publish to npmjs",
+    "Verify immutable npm artifacts",
+    "Mirror to GitHub Packages",
     "Verify public-registry Core in the reference Worker",
-    "Promote npmjs channel tags", "Promote GitHub Packages channel tags", "Create GitHub release",
+    "Promote npmjs channel tags",
+    "Promote GitHub Packages channel tags",
+    "Create GitHub release",
   ];
   let previous = -1;
   for (const name of ordered) {
@@ -43,16 +47,21 @@ if (process.argv[2] === "--self-test") {
     previous = index;
   }
   const directories = workflow.match(/PKG_DIRS: >-\n((?: {8}packages\/[^\n]+\n)+)/)?.[1];
-  assert.deepEqual(directories?.trim().split(/\s+/), [
-    "packages/mantle-ui", "packages/mantle", "packages/mantle-admin",
-  ], "the same three-package set must drive every candidate and promotion loop");
+  assert.deepEqual(
+    directories?.trim().split(/\s+/),
+    ["packages/mantle-ui", "packages/mantle", "packages/mantle-admin"],
+    "the same three-package set must drive every candidate and promotion loop",
+  );
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert(pkg.scripts.check.includes("pnpm check:worker-consumer"));
   assert.match(
     workflow,
     /- name: Check Core source\n        if: steps\.ver\.outputs\.tag_exists != 'true'\n        run: pnpm check\n        env:\n          MANTLE_PG_URL: postgres:\/\/\S+\n/,
   );
-  const sourceGate = workflow.slice(workflow.indexOf("- name: Check Core source"), workflow.indexOf("- name: Check native hosts"));
+  const sourceGate = workflow.slice(
+    workflow.indexOf("- name: Check Core source"),
+    workflow.indexOf("- name: Check native hosts"),
+  );
   assert.match(sourceGate, /^ {10}MANTLE_NEXT_BUN_PG_URL: postgres:\/\/\S+$/m);
   assert.match(sourceGate, /^ {10}MANTLE_NEXT_WORKER_PG_URL: postgres:\/\/\S+$/m);
   // the release gates PostgreSQL and all native hosts as CI does: a PR must not be checked more than the release that ships it
@@ -68,10 +77,7 @@ if (process.argv[2] === "--self-test") {
     workflow,
     /- name: Record published packages\n        id: pkgs\n[\s\S]*if \[ "\$TAG_EXISTS" = true \]; then\n\s+missing=0\n\s+for pkg in \$PKG_NAMES; do\n\s+npm view "\$pkg@\$VERSION" version --registry https:\/\/registry\.npmjs\.org/,
   );
-  assert.match(
-    workflow,
-    /- name: Pack release tarballs\n        if: steps\.pkgs\.outputs\.published != 'true'/,
-  );
+  assert.match(workflow, /- name: Pack release tarballs\n        if: steps\.pkgs\.outputs\.published != 'true'/);
   assert.match(
     workflow,
     /- name: Verify immutable npm artifacts\n        if: steps\.pkgs\.outputs\.published != 'true'/,
@@ -92,9 +98,11 @@ if (process.argv[2] === "--self-test") {
   const publishTags = [...workflow.matchAll(/--tag mantle-release/g)];
   assert.equal(publishTags.length, 2);
   assert.ok(publishTags[0].index < gate && publishTags[1].index < gate);
-  const promoteOnly = [...workflow.matchAll(
-    /for pkg in \$PKG_NAMES; do\n {12}for channel in \$\(node scripts\/release-tag-order\.mjs --channels "\$VERSION"\); do\n {14}promote "\$pkg" "\$channel"\n {12}done\n {10}done/g,
-  )];
+  const promoteOnly = [
+    ...workflow.matchAll(
+      /for pkg in \$PKG_NAMES; do\n {12}for channel in \$\(node scripts\/release-tag-order\.mjs --channels "\$VERSION"\); do\n {14}promote "\$pkg" "\$channel"\n {12}done\n {10}done/g,
+    ),
+  ];
   assert.equal(promoteOnly.length, 2);
   assert.ok(promoteOnly[0].index > npmPromote && promoteOnly[0].index < gprPromote);
   assert.ok(promoteOnly[1].index > gprPromote && promoteOnly[1].index < githubRelease);
@@ -104,10 +112,7 @@ if (process.argv[2] === "--self-test") {
   assert.match(gprStep, /dist-tag add/);
   assert.doesNotMatch(workflow, /drop_temp_tag|dist-tag rm|npm unpublish/);
   assert.doesNotMatch(workflow, /remove-mantle-release|workflow_call/);
-  assert.equal(
-    existsSync(new URL("../.github/workflows/remove-mantle-release-dist-tag.yml", import.meta.url)),
-    false,
-  );
+  assert.equal(existsSync(new URL("../.github/workflows/remove-mantle-release-dist-tag.yml", import.meta.url)), false);
 
   console.log("release self-test passed");
   process.exit(0);

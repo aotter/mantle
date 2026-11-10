@@ -19,7 +19,10 @@ import { AdminLoadBoundary } from "./load-recovery";
  */
 export function AdminRoot(props: { admin: AdminDefinition; preview?: boolean }): React.ReactElement {
   const [initialLanguage] = React.useState(readInitialLanguage);
-  const projectNav = React.useMemo(() => ({ ...props.admin.nav, pages: props.admin.pages, ...(props.admin.home ? { home: props.admin.home } : {}) }), [props.admin]);
+  const projectNav = React.useMemo(
+    () => ({ ...props.admin.nav, pages: props.admin.pages, ...(props.admin.home ? { home: props.admin.home } : {}) }),
+    [props.admin],
+  );
   // Nothing paints until the stored or browser language has loaded; a failed load falls back to English.
   return (
     <React.Suspense fallback={null}>
@@ -31,7 +34,9 @@ export function AdminRoot(props: { admin: AdminDefinition; preview?: boolean }):
                 <TooltipProvider>
                   <ConfirmProvider>
                     <ProjectNavProvider nav={projectNav}>
-                      <AdminLoadBoundary><AdminApp preview={props.preview ?? false} /></AdminLoadBoundary>
+                      <AdminLoadBoundary>
+                        <AdminApp preview={props.preview ?? false} />
+                      </AdminLoadBoundary>
                       <AdminToaster />
                     </ProjectNavProvider>
                   </ConfirmProvider>

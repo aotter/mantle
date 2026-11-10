@@ -34,7 +34,9 @@ export interface Site<E> extends WebHandler<E> {
 }
 
 export function serve<Database, E>(
-  options: WebOptions<Database, E>, views: Map<string, View<Database>>, pages: PageEntry[],
+  options: WebOptions<Database, E>,
+  views: Map<string, View<Database>>,
+  pages: PageEntry[],
 ): Site<E> {
   const origin = new URL(options.origin);
   const resolver = callerResolver(options.caller);
@@ -42,9 +44,11 @@ export function serve<Database, E>(
   /** The visit over an open pipeline: decode the View input, then admit, guard and (unless a dry run) page. */
   const visit = (request: Request, pipeline: Pipeline, caller: Caller): Visit => {
     const state: Visit = {
-      caller, ran: false,
+      caller,
+      ran: false,
       async read(name, params, cursor) {
-        const view = views.get(name)!, input = { ...view.query(params).input };
+        const view = views.get(name)!,
+          input = { ...view.query(params).input };
         convert(input, view.convert);
         const call: Call = { id: `view:${name}`, view: true, target: { kind: "view", name }, check: view.check };
         try {
@@ -54,7 +58,10 @@ export function serve<Database, E>(
           await pipeline.guard(call);
           if (pipeline.dryRun) return { rows: [] };
           return await view.page(options.db, caller, input as never, { limit: 500, cursor });
-        } catch (error) { state.failure = error; throw error; }
+        } catch (error) {
+          state.failure = error;
+          throw error;
+        }
       },
     };
     return state;
@@ -62,13 +69,18 @@ export function serve<Database, E>(
   /** An ordinary site resolves its own caller, once the request matched something it serves. */
   const open = (request: Request, env: E, ctx?: RequestContext) => async () => {
     const pipeline = await openPipeline(ctx, options);
-    return visit(request, pipeline, await pipeline.resolveCaller(request, env, resolver, SAFE_METHODS.includes(request.method)));
+    return visit(
+      request,
+      pipeline,
+      await pipeline.resolveCaller(request, env, resolver, SAFE_METHODS.includes(request.method)),
+    );
   };
 
   const segmentFor = (row: Record<string, unknown>, view: string) => (_: string, key: string) => {
     let value = row[key];
     if (views.get(view)!.booleans?.includes(key) && (value === 0 || value === 1)) value = Boolean(value);
-    if (value === null || value === undefined) throw new TypeError("List View must return every page parameter: " + key);
+    if (value === null || value === undefined)
+      throw new TypeError("List View must return every page parameter: " + key);
     const segment = String(value);
     if (segment === "." || segment === "..") return "";
     return encodeURIComponent(segment).replace(/[()]/g, char => "%" + char.charCodeAt(0).toString(16).toUpperCase());
@@ -82,14 +94,19 @@ export function serve<Database, E>(
   const match = (path: string) => {
     for (const entry of pages) {
       const hit = entry.pattern.exec(path);
-      if (hit) return { ...entry, params: new URLSearchParams(decode(entry.keys, hit, "Malformed URL parameter.", "web/path")) };
+      if (hit)
+        return {
+          ...entry,
+          params: new URLSearchParams(decode(entry.keys, hit, "Malformed URL parameter.", "web/path")),
+        };
     }
   };
   const row = async (entry: NonNullable<ReturnType<typeof match>>, reader: Visit) =>
     (await reader.read(entry.page.view, entry.params)).rows[0];
   const respond = async (request: Request, body: string, type: string, caller: Caller) => {
     const { webResponse } = await import("./web-response.js");
-    const cacheControl = caller.kind === "anonymous" ? (options.cacheControl ?? "public, max-age=60") : "private, no-store";
+    const cacheControl =
+      caller.kind === "anonymous" ? (options.cacheControl ?? "public, max-age=60") : "private, no-store";
     return webResponse(request, body, type, cacheControl);
   };
 
@@ -97,8 +114,10 @@ export function serve<Database, E>(
     let caller: Caller | undefined;
     try {
       if (!SAFE_METHODS.includes(request.method)) return;
-      const path = new URL(request.url).pathname, index = path === "/llms.txt" || path === "/sitemap.xml";
-      const entry = !index && path.endsWith(".md") ? match(path.slice(0, -3)) : undefined, markdown = entry?.page.markdown;
+      const path = new URL(request.url).pathname,
+        index = path === "/llms.txt" || path === "/sitemap.xml";
+      const entry = !index && path.endsWith(".md") ? match(path.slice(0, -3)) : undefined,
+        markdown = entry?.page.markdown;
       if (!index && !markdown) return;
       const reader = await openVisit();
       caller = reader.caller;
@@ -110,14 +129,21 @@ export function serve<Database, E>(
       }
       // A page whose own URL ends in `.md` is that page, not the Markdown of another.
       const exact = match(path);
-      if (exact) try { if (await row(exact, reader)) return; } catch (error) { if (wire(error).status !== 400) throw error; }
+      if (exact)
+        try {
+          if (await row(exact, reader)) return;
+        } catch (error) {
+          if (wire(error).status !== 400) throw error;
+        }
       const found = await row(entry!, reader);
       if (!found) return notFound();
       const body = found[markdown!];
       if (body == null) return notFound();
       if (typeof body !== "string") throw new TypeError("Markdown field must return text.");
       return respond(request, body, "text/markdown", caller);
-    } catch (error) { return hostFailure(error, caller); }
+    } catch (error) {
+      return hostFailure(error, caller);
+    }
   };
   const renderHead = async (request: Request, openVisit: () => Promise<Visit>): Promise<string> => {
     try {
@@ -134,7 +160,9 @@ export function serve<Database, E>(
     }
   };
   return {
-    visit, render, renderHead,
+    visit,
+    render,
+    renderHead,
     fetch: (request, env, ctx) => render(request, open(request, env as E, ctx)),
     head: (request, env, ctx) => renderHead(request, open(request, env as E, ctx)),
   };

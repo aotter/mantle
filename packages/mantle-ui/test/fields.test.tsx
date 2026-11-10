@@ -1,20 +1,39 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { renderDataValue, fieldLabel, propertyDescription, formatMoneyMinor, dateFromFieldValue, type FieldSchema } from "../src/index.js";
+import {
+  renderDataValue,
+  fieldLabel,
+  propertyDescription,
+  formatMoneyMinor,
+  dateFromFieldValue,
+  type FieldSchema,
+} from "../src/index.js";
 import { SchemaFields } from "../src/kit/index.js";
 
 const schema: FieldSchema = {
   type: "object",
   required: ["decision"],
   properties: {
-    decision: { type: "string", title: { en: "Decision", "zh-TW": "決定" }, oneOf: [{ const: "approved", title: { "zh-TW": "核准" } }, { const: "rejected" }] },
+    decision: {
+      type: "string",
+      title: { en: "Decision", "zh-TW": "決定" },
+      oneOf: [{ const: "approved", title: { "zh-TW": "核准" } }, { const: "rejected" }],
+    },
     note: { type: "string", "x-mcp-hint": "markdown" },
     total: { type: "integer", "x-mcp-hint": "money-minor" },
     cover: { type: "string", "x-mantle-ref": { schema: "media_assets", field: "id" } },
   },
 };
 const render = (props: Partial<Parameters<typeof SchemaFields>[0]> = {}) =>
-  renderToStaticMarkup(<SchemaFields schema={schema} value={{ total: 12345, currency: "TWD" }} onChange={() => {}} language="zh-TW" {...props} />);
+  renderToStaticMarkup(
+    <SchemaFields
+      schema={schema}
+      value={{ total: 12345, currency: "TWD" }}
+      onChange={() => {}}
+      language="zh-TW"
+      {...props}
+    />,
+  );
 
 describe("SchemaFields", () => {
   it("labels fields by title in the language and previews money", () => {
@@ -22,7 +41,8 @@ describe("SchemaFields", () => {
     expect(html).toContain("決定");
     expect(html).toMatch(/= .*123\.45/);
     expect(formatMoneyMinor(128000, "USD")).not.toBe(formatMoneyMinor(128000, "TWD"));
-    for (const currency of [undefined, "NOT_A_CURRENCY"]) expect(formatMoneyMinor(128000, currency)).toBe(new Intl.NumberFormat().format(1280));
+    for (const currency of [undefined, "NOT_A_CURRENCY"])
+      expect(formatMoneyMinor(128000, currency)).toBe(new Intl.NumberFormat().format(1280));
     expect(formatMoneyMinor("128000", "USD")).toBeNull();
     expect(dateFromFieldValue(1786405800000)?.getTime()).toBe(1786405800000);
     expect(dateFromFieldValue("2026-08-12T09:30:00.000Z")?.toISOString()).toBe("2026-08-12T09:30:00.000Z");
@@ -31,14 +51,20 @@ describe("SchemaFields", () => {
 
   it("lets a host render a field itself, and falls back to a textarea for markdown without one", () => {
     expect(render()).toContain("<textarea");
-    const html = render({ renderField: (f) => (f.name === "cover" ? <em>media-picker</em> : f.widget === "markdown" ? <em>editor</em> : undefined) });
+    const html = render({
+      renderField: f =>
+        f.name === "cover" ? <em>media-picker</em> : f.widget === "markdown" ? <em>editor</em> : undefined,
+    });
     expect(html).toContain("<em>media-picker</em>");
     expect(html).toContain("<em>editor</em>");
     expect(html).not.toContain("<textarea");
   });
 
   it("lets a host wrap a field's own control, with its own value", () => {
-    const html = render({ renderField: (f) => (f.name === "total" ? <div data-wrapped>{f.renderDefault({ value: 7, setValue: f.setValue })}</div> : undefined) });
+    const html = render({
+      renderField: f =>
+        f.name === "total" ? <div data-wrapped>{f.renderDefault({ value: 7, setValue: f.setValue })}</div> : undefined,
+    });
     // the number input shows the host's value, not the form's
     expect(html).toMatch(/data-wrapped[^]*value="7"/);
     expect(html).not.toContain('value="12345"');
@@ -67,8 +93,15 @@ describe("the root entry", () => {
 
 describe("SchemaFields labels", () => {
   it("reads a label the host resolves", () => {
-    const html = renderToStaticMarkup(<SchemaFields schema={{ type: "object", properties: { createdAt: { type: "string" } } }} value={{}} onChange={() => {}} language="en"
-      propertyLabel={(name) => (name === "createdAt" ? "Created" : name)} />);
+    const html = renderToStaticMarkup(
+      <SchemaFields
+        schema={{ type: "object", properties: { createdAt: { type: "string" } } }}
+        value={{}}
+        onChange={() => {}}
+        language="en"
+        propertyLabel={name => (name === "createdAt" ? "Created" : name)}
+      />,
+    );
     expect(html).toContain("Created");
   });
 });
@@ -84,7 +117,18 @@ describe("SchemaFields values and access", () => {
   });
 
   it("shows a readOnly property read-only, and links each label to its control and description", () => {
-    const html = renderToStaticMarkup(<SchemaFields schema={{ type: "object", required: ["note"], properties: { locked: { type: "string", readOnly: true }, note: { type: "string", description: "Why" } } }} value={{ locked: "x" }} onChange={() => {}} language="en" />);
+    const html = renderToStaticMarkup(
+      <SchemaFields
+        schema={{
+          type: "object",
+          required: ["note"],
+          properties: { locked: { type: "string", readOnly: true }, note: { type: "string", description: "Why" } },
+        }}
+        value={{ locked: "x" }}
+        onChange={() => {}}
+        language="en"
+      />,
+    );
     expect(html).toMatch(/role="textbox" aria-readonly="true"/);
     const id = /<label id="([^"]+)-label" for="\1"[^>]*>Note/.exec(html)?.[1];
     expect(id).toBeTruthy();
@@ -103,15 +147,19 @@ describe("resolveLocalizedText", () => {
     expect(resolveLocalizedText({ "zh-TW": "品項" }, "fr")).toBe("品項");
     expect(resolveLocalizedText("Plain", "en")).toBe("Plain");
     expect(resolveLocalizedText(undefined, "en")).toBeNull();
-    expect(["orderStatus", "subtotal_minor", "cover-asset-id"].map(fieldLabel)).toEqual(["Order Status", "Subtotal Minor", "Cover Asset Id"]);
+    expect(["orderStatus", "subtotal_minor", "cover-asset-id"].map(fieldLabel)).toEqual([
+      "Order Status",
+      "Subtotal Minor",
+      "Cover Asset Id",
+    ]);
     expect(propertyDescription({ description: "Plain" }, "en", null)).toBe("Plain");
     expect(propertyDescription({ description: { "zh-TW": "說明" } }, "en", "zh-TW")).toBe("說明");
     expect(propertyDescription(undefined, "en", null)).toBeUndefined();
   });
 });
 
- it("renders boolean values in the reader's language", () => {
-   expect(renderDataValue({ type: "boolean" }, true, "zh-TW")).toBe("是");
-   expect(renderDataValue({ type: "boolean" }, false, "zh-TW")).toBe("否");
-   expect(renderDataValue({ type: "boolean" }, false, "en")).toBe("No");
- });
+it("renders boolean values in the reader's language", () => {
+  expect(renderDataValue({ type: "boolean" }, true, "zh-TW")).toBe("是");
+  expect(renderDataValue({ type: "boolean" }, false, "zh-TW")).toBe("否");
+  expect(renderDataValue({ type: "boolean" }, false, "en")).toBe("No");
+});

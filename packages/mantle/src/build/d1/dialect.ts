@@ -11,5 +11,5 @@ export const d1Dialect: MantleDialect = {
   accepts: validateProgram,
   check: validateIr,
   lowering: d1Lowering,
-  print: (ast) => print(ast),
+  print: ast => print(ast),
 };

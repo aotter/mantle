@@ -33,11 +33,16 @@ export interface FieldSchema {
  * The preferred language (`en-US` also finds `en`, and case does not matter), then the site's canonical one, then English,
  * then the first given.
  */
-export function resolveLocalizedText(value: LocalizedText | null | undefined, preferred: string, canonical?: string | null): string | null {
+export function resolveLocalizedText(
+  value: LocalizedText | null | undefined,
+  preferred: string,
+  canonical?: string | null,
+): string | null {
   if (value == null) return null;
   if (typeof value === "string") return value;
   const keys = Object.keys(value);
-  const find = (tag: string | null | undefined) => (tag ? keys.find((k) => k.toLowerCase() === tag.toLowerCase()) : undefined);
+  const find = (tag: string | null | undefined) =>
+    tag ? keys.find(k => k.toLowerCase() === tag.toLowerCase()) : undefined;
   const key = find(preferred) ?? find(preferred.split("-")[0]) ?? find(canonical) ?? find("en") ?? keys[0];
   return key !== undefined ? value[key]! : null;
 }
@@ -47,30 +52,45 @@ export function fieldLabel(name: string): string {
   return name
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+    .replace(/\b\w/g, char => char.toUpperCase());
 }
 
 /** A field's `title` in the language, else its name humanized. */
-export function propertyLabel(name: string, schema: FieldSchema | undefined, language: string, canonical: string | null = null): string {
+export function propertyLabel(
+  name: string,
+  schema: FieldSchema | undefined,
+  language: string,
+  canonical: string | null = null,
+): string {
   return resolveLocalizedText(schema?.title, language, canonical) ?? fieldLabel(name);
 }
 
 /** A field's `description` in the language, if it has one. */
-export function propertyDescription(schema: FieldSchema | undefined, language: string, canonical: string | null = null): string | undefined {
+export function propertyDescription(
+  schema: FieldSchema | undefined,
+  language: string,
+  canonical: string | null = null,
+): string | undefined {
   return resolveLocalizedText(schema?.description, language, canonical) ?? undefined;
 }
 
 /** A property's string options: its `enum`, or a `oneOf` of string `const`s, each with its `title`. */
 export function enumOptions(schema: FieldSchema | undefined): { value: string; title?: LocalizedText }[] | undefined {
-  if (schema?.enum?.length && schema.enum.every((v) => typeof v === "string")) return (schema.enum as string[]).map((value) => ({ value }));
+  if (schema?.enum?.length && schema.enum.every(v => typeof v === "string"))
+    return (schema.enum as string[]).map(value => ({ value }));
   const branches = schema?.oneOf;
-  if (!branches?.length || !branches.every((b) => typeof b.const === "string")) return undefined;
-  return branches.map((b) => ({ value: b.const as string, ...(b.title !== undefined ? { title: b.title } : {}) }));
+  if (!branches?.length || !branches.every(b => typeof b.const === "string")) return undefined;
+  return branches.map(b => ({ value: b.const as string, ...(b.title !== undefined ? { title: b.title } : {}) }));
 }
 
 /** How an option reads: its `title` in the language, else the value humanized. */
-export function optionLabel(schema: FieldSchema | undefined, value: string, language: string, canonical?: string | null): string {
-  const title = enumOptions(schema)?.find((o) => o.value === value)?.title;
+export function optionLabel(
+  schema: FieldSchema | undefined,
+  value: string,
+  language: string,
+  canonical?: string | null,
+): string {
+  const title = enumOptions(schema)?.find(o => o.value === value)?.title;
   return resolveLocalizedText(title, language, canonical) ?? fieldLabel(value);
 }
 
@@ -119,12 +139,21 @@ export function dateFromFieldValue(value: unknown): Date | undefined {
 
 /** Which of the entry's own timestamps a column is, by its name; none of them has a Schema title. */
 export function nativeTimestamp(name: string): "created" | "updated" | undefined {
-  return name === "createdAt" || name === "created_at" ? "created" : name === "updatedAt" || name === "updated_at" ? "updated" : undefined;
+  return name === "createdAt" || name === "created_at"
+    ? "created"
+    : name === "updatedAt" || name === "updated_at"
+      ? "updated"
+      : undefined;
 }
 
 /** The entry's own timestamps are date-times on the wire, like a `format: date-time` field. */
 export const NATIVE_TIMESTAMP: FieldSchema = { type: "string", format: "date-time" };
-const NATIVE: Readonly<Record<string, FieldSchema>> = { createdAt: NATIVE_TIMESTAMP, updatedAt: NATIVE_TIMESTAMP, created_at: NATIVE_TIMESTAMP, updated_at: NATIVE_TIMESTAMP };
+const NATIVE: Readonly<Record<string, FieldSchema>> = {
+  createdAt: NATIVE_TIMESTAMP,
+  updatedAt: NATIVE_TIMESTAMP,
+  created_at: NATIVE_TIMESTAMP,
+  updated_at: NATIVE_TIMESTAMP,
+};
 
 /** A column's schema: the property, or for a native timestamp column the date-time it is. */
 export function withNativeSchema<S extends FieldSchema>(name: string, property: S | undefined): S | undefined {
@@ -132,7 +161,12 @@ export function withNativeSchema<S extends FieldSchema>(name: string, property: 
 }
 
 /** One value as a cell shows it: money, dates and option titles formatted, anything structured as JSON. */
-export function renderDataValue(schema: FieldSchema | undefined, value: unknown, language = "en", canonical: string | null = null): ReactNode {
+export function renderDataValue(
+  schema: FieldSchema | undefined,
+  value: unknown,
+  language = "en",
+  canonical: string | null = null,
+): ReactNode {
   if (moneyMinorHint(schema)) {
     const formatted = formatMoneyMinor(value, undefined);
     if (formatted) return formatted;
@@ -147,7 +181,7 @@ export function renderDataValue(schema: FieldSchema | undefined, value: unknown,
   }
   if (value == null || value === "") return <span className="text-muted-foreground">-</span>;
   if (typeof value === "string" && enumOptions(schema)) return optionLabel(schema, value, language, canonical);
-  if (typeof value === "boolean") return language.startsWith("zh") ? value ? "是" : "否" : value ? "Yes" : "No";
+  if (typeof value === "boolean") return language.startsWith("zh") ? (value ? "是" : "否") : value ? "Yes" : "No";
   if (typeof value === "string" || typeof value === "number") return String(value);
   return <span className="font-mono text-xs">{JSON.stringify(value)}</span>;
 }

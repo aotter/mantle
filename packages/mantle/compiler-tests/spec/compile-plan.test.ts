@@ -42,13 +42,17 @@ describe("compilePlan", () => {
     const res = await compile(fixture);
     if (!res.ok) throw new Error(JSON.stringify(res.diagnostics));
     expect(Object.keys(res.plan.views)).toEqual(["open-orders"]);
-    expect(res.plan.views["open-orders"]).toMatchObject({ grammar: PG_GRAMMAR, stmts: [{ SelectStmt: expect.any(Object) }] });
+    expect(res.plan.views["open-orders"]).toMatchObject({
+      grammar: PG_GRAMMAR,
+      stmts: [{ SelectStmt: expect.any(Object) }],
+    });
     expect(res.plan.procedures["cancel-order"]!.handler).toMatchObject({ sql: { grammar: PG_GRAMMAR } });
     expect(res.plan).toMatchObject({ dialect: { name: "@aotter/mantle/d1", version: "1" } });
   });
 
   it("carries a View's cache.sharedMaxAge into the plan", async () => {
-    const res = await compile(`${SCHEMA.replace("  lifecycle: operational\n", "").replace('  scope: "ownerId = auth.uid()"\n', "")}---
+    const res =
+      await compile(`${SCHEMA.replace("  lifecycle: operational\n", "").replace('  scope: "ownerId = auth.uid()"\n', "")}---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: v }
@@ -58,7 +62,7 @@ spec: { surface: public, cache: { sharedMaxAge: 60 }, sql: "SELECT body FROM not
     expect(res.plan.views["v"]!.sharedMaxAge).toBe(60);
   });
 
-  it.each([undefined, pgCompile])("checks shared caching against expanded IR (%s)", async (dialect) => {
+  it.each([undefined, pgCompile])("checks shared caching against expanded IR (%s)", async dialect => {
     const schema = (extra = "") => `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: records }
@@ -74,31 +78,67 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
 `;
     const check = (text: string) => compilePlan({ sources: [{ sourceId: "memory:cache", text }] }, dialect);
     for (const [sql, extra] of [
-      ["SELECT now() AS at", ""], ["SELECT pg_catalog.now() AS at", ""],
+      ["SELECT now() AS at", ""],
+      ["SELECT pg_catalog.now() AS at", ""],
       ["SELECT auth.uid() AS caller", ""],
       ["SELECT body FROM records", "  lifecycle: operational\n"],
       ["SELECT body FROM records", "  ttl: { field: expires, expireAfterSeconds: 0 }\n"],
     ]) {
       const result = await check(schema(extra) + namedView("cached", sql!));
       expect(result.ok, sql).toBe(false);
-      if (!result.ok) expect(result.diagnostics.some((d) => d.code === "VIEW_CACHE_INVALID"), JSON.stringify(result.diagnostics)).toBe(true);
+      if (!result.ok)
+        expect(
+          result.diagnostics.some(d => d.code === "VIEW_CACHE_INVALID"),
+          JSON.stringify(result.diagnostics),
+        ).toBe(true);
     }
     // The parser cannot decide eligibility by matching text inside literals, comments or a CTE name.
     for (const sql of ["SELECT 'now() auth.uid() records' AS label /* now() */", "SELECT body FROM records"])
       expect((await check(schema() + namedView("cached", sql))).ok).toBe(true);
     if (dialect) {
-      expect((await check(schema("  lifecycle: operational\n") + namedView("cached", "WITH records AS (SELECT 'fixed' AS body) SELECT body FROM records"))).ok).toBe(true);
-      for (const [sql, extra] of [["SELECT now() AS body", ""], ["SELECT body FROM records", "  lifecycle: operational\n"], ["SELECT body FROM records", "  ttl: { field: expires, expireAfterSeconds: 0 }\n"]]) {
-        const result = await check(schema(extra) + namedView("inner-source", sql!, false) + namedView("middle-source", "SELECT body FROM inner_source", false) + namedView("cached", "SELECT body FROM middle_source"));
+      expect(
+        (
+          await check(
+            schema("  lifecycle: operational\n") +
+              namedView("cached", "WITH records AS (SELECT 'fixed' AS body) SELECT body FROM records"),
+          )
+        ).ok,
+      ).toBe(true);
+      for (const [sql, extra] of [
+        ["SELECT now() AS body", ""],
+        ["SELECT body FROM records", "  lifecycle: operational\n"],
+        ["SELECT body FROM records", "  ttl: { field: expires, expireAfterSeconds: 0 }\n"],
+      ]) {
+        const result = await check(
+          schema(extra) +
+            namedView("inner-source", sql!, false) +
+            namedView("middle-source", "SELECT body FROM inner_source", false) +
+            namedView("cached", "SELECT body FROM middle_source"),
+        );
         expect(result.ok).toBe(false);
-        if (!result.ok) expect(result.diagnostics).toEqual([expect.objectContaining({ code: "VIEW_CACHE_INVALID", source: expect.objectContaining({ path: "/spec/cache" }) })]);
+        if (!result.ok)
+          expect(result.diagnostics).toEqual([
+            expect.objectContaining({
+              code: "VIEW_CACHE_INVALID",
+              source: expect.objectContaining({ path: "/spec/cache" }),
+            }),
+          ]);
       }
-      expect((await check(schema() + namedView("inner-source", "SELECT body FROM records", false) + namedView("cached", "SELECT body FROM inner_source"))).ok).toBe(true);
+      expect(
+        (
+          await check(
+            schema() +
+              namedView("inner-source", "SELECT body FROM records", false) +
+              namedView("cached", "SELECT body FROM inner_source"),
+          )
+        ).ok,
+      ).toBe(true);
     }
   });
 
   it("carries Schema checks as IR", async () => {
-    const withCheck = (c: string) => SCHEMA.replace("  lifecycle: operational", `  lifecycle: operational\n  checks: ["${c}"]`);
+    const withCheck = (c: string) =>
+      SCHEMA.replace("  lifecycle: operational", `  lifecycle: operational\n  checks: ["${c}"]`);
     const a = await compile(withCheck("length(body) > 0"));
     if (!a.ok) throw new Error("did not compile");
     expect(a.plan.schemas["notes"]!.checks).toHaveLength(1);
@@ -114,7 +154,13 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
     ["undeclared Schema", procedure("DELETE FROM nope WHERE id = input.text"), "SQL_RELATION", "/spec/handler/sql", 1],
     ["undeclared input", view("SELECT id FROM notes WHERE body = input.zzz"), "SQL_COLUMN", "/spec/sql", 1],
     ["declared input (camel case folds)", view("SELECT id FROM notes WHERE body = input.Q"), undefined],
-    ["the scope column, from the Schema's scope", procedure("INSERT INTO notes (ownerId, body) VALUES (input.text, input.text)"), "SQL_WRITE", "/spec/handler/sql", 1],
+    [
+      "the scope column, from the Schema's scope",
+      procedure("INSERT INTO notes (ownerId, body) VALUES (input.text, input.text)"),
+      "SQL_WRITE",
+      "/spec/handler/sql",
+      1,
+    ],
     ["a declared field", procedure("INSERT INTO notes (body) VALUES (input.text)"), undefined],
   ] as const)("%s", async (_name, doc, code, pointer?: string, line?: number) => {
     const res = await compile(SCHEMA + doc);
@@ -133,12 +179,36 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
 
   it("carries what Admin and MCP show, unchanged, and a plan without it is unchanged", async () => {
     const plain = await compilePlan({ sources: [{ sourceId: "m", text: SCHEMA + view("SELECT id FROM notes") }] });
-    const rich = await compilePlan({ sources: [{ sourceId: "m", text: SCHEMA.replace("title: Notes", "title: { en: Notes, zh-TW: 筆記 }\n  description: My notes\n  localized: false\n  uiSchema: { list: { columns: [body] } }") + view("SELECT id FROM notes").replace("surface: admin,", "surface: admin, title: Mine, description: Mine only, uiSchema: { list: { columns: [id] } },") }] });
+    const rich = await compilePlan({
+      sources: [
+        {
+          sourceId: "m",
+          text:
+            SCHEMA.replace(
+              "title: Notes",
+              "title: { en: Notes, zh-TW: 筆記 }\n  description: My notes\n  localized: false\n  uiSchema: { list: { columns: [body] } }",
+            ) +
+            view("SELECT id FROM notes").replace(
+              "surface: admin,",
+              "surface: admin, title: Mine, description: Mine only, uiSchema: { list: { columns: [id] } },",
+            ),
+        },
+      ],
+    });
     if (!plain.ok || !rich.ok) throw new Error("compile");
     expect(plain.plan.schemas.notes).toMatchObject({ name: "notes", title: "Notes" });
     expect(plain.plan.schemas.notes).not.toHaveProperty("uiSchema");
-    expect(rich.plan.schemas.notes).toMatchObject({ name: "notes", title: { en: "Notes", "zh-TW": "筆記" }, description: "My notes", uiSchema: { list: { columns: ["body"] } } });
-    expect(rich.plan.views.v).toMatchObject({ title: "Mine", description: "Mine only", uiSchema: { list: { columns: ["id"] } } });
+    expect(rich.plan.schemas.notes).toMatchObject({
+      name: "notes",
+      title: { en: "Notes", "zh-TW": "筆記" },
+      description: "My notes",
+      uiSchema: { list: { columns: ["body"] } },
+    });
+    expect(rich.plan.views.v).toMatchObject({
+      title: "Mine",
+      description: "Mine only",
+      uiSchema: { list: { columns: ["id"] } },
+    });
   });
 
   it("returns manifest diagnostics before compiling; a 0.1.x manifest names the upgrade guide", async () => {
@@ -148,29 +218,53 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
   });
 
   it("refuses a uiSchema.list.searchFields or filterFields name the View's SELECT does not output (ADR-0032 decision 5)", async () => {
-    const withList = (list: string) => SCHEMA + view("SELECT id, body AS text FROM notes ORDER BY id").replace("surface: admin,", `surface: admin, uiSchema: { list: { ${list} } },`);
+    const withList = (list: string) =>
+      SCHEMA +
+      view("SELECT id, body AS text FROM notes ORDER BY id").replace(
+        "surface: admin,",
+        `surface: admin, uiSchema: { list: { ${list} } },`,
+      );
     expect((await compile(withList("searchFields: [text], filterFields: [ID]"))).ok).toBe(true);
     const bad = await compile(withList("searchFields: [body], filterFields: [ownerId]"));
     expect(bad.ok).toBe(false);
-    expect(!bad.ok && bad.diagnostics.map((d) => [d.code, d.value])).toEqual([["VIEW_UI_INVALID", "body"], ["VIEW_UI_INVALID", "ownerId"]]);
+    expect(!bad.ok && bad.diagnostics.map(d => [d.code, d.value])).toEqual([
+      ["VIEW_UI_INVALID", "body"],
+      ["VIEW_UI_INVALID", "ownerId"],
+    ]);
   });
 
   it("refuses uiSchema.list.cells: components are defineAdmin's, not the manifest's", async () => {
-    const withCells = (cells: string) => SCHEMA + view("SELECT id, body AS text FROM notes ORDER BY id").replace("surface: admin,", `surface: admin, uiSchema: { list: { cells: { ${cells} } } },`);
+    const withCells = (cells: string) =>
+      SCHEMA +
+      view("SELECT id, body AS text FROM notes ORDER BY id").replace(
+        "surface: admin,",
+        `surface: admin, uiSchema: { list: { cells: { ${cells} } } },`,
+      );
     const bad = await compile(withCells("text: kit/preview"));
-    expect(!bad.ok && bad.diagnostics.map((d) => [d.code, d.path.endsWith("/spec/uiSchema/list/cells")])).toEqual([["VIEW_UI_INVALID", true]]);
+    expect(!bad.ok && bad.diagnostics.map(d => [d.code, d.path.endsWith("/spec/uiSchema/list/cells")])).toEqual([
+      ["VIEW_UI_INVALID", true],
+    ]);
   });
-
 });
 
 describe("a field with more than one JSON Schema type", () => {
-  const doc = (kind: string, name: string, spec: string) => `apiVersion: cms.mantle.aotter.net/v2\nkind: ${kind}\nmetadata: { name: ${name} }\nspec:\n${spec}\n`;
-  const things = (checks = "") => doc("Schema", "things", `  title: Things\n  lifecycle: operational\n  schema:\n    type: object\n    properties: { qty: { type: [integer, number] }, mixed: { type: [integer, string] }, tags: { type: array } }\n${checks}`);
-  const labels = doc("Schema", "labels", "  title: Labels\n  lifecycle: operational\n  schema:\n    type: object\n    properties: { mixed: { type: string }, value: { type: object } }");
+  const doc = (kind: string, name: string, spec: string) =>
+    `apiVersion: cms.mantle.aotter.net/v2\nkind: ${kind}\nmetadata: { name: ${name} }\nspec:\n${spec}\n`;
+  const things = (checks = "") =>
+    doc(
+      "Schema",
+      "things",
+      `  title: Things\n  lifecycle: operational\n  schema:\n    type: object\n    properties: { qty: { type: [integer, number] }, mixed: { type: [integer, string] }, tags: { type: array } }\n${checks}`,
+    );
+  const labels = doc(
+    "Schema",
+    "labels",
+    "  title: Labels\n  lifecycle: operational\n  schema:\n    type: object\n    properties: { mixed: { type: string }, value: { type: object } }",
+  );
   const view = (sql: string) => `---\n${doc("View", "v", `  surface: admin\n  sql: "${sql}"`)}`;
   const compile = async (text: string, dialect?: typeof pgCompile) => {
     const r = await compilePlan({ sources: [{ sourceId: "memory:union", text }] }, ...(dialect ? [dialect] : []));
-    return r.ok ? "ok" : r.diagnostics.map((d) => d.message).join(" ");
+    return r.ok ? "ok" : r.diagnostics.map(d => d.message).join(" ");
   };
   it("is one number when its types are integer and number, and json otherwise", async () => {
     const r = await compilePlan({ sources: [{ sourceId: "memory:union", text: things() }] });
@@ -178,34 +272,68 @@ describe("a field with more than one JSON Schema type", () => {
   });
   it("is refused in a comparison or a check when json, on every dialect: SQLite compares its text, PostgreSQL has no jsonb < integer", async () => {
     for (const dialect of [undefined, pgCompile]) {
-      for (const text of [things(`  checks: ["mixed < 5"]`), `${things()}---\n${labels}${view("SELECT t.id FROM things t JOIN labels l ON l.id = t.id WHERE t.mixed > 3")}`])
+      for (const text of [
+        things(`  checks: ["mixed < 5"]`),
+        `${things()}---\n${labels}${view("SELECT t.id FROM things t JOIN labels l ON l.id = t.id WHERE t.mixed > 3")}`,
+      ])
         expect(await compile(text, dialect)).toMatch(/mixed is json: compare a value read with ->>/);
       // not refused: a numeric union, another relation's field of the same name, a subquery's output, a row source's value (json_each on D1, jsonb_array_elements_text on PostgreSQL), IS NULL
-      for (const sql of ["SELECT id FROM things WHERE qty < 5", "SELECT l.id FROM labels l WHERE l.mixed = 'x'", "SELECT s.mixed FROM (SELECT CAST(t.qty AS text) AS mixed FROM things t) s WHERE s.mixed = 'x'", "SELECT t.id FROM things t, " + (dialect ? "jsonb_array_elements_text(t.tags) AS j(value)" : "json_each(t.tags)") + " WHERE value = 'x'", "SELECT id FROM things WHERE mixed IS NULL"])
-        expect(await compile(`${things()}---\n${labels}${view(sql)}`, dialect), `${dialect ? "pg" : "d1"}: ${sql}`).toBe("ok");
+      for (const sql of [
+        "SELECT id FROM things WHERE qty < 5",
+        "SELECT l.id FROM labels l WHERE l.mixed = 'x'",
+        "SELECT s.mixed FROM (SELECT CAST(t.qty AS text) AS mixed FROM things t) s WHERE s.mixed = 'x'",
+        "SELECT t.id FROM things t, " +
+          (dialect ? "jsonb_array_elements_text(t.tags) AS j(value)" : "json_each(t.tags)") +
+          " WHERE value = 'x'",
+        "SELECT id FROM things WHERE mixed IS NULL",
+      ])
+        expect(
+          await compile(`${things()}---\n${labels}${view(sql)}`, dialect),
+          `${dialect ? "pg" : "d1"}: ${sql}`,
+        ).toBe("ok");
     }
   });
 });
 
 describe("names that differ only by case", () => {
-  const codes = async (text: string) => { const r = await compile(text); return r.ok ? [] : r.diagnostics.map((d) => d.code); };
+  const codes = async (text: string) => {
+    const r = await compile(text);
+    return r.ok ? [] : r.diagnostics.map(d => d.code);
+  };
   it("two fields are FIELD_NAME_CASE_COLLISION, not one column", async () => {
-    expect(await codes(SCHEMA.replace("body: { type: string } }", "body: { type: string }, Body: { type: integer } }"))).toEqual(["FIELD_NAME_CASE_COLLISION"]);
+    expect(
+      await codes(SCHEMA.replace("body: { type: string } }", "body: { type: string }, Body: { type: integer } }")),
+    ).toEqual(["FIELD_NAME_CASE_COLLISION"]);
   });
   it("two inputs of a Procedure are FIELD_NAME_CASE_COLLISION, not one input", async () => {
-    const text = SCHEMA + procedure("INSERT INTO notes (body) VALUES (input.text)").replace("text: { type: string }", "text: { type: string }, Text: { type: string }");
+    const text =
+      SCHEMA +
+      procedure("INSERT INTO notes (body) VALUES (input.text)").replace(
+        "text: { type: string }",
+        "text: { type: string }, Text: { type: string }",
+      );
     expect(await codes(text)).toEqual(["FIELD_NAME_CASE_COLLISION"]);
     // a ref handler reads the JS object, where they are two keys
-    expect(await codes(text.replace('handler: { sql: "INSERT INTO notes (body) VALUES (input.text)" }', "handler: { ref: p }"))).toEqual([]);
+    expect(
+      await codes(
+        text.replace('handler: { sql: "INSERT INTO notes (body) VALUES (input.text)" }', "handler: { ref: p }"),
+      ),
+    ).toEqual([]);
   });
   it("two Schemas are SCHEMA_NAME_CASE_COLLISION, not one table", async () => {
-    expect(await codes(`${SCHEMA}---\n${SCHEMA.replace("name: notes", "name: Notes")}`)).toEqual(["SCHEMA_NAME_CASE_COLLISION"]);
+    expect(await codes(`${SCHEMA}---\n${SCHEMA.replace("name: notes", "name: Notes")}`)).toEqual([
+      "SCHEMA_NAME_CASE_COLLISION",
+    ]);
   });
 });
 
 describe("Schema.spec.lock (#1822)", () => {
   const LIVE = "EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)";
-  const lockSchemas = (when = LIVE, postsIndexes = "[[current_revision]]", lock?: string) => `apiVersion: cms.mantle.aotter.net/v2
+  const lockSchemas = (
+    when = LIVE,
+    postsIndexes = "[[current_revision]]",
+    lock?: string,
+  ) => `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: posts }
 spec:
@@ -223,24 +351,47 @@ spec:
   lock: ${lock ?? JSON.stringify([{ name: "live_revision", on: ["update", "delete"], when, message: "This revision is live." }])}
   schema: { type: object, properties: { body: { type: string }, state: { type: string } } }
 `;
-  const result = async (text: string, dialect?: typeof pgCompile) => { const r = await compilePlan({ sources: [{ sourceId: "memory:lock", text }] }, dialect); return r.ok ? r : { ok: false as const, found: r.diagnostics.map((d) => `${d.code}: ${d.message}`) }; };
+  const result = async (text: string, dialect?: typeof pgCompile) => {
+    const r = await compilePlan({ sources: [{ sourceId: "memory:lock", text }] }, dialect);
+    return r.ok ? r : { ok: false as const, found: r.diagnostics.map(d => `${d.code}: ${d.message}`) };
+  };
 
-  it.each([undefined, pgCompile])("compiles when into the plan as IR whose subqueries read stored rows (%s)", async (dialect) => {
-    const r = await result(lockSchemas(), dialect);
-    if (!r.ok) throw new Error(r.found.join("\n"));
-    const [lock] = r.plan.schemas.post_revisions!.locks!;
-    expect(lock).toMatchObject({ name: "live_revision", on: ["update", "delete"], message: "This revision is live.", when: { SubLink: { subLinkType: "EXISTS_SUBLINK" } } });
-    expect(JSON.stringify(lock!.when)).toContain('"mantle":"system"');
-    expect(r.plan.schemas.posts!.locks).toBeUndefined();
-  });
+  it.each([undefined, pgCompile])(
+    "compiles when into the plan as IR whose subqueries read stored rows (%s)",
+    async dialect => {
+      const r = await result(lockSchemas(), dialect);
+      if (!r.ok) throw new Error(r.found.join("\n"));
+      const [lock] = r.plan.schemas.post_revisions!.locks!;
+      expect(lock).toMatchObject({
+        name: "live_revision",
+        on: ["update", "delete"],
+        message: "This revision is live.",
+        when: { SubLink: { subLinkType: "EXISTS_SUBLINK" } },
+      });
+      expect(JSON.stringify(lock!.when)).toContain('"mantle":"system"');
+      expect(r.plan.schemas.posts!.locks).toBeUndefined();
+    },
+  );
 
   it("refuses a malformed lock entry with SCHEMA_LOCK_INVALID", async () => {
-    const entry = (patch: object) => JSON.stringify([{ name: "live", on: ["update"], when: "state = 'x'", message: "m", ...patch }]);
+    const entry = (patch: object) =>
+      JSON.stringify([{ name: "live", on: ["update"], when: "state = 'x'", message: "m", ...patch }]);
     for (const [lock, why] of [
-      ["[]", /non-empty list/], [entry({ name: "has space" }), /name must be an identifier/],
-      [entry({ on: [] }), /on must be a non-empty list/], [entry({ on: ["create"] }), /on must be/], [entry({ on: ["update", "update"] }), /distinct/],
-      [entry({ when: 1 }), /when must be a non-empty string/], [entry({ message: "" }), /message must be a non-empty string/], [entry({ extra: 1 }), /is not supported/],
-      [JSON.stringify([{ name: "live", on: ["update"], when: "true", message: "m" }, { name: "Live", on: ["delete"], when: "true", message: "m" }]), /declared twice/],
+      ["[]", /non-empty list/],
+      [entry({ name: "has space" }), /name must be an identifier/],
+      [entry({ on: [] }), /on must be a non-empty list/],
+      [entry({ on: ["create"] }), /on must be/],
+      [entry({ on: ["update", "update"] }), /distinct/],
+      [entry({ when: 1 }), /when must be a non-empty string/],
+      [entry({ message: "" }), /message must be a non-empty string/],
+      [entry({ extra: 1 }), /is not supported/],
+      [
+        JSON.stringify([
+          { name: "live", on: ["update"], when: "true", message: "m" },
+          { name: "Live", on: ["delete"], when: "true", message: "m" },
+        ]),
+        /declared twice/,
+      ],
     ] as const) {
       const r = await result(lockSchemas(undefined, undefined, lock));
       expect(r.ok ? [] : r.found, lock).toEqual([expect.stringMatching(why)]);
@@ -253,28 +404,47 @@ spec:
       ["EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = id)", /qualify every column: 'id'/],
       ["EXISTS (SELECT 1 FROM posts WHERE current_revision = post_revisions.id)", /qualify every column/],
       ["EXISTS (SELECT 1 FROM post_revisions WHERE post_revisions.state = 'x')", /hides a name already in scope/],
-      ["state = auth.uid()", /calls no function/], ["state = now()", /calls no function/], ["state = input.x", /input.x is not a declared input/],
-      ["(SELECT count(*) FROM posts p) > 0", /SubLink is refused/], ["EXISTS (SELECT count(*) FROM posts p WHERE p.id = post_revisions.id)", /calls no function/],
-      ["EXISTS (SELECT 1 FROM posts p JOIN posts q ON q.id = p.id WHERE p.current_revision = post_revisions.id)", /no join/],
+      ["state = auth.uid()", /calls no function/],
+      ["state = now()", /calls no function/],
+      ["state = input.x", /input.x is not a declared input/],
+      ["(SELECT count(*) FROM posts p) > 0", /SubLink is refused/],
+      ["EXISTS (SELECT count(*) FROM posts p WHERE p.id = post_revisions.id)", /calls no function/],
+      [
+        "EXISTS (SELECT 1 FROM posts p JOIN posts q ON q.id = p.id WHERE p.current_revision = post_revisions.id)",
+        /no join/,
+      ],
       ["EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id LIMIT 1)", /LIMIT/],
-      ["missing = 'x'", /SQL_COLUMN|not a column/], ["EXISTS (SELECT 1 FROM nope n WHERE n.id = post_revisions.id)", /nope is not a declared Schema/],
+      ["missing = 'x'", /SQL_COLUMN|not a column/],
+      ["EXISTS (SELECT 1 FROM nope n WHERE n.id = post_revisions.id)", /nope is not a declared Schema/],
       ["state || 'x' = 'y'", /is refused/],
       // a tail clause would land on the read and be dropped
-      ["state = 'x' ORDER BY state", /sortClause is refused/], ["state = 'x' GROUP BY state", /groupClause is refused/], ["state = 'x' LIMIT 1", /LIMIT needs an ORDER BY|limitCount is refused/],
+      ["state = 'x' ORDER BY state", /sortClause is refused/],
+      ["state = 'x' GROUP BY state", /groupClause is refused/],
+      ["state = 'x' LIMIT 1", /LIMIT needs an ORDER BY|limitCount is refused/],
     ] as const) {
       const r = await result(lockSchemas(when));
       expect(r.ok ? [] : r.found, when).toEqual([expect.stringMatching(why)]);
     }
     // the subset: columns, comparisons, IN, AND/OR/NOT, IS [NOT] NULL, [NOT] EXISTS, nested EXISTS
-    for (const when of ["state = 'live' OR state IS NULL", "state IN ('a', 'b') AND NOT state <> 'c'", `NOT ${LIVE}`, "EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id AND EXISTS (SELECT 1 FROM post_revisions r2 WHERE r2.id = p.id))"])
+    for (const when of [
+      "state = 'live' OR state IS NULL",
+      "state IN ('a', 'b') AND NOT state <> 'c'",
+      `NOT ${LIVE}`,
+      "EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id AND EXISTS (SELECT 1 FROM post_revisions r2 WHERE r2.id = p.id))",
+    ])
       expect((await result(lockSchemas(when))).ok, when).toBe(true);
   });
 
   it("gives the lock's relations reserved aliases and refuses authored _mantle aliases", async () => {
     const r = await result(lockSchemas());
     if (!r.ok) throw new Error(r.found.join("\n"));
-    expect(JSON.stringify(r.plan.schemas.post_revisions!.locks![0]!.when)).toContain('"fields":[{"String":{"sval":"_mantle_lock_0"}},{"String":{"sval":"current_revision"}}]');
-    for (const sql of ["DELETE FROM post_revisions _mantle_lock_0 WHERE _mantle_lock_0.id = input.text", "SELECT s.id FROM (SELECT id FROM posts) _mantle_x"]) {
+    expect(JSON.stringify(r.plan.schemas.post_revisions!.locks![0]!.when)).toContain(
+      '"fields":[{"String":{"sval":"_mantle_lock_0"}},{"String":{"sval":"current_revision"}}]',
+    );
+    for (const sql of [
+      "DELETE FROM post_revisions _mantle_lock_0 WHERE _mantle_lock_0.id = input.text",
+      "SELECT s.id FROM (SELECT id FROM posts) _mantle_x",
+    ]) {
       const p = await result(lockSchemas() + "---\n" + (sql.startsWith("SELECT") ? view(sql) : procedure(sql)));
       expect(p.ok ? [] : p.found, sql).toEqual([expect.stringMatching(/_mantle\w* is a reserved alias/)]);
     }
@@ -282,18 +452,66 @@ spec:
 
   it("proves each EXISTS is index-served, naming the index to declare", async () => {
     const r = await result(lockSchemas(LIVE, "[]"));
-    expect(r.ok ? [] : r.found).toEqual(["LOCK_INDEX_MISSING: Schema 'post_revisions' lock 'live_revision': no index serves its EXISTS on 'posts', which every guarded write runs. Declare indexes: [[current_revision]] on Schema 'posts' (handbook: reference/schema.md#locks)."]);
+    expect(r.ok ? [] : r.found).toEqual([
+      "LOCK_INDEX_MISSING: Schema 'post_revisions' lock 'live_revision': no index serves its EXISTS on 'posts', which every guarded write runs. Declare indexes: [[current_revision]] on Schema 'posts' (handbook: reference/schema.md#locks).",
+    ]);
     expect((await result(lockSchemas(LIVE))).ok).toBe(true);
     // a unique index or id serves it too; a literal equality counts; an index whose first column is not equated does not
-    expect((await result(lockSchemas(LIVE, "[]").replace("  indexes: []\n", "  indexes: []\n  uniqueIndexes: [[current_revision]]\n"))).ok).toBe(true);
-    expect((await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.id = post_revisions.body)", "[]"))).ok).toBe(true);
-    expect((await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.title = 'x' AND p.current_revision = post_revisions.id)", "[[title, current_revision]]"))).ok).toBe(true);
-    expect((await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)", "[[title, current_revision]]"))).ok).toBe(false);
+    expect(
+      (
+        await result(
+          lockSchemas(LIVE, "[]").replace("  indexes: []\n", "  indexes: []\n  uniqueIndexes: [[current_revision]]\n"),
+        )
+      ).ok,
+    ).toBe(true);
+    expect(
+      (await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.id = post_revisions.body)", "[]"))).ok,
+    ).toBe(true);
+    expect(
+      (
+        await result(
+          lockSchemas(
+            "EXISTS (SELECT 1 FROM posts p WHERE p.title = 'x' AND p.current_revision = post_revisions.id)",
+            "[[title, current_revision]]",
+          ),
+        )
+      ).ok,
+    ).toBe(true);
+    expect(
+      (
+        await result(
+          lockSchemas(
+            "EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id)",
+            "[[title, current_revision]]",
+          ),
+        )
+      ).ok,
+    ).toBe(false);
     // IN over constants is equality; OR is not index-proven
-    expect((await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.title IN ('a', 'b') AND p.current_revision > post_revisions.id)", "[[title]]"))).ok).toBe(true);
-    const or = await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id OR p.title = post_revisions.body)", "[[current_revision], [title]]"));
-    expect(or.ok ? [] : or.found).toEqual([expect.stringMatching(/^LOCK_INDEX_MISSING: .*OR is not index-proven: split it into separate locks/)]);
-    const none = await result(lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.current_revision > post_revisions.id)", "[]"));
-    expect(none.ok ? [] : none.found).toEqual([expect.stringMatching(/^LOCK_INDEX_MISSING: .*Correlate the subquery to the locked row by an equality/)]);
+    expect(
+      (
+        await result(
+          lockSchemas(
+            "EXISTS (SELECT 1 FROM posts p WHERE p.title IN ('a', 'b') AND p.current_revision > post_revisions.id)",
+            "[[title]]",
+          ),
+        )
+      ).ok,
+    ).toBe(true);
+    const or = await result(
+      lockSchemas(
+        "EXISTS (SELECT 1 FROM posts p WHERE p.current_revision = post_revisions.id OR p.title = post_revisions.body)",
+        "[[current_revision], [title]]",
+      ),
+    );
+    expect(or.ok ? [] : or.found).toEqual([
+      expect.stringMatching(/^LOCK_INDEX_MISSING: .*OR is not index-proven: split it into separate locks/),
+    ]);
+    const none = await result(
+      lockSchemas("EXISTS (SELECT 1 FROM posts p WHERE p.current_revision > post_revisions.id)", "[]"),
+    );
+    expect(none.ok ? [] : none.found).toEqual([
+      expect.stringMatching(/^LOCK_INDEX_MISSING: .*Correlate the subquery to the locked row by an equality/),
+    ]);
   });
 });

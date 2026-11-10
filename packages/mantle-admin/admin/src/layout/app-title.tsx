@@ -1,10 +1,5 @@
 import * as React from "react";
-import {
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from "@aotter/mantle-ui/kit";
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@aotter/mantle-ui/kit";
 import { Avatar, AvatarFallback, AvatarImage } from "@aotter/mantle-ui/kit";
 import { initialsFor } from "@/lib/initials";
 import type { AdminBrand } from "./types";
@@ -15,17 +10,12 @@ export function AppTitle(brand: AdminBrand): React.ReactElement {
   return (
     <SidebarMenu className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
       <SidebarMenuItem>
-        <SidebarMenuButton
-          asChild
-          className="p-1"
-        >
+        <SidebarMenuButton asChild className="p-1">
           <a href={href} onClick={() => setOpenMobile(false)}>
             {brand.image !== null ? (
               <Avatar className="size-7 rounded-none after:hidden">
                 {brand.image ? <AvatarImage className="rounded-none object-contain" src={brand.image} alt="" /> : null}
-                <AvatarFallback className="rounded-md text-xs">
-                  {initialsFor(brand.title)}
-                </AvatarFallback>
+                <AvatarFallback className="rounded-md text-xs">{initialsFor(brand.title)}</AvatarFallback>
               </Avatar>
             ) : null}
             <span className="truncate font-semibold">{brand.title}</span>

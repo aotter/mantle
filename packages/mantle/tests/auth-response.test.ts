@@ -3,15 +3,43 @@ import { normalizeEmailOtpResponse } from "../src/auth/routes.js";
 
 test("public OTP failures have one status, body and header set", async () => {
   const snapshots = [];
-  for (const [status, code] of [[400, "INVALID_OTP"], [400, "OTP_EXPIRED"], [403, "TOO_MANY_ATTEMPTS"]] as const) {
-    const response = await normalizeEmailOtpResponse(Response.json({ code, message: "upstream detail", extra: "private" }, {
-      status, headers: { "x-verification-state": code, "content-length": "123", "set-cookie": "private=value", "retry-after": "60" },
-    }));
-    snapshots.push({ status: response.status, statusText: response.statusText, headers: [...response.headers], body: await response.json() });
+  for (const [status, code] of [
+    [400, "INVALID_OTP"],
+    [400, "OTP_EXPIRED"],
+    [403, "TOO_MANY_ATTEMPTS"],
+  ] as const) {
+    const response = await normalizeEmailOtpResponse(
+      Response.json(
+        { code, message: "upstream detail", extra: "private" },
+        {
+          status,
+          headers: {
+            "x-verification-state": code,
+            "content-length": "123",
+            "set-cookie": "private=value",
+            "retry-after": "60",
+          },
+        },
+      ),
+    );
+    snapshots.push({
+      status: response.status,
+      statusText: response.statusText,
+      headers: [...response.headers],
+      body: await response.json(),
+    });
   }
-  expect(snapshots).toEqual(Array(3).fill({ status: 400, statusText: "BAD_REQUEST",
-    headers: [["cache-control", "private, no-store"], ["content-type", "application/json"]],
-    body: { code: "INVALID_OTP", message: "Invalid OTP" } }));
+  expect(snapshots).toEqual(
+    Array(3).fill({
+      status: 400,
+      statusText: "BAD_REQUEST",
+      headers: [
+        ["cache-control", "private, no-store"],
+        ["content-type", "application/json"],
+      ],
+      body: { code: "INVALID_OTP", message: "Invalid OTP" },
+    }),
+  );
 });
 
 test("success, throttling, protocol errors and non-JSON responses stay untouched", async () => {

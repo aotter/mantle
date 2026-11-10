@@ -12,7 +12,11 @@ export const ADMIN_API_BASE = "/admin/api";
  */
 export const pathTemplate = (path: string) => path.replace(/\{([^}]+)\}/g, ":$1");
 /** A describe template as the route path the routers compile: `:name` segments become `{name}`. */
-export const routePath = (template: string) => template.split("/").map(segment => segment.startsWith(":") ? `{${segment.slice(1)}}` : segment).join("/");
+export const routePath = (template: string) =>
+  template
+    .split("/")
+    .map(segment => (segment.startsWith(":") ? `{${segment.slice(1)}}` : segment))
+    .join("/");
 
 /**
  * A template's anchored pattern source and capture keys. A `{name}` segment captures one segment; with `suffix`,
@@ -21,25 +25,41 @@ export const routePath = (template: string) => template.split("/").map(segment =
  */
 export function routeSource(template: string, base = "", suffix = false): { source: string; keys: string[] } {
   const keys: string[] = [];
-  const path = template.split("/").map(segment => {
-    const rest = suffix ? /^\{([a-zA-Z]\w*)\*\}$/.exec(segment) : null, one = /^\{([^}]+)\}$/.exec(segment);
-    if (rest || one) { keys.push((rest ?? one)![1]!); return rest ? "(.*)" : "([^/]+)"; }
-    return encodeURIComponent(segment).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }).join("/");
+  const path = template
+    .split("/")
+    .map(segment => {
+      const rest = suffix ? /^\{([a-zA-Z]\w*)\*\}$/.exec(segment) : null,
+        one = /^\{([^}]+)\}$/.exec(segment);
+      if (rest || one) {
+        keys.push((rest ?? one)![1]!);
+        return rest ? "(.*)" : "([^/]+)";
+      }
+      return encodeURIComponent(segment).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    })
+    .join("/");
   return { source: `^${base}${path}/?$`, keys };
 }
 
 /** The path the routers test: each segment decoded and re-encoded, so equivalent escapes match alike. Malformed escapes are undefined. */
 export function canonicalPath(pathname: string): string | undefined {
-  try { return pathname.split("/").map(segment => encodeURIComponent(decodeURIComponent(segment))).join("/"); } catch { return undefined; }
+  try {
+    return pathname
+      .split("/")
+      .map(segment => encodeURIComponent(decodeURIComponent(segment)))
+      .join("/");
+  } catch {
+    return undefined;
+  }
 }
 
 const isParameter = (segment: string) => /^\{[^}]+\}$/.test(segment);
 /** REST precedence over route paths: fewer parameters, then a literal before a parameter from the left, then the path. */
 export function routeOrder(a: string, b: string): number {
-  const x = a.split("/"), y = b.split("/");
+  const x = a.split("/"),
+    y = b.split("/");
   const count = (segments: string[]) => segments.filter(isParameter).length;
   if (count(x) !== count(y)) return count(x) - count(y);
-  for (let i = 0; i < Math.min(x.length, y.length); i++) if (isParameter(x[i]!) !== isParameter(y[i]!)) return isParameter(x[i]!) ? 1 : -1;
+  for (let i = 0; i < Math.min(x.length, y.length); i++)
+    if (isParameter(x[i]!) !== isParameter(y[i]!)) return isParameter(x[i]!) ? 1 : -1;
   return a < b ? -1 : a > b ? 1 : 0;
 }

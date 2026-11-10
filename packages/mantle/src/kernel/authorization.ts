@@ -13,6 +13,10 @@ export async function authorizeTarget(authorize: Authorize, target: Target, call
 }
 async function decide(authorize: Authorize, target: Target, caller: Caller): Promise<unknown> {
   let result: boolean | Promise<boolean>;
-  try { result = authorize(target, caller); } catch (cause) { throw new Error("Authorization failed.", { cause }); }
+  try {
+    result = authorize(target, caller);
+  } catch (cause) {
+    throw new Error("Authorization failed.", { cause });
+  }
   return Promise.resolve(result).catch((error: unknown) => error);
 }

@@ -86,9 +86,6 @@ export function parseMimeAccept(entry: string): readonly string[] {
  * alternate / fallback) is declared independently per variant — see
  * the file header. Returns a `[slot][mime]` matrix.
  */
-export function expandPolicyRequired(
-  required: readonly string[],
-): readonly (readonly string[])[] {
+export function expandPolicyRequired(required: readonly string[]): readonly (readonly string[])[] {
   return required.map(parseMimeAccept);
 }
-

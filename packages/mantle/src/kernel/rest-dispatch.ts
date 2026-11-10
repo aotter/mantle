@@ -20,8 +20,13 @@ const typed = (raw: string, type: "number" | "boolean" | undefined): unknown =>
 
 /** Decode the input, answer a dry run, else run the View or Procedure. */
 export async function dispatch<Database, Handlers, Env>(
-  route: Route<Database, Handlers, Env>, request: Request, getDb: () => Database, caller: Caller, params: Record<string, string>,
-  options: Options<Env, Database> & { handlers?: Handlers }, pipeline: Pipeline,
+  route: Route<Database, Handlers, Env>,
+  request: Request,
+  getDb: () => Database,
+  caller: Caller,
+  params: Record<string, string>,
+  options: Options<Env, Database> & { handlers?: Handlers },
+  pipeline: Pipeline,
 ): Promise<Response> {
   let data: unknown;
   if (route.page) {

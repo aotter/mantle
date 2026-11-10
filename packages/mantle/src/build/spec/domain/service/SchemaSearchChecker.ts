@@ -9,19 +9,19 @@ export interface SchemaSearchProblem {
   readonly message: string;
 }
 
-export function checkSchemaSearchableFields(
-  manifest: SchemaManifest,
-): readonly SchemaSearchProblem[] {
+export function checkSchemaSearchableFields(manifest: SchemaManifest): readonly SchemaSearchProblem[] {
   const raw = (manifest.spec as unknown as Record<string, unknown>)["searchableFields"];
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) {
-    return [{
-      category: "shape",
-      pointer: "/spec/searchableFields",
-      value: raw,
-      expected: "an array of unique top-level string field names",
-      message: "Schema.spec.searchableFields must be an array of field-name strings.",
-    }];
+    return [
+      {
+        category: "shape",
+        pointer: "/spec/searchableFields",
+        value: raw,
+        expected: "an array of unique top-level string field names",
+        message: "Schema.spec.searchableFields must be an array of field-name strings.",
+      },
+    ];
   }
 
   const properties = manifest.spec.schema.properties ?? {};
@@ -81,8 +81,10 @@ function isStringProperty(property: unknown): boolean {
   // a date or a timestamp is stored as a number (ADR-0034 decision 5), so its text is not what search would match
   if (["date", "date-time"].includes(String((property as Record<string, unknown>)["format"]))) return false;
   if (rawType === "string") return true;
-  return Array.isArray(rawType) &&
+  return (
+    Array.isArray(rawType) &&
     rawType.length > 0 &&
-    rawType.every((type) => type === "string" || type === "null") &&
-    rawType.includes("string");
+    rawType.every(type => type === "string" || type === "null") &&
+    rawType.includes("string")
+  );
 }

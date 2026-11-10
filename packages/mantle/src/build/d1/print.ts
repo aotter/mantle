@@ -41,15 +41,22 @@ export class SqliteDeparser extends Deparser {
     // SQLite looks through a unary sign: `ORDER BY +2` is column position 2 to it (and `-2` an error) where PostgreSQL has a constant
     const sign = n.name?.[0]?.String?.sval;
     // the operand in its own parentheses: `-` then `-2` must never print as `--`, which starts a comment
-    if (n.kind === "AEXPR_OP" && !n.lexpr && (sign === "+" || sign === "-")) return `(${sign}(${this.visit(n.rexpr as never, ctx)}) + 0)`;
+    if (n.kind === "AEXPR_OP" && !n.lexpr && (sign === "+" || sign === "-"))
+      return `(${sign}(${this.visit(n.rexpr as never, ctx)}) + 0)`;
     return super.A_Expr(n, ctx);
   }
-  override NullTest(n: SqlNode, ctx: any) { return super.NullTest(parenthesized("NullTest", n) as never, ctx); }
-  override BooleanTest(n: SqlNode, ctx: any) { return super.BooleanTest(parenthesized("BooleanTest", n) as never, ctx); }
-  override SubLink(n: SqlNode, ctx: any) { return super.SubLink(parenthesized("SubLink", n) as never, ctx); }
+  override NullTest(n: SqlNode, ctx: any) {
+    return super.NullTest(parenthesized("NullTest", n) as never, ctx);
+  }
+  override BooleanTest(n: SqlNode, ctx: any) {
+    return super.BooleanTest(parenthesized("BooleanTest", n) as never, ctx);
+  }
+  override SubLink(n: SqlNode, ctx: any) {
+    return super.SubLink(parenthesized("SubLink", n) as never, ctx);
+  }
   /** Mantle's own lowerings are written as SQLite text with sub-ASTs spliced in (see `raw` in policy.ts). */
   Raw(n: RawExpr, ctx: any) {
-    return `(${n.parts.map((p) => (typeof p === "string" ? p : this.visit(p as never, ctx))).join("")})`;
+    return `(${n.parts.map(p => (typeof p === "string" ? p : this.visit(p as never, ctx))).join("")})`;
   }
 }
 

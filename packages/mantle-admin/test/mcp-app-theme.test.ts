@@ -13,7 +13,12 @@ const theme = /@theme inline \{([\s\S]*?)\n\}/.exec(css)![1]!;
 const hosted = [...theme.matchAll(/^\s*(--[\w-]+):\s*var\((--[\w-]+),/gm)].map(m => [m[2]!, m[1]!] as [string, string]);
 
 test("the documented host variable mapping is the one mcp-styles.css makes", () => {
-  const rows = doc.split("\n### Theme\n")[1]!.split("\n\n").find(part => part.startsWith("| Host variable"))!.split("\n").slice(2);
+  const rows = doc
+    .split("\n### Theme\n")[1]!
+    .split("\n\n")
+    .find(part => part.startsWith("| Host variable"))!
+    .split("\n")
+    .slice(2);
   const documented: [string, string][] = [];
   for (const row of rows) {
     const [host, tokens] = row.split("|").slice(1, 3).map(names);

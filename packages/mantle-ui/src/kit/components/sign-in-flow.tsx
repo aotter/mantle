@@ -112,9 +112,7 @@ export function signInFlowReducer(state: SignInFlowState, event: SignInFlowEvent
     case "start":
       return { ...state, busy: true, error: null };
     case "sent":
-      return event.error
-        ? { ...state, busy: false, error: event.error }
-        : { ...state, busy: false, step: "otp" };
+      return event.error ? { ...state, busy: false, error: event.error } : { ...state, busy: false, step: "otp" };
     case "verified":
       return event.error ? { ...state, busy: false, error: event.error } : state;
     case "failed":
@@ -146,17 +144,14 @@ export function SignInFlow({
   // same tick must not dispatch two sends or two verifies.
   const inFlight = React.useRef(false);
 
-  const run = (
-    request: () => Promise<SignInFlowStepResult>,
-    done: "sent" | "verified",
-  ): void => {
+  const run = (request: () => Promise<SignInFlowStepResult>, done: "sent" | "verified"): void => {
     if (busy || !claimInFlight(inFlight)) return;
     dispatch({ type: "start" });
     // Promise.resolve().then(request) turns a synchronous throw from the host
     // callback into a rejection; otherwise busy and the lock would stick.
     void Promise.resolve()
       .then(request)
-      .then((result) => {
+      .then(result => {
         dispatch(result?.error ? { type: done, error: result.error } : { type: done });
         // A successful verify hands off to host navigation; keep the lock so
         // the consumed code cannot be resubmitted while the page unloads.
@@ -192,7 +187,7 @@ export function SignInFlow({
             id={`${idPrefix}-email`}
             type="email"
             value={email}
-            onChange={(e) => dispatch({ type: "email", value: e.currentTarget.value })}
+            onChange={e => dispatch({ type: "email", value: e.currentTarget.value })}
             placeholder={labels.emailPlaceholder}
             required
             autoComplete={emailAutoComplete}
@@ -203,7 +198,7 @@ export function SignInFlow({
         </form>
       ) : (
         <form
-          onSubmit={(e) => {
+          onSubmit={e => {
             e.preventDefault();
             verifyCode(otp);
           }}
@@ -217,7 +212,7 @@ export function SignInFlow({
             autoFocus
             disabled={busy}
             value={otp}
-            onChange={(value) => dispatch({ type: "otp", value })}
+            onChange={value => dispatch({ type: "otp", value })}
             onComplete={verifyCode}
             required
           />
@@ -237,7 +232,9 @@ export function SignInFlow({
         </form>
       )}
       {error ? (
-        <p className="mt-2 text-xs text-destructive" role="alert">{error}</p>
+        <p className="mt-2 text-xs text-destructive" role="alert">
+          {error}
+        </p>
       ) : null}
     </div>
   );

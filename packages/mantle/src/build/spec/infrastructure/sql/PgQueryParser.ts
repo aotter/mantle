@@ -20,15 +20,24 @@ export interface ParsedSql {
 export async function parsePgSql(sql: string): Promise<ParsedSql> {
   const { loadModule, parse } = await import("libpg-query");
   // A runtime that cannot load the parser (a Worker: 128 MiB minimum WASM memory, ADR-0034) is an error, not SQL_SYNTAX.
-  await loadModule().catch(cause => { throw new Error("The SQL parser (libpg-query WASM, 128 MiB minimum memory) cannot load in this runtime; compile SQL manifests with Node.js or Bun.", { cause }); });
+  await loadModule().catch(cause => {
+    throw new Error(
+      "The SQL parser (libpg-query WASM, 128 MiB minimum memory) cannot load in this runtime; compile SQL manifests with Node.js or Bun.",
+      { cause },
+    );
+  });
   let tree;
   try {
     tree = await parse(sql);
   } catch (e: any) {
     const at = e?.sqlDetails?.cursorPosition; // a character index, not a byte offset
     // libpg-query prefixes "syntax error at or near ..." messages with its own noise; keep the part after the first colon
-    throw new SqlRefusal("SQL_SYNTAX", String(e?.message ?? e).replace(/^.*?:\s*/, ""), typeof at === "number" ? new TextEncoder().encode(sql.slice(0, at)).byteLength : undefined);
+    throw new SqlRefusal(
+      "SQL_SYNTAX",
+      String(e?.message ?? e).replace(/^.*?:\s*/, ""),
+      typeof at === "number" ? new TextEncoder().encode(sql.slice(0, at)).byteLength : undefined,
+    );
   }
   const raw = tree.stmts as SqlNode[];
-  return { stmts: raw.map((s) => s.stmt), locations: raw.map((s) => s.stmt_location) };
+  return { stmts: raw.map(s => s.stmt), locations: raw.map(s => s.stmt_location) };
 }

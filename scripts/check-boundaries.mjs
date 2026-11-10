@@ -19,9 +19,7 @@ function listFiles(dir, predicate) {
 }
 
 function stripComments(source) {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
 function rel(path) {
@@ -38,20 +36,43 @@ function checkUiTokens() {
   const metadata = JSON.parse(readFileSync(uiPackage, "utf8"));
   const sdk = /^@aotter\/mantle(?:-next|-admin)?(?:\/|$)/;
   for (const key of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
-    for (const name of Object.keys(metadata[key] ?? {})) if (sdk.test(name)) fail(uiPackage, `pure UI ${key} may not depend on '${name}'`);
+    for (const name of Object.keys(metadata[key] ?? {}))
+      if (sdk.test(name)) fail(uiPackage, `pure UI ${key} may not depend on '${name}'`);
   }
   for (const file of listFiles(join(ROOT, "packages/mantle-ui/src"), p => /\.tsx?$/.test(p))) {
-    for (const [, specifier] of stripComments(readFileSync(file, "utf8")).matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
+    for (const [, specifier] of stripComments(readFileSync(file, "utf8")).matchAll(
+      /\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g,
+    )) {
       if (sdk.test(specifier)) fail(file, `pure UI may not import '${specifier}'`);
     }
   }
   const rules = [
-    ["packages/mantle-ui/src/controller", ["window.", "document.", "localStorage", "sessionStorage"], "ui controller must stay framework- and host-free"],
-    ["packages/mantle-ui/src/react", ["@aotter/mantle/admin", "@tanstack/", "@modelcontextprotocol/", "fetch(", "location.", "localStorage", "document.cookie"], "ui components must not depend on Admin, a query cache, a transport or host globals"],
-    ["packages/mantle-ui/src/kit", ["@aotter/", "@tanstack/", "@modelcontextprotocol/", "fetch(", "localStorage", '"@/'], "ui kit must stay domain-neutral: no Mantle packages, query cache, transport, storage or Admin aliases"],
+    [
+      "packages/mantle-ui/src/controller",
+      ["window.", "document.", "localStorage", "sessionStorage"],
+      "ui controller must stay framework- and host-free",
+    ],
+    [
+      "packages/mantle-ui/src/react",
+      [
+        "@aotter/mantle/admin",
+        "@tanstack/",
+        "@modelcontextprotocol/",
+        "fetch(",
+        "location.",
+        "localStorage",
+        "document.cookie",
+      ],
+      "ui components must not depend on Admin, a query cache, a transport or host globals",
+    ],
+    [
+      "packages/mantle-ui/src/kit",
+      ["@aotter/", "@tanstack/", "@modelcontextprotocol/", "fetch(", "localStorage", '"@/'],
+      "ui kit must stay domain-neutral: no Mantle packages, query cache, transport, storage or Admin aliases",
+    ],
   ];
   for (const [dir, forbidden, message] of rules) {
-    for (const file of listFiles(join(ROOT, dir), (p) => p.endsWith(".ts") || p.endsWith(".tsx"))) {
+    for (const file of listFiles(join(ROOT, dir), p => p.endsWith(".ts") || p.endsWith(".tsx"))) {
       const source = stripComments(readFileSync(file, "utf8"));
       for (const token of forbidden) if (source.includes(token)) fail(file, `${message}: '${token}'`);
     }
@@ -60,9 +81,18 @@ function checkUiTokens() {
 
 /** Core holds no engine or platform code (ADR-0035 decision 3): no Cloudflare primitive appears in `src/core`. */
 function checkCoreCloudflareFree() {
-  for (const file of listFiles(join(ROOT, "packages/mantle/src/build/core"), (p) => p.endsWith(".ts"))) {
+  for (const file of listFiles(join(ROOT, "packages/mantle/src/build/core"), p => p.endsWith(".ts"))) {
     const source = stripComments(readFileSync(file, "utf8"));
-    for (const token of ["@cloudflare/", "cloudflare:", "D1Database", "KVNamespace", "R2Bucket", "ExecutionContext", "Bun.", "bun:"]) {
+    for (const token of [
+      "@cloudflare/",
+      "cloudflare:",
+      "D1Database",
+      "KVNamespace",
+      "R2Bucket",
+      "ExecutionContext",
+      "Bun.",
+      "bun:",
+    ]) {
       if (source.includes(token)) fail(file, `core must not reference Cloudflare primitive '${token}'`);
     }
   }
@@ -75,34 +105,85 @@ function checkCoreCloudflareFree() {
  */
 function checkNextFolderImports() {
   // Pure kernel leaves (no I/O, no runtime state, relative imports only among themselves) the compiler shares instead of copying.
-  const compilerLeaves = ["kernel/contract-error.js", "kernel/scalars.js", "kernel/search.js", "kernel/user-field-name.js"];
-  const folders = {testing:["kernel"],kernel:[],auth:["kernel"],bun:["kernel"],domain:["build","kernel"],usecase:["build","domain","kernel"],infrastructure:["build","domain","usecase","kernel"],build:[]};
-  const root = join(ROOT,"packages/mantle/src");
-  for (const [folder,reach] of Object.entries(folders)) for (const file of listFiles(join(root,folder),p=>p.endsWith(".ts"))) {
-    for (const spec of importSpecifiers(file)) {
-      if (spec.startsWith(".")) {
-        const target = relative(root,join(dirname(file),spec)).split(sep)[0];
-        if (target !== folder && !reach.includes(target) && !(folder === "build" && compilerLeaves.includes(relative(root,join(dirname(file),spec)).split(sep).join("/")))) fail(file,`src/${folder} may reach only ${[folder,...reach].join(", ")}: '${spec}'`);
-      } else if (/^(?:better-auth(?:\/|$)|@better-auth\/)/.test(spec)) {
-        if (folder !== "auth" && !/infrastructure\/(?:authSchema|generateAuth)\.ts$/.test(rel(file))) fail(file,`optional Auth belongs to the selected auth entry: '${spec}'`);
-      } else if (spec.startsWith("@modelcontextprotocol/")) {
-        if (folder !== "kernel" || !/mcp[^/]*\.ts$/.test(file)) fail(file,`optional MCP belongs to request-time MCP modules: '${spec}'`);
-      } else if (/^(?:libpg-query|pgsql-deparser|@pgsql\/types|yaml|zod)(?:\/|$)/.test(spec)) {
-        if (folder !== "build") fail(file,`compiler dependency must stay in src/build: '${spec}'`);
-      } else if (spec.startsWith("@aotter/mantle")) fail(file,`SDK source may not depend on another Mantle package or its public generator: '${spec}'`);
-      else if (spec.startsWith("node:") && !["build","infrastructure","bun"].includes(folder) && spec !== "node:async_hooks") fail(file,`native request code may not import '${spec}'`);
+  const compilerLeaves = [
+    "kernel/contract-error.js",
+    "kernel/scalars.js",
+    "kernel/search.js",
+    "kernel/user-field-name.js",
+  ];
+  const folders = {
+    testing: ["kernel"],
+    kernel: [],
+    auth: ["kernel"],
+    bun: ["kernel"],
+    domain: ["build", "kernel"],
+    usecase: ["build", "domain", "kernel"],
+    infrastructure: ["build", "domain", "usecase", "kernel"],
+    build: [],
+  };
+  const root = join(ROOT, "packages/mantle/src");
+  for (const [folder, reach] of Object.entries(folders))
+    for (const file of listFiles(join(root, folder), p => p.endsWith(".ts"))) {
+      for (const spec of importSpecifiers(file)) {
+        if (spec.startsWith(".")) {
+          const target = relative(root, join(dirname(file), spec)).split(sep)[0];
+          if (
+            target !== folder &&
+            !reach.includes(target) &&
+            !(
+              folder === "build" &&
+              compilerLeaves.includes(
+                relative(root, join(dirname(file), spec))
+                  .split(sep)
+                  .join("/"),
+              )
+            )
+          )
+            fail(file, `src/${folder} may reach only ${[folder, ...reach].join(", ")}: '${spec}'`);
+        } else if (/^(?:better-auth(?:\/|$)|@better-auth\/)/.test(spec)) {
+          if (folder !== "auth" && !/infrastructure\/(?:authSchema|generateAuth)\.ts$/.test(rel(file)))
+            fail(file, `optional Auth belongs to the selected auth entry: '${spec}'`);
+        } else if (spec.startsWith("@modelcontextprotocol/")) {
+          if (folder !== "kernel" || !/mcp[^/]*\.ts$/.test(file))
+            fail(file, `optional MCP belongs to request-time MCP modules: '${spec}'`);
+        } else if (/^(?:libpg-query|pgsql-deparser|@pgsql\/types|yaml|zod)(?:\/|$)/.test(spec)) {
+          if (folder !== "build") fail(file, `compiler dependency must stay in src/build: '${spec}'`);
+        } else if (spec.startsWith("@aotter/mantle"))
+          fail(file, `SDK source may not depend on another Mantle package or its public generator: '${spec}'`);
+        else if (
+          spec.startsWith("node:") &&
+          !["build", "infrastructure", "bun"].includes(folder) &&
+          spec !== "node:async_hooks"
+        )
+          fail(file, `native request code may not import '${spec}'`);
+      }
     }
-  }
 }
 
 function importSpecifiers(file) {
-  const source = ts.createSourceFile(file,readFileSync(file,"utf8"),ts.ScriptTarget.Latest,true);
+  const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
   const specifiers = [];
   const visit = node => {
-    if ((ts.isImportDeclaration(node)||ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) specifiers.push(node.moduleSpecifier.text);
-    else if (ts.isCallExpression(node) && node.expression.kind===ts.SyntaxKind.ImportKeyword && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) specifiers.push(node.arguments[0].text);
-    else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)) specifiers.push(node.argument.literal.text);
-    ts.forEachChild(node,visit);
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    )
+      specifiers.push(node.moduleSpecifier.text);
+    else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments[0] &&
+      ts.isStringLiteral(node.arguments[0])
+    )
+      specifiers.push(node.arguments[0].text);
+    else if (
+      ts.isImportTypeNode(node) &&
+      ts.isLiteralTypeNode(node.argument) &&
+      ts.isStringLiteral(node.argument.literal)
+    )
+      specifiers.push(node.argument.literal.text);
+    ts.forEachChild(node, visit);
   };
   visit(source);
   return specifiers;
@@ -112,10 +193,10 @@ function importSpecifiers(file) {
  *  so it installs and bundles alone. Checked on the AST, so re-exports,
  *  side-effect and dynamic imports count too. */
 function checkUiControllerImports() {
-  const files = listFiles(join(ROOT, "packages/mantle-ui/src/controller"), (p) => p.endsWith(".ts"));
+  const files = listFiles(join(ROOT, "packages/mantle-ui/src/controller"), p => p.endsWith(".ts"));
   for (const file of files) {
     const specifiers = importSpecifiers(file);
-    for (const specifier of specifiers.filter((value) => !value.startsWith("."))) {
+    for (const specifier of specifiers.filter(value => !value.startsWith("."))) {
       fail(file, `ui controller must not import '${specifier}'`);
     }
   }
@@ -145,7 +226,8 @@ const ADMIN_PLUMBING_DEBT = {
  */
 function checkFirstPartyLayering() {
   const exported = Object.keys(JSON.parse(readFileSync(join(ROOT, "packages/mantle/package.json"), "utf8")).exports);
-  const isSource = path => /\.(?:ts|tsx|mts|mjs)$/.test(path) && !/\.test\.[a-z]+$/.test(path) && !/[\\/]tests?[\\/]/.test(path);
+  const isSource = path =>
+    /\.(?:ts|tsx|mts|mjs)$/.test(path) && !/\.test\.[a-z]+$/.test(path) && !/[\\/]tests?[\\/]/.test(path);
   const used = new Set();
   for (const pkg of ["packages/mantle-admin", "packages/mantle-ui"]) {
     for (const file of listFiles(join(ROOT, pkg), isSource)) {
@@ -157,30 +239,33 @@ function checkFirstPartyLayering() {
         else if (subpath.startsWith("./internal/")) {
           const plumbing = subpath.slice("./internal/".length);
           if (ADMIN_PLUMBING_DEBT[name]?.includes(plumbing)) used.add(`${name} ${plumbing}`);
-          else fail(file, `first-party packages use only the developer API: '${specifier}' is generated-code plumbing (see #1971)`);
+          else
+            fail(
+              file,
+              `first-party packages use only the developer API: '${specifier}' is generated-code plumbing (see #1971)`,
+            );
         }
       }
     }
   }
   for (const [name, plumbing] of Object.entries(ADMIN_PLUMBING_DEBT)) {
     for (const module of plumbing) {
-      if (!used.has(`${name} ${module}`)) fail(join(ROOT, name), `plumbing allowance 'internal/${module}' is no longer used; remove it from ADMIN_PLUMBING_DEBT`);
+      if (!used.has(`${name} ${module}`))
+        fail(
+          join(ROOT, name),
+          `plumbing allowance 'internal/${module}' is no longer used; remove it from ADMIN_PLUMBING_DEBT`,
+        );
     }
   }
 }
 
 function checkSkillDocsVersioned() {
-  const files = listFiles(join(ROOT, "skills"), (path) =>
-    path.endsWith("SKILL.md"),
-  );
+  const files = listFiles(join(ROOT, "skills"), path => path.endsWith("SKILL.md"));
   const floatingCoreDoc =
     /(?:raw\.githubusercontent\.com\/aotter\/mantle\/develop|github\.com\/aotter\/mantle\/(?:blob|raw)\/develop)\//;
   for (const file of files) {
     if (floatingCoreDoc.test(readFileSync(file, "utf8"))) {
-      fail(
-        file,
-        "consumer skills must use the installed Mantle docs, not floating develop docs",
-      );
+      fail(file, "consumer skills must use the installed Mantle docs, not floating develop docs");
     }
   }
 }
@@ -221,9 +306,11 @@ function checkRepositoryGuidance() {
   if (!releaseSkill.includes("All three npmjs artifacts")) {
     fail(releaseSkillPath, "canonical release skill must match the three-package topology");
   }
-  if (!claudeRelease.includes("../../../.agents/skills/mantle-release/SKILL.md") ||
-      claudeRelease.split("\n").length > 8 ||
-      /^## (?:Contract|Prepare|Run|Recovery)/m.test(claudeRelease)) {
+  if (
+    !claudeRelease.includes("../../../.agents/skills/mantle-release/SKILL.md") ||
+    claudeRelease.split("\n").length > 8 ||
+    /^## (?:Contract|Prepare|Run|Recovery)/m.test(claudeRelease)
+  ) {
     fail(claudeReleasePath, "Claude release entry must only point to the canonical skill");
   }
 
@@ -243,11 +330,11 @@ function checkRepositoryGuidance() {
     contributingPath,
     join(ROOT, "README.md"),
     join(ROOT, "skills/README.md"),
-    ...listFiles(join(ROOT, "packages"), (path) => path.endsWith("README.md")),
-    ...listFiles(join(ROOT, "docs"), (path) =>
-      path.endsWith(".md") &&
-      !path.includes(`${sep}adr${sep}`) &&
-      !path.endsWith("sealed-pipeline-ownership.md")
+    ...listFiles(join(ROOT, "packages"), path => path.endsWith("README.md")),
+    ...listFiles(
+      join(ROOT, "docs"),
+      path =>
+        path.endsWith(".md") && !path.includes(`${sep}adr${sep}`) && !path.endsWith("sealed-pipeline-ownership.md"),
     ),
   ];
   for (const path of activeDocs) {
@@ -272,13 +359,13 @@ function checkRepositoryGuidance() {
   const releaseWorkflow = readFileSync(releaseWorkflowPath, "utf8");
   const codeownersPath = join(ROOT, ".github/CODEOWNERS");
   const codeowners = readFileSync(codeownersPath, "utf8");
-  const publicPackages = listFiles(join(ROOT, "packages"), (path) =>
-    path.endsWith("package.json"),
-  ).map((path) => ({
-    path,
-    dir: rel(dirname(path)),
-    manifest: JSON.parse(readFileSync(path, "utf8")),
-  })).filter(({ manifest }) => !manifest.private);
+  const publicPackages = listFiles(join(ROOT, "packages"), path => path.endsWith("package.json"))
+    .map(path => ({
+      path,
+      dir: rel(dirname(path)),
+      manifest: JSON.parse(readFileSync(path, "utf8")),
+    }))
+    .filter(({ manifest }) => !manifest.private);
   for (const { path, dir, manifest } of publicPackages) {
     if (!rootReadme.includes(`\`${manifest.name}\``)) {
       fail(rootReadmePath, `package map is missing '${manifest.name}'`);

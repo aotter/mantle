@@ -1,5 +1,17 @@
 import * as React from "react";
-import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Database, Eye, Info, LayoutGrid, Workflow, X, Zap } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  ChevronDown,
+  ChevronUp,
+  Database,
+  Eye,
+  Info,
+  LayoutGrid,
+  Workflow,
+  X,
+  Zap,
+} from "lucide-react";
 import {
   BaseEdge,
   Background,
@@ -40,7 +52,14 @@ import type {
   DeveloperRelationKind,
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@aotter/mantle-ui/kit";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@aotter/mantle-ui/kit";
 import { PageHeaderActions } from "../../layout/page-header-actions";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 
@@ -54,20 +73,35 @@ export const atomKindTone = {
   Trigger: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
 } as const;
 
-const audiences = ["public", "members", "admin", "system", "api-clients"] as const satisfies readonly DeveloperAudience[];
+const audiences = [
+  "public",
+  "members",
+  "admin",
+  "system",
+  "api-clients",
+] as const satisfies readonly DeveloperAudience[];
 
 export type ManifestGraphEdge = Edge<{ kind: DeveloperRelationKind; label: string; opacity: number }, "manifest">;
 type FocusSlice = { startId: string; nodeIds: Set<string>; relationIds: Set<string> };
 
 export const manifestEdgeTypes = { manifest: ManifestEdge, wire: WireEdge } satisfies EdgeTypes;
 const nodeTypes = { atom: AtomNode, column: ColumnNode, businessStep: BusinessStepNode } satisfies NodeTypes;
-export const graphCanvasClassName = "bg-background [--graph-inactive-filter:none] [--graph-inactive-opacity:0.16] dark:[--graph-inactive-filter:brightness(0.42)_saturate(0.2)] dark:[--graph-inactive-opacity:1]";
+export const graphCanvasClassName =
+  "bg-background [--graph-inactive-filter:none] [--graph-inactive-opacity:0.16] dark:[--graph-inactive-filter:brightness(0.42)_saturate(0.2)] dark:[--graph-inactive-opacity:1]";
 
 export function GraphControls({ onRelayout }: { onRelayout: () => void }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <Controls className="overflow-hidden rounded-lg border bg-background/95 shadow-md" showInteractive={false} fitViewOptions={{ padding: 0.08, duration: 240 }}>
-      <ControlButton onClick={onRelayout} title={t(language, "developer.graph.relayout")} aria-label={t(language, "developer.graph.relayout")}>
+    <Controls
+      className="overflow-hidden rounded-lg border bg-background/95 shadow-md"
+      showInteractive={false}
+      fitViewOptions={{ padding: 0.08, duration: 240 }}
+    >
+      <ControlButton
+        onClick={onRelayout}
+        title={t(language, "developer.graph.relayout")}
+        aria-label={t(language, "developer.graph.relayout")}
+      >
         <LayoutGrid aria-hidden />
       </ControlButton>
     </Controls>
@@ -107,15 +141,34 @@ function audienceDescription(language: AdminLanguage, audience: DeveloperAudienc
   return t(language, "developer.graph.audienceDescription.apiClients");
 }
 
-function AudienceBadge({ language, audience, prominent = false }: { language: AdminLanguage; audience: DeveloperAudience; prominent?: boolean }): React.ReactElement {
+function AudienceBadge({
+  language,
+  audience,
+  prominent = false,
+}: {
+  language: AdminLanguage;
+  audience: DeveloperAudience;
+  prominent?: boolean;
+}): React.ReactElement {
   const label = audienceLabel(language, audience);
   const description = audienceDescription(language, audience);
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded border font-semibold uppercase tracking-wider", prominent ? "border-slate-300 bg-white px-2 py-1 text-sm text-slate-800 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" : "border-border bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground")}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded border font-semibold uppercase tracking-wider",
+        prominent
+          ? "border-slate-300 bg-white px-2 py-1 text-sm text-slate-800 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          : "border-border bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground",
+      )}
+    >
       {label}
       <Tooltip>
         <TooltipTrigger asChild>
-          <button type="button" className="nodrag nopan pointer-events-auto inline-flex rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`${label}: ${description}`}>
+          <button
+            type="button"
+            className="nodrag nopan pointer-events-auto inline-flex rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`${label}: ${description}`}
+          >
             <Info className={prominent ? "size-3.5" : "size-3"} aria-hidden />
           </button>
         </TooltipTrigger>
@@ -148,12 +201,20 @@ export function AtomGraph({
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const hudRef = React.useRef<HTMLDivElement>(null);
 
-  const layout = React.useMemo(() => business ? businessOverview(graph, schemas, language) : layoutGraph(graph, language), [graph, language, schemas, business]);
+  const layout = React.useMemo(
+    () => (business ? businessOverview(graph, schemas, language) : layoutGraph(graph, language)),
+    [graph, language, schemas, business],
+  );
   const [canvas, setCanvas] = React.useState<{ width: number; height: number } | null>(null);
   React.useLayoutEffect(() => {
     const element = canvasRef.current;
     if (!element) return;
-    const measure = (): void => setCanvas((current) => current?.width === element.clientWidth && current.height === element.clientHeight ? current : { width: element.clientWidth, height: element.clientHeight });
+    const measure = (): void =>
+      setCanvas(current =>
+        current?.width === element.clientWidth && current.height === element.clientHeight
+          ? current
+          : { width: element.clientWidth, height: element.clientHeight },
+      );
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
@@ -183,43 +244,75 @@ export function AtomGraph({
     };
   }, [showDetails, selectedId]);
   const [trace, setTrace] = React.useState<FocusSlice | null>(null);
-  const atomsById = React.useMemo(() => new Map(graph.atoms.map((atom) => [atom.id, atom])), [graph.atoms]);
-  const selected = selectedId ? atomsById.get(selectedId) ?? null : null;
-  const traceAtoms = React.useMemo(() => trace ? traceAtomIds(graph, trace.nodeIds, trace.startId).map((id) => atomsById.get(id)).filter((atom): atom is DeveloperAtom => Boolean(atom)) : [], [atomsById, graph, trace]);
+  const atomsById = React.useMemo(() => new Map(graph.atoms.map(atom => [atom.id, atom])), [graph.atoms]);
+  const selected = selectedId ? (atomsById.get(selectedId) ?? null) : null;
+  const traceAtoms = React.useMemo(
+    () =>
+      trace
+        ? traceAtomIds(graph, trace.nodeIds, trace.startId)
+            .map(id => atomsById.get(id))
+            .filter((atom): atom is DeveloperAtom => Boolean(atom))
+        : [],
+    [atomsById, graph, trace],
+  );
 
   React.useEffect(() => {
     setNodes(layout.nodes);
     setEdges(layout.edges);
     setSelectedId(null);
     setTrace(null);
-    window.requestAnimationFrame(() => void flow?.fitView({ padding: 0.08, ...(business && { minZoom: 0.4 }), duration: 240 }));
+    window.requestAnimationFrame(
+      () => void flow?.fitView({ padding: 0.08, ...(business && { minZoom: 0.4 }), duration: 240 }),
+    );
   }, [layout, setEdges, setNodes]);
 
   const highlight = (nodeIds: ReadonlySet<string>, relationIds: ReadonlySet<string>): void => {
-    setNodes((current) => current.map((node) => {
-      const inactive = atomsById.has(node.id) && !nodeIds.has(node.id);
-      return {
-        ...node,
-        style: { ...node.style, opacity: inactive ? "var(--graph-inactive-opacity)" : 1, filter: inactive ? "var(--graph-inactive-filter)" : "none", transition: "filter 180ms ease, opacity 180ms ease" },
-        zIndex: atomsById.has(node.id) ? nodeIds.has(node.id) ? 1 : 0 : -1,
-      };
-    }));
-    setEdges((current) => current.map((edge) => {
-      const active = relationIds.has(edge.id);
-      return {
-        ...edge,
-        style: { ...edge.style, opacity: active ? 1 : 0.08, stroke: edge.id.startsWith("RuleEdge:") ? edge.style?.stroke : active ? "var(--foreground)" : "var(--muted-foreground)", strokeWidth: active ? 2.5 : 1.25 },
-        data: edge.data ? { ...edge.data, opacity: active ? 1 : 0.08 } : edge.data,
-        markerEnd: edge.id.startsWith("RuleEdge:") ? edge.markerEnd : typeof edge.markerEnd === "object" ? { ...edge.markerEnd, color: active ? "var(--foreground)" : "var(--muted-foreground)" } : edge.markerEnd,
-        zIndex: active ? 1 : 0,
-      };
-    }));
+    setNodes(current =>
+      current.map(node => {
+        const inactive = atomsById.has(node.id) && !nodeIds.has(node.id);
+        return {
+          ...node,
+          style: {
+            ...node.style,
+            opacity: inactive ? "var(--graph-inactive-opacity)" : 1,
+            filter: inactive ? "var(--graph-inactive-filter)" : "none",
+            transition: "filter 180ms ease, opacity 180ms ease",
+          },
+          zIndex: atomsById.has(node.id) ? (nodeIds.has(node.id) ? 1 : 0) : -1,
+        };
+      }),
+    );
+    setEdges(current =>
+      current.map(edge => {
+        const active = relationIds.has(edge.id);
+        return {
+          ...edge,
+          style: {
+            ...edge.style,
+            opacity: active ? 1 : 0.08,
+            stroke: edge.id.startsWith("RuleEdge:")
+              ? edge.style?.stroke
+              : active
+                ? "var(--foreground)"
+                : "var(--muted-foreground)",
+            strokeWidth: active ? 2.5 : 1.25,
+          },
+          data: edge.data ? { ...edge.data, opacity: active ? 1 : 0.08 } : edge.data,
+          markerEnd: edge.id.startsWith("RuleEdge:")
+            ? edge.markerEnd
+            : typeof edge.markerEnd === "object"
+              ? { ...edge.markerEnd, color: active ? "var(--foreground)" : "var(--muted-foreground)" }
+              : edge.markerEnd,
+          zIndex: active ? 1 : 0,
+        };
+      }),
+    );
   };
 
   const inspect = (id: string, slice = focusSlice(graph, id)): void => {
     setSelectedId(id);
     setTrace(slice);
-    setNodes((current) => current.map((node) => ({ ...node, selected: node.id === id })));
+    setNodes(current => current.map(node => ({ ...node, selected: node.id === id })));
     highlight(slice.nodeIds, slice.relationIds);
   };
 
@@ -227,7 +320,7 @@ export function AtomGraph({
     if (!flow || !selectedId) return;
     const compact = window.innerWidth < 640;
     void flow.fitView({
-      nodes: layout.nodes.some((node) => node.id === selectedId) ? [{ id: selectedId }] : undefined,
+      nodes: layout.nodes.some(node => node.id === selectedId) ? [{ id: selectedId }] : undefined,
       padding: 0.2,
       minZoom: compact ? 0.5 : 0.7,
       maxZoom: compact ? 1 : 1.2,
@@ -247,7 +340,14 @@ export function AtomGraph({
     setShowDetails(false);
     setSelectedId(null);
     setTrace(null);
-    setNodes((current) => current.map((node) => ({ ...node, selected: false, style: { ...node.style, opacity: 1, filter: "none" }, zIndex: atomsById.has(node.id) ? 0 : -1 })));
+    setNodes(current =>
+      current.map(node => ({
+        ...node,
+        selected: false,
+        style: { ...node.style, opacity: 1, filter: "none" },
+        zIndex: atomsById.has(node.id) ? 0 : -1,
+      })),
+    );
     setEdges(layout.edges);
   };
 
@@ -282,56 +382,108 @@ export function AtomGraph({
       <PageHeaderActions>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="ghost" className="min-w-0 max-w-full shrink" aria-label={t(language, "developer.wiring.mode")}>
-              <span className="truncate">{t(language, business ? "developer.wiring.mode.business" : "developer.wiring.mode.system")}</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="min-w-0 max-w-full shrink"
+              aria-label={t(language, "developer.wiring.mode")}
+            >
+              <span className="truncate">
+                {t(language, business ? "developer.wiring.mode.business" : "developer.wiring.mode.system")}
+              </span>
               <ChevronDown aria-hidden className="size-3" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuRadioGroup value={business ? "business" : "system"} onValueChange={(value) => onDiagramModeChange(value === "business" ? "business" : "system")}>
-              <DropdownMenuRadioItem value="business">{t(language, "developer.wiring.mode.business")}</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="system">{t(language, "developer.wiring.mode.system")}</DropdownMenuRadioItem>
+            <DropdownMenuRadioGroup
+              value={business ? "business" : "system"}
+              onValueChange={value => onDiagramModeChange(value === "business" ? "business" : "system")}
+            >
+              <DropdownMenuRadioItem value="business">
+                {t(language, "developer.wiring.mode.business")}
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="system">
+                {t(language, "developer.wiring.mode.system")}
+              </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </PageHeaderActions>
-    <div className="relative flex min-h-0 flex-1">
-    <div ref={canvasRef} className="min-w-0 flex-1">
-    <ReactFlow
-      className={graphCanvasClassName}
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onInit={setFlow}
-      edgeTypes={manifestEdgeTypes}
-      nodeTypes={nodeTypes}
-      colorMode={theme}
-      fitView
-      fitViewOptions={{ padding: 0.08, ...(business && { minZoom: 0.65 }) }}
-      minZoom={minZoom}
-      maxZoom={1.8}
-      deleteKeyCode={null}
-      nodesConnectable={false}
-      nodesDraggable
-      onNodeClick={(_, node) => {
-        if (atomsById.has(node.id)) selectAtom(node.id);
-      }}
-      onKeyDownCapture={(event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        const node = (event.target as HTMLElement).closest(".react-flow__node[data-id]");
-        const id = node?.getAttribute("data-id");
-        if (id && atomsById.has(id)) { event.preventDefault(); selectAtom(id); setShowDetails(true); }
-      }}
-      onPaneClick={clearSelection}
-    >
-      <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--border)" />
-      <GraphControls onRelayout={relayout} />
-      {business ? null : <MiniMap pannable zoomable position="bottom-left" className="!mb-3 !ml-14 hidden overflow-hidden rounded-lg border shadow-md sm:block" style={{ width: 160, height: 110 }} nodeColor={(node) => node.type === "atom" ? wiringKindColor[(node.data as { atom: DeveloperAtom }).atom.kind] : "transparent"} />}
-    </ReactFlow>
-    </div>
-      {selected && showDetails ? <div ref={hudRef} onKeyDown={(event) => { if (event.key === "Escape" && hudRef.current?.contains(event.target as HTMLElement)) setShowDetails(false); }} className="absolute inset-y-0 right-0 z-20 w-[min(24rem,calc(100%-1rem))] border-l bg-background shadow-xl md:relative md:w-[24rem] md:max-w-[50%] md:shrink-0 md:shadow-none"><GraphHud key={selected.id} atom={selected} schemas={schemas} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={() => setShowDetails(false)} onSelect={moveAlongTrace} onOpen={onOpen} /></div> : null}
-    </div>
+      <div className="relative flex min-h-0 flex-1">
+        <div ref={canvasRef} className="min-w-0 flex-1">
+          <ReactFlow
+            className={graphCanvasClassName}
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onInit={setFlow}
+            edgeTypes={manifestEdgeTypes}
+            nodeTypes={nodeTypes}
+            colorMode={theme}
+            fitView
+            fitViewOptions={{ padding: 0.08, ...(business && { minZoom: 0.65 }) }}
+            minZoom={minZoom}
+            maxZoom={1.8}
+            deleteKeyCode={null}
+            nodesConnectable={false}
+            nodesDraggable
+            onNodeClick={(_, node) => {
+              if (atomsById.has(node.id)) selectAtom(node.id);
+            }}
+            onKeyDownCapture={event => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              const node = (event.target as HTMLElement).closest(".react-flow__node[data-id]");
+              const id = node?.getAttribute("data-id");
+              if (id && atomsById.has(id)) {
+                event.preventDefault();
+                selectAtom(id);
+                setShowDetails(true);
+              }
+            }}
+            onPaneClick={clearSelection}
+          >
+            <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--border)" />
+            <GraphControls onRelayout={relayout} />
+            {business ? null : (
+              <MiniMap
+                pannable
+                zoomable
+                position="bottom-left"
+                className="!mb-3 !ml-14 hidden overflow-hidden rounded-lg border shadow-md sm:block"
+                style={{ width: 160, height: 110 }}
+                nodeColor={node =>
+                  node.type === "atom"
+                    ? wiringKindColor[(node.data as { atom: DeveloperAtom }).atom.kind]
+                    : "transparent"
+                }
+              />
+            )}
+          </ReactFlow>
+        </div>
+        {selected && showDetails ? (
+          <div
+            ref={hudRef}
+            onKeyDown={event => {
+              if (event.key === "Escape" && hudRef.current?.contains(event.target as HTMLElement))
+                setShowDetails(false);
+            }}
+            className="absolute inset-y-0 right-0 z-20 w-[min(24rem,calc(100%-1rem))] border-l bg-background shadow-xl md:relative md:w-[24rem] md:max-w-[50%] md:shrink-0 md:shadow-none"
+          >
+            <GraphHud
+              key={selected.id}
+              atom={selected}
+              schemas={schemas}
+              graph={graph}
+              atomsById={atomsById}
+              traceAtoms={traceAtoms}
+              onClose={() => setShowDetails(false)}
+              onSelect={moveAlongTrace}
+              onOpen={onOpen}
+            />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -344,23 +496,37 @@ function layoutGraph(
   const column = new Map(graph.atoms.map(({ id, kind }) => [id, wiringColumn[kind]]));
   return {
     nodes: [
-      ...columns.map(({ kind, x, count }) => ({
-        id: `Column:${kind}`,
-        type: "column",
-        position: { x, y: -56 },
-        data: { label: t(language, `developer.wiring.column.${kind.toLowerCase() as "trigger" | "procedure" | "schema" | "view"}`), count },
-        style: { width: wiringNode.width, height: 32 },
-        selectable: false,
-        draggable: false,
-        connectable: false,
-        focusable: false,
-        zIndex: -1,
-      } satisfies Node)),
-      ...graph.atoms.map((atom) => {
-        const target = graph.relations.find((relation) => relation.kind === "trigger-target" && relation.sourceId === atom.id);
+      ...columns.map(
+        ({ kind, x, count }) =>
+          ({
+            id: `Column:${kind}`,
+            type: "column",
+            position: { x, y: -56 },
+            data: {
+              label: t(
+                language,
+                `developer.wiring.column.${kind.toLowerCase() as "trigger" | "procedure" | "schema" | "view"}`,
+              ),
+              count,
+            },
+            style: { width: wiringNode.width, height: 32 },
+            selectable: false,
+            draggable: false,
+            connectable: false,
+            focusable: false,
+            zIndex: -1,
+          }) satisfies Node,
+      ),
+      ...graph.atoms.map(atom => {
+        const target = graph.relations.find(
+          relation => relation.kind === "trigger-target" && relation.sourceId === atom.id,
+        );
         const targetAtom = target ? graph.atoms.find(({ id }) => id === target.targetId) : undefined;
         const targetTitle = targetAtom ? resolveLocalizedText(targetAtom.title, language) || targetAtom.name : null;
-        const title = resolveLocalizedText(atom.title, language) || (atom.kind === "Trigger" && targetTitle ? targetTitle : null) || atom.name;
+        const title =
+          resolveLocalizedText(atom.title, language) ||
+          (atom.kind === "Trigger" && targetTitle ? targetTitle : null) ||
+          atom.name;
         return {
           id: atom.id,
           type: "atom",
@@ -373,9 +539,13 @@ function layoutGraph(
     ],
     // Edges leave a node on the side that faces the other end: right to left along the columns, left to right for a
     // View reading the Schema column before it, and right to right within one column.
-    edges: graph.relations.map((relation) => {
-      const from = column.get(relation.sourceId) ?? 0, to = column.get(relation.targetId) ?? 0;
-      const reads = relation.kind === "view-source" || relation.kind === "schema-reference" || relation.kind === "translation-parent";
+    edges: graph.relations.map(relation => {
+      const from = column.get(relation.sourceId) ?? 0,
+        to = column.get(relation.targetId) ?? 0;
+      const reads =
+        relation.kind === "view-source" ||
+        relation.kind === "schema-reference" ||
+        relation.kind === "translation-parent";
       return {
         id: relation.id,
         source: relation.sourceId,
@@ -386,15 +556,28 @@ function layoutGraph(
         data: { kind: relation.kind, label: relationLabel(language, relation.kind), opacity: 1 },
         ariaLabel: `${relationLabel(language, relation.kind)}: ${relation.sourceId} to ${relation.targetId}`,
         markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: "var(--muted-foreground)" },
-        style: { opacity: relationOpacity(relation.kind), stroke: "var(--muted-foreground)", strokeWidth: 1.25, ...(reads && { strokeDasharray: "5 4" }) },
+        style: {
+          opacity: relationOpacity(relation.kind),
+          stroke: "var(--muted-foreground)",
+          strokeWidth: 1.25,
+          ...(reads && { strokeDasharray: "5 4" }),
+        },
       } satisfies Edge;
     }),
   };
 }
 
 const wiringNode = { width: 220, height: 44 };
-const wiringColumn = { Trigger: 0, Procedure: 1, Schema: 2, View: 3 } as const satisfies Record<DeveloperAtom["kind"], number>;
-const wiringKindAccent = { Trigger: "bg-rose-500", Procedure: "bg-amber-500", Schema: "bg-blue-500", View: "bg-violet-500" } as const;
+const wiringColumn = { Trigger: 0, Procedure: 1, Schema: 2, View: 3 } as const satisfies Record<
+  DeveloperAtom["kind"],
+  number
+>;
+const wiringKindAccent = {
+  Trigger: "bg-rose-500",
+  Procedure: "bg-amber-500",
+  Schema: "bg-blue-500",
+  View: "bg-violet-500",
+} as const;
 const wiringKindIcon = { Trigger: Zap, Procedure: Workflow, Schema: Database, View: Eye } as const;
 const wiringKindColor = { Trigger: "#f43f5e", Procedure: "#f59e0b", Schema: "#3b82f6", View: "#8b5cf6" } as const;
 
@@ -405,41 +588,112 @@ type ColumnGraphNode = Node<{ label: string; count: number }, "column">;
 function AtomNode({ data, selected }: NodeProps<AtomGraphNode>): React.ReactElement {
   const { atom, title, language } = data;
   const Icon = wiringKindIcon[atom.kind];
-  const sides = (["l", "r"] as const).flatMap((side) => (["source", "target"] as const).map((type) => (
-    <Handle key={type + side} id={side} type={type} position={side === "l" ? Position.Left : Position.Right} isConnectable={false} className="!size-1 !min-h-0 !min-w-0 !border-0 !bg-transparent" />
-  )));
+  const sides = (["l", "r"] as const).flatMap(side =>
+    (["source", "target"] as const).map(type => (
+      <Handle
+        key={type + side}
+        id={side}
+        type={type}
+        position={side === "l" ? Position.Left : Position.Right}
+        isConnectable={false}
+        className="!size-1 !min-h-0 !min-w-0 !border-0 !bg-transparent"
+      />
+    )),
+  );
   return (
-    <div title={`${atomKindLabel(language, atom.kind)} · ${atom.name}`} className={cn("flex h-full items-center gap-2 overflow-hidden rounded-lg border bg-card pe-2 text-card-foreground shadow-sm transition-[box-shadow,border-color]", selected ? "border-foreground/60 ring-2 ring-ring/40" : "border-border hover:border-foreground/30")}>
+    <div
+      title={`${atomKindLabel(language, atom.kind)} · ${atom.name}`}
+      className={cn(
+        "flex h-full items-center gap-2 overflow-hidden rounded-lg border bg-card pe-2 text-card-foreground shadow-sm transition-[box-shadow,border-color]",
+        selected ? "border-foreground/60 ring-2 ring-ring/40" : "border-border hover:border-foreground/30",
+      )}
+    >
       {sides}
       <span className={cn("h-full w-1 shrink-0", wiringKindAccent[atom.kind])} aria-hidden />
       <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
-      {atom.transport ? <span className="shrink-0 rounded bg-muted px-1 py-px font-mono text-[9px] font-semibold uppercase text-muted-foreground">{atom.transport}</span> : null}
-      {atom.audience && atom.audience !== "public" ? <span className="shrink-0 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{audienceLabel(language, atom.audience)}</span> : null}
+      {atom.transport ? (
+        <span className="shrink-0 rounded bg-muted px-1 py-px font-mono text-[9px] font-semibold uppercase text-muted-foreground">
+          {atom.transport}
+        </span>
+      ) : null}
+      {atom.audience && atom.audience !== "public" ? (
+        <span className="shrink-0 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+          {audienceLabel(language, atom.audience)}
+        </span>
+      ) : null}
     </div>
   );
 }
 
 function ColumnNode({ data }: NodeProps<ColumnGraphNode>): React.ReactElement {
-  return <div className="pointer-events-none flex h-full items-end justify-between border-b px-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><span>{data.label}</span><span className="font-mono">{data.count}</span></div>;
+  return (
+    <div className="pointer-events-none flex h-full items-end justify-between border-b px-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <span>{data.label}</span>
+      <span className="font-mono">{data.count}</span>
+    </div>
+  );
 }
 
-function WireEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, markerEnd, style }: EdgeProps<ManifestGraphEdge>): React.ReactElement {
-  const [path] = sourcePosition === targetPosition
-    ? getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offset: 28, borderRadius: 12 })
-    : getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+function WireEdge({
+  id,
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition,
+  markerEnd,
+  style,
+}: EdgeProps<ManifestGraphEdge>): React.ReactElement {
+  const [path] =
+    sourcePosition === targetPosition
+      ? getSmoothStepPath({
+          sourceX,
+          sourceY,
+          sourcePosition,
+          targetX,
+          targetY,
+          targetPosition,
+          offset: 28,
+          borderRadius: 12,
+        })
+      : getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   return <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />;
 }
 
-export function ManifestEdge({ id, data, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, markerEnd, style }: EdgeProps<ManifestGraphEdge>): React.ReactElement {
-  const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+export function ManifestEdge({
+  id,
+  data,
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition,
+  markerEnd,
+  style,
+}: EdgeProps<ManifestGraphEdge>): React.ReactElement {
+  const [path, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
   return (
     <>
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
       <EdgeLabelRenderer>
         <div
           className="nodrag nopan pointer-events-none absolute z-20 whitespace-nowrap rounded-md border bg-popover px-1.5 py-0.5 text-xs font-semibold text-popover-foreground shadow-sm"
-          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, opacity: data?.opacity ?? 1, boxShadow: "0 0 0 3px var(--background)", transition: "opacity 180ms ease" }}
+          style={{
+            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            opacity: data?.opacity ?? 1,
+            boxShadow: "0 0 0 3px var(--background)",
+            transition: "opacity 180ms ease",
+          }}
         >
           {data?.label}
         </div>
@@ -466,10 +720,15 @@ export function layoutComponents(graph: DeveloperConsoleSnapshot["graph"]): Map<
 // Fixed columns left to right: entry points, Procedures, Schemas, Views (#1890 follow-up). Within a column a node sits
 // at the mean height of its already placed neighbours, packed without overlap in that order; a second sweep re-aligns
 // the entry points to their Procedures and the rest follows.
-function layoutColumns(graph: DeveloperConsoleSnapshot["graph"]): { positions: Map<string, { x: number; y: number }>; columns: Array<{ kind: DeveloperAtom["kind"]; x: number; count: number }> } {
+function layoutColumns(graph: DeveloperConsoleSnapshot["graph"]): {
+  positions: Map<string, { x: number; y: number }>;
+  columns: Array<{ kind: DeveloperAtom["kind"]; x: number; count: number }>;
+} {
   const slot = wiringNode.height + 12;
   const columnGap = 140;
-  const kinds = (Object.keys(wiringColumn) as Array<DeveloperAtom["kind"]>).filter((kind) => graph.atoms.some((atom) => atom.kind === kind));
+  const kinds = (Object.keys(wiringColumn) as Array<DeveloperAtom["kind"]>).filter(kind =>
+    graph.atoms.some(atom => atom.kind === kind),
+  );
   const x = (kind: DeveloperAtom["kind"]): number => kinds.indexOf(kind) * (wiringNode.width + columnGap);
   const neighbours = new Map<string, string[]>();
   graph.relations.forEach(({ sourceId, targetId }) => {
@@ -479,16 +738,27 @@ function layoutColumns(graph: DeveloperConsoleSnapshot["graph"]): { positions: M
   });
   const audience = (atom: DeveloperAtom): number => audiences.indexOf(atom.audience ?? "public");
   const positions = new Map<string, { x: number; y: number }>();
-  const kindOf = new Map(graph.atoms.map((atom) => [atom.id, atom.kind]));
+  const kindOf = new Map(graph.atoms.map(atom => [atom.id, atom.kind]));
   // `from` lists neighbour kinds in order of preference: the first kind with a placed neighbour decides the height.
   const place = (kind: DeveloperAtom["kind"], ...from: Array<DeveloperAtom["kind"]>): void => {
-    const wanted = graph.atoms.filter((atom) => atom.kind === kind).map((atom) => {
-      for (const other of from) {
-        const ys = (neighbours.get(atom.id) ?? []).filter((id) => kindOf.get(id) === other).map((id) => positions.get(id)?.y).filter((y): y is number => y !== undefined);
-        if (ys.length) return { atom, y: ys.reduce((sum, y) => sum + y, 0) / ys.length };
-      }
-      return { atom, y: null };
-    }).sort((a, b) => (a.y ?? Infinity) - (b.y ?? Infinity) || audience(a.atom) - audience(b.atom) || a.atom.name.localeCompare(b.atom.name));
+    const wanted = graph.atoms
+      .filter(atom => atom.kind === kind)
+      .map(atom => {
+        for (const other of from) {
+          const ys = (neighbours.get(atom.id) ?? [])
+            .filter(id => kindOf.get(id) === other)
+            .map(id => positions.get(id)?.y)
+            .filter((y): y is number => y !== undefined);
+          if (ys.length) return { atom, y: ys.reduce((sum, y) => sum + y, 0) / ys.length };
+        }
+        return { atom, y: null };
+      })
+      .sort(
+        (a, b) =>
+          (a.y ?? Infinity) - (b.y ?? Infinity) ||
+          audience(a.atom) - audience(b.atom) ||
+          a.atom.name.localeCompare(b.atom.name),
+      );
     let next = 0;
     wanted.forEach(({ atom, y }) => {
       const top = Math.max(y ?? next, next);
@@ -504,7 +774,10 @@ function layoutColumns(graph: DeveloperConsoleSnapshot["graph"]): { positions: M
   place("Schema", "Procedure");
   place("View", "Schema");
   place("Trigger", "Procedure", "Schema");
-  return { positions, columns: kinds.map((kind) => ({ kind, x: x(kind), count: graph.atoms.filter((atom) => atom.kind === kind).length })) };
+  return {
+    positions,
+    columns: kinds.map(kind => ({ kind, x: x(kind), count: graph.atoms.filter(atom => atom.kind === kind).length })),
+  };
 }
 
 export function focusSlice(graph: DeveloperConsoleSnapshot["graph"], selectedId: string): FocusSlice {
@@ -519,30 +792,55 @@ export function focusSlice(graph: DeveloperConsoleSnapshot["graph"], selectedId:
   const direct = graph.relations.filter(({ sourceId, targetId }) => sourceId === selectedId || targetId === selectedId);
 
   if (selectedKind === "Trigger") {
-    const targets = graph.relations.filter(({ sourceId, kind }) => sourceId === selectedId && kind === "trigger-target");
-    targets.forEach((relation) => add(relation));
+    const targets = graph.relations.filter(
+      ({ sourceId, kind }) => sourceId === selectedId && kind === "trigger-target",
+    );
+    targets.forEach(relation => add(relation));
     const procedureIds = new Set(targets.map(({ targetId }) => targetId));
-    graph.relations.filter(({ sourceId, kind }) => procedureIds.has(sourceId) && kind === "procedure-schema").forEach((relation) => add(relation));
+    graph.relations
+      .filter(({ sourceId, kind }) => procedureIds.has(sourceId) && kind === "procedure-schema")
+      .forEach(relation => add(relation));
   } else if (selectedKind === "Procedure") {
-    direct.filter(({ kind }) => ["trigger-target", "procedure-schema"].includes(kind)).forEach((relation) => add(relation));
+    direct
+      .filter(({ kind }) => ["trigger-target", "procedure-schema"].includes(kind))
+      .forEach(relation => add(relation));
   } else if (selectedKind === "View") {
-    direct.filter(({ kind }) => kind === "view-source").forEach((relation) => add(relation));
+    direct.filter(({ kind }) => kind === "view-source").forEach(relation => add(relation));
   } else if (selectedKind === "Schema") {
-    direct.filter(({ sourceId, kind }) => sourceId === selectedId && ["schema-reference", "translation-parent"].includes(kind)).forEach((relation) => add(relation));
-    const upstream = direct.filter(({ targetId, kind }) => targetId === selectedId && ["procedure-schema", "lifecycle-source"].includes(kind));
-    upstream.forEach((relation) => add(relation));
-    const procedureIds = new Set(upstream.filter(({ sourceId }) => sourceId.startsWith("Procedure:")).map(({ sourceId }) => sourceId));
-    graph.relations.filter(({ targetId, kind }) => procedureIds.has(targetId) && kind === "trigger-target").forEach((relation) => add(relation));
+    direct
+      .filter(
+        ({ sourceId, kind }) => sourceId === selectedId && ["schema-reference", "translation-parent"].includes(kind),
+      )
+      .forEach(relation => add(relation));
+    const upstream = direct.filter(
+      ({ targetId, kind }) => targetId === selectedId && ["procedure-schema", "lifecycle-source"].includes(kind),
+    );
+    upstream.forEach(relation => add(relation));
+    const procedureIds = new Set(
+      upstream.filter(({ sourceId }) => sourceId.startsWith("Procedure:")).map(({ sourceId }) => sourceId),
+    );
+    graph.relations
+      .filter(({ targetId, kind }) => procedureIds.has(targetId) && kind === "trigger-target")
+      .forEach(relation => add(relation));
   }
 
   return { startId: selectedId, nodeIds, relationIds };
 }
 
-export function traceAtomIds(graph: DeveloperConsoleSnapshot["graph"], nodeIds: ReadonlySet<string>, startId?: string): string[] {
+export function traceAtomIds(
+  graph: DeveloperConsoleSnapshot["graph"],
+  nodeIds: ReadonlySet<string>,
+  startId?: string,
+): string[] {
   const rank = { Trigger: 0, View: 0, Procedure: 1, Schema: 2 } as const;
   return graph.atoms
     .filter(({ id }) => nodeIds.has(id))
-    .sort((a, b) => rank[a.kind] - rank[b.kind] || Number(b.id === startId) - Number(a.id === startId) || a.name.localeCompare(b.name))
+    .sort(
+      (a, b) =>
+        rank[a.kind] - rank[b.kind] ||
+        Number(b.id === startId) - Number(a.id === startId) ||
+        a.name.localeCompare(b.name),
+    )
     .map(({ id }) => id);
 }
 
@@ -550,7 +848,25 @@ function relationOpacity(kind: DeveloperRelationKind): number {
   return ["schema-reference", "translation-parent", "authorization-guard"].includes(kind) ? 0.12 : 0.58;
 }
 
-function GraphHud({ atom, schemas, graph, atomsById, traceAtoms, onClose, onSelect, onOpen }: { atom: DeveloperAtom; schemas: readonly DeveloperSchemaModel[]; graph: DeveloperConsoleSnapshot["graph"]; atomsById: ReadonlyMap<string, DeveloperAtom>; traceAtoms: readonly DeveloperAtom[]; onClose: () => void; onSelect: (id: string) => void; onOpen: (atom: DeveloperAtom) => void }): React.ReactElement {
+function GraphHud({
+  atom,
+  schemas,
+  graph,
+  atomsById,
+  traceAtoms,
+  onClose,
+  onSelect,
+  onOpen,
+}: {
+  atom: DeveloperAtom;
+  schemas: readonly DeveloperSchemaModel[];
+  graph: DeveloperConsoleSnapshot["graph"];
+  atomsById: ReadonlyMap<string, DeveloperAtom>;
+  traceAtoms: readonly DeveloperAtom[];
+  onClose: () => void;
+  onSelect: (id: string) => void;
+  onOpen: (atom: DeveloperAtom) => void;
+}): React.ReactElement {
   const { language } = usePreferences();
   const title = resolveLocalizedText(atom.title, language);
   const description = resolveLocalizedText(atom.description ?? null, language);
@@ -559,87 +875,220 @@ function GraphHud({ atom, schemas, graph, atomsById, traceAtoms, onClose, onSele
   const modelAtom = atom.kind === "Schema" || atom.kind === "View";
   const OpenIcon = modelAtom ? Database : Workflow;
   const openLabel = t(language, modelAtom ? "developer.graph.openModel" : "developer.graph.openLogic");
-  const currentIndex = Math.max(0, traceAtoms.findIndex(({ id }) => id === atom.id));
+  const currentIndex = Math.max(
+    0,
+    traceAtoms.findIndex(({ id }) => id === atom.id),
+  );
   const previous = traceAtoms[currentIndex - 1];
   const next = traceAtoms[currentIndex + 1];
   const facts = hudFacts(language, atom);
   return (
-    <aside className="h-full overflow-y-auto bg-card text-card-foreground" aria-label={t(language, "developer.graph.details")}>
+    <aside
+      className="h-full overflow-y-auto bg-card text-card-foreground"
+      aria-label={t(language, "developer.graph.details")}
+    >
       <header className="sticky top-0 z-10 border-b bg-card p-4">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atomKindLabel(language, atom.kind)}</span>
-              {atom.transport ? <span className="inline-flex rounded border bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{atom.transport}</span> : null}
+              <span
+                className={cn(
+                  "inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                  atomKindTone[atom.kind],
+                )}
+              >
+                {atomKindLabel(language, atom.kind)}
+              </span>
+              {atom.transport ? (
+                <span className="inline-flex rounded border bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {atom.transport}
+                </span>
+              ) : null}
               {atom.audience ? <AudienceBadge language={language} audience={atom.audience} /> : null}
             </div>
             <h2 className="mt-2 truncate text-sm font-semibold">{title || atom.name}</h2>
-            {title && title !== atom.name ? <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{atom.name}</p> : null}
+            {title && title !== atom.name ? (
+              <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{atom.name}</p>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" onClick={() => onOpen(atom)} aria-label={openLabel}><OpenIcon aria-hidden /></Button></TooltipTrigger><TooltipContent>{openLabel}</TooltipContent></Tooltip>
-            <Button type="button" variant="ghost" size="icon-sm" data-inspector-close onClick={onClose} aria-label={t(language, "common.close")}><X aria-hidden /></Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => onOpen(atom)}
+                  aria-label={openLabel}
+                >
+                  <OpenIcon aria-hidden />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{openLabel}</TooltipContent>
+            </Tooltip>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              data-inspector-close
+              onClick={onClose}
+              aria-label={t(language, "common.close")}
+            >
+              <X aria-hidden />
+            </Button>
           </div>
         </div>
         <div className="mt-3 flex items-center gap-2 border-t pt-3">
-          <Button type="button" variant="outline" size="icon-sm" disabled={!previous} onClick={() => previous && onSelect(previous.id)} aria-label={t(language, "developer.graph.previous")}><ChevronUp aria-hidden /></Button>
-          <span className="min-w-0 flex-1 text-center text-[11px] font-medium text-muted-foreground">{t(language, "developer.graph.step", { current: String(currentIndex + 1), total: String(traceAtoms.length) })}</span>
-          <Button type="button" variant="outline" size="icon-sm" disabled={!next} onClick={() => next && onSelect(next.id)} aria-label={t(language, "developer.graph.next")}><ChevronDown aria-hidden /></Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            disabled={!previous}
+            onClick={() => previous && onSelect(previous.id)}
+            aria-label={t(language, "developer.graph.previous")}
+          >
+            <ChevronUp aria-hidden />
+          </Button>
+          <span className="min-w-0 flex-1 text-center text-[11px] font-medium text-muted-foreground">
+            {t(language, "developer.graph.step", {
+              current: String(currentIndex + 1),
+              total: String(traceAtoms.length),
+            })}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            disabled={!next}
+            onClick={() => next && onSelect(next.id)}
+            aria-label={t(language, "developer.graph.next")}
+          >
+            <ChevronDown aria-hidden />
+          </Button>
         </div>
       </header>
       <div className="space-y-5 p-4">
         <ProcedureLogicPreview atom={atom} schemas={schemas} />
-        <p className="text-sm leading-6 text-popover-foreground">{description || hudSummary(language, atom, outgoing, incoming, atomsById)}</p>
-        {atom.handler?.kind === "ref" ? <p className="text-xs text-muted-foreground">{t(language, "developer.unknownEffects")}</p> : null}
+        <p className="text-sm leading-6 text-popover-foreground">
+          {description || hudSummary(language, atom, outgoing, incoming, atomsById)}
+        </p>
+        {atom.handler?.kind === "ref" ? (
+          <p className="text-xs text-muted-foreground">{t(language, "developer.unknownEffects")}</p>
+        ) : null}
         {facts.length ? (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border bg-muted/35 p-3">
-            {facts.map(({ label, value }) => <div key={label} className="min-w-0"><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</dt><dd className="mt-1 break-words font-mono text-xs font-semibold">{value}</dd></div>)}
+            {facts.map(({ label, value }) => (
+              <div key={label} className="min-w-0">
+                <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</dt>
+                <dd className="mt-1 break-words font-mono text-xs font-semibold">{value}</dd>
+              </div>
+            ))}
           </dl>
         ) : null}
-        {incoming.length ? <HudRelationGroup title={t(language, "developer.graph.comesFrom")} relations={incoming} outgoing={false} atomsById={atomsById} onSelect={onSelect} /> : null}
-        {outgoing.length ? <HudRelationGroup title={t(language, "developer.graph.continuesTo")} relations={outgoing} outgoing atomsById={atomsById} onSelect={onSelect} /> : null}
-        {!outgoing.length && !incoming.length ? <p className="text-sm text-muted-foreground">{t(language, "model.noRelations")}</p> : null}
+        {incoming.length ? (
+          <HudRelationGroup
+            title={t(language, "developer.graph.comesFrom")}
+            relations={incoming}
+            outgoing={false}
+            atomsById={atomsById}
+            onSelect={onSelect}
+          />
+        ) : null}
+        {outgoing.length ? (
+          <HudRelationGroup
+            title={t(language, "developer.graph.continuesTo")}
+            relations={outgoing}
+            outgoing
+            atomsById={atomsById}
+            onSelect={onSelect}
+          />
+        ) : null}
+        {!outgoing.length && !incoming.length ? (
+          <p className="text-sm text-muted-foreground">{t(language, "model.noRelations")}</p>
+        ) : null}
       </div>
     </aside>
   );
 }
 
-function hudSummary(language: AdminLanguage, atom: DeveloperAtom, outgoing: readonly DeveloperAtomRelation[], incoming: readonly DeveloperAtomRelation[], atomsById: ReadonlyMap<string, DeveloperAtom>): string {
+function hudSummary(
+  language: AdminLanguage,
+  atom: DeveloperAtom,
+  outgoing: readonly DeveloperAtomRelation[],
+  incoming: readonly DeveloperAtomRelation[],
+  atomsById: ReadonlyMap<string, DeveloperAtom>,
+): string {
   const target = outgoing[0] ? atomsById.get(outgoing[0].targetId)?.name : null;
-  if (atom.kind === "Trigger") return t(language, "developer.graph.summary.trigger", { audience: audienceLabel(language, atom.audience ?? "public"), transport: atom.transport?.toUpperCase() ?? "manifest", target: target ?? "—" });
+  if (atom.kind === "Trigger")
+    return t(language, "developer.graph.summary.trigger", {
+      audience: audienceLabel(language, atom.audience ?? "public"),
+      transport: atom.transport?.toUpperCase() ?? "manifest",
+      target: target ?? "—",
+    });
   if (atom.kind === "Procedure" && atom.handler?.kind === "sql") return t(language, "developer.sqlProcedure");
-  if (atom.kind === "Procedure" && atom.handler?.kind === "ref") return t(language, "developer.graph.summary.ref", { ref: atom.handler.ref });
-  if (atom.kind === "View") return t(language, "developer.graph.summary.view", { audience: audienceLabel(language, atom.audience ?? "public"), target: target ?? "—" });
-  return t(language, "developer.graph.summary.schema", { incoming: String(incoming.length), outgoing: String(outgoing.length) });
+  if (atom.kind === "Procedure" && atom.handler?.kind === "ref")
+    return t(language, "developer.graph.summary.ref", { ref: atom.handler.ref });
+  if (atom.kind === "View")
+    return t(language, "developer.graph.summary.view", {
+      audience: audienceLabel(language, atom.audience ?? "public"),
+      target: target ?? "—",
+    });
+  return t(language, "developer.graph.summary.schema", {
+    incoming: String(incoming.length),
+    outgoing: String(outgoing.length),
+  });
 }
 
 function hudFacts(language: AdminLanguage, atom: DeveloperAtom): Array<{ label: string; value: string }> {
   const facts: Array<{ label: string; value: string }> = [];
-  if (atom.transport) facts.push({ label: t(language, "developer.graph.fact.transport"), value: atom.transport.toUpperCase() });
-  if (atom.handler?.kind === "ref") facts.push({ label: t(language, "developer.graph.fact.handler"), value: atom.handler.ref });
+  if (atom.transport)
+    facts.push({ label: t(language, "developer.graph.fact.transport"), value: atom.transport.toUpperCase() });
+  if (atom.handler?.kind === "ref")
+    facts.push({ label: t(language, "developer.graph.fact.handler"), value: atom.handler.ref });
   if (atom.handler?.kind === "sql") facts.push({ label: t(language, "developer.graph.fact.handler"), value: "SQL" });
   return facts;
 }
 
-function HudRelationGroup({ title, relations, outgoing, atomsById, onSelect }: { title: string; relations: readonly DeveloperAtomRelation[]; outgoing: boolean; atomsById: ReadonlyMap<string, DeveloperAtom>; onSelect: (id: string) => void }): React.ReactElement {
+function HudRelationGroup({
+  title,
+  relations,
+  outgoing,
+  atomsById,
+  onSelect,
+}: {
+  title: string;
+  relations: readonly DeveloperAtomRelation[];
+  outgoing: boolean;
+  atomsById: ReadonlyMap<string, DeveloperAtom>;
+  onSelect: (id: string) => void;
+}): React.ReactElement {
   const { language } = usePreferences();
   const DirectionIcon = outgoing ? ArrowDownRight : ArrowUpRight;
   return (
     <section>
       <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
       <div className="space-y-2">
-        {relations.map((relation) => {
+        {relations.map(relation => {
           const related = atomsById.get(outgoing ? relation.targetId : relation.sourceId);
           return related ? (
             <div key={relation.id} className="rounded-lg border bg-white p-3 text-card-foreground dark:bg-[#0a1124]">
-              <button type="button" className="flex w-full min-w-0 items-center gap-2 text-start hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onSelect(related.id)}>
+              <button
+                type="button"
+                className="flex w-full min-w-0 items-center gap-2 text-start hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => onSelect(related.id)}
+              >
                 <DirectionIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                 <span className="text-xs font-medium">{relationLabel(language, relation.kind)}</span>
                 <span className="ms-auto min-w-0 truncate font-mono text-xs font-semibold">{related.name}</span>
               </button>
               <details className="mt-2 border-t pt-2">
-                <summary className="cursor-pointer text-[10px] font-medium text-muted-foreground">{t(language, "developer.graph.manifestSource")}</summary>
-                <code className="mt-2 block break-all rounded bg-muted p-2 text-[10px] text-muted-foreground">{relation.sourceId.replace(":", "/")}{relation.pointer} = {JSON.stringify(relation.value)}</code>
+                <summary className="cursor-pointer text-[10px] font-medium text-muted-foreground">
+                  {t(language, "developer.graph.manifestSource")}
+                </summary>
+                <code className="mt-2 block break-all rounded bg-muted p-2 text-[10px] text-muted-foreground">
+                  {relation.sourceId.replace(":", "/")}
+                  {relation.pointer} = {JSON.stringify(relation.value)}
+                </code>
               </details>
             </div>
           ) : null;

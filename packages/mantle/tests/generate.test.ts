@@ -60,12 +60,26 @@ spec:
 async function canonical(target: Target, text = source) {
   const sqlite = target === "bun-sqlite" || target === "cloudflare-d1";
   const { lowerPlan } = await import(new URL("../src/build/core/sql/lowered.ts", import.meta.url).href);
-  const dialectModule = await import(new URL(sqlite ? "../src/build/d1/dialect.ts" : "../src/build/postgres/dialect.ts", import.meta.url).href);
+  const dialectModule = await import(
+    new URL(sqlite ? "../src/build/d1/dialect.ts" : "../src/build/postgres/dialect.ts", import.meta.url).href
+  );
   const dialect = sqlite ? dialectModule.d1Dialect : dialectModule.postgresDialect();
-  const compiled = await compilePlan({ sources: [{ sourceId: "notes.yaml", text }] }, sqlite ? undefined : postgresDialect());
+  const compiled = await compilePlan(
+    { sources: [{ sourceId: "notes.yaml", text }] },
+    sqlite ? undefined : postgresDialect(),
+  );
   if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
   const { lowered } = lowerPlan(compiled.plan, dialect);
-  return { target, description: await describeApp(compiled.plan), plan: compiled.plan, lowered, newId: coreNewId(dialect, compiled.plan.schemas), viewKeys: Object.fromEntries(Object.entries(compiled.plan.views).map(([name, view]) => [name, viewOutputs(view, compiled.plan.schemas).keys])) };
+  return {
+    target,
+    description: await describeApp(compiled.plan),
+    plan: compiled.plan,
+    lowered,
+    newId: coreNewId(dialect, compiled.plan.schemas),
+    viewKeys: Object.fromEntries(
+      Object.entries(compiled.plan.views).map(([name, view]) => [name, viewOutputs(view, compiled.plan.schemas).keys]),
+    ),
+  };
 }
 describe("native generation", () => {
   test("a plan lowered for another dialect fails generation", async () => {
@@ -80,45 +94,119 @@ test("bare PG writes on the Bun.SQL shape read a unique clash as CONFLICT and si
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const caller = user("test-user");
   // Bun.SQL reports SQLSTATE in errno; node-postgres/postgres.js in code.
-  const server = (state: string, bun = false) => Object.assign(new Error("native-" + state), bun ? { errno: state, code: "ERR_POSTGRES_SERVER_ERROR", severity: "ERROR" } : { code: state, severity: "ERROR" });
+  const server = (state: string, bun = false) =>
+    Object.assign(
+      new Error("native-" + state),
+      bun ? { errno: state, code: "ERR_POSTGRES_SERVER_ERROR", severity: "ERROR" } : { code: state, severity: "ERROR" },
+    );
   const socket = () => Object.assign(new Error("native-socket"), { code: "ERR_POSTGRES_CONNECTION_CLOSED" });
   {
     const module = await loadGenerated(generated.files["generated.ts"]!);
     // One statement, autocommit: no begin(), one round trip.
-    for (const [failure, expected] of [["none", undefined], ["zero", "CONFLICT"], ["23505", "CONFLICT"], ["23505-bun", "CONFLICT"], ["40001", "CONFLICT"], ["40001-bun", "CONFLICT"], ["40P01", "CONFLICT"], ["40P01-bun", "CONFLICT"], ["57014", "OUTCOME_UNKNOWN"], ["socket", "OUTCOME_UNKNOWN"]] as const) {
-      const error = failure === "socket" ? socket() : /^[245]/.test(failure) ? server(failure.slice(0, 5), failure.endsWith("bun")) : undefined;
+    for (const [failure, expected] of [
+      ["none", undefined],
+      ["zero", "CONFLICT"],
+      ["23505", "CONFLICT"],
+      ["23505-bun", "CONFLICT"],
+      ["40001", "CONFLICT"],
+      ["40001-bun", "CONFLICT"],
+      ["40P01", "CONFLICT"],
+      ["40P01-bun", "CONFLICT"],
+      ["57014", "OUTCOME_UNKNOWN"],
+      ["socket", "OUTCOME_UNKNOWN"],
+    ] as const) {
+      const error =
+        failure === "socket"
+          ? socket()
+          : /^[245]/.test(failure)
+            ? server(failure.slice(0, 5), failure.endsWith("bun"))
+            : undefined;
       const calls: string[] = [];
-      const db = { unsafe: async (text: string) => { calls.push(text); if (error) throw error; return Object.assign([], { count: failure === "zero" ? 0 : 1 }); }, begin: async () => { calls.push("BEGIN"); throw Error("unexpected begin"); } };
+      const db = {
+        unsafe: async (text: string) => {
+          calls.push(text);
+          if (error) throw error;
+          return Object.assign([], { count: failure === "zero" ? 0 : 1 });
+        },
+        begin: async () => {
+          calls.push("BEGIN");
+          throw Error("unexpected begin");
+        },
+      };
       let caught: any;
-      try { await module.procedures["update-note"](db, caller, { id: "n1", title: "t", version: 1 }); } catch (e) { caught = e; }
-      expect(calls.length).toBe(1); expect(calls[0]).toStartWith("UPDATE");
+      try {
+        await module.procedures["update-note"](db, caller, { id: "n1", title: "t", version: 1 });
+      } catch (e) {
+        caught = e;
+      }
+      expect(calls.length).toBe(1);
+      expect(calls[0]).toStartWith("UPDATE");
       if (expected === undefined) expect(caught).toBeUndefined();
-      else { expect(caught.code).toBe(expected); if (error) expect(caught.cause).toBe(error); if (failure.startsWith("4")) expect(caught.fields).toEqual({kind:"serialization"}); }
+      else {
+        expect(caught.code).toBe(expected);
+        if (error) expect(caught.cause).toBe(error);
+        if (failure.startsWith("4")) expect(caught.fields).toEqual({ kind: "serialization" });
+      }
     }
     // Two statements: begin() owns the connection and ROLLBACK; only a failed COMMIT is uncertain.
-    for (const [failure, expected] of [["execute-23505", "CONFLICT"], ["execute-40001", "CONFLICT"], ["execute-40P01", "CONFLICT"], ["commit-40001", "CONFLICT"], ["commit-40P01", "CONFLICT"], ["commit-57P01", "OUTCOME_UNKNOWN"], ["commit-socket", "OUTCOME_UNKNOWN"]] as const) {
+    for (const [failure, expected] of [
+      ["execute-23505", "CONFLICT"],
+      ["execute-40001", "CONFLICT"],
+      ["execute-40P01", "CONFLICT"],
+      ["commit-40001", "CONFLICT"],
+      ["commit-40P01", "CONFLICT"],
+      ["commit-57P01", "OUTCOME_UNKNOWN"],
+      ["commit-socket", "OUTCOME_UNKNOWN"],
+    ] as const) {
       for (const operation of ["procedure", "batch", "transaction"] as const) {
         const executing = failure.startsWith("execute-");
-        const error = failure === "commit-socket" ? socket() : server(failure.slice(failure.indexOf("-")+1), operation === "transaction");
+        const error =
+          failure === "commit-socket"
+            ? socket()
+            : server(failure.slice(failure.indexOf("-") + 1), operation === "transaction");
         const calls: string[] = [];
-        const tx = { unsafe: async (text: string) => { calls.push(text); if (executing) throw error; return Object.assign([], { count: 1 }); } };
-        const db = { unsafe: async () => { throw Error("statements must run inside begin()"); }, begin: async (options: string, fn: (t: unknown) => Promise<unknown>) => {
-          calls.push("BEGIN " + options);
-          try { await fn(tx); } catch (e) { calls.push("ROLLBACK"); throw e; }
-          calls.push("COMMIT"); throw error;
-        } };
+        const tx = {
+          unsafe: async (text: string) => {
+            calls.push(text);
+            if (executing) throw error;
+            return Object.assign([], { count: 1 });
+          },
+        };
+        const db = {
+          unsafe: async () => {
+            throw Error("statements must run inside begin()");
+          },
+          begin: async (options: string, fn: (t: unknown) => Promise<unknown>) => {
+            calls.push("BEGIN " + options);
+            try {
+              await fn(tx);
+            } catch (e) {
+              calls.push("ROLLBACK");
+              throw e;
+            }
+            calls.push("COMMIT");
+            throw error;
+          },
+        };
         let caught: any;
         try {
           if (operation === "procedure") await module.procedures["create-note-pair"](db, caller, { title: "t" });
           else {
             const store = module.store(db, caller);
-            if (operation === "batch") await store.batch([store.collection("notes").insert({ title: "one" }), store.collection("notes").insert({ title: "two" })]);
+            if (operation === "batch")
+              await store.batch([
+                store.collection("notes").insert({ title: "one" }),
+                store.collection("notes").insert({ title: "two" }),
+              ]);
             else await store.transaction(async (tx: any) => tx.procedures["create-note-pair"]({ title: "t" }));
           }
-        } catch (e) { caught = e; }
+        } catch (e) {
+          caught = e;
+        }
         expect(calls[0]).toBe("BEGIN isolation level serializable");
-        expect(caught.code).toBe(expected); expect(caught.cause).toBe(error);
-        if (/40001|40P01/.test(failure)) expect(caught.fields).toEqual({kind:"serialization"});
+        expect(caught.code).toBe(expected);
+        expect(caught.cause).toBe(error);
+        if (/40001|40P01/.test(failure)) expect(caught.fields).toEqual({ kind: "serialization" });
         expect(calls.at(-1)).toBe(executing ? "ROLLBACK" : "COMMIT");
       }
     }
@@ -128,53 +216,92 @@ test("bare PG writes on the Bun.SQL shape read a unique clash as CONFLICT and si
 test("repeated or unverified View outputs explicitly refuse generation", async () => {
   const input = await canonical("bun-postgres");
   for (const keys of [undefined, ["id", "id", "title"]]) {
-    const result = generate({...input, viewKeys: {"notes-list": keys}});
+    const result = generate({ ...input, viewKeys: { "notes-list": keys } });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.diagnostics.some(d => d.path === "views/notes-list")).toBe(true);
   }
 });
 
 test("native binds directly use authored input names", async () => {
-  const text = source.replace('input: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}', 'input: {type: object, properties: {NoteTitle: {type: string, nullable: true}}, additionalProperties: false}').replace('VALUES (input.title)', "VALUES (coalesce(input.noteTitle, input.noteTitle, ''Nullable fallback''))");
-  const generated = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"names.yaml",text}]}});
+  const text = source
+    .replace(
+      "input: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}",
+      "input: {type: object, properties: {NoteTitle: {type: string, nullable: true}}, additionalProperties: false}",
+    )
+    .replace("VALUES (input.title)", "VALUES (coalesce(input.noteTitle, input.noteTitle, ''Nullable fallback''))");
+  const generated = await generateFromSources({
+    target: "bun-sqlite",
+    sources: { sources: [{ sourceId: "names.yaml", text }] },
+  });
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   const db = new Database(":memory:");
   const caller = user("test-owner");
   try {
     db.exec(generated.files["schema.sql"]!);
     const app = await loadGenerated(generated.files["generated.ts"]!);
-    await app.procedures["create-note"](db,caller,{NoteTitle:"Authored case"});
-    await app.procedures["create-note"](db,caller,{NoteTitle:null});
-    expect(db.query("SELECT title FROM notes ORDER BY title").all()).toEqual([{title:"Authored case"},{title:"Nullable fallback"}]);
-  } finally { db.close(); }
+    await app.procedures["create-note"](db, caller, { NoteTitle: "Authored case" });
+    await app.procedures["create-note"](db, caller, { NoteTitle: null });
+    expect(db.query("SELECT title FROM notes ORDER BY title").all()).toEqual([
+      { title: "Authored case" },
+      { title: "Nullable fallback" },
+    ]);
+  } finally {
+    db.close();
+  }
   const original = await canonical("bun-sqlite");
-  const ambiguous = generate({...original,plan:{...original.plan,procedures:{...original.plan.procedures,"create-note":{...original.plan.procedures["create-note"]!,input:{type:"object",properties:{Title:{type:"string"},title:{type:"string"}}}}}}});
+  const ambiguous = generate({
+    ...original,
+    plan: {
+      ...original.plan,
+      procedures: {
+        ...original.plan.procedures,
+        "create-note": {
+          ...original.plan.procedures["create-note"]!,
+          input: { type: "object", properties: { Title: { type: "string" }, title: { type: "string" } } },
+        },
+      },
+    },
+  });
   expect(ambiguous.ok).toBe(false);
-  if (!ambiguous.ok) expect(ambiguous.diagnostics.some(d=>d.path==="procedures/create-note/input" && d.message.includes("case-insensitive"))).toBe(true);
+  if (!ambiguous.ok)
+    expect(
+      ambiguous.diagnostics.some(
+        d => d.path === "procedures/create-note/input" && d.message.includes("case-insensitive"),
+      ),
+    ).toBe(true);
 });
 
-for (const target of ["bun-sqlite"] as const) test(`${target} bare View preserves driver rows and errors without validation`, async () => {
-  const generated = generate(await canonical(target));
-  if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
-  const rows = [{id:"native-id",title:null}];
-  const caller = user("test-user");
-  let failure: unknown;
-  let calls = 0;
-  const execute = () => { calls++; if (failure) throw failure; return rows; };
-  const db = target === "bun-sqlite" ? {query:()=>({all:execute})}
-    : target === "cloudflare-d1" ? {prepare:()=>({bind:()=>({all:async()=>({results:execute()})})})}
-    : {unsafe:async()=>execute()};
-  {
-    const app = await loadGenerated(generated.files["generated.ts"]!);
-    // A cyclic extra value proves no recursive scan or schema parse runs here.
-    const input:any = {}; input.extra = input;
-    expect(await app.views["notes-list"](db,caller,input)).toBe(rows);
-    expect(calls).toBe(1);
-    failure = new Error("native failure identity");
-    await expect(app.views["notes-list"](db,caller,{})).rejects.toBe(failure);
-    expect(calls).toBe(2);
-  }
-});
+for (const target of ["bun-sqlite"] as const)
+  test(`${target} bare View preserves driver rows and errors without validation`, async () => {
+    const generated = generate(await canonical(target));
+    if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+    const rows = [{ id: "native-id", title: null }];
+    const caller = user("test-user");
+    let failure: unknown;
+    let calls = 0;
+    const execute = () => {
+      calls++;
+      if (failure) throw failure;
+      return rows;
+    };
+    const db =
+      target === "bun-sqlite"
+        ? { query: () => ({ all: execute }) }
+        : target === "cloudflare-d1"
+          ? { prepare: () => ({ bind: () => ({ all: async () => ({ results: execute() }) }) }) }
+          : { unsafe: async () => execute() };
+    {
+      const app = await loadGenerated(generated.files["generated.ts"]!);
+      // A cyclic extra value proves no recursive scan or schema parse runs here.
+      const input: any = {};
+      input.extra = input;
+      expect(await app.views["notes-list"](db, caller, input)).toBe(rows);
+      expect(calls).toBe(1);
+      failure = new Error("native failure identity");
+      await expect(app.views["notes-list"](db, caller, {})).rejects.toBe(failure);
+      expect(calls).toBe(2);
+    }
+  });
 
 const scalars = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -205,37 +332,63 @@ spec:
 `;
 
 test("declared timestamps and dates come back in wire form from the SQL itself", async () => {
-  const generated = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"events.yaml",text:scalars}]}});
+  const generated = await generateFromSources({
+    target: "bun-sqlite",
+    sources: { sources: [{ sourceId: "events.yaml", text: scalars }] },
+  });
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   // required (NOT NULL) columns read unchanged are non-null
-  expect(generated.files["generated.ts"]).toContain('readonly "at": string; readonly "day": string; readonly "created_at": string;');
+  expect(generated.files["generated.ts"]).toContain(
+    'readonly "at": string; readonly "day": string; readonly "created_at": string;',
+  );
   const db = new Database(":memory:");
   try {
     db.exec(generated.files["schema.sql"]!);
     // Storage as Mantle writes it: microseconds and days. Before 1970 is negative.
-    db.query("INSERT INTO events (id, version, created_at, updated_at, owner, at, day) VALUES ('a', 1, 0, 0, 'u', ?, ?)").run(1791676800123456, 20738);
-    db.query("INSERT INTO events (id, version, created_at, updated_at, owner, at, day) VALUES ('b', 1, 0, 0, 'u', ?, ?)").run(-1, -1);
+    db.query(
+      "INSERT INTO events (id, version, created_at, updated_at, owner, at, day) VALUES ('a', 1, 0, 0, 'u', ?, ?)",
+    ).run(1791676800123456, 20738);
+    db.query(
+      "INSERT INTO events (id, version, created_at, updated_at, owner, at, day) VALUES ('b', 1, 0, 0, 'u', ?, ?)",
+    ).run(-1, -1);
     const app = await loadGenerated(generated.files["generated.ts"]!);
     const caller = user("u");
     // Only min/max keep the column's type; count is an integer and stays one.
-    expect(await app.views["events-span"](db,caller,{})).toEqual([{n:2,latest:"2026-10-11T00:00:00.123456Z",first:"1969-12-31"}]);
-    expect(await app.views["events-list"](db,caller,{})).toEqual([
-      {at:"1969-12-31T23:59:59.999999Z",day:"1969-12-31",created_at:"1970-01-01T00:00:00.000000Z"},
-      {at:"2026-10-11T00:00:00.123456Z",day:"2026-10-12",created_at:"1970-01-01T00:00:00.000000Z"},
+    expect(await app.views["events-span"](db, caller, {})).toEqual([
+      { n: 2, latest: "2026-10-11T00:00:00.123456Z", first: "1969-12-31" },
     ]);
-  } finally { db.close(); }
+    expect(await app.views["events-list"](db, caller, {})).toEqual([
+      { at: "1969-12-31T23:59:59.999999Z", day: "1969-12-31", created_at: "1970-01-01T00:00:00.000000Z" },
+      { at: "2026-10-11T00:00:00.123456Z", day: "2026-10-12", created_at: "1970-01-01T00:00:00.000000Z" },
+    ]);
+  } finally {
+    db.close();
+  }
   for (const target of ["bun-postgres", "cloudflare-postgres"] as const) {
-    const pg = await generateFromSources({target,sources:{sources:[{sourceId:"events.yaml",text:scalars}]}});
+    const pg = await generateFromSources({
+      target,
+      sources: { sources: [{ sourceId: "events.yaml", text: scalars }] },
+    });
     if (!pg.ok) throw Error(JSON.stringify(pg.diagnostics));
-    expect(pg.files["generated.ts"]).toContain(`to_char((e.at) AT TIME ZONE 'UTC', 'YYYY-MM-DD\\"T\\"HH24:MI:SS.US\\"Z\\"')`);
+    expect(pg.files["generated.ts"]).toContain(
+      `to_char((e.at) AT TIME ZONE 'UTC', 'YYYY-MM-DD\\"T\\"HH24:MI:SS.US\\"Z\\"')`,
+    );
   }
 });
 test("generation is refused when a Schema's rules would not be Core's", async () => {
   const { emitStores } = await import("../src/usecase/stores.js");
-  const schema = { name: "t", fields: { c: "timestamptz" }, names: {}, schema: { type: "object" }, scope: "owner", ttl: "c" };
+  const schema = {
+    name: "t",
+    fields: { c: "timestamptz" },
+    names: {},
+    schema: { type: "object" },
+    scope: "owner",
+    ttl: "c",
+  };
   const refused: string[] = [];
   expect(emitStores({ t: schema as never }, true, "x", (_, message) => refused.push(message))).toBeDefined();
-  expect(refused.length).toBe(1); expect(refused[0]).toContain("differ from the shared rules"); // ttlSeconds is absent: Core's term has no seconds
+  expect(refused.length).toBe(1);
+  expect(refused[0]).toContain("differ from the shared rules"); // ttlSeconds is absent: Core's term has no seconds
   const fine: string[] = [];
   emitStores({ t: { ...schema, ttlSeconds: 60 } as never }, true, "x", (_, message) => fine.push(message));
   expect(fine).toEqual([]);
@@ -250,7 +403,10 @@ spec:
   sql: |
     SELECT date_trunc('day', CAST('2026-10-11T12:34:56.123456Z' AS timestamptz)) AS day
 `;
-  const generated = await generateFromSources({target:"bun-sqlite",sources:{sources:[{sourceId:"utc.yaml",text:utcDay}]}});
+  const generated = await generateFromSources({
+    target: "bun-sqlite",
+    sources: { sources: [{ sourceId: "utc.yaml", text: utcDay }] },
+  });
   if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
   expect(generated.files["schema.sql"]).toContain("CREATE TABLE IF NOT EXISTS _mantle_tz");
   expect(generated.files["schema.sql"]).toContain("(-9007199254740991, 0)");
@@ -260,6 +416,10 @@ spec:
     db.exec(generated.files["schema.sql"]!);
     db.exec(generated.files["schema.sql"]!); // re-applying the initial artifact is harmless
     const app = await loadGenerated(generated.files["generated.ts"]!);
-    expect(await app.views["utc-day"](db,{kind:"anonymous"},{})).toEqual([{day:Date.parse("2026-10-11T00:00:00Z")*1000}]);
-  } finally { db.close(); }
+    expect(await app.views["utc-day"](db, { kind: "anonymous" }, {})).toEqual([
+      { day: Date.parse("2026-10-11T00:00:00Z") * 1000 },
+    ]);
+  } finally {
+    db.close();
+  }
 });

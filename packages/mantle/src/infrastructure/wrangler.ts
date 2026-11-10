@@ -20,45 +20,85 @@ function compatibilityDate(dir: string): string {
 }
 
 /** `assets`: with `--admin`, the static assets directory `mantle bundle` builds Admin into (`<assets>/admin`). */
-export function configureWrangler(configPath: string, entry: string, outdir: string, generated: string, check = false, assets?: string, publicFetchRequired = false): boolean {
+export function configureWrangler(
+  configPath: string,
+  entry: string,
+  outdir: string,
+  generated: string,
+  check = false,
+  assets?: string,
+  publicFetchRequired = false,
+): boolean {
   const configDir = dirname(resolve(configPath));
   const local = (path: string) => relative(configDir, resolve(path)).replaceAll("\\", "/") || ".";
   const output = local(outdir);
-  const quote = (arg: string) => /^[\w./-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", "'\\''")}'`;
+  const quote = (arg: string) => (/^[\w./-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", "'\\''")}'`);
   const worker = `${output}/worker`;
-  const assetsFlag = assets !== undefined && resolve(assets) !== resolve(outdir, "client") ? ` --assets ${quote(assets)}` : "";
+  const assetsFlag =
+    assets !== undefined && resolve(assets) !== resolve(outdir, "client") ? ` --assets ${quote(assets)}` : "";
   const keys = {
-    main: `${worker}/${basename(entry).replace(/\.[^.]+$/, "")}.js`, no_bundle: true,
-    find_additional_modules: true, base_dir: worker,
+    main: `${worker}/${basename(entry).replace(/\.[^.]+$/, "")}.js`,
+    no_bundle: true,
+    find_additional_modules: true,
+    base_dir: worker,
     rules: [{ type: "ESModule", globs: ["**/*.js"], fallthrough: true }],
-    build: { command: `mantle bundle ${quote(entry)} ${quote(outdir)}${assetsFlag}`, watch_dir: [local(dirname(entry)), local(generated)] },
+    build: {
+      command: `mantle bundle ${quote(entry)} ${quote(outdir)}${assetsFlag}`,
+      watch_dir: [local(dirname(entry)), local(generated)],
+    },
   };
   if (configPath.endsWith(".toml")) {
-    if (check) throw new Error("--check requires a JSON or JSONC Wrangler config; TOML generation only prints manual edits.");
-    console.log(`Leave ${configPath} unchanged. Add these Wrangler TOML keys (include nodejs_compat and global_fetch_strictly_public in every compatibility_flags override):\n` +
-      `main = ${JSON.stringify(keys.main)}\nno_bundle = true\nfind_additional_modules = true\nbase_dir = ${JSON.stringify(worker)}\ncompatibility_flags = ${JSON.stringify(requiredFlags)}\n\n` +
-      (assets === undefined ? "" : `[assets]\ndirectory = ${JSON.stringify(local(assets))}\nbinding = "ASSETS"\nrun_worker_first = ${JSON.stringify(workerFirst)}\nhtml_handling = "none"\n\n`) +
-      `[[rules]]\ntype = "ESModule"\nglobs = ["**/*.js"]\nfallthrough = true\n\n[build]\ncommand = ${JSON.stringify(keys.build.command)}\nwatch_dir = ${JSON.stringify(keys.build.watch_dir)}`);
+    if (check)
+      throw new Error("--check requires a JSON or JSONC Wrangler config; TOML generation only prints manual edits.");
+    console.log(
+      `Leave ${configPath} unchanged. Add these Wrangler TOML keys (include nodejs_compat and global_fetch_strictly_public in every compatibility_flags override):\n` +
+        `main = ${JSON.stringify(keys.main)}\nno_bundle = true\nfind_additional_modules = true\nbase_dir = ${JSON.stringify(worker)}\ncompatibility_flags = ${JSON.stringify(requiredFlags)}\n\n` +
+        (assets === undefined
+          ? ""
+          : `[assets]\ndirectory = ${JSON.stringify(local(assets))}\nbinding = "ASSETS"\nrun_worker_first = ${JSON.stringify(workerFirst)}\nhtml_handling = "none"\n\n`) +
+        `[[rules]]\ntype = "ESModule"\nglobs = ["**/*.js"]\nfallthrough = true\n\n[build]\ncommand = ${JSON.stringify(keys.build.command)}\nwatch_dir = ${JSON.stringify(keys.build.watch_dir)}`,
+    );
     return false;
   }
   const exists = existsSync(configPath);
-  const original = exists ? readFileSync(configPath, "utf8") : JSON.stringify({ name: "your-worker-name", compatibility_date: compatibilityDate(configDir) }, null, 2) + "\n";
+  const original = exists
+    ? readFileSync(configPath, "utf8")
+    : JSON.stringify({ name: "your-worker-name", compatibility_date: compatibilityDate(configDir) }, null, 2) + "\n";
   let text = original;
   const errors: ParseError[] = [];
   const config = parse(text, errors, { allowTrailingComma: true });
-  if (errors.length || !config || typeof config !== "object" || Array.isArray(config)) throw new Error(`${configPath} must be a valid JSONC object.`);
+  if (errors.length || !config || typeof config !== "object" || Array.isArray(config))
+    throw new Error(`${configPath} must be a valid JSONC object.`);
   const indent = text.match(/\n([ \t]+)"/)?.[1] ?? "  ";
-  const formattingOptions = { insertSpaces: !indent.includes("\t"), tabSize: indent.length, eol: text.includes("\r\n") ? "\r\n" : "\n" };
+  const formattingOptions = {
+    insertSpaces: !indent.includes("\t"),
+    tabSize: indent.length,
+    eol: text.includes("\r\n") ? "\r\n" : "\n",
+  };
   // Merge, never replace: the user's own module rules and build options survive.
-  const { rules: [rule], build: buildKeys, ...top } = keys;
+  const {
+    rules: [rule],
+    build: buildKeys,
+    ...top
+  } = keys;
   const edit = (path: (string | number)[], value: unknown) => {
-    if (!isDeepStrictEqual(path.reduce((v: any, k) => v?.[k], config), value)) text = applyEdits(text, modify(text, path, value, { formattingOptions }));
+    if (
+      !isDeepStrictEqual(
+        path.reduce((v: any, k) => v?.[k], config),
+        value,
+      )
+    )
+      text = applyEdits(text, modify(text, path, value, { formattingOptions }));
   };
   // Public routing is the default; an explicit private origin remains app-owned without OAuth/CIMD.
   const ensureFlags = (path: (string | number)[], flags: unknown) => {
-    if (flags !== undefined && (!Array.isArray(flags) || !flags.every(flag => typeof flag === "string"))) throw new Error(`${configPath}: ${path.join(".")} must be an array of strings.`);
+    if (flags !== undefined && (!Array.isArray(flags) || !flags.every(flag => typeof flag === "string")))
+      throw new Error(`${configPath}: ${path.join(".")} must be an array of strings.`);
     const privateFetch = Array.isArray(flags) && flags.includes("global_fetch_private_origin");
-    if (privateFetch && (publicFetchRequired || flags.includes("global_fetch_strictly_public"))) throw new Error(`${configPath}: ${path.join(".")} includes global_fetch_private_origin, which conflicts with public OAuth/CIMD fetch routing. Remove it and use global_fetch_strictly_public.`);
+    if (privateFetch && (publicFetchRequired || flags.includes("global_fetch_strictly_public")))
+      throw new Error(
+        `${configPath}: ${path.join(".")} includes global_fetch_private_origin, which conflicts with public OAuth/CIMD fetch routing. Remove it and use global_fetch_strictly_public.`,
+      );
     const required = privateFetch ? ["nodejs_compat"] : requiredFlags;
     if (flags === undefined) edit(path, required);
     else for (const flag of required) if (!(flags as string[]).includes(flag)) edit([...path, -1], flag);
@@ -66,7 +106,8 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
   ensureFlags(["compatibility_flags"], config.compatibility_flags);
   // Wrangler environment arrays replace the top-level flags rather than inheriting them.
   for (const [name, environment] of Object.entries(config.env ?? {}) as [string, any][]) {
-    if (environment?.compatibility_flags !== undefined) ensureFlags(["env", name, "compatibility_flags"], environment.compatibility_flags);
+    if (environment?.compatibility_flags !== undefined)
+      ensureFlags(["env", name, "compatibility_flags"], environment.compatibility_flags);
   }
   for (const [key, value] of Object.entries(top)) edit([key], value);
   for (const [key, value] of Object.entries(buildKeys)) edit(["build", key], value);
@@ -77,16 +118,26 @@ export function configureWrangler(configPath: string, entry: string, outdir: str
       if (ownsDefaults && current?.binding === undefined) edit([...path, "binding"], "ASSETS");
       if (ownsDefaults && current?.run_worker_first === undefined) edit([...path, "run_worker_first"], workerFirst);
       // The shell fetches index.html itself; asset canonicalization would redirect it back to /admin/ forever.
-      if (current?.html_handling === undefined && (current?.run_worker_first === true || Array.isArray(current?.run_worker_first) || (ownsDefaults && current?.run_worker_first === undefined))) edit([...path, "html_handling"], "none");
+      if (
+        current?.html_handling === undefined &&
+        (current?.run_worker_first === true ||
+          Array.isArray(current?.run_worker_first) ||
+          (ownsDefaults && current?.run_worker_first === undefined))
+      )
+        edit([...path, "html_handling"], "none");
     };
     wireAssets(["assets"], config.assets);
     for (const [name, environment] of Object.entries(config.env ?? {}) as [string, any][]) {
       if (environment?.assets !== undefined) wireAssets(["env", name, "assets"], environment.assets);
     }
   }
-  if (!(config.rules ?? []).some((r: unknown) => isDeepStrictEqual(r, rule))) edit(config.rules === undefined ? ["rules"] : ["rules", -1], config.rules === undefined ? [rule] : rule);
+  if (!(config.rules ?? []).some((r: unknown) => isDeepStrictEqual(r, rule)))
+    edit(config.rules === undefined ? ["rules"] : ["rules", -1], config.rules === undefined ? [rule] : rule);
   const changed = !exists || text !== original;
   if (changed && !check) writeFileSync(configPath, text);
-  if (!exists && !check) console.log(`Created ${configPath}. Set name and compatibility_date for your Worker, and add your D1/Hyperdrive bindings and other application settings.`);
+  if (!exists && !check)
+    console.log(
+      `Created ${configPath}. Set name and compatibility_date for your Worker, and add your D1/Hyperdrive bindings and other application settings.`,
+    );
   return changed;
 }

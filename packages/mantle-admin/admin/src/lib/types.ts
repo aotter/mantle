@@ -3,10 +3,7 @@ export type LocalizedText = string | Readonly<Record<string, string>>;
 
 export type Lifecycle = "publishing" | "operational";
 
-export type ContentStatus =
-  | "draft"
-  | "published"
-  | "archived";
+export type ContentStatus = "draft" | "published" | "archived";
 
 export type SidebarStatus = ContentStatus;
 
@@ -150,7 +147,9 @@ export interface CollectionsMetadata {
 }
 
 /** Titles of referenced records the caller may read, by referencing field then by the stored value; anything unresolved is absent. */
-export type RefTitles = Readonly<Record<string, Readonly<Record<string, { collection: string; id: string; title: string }>>>>;
+export type RefTitles = Readonly<
+  Record<string, Readonly<Record<string, { collection: string; id: string; title: string }>>>
+>;
 
 export interface EntryEditorPayload {
   collection: EntryEditorCollection;
@@ -220,7 +219,11 @@ export interface ListEntriesResult {
 }
 
 /** `uiSchema.nav` placement in Admin's sidebar (presentation only). */
-export interface NavPlacement { group?: string; order?: number; hidden?: boolean }
+export interface NavPlacement {
+  group?: string;
+  order?: number;
+  hidden?: boolean;
+}
 export interface SiteInfo {
   title: string;
   description: string;
@@ -235,7 +238,13 @@ export interface SiteInfo {
   /** Deprecated admin endpoint alias. */
   mcpUrl: string | null;
   /** What the deployment turned on; absent from an older server, which means all of it. */
-  capabilities?: { siteSettings: boolean; media: boolean; invitationEmail: boolean; statistics: boolean; identity?: boolean };
+  capabilities?: {
+    siteSettings: boolean;
+    media: boolean;
+    invitationEmail: boolean;
+    statistics: boolean;
+    identity?: boolean;
+  };
   media?: {
     purposes?: MediaPurposePolicy[];
   };
@@ -365,10 +374,32 @@ export type DeveloperAudience = "public" | "members" | "admin" | "system" | "api
 export type DeveloperTransport = "http" | "mcp" | "lifecycle" | "schedule";
 
 /** An inline program's SQL as authored, or a registered code handler. */
-export interface SqlLogicNode { kind: string; label: string; children: SqlLogicNode[]; column?: { name: string; relation?: string }; relation?: { name: string; alias?: string } }
+export interface SqlLogicNode {
+  kind: string;
+  label: string;
+  children: SqlLogicNode[];
+  column?: { name: string; relation?: string };
+  relation?: { name: string; alias?: string };
+}
 
 export type DeveloperProcedureHandler =
-  | { kind: "sql"; statement: string; flow?: Array<{ logic?: SqlLogicNode; index: number; operation: string; table: string | null; mode: "read" | "row" | "set"; reads: string[]; writes: string[]; returns: string[]; filter: string | null; cases: Array<{ field: string; branches: Array<{ condition: string; value: string }>; otherwise: string }> }>; hooks?: Array<{ trigger: string; procedure: string; schema: string; on: string[] }> }
+  | {
+      kind: "sql";
+      statement: string;
+      flow?: Array<{
+        logic?: SqlLogicNode;
+        index: number;
+        operation: string;
+        table: string | null;
+        mode: "read" | "row" | "set";
+        reads: string[];
+        writes: string[];
+        returns: string[];
+        filter: string | null;
+        cases: Array<{ field: string; branches: Array<{ condition: string; value: string }>; otherwise: string }>;
+      }>;
+      hooks?: Array<{ trigger: string; procedure: string; schema: string; on: string[] }>;
+    }
   | { kind: "ref"; ref: string };
 
 export interface DeveloperProcedureModel {
@@ -429,9 +460,15 @@ export interface DeveloperAtomRelation {
 }
 
 export interface DeveloperRunObservation {
-  scheduleId: string; runId: string; attempt: number; scheduledAt: number; startedAt: number;
-  finishedAt: number | null; status: "started" | "succeeded" | "failed";
-  durationMs: number | null; errorSummary: string | null;
+  scheduleId: string;
+  runId: string;
+  attempt: number;
+  scheduledAt: number;
+  startedAt: number;
+  finishedAt: number | null;
+  status: "started" | "succeeded" | "failed";
+  durationMs: number | null;
+  errorSummary: string | null;
   counts: { scanned?: number; removed?: number } | null;
 }
 

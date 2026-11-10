@@ -1,5 +1,3 @@
-
-
 /**
  * Per-purpose policy. `name` is the slug consumers reference from
  * `create_media_upload`; `required` is the closed set of mime types

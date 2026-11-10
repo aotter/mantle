@@ -40,18 +40,33 @@ export const isBothSlot = (name: string): boolean => name.startsWith("cell:view:
  * names stack in order, the first nearest `Default`. Without a provider, or without a layer for any name, it is `Default`
  * itself. `Default` must be a stable component.
  */
-export function Slot<P extends object>({ name, Default, props }: { name: string | readonly string[]; Default: React.ComponentType<P>; props: P }): React.ReactElement {
+export function Slot<P extends object>({
+  name,
+  Default,
+  props,
+}: {
+  name: string | readonly string[];
+  Default: React.ComponentType<P>;
+  props: P;
+}): React.ReactElement {
   const context = React.useContext(SurfaceContext);
   const names = typeof name === "string" ? [name] : name;
   const layers = context ? names.flatMap(each => context.layers[each] ?? []) : [];
   if (!context || layers.length === 0) return <Default {...props} />;
-  const extra = isBothSlot(names[0]!) ? { surface: context.surface }
-    : names[0] === "RecordView" || /^(?:cell|input|record\.aside|record\.actions):/.test(names[0]!) ? { surface: "browser" } : {};
-  const at = (index: number) => (next: P): React.ReactNode => {
-    if (index < 0) return <Default {...props} {...next} />;
-    const Layer = layers[index] as unknown as React.ComponentType<P & { renderDefault: (props: P) => React.ReactNode }>;
-    return <Layer {...next} {...extra} renderDefault={at(index - 1)} />;
-  };
+  const extra = isBothSlot(names[0]!)
+    ? { surface: context.surface }
+    : names[0] === "RecordView" || /^(?:cell|input|record\.aside|record\.actions):/.test(names[0]!)
+      ? { surface: "browser" }
+      : {};
+  const at =
+    (index: number) =>
+    (next: P): React.ReactNode => {
+      if (index < 0) return <Default {...props} {...next} />;
+      const Layer = layers[index] as unknown as React.ComponentType<
+        P & { renderDefault: (props: P) => React.ReactNode }
+      >;
+      return <Layer {...next} {...extra} renderDefault={at(index - 1)} />;
+    };
   return <>{at(layers.length - 1)(props)}</>;
 }
 
@@ -69,10 +84,18 @@ export const toolName: (name: string) => string = tool;
  */
 export function useViewCellNames(tool: string, column: string): readonly string[] {
   const layers = React.useContext(SurfaceContext)?.layers;
-  return React.useMemo(() => Object.keys(layers ?? {}).filter(name => {
-    const at = name.lastIndexOf(".");
-    return name.startsWith("cell:view:") && name.slice(at + 1) === column && toolName(name.slice("cell:view:".length, at)) === tool;
-  }), [layers, tool, column]);
+  return React.useMemo(
+    () =>
+      Object.keys(layers ?? {}).filter(name => {
+        const at = name.lastIndexOf(".");
+        return (
+          name.startsWith("cell:view:") &&
+          name.slice(at + 1) === column &&
+          toolName(name.slice("cell:view:".length, at)) === tool
+        );
+      }),
+    [layers, tool, column],
+  );
 }
 
 const isWeb = (url: string): boolean => /^https?:\/\//i.test(url);
@@ -86,13 +109,16 @@ const isWeb = (url: string): boolean => /^https?:\/\//i.test(url);
  */
 export function useOpenLink(): (url: string) => Promise<boolean> {
   const host = React.useContext(SurfaceContext)?.host ?? null;
-  return React.useCallback(async (url: string) => {
-    if (!isWeb(url)) return false;
-    if (host) return host.openLink(url);
-    // `noopener` makes window.open return null even when the tab opens, so success cannot be read back
-    window.open(url, "_blank", "noopener,noreferrer");
-    return true;
-  }, [host]);
+  return React.useCallback(
+    async (url: string) => {
+      if (!isWeb(url)) return false;
+      if (host) return host.openLink(url);
+      // `noopener` makes window.open return null even when the tab opens, so success cannot be read back
+      window.open(url, "_blank", "noopener,noreferrer");
+      return true;
+    },
+    [host],
+  );
 }
 
 /**
@@ -102,12 +128,32 @@ export function useOpenLink(): (url: string) => Promise<boolean> {
  *
  * Surface: both.
  */
-export function AdminLink({ href, children, onClick, ...rest }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }): React.ReactElement {
+export function AdminLink({
+  href,
+  children,
+  onClick,
+  ...rest
+}: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }): React.ReactElement {
   const host = React.useContext(SurfaceContext)?.host ?? null;
-  if (!host) return <a href={href} onClick={onClick} {...rest}>{children}</a>;
+  if (!host)
+    return (
+      <a href={href} onClick={onClick} {...rest}>
+        {children}
+      </a>
+    );
   if (!isWeb(href)) return <span>{children}</span>;
   return (
-    <a href={href} {...rest} onClick={(event) => { onClick?.(event); if (!event.defaultPrevented) { event.preventDefault(); void host.openLink(href); } }}>
+    <a
+      href={href}
+      {...rest}
+      onClick={event => {
+        onClick?.(event);
+        if (!event.defaultPrevented) {
+          event.preventDefault();
+          void host.openLink(href);
+        }
+      }}
+    >
       {children}
     </a>
   );

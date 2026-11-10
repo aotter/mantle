@@ -11,22 +11,9 @@ import type { AdminUser, AdminRole, AdminIdentity } from "../../lib/types";
 import { Button } from "@aotter/mantle-ui/kit";
 import { Badge } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@aotter/mantle-ui/kit";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@aotter/mantle-ui/kit";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@aotter/mantle-ui/kit";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 import { IdValue } from "../../ui/id-value";
@@ -52,9 +39,7 @@ export function AdminView(): React.ReactElement {
     retry: false,
   });
   const authMethods = useQuery(authMethodsQueryOptions());
-  const hasEmailSignIn = authMethods.data?.some(
-    ({ kind }) => kind === "email-otp" || kind === "magic-link",
-  );
+  const hasEmailSignIn = authMethods.data?.some(({ kind }) => kind === "email-otp" || kind === "magic-link");
 
   const refetch = (): void => {
     void queryClient.invalidateQueries({ queryKey: ["admin"] });
@@ -68,8 +53,7 @@ export function AdminView(): React.ReactElement {
     onSettled: refetch,
   });
   const revoke = useMutation({
-    mutationFn: (userId: string) =>
-      api.delete(`/admin/invitations/${encodeURIComponent(userId)}`),
+    mutationFn: (userId: string) => api.delete(`/admin/invitations/${encodeURIComponent(userId)}`),
     onSettled: refetch,
   });
 
@@ -83,16 +67,14 @@ export function AdminView(): React.ReactElement {
     role === "__none" ? t(language, "admin.role.none") : role === "admin" ? t(language, "admin.role.admin") : role;
   const term = search.toLowerCase();
   const users = term
-    ? admin.data.users.filter((user) =>
-        [user.id, user.name, user.email, user.githubLogin].some((value) => value?.toLowerCase().includes(term)))
+    ? admin.data.users.filter(user =>
+        [user.id, user.name, user.email, user.githubLogin].some(value => value?.toLowerCase().includes(term)),
+      )
     : admin.data.users;
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={t(language, "admin.page.title")}
-        description={t(language, "admin.page.body")}
-      />
+      <PageHeader title={t(language, "admin.page.title")} description={t(language, "admin.page.body")} />
       {setRole.isError ? <ErrorBox error={asRenderable(setRole.error)} /> : null}
       {revoke.isError ? <ErrorBox error={asRenderable(revoke.error)} /> : null}
       {authMethods.data && !hasEmailSignIn ? <EmailSignInSetup /> : null}
@@ -101,7 +83,9 @@ export function AdminView(): React.ReactElement {
         key={search}
         language={language}
         searchValue={search}
-        onSubmit={({ search: next }) => navigate(next ? `/admin/admin?${new URLSearchParams({ search: next })}` : "/admin/admin")}
+        onSubmit={({ search: next }) =>
+          navigate(next ? `/admin/admin?${new URLSearchParams({ search: next })}` : "/admin/admin")
+        }
       />
       <SectionCard className="overflow-x-auto p-0">
         <Table>
@@ -115,22 +99,25 @@ export function AdminView(): React.ReactElement {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => {
+            {users.map(user => {
               const isSelf = user.id === me.data?.userId;
               const invited = !user.emailVerified && !user.githubLogin;
-              const roles = (user.role ?? "").split(",").map(role => role.trim()).filter(Boolean);
+              const roles = (user.role ?? "")
+                .split(",")
+                .map(role => role.trim())
+                .filter(Boolean);
               const current = roles.find(role => adminRoles.includes(role)) ?? "__none";
               return (
                 <TableRow key={user.id}>
-                  <TableCell><IdValue value={user.id} language={language} /></TableCell>
+                  <TableCell>
+                    <IdValue value={user.id} language={language} />
+                  </TableCell>
                   <TableCell>{user.name}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>
                     {invited ? (
                       <span className="inline-flex items-center gap-2">
-                        <Badge variant="secondary">
-                          {t(language, "admin.badge.invited")}
-                        </Badge>
+                        <Badge variant="secondary">{t(language, "admin.badge.invited")}</Badge>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -150,7 +137,7 @@ export function AdminView(): React.ReactElement {
                     <Select
                       value={current}
                       disabled={setRole.isPending}
-                      onValueChange={(next) => {
+                      onValueChange={next => {
                         setRole.mutate({
                           userId: user.id,
                           role: next === "__none" ? null : next,
@@ -161,7 +148,7 @@ export function AdminView(): React.ReactElement {
                         <SelectValue>{roles.map(roleLabel).join(", ") || roleLabel("__none")}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {[...adminRoles, "__none"].map((role) => (
+                        {[...adminRoles, "__none"].map(role => (
                           <SelectItem key={role} value={role}>
                             {roleLabel(role)}
                           </SelectItem>
@@ -199,7 +186,7 @@ function InviteCard({ onInvited, role }: { onInvited: () => void; role?: string 
       {invite.isError ? <ErrorBox error={asRenderable(invite.error)} /> : null}
       <form
         className="grid max-w-4xl gap-4 md:grid-cols-[minmax(0,1fr)_18rem]"
-        onSubmit={(event) => {
+        onSubmit={event => {
           event.preventDefault();
           invite.mutate();
         }}
@@ -210,10 +197,13 @@ function InviteCard({ onInvited, role }: { onInvited: () => void; role?: string 
             type="email"
             value={email}
             placeholder={t(language, "admin.invite.emailPlaceholder")}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={event => setEmail(event.target.value)}
           />
           <span className="text-xs font-normal leading-5 text-muted-foreground">
-            {t(language, site.data?.capabilities?.invitationEmail === true ? "admin.invite.hint" : "admin.invite.hintNoEmail")}
+            {t(
+              language,
+              site.data?.capabilities?.invitationEmail === true ? "admin.invite.hint" : "admin.invite.hintNoEmail",
+            )}
           </span>
         </label>
         <div className="grid content-start gap-1.5 text-sm">
@@ -221,14 +211,9 @@ function InviteCard({ onInvited, role }: { onInvited: () => void; role?: string 
           <span className="text-xs leading-5 text-muted-foreground">{t(language, "admin.role.admin.help")}</span>
         </div>
         <div className="flex justify-end md:col-span-2">
-          <Button
-            type="submit"
-            disabled={!role || invite.isPending || email.trim() === ""}
-          >
+          <Button type="submit" disabled={!role || invite.isPending || email.trim() === ""}>
             <UserPlus className="size-4" aria-hidden />
-            {invite.isPending
-              ? t(language, "admin.invite.sending")
-              : t(language, "admin.invite.button")}
+            {invite.isPending ? t(language, "admin.invite.sending") : t(language, "admin.invite.button")}
           </Button>
         </div>
       </form>
@@ -257,9 +242,7 @@ function EmailSignInSetup(): React.ReactElement {
       </span>
       <div className="min-w-64 flex-1">
         <h2 className="font-semibold">{t(language, "admin.emailSetup.title")}</h2>
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">
-          {t(language, "admin.emailSetup.body")}
-        </p>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">{t(language, "admin.emailSetup.body")}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="secondary" onClick={() => void copySetupPrompt()}>

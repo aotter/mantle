@@ -39,10 +39,10 @@ export function LocaleStatusBadges({
   if (locales.length === 0) return null;
   const present = new Set(available);
   const [visible, overflow] = splitLocaleChips(locales);
-  const overflowComplete = overflow.every((locale) => present.has(locale));
+  const overflowComplete = overflow.every(locale => present.has(locale));
   return (
     <div className="flex flex-wrap gap-1">
-      {visible.map((locale) => (
+      {visible.map(locale => (
         <LocaleStatusBadge
           key={locale}
           locale={locale}
@@ -59,28 +59,35 @@ export function LocaleStatusBadges({
               variant={overflowComplete ? "secondary" : "outline"}
               className={overflowComplete ? undefined : "border-dashed text-muted-foreground opacity-60"}
             >
-              <button type="button" aria-label={t(language, "collection.moreLanguages", { count: String(overflow.length) })}>
-                {overflowComplete ? <Check className="text-[color:var(--success)]" aria-hidden /> : null}
-                …{t(language, "collection.moreLanguages", { count: String(overflow.length) })}
+              <button
+                type="button"
+                aria-label={t(language, "collection.moreLanguages", { count: String(overflow.length) })}
+              >
+                {overflowComplete ? <Check className="text-[color:var(--success)]" aria-hidden /> : null}…
+                {t(language, "collection.moreLanguages", { count: String(overflow.length) })}
               </button>
             </Badge>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-56 max-w-[calc(100vw-2rem)] p-1.5">
             <ul className="grid gap-0.5">
-              {overflow.map((locale) => {
+              {overflow.map(locale => {
                 const available = present.has(locale);
                 const label = localeStatusLabel(locale, available, language);
                 return (
                   <li
                     key={locale}
                     aria-label={label}
-                    className={available
-                      ? "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
-                      : "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground opacity-60"}
+                    className={
+                      available
+                        ? "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
+                        : "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground opacity-60"
+                    }
                   >
-                    {available
-                      ? <Check className="size-3 text-[color:var(--success)]" aria-hidden />
-                      : <span className="size-3" aria-hidden />}
+                    {available ? (
+                      <Check className="size-3 text-[color:var(--success)]" aria-hidden />
+                    ) : (
+                      <span className="size-3" aria-hidden />
+                    )}
                     <span className="min-w-0 flex-1 truncate">{localeName(locale)}</span>
                     <span className="font-mono text-[0.625rem] text-muted-foreground">{locale}</span>
                   </li>
@@ -118,16 +125,14 @@ function LocaleStatusBadge({
   );
   return showTooltip ? (
     <Tooltip>
-      <TooltipTrigger asChild>
-        {badge}
-      </TooltipTrigger>
-      <TooltipContent
-        className="bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 [&>svg]:fill-popover!"
-      >
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent className="bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 [&>svg]:fill-popover!">
         {label}
       </TooltipContent>
     </Tooltip>
-  ) : badge;
+  ) : (
+    badge
+  );
 }
 
 function localeStatusLabel(locale: string, available: boolean, language: AdminLanguage): string {
@@ -137,12 +142,8 @@ function localeStatusLabel(locale: string, available: boolean, language: AdminLa
   });
 }
 
-export function splitLocaleChips(
-  locales: readonly string[],
-): [visible: string[], overflow: string[]] {
-  return locales.length <= 3
-    ? [[...locales], []]
-    : [locales.slice(0, 2), locales.slice(2)];
+export function splitLocaleChips(locales: readonly string[]): [visible: string[], overflow: string[]] {
+  return locales.length <= 3 ? [[...locales], []] : [locales.slice(0, 2), locales.slice(2)];
 }
 
 export function contentLocales(
@@ -150,7 +151,7 @@ export function contentLocales(
   siteLocales: readonly string[] | undefined,
   current = "",
 ): string[] {
-  const declared = schema?.properties?.locale?.enum
-    ?.filter((value): value is string => typeof value === "string") ?? [];
+  const declared =
+    schema?.properties?.locale?.enum?.filter((value): value is string => typeof value === "string") ?? [];
   return [...new Set([...(siteLocales ?? []), ...declared, ...(current ? [current] : [])])];
 }

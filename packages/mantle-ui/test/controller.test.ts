@@ -9,10 +9,25 @@ import {
 
 const review = { bind: [{ input: "id", field: "id" }], version: "expectedVersion" } as const;
 const row = { id: "r1", version: 3, requestStatus: "submitted", note: "" };
-const entry = (version: number, data: Record<string, unknown> = {}): EntrySnapshot =>
-  ({ id: "r1", version, data: { ...row, version, ...data } });
-const conflict: Diagnostic = { code: "CONFLICT", phase: "runtime", severity: "error", path: "MCP review", message: "Version moved." };
-const denied: Diagnostic = { code: "AUTH_DENIED", phase: "runtime", severity: "error", path: "MCP review", message: "No." };
+const entry = (version: number, data: Record<string, unknown> = {}): EntrySnapshot => ({
+  id: "r1",
+  version,
+  data: { ...row, version, ...data },
+});
+const conflict: Diagnostic = {
+  code: "CONFLICT",
+  phase: "runtime",
+  severity: "error",
+  path: "MCP review",
+  message: "Version moved.",
+};
+const denied: Diagnostic = {
+  code: "AUTH_DENIED",
+  phase: "runtime",
+  severity: "error",
+  path: "MCP review",
+  message: "No.",
+};
 
 function controller(overrides: Partial<InteractionControllerOptions> = {}) {
   const read = vi.fn(async () => entry(3));
@@ -36,7 +51,11 @@ describe("createInteractionController", () => {
   it("stops at changedSinceList when the target moved after the list was read", async () => {
     const { controller: c, invoke } = controller({ read: async () => entry(5, { requestStatus: "approved" }) });
     await c.open();
-    expect(c.getSnapshot()).toMatchObject({ phase: "changedSinceList", reviewed: { version: 3 }, latest: { version: 5 } });
+    expect(c.getSnapshot()).toMatchObject({
+      phase: "changedSinceList",
+      reviewed: { version: 3 },
+      latest: { version: 5 },
+    });
     // The version the person saw is never silently swapped for the new one.
     await c.submit();
     expect(invoke).not.toHaveBeenCalled();
@@ -53,12 +72,20 @@ describe("createInteractionController", () => {
     await c.open();
     c.edit("requestStatus", "rejected");
     await c.submit();
-    expect(c.getSnapshot()).toMatchObject({ phase: "conflict", diagnostics: [conflict], draft: { requestStatus: "rejected" } });
+    expect(c.getSnapshot()).toMatchObject({
+      phase: "conflict",
+      diagnostics: [conflict],
+      draft: { requestStatus: "rejected" },
+    });
     await c.submit();
     expect(invoke).toHaveBeenCalledTimes(1);
     read.mockResolvedValueOnce(entry(4));
     await c.reread();
-    expect(c.getSnapshot()).toMatchObject({ phase: "changedSinceList", latest: { version: 4 }, draft: { requestStatus: "rejected" } });
+    expect(c.getSnapshot()).toMatchObject({
+      phase: "changedSinceList",
+      latest: { version: 4 },
+      draft: { requestStatus: "rejected" },
+    });
     c.review();
     invoke.mockResolvedValueOnce({ ok: true, data: {} });
     await c.submit();
@@ -74,7 +101,9 @@ describe("createInteractionController", () => {
   });
 
   it("never retries a write whose outcome is unknown", async () => {
-    const invoke = vi.fn(async (): Promise<InvokeOutcome> => { throw new Error("timeout"); });
+    const invoke = vi.fn(async (): Promise<InvokeOutcome> => {
+      throw new Error("timeout");
+    });
     const read = vi.fn(async () => entry(3));
     const { controller: c } = controller({ invoke, read });
     await c.open();
@@ -89,7 +118,9 @@ describe("createInteractionController", () => {
   });
 
   it("returns to ready after an uncertain write that did not land", async () => {
-    const invoke = vi.fn(async (): Promise<InvokeOutcome> => { throw new Error("reset"); });
+    const invoke = vi.fn(async (): Promise<InvokeOutcome> => {
+      throw new Error("reset");
+    });
     const { controller: c } = controller({ invoke });
     await c.open();
     await c.submit();
@@ -99,10 +130,13 @@ describe("createInteractionController", () => {
 
   it("cancels a read, and marks a cancelled submit uncertain", async () => {
     let release!: (value: EntrySnapshot) => void;
-    const { controller: c } = controller({ read: (signal) => new Promise((resolve) => {
-      release = resolve;
-      signal.addEventListener("abort", () => resolve(entry(9)));
-    }) });
+    const { controller: c } = controller({
+      read: signal =>
+        new Promise(resolve => {
+          release = resolve;
+          signal.addEventListener("abort", () => resolve(entry(9)));
+        }),
+    });
     const opening = c.open();
     c.cancel();
     release(entry(9));
@@ -111,9 +145,12 @@ describe("createInteractionController", () => {
     c.edit("note", "late");
     expect(c.getSnapshot().draft).toEqual({});
 
-    const pending = controller({ invoke: (_input, signal) => new Promise((_resolve, reject) => {
-      signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
-    }) });
+    const pending = controller({
+      invoke: (_input, signal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+    });
     await pending.controller.open();
     const submitting = pending.controller.submit();
     pending.controller.cancel();
@@ -132,7 +169,11 @@ describe("createInteractionController", () => {
   });
 
   it("does not submit against an unconfirmed version after a failed read", async () => {
-    const { controller: c, invoke } = controller({ read: async () => { throw new Error("offline"); } });
+    const { controller: c, invoke } = controller({
+      read: async () => {
+        throw new Error("offline");
+      },
+    });
     await c.open();
     expect(c.getSnapshot()).toMatchObject({ phase: "unreadable", error: expect.any(Error) });
     await c.submit();
@@ -193,19 +234,25 @@ describe("createInteractionController", () => {
     read.mockResolvedValueOnce(entry(4, { note: "added by someone else", requestStatus: "rejected" }));
     await c.refresh();
     expect(c.getSnapshot().contested).toEqual(["requestStatus"]);
-    expect(c.latestChanges()).toEqual(expect.arrayContaining([
-      { field: "note", before: "", after: "added by someone else" },
-    ]));
+    expect(c.latestChanges()).toEqual(
+      expect.arrayContaining([{ field: "note", before: "", after: "added by someone else" }]),
+    );
     await c.submit();
     expect(invoke).not.toHaveBeenCalled();
     c.review();
     expect(c.getSnapshot().draft).toEqual({ requestStatus: "approved", note: "added by someone else" });
     await c.submit();
-    expect(invoke.mock.calls[0]![0]).toMatchObject({ note: "added by someone else", requestStatus: "approved", expectedVersion: 4 });
+    expect(invoke.mock.calls[0]![0]).toMatchObject({
+      note: "added by someone else",
+      requestStatus: "approved",
+      expectedVersion: 4,
+    });
   });
 
   it("keeps an uncertain write uncertain without a read until the person acknowledges it", async () => {
-    const invoke = vi.fn(async (): Promise<InvokeOutcome> => { throw new Error("timeout"); });
+    const invoke = vi.fn(async (): Promise<InvokeOutcome> => {
+      throw new Error("timeout");
+    });
     const c = createInteractionController({ interaction: review, row, invoke });
     await c.open();
     await c.submit();
@@ -218,10 +265,18 @@ describe("createInteractionController", () => {
   it("keeps working when a listener throws", async () => {
     const reported = vi.fn();
     const original = globalThis.queueMicrotask;
-    globalThis.queueMicrotask = (task) => { try { task(); } catch (error) { reported(error); } };
+    globalThis.queueMicrotask = task => {
+      try {
+        task();
+      } catch (error) {
+        reported(error);
+      }
+    };
     try {
       const { controller: c, invoke } = controller();
-      c.subscribe(() => { throw new Error("render bug"); });
+      c.subscribe(() => {
+        throw new Error("render bug");
+      });
       await c.open();
       await c.submit();
       expect(invoke).toHaveBeenCalledTimes(1);
@@ -269,8 +324,13 @@ describe("createInteractionController", () => {
   it("refuses a construction that could only submit unbound values", () => {
     const invoke = async (): Promise<InvokeOutcome> => ({ ok: true, data: {} });
     expect(() => createInteractionController({ interaction: review, invoke })).toThrow(/does not carry/u);
-    expect(() => createInteractionController({ interaction: { bind: [{ input: "sku", field: "sku" }], version: "expectedVersion" }, row: { sku: "A" }, invoke }))
-      .toThrow(/needs a `read`/u);
+    expect(() =>
+      createInteractionController({
+        interaction: { bind: [{ input: "sku", field: "sku" }], version: "expectedVersion" },
+        row: { sku: "A" },
+        invoke,
+      }),
+    ).toThrow(/needs a `read`/u);
   });
 
   it("shows a non-version refusal again after a conflict reread finds the same version", async () => {
@@ -284,7 +344,9 @@ describe("createInteractionController", () => {
 
   it("compares only fields both snapshots carry", async () => {
     // The list row is a projection: it has no `reviewerNote`, so that is not a change.
-    const { controller: c } = controller({ read: async () => ({ id: "r1", version: 4, data: { requestStatus: "approved", note: "", reviewerNote: "x" } }) });
+    const { controller: c } = controller({
+      read: async () => ({ id: "r1", version: 4, data: { requestStatus: "approved", note: "", reviewerNote: "x" } }),
+    });
     await c.open();
     expect(c.latestChanges()).toEqual([{ field: "requestStatus", before: "submitted", after: "approved" }]);
   });
@@ -300,7 +362,9 @@ describe("createInteractionController", () => {
 
   it("treats a rejected output or an internal error after invoking as uncertain", async () => {
     for (const code of ["OUTPUT_VALIDATION_FAILED", "INTERNAL_ERROR"]) {
-      const { controller: c } = controller({ invoke: async () => ({ ok: false, diagnostics: [{ code, message: code }] }) });
+      const { controller: c } = controller({
+        invoke: async () => ({ ok: false, diagnostics: [{ code, message: code }] }),
+      });
       await c.open();
       await c.submit();
       expect(c.getSnapshot().phase).toBe("uncertain");
@@ -319,6 +383,9 @@ describe("createInteractionController", () => {
     });
     await controller.open();
     await controller.submit();
-    expect(controller.getSnapshot()).toMatchObject({ phase: "failed", diagnostics: [{ message: "That key is taken." }] });
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "failed",
+      diagnostics: [{ message: "That key is taken." }],
+    });
   });
 });

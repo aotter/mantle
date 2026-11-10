@@ -1,7 +1,4 @@
-import {
-  RESERVED_ENTRY_COLUMNS,
-  type SchemaManifest,
-} from "../model/ManifestGrammar.js";
+import { RESERVED_ENTRY_COLUMNS, type SchemaManifest } from "../model/ManifestGrammar.js";
 import type { DiagnosticCode } from "../../kernel/diagnostic.js";
 
 export type SchemaIndexAffinity = "TEXT" | "INTEGER" | "REAL";
@@ -59,7 +56,7 @@ export function checkSchemaIndexes(manifest: SchemaManifest): SchemaIndexCheckRe
   const problems: SchemaIndexProblem[] = [];
   const seen = new Map<string, SchemaIndexSource>();
 
-  const hasDeclarations = SOURCES.some((source) => {
+  const hasDeclarations = SOURCES.some(source => {
     const raw = spec[source];
     return Array.isArray(raw) && raw.length > 0;
   });
@@ -219,7 +216,7 @@ export function checkSchemaIndexes(manifest: SchemaManifest): SchemaIndexCheckRe
       }
 
       if (!valid) continue;
-      const key = JSON.stringify(fields.map((field) => field.name));
+      const key = JSON.stringify(fields.map(field => field.name));
       const previous = seen.get(key);
       if (previous !== undefined) {
         const crossKind = previous !== source;
@@ -227,7 +224,7 @@ export function checkSchemaIndexes(manifest: SchemaManifest): SchemaIndexCheckRe
           category: "invalid",
           source,
           pointer: compositePointer,
-          value: fields.map((field) => field.name),
+          value: fields.map(field => field.name),
           expected: crossKind
             ? "a tuple not already supplied by uniqueIndexes"
             : `a unique ordered tuple within ${source}`,
@@ -248,39 +245,32 @@ export function checkSchemaIndexes(manifest: SchemaManifest): SchemaIndexCheckRe
   return { declarations, problems };
 }
 
-export function schemaIndexDiagnosticCode(
-  problem: SchemaIndexProblem,
-  parserShape: boolean = false,
-): DiagnosticCode {
+export function schemaIndexDiagnosticCode(problem: SchemaIndexProblem, parserShape: boolean = false): DiagnosticCode {
   if (problem.category === "shape") {
     return parserShape ? "INVALID_MANIFEST_ENVELOPE" : "SCHEMA_INDEX_INVALID";
   }
   if (problem.category === "field-unknown") {
-    return problem.source === "uniqueIndexes"
-      ? "UNIQUE_INDEX_FIELD_UNKNOWN"
-      : "SCHEMA_INDEX_FIELD_UNKNOWN";
+    return problem.source === "uniqueIndexes" ? "UNIQUE_INDEX_FIELD_UNKNOWN" : "SCHEMA_INDEX_FIELD_UNKNOWN";
   }
   return "SCHEMA_INDEX_INVALID";
 }
 
 function scalarAffinity(rawProperty: unknown): SchemaIndexAffinity | null {
   if (!isRecord(rawProperty)) return null;
-  if (
-    rawProperty["nullable"] !== undefined &&
-    typeof rawProperty["nullable"] !== "boolean"
-  ) {
+  if (rawProperty["nullable"] !== undefined && typeof rawProperty["nullable"] !== "boolean") {
     return null;
   }
   const rawType = rawProperty["type"];
-  const types = typeof rawType === "string"
-    ? [rawType]
-    : Array.isArray(rawType) && rawType.every((value) => typeof value === "string")
-      ? rawType
-      : null;
+  const types =
+    typeof rawType === "string"
+      ? [rawType]
+      : Array.isArray(rawType) && rawType.every(value => typeof value === "string")
+        ? rawType
+        : null;
   if (types === null || types.length === 0 || new Set(types).size !== types.length) {
     return null;
   }
-  const nonNull = types.filter((type) => type !== "null");
+  const nonNull = types.filter(type => type !== "null");
   if (nonNull.length !== 1 || types.length > 2) return null;
   switch (nonNull[0]) {
     case "string":

@@ -1,12 +1,27 @@
 import { validateDiagnostic, type Diagnostic } from "../../kernel/diagnostic.js";
-import { MANTLE_REF_KEYWORD, RESERVED_PROCEDURE_INPUT_NAMES, resolveMantleRef, type JsonSchema, type Manifest, type ProcedureManifest, type SchemaManifest, type TriggerManifest, type ViewManifest } from "../model/ManifestGrammar.js";
+import {
+  MANTLE_REF_KEYWORD,
+  RESERVED_PROCEDURE_INPUT_NAMES,
+  resolveMantleRef,
+  type JsonSchema,
+  type Manifest,
+  type ProcedureManifest,
+  type SchemaManifest,
+  type TriggerManifest,
+  type ViewManifest,
+} from "../model/ManifestGrammar.js";
 import { checkTranslatesReferences } from "./CrossSchemaChecker.js";
 import { readerNameProblems } from "./ReaderNames.js";
 import { partitionManifests } from "./ManifestPartition.js";
 import { bestMatch, manifestPath, type ManifestFilePaths } from "./ManifestPathDiagnoser.js";
 import { checkSchemaNavTargets } from "./SchemaAdminUiChecker.js";
 import { checkSchemaIndexes } from "./SchemaIndexChecker.js";
-import { checkMcpToolNameCollisions, checkProcedureTarget, checkSqlHandler, checkTriggerRefs } from "./TriggerGraphChecks.js";
+import {
+  checkMcpToolNameCollisions,
+  checkProcedureTarget,
+  checkSqlHandler,
+  checkTriggerRefs,
+} from "./TriggerGraphChecks.js";
 
 /**
  * Package-private implementation of the pure graph rules. The public sealed
@@ -49,12 +64,7 @@ export function validateManifestGraph(
   }
 
   diags.push(...checkTriggerRefs(partitioned.triggers, proceduresByName, filePaths));
-  diags.push(...checkMcpToolNameCollisions(
-    partitioned.views,
-    partitioned.procedures,
-    partitioned.triggers,
-    filePaths,
-  ));
+  diags.push(...checkMcpToolNameCollisions(partitioned.views, partitioned.procedures, partitioned.triggers, filePaths));
 
   return { diagnostics: diags, ...partitioned };
 }
@@ -68,14 +78,16 @@ function checkSchemaNavTargetsGraph(
   for (const schema of schemas) {
     const problem = checkSchemaNavTargets(schema, schemasByName);
     if (!problem) continue;
-    out.push(validateDiagnostic({
-      code: "SCHEMA_UI_INVALID",
-      severity: "error",
-      path: manifestPath("Schema", schema.metadata.name, problem.pointer, filePaths),
-      value: problem.value,
-      expected: problem.expected,
-      message: problem.message,
-    }));
+    out.push(
+      validateDiagnostic({
+        code: "SCHEMA_UI_INVALID",
+        severity: "error",
+        path: manifestPath("Schema", schema.metadata.name, problem.pointer, filePaths),
+        value: problem.value,
+        expected: problem.expected,
+        message: problem.message,
+      }),
+    );
   }
   return out;
 }
@@ -87,14 +99,16 @@ function checkCollectionActionRef(
 ): Diagnostic[] {
   const target = procedure.spec.uiSchema?.["collectionAction"];
   if (typeof target !== "string" || schemasByName.has(target)) return [];
-  return [validateDiagnostic({
-    code: "SCHEMA_UI_INVALID",
-    severity: "error",
-    path: manifestPath("Procedure", procedure.metadata.name, "/spec/uiSchema/collectionAction", filePaths),
-    value: target,
-    expected: "the metadata.name of an existing Schema",
-    message: `Procedure '${procedure.metadata.name}' collection action references unknown Schema '${target}'.`,
-  })];
+  return [
+    validateDiagnostic({
+      code: "SCHEMA_UI_INVALID",
+      severity: "error",
+      path: manifestPath("Procedure", procedure.metadata.name, "/spec/uiSchema/collectionAction", filePaths),
+      value: target,
+      expected: "the metadata.name of an existing Schema",
+      message: `Procedure '${procedure.metadata.name}' collection action references unknown Schema '${target}'.`,
+    }),
+  ];
 }
 
 /**
@@ -114,45 +128,56 @@ function checkMantleRefs(
   for (const [field, property] of Object.entries(schema.properties ?? {})) {
     const raw = property?.[MANTLE_REF_KEYWORD];
     if (raw === undefined || typeof raw === "string") continue;
-    const path = manifestPath(kind, name, `${pointer}/properties/${pointerSegment(field)}/${MANTLE_REF_KEYWORD}`, filePaths);
+    const path = manifestPath(
+      kind,
+      name,
+      `${pointer}/properties/${pointerSegment(field)}/${MANTLE_REF_KEYWORD}`,
+      filePaths,
+    );
     const ref = resolveMantleRef(property);
     const keys = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? Object.keys(raw) : [];
-    if (!ref || keys.some((key) => key !== "schema" && key !== "field")) {
-      out.push(validateDiagnostic({
-        code: "MANTLE_REF_INVALID",
-        severity: "error",
-        path,
-        value: raw,
-        expected: "a Schema name, or { schema: <Schema name>, field: <id or single-field unique index> }",
-        message: `${kind} '${name}' field '${field}' has a malformed x-mantle-ref.`,
-      }));
+    if (!ref || keys.some(key => key !== "schema" && key !== "field")) {
+      out.push(
+        validateDiagnostic({
+          code: "MANTLE_REF_INVALID",
+          severity: "error",
+          path,
+          value: raw,
+          expected: "a Schema name, or { schema: <Schema name>, field: <id or single-field unique index> }",
+          message: `${kind} '${name}' field '${field}' has a malformed x-mantle-ref.`,
+        }),
+      );
       continue;
     }
     const target = schemasByName.get(ref.schema);
     if (!target) {
-      out.push(validateDiagnostic({
-        code: "MANTLE_REF_INVALID",
-        severity: "error",
-        path: `${path}/schema`,
-        value: ref.schema,
-        expected: "the metadata.name of an existing Schema",
-        candidates: [...schemasByName.keys()],
-        suggestion: bestMatch(ref.schema, [...schemasByName.keys()]),
-        message: `${kind} '${name}' field '${field}' references unknown Schema '${ref.schema}'.`,
-      }));
+      out.push(
+        validateDiagnostic({
+          code: "MANTLE_REF_INVALID",
+          severity: "error",
+          path: `${path}/schema`,
+          value: ref.schema,
+          expected: "the metadata.name of an existing Schema",
+          candidates: [...schemasByName.keys()],
+          suggestion: bestMatch(ref.schema, [...schemasByName.keys()]),
+          message: `${kind} '${name}' field '${field}' references unknown Schema '${ref.schema}'.`,
+        }),
+      );
       continue;
     }
     const keyFields = entryKeyFields(target);
     if (!keyFields.includes(ref.field)) {
-      out.push(validateDiagnostic({
-        code: "MANTLE_REF_INVALID",
-        severity: "error",
-        path: `${path}/field`,
-        value: ref.field,
-        expected: `one of ${keyFields.join(", ")}`,
-        candidates: keyFields,
-        message: `${kind} '${name}' field '${field}' references '${ref.schema}.${ref.field}', which does not identify one entry; use id or a single-field unique index.`,
-      }));
+      out.push(
+        validateDiagnostic({
+          code: "MANTLE_REF_INVALID",
+          severity: "error",
+          path: `${path}/field`,
+          value: ref.field,
+          expected: `one of ${keyFields.join(", ")}`,
+          candidates: keyFields,
+          message: `${kind} '${name}' field '${field}' references '${ref.schema}.${ref.field}', which does not identify one entry; use id or a single-field unique index.`,
+        }),
+      );
     }
   }
   return out;
@@ -160,9 +185,9 @@ function checkMantleRefs(
 
 /** Fields whose value identifies exactly one entry of a Schema. */
 function entryKeyFields(schema: SchemaManifest): string[] {
-  const unique = checkSchemaIndexes(schema).declarations
-    .filter((declaration) => declaration.unique && declaration.fields.length === 1)
-    .map((declaration) => declaration.fields[0]!.name);
+  const unique = checkSchemaIndexes(schema)
+    .declarations.filter(declaration => declaration.unique && declaration.fields.length === 1)
+    .map(declaration => declaration.fields[0]!.name);
   return ["id", ...new Set(unique)];
 }
 
@@ -176,10 +201,7 @@ function byName<M extends { metadata: { name: string } }>(arr: ReadonlyArray<M>)
   return m;
 }
 
-function checkSchemaReservedWireNames(
-  schemas: readonly SchemaManifest[],
-  filePaths?: ManifestFilePaths,
-): Diagnostic[] {
+function checkSchemaReservedWireNames(schemas: readonly SchemaManifest[], filePaths?: ManifestFilePaths): Diagnostic[] {
   const out: Diagnostic[] = [];
   for (const schema of schemas) {
     const properties = schema.spec.schema.properties ?? {};
@@ -204,7 +226,11 @@ function checkSchemaReservedWireNames(
  * SQL resolves identifiers case-insensitively (ADR-0034 decision 2) and the plan keys Schemas, fields and inputs by their lower-case
  * name, so two names that differ only by case would silently become one table, one column or one input.
  */
-function checkCaseCollisions(schemas: readonly SchemaManifest[], programs: readonly (ViewManifest | ProcedureManifest)[], filePaths?: ManifestFilePaths): Diagnostic[] {
+function checkCaseCollisions(
+  schemas: readonly SchemaManifest[],
+  programs: readonly (ViewManifest | ProcedureManifest)[],
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
   const out: Diagnostic[] = [];
   const collide = (names: readonly string[], report: (name: string, other: string) => void) => {
     const first = new Map<string, string>();
@@ -214,30 +240,59 @@ function checkCaseCollisions(schemas: readonly SchemaManifest[], programs: reado
       else if (seen !== n) report(n, seen); // an exact repeat is DUPLICATE_NAME
     }
   };
-  collide(schemas.map((s) => s.metadata.name), (name, other) => out.push(validateDiagnostic({
-    code: "SCHEMA_NAME_CASE_COLLISION", severity: "error", path: manifestPath("Schema", name, "/metadata/name", filePaths), value: name,
-    message: `Schema '${name}' and Schema '${other}' differ only by case; SQL names them the same table. Rename one.`,
-  })));
+  collide(
+    schemas.map(s => s.metadata.name),
+    (name, other) =>
+      out.push(
+        validateDiagnostic({
+          code: "SCHEMA_NAME_CASE_COLLISION",
+          severity: "error",
+          path: manifestPath("Schema", name, "/metadata/name", filePaths),
+          value: name,
+          message: `Schema '${name}' and Schema '${other}' differ only by case; SQL names them the same table. Rename one.`,
+        }),
+      ),
+  );
   for (const s of schemas)
-    collide(Object.keys(s.spec.schema.properties ?? {}), (name, other) => out.push(validateDiagnostic({
-      code: "FIELD_NAME_CASE_COLLISION", severity: "error", path: manifestPath("Schema", s.metadata.name, `/spec/schema/properties/${pointerSegment(name)}`, filePaths), value: name,
-      message: `Schema '${s.metadata.name}' declares '${name}' and '${other}', which differ only by case; SQL names them the same column. Rename one.`,
-    })));
+    collide(Object.keys(s.spec.schema.properties ?? {}), (name, other) =>
+      out.push(
+        validateDiagnostic({
+          code: "FIELD_NAME_CASE_COLLISION",
+          severity: "error",
+          path: manifestPath("Schema", s.metadata.name, `/spec/schema/properties/${pointerSegment(name)}`, filePaths),
+          value: name,
+          message: `Schema '${s.metadata.name}' declares '${name}' and '${other}', which differ only by case; SQL names them the same column. Rename one.`,
+        }),
+      ),
+    );
   // `input.itemId` and `input.ItemId` are one name in SQL, so a statement could not tell the two inputs apart; a `ref` handler reads
   // the JS object, where they are two keys
-  for (const m of programs.filter((p) => p.kind === "View" || "sql" in p.spec.handler))
-    collide(Object.keys(m.spec.input?.properties ?? {}), (name, other) => out.push(validateDiagnostic({
-      code: "FIELD_NAME_CASE_COLLISION", severity: "error", path: manifestPath(m.kind, m.metadata.name, `/spec/input/properties/${pointerSegment(name)}`, filePaths), value: name,
-      message: `${m.kind} '${m.metadata.name}' declares the inputs '${name}' and '${other}', which differ only by case; SQL names them the same input. Rename one.`,
-    })));
+  for (const m of programs.filter(p => p.kind === "View" || "sql" in p.spec.handler))
+    collide(Object.keys(m.spec.input?.properties ?? {}), (name, other) =>
+      out.push(
+        validateDiagnostic({
+          code: "FIELD_NAME_CASE_COLLISION",
+          severity: "error",
+          path: manifestPath(m.kind, m.metadata.name, `/spec/input/properties/${pointerSegment(name)}`, filePaths),
+          value: name,
+          message: `${m.kind} '${m.metadata.name}' declares the inputs '${name}' and '${other}', which differ only by case; SQL names them the same input. Rename one.`,
+        }),
+      ),
+    );
   return out;
 }
 
 /** `store.db.<name>` is one reader per Schema (ADR-0043 decision 2): two Schemas that project to one name, or a reserved name, are refused. */
 function checkReaderNames(schemas: readonly SchemaManifest[], filePaths?: ManifestFilePaths): Diagnostic[] {
-  return readerNameProblems(schemas.map((s) => s.metadata.name)).map((p) => validateDiagnostic({
-    code: "SCHEMA_READER_NAME_COLLISION", severity: "error", path: manifestPath("Schema", p.name, "/metadata/name", filePaths), value: p.name, message: p.message,
-  }));
+  return readerNameProblems(schemas.map(s => s.metadata.name)).map(p =>
+    validateDiagnostic({
+      code: "SCHEMA_READER_NAME_COLLISION",
+      severity: "error",
+      path: manifestPath("Schema", p.name, "/metadata/name", filePaths),
+      value: p.name,
+      message: p.message,
+    }),
+  );
 }
 
 function checkDuplicates<M extends { kind: string; metadata: { name: string } }>(
