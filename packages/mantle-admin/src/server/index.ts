@@ -1,12 +1,9 @@
 import type { GatewayOptions } from "@aotter/mantle/contracts";
 /** Optional Admin API: generated data and native calls, with one fresh admin session per request. */
 import {
-  forwarded,
   deny,
   isAdmin,
   ContractError,
-  checkOrigin,
-  surfaceCaller,
   type Caller,
   type Target,
   type Authorize,
@@ -17,9 +14,9 @@ import {
   nativeRest,
   body,
   ADMIN_API_BASE,
-  canonicalPath,
   routeSource,
   type Route as RestRoute,
+  type RouteAccess,
 } from "@aotter/mantle/rest";
 import { userOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
@@ -41,6 +38,7 @@ export interface Context<Env, Database> {
   authorize?: (target: Target) => Promise<boolean>;
 }
 export interface Route<Env, Database> {
+  /** What application `authorize` decides on, from the request (`params`, `input`, `url`, `caller`); not `db` or `authorize`. */
   readonly target?: (context: Context<Env, Database>) => Target;
   readonly prepare?: (context: Context<Env, Database>) => void | Promise<void>;
   readonly method: string;
@@ -258,8 +256,9 @@ export function admin<Env, Database, Handlers = never>(
       },
     };
   };
-  const checkTarget = async (target: Target, caller: Caller) =>
-    (await import("@aotter/mantle/internal/authorization")).authorizeTarget(options.authorize!, target, caller);
+  // Application `authorize`, bound to the request's caller by the pipeline; a context reaches it through here.
+  const access = new WeakMap<Context<Env, Database>, RouteAccess>();
+  const checkTarget = (c: Context<Env, Database>, target: Target) => access.get(c)!.authorize(target);
   const developerConsole = async () =>
     typeof metadata.developerConsole === "function"
       ? await (metadata.developerConsole as () => unknown)()
@@ -279,7 +278,7 @@ export function admin<Env, Database, Handlers = never>(
       views,
       operations,
       options.developerViews ?? views,
-      options.authorize,
+      c.authorize!,
       c.caller,
       developer ? await developerConsole() : undefined,
     );
@@ -295,7 +294,7 @@ export function admin<Env, Database, Handlers = never>(
     return names;
   };
   const runRoute = (route: Route<Env, Database>, c: Context<Env, Database>) =>
-    options.authorize && route.target ? checkTarget(route.target(c), c.caller).then(() => route.run(c)) : route.run(c);
+    options.authorize && route.target ? checkTarget(c, route.target(c)).then(() => route.run(c)) : route.run(c);
   const viewPage = async (
     c: Context<Env, Database>,
     preview = false,
@@ -310,7 +309,7 @@ export function admin<Env, Database, Handlers = never>(
       if (preview) return { unavailable: true };
       throw missing();
     }
-    if (options.authorize) await checkTarget({ kind: "view", name: view.name }, c.caller);
+    if (options.authorize) await checkTarget(c, { kind: "view", name: view.name });
     const { input: raw, ...paging } = view.query(search),
       input = { ...raw };
     convert(input, view.convert);
@@ -390,7 +389,7 @@ export function admin<Env, Database, Handlers = never>(
         const view = views.find(v => v.name === c.params.name && (options.authorize || v.allows(c.caller)));
         if (view && options.authorize) deny(c.caller, view.allows(c.caller), "views/" + view.name);
         if (!view) throw missing();
-        if (options.authorize) await checkTarget({ kind: "view", name: view.name }, c.caller);
+        if (options.authorize) await checkTarget(c, { kind: "view", name: view.name });
         const params = new URLSearchParams(c.url.searchParams);
         params.delete("cursor");
         params.set("limit", "500");
@@ -417,7 +416,7 @@ export function admin<Env, Database, Handlers = never>(
         if (!view) throw missing();
         deny(c.caller, view.allows(c.caller), "views/" + view.name);
         view.check?.(c.caller);
-        if (options.authorize) await checkTarget({ kind: "view", name: view.name }, c.caller);
+        if (options.authorize) await checkTarget(c, { kind: "view", name: view.name });
         const input = { ...view.query(c.url.searchParams).input };
         convert(input, view.convert);
       },
@@ -466,14 +465,14 @@ export function admin<Env, Database, Handlers = never>(
         if (!operation) throw missing();
         deny(c.caller, operation.allows(c.caller), "procedures/" + operation.name);
         operation.check?.(c.caller);
-        if (options.authorize) await checkTarget({ kind: "procedure", name: operation.name }, c.caller);
+        if (options.authorize) await checkTarget(c, { kind: "procedure", name: operation.name });
         convert(operation.validate(await json(c)), operation.convert);
       },
       run: async c => {
         const operation = operations.find(p => p.name === c.params.name && (options.authorize || p.allows(c.caller)));
         if (operation && options.authorize) deny(c.caller, operation.allows(c.caller), "procedures/" + operation.name);
         if (!operation) throw missing();
-        if (options.authorize) await checkTarget({ kind: "procedure", name: operation.name }, c.caller);
+        if (options.authorize) await checkTarget(c, { kind: "procedure", name: operation.name });
         return {
           ok: true,
           output: await callTool(
@@ -498,9 +497,42 @@ export function admin<Env, Database, Handlers = never>(
         ]),
     ...(options.routes ?? []),
   ];
-  const table: RestRoute<Database, Handlers, Env>[] = routes.map(route => {
+  const context = (
+    request: Request,
+    env: Env,
+    caller: Caller,
+    params: Record<string, string>,
+    input: Record<string, unknown> | undefined,
+    bound: RouteAccess,
+    getDb: () => Database = () => {
+      throw new Error("Only an Admin route's run acquires the database (not its target or prepare)");
+    },
+  ): Context<Env, Database> => {
+    const c: Context<Env, Database> = {
+      request,
+      url: new URL(request.url),
+      env,
+      get db() {
+        return getDb();
+      },
+      caller: caller as Admin,
+      params,
+      input,
+      ...(options.authorize ? { authorize: bound.authorized } : {}),
+    };
+    access.set(c, bound);
+    return c;
+  };
+  // A route's target is computed from the request alone, before authorization: it may not authorize anything itself.
+  const refuse = () => Promise.reject(new Error("An Admin route's target cannot call authorize"));
+  const unbound: RouteAccess = { authorize: refuse, authorized: refuse };
+  const entry = (
+    route: Route<Env, Database>,
+    named?: { path: string; name: string; variant: string; readOnly?: boolean },
+  ): RestRoute<Database, Handlers, Env> => {
     // The pattern grammar describe's matchTarget compiles from the same ids.
-    const { source, keys } = routeSource(route.path, ADMIN_API_BASE, true);
+    const { source, keys } = routeSource(named?.path ?? route.path, ADMIN_API_BASE, true);
+    const paramsOf = (params: Record<string, string>) => (named ? { ...params, name: named.name } : params);
     return {
       id: `admin:${route.method} ${route.path.replace(/\{([^}*]+)\*?\}/g, ":$1")}`,
       method: route.method,
@@ -508,26 +540,20 @@ export function admin<Env, Database, Handlers = never>(
       keys,
       bodyLimit: route.bodyLimit,
       rawBody: route.rawBody,
-      handle: async (request, env, getDb, caller, params, _handlers, input) => {
-        const result = await runRoute(route, {
-          request,
-          url: new URL(request.url),
-          env,
-          get db() {
-            return getDb();
-          },
-          caller: caller as Admin,
-          params,
-          input,
-          ...(options.authorize
-            ? {
-                authorize: (target: Target) =>
-                  import("@aotter/mantle/internal/authorization").then(m =>
-                    m.authorized(options.authorize!, target, caller),
-                  ),
-              }
-            : {}),
-        });
+      // Every Admin read is a GET; a POST reads only through a read-only operation.
+      readOnly: route.method === "GET" || named?.readOnly === true,
+      variant: named?.variant,
+      target:
+        options.authorize && route.target
+          ? (request, env, caller, params, input) =>
+              route.target!(context(request, env, caller, paramsOf(params), input, unbound))
+          : undefined,
+      prepare: route.prepare
+        ? (request, env, caller, params, input, bound) =>
+            route.prepare!(context(request, env, caller, paramsOf(params), input, bound))
+        : undefined,
+      handle: async (request, env, getDb, caller, params, _handlers, input, bound) => {
+        const result = await route.run(context(request, env, caller, paramsOf(params), input, bound, getDb));
         if (!(result instanceof Response)) return result;
         const headers = new Headers(result.headers);
         if (!route.preserveCacheControl || !headers.has("cache-control"))
@@ -535,127 +561,54 @@ export function admin<Env, Database, Handlers = never>(
         return new Response(result.body, { status: result.status, statusText: result.statusText, headers });
       },
     };
-  });
-  const serve = async (request: Request, env: Env, ctx?: RequestContext) => {
-    const path = new URL(request.url).pathname;
-    if (path !== ADMIN_API_BASE && !path.startsWith(ADMIN_API_BASE + "/")) return;
-    let caller: Caller | undefined;
-    const access = options.gateway
-      ? (await import("@aotter/mantle/host-access")).accessRequest(ctx, {
-          ...options,
-          accessTargets: options.accessTargets ?? metadata.accessTargets,
-        })
-      : undefined;
-    // Matched as the dispatching router matches: on the canonical path, so equivalent escapes select one target.
-    const canonical = canonicalPath(path);
-    const matched =
-      canonical === undefined ? undefined : table.find(r => r.method === request.method && r.pattern.test(canonical));
-    const targetId = matched?.id ?? `admin:${request.method} ${path.slice(ADMIN_API_BASE.length)}`;
-    try {
-      await access?.select(targetId);
-      caller = forwarded(ctx, options.gateway)
-        ? (await import("@aotter/mantle/host-caller")).gatewayCaller(
-            ctx,
-            options.gateway,
-            options.fields ?? metadata.userFields,
-          )
-        : await surfaceCaller(request, env, options.caller ?? (() => ({ kind: "anonymous" })));
-      await access?.select(targetId, caller);
-      if (caller.kind === "anonymous") throw new ContractError("UNAUTHENTICATED", "Sign in to use Admin.", "admin");
-      if (!isAdmin(caller) || (caller.kind !== "host" && caller.credential !== "session")) {
-        if (options.gateway) throw new ContractError("AUTH_DENIED", "Admin layer required.", "admin");
-        return Response.json(
-          {
-            error: { code: "AUTH_DENIED", message: "Admin needs a signed-in admin session.", path: "admin" },
-            minimumRole: "admin",
-          },
-          { status: 403, headers: { "cache-control": "private, no-store" } },
-        );
-      }
-      const operation = options.gateway ? /^\/admin\/api\/operations\/([^/]+)\/?$/.exec(canonical ?? "") : null;
-      const readOnly =
-        ["GET", "HEAD", "OPTIONS"].includes(request.method) ||
-        (request.method === "POST" &&
-          !!operation &&
-          operations.some(p => p.name === decodeURIComponent(operation[1]!) && p.readOnly === true));
-      if (options.gateway) {
-        const { checkFresh } = await import("@aotter/mantle/host-caller");
-        const view = /\/views\/([^/]+)/.exec(canonical ?? "");
-        const variant = operation
-          ? `procedure:${decodeURIComponent(operation[1]!)}`
-          : view
-            ? `view:${decodeURIComponent(view[1]!)}`
-            : undefined;
-        if (matched) await access?.check(readOnly, variant);
-        if (!matched) checkFresh(caller, readOnly, path);
-      }
-      checkOrigin(request, caller);
-      try {
-        decodeURIComponent(path);
-      } catch {
-        throw new ContractError("INPUT_VALIDATION_FAILED", "Malformed Admin path.", "admin");
-      }
-      if (/%2f|%5c|%00/i.test(path) || path.includes("\\"))
-        throw new ContractError("INPUT_VALIDATION_FAILED", "Malformed Admin path.", "admin");
-      if (access?.dryRun) {
-        if (!matched) throw missing();
-        const route = routes[table.indexOf(matched)]!;
-        if (!route.prepare)
-          throw new ContractError("DRY_RUN_UNSUPPORTED", "Opaque Admin work.", matched.id, { status: 412 });
-        const params = Object.fromEntries(
-          (matched.keys ?? []).map((key, i) => [key, decodeURIComponent(matched.pattern.exec(canonical!)![i + 1]!)]),
-        );
-        const input = ["GET", "HEAD", "OPTIONS"].includes(request.method)
-          ? undefined
-          : await body(request, route.bodyLimit);
-        const c: Context<Env, Database> = {
-          request,
-          url: new URL(request.url),
-          env,
-          get db(): Database {
-            throw new Error("Dry run attempted database acquisition");
-          },
-          caller: caller as Admin,
-          params,
-          input,
-          ...(options.authorize
-            ? {
-                authorize: (target: Target) =>
-                  import("@aotter/mantle/internal/authorization").then(m =>
-                    m.authorized(options.authorize!, target, caller!),
-                  ),
-              }
-            : {}),
-        };
-        if (options.authorize && route.target) await checkTarget(route.target(c), caller);
-        await route.prepare(c);
-        return access.response();
-      }
-      const response = await nativeRest(
-        table.map(r => (r === matched ? { ...r, readOnly } : r)),
-        {
-          accessTargets: options.accessTargets ?? metadata.accessTargets,
-          gateway: options.gateway,
-          fields: options.fields ?? metadata.userFields,
-          db: options.db,
-          caller: () => caller!,
-          handlers: options.handlers,
-        },
-      )(request, env, ctx);
-      if (!response) throw missing();
-      await access?.finishResponse(response);
-      return response;
-    } catch (error) {
-      access?.finish(error);
-      return (await import("@aotter/mantle/host-caller")).hostFailure(error, caller, "admin");
-    }
   };
-  // the drain loads on an Admin request only (it is request-time code), never at Worker startup
+  // A View or operation route is matched once per name, so a host caller's dry run and freshness follow that View
+  // or Procedure (its access variant, and whether it is read-only); the template answers any other name.
+  const perName: Readonly<Record<string, readonly { name: string; variant: string; readOnly?: boolean }[]>> = {
+    "GET /views/{name}": views.map(v => ({ name: v.name, variant: `view:${v.name}` })),
+    "GET /views/{name}/export": views.map(v => ({ name: v.name, variant: `view:${v.name}` })),
+    "GET /developer/views/{name}": (options.developerViews ?? views).map(v => ({
+      name: v.name,
+      variant: `view:${v.name}`,
+    })),
+    "POST /operations/{name}": operations.map(p => ({
+      name: p.name,
+      variant: `procedure:${p.name}`,
+      readOnly: p.readOnly === true,
+    })),
+  };
+  const table = routes.flatMap(route => [
+    ...(Object.hasOwn(perName, `${route.method} ${route.path}`)
+      ? perName[`${route.method} ${route.path}`]!.map(named =>
+          entry(route, { ...named, path: route.path.replace("{name}", named.name) }),
+        )
+      : []),
+    entry(route),
+  ]);
+  /** Admin needs a signed-in admin session, or a gateway's admin layer. */
+  const admission = (caller: Caller): Response | undefined => {
+    if (caller.kind === "anonymous") throw new ContractError("UNAUTHENTICATED", "Sign in to use Admin.", "admin");
+    if (isAdmin(caller) && (caller.kind === "host" || caller.credential === "session")) return undefined;
+    if (options.gateway) throw new ContractError("AUTH_DENIED", "Admin layer required.", "admin");
+    return Response.json(
+      {
+        error: { code: "AUTH_DENIED", message: "Admin needs a signed-in admin session.", path: "admin" },
+        minimumRole: "admin",
+      },
+      { status: 403, headers: { "cache-control": "private, no-store" } },
+    );
+  };
+  const api = nativeRest(table, {
+    ...options,
+    base: ADMIN_API_BASE,
+    accessTargets: options.accessTargets ?? metadata.accessTargets,
+    fields: options.fields ?? metadata.userFields,
+    admission,
+  });
+  // The router loads on an Admin request only, never for the application's other paths.
   return async (request, env, ctx) => {
     const path = new URL(request.url).pathname;
-    return path === ADMIN_API_BASE || path.startsWith(ADMIN_API_BASE + "/")
-      ? (await import("@aotter/mantle/host-caller")).draining(serve)(request, env, ctx)
-      : undefined;
+    return path === ADMIN_API_BASE || path.startsWith(ADMIN_API_BASE + "/") ? api(request, env, ctx) : undefined;
   };
 }
 export { adminShell } from "./shell.js";

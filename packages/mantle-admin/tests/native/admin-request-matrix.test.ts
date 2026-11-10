@@ -4,6 +4,14 @@
  * headers a client reads, the body's top-level keys, database acquisition, caller resolution, every `authorize` call
  * and the `AccessEvent` given to `onAccess`. A change to Admin's caller, layer, Origin, path, freshness, pinning,
  * dry-run or authorization rules shows as a diff of that file.
+ *
+ * Two conditions let a forwarded host session read cross-origin (a same-site page can send it), and every cell pins
+ * them: no response carries an `access-control-*` header (recorded when present, and asserted absent), and a read
+ * changes nothing. Every request to a route Admin itself declares a read (its GET routes) leaves the fixture
+ * database's contents as they were and issues no write statement through the driver. Here `/media` and the site
+ * routes run on the fixture's stub site; `/me` (`getUser`) and the identity list routes call the application's own
+ * callbacks, which are not auditable here. A read-only operation is read-only because the compiler proved it; the
+ * fixture's `peek` is a write marked read-only by hand, so its cells pin freshness and the Origin rule, not effects.
  * Regenerate it with `UPDATE_MATRIX=1 bun test tests/native/admin-request-matrix.test.ts` and review the diff.
  */
 import { expect, spyOn, test } from "bun:test";
@@ -120,7 +128,10 @@ const routes: readonly RouteCase[] = [
   { name: "malformed-slash", method: "GET", path: "/entries%2Fx", id: "admin:GET /entries%2Fx" },
   { name: "malformed-nul", method: "GET", path: "/entries%00", id: "admin:GET /entries%00" },
   { name: "malformed-escape", method: "GET", path: "/entries%zz", id: "admin:GET /entries%zz" },
+  { name: "preflight", method: "OPTIONS", path: "/entries", id: "admin:OPTIONS /entries" },
+  { name: "preflight-operation", method: "OPTIONS", path: "/operations/write", id: "admin:OPTIONS /operations/:name" },
 ];
+const WRITE = /^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i;
 
 const user = (subject: string, overrides: Partial<Extract<Caller, { kind: "user" }>>): Caller =>
   fixtureCaller({
@@ -205,6 +216,7 @@ test("Admin decides the same caller x route x request-shape matrix", async () =>
       acquired = 0,
       resolutions = 0,
       entry = { id: "", version: 0 };
+    const statements: string[] = [];
     const authorizations: string[] = [];
     const events: any[] = [];
     const seed = async () => {
@@ -215,6 +227,23 @@ test("Admin decides the same caller x route x request-shape matrix", async () =>
       const row = await system.collection("records").insert({ title: "first" });
       await system.collection("notes").insert({ title: "note" });
       entry = { id: row.id, version: Number(row.version) };
+      const query = db.query.bind(db);
+      db.query = ((sql: string) => {
+        statements.push(sql);
+        return query(sql);
+      }) as typeof db.query;
+    };
+    /** The fixture database's contents, table by table, read without being recorded as a statement. */
+    const contents = () => {
+      const tables = Database.prototype.query
+        .call(db!, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+        .all() as { name: string }[];
+      return JSON.stringify(
+        tables.map(({ name }) => [
+          name,
+          Database.prototype.query.call(db!, `SELECT * FROM "${name}" ORDER BY rowid`).all(),
+        ]),
+      );
     };
     const siteOptions = {
       site: (handle: unknown) => ({
@@ -307,6 +336,8 @@ test("Admin decides the same caller x route x request-shape matrix", async () =>
       parts.push(`cache=${response.headers.get("cache-control") ?? "-"}`);
       if (response.headers.has("www-authenticate")) parts.push("www-authenticate");
       if (response.headers.has("allow")) parts.push(`allow=${response.headers.get("allow")}`);
+      for (const [name, value] of response.headers)
+        if (name.startsWith("access-control-")) parts.push(`${name}=${value}`);
       return normalize(parts.join(" "));
     };
     const describeEvent = (event: any) =>
@@ -334,6 +365,9 @@ test("Admin decides the same caller x route x request-shape matrix", async () =>
         ...(origins[shapeName] ?? origins["same-origin"]),
         ...(session ? { cookie: "session=fixture" } : {}),
         ...(route.body === undefined ? {} : { "content-type": "application/json" }),
+        ...(route.method === "OPTIONS"
+          ? { "access-control-request-method": "POST", "access-control-request-headers": "content-type" }
+          : {}),
       };
       let context: { props: Record<string, unknown> } | undefined;
       if (gateway) {
@@ -351,6 +385,8 @@ test("Admin decides the same caller x route x request-shape matrix", async () =>
       resolutions = 0;
       authorizations.length = 0;
       events.length = 0;
+      statements.length = 0;
+      const before = contents();
       const request = new Request(ORIGIN + "/admin/api" + route.path.replace("{id}", entry.id), {
         method: route.method,
         headers,
@@ -358,6 +394,10 @@ test("Admin decides the same caller x route x request-shape matrix", async () =>
       });
       const outcome = await describeResponse(await mounted(gateway, authorization)(request, {}, context));
       await new Promise(resolve => setTimeout(resolve, 0));
+      if (route.method === "GET") {
+        expect(contents()).toBe(before);
+        expect(statements.filter(sql => WRITE.test(sql))).toEqual([]);
+      }
       const mode = `gateway=${gateway ? "on" : "off"} authorize=${authorization}`;
       lines.push(
         `${mode} caller=${callerName} shape=${shapeName} route=${route.name}`,
@@ -379,6 +419,7 @@ test("Admin decides the same caller x route x request-shape matrix", async () =>
           for (const route of routes) await run(true, authorization, callerName, shapeName, route);
     }
 
+    expect(lines.filter(line => line.includes("access-control-"))).toEqual([]);
     const actual = lines.join("\n") + "\n";
     if (process.env.UPDATE_MATRIX) await writeFile(GOLDEN, actual);
     expect(actual).toBe(await readFile(GOLDEN, "utf8"));

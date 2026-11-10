@@ -1,6 +1,5 @@
 /** Request-only filtering of generated Admin metadata. */
-import { authorized } from "@aotter/mantle/internal/authorization";
-import type { Authorize, Caller, Target } from "@aotter/mantle/contracts";
+import type { Caller, Target } from "@aotter/mantle/contracts";
 import type { Metadata, View, Operation } from "./index.js";
 
 type Item = Record<string, unknown>;
@@ -11,7 +10,8 @@ export async function visibleMetadata<Database, Handlers>(
   views: readonly View<Database>[],
   operations: readonly Operation<Database, Handlers>[],
   previews: readonly View<Database>[],
-  authorize: Authorize,
+  /** Application `authorize`, bound to the caller. */
+  permits: (target: Target) => Promise<boolean>,
   caller: Caller,
   snapshot?: unknown,
 ): Promise<Metadata> {
@@ -19,7 +19,6 @@ export async function visibleMetadata<Database, Handlers>(
     const permitted = await Promise.all(items.map(allows));
     return items.filter((_, i) => permitted[i]);
   };
-  const permits = (target: Target) => authorized(authorize, target, caller);
   const sees = (
     kind: "view" | "procedure",
     routes: readonly { name: string; allows: (caller: Caller) => boolean }[],

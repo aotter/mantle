@@ -208,10 +208,8 @@ function checkUiControllerImports() {
  * developer API offers what Admin needs. An entry that no longer matches an import fails the check.
  */
 const ADMIN_PLUMBING_DEBT = {
-  // The application's `authorize` with the SDK's deny/reject semantics. Admin applies it in its own request pipeline.
-  "packages/mantle-admin/src/server/authorization.ts": ["authorization"],
-  // Same, plus declared bind conversion of validated View and Procedure input before dispatch.
-  "packages/mantle-admin/src/server/index.ts": ["authorization", "surface"],
+  // Declared bind conversion of validated View and Procedure input before Admin pages or calls them.
+  "packages/mantle-admin/src/server/index.ts": ["surface"],
   // The runtime half of generated `admin-bindings.ts`: caller-mode SQL, bind recipes, cursors and page limits.
   "packages/mantle-admin/src/server/native.ts": ["binds", "paging", "user-fields", "validation"],
   "packages/mantle-admin/src/server/entries.ts": ["binds"],

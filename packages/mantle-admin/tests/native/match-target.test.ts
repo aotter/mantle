@@ -99,7 +99,8 @@ test("matchTarget resolves what the Admin router resolves, for every Admin route
                 matchTarget(describe, { surface: "admin", method: request.method, path: new URL(request.url).pathname })
                   ?.id ?? null;
             if (routed === null && matched !== null && unmounted.has(matched)) continue;
-            expect([id, path, verb, matched]).toEqual([id, path, verb, routed]);
+            // Admin's mount refuses an encoded separator before routing, so no target is selected for it.
+            expect([id, path, verb, /%2f/i.test(path) ? null : matched]).toEqual([id, path, verb, routed]);
           }
       }
       for (const path of [
