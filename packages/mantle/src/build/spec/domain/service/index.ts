@@ -10,7 +10,6 @@ export * from "./ManifestPathDiagnoser.js";
 export * from "./SchemaIndexChecker.js";
 export * from "./SchemaAdminUiChecker.js";
 export * from "./SiteDefaultsValidator.js";
-export * from "./JsonSchemaToZod.js";
 export * from "./RootRefChain.js";
 export * from "./McpToolNaming.js";
 export * from "./SqlRefusal.js";

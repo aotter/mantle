@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateManifests } from "./parse.js";
 import { parseManifests } from "./parse.js";
-import { jsonSchemaToZod } from "../../src/build/spec/domain/service/JsonSchemaToZod.js";
 import type {
   Manifest,
   ProcedureManifest,
@@ -922,23 +921,5 @@ spec:
     // an unanchored pattern is retried at every offset: one more factor of maxLength
     expect(input(`{ type: string, maxLength: 3162, pattern: '[a-z]*[a-z]*!' }`)[0]?.message).toMatch(/maxLength of at most 215\b/);
     expect(input(`{ type: string, maxLength: 100000, pattern: '[a-z]*!' }`)[0]?.message).toMatch(/maxLength of at most 3162\b/);
-  });
-  it("the worst accepted shape at its maxLength validates in well under 100 ms", () => {
-    for (const [pattern, maxLength] of [["^a*a*a*a*a*a*a*a*a*a*a*a*$", 3], ["^.*.*.*.*.*.*.*$", 10], ["^[^@]+@[^@]+$", 3162], ["^[a-z0-9-]+$", 100_000], ["[a-z]*[a-z]*!", 215], ["[a-z]*!", 3162], ["^[^]a*a*]?$", 215], [`^${"(a|a)".repeat(23)}a*$`, 1]] as const) {
-      expect(input(`{ type: string, maxLength: ${maxLength}, pattern: '${pattern}' }`)).toEqual([]);
-      const zs = jsonSchemaToZod({ type: "string", maxLength, pattern });
-      const worst = "a".repeat(maxLength - 1) + "!";
-      const started = performance.now();
-      zs.safeParse(worst);
-      zs.safeParse("a".repeat(maxLength + 1) + "!");
-      expect(performance.now() - started).toBeLessThan(100);
-    }
-  });
-  it("a string past maxLength is refused before its pattern runs", () => {
-    const zs = jsonSchemaToZod({ type: "object", properties: { s: { type: "string", maxLength: 3, pattern: "^a*a*a*a*a*a*a*a*a*a*a*a*$" } } });
-    const started = performance.now();
-    const result = zs.safeParse({ s: "a".repeat(30) + "b" });
-    expect(performance.now() - started).toBeLessThan(100);
-    expect(result.error?.issues.map((i) => i.code)).toEqual(["too_big"]);
   });
 });

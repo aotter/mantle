@@ -1,7 +1,6 @@
 /** Graph checks across Triggers, Procedures and Views: targets, guards, sql handlers, and MCP tool names. */
 import { validateDiagnostic, type Diagnostic } from "../../kernel/diagnostic.js";
 import { resolveLocalizedText, type ProcedureManifest, type SchemaManifest, type TriggerManifest, type ViewManifest, type JsonSchema } from "../model/ManifestGrammar.js";
-import { jsonSchemaToZod } from "./JsonSchemaToZod.js";
 import { bestMatch, manifestPath, type ManifestFilePaths } from "./ManifestPathDiagnoser.js";
 import { mcpToolNameSegment } from "./McpToolNaming.js";
 
@@ -164,30 +163,6 @@ export function checkTriggerRefs(
           message: `Trigger '${t.metadata.name}' targets unknown Procedure '${procName}'.`,
         }),
       );
-    }
-
-    if (t.spec.source.kind === "schedule") {
-      const target = proceduresByName.get(procName);
-      if (target && (target.spec.requires?.auth?.all.length ?? 0) > 0) {
-        out.push(validateDiagnostic({
-          code: "SCHEDULE_AUTH_INVALID",
-          severity: "error",
-          path: manifestPath("Trigger", t.metadata.name, "/spec/target/procedure", filePaths),
-          value: procName,
-          expected: "a Procedure without user or admin authorization requirements",
-          message: `Scheduled Trigger '${t.metadata.name}' cannot satisfy '${procName}' authorization with a system caller.`,
-        }));
-      }
-      if (target && !jsonSchemaToZod(target.spec.input).safeParse({}).success) {
-        out.push(validateDiagnostic({
-          code: "SCHEDULE_INPUT_INVALID",
-          severity: "error",
-          path: manifestPath("Trigger", t.metadata.name, "/spec/target/procedure", filePaths),
-          value: procName,
-          expected: "a Procedure whose input accepts an empty object",
-          message: `Scheduled Trigger '${t.metadata.name}' cannot supply required Procedure input to '${procName}'.`,
-        }));
-      }
     }
 
     if (t.spec.source.kind === "http") {
