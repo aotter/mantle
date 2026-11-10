@@ -6,8 +6,6 @@ import type { AuthorizationRequirements, HandlerStep, JsonSchema, LocalizedText,
 import type { SqlLock, SqlNode, SqlPlan } from "./SqlIr.js";
 import type { UserScope, UserFieldSpec } from "./UserFields.js";
 
-export const RUNTIME_PLAN_VERSION = 6 as const;
-
 /** A Schema as storage and Store see it. Keys of `fields` and `names` are lower case: SQL folds unquoted identifiers. */
 export interface PlanSchema {
   readonly userScopes?: readonly UserScope[];
@@ -126,26 +124,21 @@ export type LoweredMode = "caller" | "public" | "trusted";
 
 /** What `mantle generate` printed for the plan's dialect (ADR-0044): text, bind recipes and paging metadata, never ASTs. */
 export interface PlanLowered {
-  /** The `@aotter/mantle` version that lowered. */
-  readonly mantle: string;
-  /** The dialect's name and version, and its `lowerKey` ("" when absent): a runtime on another uses none of it. */
-  readonly dialect: { readonly name: string; readonly version: string; readonly key: string };
+  /** The dialect's name and version: a runtime on another uses none of it. */
+  readonly dialect: { readonly name: string; readonly version: string };
   readonly views: Readonly<Record<string, Readonly<Partial<Record<LoweredMode, LoweredView>>>>>;
   readonly procedures: Readonly<Record<string, Readonly<Partial<Record<"caller" | "trusted", readonly LoweredStatement[]>>>>>;
 }
 
 export interface RuntimePlan {
   readonly access?: { readonly roles: readonly string[]; readonly userFields: Readonly<Record<string, UserFieldSpec>>; readonly warnings: readonly string[] };
-  readonly version: typeof RUNTIME_PLAN_VERSION;
   /** The dialect the SQL was compiled for (ADR-0035 decision 5); boot refuses a storage of another. */
   readonly dialect: { readonly name: string; readonly version: string };
-  /** SHA-256 of the plan without this field (`planFingerprint`). */
-  readonly fingerprint: string;
   readonly schemas: Readonly<Record<string, PlanSchema>>;
   readonly views: Readonly<Record<string, PlanView>>;
   readonly procedures: Readonly<Record<string, PlanProcedure>>;
   readonly triggers: Readonly<Record<string, PlanTrigger>>;
-  /** Optional, covered by the fingerprint, and ignored by a runtime it does not match (ADR-0044). */
+  /** Optional, and ignored by a runtime it does not match (ADR-0044). */
   readonly lowered?: PlanLowered;
 }
 

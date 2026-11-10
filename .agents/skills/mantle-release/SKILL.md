@@ -16,10 +16,9 @@ versions and the versioned reference-service links (see
 docs/release-process.md step 2), inspect the packed docs payload, run `pnpm check` and
 `pnpm check:init-audit` (the `mantle init` app installs without high or critical advisories;
 needs the network) and review its exact SHA. The reference consumer gate runs
-from packed packages outside workspace links. Bump `MANTLE_VERSION`
-(`packages/mantle/src/build/core/version.ts`) with `package.json`, then regenerate
+from packed packages outside workspace links. After bumping `package.json`, regenerate
 `docs/examples/reference-service` using that example's native generation command.
-Keep compiler version metadata and the committed generated artifacts fresh.
+Keep the committed generated artifacts fresh.
 Merge into develop for every
 version; 0.2 work on `0.2.x` reaches a release only after a `0.2.x` -> develop
 PR merges (docs/release-process.md). Beta, RC and stable then follow "Promote to main" in

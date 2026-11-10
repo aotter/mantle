@@ -38,8 +38,6 @@ export type PolicyOpts = {
   status?: string;
   /** Schema + semantic verb keys (`posts.publish`, `items.update`) whose after hooks need whole rows. */
   returning?: ReadonlySet<string>;
-  /** NEGATIVE CONTROL ONLY: print no visibility predicate, so a probe that cannot fail is caught */
-  unsafeNoVisibility?: boolean;
   /** skip `refs` (see CompileContext) */
   uncheckedRefs?: true;
   /** records every relation position the pass printed a wrapper for (the probe checks it is complete) */
@@ -183,7 +181,6 @@ function probe(c: C, rel: N, a: string, where: N | undefined, locks: readonly Lo
 }
 /** Where a Schema's visibility rule is rendered (`rowPolicy` spells it). `a` is the alias (or table) the predicate reads through. */
 function visible(s: SchemaDef, a: string, c: C, table?: string): N | undefined {
-  if (c.unsafeNoVisibility) return undefined;
   const r = table !== undefined && c.mode !== 'trusted' ? c.restrict?.[table.toLowerCase()] : undefined;
   const extra: RowTerm[] = r ? [...(r.owner ? [[r.owner, 'eq', { k: 'uid' }] as const] : []), ...r.terms.map(u => userScopeTerm(u))] : [];
   return and(...[...rowPolicy(s, c.mode, c.schemas), ...extra].map((t) => term(c, a, t)));

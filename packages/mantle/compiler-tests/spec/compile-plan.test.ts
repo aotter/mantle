@@ -43,7 +43,7 @@ describe("compilePlan", () => {
     expect(Object.keys(res.plan.views)).toEqual(["open-orders"]);
     expect(res.plan.views["open-orders"]).toMatchObject({ grammar: PG_GRAMMAR, stmts: [{ SelectStmt: expect.any(Object) }] });
     expect(res.plan.procedures["cancel-order"]!.handler).toMatchObject({ sql: { grammar: PG_GRAMMAR } });
-    expect(res.plan).toMatchObject({ version: 6, dialect: { name: "@aotter/mantle/d1", version: "1" }, fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(res.plan).toMatchObject({ dialect: { name: "@aotter/mantle/d1", version: "1" } });
   });
 
   it("carries a View's cache.sharedMaxAge into the plan", async () => {
@@ -96,15 +96,12 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
     }
   });
 
-  it("carries Schema checks as IR, and the fingerprint follows the plan", async () => {
+  it("carries Schema checks as IR", async () => {
     const withCheck = (c: string) => SCHEMA.replace("  lifecycle: operational", `  lifecycle: operational\n  checks: ["${c}"]`);
     const a = await compile(withCheck("length(body) > 0"));
-    const same = await compile(withCheck("length(body) > 0"));
-    const other = await compile(withCheck("length(body) > 1"));
-    if (!a.ok || !same.ok || !other.ok) throw new Error("did not compile");
+    if (!a.ok) throw new Error("did not compile");
     expect(a.plan.schemas["notes"]!.checks).toHaveLength(1);
     expect(a.plan.schemas["notes"]!.checks![0]).toHaveProperty("A_Expr");
-    expect([a.plan.fingerprint === same.plan.fingerprint, a.plan.fingerprint === other.plan.fingerprint]).toEqual([true, false]);
     const sub = await compile(withCheck("body IN (SELECT body FROM notes)"));
     if (sub.ok) throw new Error("accepted a subquery in a check");
     expect(sub.diagnostics[0]).toMatchObject({ code: "SQL_SHAPE", source: { path: "/spec/checks/0" } });
@@ -141,7 +138,6 @@ spec: { surface: ${cache ? "public" : "internal"}, ${cache ? "cache: { sharedMax
     expect(plain.plan.schemas.notes).not.toHaveProperty("uiSchema");
     expect(rich.plan.schemas.notes).toMatchObject({ name: "notes", title: { en: "Notes", "zh-TW": "筆記" }, description: "My notes", uiSchema: { list: { columns: ["body"] } } });
     expect(rich.plan.views.v).toMatchObject({ title: "Mine", description: "Mine only", uiSchema: { list: { columns: ["id"] } } });
-    expect(rich.plan.fingerprint).not.toBe(plain.plan.fingerprint);
   });
 
   it("returns manifest diagnostics before compiling; a 0.1.x manifest names the upgrade guide", async () => {
