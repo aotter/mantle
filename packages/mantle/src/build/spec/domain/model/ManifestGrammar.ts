@@ -426,12 +426,14 @@ export interface HandlerSqlBinding {
 }
 
 /** One statement of a `steps` program. `onNoRows: conflict`: a set-op write that writes no row is
- *  `CONFLICT` kind "row" and the whole program rolls back. */
+ *  `CONFLICT` kind "row" and the whole program rolls back. `name` (#1974): a row conflict of this step carries
+ *  `fields.step`, which tells the caller which guard failed, so name a step only when that is not a secret. */
 export interface HandlerStep {
   readonly sql: string;
   readonly onNoRows?: "conflict";
+  readonly name?: string;
 }
-export const HANDLER_STEP_KEYS = ["sql", "onNoRows"] as const;
+export const HANDLER_STEP_KEYS = ["sql", "onNoRows", "name"] as const;
 
 /** The program `steps` compile as: the statements in order, each on its own lines. `lines[i]` is the 0-based line step i starts
  *  on, so a diagnostic in the program points back into its step. A step's own trailing `;` is dropped; after a step ending in a

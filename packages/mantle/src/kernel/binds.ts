@@ -50,12 +50,15 @@ export interface Step {
   readonly sql: string;
   readonly binds: readonly Recipe[];
   readonly row?: boolean | "some";
+  /** The authored step's name: its row conflict carries it as `fields.step` (#1974). */
+  readonly step?: string;
   readonly lock?: LockProbe;
 }
 export type Bound = {
   readonly sql: string;
   readonly binds: unknown[];
   readonly row?: boolean | "some";
+  readonly step?: string;
   readonly lock?: LockProbe<unknown[]>;
 };
 
@@ -133,6 +136,7 @@ export function bound(
     sql: s.sql,
     binds: binds(d, s.binds, caller, input, ms),
     row: s.row,
+    step: s.step,
     ...(s.lock ? { lock: { ...s.lock, binds: binds(d, s.lock.binds, caller, input, ms) } } : {}),
   }));
 }

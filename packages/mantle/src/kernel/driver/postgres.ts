@@ -85,8 +85,8 @@ export async function procedure(db: Postgres, steps: readonly Bound[], path: str
       });
       if (s.row && (changes < 1 || (changes > 1 && s.row !== "some")))
         throw s.row === true && s.lock
-          ? lockConflict(path, s.lock, (await run(handle, s.lock.sql, s.lock.binds)).rows)
-          : conflict(path, false);
+          ? lockConflict(path, s.lock, (await run(handle, s.lock.sql, s.lock.binds)).rows, s.step)
+          : conflict(path, false, undefined, s.step);
       results.push(rows);
     }
     return results;

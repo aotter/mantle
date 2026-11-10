@@ -7,8 +7,10 @@ const equal = (actual: unknown, expected: unknown, what: string) => {
 const code = (run: () => Promise<unknown>) =>
   run().then(
     () => "ok",
-    (e: { code?: string; fields?: { kind?: string } }) =>
-      e.code ? `${e.code}${e.fields?.kind ? `:${e.fields.kind}` : ""}` : String(e),
+    (e: { code?: string; fields?: { kind?: string; step?: string } }) =>
+      e.code
+        ? `${e.code}${e.fields?.kind ? `:${e.fields.kind}` : ""}${e.fields?.step ? ` step=${e.fields.step}` : ""}`
+        : String(e),
   );
 
 export async function verifyProcedureSteps(app: any, db: unknown, caller: unknown, rows: Query) {
@@ -67,4 +69,29 @@ export async function verifyProcedureSteps(app: any, db: unknown, caller: unknow
     "CONFLICT:row",
     "a set update over no row",
   );
+
+  // #1974: a named step's row conflict says which step found no row; an unnamed one does not
+  equal(
+    await code(() => app.procedures.add_named(db, caller, { client: "missing", name: "n" })),
+    "CONFLICT:row step=contact",
+    "the first named guard",
+  );
+  equal(
+    await code(() => app.procedures.add_named(db, caller, { client: client.id, name: "blocked" })),
+    "CONFLICT:row step=audit",
+    "the second named guard",
+  );
+  equal([await count("audit"), await count("contacts")], [1, 2], "a named step's conflict rolls back too");
+  equal(
+    await code(() => app.procedures.rename_client(db, caller, { client: "missing", name: "n" })),
+    "CONFLICT:row step=client",
+    "a named row op",
+  );
+  const store = app.store(db, caller);
+  if (store.transaction)
+    equal(
+      await code(() => store.transaction((tx: any) => tx.procedures.add_named({ client: client.id, name: "blocked" }))),
+      "CONFLICT:row step=audit",
+      "a named step inside an interactive transaction",
+    );
 }
