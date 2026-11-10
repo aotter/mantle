@@ -15,6 +15,12 @@
 > [features](../handbook/reference/features.md#refused) and
 > [TTL maintenance](../handbook/guides/native-execution.md#ttl-maintenance).
 
+> **Amended 2026-11-10.** `schedule` and `lifecycle` are no longer Trigger
+> source kinds: the parser refuses them at `/spec/source/kind` with
+> `INVALID_MANIFEST_ENVELOPE` and the same guidance generation gave, so
+> `mantle describe` refuses them too. Their validation, linking and plan
+> fields are removed; `toCloudflareCron` remains for application-owned crons.
+
 **Date:** 2026-09-25
 
 ## Context

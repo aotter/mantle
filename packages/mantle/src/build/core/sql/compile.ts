@@ -20,8 +20,6 @@ export interface CompileContext {
   readonly inputs: Readonly<Record<string, string>>;
   readonly kind: "view" | "procedure";
   readonly mode: Mode;
-  /** Schema + semantic verb keys whose after hooks need whole rows in hidden columns. */
-  readonly returning?: ReadonlySet<string>;
   /** Add `AND version = ?` (the version checked by the publishing lifecycle) to a row op. */
   readonly lockVersion?: boolean;
   /** Records every relation position the policy printed a wrapper for (the position probe checks it is complete). */
@@ -35,7 +33,7 @@ export function compileProgram(stmts: readonly SqlNode[], ctx: CompileContext): 
   const diagnostics = ctx.dialect.check({ grammar: PG_GRAMMAR, stmts } satisfies SqlPlan, { schemas: ctx.schemas, ...(ctx.columns ? { columns: ctx.columns } : {}), inputs: ctx.inputs, kind: ctx.kind, public: ctx.mode === "public" });
   if (diagnostics.length)
     throw new DiagnosticError(diagnostics.map((d) => runtimeDiagnostic({ code: "INPUT_VALIDATION_FAILED", severity: "error", path: "store", message: `${d.code}: ${d.message}` })));
-  const opts: PolicyOpts = { restrict: ctx.restrict, schemas: ctx.schemas, inputs: ctx.inputs, mode: ctx.mode, lockVersion: ctx.lockVersion, returning: ctx.returning, seen: ctx.seen, uncheckedRefs: ctx.uncheckedRefs, lower: ctx.dialect.lowering, nativeOrder: ctx.dialect.nativeOrder };
+  const opts: PolicyOpts = { restrict: ctx.restrict, schemas: ctx.schemas, inputs: ctx.inputs, mode: ctx.mode, lockVersion: ctx.lockVersion, seen: ctx.seen, uncheckedRefs: ctx.uncheckedRefs, lower: ctx.dialect.lowering, nativeOrder: ctx.dialect.nativeOrder };
   return stmts.map((stmt, i) => {
     const c = applyPolicy(stmt, opts);
     // a Schema whose published entries are protected takes row ops only (ADR-0032 decision 2, ADR-0034 decision 4)

@@ -487,19 +487,8 @@ export interface TriggerManifestSpec {
   readonly target: { readonly procedure: string };
 }
 
-/** Supported Trigger sources. */
-export type TriggerSource =
-  | HttpTriggerSource
-  | LifecycleTriggerSource
-  | McpTriggerSource
-  | ScheduleTriggerSource;
-
-/** Five-field POSIX cron expression in UTC (weekday 0 = Sunday). Registration remains host-owned. */
-export interface ScheduleTriggerSource {
-  readonly kind: "schedule";
-  readonly cron: string;
-  readonly enabled?: boolean;
-}
+/** Supported Trigger sources. Scheduling and lifecycle hooks are application code, not Trigger sources. */
+export type TriggerSource = HttpTriggerSource | McpTriggerSource;
 
 export interface HttpTriggerSource {
   readonly kind: "http";
@@ -507,29 +496,6 @@ export interface HttpTriggerSource {
   /** OpenAPI `{param}` syntax. Path params auto-bind to identically-named
    *  fields on the target Procedure's `input`. No optional segments. */
   readonly path: string;
-}
-
-/** Shipped v0.1 lifecycle hook vocabulary: before/after ×
- *  create/update/delete plus the publish boundary. New entries require an
- *  explicit grammar-revise round. */
-export const LIFECYCLE_HOOKS = [
-  "before_create",
-  "after_create",
-  "before_update",
-  "after_update",
-  "before_delete",
-  "after_delete",
-  "before_publish",
-  "after_publish",
-] as const;
-export type LifecycleHook = (typeof LIFECYCLE_HOOKS)[number];
-
-export interface LifecycleTriggerSource {
-  readonly kind: "lifecycle";
-  /** Schema this Trigger watches (`Schema.metadata.name`). */
-  readonly schema: string;
-  /** Hooks bound by this Trigger. Non-empty. */
-  readonly on: readonly LifecycleHook[];
 }
 
 /** Surfaces an MCP-source Trigger can be bound to. `admin` ⇒

@@ -1,6 +1,6 @@
 /** Field checks every manifest kind shares: LocalizedText, unknown keys, the kind and enum sets, and the parse error. */
 import type { Diagnostic, DiagnosticCode } from "../../kernel/diagnostic.js";
-import { LIFECYCLE_HOOKS, MCP_TRIGGER_SURFACES, VIEW_SURFACES, type HttpMethod, type LifecycleHook, type ManifestKind } from "../model/ManifestGrammar.js";
+import { MCP_TRIGGER_SURFACES, VIEW_SURFACES, type HttpMethod, type ManifestKind } from "../model/ManifestGrammar.js";
 
 /**
  * Shared shape validator for `LocalizedText` fields (`Schema.spec.title`
@@ -124,12 +124,7 @@ export const KNOWN_KINDS: ReadonlySet<ManifestKind> = new Set([
   "Trigger",
 ]);
 
-export const V01_TRIGGER_SOURCE_KINDS: ReadonlySet<string> = new Set([
-  "http",
-  "lifecycle",
-  "mcp",
-  "schedule",
-]);
+export const V01_TRIGGER_SOURCE_KINDS: ReadonlySet<string> = new Set(["http", "mcp"]);
 
 export const V01_HTTP_METHODS: ReadonlySet<HttpMethod> = new Set([
   "POST",
@@ -138,7 +133,6 @@ export const V01_HTTP_METHODS: ReadonlySet<HttpMethod> = new Set([
   "DELETE",
 ]);
 
-export const V01_LIFECYCLE_HOOKS: ReadonlySet<LifecycleHook> = new Set(LIFECYCLE_HOOKS);
 export const V01_MCP_TRIGGER_SURFACES: ReadonlySet<string> = new Set(MCP_TRIGGER_SURFACES);
 export const V01_VIEW_SURFACES: ReadonlySet<string> = new Set(VIEW_SURFACES);
 export const V01_LIFECYCLE_MODES: ReadonlySet<string> = new Set(["publishing", "operational"]);

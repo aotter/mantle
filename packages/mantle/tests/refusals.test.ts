@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { generateFromSources } from "../src/infrastructure/generateAuth.js";
+import { compilePlan } from "../src/build/compiler.js";
 import { wireScalars } from "../src/domain/wireScalars.js";
 import { dialect } from "../src/kernel/dialect/sqlite.js";
 
@@ -16,15 +17,14 @@ async function diagnostics(extra: string[]) {
   return result.diagnostics;
 }
 
-for (const [kind, hint] of [["schedule", "Wire scheduled() yourself."], ["lifecycle", "Write a custom handler."]] as const) {
-  test(`${kind} Triggers produce one actionable diagnostic per declaration`, async () => {
-    const result = await diagnostics([...(kind === "lifecycle" ? [doc("Procedure", "hook", { input: { type: "object" }, output: { type: "object" }, handler: { ref: "hook" } })] : []), ...["first", "second"].map(name => doc("Trigger", name, {
-      source: kind === "schedule" ? { kind, cron: "0 * * * *", enabled: false } : { kind, schema: "notes", on: ["before_create", "after_create"] }, target: { procedure: kind === "lifecycle" ? "hook" : "read" },
-    }))]);
-    const triggers = result.filter(d => d.path.startsWith("triggers/"));
-    expect(triggers).toHaveLength(2);
-    expect(triggers.map(d => d.path)).toEqual(["triggers/first", "triggers/second"]);
-    for (const d of triggers) { expect(d.code).toBe("GENERATE_UNSUPPORTED"); expect(d.message).toContain(hint); }
+for (const [kind, source, hint] of [["schedule", "{kind: schedule, cron: '0 * * * *'}", "Schedule Triggers are unsupported. Wire scheduled() yourself."], ["lifecycle", "{kind: lifecycle, schema: notes, on: [after_create]}", "Before/after lifecycle hooks are unsupported. Write a custom handler."]] as const) {
+  test(`a ${kind} Trigger fails the manifest with one actionable diagnostic per declaration`, async () => {
+    const trigger = (name: string) => `apiVersion: cms.mantle.aotter.net/v2\nkind: Trigger\nmetadata: {name: ${name}}\nspec:\n  source: ${source}\n  target: {procedure: read}`;
+    const result = await diagnostics([trigger("first"), trigger("second")]);
+    expect(result).toEqual(["[doc 2]", "[doc 3]"].map(doc => ({ code: "INVALID_MANIFEST_ENVELOPE", path: "/spec/source/kind", message: `${doc} Trigger.spec.source.kind '${kind}' is not accepted (one of http, mcp). ${hint}` })));
+    const compiled = await compilePlan({ sources: [{ sourceId: "refused.yaml", text: [...base, trigger("first")].join("\n---\n") }] });
+    expect(compiled.ok).toBe(false);
+    if (!compiled.ok) expect(compiled.diagnostics).toEqual([expect.objectContaining({ path: "/spec/source/kind", source: expect.objectContaining({ sourceId: "refused.yaml", documentIndex: 2, span: expect.objectContaining({ start: expect.objectContaining({ line: 9, column: 18 }) }) }) })]);
   });
 }
 

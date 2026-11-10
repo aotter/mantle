@@ -6,4 +6,4 @@ SQL Procedures compile to native statements and return `{ results }`, one row ar
 
 A ref Procedure generates a typed `Handlers` key. Its handler receives `(ctx, input)` with `{ caller, db, store }` bound to the same Caller and transaction. Generated `requires` runs first. Handlers own side effects and their transaction boundaries.
 
-HTTP and MCP Triggers expose a declared Procedure with its existing authorization. Lifecycle and schedule Triggers are rejected by generation. Put side effects in app-owned handlers, and wire scheduled system maintenance with the host's scheduler. See [Procedure](../reference/procedure.md), [Trigger](../reference/trigger.md) and [Store](../guides/typed-queries.md).
+HTTP and MCP Triggers expose a declared Procedure with its existing authorization. Lifecycle and schedule sources fail validation. Put side effects in app-owned handlers, and wire scheduled system maintenance with the host's scheduler. See [Procedure](../reference/procedure.md), [Trigger](../reference/trigger.md) and [Store](../guides/typed-queries.md).

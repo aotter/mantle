@@ -59,7 +59,7 @@ function mergeRestrict(policies: PlanRestrict[], conjunctive: boolean): PlanRest
   }));
 }
 
-/** Follow guards and write hooks to a fixed point, including writes made by hooks. */
+/** Follow guards to a fixed point. */
 function inspectBehavior(plan: RuntimePlan, ir: unknown, opaque: boolean, requires?: AuthorizationRequirements, restrict?: PlanRestrict, writes?: { schema: string; operation: string }[]) {
   const inspected = inspectSql(ir);
   if (writes) {
@@ -68,7 +68,7 @@ function inspectBehavior(plan: RuntimePlan, ir: unknown, opaque: boolean, requir
     inspected.readSchemas.push(...writes.filter(w => w.operation !== "create").map(w => w.schema));
   }
   const dependencies: unknown[] = [], policies = [restrict ?? {}];
-  const procedures = new Set<string>(), hooks = new Set<string>();
+  const procedures = new Set<string>();
   const visit = (name: string): void => {
     if (procedures.has(name)) return;
     procedures.add(name);
@@ -83,16 +83,6 @@ function inspectBehavior(plan: RuntimePlan, ir: unknown, opaque: boolean, requir
     if (p.requires?.guard) visit(p.requires.guard.procedure);
   };
   if (requires?.guard) visit(requires.guard.procedure);
-  for (;;) {
-    const before = hooks.size;
-    for (const [id, t] of Object.entries(plan.triggers).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-      if (t.source.kind !== "lifecycle" || hooks.has(id)) continue;
-      const source = t.source;
-      if (!opaque && !inspected.writes.some(w => w.schema === source.schema.toLowerCase() && source.on.some(on => on.endsWith(`_${w.operation}`)))) continue;
-      hooks.add(id); dependencies.push({ trigger: id, source }); visit(t.procedure);
-    }
-    if (hooks.size === before) break;
-  }
   const related = (names: string[]) => {
     const all = new Set(opaque ? Object.keys(plan.schemas) : names);
     for (const name of all) { const parent = plan.schemas[name]?.translates?.parent.toLowerCase(); if (parent) all.add(parent); }
@@ -128,7 +118,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
       const triggers = Object.entries(plan.triggers).filter(([, t]) => kind === "procedure" && t.procedure === name).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([id, t]) => ({ id, source: t.source }));
       const surfaces = [...new Set([
         ...(view ? [view.surface, "admin", ...(view.surface === "public" ? ["rest"] : [])] : []),
-        ...triggers.map(t => t.source.kind === "mcp" ? t.source.surface : t.source.kind === "http" ? "rest" : t.source.kind),
+        ...triggers.map(t => t.source.kind === "mcp" ? t.source.surface : "rest"),
       ])].sort();
       if (!surfaces.length) surfaces.push("internal");
       out.push({ id: `${kind}:${name}`, name: tool?.name ?? mcpToolNameSegment(name), kind,

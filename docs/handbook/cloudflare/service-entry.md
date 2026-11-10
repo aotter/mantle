@@ -183,7 +183,7 @@ Name the variables as your `auth.ts` reads them (the app shell uses these three)
 
 ## Scheduling and Bun
 
-Scheduling remains app-owned; schedule/lifecycle Triggers are refused. Import
+Scheduling remains app-owned; a schedule or lifecycle Trigger source fails validation. Import
 only the desired generated `sweepExpired` entry in `scheduled()`, pass a system
 Caller with a reason, and choose an application-owned page budget for each
 invocation; see the [TTL contract](../guides/native-execution.md#ttl-maintenance). Configure `triggers.crons` yourself;

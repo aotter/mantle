@@ -141,7 +141,6 @@ export function checkTriggerRefs(
   triggers: ReadonlyArray<TriggerManifest>,
   proceduresByName: ReadonlyMap<string, ProcedureManifest>,
   filePaths?: ManifestFilePaths,
-  schemasByName?: ReadonlyMap<string, SchemaManifest>,
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
   const httpRoutes = new Map<string, string>();
@@ -245,37 +244,6 @@ export function checkTriggerRefs(
           }),
         );
       }
-    }
-
-    // a hook target is consumer code: an inline program would write inside a before hook, which fails open (ADR-0032 decision 3)
-    const hookTarget = t.spec.source.kind === "lifecycle" ? proceduresByName.get(t.spec.target.procedure) : undefined;
-    if (hookTarget && !("ref" in hookTarget.spec.handler)) {
-      out.push(
-        validateDiagnostic({
-          code: "LIFECYCLE_TARGET_NOT_REF",
-          severity: "error",
-          path: manifestPath("Trigger", t.metadata.name, "/spec/target/procedure", filePaths),
-          value: t.spec.target.procedure,
-          expected: "a Procedure with a ref handler",
-          message: `Lifecycle Trigger '${t.metadata.name}' targets '${t.spec.target.procedure}', whose handler is an inline program; a hook target must use a ref handler.`,
-        }),
-      );
-    }
-
-    if (t.spec.source.kind === "lifecycle" && schemasByName && !schemasByName.has(t.spec.source.schema)) {
-      const schemaName = t.spec.source.schema;
-      out.push(
-        validateDiagnostic({
-          code: "LIFECYCLE_SCHEMA_UNKNOWN",
-          severity: "error",
-          path: manifestPath("Trigger", t.metadata.name, "/spec/source/schema", filePaths),
-          value: schemaName,
-          expected: "name of a declared Schema",
-          candidates: [...schemasByName.keys()],
-          suggestion: bestMatch(schemaName, [...schemasByName.keys()]),
-          message: `Trigger '${t.metadata.name}' watches unknown Schema '${schemaName}'.`,
-        }),
-      );
     }
   }
   return out;

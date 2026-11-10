@@ -13,7 +13,9 @@ rebuilds the project on 0.2.0 and plans a reviewed data move for it.
    references. The application owns routing, Auth, native handles and database
    migrations. Install the same exact version of `@aotter/mantle`,
    `@aotter/mantle-ui` and, when selecting Admin, `@aotter/mantle-admin`.
-   Preserve every authorization, scope and OCC requirement.
+   Preserve every authorization, scope and OCC requirement. A 0.1.x
+   `schedule` or `lifecycle` Trigger does not validate in 0.2: wire
+   `scheduled()` yourself, or write a custom handler.
 2. **Move the data** into a new 0.2 database, as
    [Moving data from 0.1.x](#moving-data-from-01x) describes.
 
