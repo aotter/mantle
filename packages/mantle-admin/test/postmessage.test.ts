@@ -16,6 +16,7 @@ vi.mock("@modelcontextprotocol/ext-apps", () => ({
     sendMessage = vi.fn(async () => ({}));
     updateModelContext = vi.fn(async () => ({}));
     requestDisplayMode = vi.fn(async ({ mode }: { mode: string }) => ({ mode }));
+    downloadFile = vi.fn(async () => ({}));
     sendSizeChanged = vi.fn(async () => {});
     close = vi.fn(async () => {});
     constructor(
@@ -129,12 +130,14 @@ test("missing capabilities expose no tool call and send no unavailable host requ
   expect(await host.sendMessage("hi")).toBe(false);
   expect(await host.updateModelContext({ content: [{ type: "text", text: "x" }] })).toBe(false);
   expect(await host.requestDisplayMode("fullscreen")).toBeNull();
+  expect(await host.downloadFile("pending.csv", "id\r\n")).toBe(false);
   for (const request of [
     app.callServerTool,
     app.openLink,
     app.sendMessage,
     app.updateModelContext,
     app.requestDisplayMode,
+    app.downloadFile,
   ])
     expect(request).not.toHaveBeenCalled();
   disconnect();
@@ -168,6 +171,32 @@ test("host calls use official methods, retain abort signals and limit links and 
   disconnect();
   await expect(host.call!("review", {})).rejects.toThrow("Invalid tool call");
   expect(await host.sendMessage("closed")).toBe(false);
+});
+
+test("a download is one embedded CSV resource named by its file:// URI, with the person's time to confirm", async () => {
+  const { app, host, disconnect } = await make({ downloadFile: {} });
+  expect(await host.downloadFile("pending.csv", "\uFEFFitem\r\nLaptops\r\n")).toBe(true);
+  expect(app.downloadFile.mock.calls).toEqual([
+    [
+      {
+        contents: [
+          {
+            type: "resource",
+            resource: { uri: "file:///pending.csv", mimeType: "text/csv", text: "\uFEFFitem\r\nLaptops\r\n" },
+          },
+        ],
+      },
+      { timeout: 600_000 },
+    ],
+  ]);
+  // a refusal and a cancellation are the same answer
+  app.downloadFile.mockResolvedValueOnce({ isError: true });
+  expect(await host.downloadFile("pending.csv", "x")).toBe(false);
+  app.downloadFile.mockRejectedValueOnce(new Error("Request timed out"));
+  expect(await host.downloadFile("pending.csv", "x")).toBe(false);
+  disconnect();
+  expect(await host.downloadFile("pending.csv", "x")).toBe(false);
+  expect(app.downloadFile).toHaveBeenCalledTimes(3);
 });
 
 test("early and late results, cancellation, context and teardown keep their existing semantics", async () => {

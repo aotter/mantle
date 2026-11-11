@@ -18,6 +18,9 @@ export interface AppLabels {
   readonly loadMoreFailed: string;
   /** `{count}` is the number of rows added. */
   readonly rowsLoaded: string;
+  readonly exportCsv: string;
+  /** The host refused the download, or the person cancelled it: its answer does not say which. */
+  readonly exportFailed: string;
   readonly fullscreen: string;
   readonly exitFullscreen: string;
 }
@@ -75,6 +78,8 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     loadMore: "Load more",
     loadMoreFailed: "More results could not be loaded.",
     rowsLoaded: "{count} more loaded",
+    exportCsv: "Export CSV",
+    exportFailed: "The download did not finish.",
     fullscreen: "Full screen",
     exitFullscreen: "Exit full screen",
   },
@@ -128,6 +133,8 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     loadMore: "載入更多",
     loadMoreFailed: "無法載入更多結果。",
     rowsLoaded: "已載入 {count} 筆",
+    exportCsv: "匯出 CSV",
+    exportFailed: "下載未完成。",
     fullscreen: "全螢幕",
     exitFullscreen: "結束全螢幕",
   },
@@ -181,6 +188,8 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     loadMore: "加载更多",
     loadMoreFailed: "无法加载更多结果。",
     rowsLoaded: "已加载 {count} 条",
+    exportCsv: "导出 CSV",
+    exportFailed: "下载未完成。",
     fullscreen: "全屏",
     exitFullscreen: "退出全屏",
   },

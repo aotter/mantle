@@ -329,6 +329,12 @@ the host advertises in `hostCapabilities`:
 - It declares `availableDisplayModes: ["inline", "fullscreen"]` and offers a
   full-screen toggle (`ui/request-display-mode`) when the host lists
   `fullscreen` in its context.
+- When the host offers `downloadFile`, a View with rows shows "Export CSV". It
+  saves the rows the App holds, "Load more" pages included, in the columns
+  shown, as one `text/csv` resource named `<tool>.csv` through
+  `ui/download-file`, laid out as Admin's browser export. It makes no server
+  call. The host's answer does not tell a refusal from a cancellation, so
+  either shows that the download did not finish.
 - `appInfo.version` is the `@aotter/mantle-admin` version.
 
 The pinned official client validates host context. Invalid protocol data is not

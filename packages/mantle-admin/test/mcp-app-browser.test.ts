@@ -188,7 +188,7 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
   }
 }, 45_000);
 
-it("loads the next page of a View through the host and appends its rows", async () => {
+it("loads the next page of a View through the host and appends its rows, and exports them all through the host", async () => {
   const server = await hostServer();
   await server.listen();
   const browser = await chromium.launch({
@@ -222,6 +222,25 @@ it("loads the next page of a View through the host and appends its rows", async 
     ]);
     expect(await app.getByRole("button", { name: "載入更多" }).count()).toBe(0);
     expect(await app.locator("body").evaluate(() => document.activeElement === document.body)).toBe(false);
+    // `ui/download-file` with the rows held, Load more's included; no server tool is called for it
+    await app.getByRole("button", { name: "匯出 CSV" }).click();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).host.downloads))
+      .toEqual([
+        {
+          contents: [
+            {
+              type: "resource",
+              resource: {
+                uri: "file:///pending.csv",
+                mimeType: "text/csv",
+                text: "\uFEFFitem,date,link\r\nLaptops,,\r\nDesks,,\r\n",
+              },
+            },
+          ],
+        },
+      ]);
+    expect(await page.evaluate(() => (window as any).host.calls)).toHaveLength(1);
   } finally {
     await browser.close();
     await server.close();

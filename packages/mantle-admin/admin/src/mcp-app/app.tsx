@@ -33,6 +33,7 @@ import { useLoadMore } from "../lib/use-load-more";
 import { Slot, useViewCellNames } from "../app/slots";
 import type { CellProps } from "../app/slot-props";
 import { appLabels, type AppLabels } from "./locale";
+import { csvText } from "../../../src/csv";
 
 type Row = Readonly<Record<string, unknown>>;
 
@@ -248,6 +249,9 @@ export function MantleApp(props: {
   return (
     <CellEnv.Provider value={{ language, timeZone: props.timeZone, openLink }}>
       {notice}
+      {capabilities.downloadFile && tool ? (
+        <ExportRows labels={labels} onExport={() => props.host.downloadFile(`${tool}.csv`, csvText(columns, rows))} />
+      ) : null}
       <ul data-slot="app-rows" className="grid gap-2 p-3">
         {rows.map((row, index) => {
           const id = typeof row["id"] === "string" ? row["id"] : undefined;
@@ -383,6 +387,29 @@ function MoreRows(props: {
           {props.labels.loadMore}
         </button>
       ) : null}
+    </div>
+  );
+}
+
+/** "Export CSV": the rows the App holds, with the columns shown, saved through the host; no server call. */
+function ExportRows(props: { readonly labels: AppLabels; readonly onExport: () => Promise<boolean> }): ReactNode {
+  const [state, setState] = useState<"idle" | "pending" | "failed">("idle");
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
+      <button
+        type="button"
+        className="rounded-md border px-3 py-1 text-sm font-medium"
+        disabled={state === "pending"}
+        onClick={() => {
+          setState("pending");
+          void props.onExport().then(done => setState(done ? "idle" : "failed"));
+        }}
+      >
+        {props.labels.exportCsv}
+      </button>
+      <span role="status" className="text-destructive text-sm">
+        {state === "failed" ? props.labels.exportFailed : null}
+      </span>
     </div>
   );
 }

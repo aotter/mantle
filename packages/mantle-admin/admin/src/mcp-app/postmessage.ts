@@ -20,6 +20,11 @@ export interface HostApi {
   updateModelContext(params: McpUiUpdateModelContextRequest["params"]): Promise<boolean>;
   /** `ui/request-display-mode`: the mode the host granted, or null when it offers none other. */
   requestDisplayMode(mode: McpUiDisplayMode): Promise<McpUiDisplayMode | null>;
+  /**
+   * `ui/download-file`: a CSV file saved to the person's device, named `name`, after the host confirms it. False when the
+   * host offers no downloads, refuses or the person cancels; the host's answer does not tell these apart.
+   */
+  downloadFile(name: string, text: string): Promise<boolean>;
 }
 
 /** The display modes the App can lay itself out for. */
@@ -191,6 +196,15 @@ export function connectHost(
             };
             return Object.keys(sent).length > 0 && json(sent) && ask(() => app.updateModelContext(sent));
           },
+          // the person confirms in the host, so the wait is theirs, not the SDK's default request timeout
+          downloadFile: async (name, text) =>
+            !!capabilities.downloadFile &&
+            ask(() =>
+              app.downloadFile(
+                { contents: [{ type: "resource", resource: { uri: "file:///" + name, mimeType: "text/csv", text } }] },
+                { timeout: 600_000 },
+              ),
+            ),
           requestDisplayMode: async mode => {
             if (closed || !app.getHostContext()?.availableDisplayModes?.includes(mode)) return null;
             try {
