@@ -10,7 +10,7 @@ import { seed, verifySqlPatterns } from "./sql-patterns-scenarios.js";
 const base = resolve(import.meta.dir, ".."),
   port = process.env.MANTLE_NEXT_SQL_PATTERNS_D1_PORT ?? "8990";
 const composition = `import {userCaller} from '${resolve(base, "src/kernel/user-caller.ts")}';import {rest} from './rest.js';import {mcp} from './mcp.js';
-const options={db:(env:{DB:any})=>env.DB,caller:async(request:Request)=>userCaller({id:"u",role:request.headers.get("x-role")},{adminRoles:["admin"],credential:"api-key",scopes:["mcp"]}),handlers:{}};
+const options={db:(env:{DB:any})=>env.DB,caller:async(request:Request)=>userCaller({id:"u",role:request.headers.get("x-role")},{adminRoles:["admin"],credential:"oauth",scopes:["mcp"]}),handlers:{}};
 const api=rest(options),tools=mcp(options);
 export const app=(request:Request,env:{DB:any})=>(new URL(request.url).pathname.startsWith("/mcp")?tools:api)(request,env);`;
 // The guide's Views are admin-surface; public here so the oracle reads them through REST (requires stays ctx.admin).

@@ -144,6 +144,70 @@ test("official SDK initializes, lists only surface tools, calls shared validatio
   }
 });
 
+test("a service credential lists and calls only scope-gated tools, in every discovery mode", async () => {
+  const scoped = `${source}---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: scoped-add}
+spec:
+  requires: {auth: {all: [ctx.user, {ctx.auth.scope: "items:write"}]}}
+  input: {type: object, properties: {title: {type: string, minLength: 1}}, required: [title], additionalProperties: false}
+  output: {type: object}
+  handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: scoped-add-mcp}
+spec: {source: {kind: mcp, surface: public}, target: {procedure: scoped-add}}
+`;
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "mcp.yaml", text: scoped }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-")),
+    db = new Database(":memory:");
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const key = fixtureCaller({
+      ...user,
+      admin: false,
+      role: null,
+      credential: "api-key",
+      scopes: ["mcp", "items:write"],
+    });
+    const send = (handle: any, body: unknown) =>
+      handle(
+        new Request("https://app.test/mcp", {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+          body: JSON.stringify(body),
+        }),
+        {},
+      );
+    const json = async (response: Response) => {
+      const text = await response.text();
+      return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
+    };
+    const call = (method: string, params: unknown = {}) => ({ jsonrpc: "2.0", id: 1, method, params });
+    const add = (name: string) => call("tools/call", { name, arguments: { title: "x" } });
+    for (const options of [{}, { authorize: () => true }, { authorize: () => true, discovery: "all" }]) {
+      const handle = mcp({ db: () => db, caller: () => key, ...options });
+      const listed = await json(await send(handle, call("tools/list")));
+      expect(listed.result.tools.map((tool: any) => tool.name)).toEqual(["scoped_add"]);
+      for (const refused of [add("add_item"), call("tools/call", { name: "items", arguments: {} })]) {
+        const response = await send(handle, refused);
+        expect(response.status).toBe(403);
+        expect((await json(response)).error.code).toBe("AUTH_DENIED");
+      }
+      // Every call of a batch is refused before any runs.
+      expect((await send(handle, [add("scoped_add"), add("add_item")])).status).toBe(403);
+      expect((await json(await send(handle, add("scoped_add")))).result.isError).toBeUndefined();
+    }
+    expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({ n: 3 });
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 before authentication; no Origin passes; allowedOrigins parses once", async () => {
   const files = await generateOrThrow("bun-sqlite", [{ sourceId: "origin.yaml", text: source }]);
   const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-origin-")),

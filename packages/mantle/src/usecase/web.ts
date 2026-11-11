@@ -2,7 +2,7 @@
 import type { RuntimePlan, PlanLowered } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
 import { databaseImport, q } from "../domain/entry.js";
-import { authLines, conversions } from "../domain/input.js";
+import { authLines, conversions, requiredScopes } from "../domain/input.js";
 import { acceptsEmpty } from "./validation.js";
 export function emitWeb(plan: RuntimePlan, lowered: PlanLowered, target: Target): Record<string, string> {
   const views = Object.entries(plan.views).filter(([, v]) => v.surface === "public");
@@ -14,8 +14,9 @@ export function emitWeb(plan: RuntimePlan, lowered: PlanLowered, target: Target)
         b => b.k === "input" && String(b.name).toLowerCase() === field.toLowerCase() && String(b.type) === "bool",
       ),
     );
-    const check = authLines(v.requires, `views/${name}`, binds, !target.endsWith("postgres"));
-    return `[${q(name)}, { ${check.length ? `check: (caller) => {${check.join("")}}, ` : ""}${acceptsEmpty(v.input) ? "" : "unlisted: true, "}query: input${i}, page: async (db, caller, input, paging) => (await import("./paged/views/${encodeURIComponent(name)}.js")).default(db, caller, input, paging)${convert ? `, convert: ${convert}` : ""}${booleans.length ? `, booleans: ${q(booleans)}` : ""} }]`;
+    const check = authLines(v.requires, `views/${name}`, binds, !target.endsWith("postgres")),
+      scopes = requiredScopes(v.requires);
+    return `[${q(name)}, { ${check.length ? `check: (caller) => {${check.join("")}}, ` : ""}${scopes.length ? `scopes: ${q(scopes)}, ` : ""}${acceptsEmpty(v.input) ? "" : "unlisted: true, "}query: input${i}, page: async (db, caller, input, paging) => (await import("./paged/views/${encodeURIComponent(name)}.js")).default(db, caller, input, paging)${convert ? `, convert: ${convert}` : ""}${booleans.length ? `, booleans: ${q(booleans)}` : ""} }]`;
   });
   return {
     "web.ts":

@@ -45,7 +45,7 @@ spec:
 `;
 const user = (
   role: string | null = "admin",
-  credential: import("../src/kernel/contracts.js").CredentialKind = "api-key",
+  credential: import("../src/kernel/contracts.js").CredentialKind = "oauth",
 ) =>
   fixtureCaller({
     kind: "user",

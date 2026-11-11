@@ -1475,6 +1475,12 @@ describe("OAuth grant revocation and consent routes", () => {
         },
       }),
     ).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    // An application credential cannot pass for an OAuth token and so escape its scope allow-list.
+    await expect(
+      resolveCaller(app.request({ cookie }), app.loader, {
+        resolveCredential: () => fixtureCaller({ ...credential, credential: "oauth" }),
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
   });
   test("scheduled legacy DCR pruning keeps new, owned, reference and CIMD clients", async () => {
     const app = await makeApp();

@@ -14,7 +14,7 @@ import { emitMcpMedia, mediaDefinitions } from "./mcp-media.js";
 import type { mediaPolicies } from "./site.js";
 import { advertised, emitValidation } from "./validation.js";
 import { databaseImport, literal, q } from "../domain/entry.js";
-import { authLines, conversions } from "../domain/input.js";
+import { authLines, conversions, requiredScopes } from "../domain/input.js";
 import { publishingAnnotations, publishingInput } from "./publishing.js";
 import { versioned } from "./tool-version.js";
 import { boundaryPage, outputConversions } from "../domain/columns.js";
@@ -104,9 +104,7 @@ export function emitMcp(
     if (names.has(surface + ":" + tool)) refuse(`${kind}/${name}`, `MCP tool name ${tool} collides on ${surface}.`);
     names.add(surface + ":" + tool);
     const convert = conversions(operation.input?.properties, binds, target),
-      scopes = (operation.requires?.auth?.all ?? []).flatMap(p =>
-        typeof p === "object" && "ctx.auth.scope" in p ? [p["ctx.auth.scope"]] : [],
-      );
+      scopes = requiredScopes(operation.requires);
     const procedure = kind === "procedures" ? plan.procedures[name] : undefined;
     const output =
       kind === "procedures"

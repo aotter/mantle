@@ -21,7 +21,7 @@
  */
 import { authorizeTarget } from "./authorization.js";
 import { isHostCaller } from "./caller-identity.js";
-import { forwarded } from "./contracts.js";
+import { ContractError, forwarded } from "./contracts.js";
 import type { Authorize, Caller, Gateway, GatewayOptions, RequestContext, Target } from "./contracts.js";
 import { checkOrigin, surfaceCaller, surfaceError } from "./surface-failure.js";
 import type { UserFields } from "./user-fields.js";
@@ -58,6 +58,8 @@ export interface Call {
   readonly target?: Target;
   /** The generated `requires` guard. */
   readonly check?: (caller: Caller) => void;
+  /** A generated target that names a scope in `requires`; `undefined` for a native route, which is its own judge. */
+  readonly scoped?: boolean;
 }
 
 /** A View target: it pages, and has neither a Procedure nor an opaque handler. */
@@ -77,6 +79,17 @@ export const isRead = (call: Pick<Call, "view" | "readOnly">): boolean => call.v
  */
 export const originChecked = (call: Pick<Call, "view" | "readOnly">, host: boolean): boolean =>
   !(call.view || (host && call.readOnly === true));
+
+/**
+ * A user Caller from the application's own credential (`resolveCredential`: an API key or personal token). Its scopes
+ * are an allow-list: it reaches only a generated target whose `requires` names a scope. A forwarded host caller's
+ * credential was its gateway's to judge.
+ */
+export const scopedOnly = (caller: Caller, host: boolean): boolean =>
+  !host && caller.kind === "user" && caller.credential !== "session" && caller.credential !== "oauth";
+/** The refusal of a service credential at a target that is not scope-gated. */
+export const notScopeGated = (): ContractError =>
+  new ContractError("AUTH_DENIED", "A service credential reaches only scope-gated targets.", "auth:scope");
 
 /** A refusal as a client reads it: the redacted wire error. */
 export type Diagnostic = ReturnType<typeof surfaceError>["error"];
@@ -102,9 +115,9 @@ export interface Pipeline {
   /** Step 4. */
   enforceOrigin(request: Request, call: Pick<Call, "view" | "readOnly">): void;
   /** Step 5, first half: the generated guard alone, for a surface that authorized the call earlier in the request. */
-  check(call: Pick<Call, "check">): void;
+  check(call: Pick<Call, "check" | "scoped">): void;
   /** Step 5. */
-  guard(call: Pick<Call, "check" | "target">): Promise<void>;
+  guard(call: Pick<Call, "check" | "scoped" | "target">): Promise<void>;
   /** Step 6 as a tool result: the decision's access event. */
   dryRunResult(): { readonly dryRun: true; readonly event: unknown };
   /** Step 6 as an HTTP response. */
@@ -125,6 +138,11 @@ export async function openPipeline(ctx: RequestContext | undefined, options: Pip
   const hostCallers = () => import("./host-caller.js");
   let caller: Caller | undefined;
   const isHost = () => !!options.gateway && !!caller && isHostCaller(caller);
+  /** Step 5's generated half: `requires`, then a service credential's allow-list. */
+  const check = (call: Pick<Call, "check" | "scoped">) => {
+    call.check?.(caller!);
+    if (call.scoped === false && scopedOnly(caller!, isHost())) throw notScopeGated();
+  };
   /** Forwarded props are the only authority in gateway mode, and a contract violation anywhere else. */
   const resolveForwarded = async () => {
     if (!caller && forwarded(ctx, options.gateway))
@@ -156,11 +174,9 @@ export async function openPipeline(ctx: RequestContext | undefined, options: Pip
     enforceOrigin(request, call) {
       if (originChecked(call, isHost())) checkOrigin(request, caller!);
     },
-    check(call) {
-      call.check?.(caller!);
-    },
+    check,
     async guard(call) {
-      call.check?.(caller!);
+      check(call);
       if (options.authorize && call.target) await authorizeTarget(options.authorize, call.target, caller!);
     },
     dryRunResult: () => ({ dryRun: true, event: access!.finish() }),

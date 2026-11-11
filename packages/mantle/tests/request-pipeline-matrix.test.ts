@@ -84,6 +84,9 @@ const localCallers: Readonly<Record<string, Caller>> = {
   "user-oauth": user("u-oauth", { credential: "oauth", scopes: ["mcp", "notes:write"] }),
   "user-oauth-mcp-only": user("u-narrow", { credential: "oauth", scopes: ["mcp"] }),
   "user-oauth-no-scope": user("u-bare", { credential: "oauth", scopes: [] }),
+  // An application credential (`resolveCredential`): its scopes are an allow-list, so it reaches scope-gated targets only.
+  "user-api-key": user("u-key", { credential: "api-key", scopes: ["mcp", "notes:write"] }),
+  "user-api-key-mcp-only": user("u-key-narrow", { credential: "api-key", scopes: ["mcp"] }),
   "admin-session": user("u-admin", { role: "admin", admin: true }),
   "system": { kind: "system", reason: "matrix" },
 };

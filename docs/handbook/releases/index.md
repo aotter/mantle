@@ -34,6 +34,19 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ## 0.2.2 — in preparation
 
+### Upgrading to 0.2.2-alpha.3
+
+Pin the selected packages to `0.2.2-alpha.3` and regenerate. This alpha has one breaking change:
+
+- **Breaking: an application credential reaches only scope-gated targets.** A Caller from `resolveCaller`'s
+  `resolveCredential` hook (an API key or personal token) is refused with `AUTH_DENIED` (403) on generated REST, MCP
+  and web surfaces unless the target's `requires` names a `ctx.auth.scope`, which it must then hold. `ctx.user`-only
+  and ungated targets no longer admit it, and its MCP `tools/list` shows only the tools it may call (this includes
+  `/mcp/admin` and the Admin and media tools there, which name no scope; `/admin/api` already refused it). Add a
+  `{ ctx.auth.scope: … }` to the `requires` of each target such a credential should reach. The hook may no longer
+  return `credential: "oauth"`; it is `UNAUTHENTICATED`. Sessions, OAuth access tokens, host and system callers, and
+  `nativeRest` routes are unchanged.
+
 ### Upgrading to 0.2.2-alpha.2
 
 Pin the selected packages to `0.2.2-alpha.2` and regenerate: output from an earlier version fails

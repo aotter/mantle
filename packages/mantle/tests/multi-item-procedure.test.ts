@@ -10,7 +10,7 @@ import { seed, verifyMultiItem } from "./multi-item-scenarios.js";
 const base = resolve(import.meta.dir, ".."),
   port = process.env.MANTLE_NEXT_ORDERS_D1_PORT ?? "8991";
 const composition = `import {userCaller} from '${resolve(base, "src/kernel/user-caller.ts")}';import {rest} from './rest.js';
-export const app=rest({db:(env:{DB:any})=>env.DB,caller:async()=>userCaller({id:"u",role:"user"},{adminRoles:["admin"],credential:"api-key"}),
+export const app=rest({db:(env:{DB:any})=>env.DB,caller:async()=>userCaller({id:"u",role:"user"},{adminRoles:["admin"],credential:"oauth"}),
 handlers:{"place-order-ref":async(ctx:any,input:any)=>({...await ctx.store.procedures["place-order"](input),products:await ctx.store.views["products-by-ids"]({ids:input.items.map((i:any)=>i.productId)})})}});`;
 // PostgreSQL's row source over jsonb is jsonb_array_elements; its ->> is text, so lines cast to the column type.
 const postgres = (text: string) =>

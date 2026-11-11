@@ -99,7 +99,7 @@ export interface Tool<Database, Handlers = never> {
   readonly version?: string;
   /** Declares an auth requirement: anonymous callers are challenged. */
   readonly closed?: boolean;
-  /** OAuth scopes the requirement names. */
+  /** Scopes the requirement names; only a tool with some admits a service credential. */
   readonly scopes?: readonly string[];
   readonly validate: (raw: unknown) => Record<string, unknown> | Promise<Record<string, unknown>>;
   readonly convert?: Conversions;

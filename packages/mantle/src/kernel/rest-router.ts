@@ -49,6 +49,8 @@ export function router<Env, Database, Handlers>(
           // A computed target is the dispatch's to authorize, once the request is decoded.
           target: typeof route.target === "function" ? undefined : route.target,
           check: route.check,
+          // A native route (`handle`) decides its own credentials.
+          scoped: route.handle ? undefined : !!route.scopes?.length,
         };
         const caller = await pipeline.resolveCaller(request, env, options.caller ?? anonymous, call.view);
         if (options.admission) {

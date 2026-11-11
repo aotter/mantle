@@ -192,8 +192,11 @@ Database failures remain server errors, rather than silently authenticating.
 
 For app-owned API keys/personal tokens, supply `resolveCredential(request)` in
 `resolveCaller` options. It runs before OAuth/cookies; return a verified user
-Caller or null when absent, and throw when presented but invalid. The same scope
-floor applies. Any non-Bearer/DPoP Authorization header (including Basic from a staging
+Caller (credential `api-key` or `personal-token`) or null when absent, and throw when
+presented but invalid. The same scope floor applies, and the Caller's scopes are an allow-list: on generated REST,
+MCP and web surfaces it reaches only a target whose `requires` names a `ctx.auth.scope` it holds, and every other
+target, including `ctx.user`-only and ungated ones, refuses it with `AUTH_DENIED` and is left out of its MCP tool
+list. Any non-Bearer/DPoP Authorization header (including Basic from a staging
 gateway), unless handled by the app-owned credential hook, is UNAUTHENTICATED
 and never falls back to a cookie. The application owns credential verification;
 Mantle loads live roles, bans and declared stored fields.

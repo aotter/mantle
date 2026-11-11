@@ -50,7 +50,13 @@ export function serve<Database, E>(
         const view = views.get(name)!,
           input = { ...view.query(params).input };
         convert(input, view.convert);
-        const call: Call = { id: `view:${name}`, view: true, target: { kind: "view", name }, check: view.check };
+        const call: Call = {
+          id: `view:${name}`,
+          view: true,
+          target: { kind: "view", name },
+          check: view.check,
+          scoped: !!view.scopes?.length,
+        };
         try {
           state.ran = true;
           await pipeline.admit(call);
