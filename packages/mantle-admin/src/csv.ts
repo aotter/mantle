@@ -5,8 +5,10 @@ export function csvCell(value: unknown, quote = false): string {
   return quote || /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
+/** One CSV record of `csvCell` cells, ended by CRLF. */
+export const csvLine = (values: readonly unknown[]): string => values.map(value => csvCell(value)).join(",") + "\r\n";
+
 /** A CSV file as Admin exports a View: a BOM, the header, then one CRLF line per row. */
 export function csvText(columns: readonly string[], rows: readonly Readonly<Record<string, unknown>>[]): string {
-  const line = (values: readonly unknown[]) => values.map(value => csvCell(value)).join(",") + "\r\n";
-  return "﻿" + line(columns) + rows.map(row => line(columns.map(column => row[column]))).join("");
+  return "\uFEFF" + csvLine(columns) + rows.map(row => csvLine(columns.map(column => row[column]))).join("");
 }
