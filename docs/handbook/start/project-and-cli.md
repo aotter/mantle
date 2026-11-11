@@ -6,7 +6,7 @@ description: Generation targets, CLI options and ownership of native application
 | File | Owner |
 | --- | --- |
 | `manifests/*.yaml` | App: closed v2 declarations and SQL |
-| `src/worker.ts`, auth, handlers, frontend | App: routing, Caller verification and side effects |
+| `src/index.ts` (from `init`) or your own Worker entry, auth, handlers, routes, frontend | App: routing, Caller verification and side effects |
 | `generated/` | Generator: TypeScript, native SQL and selected bindings |
 | `migrations/` | App's agent and native migration tool |
 | `wrangler.jsonc` | App configuration; generator maintains selected split-build keys |
@@ -49,7 +49,7 @@ Other handles may adapt to the same [structural driver contracts](../guides/adap
 | `--auth <module>` | Read plain `authOptions(env)` (or an exported auth instance's options) and append selected Better Auth DDL. Repeat it once per Better Auth instance. Prefer plain options without initialization side effects. |
 | `--site <module>` | Read `siteDefaults`; emit site/media bindings and deployment SQL. |
 | `--wrangler <path>` | Existing JSONC/JSON/TOML config; default finds one or creates `wrangler.jsonc`. TOML receives manual-edit instructions. |
-| `--entry <path>` | Worker source entry; default `src/worker.ts`. |
+| `--entry <path>` | Worker source entry; default `src/worker.ts`. The scripts `init` writes pass `src/index.ts`. |
 | `--outdir <path>` | Bundle output; default `dist`. The Worker goes to `<outdir>/worker`. Keep separate from source/generated files. |
 | `--assets <path>` | With `--admin`: the static assets directory `mantle bundle` builds Admin into (`<assets>/admin`); default `<outdir>/client`. Written to Wrangler's `assets.directory`, and to the build command when not the default. New assets blocks default to `ASSETS`, Worker-first routing and no HTML rewriting; existing blocks keep their binding/routing. |
 
