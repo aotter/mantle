@@ -57,7 +57,7 @@ const caller: any = fixtureCaller({
   kind: "user",
   subject: "a",
   role: null,
-  credential: "api-key",
+  credential: "oauth",
   credentialId: null,
   clientId: null,
   scopes: ["mcp"],

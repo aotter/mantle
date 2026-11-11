@@ -46,6 +46,8 @@ export type ViewPage = { rows: Record<string, unknown>[]; nextCursor?: string };
 /** One public View: its query-string reader, paged boundary, bind conversions and boolean input keys. */
 export interface View<Database> {
   readonly check?: (caller: Caller) => void;
+  /** The scopes the generated `requires` names; only such a View admits a service credential. */
+  readonly scopes?: readonly string[];
   /** The input rejects an empty query, so a list cannot name this View. */
   readonly unlisted?: true;
   readonly query: (params: URLSearchParams) => { input: Record<string, unknown> };

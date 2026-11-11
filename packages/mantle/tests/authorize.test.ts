@@ -39,7 +39,7 @@ const admin: Caller = fixtureCaller({
   role: "admin",
   admin: true,
   scopes: ["mcp"],
-  credential: "api-key",
+  credential: "oauth",
   credentialId: null,
   clientId: null,
 });

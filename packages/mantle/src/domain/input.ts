@@ -17,6 +17,14 @@ export function conversions(
   return fields.length ? q(fields) : "";
 }
 
+/**
+ * The scopes a target's `requires` names. `all` is the only combinator, so the target is scope-gated (no caller
+ * satisfies it without a scope) exactly when this is non-empty. @internal
+ */
+export const requiredScopes = (requires: RuntimePlan["views"][string]["requires"]): string[] =>
+  (requires?.auth?.all ?? []).flatMap(p =>
+    typeof p === "object" && "ctx.auth.scope" in p ? [p["ctx.auth.scope"]] : [],
+  );
 /** Only build-time authorization assembly; generated queries retain their existing predicates. @internal */
 export const authLines = (
   requires: RuntimePlan["views"][string]["requires"],

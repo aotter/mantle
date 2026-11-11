@@ -164,7 +164,8 @@ export async function resolveCaller(
   const lacks = (have: readonly string[]) => options.scopes?.some(scope => !have.includes(scope));
   const supplied = await options.resolveCredential?.(request);
   if (supplied) {
-    if (supplied.kind !== "user" || supplied.credential === "session")
+    // An application credential is never a session or an OAuth token: its scopes are an allow-list (request-pipeline).
+    if (supplied.kind !== "user" || supplied.credential === "session" || supplied.credential === "oauth")
       throw new ContractError("UNAUTHENTICATED", "Invalid service credential.");
     if (lacks(supplied.scopes))
       throw new ContractError("AUTH_DENIED", "The service credential lacks a required scope.");

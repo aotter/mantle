@@ -35,6 +35,8 @@ export interface Route<Database, Handlers = never, Env = unknown> {
   readonly target?: Target | NativeTarget<Env>;
   /** Generated requires guard, used before application authorization. */
   readonly check?: (caller: Caller) => void;
+  /** The scopes the generated `requires` names; only such a route admits a service credential. */
+  readonly scopes?: readonly string[];
   /** A selected native surface can preserve the Request and return its own Response. */
   readonly handle?: (
     request: Request,

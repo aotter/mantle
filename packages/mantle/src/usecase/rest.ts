@@ -3,7 +3,7 @@ import type { AppDescription } from "../domain/describe/index.js";
 import type { RuntimePlan, PlanLowered, LoweredStatement } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
 import { databaseImport, q, viewImports } from "../domain/entry.js";
-import { authLines, conversions } from "../domain/input.js";
+import { authLines, conversions, requiredScopes } from "../domain/input.js";
 import { boundaryPage, outputConversions } from "../domain/columns.js";
 import { pathTemplate as template, routeOrder, routeSource } from "../kernel/route-pattern.js";
 export function emitRest(
@@ -18,8 +18,11 @@ export function emitRest(
     binds: LoweredStatement["binds"] = [],
     trustedOnly = false,
   ) => {
-    const lines = authLines(requires, path, binds, !target.endsWith("postgres"), trustedOnly);
-    return lines.length ? `, check: (caller) => {${lines.join("")}}` : "";
+    const lines = authLines(requires, path, binds, !target.endsWith("postgres"), trustedOnly),
+      scopes = requiredScopes(requires);
+    return (
+      (lines.length ? `, check: (caller) => {${lines.join("")}}` : "") + (scopes.length ? `, scopes: ${q(scopes)}` : "")
+    );
   };
   const userImport = plan.access ? ['import { userBinds } from "@aotter/mantle/internal/user-fields";'] : [];
   const refs = Object.values(plan.procedures).some(p => "ref" in p.handler);

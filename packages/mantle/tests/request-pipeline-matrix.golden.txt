@@ -433,6 +433,180 @@ gateway=off authorize=off caller=user-oauth-no-scope shape=no-origin target=scop
 gateway=off authorize=off caller=user-oauth-no-scope shape=no-origin target=manage
   rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
   mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=same-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key shape=same-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key shape=same-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key shape=same-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=same-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=same-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=same-origin target=scoped
+  rest: allow [http 200] db=1 authorize=0 resolver=1 event=none
+  mcp: allow [http 200 tool-result] db=1 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=same-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=cross-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key shape=cross-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key shape=cross-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key shape=cross-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=cross-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=cross-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=cross-origin target=scoped
+  rest: allow [http 200] db=1 authorize=0 resolver=1 event=none
+  mcp: allow [http 200 tool-result] db=1 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=cross-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=no-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key shape=no-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key shape=no-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key shape=no-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=no-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=no-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=no-origin target=scoped
+  rest: allow [http 200] db=1 authorize=0 resolver=1 event=none
+  mcp: allow [http 200 tool-result] db=1 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key shape=no-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=same-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key-mcp-only shape=same-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key-mcp-only shape=same-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key-mcp-only shape=same-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=same-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=same-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=same-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=same-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=cross-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key-mcp-only shape=cross-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key-mcp-only shape=cross-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key-mcp-only shape=cross-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=cross-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=cross-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=cross-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=cross-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=no-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key-mcp-only shape=no-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key-mcp-only shape=no-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: empty
+gateway=off authorize=off caller=user-api-key-mcp-only shape=no-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=no-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=no-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=no-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=off caller=user-api-key-mcp-only shape=no-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
 gateway=off authorize=off caller=admin-session shape=same-origin target=open
   rest: allow [http 200] db=1 authorize=0 resolver=1 event=none
   mcp: allow [http 200 tool-result] db=1 authorize=0 resolver=1 event=none
@@ -1825,6 +1999,180 @@ gateway=off authorize=allow caller=user-oauth-no-scope shape=no-origin target=sc
 gateway=off authorize=allow caller=user-oauth-no-scope shape=no-origin target=manage
   rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
   mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=same-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key shape=same-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key shape=same-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key shape=same-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=same-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=same-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=same-origin target=scoped
+  rest: allow [http 200] db=1 authorize=1 resolver=1 event=none
+  mcp: allow [http 200 tool-result] db=1 authorize=1 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=same-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=cross-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key shape=cross-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key shape=cross-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key shape=cross-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=cross-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=cross-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=cross-origin target=scoped
+  rest: allow [http 200] db=1 authorize=1 resolver=1 event=none
+  mcp: allow [http 200 tool-result] db=1 authorize=1 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=cross-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=no-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key shape=no-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key shape=no-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key shape=no-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=no-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=no-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=no-origin target=scoped
+  rest: allow [http 200] db=1 authorize=1 resolver=1 event=none
+  mcp: allow [http 200 tool-result] db=1 authorize=1 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key shape=no-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=same-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=same-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=same-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=same-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=same-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=same-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=same-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=same-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=cross-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=cross-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=cross-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=cross-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=cross-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=cross-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=cross-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=cross-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=no-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=no-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=no-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=no-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=no-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=no-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=no-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=allow caller=user-api-key-mcp-only shape=no-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
 gateway=off authorize=allow caller=admin-session shape=same-origin target=open
   rest: allow [http 200] db=1 authorize=1 resolver=1 event=none
   mcp: allow [http 200 tool-result] db=1 authorize=1 resolver=1 event=none
@@ -3217,6 +3565,180 @@ gateway=off authorize=deny caller=user-oauth-no-scope shape=no-origin target=sco
 gateway=off authorize=deny caller=user-oauth-no-scope shape=no-origin target=manage
   rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
   mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=same-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key shape=same-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key shape=same-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key shape=same-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=same-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=same-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=same-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedure/scoped] db=0 authorize=1 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=procedure/scoped] db=0 authorize=1 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=same-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=cross-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key shape=cross-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key shape=cross-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key shape=cross-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=cross-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=cross-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=cross-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedure/scoped] db=0 authorize=1 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=procedure/scoped] db=0 authorize=1 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=cross-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=no-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key shape=no-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key shape=no-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key shape=no-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=no-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=no-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=no-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedure/scoped] db=0 authorize=1 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=procedure/scoped] db=0 authorize=1 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key shape=no-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=same-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=same-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=same-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=same-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=same-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=same-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=same-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=same-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=cross-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=cross-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=cross-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=cross-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=cross-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=cross-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=cross-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=cross-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=no-origin target=open
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=no-origin target=members
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=no-origin target=staff
+  rest: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  web: deny:AUTH_DENIED [http 403 at=views/staff/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  web.head: throws:AUTH_DENIED
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=no-origin target=audit
+  mcp: deny:AUTH_DENIED [http 403 at=mcp/admin] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=no-origin target=peek
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=no-origin target=write
+  rest: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=no-origin target=scoped
+  rest: deny:AUTH_DENIED [http 403 at=procedures/scoped/requires/auth/all/1] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 challenge at=mcp] db=0 authorize=0 resolver=1 event=none
+gateway=off authorize=deny caller=user-api-key-mcp-only shape=no-origin target=manage
+  rest: deny:AUTH_DENIED [http 403 at=procedures/manage/requires/auth/all/0] db=0 authorize=0 resolver=1 event=none
+  mcp: deny:AUTH_DENIED [http 403 at=auth:scope] db=0 authorize=0 resolver=1 event=none
 gateway=off authorize=deny caller=admin-session shape=same-origin target=open
   rest: deny:AUTH_DENIED [http 403 at=view/open] db=0 authorize=1 resolver=1 event=none
   mcp: deny:AUTH_DENIED [http 403 challenge at=view/open] db=0 authorize=1 resolver=1 event=none

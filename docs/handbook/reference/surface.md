@@ -217,7 +217,9 @@ Discovery is caller-independent by default (ADR-0014); listing a tool grants no
 execution authority. Configure `authorize` to filter `tools/list` and the tool
 names supplied to resource HTML loaders: that mode also excludes tools refused
 by declared identity, scope and `check` requirements. Without `authorize`, the
-complete endpoint catalogue is not a permission-filtered catalogue. Operation
+complete endpoint catalogue is not a permission-filtered catalogue, except that
+a service credential (`resolveCredential`) always lists only the tools whose
+`requires` names a scope. Operation
 validation, guards and credential checks still apply to calls.
 
 With `authorize`, `discovery: "all"` keeps the caller-independent list: every

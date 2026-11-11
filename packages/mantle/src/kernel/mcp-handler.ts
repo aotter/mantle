@@ -9,7 +9,15 @@ import type { Tool, Tools, Options } from "./mcp.js";
 import { linkSurface, type McpAppRender, type McpAppsSource } from "./mcp-apps.js";
 import { resolveMcpApps } from "./mcp-app-pages.js";
 import { serveTools } from "./mcp-server.js";
-import { isView, openPipeline, type Call, type Pipeline, type PipelineOptions } from "./request-pipeline.js";
+import {
+  isView,
+  notScopeGated,
+  openPipeline,
+  scopedOnly,
+  type Call,
+  type Pipeline,
+  type PipelineOptions,
+} from "./request-pipeline.js";
 
 type Surface = "public" | "admin";
 type AppLinks = ReturnType<typeof linkSurface>;
@@ -141,8 +149,10 @@ export function handler<Env, Database, Handlers>(
       const called = calledTools(body.messages, selected);
       for (const tool of called) {
         const refusal = credentialRefusal(caller, tool, requiredScopes, pipeline.host);
-        if (refusal) return challenge(refusal.error, refusal.scope);
+        if (refusal) return challenge(refusal.error, refusal.scope, refusal.bare);
       }
+      // A service credential sees only the tools it may call, in every discovery mode.
+      if (scopedOnly(caller, pipeline.host)) selected = selected.filter(tool => tool.scopes?.length);
 
       const links = await linkRequestApps(options.apps?.[surface], selected, apps, surface, { env, request });
 
@@ -298,6 +308,7 @@ const callOf = <Database, Handlers>(tool: Tool<Database, Handlers>): Call => ({
   readOnly: tool.readOnly,
   target: authorizeTarget(tool),
   check: tool.check,
+  scoped: !!tool.scopes?.length,
 });
 
 /** The endpoint's own caller rules, in order: a closed endpoint, system callers, the admin layer, the scope floor. */
@@ -328,7 +339,10 @@ function endpointRefusal(
   return undefined;
 }
 
-/** One tool's credential rules: an auth requirement challenges an anonymous caller, an OAuth token needs the tool's scopes. */
+/**
+ * One tool's credential rules: an auth requirement challenges an anonymous caller, a service credential reaches only a
+ * tool that names scopes, and either credential needs the tool's scopes.
+ */
 function credentialRefusal(
   caller: Caller,
   tool: { readonly closed?: boolean; readonly scopes?: readonly string[] },
@@ -341,10 +355,11 @@ function credentialRefusal(
       error: new ContractError("UNAUTHENTICATED", "Authentication is required.", "mcp"),
       scope: union(requiredScopes, scopes),
     };
+  if (scopedOnly(caller, host) && !scopes.length) return { error: notScopeGated(), bare: true };
   if (
     !host &&
     caller.kind === "user" &&
-    caller.credential === "oauth" &&
+    caller.credential !== "session" &&
     scopes.some(scope => !caller.scopes.includes(scope))
   ) {
     const error = new ContractError("AUTH_DENIED", "The credential needs additional scopes.", "mcp");
