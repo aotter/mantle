@@ -55,9 +55,10 @@ const call = async (
   params: Record<string, unknown> = {},
   surface = "public",
   ui: boolean | null = true,
+  origin = "https://app.test",
 ) => {
   const response = await api(
-    new Request(`https://app.test/mcp${surface === "admin" ? "/admin/" : "/"}`, {
+    new Request(`${origin}/mcp${surface === "admin" ? "/admin/" : "/"}`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
       body: JSON.stringify({
@@ -469,24 +470,8 @@ test("a function source may set domain per request; each read emits its own", as
       ],
     }),
   });
-  const read = async (origin: string) => {
-    const response = await api(
-      new Request(`${origin}/mcp/`, {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "resources/read",
-          params: { uri: "ui://app/rows", _meta: meta },
-        }),
-      }),
-      {},
-    );
-    const text = await response!.text();
-    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result.contents[0]
-      ._meta.ui;
-  };
+  const read = async (origin: string) =>
+    (await call(api, "resources/read", { uri: "ui://app/rows" }, "public", true, origin)).result.contents[0]._meta.ui;
   expect(await read("https://one.example.test")).toEqual({
     domain: "one.apps.example",
     preferredDisplayMode: "fullscreen",
