@@ -31,7 +31,7 @@ catalog:
   better-auth: 1.7.12
   '@better-auth/core': 1.7.12
   '@better-auth/utils': 0.5.0
-  '@better-auth/oauth-provider': 1.7.12
+  '@better-auth/oauth-provider': 1.7.14
   '@better-auth/mcp': 1.7.12
   '@better-auth/cimd': 1.7.12
   playwright: ^1.64.1
