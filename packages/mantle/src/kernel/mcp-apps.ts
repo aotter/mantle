@@ -43,6 +43,11 @@ export interface McpAppResource {
   readonly prefersBorder?: boolean;
   /** `_meta.ui.domain`: the dedicated sandbox origin a host should serve this App from, in the form that host documents. */
   readonly domain?: string;
+  /**
+   * Host-defined keys merged into the `resources/read` content item's `_meta` (top level shallow, `ui` one key deep).
+   * The typed fields above win over `meta.ui` keys of the same name. It is not sent on `resources/list`.
+   */
+  readonly meta?: Readonly<Record<string, unknown>>;
   /** Tool names whose results this resource renders. */
   readonly renders?: readonly string[];
   /** Views only this App may call (`visibility: ["app"]`); a client without MCP Apps does not see them. To hide a Procedure, give its tool `meta: { ui: { visibility: ["app"] } }`. */
