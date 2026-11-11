@@ -398,7 +398,9 @@ function registerApps(
         try {
           // A statically linked resource is as its contributor declared it; a resolved one is already in normal form.
           const page = await mcpAppPageLoader(resource.html)({ tools, ...request }),
-            read = page.csp ? appMeta(resource, page.csp) : meta;
+            typed = page.csp ? appMeta(resource, page.csp) : meta,
+            own = resource.meta,
+            read = typed && own ? { ...own, ui: { ...(own.ui as object), ...typed.ui } } : (typed ?? own);
           return {
             contents: [
               { uri: resource.uri, mimeType: RESOURCE_MIME_TYPE, text: page.html, ...(read ? { _meta: read } : {}) },

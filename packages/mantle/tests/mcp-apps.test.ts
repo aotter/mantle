@@ -407,6 +407,96 @@ test("a resource's domain is passed through as _meta.ui.domain on list and read"
   ).toEqual({ domain: "rows.apps.example" });
 });
 
+test("a resource's meta is merged into the resources/read content _meta only", async () => {
+  const api = handle({
+    public: {
+      resources: [
+        {
+          ...resource("ui://app/rows", ["public_rows"]),
+          prefersBorder: true,
+          meta: { ui: { preferredDisplayMode: "fullscreen" }, "example/hint": 1 },
+        },
+      ],
+    },
+  });
+  expect((await call(api, "resources/read", { uri: "ui://app/rows" })).result.contents[0]._meta).toEqual({
+    ui: { preferredDisplayMode: "fullscreen", prefersBorder: true },
+    "example/hint": 1,
+  });
+  expect((await call(api, "resources/list")).result.resources[0]._meta).toEqual({ ui: { prefersBorder: true } });
+  const listed = (await call(api, "tools/list")).result.tools.find((tool: any) => tool.name === "public_rows");
+  expect(listed._meta).toEqual({
+    ui: { resourceUri: "ui://app/rows" },
+    "ui/resourceUri": "ui://app/rows",
+    "openai/outputTemplate": "ui://app/rows",
+  });
+  // Without meta (and without typed fields) the read content carries no _meta at all.
+  const plain = handle({ public: { resources: [resource("ui://app/rows", ["public_rows"])] } });
+  expect((await call(plain, "resources/read", { uri: "ui://app/rows" })).result.contents[0]._meta).toBeUndefined();
+});
+
+test("typed fields win over meta.ui keys of the same name, and a loader's csp still replaces the resource's", async () => {
+  const csp = { resourceDomains: ["https://cdn.example.test"] };
+  const api = handle({
+    public: {
+      resources: [
+        {
+          ...resource("ui://app/rows", ["public_rows"]),
+          html: () => ({ html: "<p>x</p>", csp }),
+          csp: { connectDomains: ["https://static.example.test"] },
+          domain: "rows.apps.example",
+          meta: {
+            ui: { domain: "other.example", csp: { connectDomains: ["https://meta.example.test"] }, extra: true },
+          },
+        },
+      ],
+    },
+  });
+  expect((await call(api, "resources/read", { uri: "ui://app/rows" })).result.contents[0]._meta).toEqual({
+    ui: { domain: "rows.apps.example", csp, extra: true },
+  });
+});
+
+test("a function source may set domain per request; each read emits its own", async () => {
+  const api = handle({
+    public: async ({ request }) => ({
+      resources: [
+        {
+          ...resource("ui://app/rows", ["public_rows"]),
+          domain: `${new URL(request.url).hostname.split(".")[0]}.apps.example`,
+          meta: { ui: { preferredDisplayMode: "fullscreen" } },
+        },
+      ],
+    }),
+  });
+  const read = async (origin: string) => {
+    const response = await api(
+      new Request(`${origin}/mcp/`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "resources/read",
+          params: { uri: "ui://app/rows", _meta: meta },
+        }),
+      }),
+      {},
+    );
+    const text = await response!.text();
+    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result.contents[0]
+      ._meta.ui;
+  };
+  expect(await read("https://one.example.test")).toEqual({
+    domain: "one.apps.example",
+    preferredDisplayMode: "fullscreen",
+  });
+  expect(await read("https://two.example.test")).toEqual({
+    domain: "two.apps.example",
+    preferredDisplayMode: "fullscreen",
+  });
+});
+
 test("an HTML loader renders for the tools this caller's tools/list shows, and only those", async () => {
   const rendered: string[][] = [];
   const api = mcp(tools, {

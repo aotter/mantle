@@ -33,6 +33,36 @@ passed through as the resource's `_meta.ui`. `domain` is the dedicated sandbox
 origin for hosts that serve each App from its own origin; use the form that
 host documents.
 
+When one App is served at several server URLs and the host derives `domain`
+from the server URL, pass a function source and set `domain` from `request.url`,
+the URL of the request being answered. Core does not compute host-specific
+values; apply the formula the host documents, for Claude
+[Set `ui.domain` for Claude](https://claude.com/docs/connectors/building/mcp-apps/getting-started#set-ui-domain-for-claude):
+
+```ts
+import type { McpAppsSource } from '@aotter/mantle/mcp';
+
+declare function loadAppHtml(): string;
+declare function hostDomain(serverUrl: string): string; // the formula your host documents
+
+const app: McpAppsSource = ({ request }) => ({ resources: [{
+  uri: 'ui://my-app/records/build-1', name: 'my-app-records',
+  html: () => loadAppHtml(), renders: ['records'],
+  domain: hostDomain(request.url),
+}] });
+```
+
+A resource's `meta` adds host-defined keys to the `_meta` of the
+`resources/read` content item, merged as a tool's `meta` is: the top level
+shallowly, `ui` one key deep. The typed fields (`csp` or a loader's `csp`,
+`permissions`, `domain`, `prefersBorder`) are applied after it and win over
+`meta.ui` keys of the same name. `meta` is not sent on `resources/list` or in
+tool `_meta`. For example, `meta: { ui: { preferredDisplayMode: 'fullscreen' } }`
+asks Claude to open the App in its side panel, where available, without a click.
+This is a Claude extension outside the MCP Apps specification, as Claude's
+[display modes](https://claude.com/docs/connectors/building/mcp-apps/display-modes)
+page describes it; other hosts may ignore it.
+
 ### Tool metadata and result `_meta`
 
 A hand-built kernel `Tool` may set `meta`, merged into its `_meta` in
