@@ -1,4 +1,4 @@
-import { csvCell } from "../csv.js";
+import { csvLine } from "../csv.js";
 /** Read the first page before answering; subsequent errors fail the stream. */
 export async function csv(
   name: string,
@@ -7,11 +7,10 @@ export async function csv(
 ): Promise<Response> {
   let page = await read();
   const columns = declared?.length ? declared : [...new Set(page.rows.flatMap(row => Object.keys(row)))];
-  const line = (values: readonly unknown[]) => values.map(value => csvCell(value)).join(",") + "\r\n";
   async function* chunks() {
-    yield "\uFEFF" + line(columns);
+    yield "\uFEFF" + csvLine(columns);
     for (;;) {
-      yield page.rows.map(row => line(columns.map(column => row[column]))).join("");
+      yield page.rows.map(row => csvLine(columns.map(column => row[column]))).join("");
       if (!page.nextCursor) return;
       const previous = page.nextCursor;
       page = await read(previous);
