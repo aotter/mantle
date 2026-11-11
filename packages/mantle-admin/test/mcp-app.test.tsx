@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { MantleApp, appValue, pagesReducer, type Pages } from "../admin/src/mcp-app/app";
 import type { HostApi } from "../admin/src/mcp-app/postmessage";
 import { adminMcpApps } from "../src/server/mcp.js";
+import { csv } from "../src/server/csv.js";
+import { csvText } from "../src/csv.js";
 import { defineAdmin } from "../admin/src/app/define-admin.js";
 import { SurfaceProvider } from "../admin/src/app/slots.js";
 import {
@@ -126,6 +128,7 @@ describe("MantleApp", () => {
     sendMessage: vi.fn(),
     updateModelContext: vi.fn(),
     requestDisplayMode: vi.fn(),
+    downloadFile: vi.fn(),
   });
   const render = (props: Partial<Parameters<typeof MantleApp>[0]> = {}) =>
     renderToStaticMarkup(<MantleApp catalog={catalog} host={host()} result={viewResult} input={{}} {...props} />);
@@ -270,6 +273,51 @@ describe("MantleApp", () => {
     expect(
       pagesReducer(loading, { type: "loaded", generation: loading.generation, result: { isError: true } }).more,
     ).toBe("failed");
+  });
+
+  it("offers Export CSV only where the host offers downloads, for a known View's rows, never beside a page", () => {
+    const downloads = host({ serverTools: {}, downloadFile: {} });
+    expect(render({ host: downloads })).toContain(">Export CSV</button>");
+    expect(render({ host: downloads, locale: "zh-TW" })).toContain(">匯出 CSV</button>");
+    // a read-only host exports the rows it shows: the export calls no server tool
+    expect(render({ host: host({ downloadFile: {} }) })).toContain(">Export CSV</button>");
+    expect(render()).not.toContain("Export CSV");
+    expect(render({ host: downloads, result: { ...viewResult, structuredContent: { rows: [] } } })).not.toContain(
+      "Export CSV",
+    );
+    // the file is named after the tool: no known tool, no export
+    expect(render({ host: downloads, result: { ...viewResult, _meta: {} } })).not.toContain("Export CSV");
+    expect(render({ host: downloads, pages: { pending: <p>queue-page</p> } })).not.toContain("Export CSV");
+  });
+
+  it("exports the rows held, Load more's included, in the columns shown and the browser export's layout", async () => {
+    const first = pagesReducer(
+      { rows: null, cursor: undefined, more: "idle", generation: 0 },
+      {
+        type: "reset",
+        result: { ...viewResult, structuredContent: { ...viewResult.structuredContent, nextCursor: "c2" } },
+      },
+    );
+    const loaded = pagesReducer(first, {
+      type: "loaded",
+      generation: first.generation,
+      result: {
+        structuredContent: {
+          rows: [{ id: "r3", item: '=HYPERLINK("x")', totalMinor: -5, requestStatus: 'a, "b"\nc' }],
+        },
+      },
+    });
+    const columns = catalog.views.pending!.list.columns;
+    const text = csvText(columns, loaded.rows!);
+    expect(text).toBe(
+      "\uFEFFitem,totalMinor,requestStatus,created_at\r\n" +
+        "Laptops,123456,submitted,2026-10-01T15:20:14.841000Z\r\n" +
+        "Desks,1,submitted,\r\n" +
+        // text that a spreadsheet would read as a formula is neutralized; a number is not
+        `"'=HYPERLINK(""x"")",-5,"a, ""b""\nc",\r\n`,
+    );
+    const exported = await csv("pending", async () => ({ rows: loaded.rows! }), columns);
+    expect(new TextDecoder("utf-8", { ignoreBOM: true }).decode(await exported.arrayBuffer())).toBe(text);
   });
 
   it("is read-only when the host offers no server tools: the rows, but no action to open", () => {

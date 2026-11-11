@@ -13,7 +13,8 @@ const calls: unknown[] = [],
   links: string[] = [],
   messages: unknown[] = [],
   contexts: unknown[] = [],
-  modes: string[] = [];
+  modes: string[] = [],
+  downloads: unknown[] = [];
 // `?read-only`: a host that renders Apps but offers no server tools
 const readOnly = location.search.includes("read-only");
 const bridge = new AppBridge(
@@ -26,6 +27,7 @@ const bridge = new AppBridge(
         openLinks: {},
         message: { text: {} },
         updateModelContext: { text: {}, structuredContent: {} },
+        downloadFile: {},
       },
   {
     hostContext: {
@@ -74,6 +76,10 @@ bridge.onrequestdisplaymode = async ({ mode }) => {
   modes.push(mode);
   return { mode };
 };
+bridge.ondownloadfile = async params => {
+  downloads.push(params);
+  return {};
+};
 bridge.oncalltool = async (params, extra) => {
   calls.push(params);
   if (params.name === "wait") {
@@ -121,6 +127,7 @@ Object.assign(window, {
     messages,
     contexts,
     modes,
+    downloads,
     get ready() {
       return ready;
     },
