@@ -62,7 +62,7 @@ vi.stubGlobal(
     }
   },
 );
-const make = async (capabilities = {}, context = {}, initialize = true) => {
+const make = async (capabilities = {}, context = {}, initialize = true, framed = true) => {
   const ready = vi.fn(),
     input = vi.fn(),
     result = vi.fn(),
@@ -73,6 +73,7 @@ const make = async (capabilities = {}, context = {}, initialize = true) => {
     body = {};
   const win = {
     parent: { postMessage: vi.fn() },
+    postMessage: vi.fn(),
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     setTimeout,
@@ -82,6 +83,8 @@ const make = async (capabilities = {}, context = {}, initialize = true) => {
       return 0;
     },
   } as unknown as Window;
+  // a native WebView: no distinct parent
+  if (!framed) (win as { parent: unknown }).parent = win;
   const disconnect = connectHost({ ready, input, result, cancelled, context: changed, error }, win, "9.9.9");
   const app = sdk.apps.at(-1)!;
   app.capabilities = capabilities;
@@ -575,6 +578,20 @@ test("platform origin continuity guard is separate from the official source-wind
   guard(navigated as unknown as MessageEvent);
   expect(first.stopImmediatePropagation).not.toHaveBeenCalled();
   expect(navigated.stopImmediatePropagation).toHaveBeenCalledOnce();
+  disconnect();
+});
+
+test("without a distinct parent (a native WebView) nothing is pinned: no origin is dropped and replies target \"*\"", async () => {
+  const { app, win, disconnect } = await make({}, {}, true, false);
+  expect(win.parent).toBe(win);
+  const guard = vi.mocked(win.addEventListener).mock.calls[0]![1] as (event: MessageEvent) => void;
+  const other = { source: win, origin: "https://other.test", data: {}, stopImmediatePropagation: vi.fn() };
+  guard(other as unknown as MessageEvent);
+  expect(other.stopImmediatePropagation).not.toHaveBeenCalled();
+  const transport = app.connect.mock.calls[0][0];
+  expect(transport.source).toBe(win);
+  transport.target.postMessage({ hello: "host" }, "*");
+  expect(win.postMessage).toHaveBeenCalledWith({ hello: "host" }, "*");
   disconnect();
 });
 
