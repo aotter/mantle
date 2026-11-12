@@ -52,6 +52,24 @@ const app: McpAppsSource = ({ request }) => ({ resources: [{
 }] });
 ```
 
+For Claude, `domain` must match the connector exactly; otherwise Claude shows
+`Invalid ui.domain format` or `ui.domain mismatch` instead of the App
+([`ui.domain` validation fails](https://claude.com/docs/connectors/building/mcp-apps/troubleshooting#ui-domain-validation-fails)):
+
+- The hash covers the exact connector URL configured in Claude, scheme, path
+  and any trailing slash included: `https://example.com/mcp` and
+  `https://example.com/mcp/` give different values.
+- `request.url` is that URL only when nothing in front of the server changes
+  it. Behind a proxy, a gateway or a rewrite (another host, scheme or path, a
+  trailing slash added or removed), hash the public connector URL from your own
+  configuration, not `request.url`.
+- A local stdio server has no URL to hash, so Claude offers it no `domain`:
+  leave `domain` unset.
+
+Without `domain`, Claude derives the App's origin from the conversation and the
+connector, so the origin differs between conversations. Storage that the App
+calls directly must allow for that ([The upload card](#the-upload-card)).
+
 A resource's `meta` adds host-defined keys to the `_meta` of the
 `resources/read` content item, merged as a tool's `meta` is: the top level
 shallowly, `ui` one key deep. The typed fields (`csp` or a loader's `csp`,
@@ -684,18 +702,44 @@ On `resources/read` the card declares the storage origin as
 read fails with a logged error.
 
 The bucket must answer the card's CORS preflight. Allow `PUT` with the
-`Content-Type` header from the origin the host serves Apps from, and key the
-rule on `Origin`: the request carries no cookies, and some clients (iOS) send no
-`Referer`. A sandboxed frame without its own origin sends `Origin: null`. For
-example, as R2 CORS JSON:
+`Content-Type` header from the origin the host serves the card from, and key
+the rule on `Origin`: the request carries no cookies, and WebKit on iOS sends no
+`Referer` on cross-origin requests. Which origin that is depends on the host.
+
+**Claude, with `domain`.** Set `mediaUploadCard({ media, domain })` to the value
+Claude documents for the exact connector URL, `{hash}.claudemcpcontent.com`
+([as above](#mcp-apps)), and allow exactly that origin. For example, as R2 CORS
+JSON, for the connector URL `https://example.com/mcp`:
 
 ```json
-[{ "AllowedOrigins": ["https://your-host-sandbox.example"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
+[{ "AllowedOrigins": ["https://c3d80a4ed901ee05b21755a88273b4a4.claudemcpcontent.com"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
 ```
 
-Use the sandbox origin each host documents for its Apps (a host that honours
-`_meta.ui.domain` serves the App from that origin; `mediaUploadCard` passes
-`domain` through).
+**Claude, without `domain`.** The origin differs between conversations, so a
+rule that names one origin matches no other conversation, and the card reports
+that storage could not be reached. Allow `https://*.claudemcpcontent.com`, the
+pattern Claude's
+[troubleshooting](https://claude.com/docs/connectors/building/mcp-apps/troubleshooting#assets-or-api-requests-fail-only-on-ios)
+page gives, if your storage's CORS rules accept a subdomain wildcard (check its
+documentation); otherwise set `domain`.
+
+The wildcard matches every connector's Apps on Claude, not only yours.
+Claude's [embedded sites](https://claude.com/docs/connectors/building/mcp-apps/embedded-sites#allow-claude-to-frame-your-site)
+page warns that a wildcard in `frame-ancestors` lets other connectors' Apps
+frame your site. On a bucket the effect is narrower, as long as the rule allows
+only `PUT`, the request carries no cookies or other ambient credentials, and
+the bucket accepts a `PUT` only at a signed upload URL (as `r2MediaStorage`'s
+are): another connector's App can then pass the CORS check, but it still needs
+a valid signed URL, which only your server issues and which works from any
+client outside a browser, where CORS does not apply. The warning applies in full to any rule on the same bucket that allows reading
+private objects, or relies on cookies or credentials: keep such rules off the
+wildcard, or set `domain`.
+
+**Other hosts.** Allow the sandbox origin the host documents for its Apps; a
+host that honours `_meta.ui.domain` serves the card from that origin, and
+`mediaUploadCard` passes `domain` through. A sandboxed frame without an origin
+of its own sends `Origin: null`; do not allow `null`, which any such frame
+sends.
 
 ## Customising Admin for MCP hosts
 
@@ -784,7 +828,8 @@ declare its read View and write Procedure; `useEntry` is unavailable in MCP.
    loads only if `defineAdmin({ mcp: { csp } })` names it in the list its use needs:
    `resourceDomains` for an image, font, stylesheet or script,
    `connectDomains` for `fetch`, `WebSocket`, `EventSource` and `import()`,
-   `frameDomains` for an iframe (`baseUriDomains` is for `<base>`). Each entry is an
+   `frameDomains` for an iframe (`baseUriDomains` is for `<base>`; Claude ignores
+   it and keeps the base URI on the App's own origin). Each entry is an
    origin, `https://host[:port]` or `https://*.host`; the build refuses `*`, a bare
    scheme or a path. You declare it once: the build writes it into
    `mcp-app.html` and `adminMcpApps` sends it as `_meta.ui.csp` on `resources/read`
