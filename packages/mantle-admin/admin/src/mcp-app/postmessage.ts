@@ -419,8 +419,8 @@ function reportHeight(app: App, win: Window): () => void {
  * The host's presentation fields on the document root. A fixed height (`fullscreen`: the side panel or full screen) bounds
  * the root, which scrolls inside it. In the conversation the host gives only `maxHeight`: it caps the frame and clips what
  * exceeds it, and on a touch screen a vertical pan scrolls the conversation, so the root is not a scroll container there and
- * its content sets the height it reports. `scroll` bounds it by `maxHeight` and scrolls it all the same: the App's fallback
- * when the host offers no full screen or refused it.
+ * its content sets the height it reports. `scroll` bounds it by `maxHeight` and scrolls it all the same: wherever the App
+ * does not fit the conversation, in another display mode or when the host offers no full screen or refused it.
  */
 export function applyHostContext(
   value: McpUiHostContext,

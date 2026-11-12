@@ -96,12 +96,15 @@ function Root({ admin, listen }: { admin: AdminDefinition; listen: (handlers: Ho
       }),
     [listen],
   );
+  // Fit the conversation only there (or before the host says where the App is), and only while full screen may open.
+  // Anywhere else a `maxHeight` bounds the root, which scrolls: a host may give only that in full screen or a picture in
+  // picture, and Claude gives the inline cap until it has measured full screen's container.
+  const mode = context?.displayMode;
+  const fits =
+    !scroll && (mode === undefined || mode === "inline") && !!context?.availableDisplayModes?.includes("fullscreen");
   useEffect(() => {
-    if (context)
-      applyHostContext(context, document, {
-        scroll: scroll || !context.availableDisplayModes?.includes("fullscreen"),
-      });
-  }, [context, scroll]);
+    if (context) applyHostContext(context, document, { scroll: !fits });
+  }, [context, fits]);
   // a host that sends no theme gets the system's: the same `.dark` class a host theme sets, so tokens and `dark:` follow it
   const hostTheme = context?.theme;
   useEffect(() => {
@@ -169,10 +172,7 @@ function Root({ admin, listen }: { admin: AdminDefinition; listen: (handlers: Ho
     });
   };
   // in the conversation, while full screen may open: a row action asks for it, and rows past the host's cap open it
-  const expand =
-    !scroll && context?.displayMode !== "fullscreen" && context?.availableDisplayModes?.includes("fullscreen")
-      ? () => request("fullscreen")
-      : undefined;
+  const expand = fits ? () => request("fullscreen") : undefined;
   const box = context?.containerDimensions as { readonly height?: number; readonly maxHeight?: number } | undefined;
   const maxHeight = expand && box?.height === undefined ? box?.maxHeight : undefined;
   // a long form or many columns: the person may ask the host for the whole screen, when it offers one. `fullscreen` is
