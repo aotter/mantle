@@ -1,9 +1,10 @@
 import type { App } from "@modelcontextprotocol/ext-apps";
 import { nextCursorOf, rowsOf, type ToolResult } from "../../../src/app/bridge";
+import type { AdminAppTool } from "../app/hooks";
 
 type Row = Readonly<Record<string, unknown>>;
 /** A `tools/list` entry, as the official App types it. */
-type AppTool = Awaited<ReturnType<NonNullable<App["onlisttools"]>>>["tools"][number];
+export type AppTool = Awaited<ReturnType<NonNullable<App["onlisttools"]>>>["tools"][number];
 
 /**
  * The App's own tools ("app tools"), which a host may let the model call while the App is open. They are view-only: they
@@ -138,4 +139,53 @@ export async function callAppTool(
   if ((read()?.generation ?? view.generation) !== view.generation)
     return text("The View was replaced; call view_state.", true);
   return state(view, [...view.rows, ...added], cursorAfter(view.cursor, result) !== undefined);
+}
+
+/** A host's limits on a view's tools (Claude's): checked when a page registers, as a host would reject them. */
+const MAX_TOOLS = 64,
+  MAX_DEFINITIONS = 1024 * 1024,
+  MAX_SCHEMA = 64 * 1024,
+  MAX_DEPTH = 32;
+const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+const depth = (value: unknown): number =>
+  value !== null && typeof value === "object" ? 1 + Math.max(0, ...Object.values(value).map(depth)) : 0;
+
+/**
+ * A page's tools as `tools/list` lists them after `APP_TOOLS`: each definition as JSON, so what is listed is what is
+ * measured. Throws on the first definition a host would reject.
+ */
+export function pageToolList(tools: readonly AdminAppTool[]): AppTool[] {
+  const names = new Set<string>();
+  const listed = tools.map(({ name, title, description, inputSchema, annotations }) => {
+    if (typeof name !== "string" || !/^[A-Za-z0-9._-]{1,128}$/.test(name))
+      throw new Error(`App tool name ${JSON.stringify(name)} must be 1 to 128 letters, digits, ".", "_" or "-".`);
+    if (name.startsWith("view_")) throw new Error(`App tool name ${name}: "view_" names are the App's own tools.`);
+    if (names.has(name)) throw new Error(`App tool name ${name} is registered twice.`);
+    names.add(name);
+    const tool = JSON.parse(JSON.stringify({ name, title, description, inputSchema, annotations })) as AppTool;
+    if (tool.inputSchema?.type !== "object")
+      throw new Error(`App tool ${name}: inputSchema must have type "object" at its root.`);
+    if (bytes(tool.inputSchema) > MAX_SCHEMA || depth(tool.inputSchema) > MAX_DEPTH)
+      throw new Error(`App tool ${name}: inputSchema must be at most 64 KiB as JSON and 32 levels deep.`);
+    return tool;
+  });
+  if (APP_TOOLS.length + listed.length > MAX_TOOLS)
+    throw new Error(`A page registers at most ${MAX_TOOLS - APP_TOOLS.length} app tools.`);
+  if (bytes([...APP_TOOLS, ...listed]) > MAX_DEFINITIONS)
+    throw new Error("App tool definitions must be at most 1 MiB as JSON.");
+  return listed;
+}
+
+/** Runs a page tool's handler: the text it answers, or an error result with the message it threw. */
+export async function callPageTool(
+  tool: AdminAppTool,
+  args: Readonly<Record<string, unknown>>,
+  signal: AbortSignal,
+): Promise<AppToolResult> {
+  try {
+    const answer = await tool.handler(args, signal);
+    return typeof answer === "string" ? text(answer) : text(`${tool.name} answered no text.`, true);
+  } catch (error) {
+    return text((error instanceof Error ? error.message : String(error)) || `${tool.name} failed.`, true);
+  }
 }

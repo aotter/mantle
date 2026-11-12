@@ -114,7 +114,7 @@ describe("@aotter/mantle-admin/app", () => {
   it("types resolve for a NodeNext consumer", () => {
     const consumer = resolve(pkg, "test/__app-consumer.ts");
     const source = [
-      'import { createAdminHooks, mcpAppTransport, type AdminHost, type HostRequestOutcome } from "@aotter/mantle-admin/hooks";',
+      'import { createAdminHooks, mcpAppTransport, type AdminAppTool, type AdminHost, type HostRequestOutcome } from "@aotter/mantle-admin/hooks";',
       "interface Types {",
       '  readonly views: { readonly "pending-requests": { readonly input: { readonly q?: string }; readonly row: { readonly id: string; readonly amount: number } } };',
       '  readonly collections: { readonly requests: { readonly data: { readonly title: string; readonly status: "open" | "closed" } } };',
@@ -154,6 +154,12 @@ describe("@aotter/mantle-admin/app", () => {
       'export const sent = (h: AdminHost): Promise<HostRequestOutcome> => h.sendMessage("Plan the week.");',
       "// @ts-expect-error `sendMessage` no longer resolves to a boolean",
       'export const yes = (h: AdminHost): Promise<boolean> => h.sendMessage("Plan the week.");',
+      'export const saved = (h: AdminHost): Promise<HostRequestOutcome> => h.downloadFile("notes.txt", "hi");',
+      "// a page's app tool: plain JSON Schema and a handler that answers text",
+      'export const tool: AdminAppTool = { name: "page_note", description: "Adds a note.", inputSchema: { type: "object", properties: { text: { type: "string" } } }, handler: async args => `noted ${String(args["text"])}` };',
+      "export const unregister: (h: AdminHost) => () => void = h => h.registerTools([tool]);",
+      "// @ts-expect-error an input schema's root is an object",
+      'export const scalar: AdminAppTool = { ...tool, inputSchema: { type: "string" } };',
       "export const transport = mcpAppTransport;",
       'import { AdminLink, defineAdmin, MantleAdmin, type AdminDefinition, type AdminMeta, type MantleAdminProps, type SidebarProps } from "@aotter/mantle-admin/app";',
       "const admin: AdminDefinition = defineAdmin({});",

@@ -81,7 +81,7 @@ describe("browser transport", () => {
 
 const result = (structuredContent: Record<string, unknown>, isError = false): McpToolResult => ({ structuredContent, isError });
 function host(capabilities: Record<string, unknown> = { serverTools: {} }): AdminHost & { updateModelContext: ReturnType<typeof vi.fn> } {
-  return { context: {}, capabilities, openLink: async () => true, sendMessage: async () => "accepted" as const, updateModelContext: vi.fn(async () => true), requestDisplayMode: async () => null };
+  return { context: {}, capabilities, openLink: async () => true, sendMessage: async () => "accepted" as const, updateModelContext: vi.fn(async () => true), requestDisplayMode: async () => null, downloadFile: async () => "refused" as const, registerTools: () => () => {} };
 }
 
 describe("MCP App transport", () => {

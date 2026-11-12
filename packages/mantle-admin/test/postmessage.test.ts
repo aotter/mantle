@@ -17,6 +17,7 @@ vi.mock("@modelcontextprotocol/ext-apps", () => ({
     updateModelContext = vi.fn(async () => ({}));
     requestDisplayMode = vi.fn(async ({ mode }: { mode: string }) => ({ mode }));
     downloadFile = vi.fn(async () => ({}));
+    sendToolListChanged = vi.fn(async () => {});
     sendSizeChanged = vi.fn(async () => {});
     close = vi.fn(async () => {});
     constructor(
@@ -107,7 +108,10 @@ const make = async (capabilities = {}, context = {}, initialize = true) => {
 test("official App owns initialization, with package version, supported layouts and a height-only size report", async () => {
   const { app, win, disconnect } = await make();
   expect(app.info).toEqual({ name: "mantle", version: "9.9.9" });
-  expect(app.appCapabilities).toEqual({ availableDisplayModes: ["inline", "fullscreen"], tools: {} });
+  expect(app.appCapabilities).toEqual({
+    availableDisplayModes: ["inline", "fullscreen"],
+    tools: { listChanged: true },
+  });
   const transport = app.connect.mock.calls[0][0];
   expect(transport.source).toBe(win.parent);
   transport.target.postMessage({ hello: "host" }, "*");
@@ -206,9 +210,9 @@ test.each(["sendMessage", "downloadFile"] as const)(
   },
 );
 
-test("a download is one embedded CSV resource named by its file:// URI, with the person's time to confirm", async () => {
+test("a download is one embedded text resource named by its file:// URI, with the person's time to confirm", async () => {
   const { app, host, disconnect } = await make({ downloadFile: {} });
-  expect(await host.downloadFile("pending.csv", "\uFEFFitem\r\nLaptops\r\n")).toBe("accepted");
+  expect(await host.downloadFile("pending.csv", "\uFEFFitem\r\nLaptops\r\n", "text/csv")).toBe("accepted");
   expect(app.downloadFile.mock.calls).toEqual([
     [
       {
@@ -222,12 +226,22 @@ test("a download is one embedded CSV resource named by its file:// URI, with the
       { timeout: 600_000 },
     ],
   ]);
+  // a page's file is plain text unless it names a type
+  expect(await host.downloadFile("notes.txt", "hi")).toBe("accepted");
+  expect(app.downloadFile.mock.calls[1]![0].contents[0].resource).toEqual({
+    uri: "file:///notes.txt",
+    mimeType: "text/plain",
+    text: "hi",
+  });
+  // the URI's last segment is the saved name: a name with a path, or none, is not sent
+  expect(await host.downloadFile("a/b.txt", "x")).toBe("refused");
+  expect(await host.downloadFile("", "x")).toBe("refused");
   // a refusal and a cancellation are the same answer
   app.downloadFile.mockResolvedValueOnce({ isError: true });
   expect(await host.downloadFile("pending.csv", "x")).toBe("refused");
   disconnect();
   expect(await host.downloadFile("pending.csv", "x")).toBe("refused");
-  expect(app.downloadFile).toHaveBeenCalledTimes(2);
+  expect(app.downloadFile).toHaveBeenCalledTimes(3);
 });
 
 test("the App's own tools: the same definitions on every mount, answered from what the App shows, none once closed", async () => {
@@ -266,6 +280,118 @@ test("the App's own tools: the same definitions on every mount, answered from wh
   // answering the model's tools sends the host nothing of the App's own
   expect(first.app.callServerTool).not.toHaveBeenCalled();
   second.disconnect();
+});
+
+const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+const note = (handler = vi.fn((args: Readonly<Record<string, unknown>>) => `noted ${String(args["text"])}`)) => ({
+  name: "page_note",
+  title: "Add a note",
+  description: "Adds a note to the open page.",
+  inputSchema: { type: "object" as const, properties: { text: { type: "string" } }, required: ["text"] },
+  handler,
+});
+
+test("a page's tools: listed after the App's own while registered, replaced, removed, and the host told of each change", async () => {
+  const { app, host, disconnect } = await make({ serverTools: {} });
+  const extra = { mcpReq: { signal: new AbortController().signal } };
+  const names = async () => (await app.onlisttools({}, extra)).tools.map((tool: { name: string }) => tool.name);
+  const call = (name: string, args: unknown = { text: "a" }) => app.oncalltool({ name, arguments: args }, extra);
+  const first = note();
+  const remove = host.registerTools([first]);
+  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "page_note"]);
+  // the definition as the host reads it: no handler
+  expect((await app.onlisttools({}, extra)).tools[3]).toEqual({
+    name: "page_note",
+    title: "Add a note",
+    description: "Adds a note to the open page.",
+    inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+  });
+  await tick();
+  expect(app.sendToolListChanged).toHaveBeenCalledTimes(1);
+  expect(await call("page_note")).toEqual({ content: [{ type: "text", text: "noted a" }] });
+  expect(first.handler).toHaveBeenCalledWith({ text: "a" }, extra.mcpReq.signal);
+  // a re-render: the effect's cleanup and a new registration of the same definitions in one task tell the host nothing
+  const second = note();
+  remove();
+  const removeSecond = host.registerTools([second]);
+  await tick();
+  expect(app.sendToolListChanged).toHaveBeenCalledTimes(1);
+  await call("page_note");
+  expect(first.handler).toHaveBeenCalledOnce();
+  expect(second.handler).toHaveBeenCalledOnce();
+  // a replacement: the earlier registration's cleanup no longer removes anything
+  const removeThird = host.registerTools([{ ...note(), name: "page_other" }]);
+  removeSecond();
+  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "page_other"]);
+  expect(await call("page_note")).toMatchObject({ isError: true, content: [{ text: "Unknown tool: page_note" }] });
+  await tick();
+  expect(app.sendToolListChanged).toHaveBeenCalledTimes(2);
+  // unmounted: the App's own tools only, and the handler is never called again
+  removeThird();
+  expect(await names()).toEqual(["view_state", "view_more", "view_focus"]);
+  expect(await call("page_other")).toMatchObject({ isError: true });
+  await tick();
+  expect(app.sendToolListChanged).toHaveBeenCalledTimes(3);
+  // closed: nothing is called or announced
+  const last = note();
+  host.registerTools([last]);
+  disconnect();
+  expect(await call("page_note")).toMatchObject({ isError: true });
+  expect(last.handler).not.toHaveBeenCalled();
+  await tick();
+  expect(app.sendToolListChanged).toHaveBeenCalledTimes(3);
+});
+
+test("a page tool's throw or non-text answer is an error result; a lost announcement is not the page's error", async () => {
+  const { app, host, disconnect } = await make();
+  const extra = { mcpReq: { signal: new AbortController().signal } };
+  app.sendToolListChanged.mockRejectedValueOnce(new Error("Not connected"));
+  host.registerTools([
+    note(
+      vi.fn(() => {
+        throw new Error("No such row.");
+      }),
+    ),
+    { ...note(vi.fn(async () => 1 as unknown as string)), name: "page_count" },
+    { ...note(vi.fn(async () => Promise.reject("gone"))), name: "page_gone" },
+  ]);
+  const call = (name: string) => app.oncalltool({ name, arguments: {} }, extra);
+  expect(await call("page_note")).toEqual({ content: [{ type: "text", text: "No such row." }], isError: true });
+  expect(await call("page_count")).toEqual({
+    content: [{ type: "text", text: "page_count answered no text." }],
+    isError: true,
+  });
+  expect(await call("page_gone")).toEqual({ content: [{ type: "text", text: "gone" }], isError: true });
+  await tick();
+  disconnect();
+});
+
+test("a page's tools that a host would reject are refused when registered, and the registered ones stay", async () => {
+  const { app, host, disconnect } = await make();
+  const extra = { mcpReq: { signal: new AbortController().signal } };
+  host.registerTools([note()]);
+  const refused = (tools: object[]) => () => host.registerTools(tools as never);
+  expect(refused([{ ...note(), name: "view_state" }])).toThrow('"view_" names are the App\'s own tools');
+  expect(refused([{ ...note(), name: "view_page" }])).toThrow("view_");
+  expect(refused([note(), note()])).toThrow("registered twice");
+  expect(refused([{ ...note(), name: "has space" }])).toThrow("letters, digits");
+  expect(refused([{ ...note(), name: "x".repeat(129) }])).toThrow("letters, digits");
+  expect(refused([{ ...note(), inputSchema: { type: "string" } }])).toThrow('type "object"');
+  expect(refused([{ ...note(), inputSchema: undefined }])).toThrow('type "object"');
+  expect(refused([{ ...note(), inputSchema: { type: "object", description: "x".repeat(64 * 1024) } }])).toThrow(
+    "64 KiB",
+  );
+  let deep: Record<string, unknown> = { type: "string" };
+  for (let level = 0; level < 32; level++) deep = { type: "object", properties: { a: deep } };
+  expect(refused([{ ...note(), inputSchema: deep }])).toThrow("32 levels");
+  const many = (count: number, extra = {}) =>
+    Array.from({ length: count }, (_, i) => ({ ...note(), name: `page_${i}`, ...extra }));
+  expect(() => host.registerTools(many(61))).not.toThrow();
+  expect(refused(many(62))).toThrow("at most 61");
+  expect(refused(many(30, { description: "x".repeat(40 * 1024) }))).toThrow("1 MiB");
+  // the 61 registered before the refusals are still listed: with the App's own, a host's 64
+  expect((await app.onlisttools({}, extra)).tools).toHaveLength(64);
+  disconnect();
 });
 
 test("early and late results, cancellation, context and teardown keep their existing semantics", async () => {

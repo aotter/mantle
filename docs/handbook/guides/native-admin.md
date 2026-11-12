@@ -186,10 +186,13 @@ way to name them. Leave `refresh` out when unsure; a View you forget to name kee
 In an MCP host, `useView` and `useOperation` call the View's or operation's admin MCP tool (its name lowercased, kebab to snake) through the host (`tools/call`),
 under the caller's MCP authorization; the browser-only hooks read `unavailable` there, so declare the data an App needs as an
 admin View. Without the host's `serverTools`, `run` is `undefined`. `useHost()` is `null` in the browser and the host's API
-(context, capabilities, `openLink`, `sendMessage`, `updateModelContext`, `requestDisplayMode`) in a host; `useAdminSurface()`
-says which. `sendMessage` resolves to `"accepted"` (the host answered without an error, not proof of delivery), `"refused"`
-(an error answer, or no messages offered) or `"unknown"` (no answer came, so it may still arrive; do not report a failure);
-see [the MCP Apps guide](mcp-apps.md#rules-for-a-component-that-renders-in-a-host). `@aotter/mantle-admin/hooks` also exports the same hooks untyped, for code without generated types.
+(context, capabilities, `openLink`, `sendMessage`, `updateModelContext`, `requestDisplayMode`, `downloadFile`,
+`registerTools`) in a host; `useAdminSurface()` says which. `sendMessage` and `downloadFile` resolve to `"accepted"` (the
+host answered without an error, not proof of delivery), `"refused"` (an error answer, or not offered) or `"unknown"` (no
+answer came, so it may still arrive; do not report a failure); see [the MCP Apps guide](mcp-apps.md#rules-for-a-component-that-renders-in-a-host).
+`registerTools` lets a page add app tools the model may call while it is shown, with plain JSON Schema input and its own
+handler; register in a `useEffect` and return what it returns, so the tools go when the page unmounts. Host-to-App tool calls
+are in the MCP Apps draft specification and host support varies; see [a page's own app tools](mcp-apps.md#a-pages-own-app-tools). `@aotter/mantle-admin/hooks` also exports the same hooks untyped, for code without generated types.
 
 `@aotter/mantle-admin/app` and `/hooks`, and so `generated/admin-client.ts`, which imports them, run in the browser only:
 `mantle bundle` refuses them in the Worker's startup graph.
