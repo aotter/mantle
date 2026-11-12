@@ -72,9 +72,18 @@ const text = (value: string, isError = false): AppToolResult => ({
   ...(isError ? { isError } : {}),
 });
 
+/**
+ * A row's id as the tools name it: a View may output a number as id (a GROUP BY key, say), named as text since view_focus
+ * takes text. A row with any other id, or none, is shown and counted but cannot be named.
+ */
+export function rowId(row: Row): string | undefined {
+  const id = row["id"];
+  return typeof id === "string" ? id : typeof id === "number" && Number.isFinite(id) ? String(id) : undefined;
+}
+
 /** view_state's answer: as many row ids as fit the host's limit, marked `truncated` when some do not. */
 function state(view: ShownView, rows: readonly Row[], more: boolean): AppToolResult {
-  const ids = rows.flatMap(row => (typeof row["id"] === "string" ? [row["id"]] : []));
+  const ids = rows.flatMap(row => rowId(row) ?? []);
   const base = { tool: view.tool, input: view.input, rows: rows.length, more };
   let budget = APP_TOOL_TEXT_LIMIT - JSON.stringify({ ...base, ids: [], truncated: true }).length;
   // never cut the JSON: a View input over the limit on its own is an error, not a broken answer
