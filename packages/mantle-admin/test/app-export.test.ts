@@ -114,7 +114,7 @@ describe("@aotter/mantle-admin/app", () => {
   it("types resolve for a NodeNext consumer", () => {
     const consumer = resolve(pkg, "test/__app-consumer.ts");
     const source = [
-      'import { createAdminHooks, mcpAppTransport, type AdminHost } from "@aotter/mantle-admin/hooks";',
+      'import { createAdminHooks, mcpAppTransport, type AdminHost, type HostRequestOutcome } from "@aotter/mantle-admin/hooks";',
       "interface Types {",
       '  readonly views: { readonly "pending-requests": { readonly input: { readonly q?: string }; readonly row: { readonly id: string; readonly amount: number } } };',
       '  readonly collections: { readonly requests: { readonly data: { readonly title: string; readonly status: "open" | "closed" } } };',
@@ -150,6 +150,10 @@ describe("@aotter/mantle-admin/app", () => {
       '  return (amount ?? 0) + (title ?? "").length + (more ? 1 : 0) + (pending.status === "unavailable" ? 1 : 0);',
       "}",
       "export const host: AdminHost | null = null;",
+      "// a message the person confirms in the host has three outcomes, not a yes or no",
+      'export const sent = (h: AdminHost): Promise<HostRequestOutcome> => h.sendMessage("Plan the week.");',
+      "// @ts-expect-error `sendMessage` no longer resolves to a boolean",
+      'export const yes = (h: AdminHost): Promise<boolean> => h.sendMessage("Plan the week.");',
       "export const transport = mcpAppTransport;",
       'import { AdminLink, defineAdmin, MantleAdmin, type AdminDefinition, type AdminMeta, type MantleAdminProps, type SidebarProps } from "@aotter/mantle-admin/app";',
       "const admin: AdminDefinition = defineAdmin({});",

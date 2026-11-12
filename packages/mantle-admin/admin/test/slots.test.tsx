@@ -126,7 +126,7 @@ describe("matching a View's tool to its slots", () => {
 });
 
 describe("links", () => {
-  const host = (openLink: AdminHost["openLink"]): AdminHost => ({ context: {}, capabilities: { openLinks: {} }, openLink, sendMessage: async () => true, updateModelContext: async () => true, requestDisplayMode: async () => null });
+  const host = (openLink: AdminHost["openLink"]): AdminHost => ({ context: {}, capabilities: { openLinks: {} }, openLink, sendMessage: async () => "accepted" as const, updateModelContext: async () => true, requestDisplayMode: async () => null });
   const inHost = (node: React.ReactNode, openLink: AdminHost["openLink"] = async () => true) => renderToStaticMarkup(<SurfaceProvider surface="mcp-app" host={host(openLink)} layers={{}}>{node}</SurfaceProvider>);
 
   it("is an anchor in the browser, and in a host opens http(s) through the host and shows any other target as text", () => {

@@ -21,6 +21,8 @@ export interface AppLabels {
   readonly exportCsv: string;
   /** The host refused the download, or the person cancelled it: its answer does not say which. */
   readonly exportFailed: string;
+  /** No answer came: the host's download dialog may still be open, so this is not a failure. */
+  readonly exportUnconfirmed: string;
   readonly fullscreen: string;
   readonly exitFullscreen: string;
 }
@@ -80,6 +82,7 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     rowsLoaded: "{count} more loaded",
     exportCsv: "Export CSV",
     exportFailed: "The download did not finish.",
+    exportUnconfirmed: "The download could not be confirmed. Check for an open download dialog before exporting again.",
     fullscreen: "Full screen",
     exitFullscreen: "Exit full screen",
   },
@@ -135,6 +138,7 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     rowsLoaded: "已載入 {count} 筆",
     exportCsv: "匯出 CSV",
     exportFailed: "下載未完成。",
+    exportUnconfirmed: "無法確認是否已下載。再次匯出前，請先查看是否有開啟中的下載對話框。",
     fullscreen: "全螢幕",
     exitFullscreen: "結束全螢幕",
   },
@@ -190,6 +194,7 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     rowsLoaded: "已加载 {count} 条",
     exportCsv: "导出 CSV",
     exportFailed: "下载未完成。",
+    exportUnconfirmed: "无法确认是否已下载。再次导出前，请先查看是否有打开的下载对话框。",
     fullscreen: "全屏",
     exitFullscreen: "退出全屏",
   },

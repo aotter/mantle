@@ -33,6 +33,7 @@ import { cursorAfter, rowId, type ShownView } from "./app-tools";
 import { useLoadMore } from "../lib/use-load-more";
 import { Slot, useViewCellNames } from "../app/slots";
 import type { CellProps } from "../app/slot-props";
+import type { HostRequestOutcome } from "../app/hooks";
 import { appLabels, type AppLabels } from "./locale";
 import { csvText } from "../../../src/csv";
 
@@ -444,8 +445,12 @@ function MoreRows(props: {
 }
 
 /** "Export CSV": the rows the App holds, with the columns shown, saved through the host; no server call. */
-function ExportRows(props: { readonly labels: AppLabels; readonly onExport: () => Promise<boolean> }): ReactNode {
-  const [state, setState] = useState<"idle" | "pending" | "failed">("idle");
+function ExportRows(props: {
+  readonly labels: AppLabels;
+  readonly onExport: () => Promise<HostRequestOutcome>;
+}): ReactNode {
+  // `accepted` says no more than the host took the request, so it shows nothing; `unknown` is not reported as a failure
+  const [state, setState] = useState<"idle" | "pending" | HostRequestOutcome>("idle");
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
       <button
@@ -454,13 +459,16 @@ function ExportRows(props: { readonly labels: AppLabels; readonly onExport: () =
         disabled={state === "pending"}
         onClick={() => {
           setState("pending");
-          void props.onExport().then(done => setState(done ? "idle" : "failed"));
+          void props.onExport().then(setState);
         }}
       >
         {props.labels.exportCsv}
       </button>
-      <span role="status" className="text-destructive text-sm">
-        {state === "failed" ? props.labels.exportFailed : null}
+      <span
+        role="status"
+        className={state === "refused" ? "text-destructive text-sm" : "text-muted-foreground text-sm"}
+      >
+        {state === "refused" ? props.labels.exportFailed : state === "unknown" ? props.labels.exportUnconfirmed : null}
       </span>
     </div>
   );

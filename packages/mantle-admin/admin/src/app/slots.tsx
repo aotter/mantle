@@ -103,7 +103,8 @@ const isWeb = (url: string): boolean => /^https?:\/\//i.test(url);
 /**
  * Open an http(s) URL outside Admin: a new tab in the browser, `ui/open-link` in an MCP host (which blocks navigation
  * from its sandbox, so never `window.open` or `target="_blank"` in a component that renders there). Resolves false when
- * the URL is not http(s), or an MCP host cannot or refuses to open it (the browser cannot tell, so it resolves true).
+ * the URL is not http(s), or an MCP host cannot, refuses or does not answer in time (a link the person confirms late can
+ * still open); the browser cannot tell, so it resolves true.
  *
  * Surface: both.
  */
