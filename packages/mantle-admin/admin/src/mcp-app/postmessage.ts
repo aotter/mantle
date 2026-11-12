@@ -174,6 +174,12 @@ export function connectHost(
   // separate platform guard: only the official successful handshake pins the origin;
   // a parent that subsequently navigates cannot inherit this connection.
   // No message IDs, methods, envelopes or protocol versions are interpreted here.
+  // Only a framed App pins. Without a distinct parent (`window.parent === window`: a native
+  // WebView, as Claude's mobile apps render Apps) the host's bridge is not a window with an
+  // origin to keep, and posting to a pinned origin other than the document's own would drop
+  // every later message. Unverified on a real mobile host (#1119): the WebView path keeps
+  // the official transport's own source check and its "*" target.
+  const framed = win.parent !== win;
   const guard = (event: MessageEvent) => {
     if (event.source !== win.parent) return;
     if (origin !== undefined && event.origin !== origin) event.stopImmediatePropagation();
@@ -220,7 +226,7 @@ export function connectHost(
     .connect(new PostMessageTransport(target, win.parent))
     .then(() => {
       if (closed) return;
-      origin = incomingOrigin;
+      if (framed) origin = incomingOrigin;
       ready = true;
       const capabilities = app.getHostCapabilities() ?? {};
       // nothing is sent once closed; a rejection (timeout, lost connection, an error answer) does not say the host did not act

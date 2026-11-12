@@ -176,7 +176,10 @@ data and invocation callbacks; it knows no MCP connection, cookie, role or Admin
 `@aotter/mantle-admin` owns the Admin product, its existing hooks/surface transport
 and the thin adapter to the pinned official ext-apps client. The official client
 owns protocol negotiation, messages and connection lifecycle; the separate browser
-source/origin guard is not a protocol implementation.
+source/origin guard is not a protocol implementation. That guard keeps the host's
+origin after the handshake only when the App is framed; without a distinct parent
+(`window.parent === window`, as in a native WebView) it pins nothing and leaves the
+official transport's own checks.
 
 Applications own domain components and build entries. A frontend MCP App uses its
 own React entry, official ext-apps and optionally mantle-ui, registered through
