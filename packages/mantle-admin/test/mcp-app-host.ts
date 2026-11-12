@@ -42,14 +42,17 @@ const bridge = new AppBridge(
       displayMode: "inline",
       safeAreaInsets: { top: 0, right: 0, bottom: 24, left: 0 },
       toolInfo: { tool: { name: "pending", inputSchema: { type: "object" } } },
+      // `?no-styles`: a host that sends no style variables, so the App's own tokens apply
       styles: {
-        variables: {
-          "--color-text-primary": "rgb(1, 2, 3)",
-          "--color-background-inverse": "rgb(7, 8, 9)",
-          "--color-ring-primary": "rgb(4, 5, 6)",
-          "--border-radius-md": "3px",
-          "--font-weight-medium": "550",
-        } as never,
+        variables: location.search.includes("no-styles")
+          ? {}
+          : ({
+              "--color-text-primary": "rgb(1, 2, 3)",
+              "--color-background-inverse": "rgb(7, 8, 9)",
+              "--color-ring-primary": "rgb(4, 5, 6)",
+              "--border-radius-md": "3px",
+              "--font-weight-medium": "550",
+            } as never),
       },
     },
   },

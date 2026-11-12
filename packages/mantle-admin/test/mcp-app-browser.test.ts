@@ -126,6 +126,18 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
       };
     });
     expect(look).toEqual({ radius: "3px", weight: "550", dark: true, inset: "24px" });
+    // no background of its own: the conversation shows through html and body; the shell declares both schemes for the
+    // first paint, and the dark theme the host sent is the root's scheme
+    expect(
+      await app
+        .locator("html")
+        .evaluate(html => [
+          getComputedStyle(html).backgroundColor,
+          getComputedStyle(document.body).backgroundColor,
+          document.querySelector('meta[name="color-scheme"]')?.getAttribute("content"),
+          getComputedStyle(html).colorScheme,
+        ]),
+    ).toEqual(["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "light dark", "dark"]);
     await app.getByRole("button", { name: "全螢幕" }).click();
     await app.getByRole("button", { name: "結束全螢幕" }).waitFor();
     expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen"]);
@@ -792,22 +804,29 @@ it("follows the system colour scheme when the host sends no theme, and an explic
     page.setDefaultTimeout(10_000);
     await page.emulateMedia({ colorScheme: "dark" });
     await serveApp(page);
-    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?no-theme`);
+    // nor style variables: the text is the tokens' own, light on a dark conversation and dark on a light one, over no
+    // background of the App's own
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?no-theme&no-styles`);
     await page.waitForFunction(() => (window as any).host?.ready);
     const app = page.frameLocator("iframe");
     const look = () =>
       app.locator("html").evaluate(node => ({
         dark: node.classList.contains("dark"),
         primary: getComputedStyle(node).getPropertyValue("--primary").trim(),
+        text: getComputedStyle(document.body).color,
+        scheme: getComputedStyle(node).colorScheme,
+        background: getComputedStyle(document.body).backgroundColor,
       }));
-    await expect.poll(look).toEqual({ dark: true, primary: "#c8d2dc" });
+    const dark = { dark: true, primary: "#c8d2dc", text: "rgb(245, 245, 245)", scheme: "dark" },
+      light = { dark: false, primary: "#0a141e", text: "rgb(23, 32, 51)", scheme: "light" };
+    await expect.poll(look).toEqual({ ...dark, background: "rgba(0, 0, 0, 0)" });
     await page.emulateMedia({ colorScheme: "light" });
-    await expect.poll(look).toEqual({ dark: false, primary: "#0a141e" });
+    await expect.poll(look).toEqual({ ...light, background: "rgba(0, 0, 0, 0)" });
     // a theme from the host wins over the system's
     await page.emulateMedia({ colorScheme: "dark" });
     await expect.poll(look).toMatchObject({ dark: true });
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ theme: "light" }));
-    await expect.poll(look).toEqual({ dark: false, primary: "#0a141e" });
+    await expect.poll(look).toMatchObject(light);
     await page.emulateMedia({ colorScheme: "light" });
     await page.emulateMedia({ colorScheme: "dark" });
     expect((await look()).dark).toBe(false);
