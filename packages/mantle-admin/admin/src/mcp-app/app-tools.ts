@@ -75,6 +75,8 @@ const text = (value: string, isError = false): AppToolResult => ({
 /**
  * A row's id as the tools name it: a View may output a number as id (a GROUP BY key, say), named as text since view_focus
  * takes text. A row with any other id, or none, is shown and counted but cannot be named.
+ * A number id and a string id with the same text (`7` and `"7"`) get the same name: view_state lists it twice, view_focus
+ * shows the first and both are marked as shown.
  */
 export function rowId(row: Row): string | undefined {
   const id = row["id"];
