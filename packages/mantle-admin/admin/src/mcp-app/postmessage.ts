@@ -29,9 +29,9 @@ export interface HostApi {
   /** `ui/request-display-mode`: the mode the host granted, or null when it offers none other. */
   requestDisplayMode(mode: McpUiDisplayMode): Promise<McpUiDisplayMode | null>;
   /**
-   * `ui/download-file`: a text file saved to the person's device, named `name`, after the person confirms it in the host.
-   * `refused` when the host offers no downloads, refuses or the person cancels (its answer does not tell these apart), or
-   * `name` has a `/`; `unknown` when no answer came, and the host's dialog may still save the file.
+   * `ui/download-file`: a text file saved to the person's device, named `downloadName(name)`, after the person confirms it
+   * in the host. `refused` when the host offers no downloads, refuses or the person cancels (its answer does not tell these
+   * apart), or `name` names no file; `unknown` when no answer came, and the host's dialog may still save the file.
    */
   downloadFile(name: string, text: string, mimeType?: string): Promise<HostRequestOutcome>;
   /**
@@ -100,6 +100,17 @@ export function messageText(text: string): string | null {
     .replace(/(?:\r\n|\r|\n){4,}/g, "\n\n\n")
     .replace(/[ \t]{65,}/g, run => run.slice(0, 64));
   return sent.trim() && sent.length <= MESSAGE_LIMIT ? sent : null;
+}
+
+/**
+ * A download's file name as the last segment of its `file:///` URI, the segment a host saves it as, or null. Characters
+ * that would end or change that segment (`/`, `?`, `#`) and those Claude replaces with `_` anyway (`%`, `:`, `"`, `*`,
+ * `<`, `>`, `|`, `~`, `\`) become `_` here, so the name saved is the name sent; spaces stay literal, as Claude reads them.
+ * An empty name, `.` or `..` names no file.
+ */
+export function downloadName(name: string): string | null {
+  const file = name.replace(/[/?#\\%:"*<>|~]/g, "_");
+  return file && file !== "." && file !== ".." ? file : null;
 }
 
 /** An absolute http(s) URL: the only links the App asks a host to open. */
@@ -299,17 +310,19 @@ export function connectHost(
           },
           // the person confirms in the host, so the wait is theirs, not the SDK's default request timeout
           // the URI's last segment names the saved file
-          downloadFile: async (name, text, mimeType = "text/plain") =>
-            capabilities.downloadFile && name && !name.includes("/")
+          downloadFile: async (name, text, mimeType = "text/plain") => {
+            const file = downloadName(name);
+            return capabilities.downloadFile && file
               ? ask(() =>
                   app.downloadFile(
                     {
-                      contents: [{ type: "resource", resource: { uri: "file:///" + name, mimeType, text } }],
+                      contents: [{ type: "resource", resource: { uri: "file:///" + file, mimeType, text } }],
                     },
                     { timeout: 600_000 },
                   ),
                 )
-              : "refused",
+              : "refused";
+          },
           serveTools: read => {
             shown = read;
           },

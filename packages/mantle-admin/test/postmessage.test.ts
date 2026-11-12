@@ -3,6 +3,7 @@ import { APP_TOOLS } from "../admin/src/mcp-app/app-tools";
 import {
   applyHostContext,
   connectHost,
+  downloadName,
   MESSAGE_LIMIT,
   messageText,
   type HostApi,
@@ -279,15 +280,25 @@ test("a download is one embedded text resource named by its file:// URI, with th
     mimeType: "text/plain",
     text: "hi",
   });
-  // the URI's last segment is the saved name: a name with a path, or none, is not sent
-  expect(await host.downloadFile("a/b.txt", "x")).toBe("refused");
-  expect(await host.downloadFile("", "x")).toBe("refused");
+  // the URI's last segment is the saved name: what would change it, or a host replaces anyway, is replaced here
+  expect(await host.downloadFile("Q3 a/b?c#d.txt", "x")).toBe("accepted");
+  expect(app.downloadFile.mock.calls[2]![0].contents[0].resource.uri).toBe("file:///Q3 a_b_c_d.txt");
+  // a name that names no file is not sent
+  for (const none of ["", ".", ".."]) expect(await host.downloadFile(none, "x")).toBe("refused");
   // a refusal and a cancellation are the same answer
   app.downloadFile.mockResolvedValueOnce({ isError: true });
   expect(await host.downloadFile("pending.csv", "x")).toBe("refused");
   disconnect();
   expect(await host.downloadFile("pending.csv", "x")).toBe("refused");
-  expect(app.downloadFile).toHaveBeenCalledTimes(3);
+  expect(app.downloadFile).toHaveBeenCalledTimes(4);
+});
+
+// claude.com/docs/connectors/building/mcp-apps/download-files#build-the-contents-of-a-download-request
+test("a download name keeps spaces and replaces what would change the URI's last segment or a host replaces", () => {
+  expect(downloadName("Q3 report.csv")).toBe("Q3 report.csv");
+  expect(downloadName('a/b\\c?d#e%20f:g"h*i<j>k|l~m.csv')).toBe("a_b_c_d_e_20f_g_h_i_j_k_l_m.csv");
+  expect(downloadName("..csv")).toBe("..csv");
+  for (const none of ["", ".", ".."]) expect(downloadName(none)).toBeNull();
 });
 
 test("the App's own tools: the same definitions on every mount, answered from what the App shows, none once closed", async () => {
