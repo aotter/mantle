@@ -166,6 +166,8 @@ export function MantleApp(props: {
   // the row the model asked to see (`view_focus`); a new object each time, so asking again scrolls again
   const [focused, setFocused] = useState<{ id: string } | null>(null);
   const list = useRef<HTMLUListElement>(null);
+  // the page Load more asked for last, as "generation:cursor"
+  const asked = useRef<string | null>(null);
   useEffect(() => {
     dispatch({ type: "reset", result: props.result });
     setStale(false);
@@ -190,18 +192,18 @@ export function MantleApp(props: {
 
   // the same View tool and input through the host, at the cursor of the page shown last; the rows already shown stay.
   // Only the button's start() announces the rows added: rows view_more loads were asked for by the model, not the person.
+  // The page is marked as asked for before the call: a second ask in the same task (parallel view_more calls, the button)
+  // still sees the last render's state, so it is refused here. A failed or cancelled read can be asked for again.
+  const nextPage = `${pages.generation}:${cursor}`;
   const loadMore = async (signal?: AbortSignal) => {
-    if (!tool || !call || !cursor) return null;
+    if (!tool || !call || !cursor || asked.current === nextPage) return null;
+    asked.current = nextPage;
     const { generation } = pages;
     dispatch({ type: "loading" });
-    try {
-      const result = await call(tool, { ...props.input, cursor }, signal);
-      dispatch({ type: "loaded", generation, result });
-      return result;
-    } catch {
-      dispatch({ type: "failed", generation });
-      return null;
-    }
+    const result = await call(tool, { ...props.input, cursor }, signal).catch(() => null);
+    dispatch(result ? { type: "loaded", generation, result } : { type: "failed", generation });
+    if ((!result || !rowsOf(result)) && asked.current === nextPage) asked.current = null;
+    return result;
   };
 
   const page =
@@ -216,7 +218,9 @@ export function MantleApp(props: {
             input: props.input ?? {},
             rows,
             more: cursor !== undefined,
-            loading: pages.more === "loading",
+            get loading() {
+              return asked.current === nextPage;
+            },
             generation: pages.generation,
             ...(call ? { loadMore } : {}),
             focus: id => {

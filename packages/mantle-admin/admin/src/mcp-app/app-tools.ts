@@ -52,6 +52,7 @@ export interface ShownView {
   readonly rows: readonly Row[];
   /** A next page exists. */
   readonly more: boolean;
+  /** A next page is being loaded; read when a tool runs, as a load started in the same task is not rendered yet. */
   readonly loading: boolean;
   /** Counts the lists the App has shown; a page loaded for an earlier list is dropped. */
   readonly generation: number;
