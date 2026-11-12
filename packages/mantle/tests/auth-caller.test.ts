@@ -1788,7 +1788,10 @@ describe("managed grants (opt-in extension-grant binding)", () => {
     const app = await makeApp({ managedGrants: true, extensionGrants: true });
     const context = await app.auth.$context;
     const email = "member@example.test";
-    const user = await context.internalAdapter.createUser({ email, name: "Member", emailVerified: true });
+    const user = await context.internalAdapter.createUser(
+      { email, name: "Member", emailVerified: true },
+      { method: "admin" },
+    );
     const registered = await app.post("/oauth2/register", {
       client_name: "assistant",
       redirect_uris: [REDIRECT],
@@ -1977,7 +1980,10 @@ describe("managed grants (opt-in extension-grant binding)", () => {
       false,
     );
     const context = await app.auth.$context;
-    const user = await context.internalAdapter.createUser({ email: "x@example.test", name: "X", emailVerified: true });
+    const user = await context.internalAdapter.createUser(
+      { email: "x@example.test", name: "X", emailVerified: true },
+      { method: "admin" },
+    );
     const registered = await app.post("/oauth2/register", {
       client_name: "assistant",
       redirect_uris: [REDIRECT],
