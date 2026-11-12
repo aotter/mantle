@@ -515,7 +515,9 @@ it("loads a further page after the second, retries a page that failed, and ends 
     await app.getByText("Desks").waitFor();
     expect(await loadMore.count()).toBe(0);
     expect(text(await tool("view_state"))).toMatchObject({ rows: 2, more: false });
-    expect(await tool("view_more")).toMatchObject({ isError: true, content: [{ text: "The View has no more rows." }] });
+    expect(await tool("view_more")).toEqual({
+      content: [{ type: "text", text: "The View has no more rows; nothing was loaded." }],
+    });
     await first({ c2: [["r2", "Desks", "c2"]] });
     expect(text(await tool("view_more"))).toMatchObject({ rows: 2, more: false, ids: ["r1", "r2"] });
     await app.getByText("Desks").waitFor();
