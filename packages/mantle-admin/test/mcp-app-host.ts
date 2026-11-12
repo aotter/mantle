@@ -15,6 +15,8 @@ const calls: unknown[] = [],
   contexts: unknown[] = [],
   modes: string[] = [],
   downloads: unknown[] = [];
+// a test's own answers for a View page, by cursor, used in order; an Error fails that call
+const pages: Record<string, unknown[]> = {};
 // `?read-only`: a host that renders Apps but offers no server tools
 const readOnly = location.search.includes("read-only");
 const bridge = new AppBridge(
@@ -98,6 +100,9 @@ bridge.oncalltool = async (params, extra) => {
       ),
     );
   }
+  const queued = pages[String(params.arguments?.cursor)]?.shift();
+  if (queued instanceof Error) throw queued;
+  if (queued) return queued as never;
   if (params.name === "pending" && params.arguments?.cursor === "c2")
     return {
       content: [],
@@ -128,6 +133,7 @@ Object.assign(window, {
     contexts,
     modes,
     downloads,
+    pages,
     get ready() {
       return ready;
     },

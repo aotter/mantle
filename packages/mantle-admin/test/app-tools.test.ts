@@ -22,7 +22,7 @@ const view = (over: Partial<ShownView> = {}): ShownView => ({
   tool: "pending",
   input: { limit: 2 },
   rows: [{ id: "r1" }, { id: "r2" }, { item: "no id" }],
-  more: true,
+  cursor: "c2",
   loading: false,
   generation: 1,
   loadMore: vi.fn(async () => ({ structuredContent: { rows: [{ id: "r3" }], nextCursor: "c3" } })),
@@ -92,9 +92,12 @@ test("view_more is Load more: the View's own read, with the host's cancellation;
   const shown = view();
   expect(parsed(await answer(shown, "view_more"))).toMatchObject({ rows: 4, more: true, ids: ["r1", "r2", "r3"] });
   expect(shown.loadMore).toHaveBeenCalledWith(signal);
+  // a host that answers the page's own cursor again: the list ends there, not a page loaded forever
+  const repeated = view({ loadMore: async () => ({ structuredContent: { rows: [{ id: "r3" }], nextCursor: "c2" } }) });
+  expect(parsed(await answer(repeated, "view_more"))).toMatchObject({ rows: 4, more: false });
   // the tools get no server call of their own: `loadMore` is the only way out, and every refusal skips it
   for (const refused of [
-    view({ more: false }),
+    view({ cursor: undefined }),
     view({ loading: true }),
     view({ tool: null }),
     view({ loadMore: undefined }),

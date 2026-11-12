@@ -260,6 +260,10 @@ describe("MantleApp", () => {
     expect(loading.more).toBe("loading");
     const appended = pagesReducer(loading, { type: "loaded", generation: loading.generation, result: page(["b"]) });
     expect(appended).toMatchObject({ rows: [{ id: "a" }, { id: "b" }], cursor: undefined, more: "idle" });
+    // a page whose next cursor is the one it was read at ends the list, so Load more cannot read it forever
+    expect(
+      pagesReducer(loading, { type: "loaded", generation: loading.generation, result: page(["b"], "c2") }),
+    ).toMatchObject({ rows: [{ id: "a" }, { id: "b" }], cursor: undefined, more: "idle" });
     // a new result (or a refresh) while the page was in flight: the old page is for a list that is gone
     const replaced = pagesReducer(loading, { type: "reset", result: page(["x"], "d2") });
     expect(pagesReducer(replaced, { type: "loaded", generation: loading.generation, result: page(["b"]) })).toBe(

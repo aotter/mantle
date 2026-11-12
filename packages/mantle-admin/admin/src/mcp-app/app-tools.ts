@@ -50,8 +50,8 @@ export interface ShownView {
   readonly tool: string | null;
   readonly input: Readonly<Record<string, unknown>>;
   readonly rows: readonly Row[];
-  /** A next page exists. */
-  readonly more: boolean;
+  /** The next page's cursor; undefined when no next page exists. */
+  readonly cursor: string | undefined;
   /** A next page is being loaded; read when a tool runs, as a load started in the same task is not rendered yet. */
   readonly loading: boolean;
   /** Counts the lists the App has shown; a page loaded for an earlier list is dropped. */
@@ -79,6 +79,15 @@ const text = (value: string, isError = false): AppToolResult => ({
 export function rowId(row: Row): string | undefined {
   const id = row["id"];
   return typeof id === "string" ? id : typeof id === "number" && Number.isFinite(id) ? String(id) : undefined;
+}
+
+/**
+ * The cursor after a page read at `cursor`. A page whose next cursor is the one it was read at ends the list: reading it
+ * again would answer the same page forever.
+ */
+export function cursorAfter(cursor: string | undefined, result: ToolResult): string | undefined {
+  const next = nextCursorOf(result);
+  return next === cursor ? undefined : next;
 }
 
 /** view_state's answer: as many row ids as fit the host's limit, marked `truncated` when some do not. */
@@ -110,7 +119,7 @@ export async function callAppTool(
   if (!APP_TOOLS.some(tool => tool.name === name)) return text(`Unknown tool: ${name}`, true);
   const view = read();
   if (!view) return text("The App shows no View's rows now.", true);
-  if (name === "view_state") return state(view, view.rows, view.more);
+  if (name === "view_state") return state(view, view.rows, view.cursor !== undefined);
   if (name === "view_focus") {
     const id = args["id"];
     return typeof id === "string" && view.focus(id)
@@ -118,7 +127,7 @@ export async function callAppTool(
       : text("No row shown has this id; view_state lists them.", true);
   }
   if (!view.loadMore || !view.tool) return text("This host cannot load more rows in the App.", true);
-  if (!view.more) return text("The View has no more rows.", true);
+  if (view.cursor === undefined) return text("The View has no more rows.", true);
   if (view.loading) return text("The App is loading more rows already.", true);
   const result = await view.loadMore(signal);
   const added = result && rowsOf(result);
@@ -126,5 +135,5 @@ export async function callAppTool(
   // a new or refreshed result while the page loaded: the page was for a list that is gone
   if ((read()?.generation ?? view.generation) !== view.generation)
     return text("The View was replaced; call view_state.", true);
-  return state(view, [...view.rows, ...added], nextCursorOf(result) !== undefined);
+  return state(view, [...view.rows, ...added], cursorAfter(view.cursor, result) !== undefined);
 }

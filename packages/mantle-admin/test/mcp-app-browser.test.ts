@@ -397,6 +397,108 @@ it("loads a page once when view_more calls, or a view_more and the Load more but
   }
 }, 45_000);
 
+it("loads a further page after the second, retries a page that failed, and ends the list at a repeated cursor", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    const shown = () => app.locator('[data-slot="app-rows"] > li').count();
+    const loadMore = app.getByRole("button", { name: "載入更多" });
+    // a new first page, with the host's answers for page c2 (and c3) queued: a further cursor, a failure, the same cursor
+    const first = async (answers: Record<string, unknown[]>) => {
+      await page.evaluate(async answers => {
+        const { bridge, pages } = (window as any).host;
+        const result = (id: string, item: string, nextCursor?: string) => ({
+          content: [],
+          structuredContent: { rows: [{ id, version: 1, item }], ...(nextCursor ? { nextCursor } : {}) },
+          _meta: { "net.aotter.mantle/tool": "pending" },
+        });
+        for (const [cursor, list] of Object.entries(answers))
+          pages[cursor] = (list as [string, string, string?][]).map(answer =>
+            answer[0] === "fail" ? new Error("Unavailable") : result(...answer),
+          );
+        await bridge.sendToolInput({ arguments: { limit: 1 } });
+        await bridge.sendToolResult(result("r1", "Laptops", "c2"));
+      }, answers);
+      await expect.poll(shown).toBe(1);
+      await loadMore.waitFor();
+    };
+    const tool = (name: string) =>
+      page.evaluate(async name => (window as any).host.bridge.callTool({ name, arguments: {} }), name);
+    const text = (result: { content: { text: string }[] }) => JSON.parse(result.content[0]!.text);
+    const calls = async () =>
+      (await page.evaluate(() => (window as any).host.calls)).map((call: any) => call.arguments.cursor);
+
+    // the host answers page c2 with a further cursor: a second view_more loads page c3 normally
+    await first({ c2: [["r2", "Desks", "c3"]], c3: [["r3", "Chairs"]] });
+    expect(text(await tool("view_more"))).toMatchObject({ rows: 2, more: true, ids: ["r1", "r2"] });
+    await app.getByText("Desks").waitFor();
+    expect(text(await tool("view_more"))).toMatchObject({ rows: 3, more: false, ids: ["r1", "r2", "r3"] });
+    await app.getByText("Chairs").waitFor();
+    expect(await loadMore.count()).toBe(0);
+    // and so does a second Load more press
+    await first({ c2: [["r2", "Desks", "c3"]], c3: [["r3", "Chairs"]] });
+    await loadMore.click();
+    await app.getByText("Desks").waitFor();
+    await loadMore.click();
+    await app.getByText("Chairs").waitFor();
+    expect(await shown()).toBe(3);
+    expect(await loadMore.count()).toBe(0);
+    expect(await calls()).toEqual(["c2", "c3", "c2", "c3"]);
+
+    // page c2 fails first: view_more says so, and asking again loads it
+    await first({
+      c2: [
+        ["fail", ""],
+        ["r2", "Desks"],
+      ],
+    });
+    expect(await tool("view_more")).toMatchObject({ isError: true, content: [{ text: "Could not load more rows." }] });
+    expect(text(await tool("view_more"))).toMatchObject({ rows: 2, more: false, ids: ["r1", "r2"] });
+    await app.getByText("Desks").waitFor();
+    // and so does pressing Load more again after the notice
+    await first({
+      c2: [
+        ["fail", ""],
+        ["r2", "Desks"],
+      ],
+    });
+    await loadMore.click();
+    await app.getByText("無法載入更多結果。").waitFor();
+    await loadMore.click();
+    await app.getByText("Desks").waitFor();
+    expect(await app.getByText("無法載入更多結果。").count()).toBe(0);
+    expect(await calls()).toHaveLength(8);
+
+    // the host answers page c2 with c2 again: the list ends there instead of loading that page forever
+    await first({ c2: [["r2", "Desks", "c2"]] });
+    await loadMore.click();
+    await app.getByText("Desks").waitFor();
+    expect(await loadMore.count()).toBe(0);
+    expect(text(await tool("view_state"))).toMatchObject({ rows: 2, more: false });
+    expect(await tool("view_more")).toMatchObject({ isError: true, content: [{ text: "The View has no more rows." }] });
+    await first({ c2: [["r2", "Desks", "c2"]] });
+    expect(text(await tool("view_more"))).toMatchObject({ rows: 2, more: false, ids: ["r1", "r2"] });
+    await app.getByText("Desks").waitFor();
+    expect(await loadMore.count()).toBe(0);
+    expect(await calls()).toHaveLength(10);
+    expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 45_000);
+
 it("names a View's number id as text in view_state and shows that row for view_focus", async () => {
   const server = await hostServer();
   await server.listen();
