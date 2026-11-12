@@ -115,6 +115,50 @@ A caller that forwards a result to a model, such as an application's own agent,
 must forward only `data` and drop `_meta`, or the signed URL leaks through that
 path. A thrown error still produces the standard diagnostics result.
 
+### Open an App from a host's entry point
+
+Claude can list an App on its Artifacts page, so people open it without asking
+for it, when one of its tools is marked as a global entry point: the tool's
+`_meta` keeps `ui.resourceUri` and adds `"openai/ui": { entrypoints: [{ type: "global" }] }`.
+That key is a host extension, outside the MCP Apps specification; other hosts may
+ignore it. Core adds no entry-point API: the generated tools are plain objects, so
+give one of them `meta` and pass the array to `mcp()` from `@aotter/mantle/mcp`, as
+an application composes its own tools:
+
+```ts
+import { mcp } from '@aotter/mantle/mcp';
+import { tools } from './generated/mcp.js';
+
+declare const db: (env: Env) => D1Database; // as in service composition
+declare const caller: Parameters<typeof mcp>[1]['caller'];
+declare function loadAppHtml(): string;
+
+const marked = tools.map(tool => tool.name === 'my_tasks'
+  ? { ...tool, meta: { 'openai/ui': { entrypoints: [{ type: 'global' }] } } } : tool);
+const handler = mcp(marked, { db, caller, apps: { public: { resources: [{
+  uri: 'ui://my-tasks/build-1', name: 'my-tasks', html: () => loadAppHtml(), renders: ['my_tasks'],
+}] } } });
+```
+
+`renders` still produces `ui.resourceUri`; the two keys merge. The mark is a
+listing hint and grants nothing: every call of the tool still runs its
+`requires`, scope and `authorize` decisions. A client that declares no MCP Apps support
+sees the tool without `ui.resourceUri` and reads its result as text. The
+[frontend example](../../examples/frontend-mcp-app/README.md) is tested this way.
+
+The host's requirements for the marked tool are on Claude's
+[entry points](https://claude.com/docs/connectors/building/mcp-apps/entry-points)
+page; check them there. In short: every input optional, with a useful first
+view for `{}` (a View tool's `limit` and `cursor` are optional, so a View with
+no required input opens on its first page); `ui.visibility` omitted or
+containing `"model"` (not an `appOnly` View); a `title` of at most 60
+characters that leaves out Claude's and Anthropic's names; and a `name` with no
+two underscores in a row, no two dots in a row and no dot next to an underscore.
+Core derives a tool name from the manifest name, lower-cased with `-` turned
+into `_`, and adds no prefix, so a manifest name can break the name rule:
+`my--tasks`, `my_-tasks` and `my__tasks` all become `my__tasks`, and `a..b` and
+`a._b` stay as they are. Rename such a View or Procedure before marking it.
+
 ## Package and application ownership
 
 Core (`@aotter/mantle`) owns tools, resources, endpoint links and server authorization,
