@@ -190,83 +190,6 @@ token inactive once its original session has expired, while Mantle's resource
 check accepts it; Mantle does not use introspection.
 Database failures remain server errors, rather than silently authenticating.
 
-## Managed grants (opt-in)
-
-MCP [enterprise-managed authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization)
-lets an organization authorize a client for its members once: the client posts
-a signed identity assertion (ID-JAG) to the token endpoint with an extension
-grant such as `urn:ietf:params:oauth:grant-type:jwt-bearer`, and gets a user
-access token with no consent screen. Supporting it is the application's choice.
-Mantle does not enable it, does not validate assertions and knows no issuer.
-What Core supplies is the binding that lets such a token pass `resolveCaller`:
-
-- Opt in with `oauthGrantRevocation({ managedGrants: true })`. This declares the
-  `oauthManagedGrant` table, so `mantle generate --auth` adds it to `schema.sql`
-  for SQLite/D1 and PostgreSQL. Apply it through your own migration. Without
-  the option nothing changes: no table, no new query, and a token's
-  `mantle_managed_grant` claim is ignored.
-- In your own grant handler, after **your** code has validated the assertion,
-  authenticated the client and matched the user, call `issueManagedGrant`. It
-  records (or renews) one live grant per user and client, with its scopes,
-  resources, grant type and the asserting issuer (kept for audit only), and
-  issues the tokens through Better Auth's shared token path.
-- The access token names that record (`mantle_managed_grant`) instead of a
-  consent. `resolveCaller` accepts it with no browser session and no refresh
-  token, only while the record is live, belongs to the token's user and client,
-  covers the requested resource and every token scope, and the client is
-  enabled. It is one single-row read per request. A claim alone never passes:
-  a handler can set any claim on its own tokens, so the stored record decides.
-- A managed grant never gets a refresh token: `offline_access` is dropped from
-  the grant, so Better Auth issues none. The client renews with a new assertion,
-  which updates the same record.
-- The events in the table above end managed grants too (they are marked
-  revoked), and so does a disconnect: managed grants are listed on the
-  connected-apps page, one row per client. Sign-out and session expiry do not
-  end them. A banned user is refused on every request, as for any token. An
-  ended grant comes back only with a new assertion that your handler accepts.
-
-```ts
-import { oauthProvider } from "@better-auth/oauth-provider";
-import { issueManagedGrant, oauthGrantExtension, oauthGrantRevocation } from "@aotter/mantle/auth/oauth";
-// Your code: verify the assertion's signature, issuer, audience, expiry and single use, and return the user it names.
-import { verifyIdJag } from "./id-jag.js";
-
-const JWT_BEARER = "urn:ietf:params:oauth:grant-type:jwt-bearer";
-
-oauthProvider({
-  loginPage: "/sign-in",
-  consentPage: "/oauth/consent",
-  // ...the other options above
-  extensions: [
-    oauthGrantExtension,
-    {
-      grants: {
-        [JWT_BEARER]: async input => {
-          const body = input.ctx.body as Record<string, string>;
-          const scopes = (body.scope ?? "").split(" ").filter(Boolean);
-          const { client } = await input.provider.authenticateClient({ scopes });
-          const asserted = await verifyIdJag(input.ctx, body.assertion, client); // throws invalid_grant
-          return issueManagedGrant(input, {
-            client,
-            user: asserted.user,
-            scopes,
-            resources: [body.resource ?? "https://example.com/mcp"],
-            issuer: asserted.issuer,
-          });
-        },
-      },
-    },
-  ],
-});
-// plugins: [..., oauthGrantRevocation({ managedGrants: true }), oauthProvider(...)]
-```
-
-Validating the assertion, choosing which issuers and clients to trust, and
-matching its subject to a user are the application's job, as are any admin
-settings for them. For what Claude expects from such a server, see Claude's
-[enterprise-managed authorization page](https://claude.com/docs/connectors/building/enterprise-managed-auth.md).
-The decision is recorded in ADR-0014's 2026-11-12 amendment.
-
 For app-owned API keys/personal tokens, supply `resolveCredential(request)` in
 `resolveCaller` options. It runs before OAuth/cookies; return a verified user
 Caller (credential `api-key` or `personal-token`) or null when absent, and throw when
@@ -297,3 +220,93 @@ Merely setting storeSessionInDatabase true does not fix those SDK endpoints.
 Mantle's caller and raw-admin guard validate primary authority before refreshing,
 but do not make arbitrary SDK session caching safe. Keep verification
 consumption and DPoP single-use reservations in the database.
+
+## Managed grants (opt-in)
+
+MCP [enterprise-managed authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization)
+lets an organization authorize a client for its members once: the client posts
+a signed identity assertion (ID-JAG) to the token endpoint with an extension
+grant such as `urn:ietf:params:oauth:grant-type:jwt-bearer`, and gets a user
+access token with no consent screen. Supporting it is the application's choice.
+Mantle does not enable it, does not validate assertions and knows no issuer.
+What Core supplies is the binding that lets such a token pass `resolveCaller`:
+
+- Opt in with `oauthGrantRevocation({ managedGrants: true })`. This declares the
+  `oauthManagedGrant` table, so `mantle generate --auth` adds it to `schema.sql`
+  for SQLite/D1 and PostgreSQL. Apply it through your own migration. Without
+  the option nothing changes: no table, no new query, and a token's
+  `mantle_managed_grant` claim is ignored.
+- In your own grant handler, after **your** code has validated the assertion,
+  authenticated the client and matched the user, call `issueManagedGrant`. It
+  records (or renews) one live grant per user, client and resource set, with its
+  scopes, resources, grant type and the asserting issuer (kept for audit only),
+  and issues the tokens through Better Auth's shared token path. A client's
+  grants for two resources of one server are separate records. The record is
+  written only once the tokens are issued, so a request Better Auth refuses
+  (for example an unknown `resource`) changes no grant. A user banned at that
+  moment is refused.
+- The access token names that record (`mantle_managed_grant`) instead of a
+  consent. `resolveCaller` accepts it with no browser session and no refresh
+  token, only while the record is live, belongs to the token's user and client,
+  covers the requested resource and every token scope, and the client is
+  enabled. It is one single-row read per request. A claim alone never passes:
+  a handler can set any claim on its own tokens, so the stored record decides.
+- A managed grant never gets a refresh token: `offline_access` is dropped from
+  the grant, so Better Auth issues none. The client renews with a new assertion,
+  which updates the record for the same resources.
+- The events in the table above end managed grants too (they are marked
+  revoked), and so does a disconnect: managed grants are listed on the
+  connected-apps page, one row per client. Sign-out and session expiry do not
+  end them. A banned user is refused on every request, as for any token, and a
+  ban ends the grants for good: none is issued during the ban, so after an
+  unban the client needs a new assertion that your handler accepts.
+
+```ts
+import { oauthProvider } from "@better-auth/oauth-provider";
+import { issueManagedGrant, oauthGrantExtension, oauthGrantRevocation } from "@aotter/mantle/auth/oauth";
+// Your code: verify the assertion's signature, issuer, audience, expiry and single use, check that it names this
+// client, and return the verified user it names with the scopes and resource it grants.
+import { verifyIdJag } from "./id-jag.js";
+
+const JWT_BEARER = "urn:ietf:params:oauth:grant-type:jwt-bearer";
+
+oauthProvider({
+  loginPage: "/sign-in",
+  consentPage: "/oauth/consent",
+  // ...the other options above
+  extensions: [
+    oauthGrantExtension,
+    {
+      grants: {
+        [JWT_BEARER]: async input => {
+          const body = input.ctx.body as Record<string, string>;
+          const scopes = (body.scope ?? "").split(" ").filter(Boolean);
+          const { client } = await input.provider.authenticateClient({ scopes });
+          const asserted = await verifyIdJag(input.ctx, body.assertion, client); // throws invalid_grant
+          // Grant only what the assertion authorizes, never more than the client asked for.
+          const resource = body.resource ?? asserted.resource;
+          if (resource !== asserted.resource) throw input.ctx.error("BAD_REQUEST", { error: "invalid_target" });
+          return issueManagedGrant(input, {
+            client,
+            user: asserted.user,
+            scopes: scopes.filter(scope => asserted.scopes.includes(scope)),
+            resources: [resource],
+            issuer: asserted.issuer,
+          });
+        },
+      },
+    },
+  ],
+});
+// plugins: [..., oauthGrantRevocation({ managedGrants: true }), oauthProvider(...)]
+```
+
+Validating the assertion, choosing which issuers and clients to trust, and
+matching its subject to a user are the application's job, as are any admin
+settings for them. Match only a verified account (or verify the address from the
+assertion before linking): Core ends grants on an unverified-email proof because
+someone else may have registered that address first, and `issueManagedGrant`
+accepts whatever user your handler passes. For what Claude expects from such a
+server, see Claude's
+[enterprise-managed authorization page](https://claude.com/docs/connectors/building/enterprise-managed-auth.md).
+The decision is recorded in ADR-0014's 2026-11-12 amendment.
