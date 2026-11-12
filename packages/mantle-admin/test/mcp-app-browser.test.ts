@@ -200,8 +200,7 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     expect(root).toEqual({ lang: "zh-TW", theme: "dark", color: "rgb(1, 2, 3)" });
     // only a maximum height while the App is still in full screen (the inline request above was refused): a host may
     // give only that there, so it bounds the root, which scrolls
-    const bounds = () =>
-      app.locator("html").evaluate(html => [html.style.maxHeight, getComputedStyle(html).overflowY]);
+    const bounds = () => app.locator("html").evaluate(html => [html.style.maxHeight, getComputedStyle(html).overflowY]);
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { maxHeight: 200 } }));
     await expect.poll(bounds).toEqual(["200px", "auto"]);
     // in the conversation the same cap is the host's: it clips the frame, so the App is no scroll container (this
