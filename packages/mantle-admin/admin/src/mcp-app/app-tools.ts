@@ -76,19 +76,15 @@ function state(view: ShownView, rows: readonly Row[], more: boolean): AppToolRes
   const ids = rows.flatMap(row => (typeof row["id"] === "string" ? [row["id"]] : []));
   const base = { tool: view.tool, input: view.input, rows: rows.length, more };
   let budget = APP_TOOL_TEXT_LIMIT - JSON.stringify({ ...base, ids: [], truncated: true }).length;
+  // never cut the JSON: a View input over the limit on its own is an error, not a broken answer
+  if (budget < 0) return text("The View's input is too large to report.", true);
   const shown: string[] = [];
   for (const id of ids) {
     budget -= JSON.stringify(id).length + 1;
     if (budget < 0) break;
     shown.push(id);
   }
-  // ponytail: a View input alone over the limit is cut mid-JSON; the host would refuse the whole answer otherwise
-  return text(
-    JSON.stringify({ ...base, ids: shown, ...(shown.length < ids.length ? { truncated: true } : {}) }).slice(
-      0,
-      APP_TOOL_TEXT_LIMIT,
-    ),
-  );
+  return text(JSON.stringify({ ...base, ids: shown, ...(shown.length < ids.length ? { truncated: true } : {}) }));
 }
 
 /**
