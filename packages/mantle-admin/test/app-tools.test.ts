@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { APP_TOOLS, APP_TOOL_TEXT_LIMIT, callAppTool, type ShownView } from "../admin/src/mcp-app/app-tools";
+import { APP_TOOLS, APP_TOOL_TEXT_LIMIT, callAppTool, rowId, type ShownView } from "../admin/src/mcp-app/app-tools";
 
 // Claude's limits for the tools a view registers (claude.com/docs/connectors/building/mcp-apps/app-tools)
 test("the App's tool definitions stay within a host's app-tool limits", () => {
@@ -44,6 +44,14 @@ test("view_state reads the shown View: its tool, input, row ids and whether more
   // no rows on screen (waiting, a page, a row action): nothing to read
   expect(await answer(null, "view_state")).toMatchObject({ isError: true });
   expect(await answer(view(), "delete_row")).toMatchObject({ isError: true });
+});
+
+test("view_state lists a View's number ids as text, the form view_focus takes; a row with no id is only counted", async () => {
+  // a View outputs any value as id, a GROUP BY key say
+  const rows = [{ id: 7 }, { id: "r1" }, { id: Number.NaN }, { id: { nested: true } }, { item: "no id" }];
+  expect(parsed(await answer(view({ rows }), "view_state"))).toMatchObject({ rows: 5, ids: ["7", "r1"] });
+  expect(rowId({ id: 7 })).toBe("7");
+  expect(rowId({ id: null })).toBeUndefined();
 });
 
 test("view_state keeps within the host's text limit, marking ids it leaves out", async () => {

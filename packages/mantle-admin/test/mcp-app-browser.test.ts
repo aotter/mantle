@@ -397,6 +397,55 @@ it("loads a page once when view_more calls, or a view_more and the Load more but
   }
 }, 45_000);
 
+it("names a View's number id as text in view_state and shows that row for view_focus", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    await page.evaluate(async () => {
+      const { bridge } = (window as any).host;
+      await bridge.sendToolInput({ arguments: {} });
+      await bridge.sendToolResult({
+        content: [],
+        structuredContent: {
+          rows: [
+            { id: 2025, item: "Laptops" },
+            { id: 2026, item: "Desks" },
+          ],
+        },
+        _meta: { "net.aotter.mantle/tool": "pending" },
+      });
+    });
+    await app.getByText("Desks").waitFor();
+    const tool = (name: string, args = {}) =>
+      page.evaluate(async ([name, args]) => (window as any).host.bridge.callTool({ name, arguments: args }), [
+        name,
+        args,
+      ] as const);
+    expect(JSON.parse((await tool("view_state")).content[0].text)).toMatchObject({ rows: 2, ids: ["2025", "2026"] });
+    expect(await tool("view_focus", { id: "2026" })).toEqual({
+      content: [{ type: "text", text: "Showing row 2026." }],
+    });
+    await expect
+      .poll(() => app.locator('[data-slot="app-rows"] > li').nth(1).getAttribute("aria-current"))
+      .toBe("true");
+    expect(await app.locator('[aria-current="true"]').count()).toBe(1);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 45_000);
+
 it("renders an application's pages[].mcp page for its View's tool, not the rows, and its data comes through the host's tools", async () => {
   const server = await hostServer();
   await server.listen();

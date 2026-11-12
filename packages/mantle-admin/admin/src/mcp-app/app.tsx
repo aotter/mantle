@@ -29,7 +29,7 @@ import {
   type ToolResult,
 } from "../../../src/app/bridge";
 import { web, type HostApi } from "./postmessage";
-import type { ShownView } from "./app-tools";
+import { rowId, type ShownView } from "./app-tools";
 import { useLoadMore } from "../lib/use-load-more";
 import { Slot, useViewCellNames } from "../app/slots";
 import type { CellProps } from "../app/slot-props";
@@ -174,7 +174,7 @@ export function MantleApp(props: {
     setFocused(null);
   }, [props.result]);
   useEffect(() => {
-    const index = focused && rows ? rows.findIndex(row => row["id"] === focused.id) : -1;
+    const index = focused && rows ? rows.findIndex(row => rowId(row) === focused.id) : -1;
     list.current?.children[index]?.scrollIntoView({ block: "nearest" });
   }, [focused]);
 
@@ -224,7 +224,7 @@ export function MantleApp(props: {
             generation: pages.generation,
             ...(call ? { loadMore } : {}),
             focus: id => {
-              if (!rows.some(row => row["id"] === id)) return false;
+              if (!rows.some(row => rowId(row) === id)) return false;
               setFocused({ id });
               return true;
             },
@@ -302,7 +302,7 @@ export function MantleApp(props: {
           return (
             <li
               key={id ?? index}
-              aria-current={id !== undefined && focused?.id === id ? "true" : undefined}
+              aria-current={focused && rowId(row) === focused.id ? "true" : undefined}
               className="aria-[current=true]:ring-ring grid gap-2 rounded-md border p-3 text-sm aria-[current=true]:ring-2"
             >
               <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-3 gap-y-1">
