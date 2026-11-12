@@ -954,9 +954,14 @@ authorization stays the adopter's decision; Core only provides the binding.
    `mantle_managed_grant` claim is ignored.
 2. **Record.** `issueManagedGrant(handlerInput, { client, user, scopes, resources,
    issuer })`, called by the adopter's grant handler after it validated the
-   assertion, keeps one live record per user and client: scopes, resources, grant
-   type, asserting issuer (audit only) and a `revoked` date. A new assertion renews
-   that record rather than adding one.
+   assertion, keeps one live record per user, client and resource set: scopes,
+   resources, grant type, asserting issuer (audit only) and a `revoked` date. A new
+   assertion for the same resources renews that record rather than adding one;
+   one for other resources has its own record, so a client's grants for two
+   resources of one server never replace each other. The record is written only
+   after Better Auth has issued the tokens, so a refused token request changes no
+   grant. A user banned at that moment is refused, so no grant asserted during a
+   ban passes after the unban.
 3. **Claim.** While `issueManagedGrant` mints, `oauthGrantExtension` stamps
    `mantle_managed_grant` (the record id) in place of the consent claims.
 4. **Check.** `assertActiveUserGrant` accepts a token naming a managed grant only
@@ -973,7 +978,7 @@ authorization stays the adopter's decision; Core only provides the binding.
    ban, admin session revocation, unverified-email proof) and a disconnect mark the
    user's managed grants revoked. Sign-out and session expiry do not end them.
 7. **Visibility.** The connected-apps list shows live managed grants, one entry per
-   client not already listed by a consent, under a `managed:`-prefixed id (consent
+   client (with the scopes of all its resources) not already listed by a consent, under a `managed:`-prefixed id (consent
    and managed-grant ids come from different tables and may coincide), so a user
    can disconnect them. A disconnect ends every grant of that client, as before.
 
