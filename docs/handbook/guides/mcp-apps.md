@@ -454,15 +454,43 @@ is not cut: under the cap it is reached through the full-screen toggle.
 `theme: "dark"` sets both `data-theme` and the `.dark` class. Only the spec's
 style variables are applied; [Theme](#theme) says how they meet your own.
 
+### Result size
+
 A View result carries its rows twice, as the JSON text block and as
-`structuredContent`. Hosts truncate long tool results (about 150k characters
-is reported for some), and a truncated text block is no longer JSON. So an MCP
-View page is cut by size: `limit` still accepts 1 to 500, but a page holds only
-as many of those rows as fit 60,000 characters of JSON. It stops before the first
-row that overflows, and the next cursor resumes at that row, so no row is skipped
-or repeated. A single row over the budget is returned alone, with its cursor, and a
-View without an order (one page, no cursor) is returned whole; any page still over the
-budget carries a notice that hosts may truncate it. The default is 50 rows. REST and native paging keep their 500-row limit.
+`structuredContent`. A host does not always pass a large result to the App. On
+claude.ai and Claude Desktop, when a result exceeds about 150,000 characters
+and Claude's code execution sandbox is active, Claude writes it to the
+sandbox's files instead, and the App receives a pointer to that file rather
+than the result, so it never shows the rows
+([App doesn't render when tool results are large](https://claude.com/docs/connectors/building/mcp-apps/troubleshooting#app-doesnt-render-when-tool-results-are-large)).
+That page does not say whether the threshold counts the text block alone or
+the text and `structuredContent` together. Claude Code limits results in
+tokens instead. Another host may truncate a long result, and a truncated text
+block is no longer JSON.
+
+So an MCP View page is cut by size: `limit` still accepts 1 to 500, but a page
+holds only as many of those rows as fit 60,000 characters of JSON, which stays
+under that threshold even counted twice. It stops before the first row that
+overflows, and the next cursor resumes at that row, so no row is skipped or
+repeated. The default is 50 rows. REST and native paging keep their 500-row
+limit.
+
+Three results the App renders are not cut, and can pass the threshold:
+
+- a single row over the budget, returned alone with its cursor;
+- a View without an order, which is one page with no cursor and is returned
+  whole;
+- the result of a Procedure, or of your own tool, that `adminMcpApps({ tools })`
+  names: Core neither pages nor measures it.
+
+A View page still over the budget carries a notice that a host may truncate it
+or not render its App. Core does not turn these results into errors: a
+Procedure's result reports a write that has already happened, so an error in
+its place invites a retry, and on Claude a stored result is kept in the
+sandbox rather than lost. Keep them small instead: give a View that can grow an
+order, so it pages; keep large values (document text, base64 images, logs) out
+of rows, and read one through a View or tool of its own; have a Procedure
+return what it changed, not a collection.
 
 ### Fonts, border and display mode
 
