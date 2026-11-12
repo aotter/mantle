@@ -264,7 +264,7 @@ async function invoke<Env, Database, Handlers>(
       oversized = tool.page && body.length > MCP_PAGE_BUDGET;
     const notice =
       `This page is larger than the ${MCP_PAGE_BUDGET}-character page size budget (a single row over it, ` +
-      "or a View without an order, is returned whole), so a host may truncate it. Continue with nextCursor, if any.";
+      "or a View without an order, is returned whole), so a host may truncate it or not render its App. Continue with nextCursor, if any.";
     return {
       ...(hasMeta || resultMeta ? { _meta: { ...resultMeta, [TOOL_META_KEY]: tool.name } } : {}),
       content: [
