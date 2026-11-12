@@ -7,7 +7,7 @@ export async function verifyRest(fetch: (request: Request) => Promise<Response |
       new Request("https://app.test" + path, {
         method,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        headers,
+        headers: { origin: "https://app.test", ...headers },
       }),
     );
   const first = await request("/api/views/notes?limit=1");
@@ -28,13 +28,7 @@ export async function verifyRest(fetch: (request: Request) => Promise<Response |
     ["/api/missing", "GET", undefined, {}, 404],
     ["/api/views/admin-notes", "GET", undefined, editor, 404],
     ["/api/views/notes", "POST", undefined, {}, 405],
-    [
-      "/api/notes/a",
-      "PUT",
-      { title: "x", version: 2 },
-      { ...editor, "x-credential": "session", origin: "https://evil.test" },
-      403,
-    ],
+    ["/api/notes/a", "PUT", { title: "x", version: 2 }, { ...editor, origin: "https://evil.test" }, 403],
   ] as const)
     assert.equal((await request(path, method, body, headers))!.status, status, path);
   const method = await request("/api/views/notes", "POST");
@@ -43,7 +37,7 @@ export async function verifyRest(fetch: (request: Request) => Promise<Response |
     "/api/notes/a",
     "PUT",
     { title: "x", version: 2 },
-    { ...editor, "x-credential": "session", origin: "https://evil.test" },
+    { ...editor, origin: "https://evil.test" },
   );
   assert.equal(((await csrf!.json()) as any).error.path, "request:origin");
   const options = await request(
