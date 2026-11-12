@@ -41,8 +41,9 @@ export interface Serving<Env, Database, Handlers> {
 
 /**
  * Characters of `JSON.stringify(page)` an MCP View page may hold. A result carries its rows twice (text block and
- * `structuredContent`) and hosts are reported to truncate near 150k characters, so one copy stays at 60k.
- * ponytail: one fixed number; raise it or make it an option if hosts publish their limits.
+ * `structuredContent`), and Claude does not pass a result over about 150k characters to its App when code execution
+ * is active, so one copy stays at 60k.
+ * ponytail: one fixed number; raise it or make it an option if hosts publish other limits.
  */
 const MCP_PAGE_BUDGET = 60_000;
 /**

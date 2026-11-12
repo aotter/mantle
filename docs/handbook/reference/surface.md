@@ -86,11 +86,14 @@ driver-native rows. Internal paging creates no public route/tool.
 Authored SQL `LIMIT` bounds the complete ordered row set, including across cursor pages.
 Use `limit` in the paging options to choose each page size (up to 500); it does not expand the View's declared result set.
 An MCP View page keeps the `limit` of 1 to 500 but holds only as many of those rows
-as fit 60,000 characters of JSON, so a result stays under host truncation limits. It
+as fit 60,000 characters of JSON, so a result, which carries its rows twice, stays
+under the size above which claude.ai and Claude Desktop, with code execution
+active, do not pass a result to its App (about 150,000 characters; see
+[Result size](../guides/mcp-apps.md#result-size)). It
 is cut before the first row that overflows and its next cursor resumes at that row.
 A single row over the budget is returned alone with the cursor, and a View without an
-order stays one whole page; a page still over the budget carries a notice that hosts
-may truncate it.
+order stays one whole page; a page still over the budget carries a notice that a host
+may truncate it or not render its App.
 A pageable Schema View has a complete NOT NULL scalar tuple ending in the
 compiler's `id` tiebreak. Its ordered columns must match an index after fixed
 equality prefixes; a user-field `IN` scope or restrict is not one (see
