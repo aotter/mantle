@@ -37,7 +37,8 @@ move, and never booting 0.2 against a 0.1.x database.
 ### Upgrading to 0.2.2-alpha.3
 
 Pin the selected packages to `0.2.2-alpha.3` and regenerate: generated output now marks scope-gated targets, and
-output from an earlier version refuses a service credential even there. This alpha has one breaking change:
+output from an earlier version refuses a service credential even there. This alpha has three breaking changes; work
+through **Breaking** below, then the rest applies without changes.
 
 - **Breaking: an application credential reaches only scope-gated targets.** A user Caller whose `credential` is
   `api-key` or `personal-token` (what `resolveCaller`'s `resolveCredential` hook returns, and any such Caller an
@@ -48,7 +49,64 @@ output from an earlier version refuses a service credential even there. This alp
   it). Add a `{ ctx.auth.scope: … }` to the `requires` of each target such a credential should reach; an application
   tool composed into `mcp(...)` admits it only when the tool declares `scopes`. The hook may no longer return
   `credential: "oauth"`; it is `UNAUTHENTICATED`. Sessions, OAuth access tokens, host and system callers, and
-  `nativeRest` routes are unchanged.
+  `nativeRest` routes are unchanged. (#1979)
+- **Breaking: `useHost().sendMessage` answers an outcome, not a boolean.** It resolves `"accepted"`, `"refused"` or
+  `"unknown"` (the type `HostRequestOutcome` is exported from `@aotter/mantle-admin/hooks`). `accepted`: the host
+  answered without an error, which is not proof of delivery. `refused`: the host answered with an error, does not offer
+  the request, the connection was already closed, or the text was refused before it was sent. `unknown`: a timeout, a
+  thrown error or a connection lost in flight; the host may still act on it, so do not report a failure or invite a
+  resend. Replace `if (await sendMessage(text))` with a comparison against `"accepted"`, and handle `"unknown"` as
+  neither success nor failure. A promise that resolved `false` for a timeout now resolves `"unknown"`. (#2004)
+- **Breaking: the Admin MCP App declares `tools: { listChanged: true }`, custom pages gain `useHost().registerTools` and
+  `useHost().downloadFile`, and tool names starting with `view_` are reserved.** `registerTools(tools)` registers a
+  page's own app tools over the App's connection and returns a cleanup function; `downloadFile(name, text, mimeType?)`
+  asks the host to save a text file and answers a `HostRequestOutcome`. A custom page or a `useHost` mock typed as
+  `AdminHost` must implement both members. An application that already exposes an app tool of its own named `view_…`
+  renames it, since `registerTools` refuses that prefix (and a name already registered). A host that lists the App's
+  tools now sees a capability that sends `notifications/tools/list_changed`. (#2005)
+
+Host-to-App tool calls (`tools/list` and `tools/call` on the App) and `ui/download-file` are defined in the MCP Apps
+draft specification rather than the stable `2026-01-26` text, and host support varies. **None of the host-facing
+changes in this alpha has been verified on a real host** (tracked in
+[#1119](https://github.com/aotter/mantle/issues/1119)); automated coverage runs against the official AppBridge in
+Chrome. Each one is opt-in or degrades when the host lacks the capability.
+
+- **Managed grants.** `oauthGrantRevocation({ managedGrants: true })` opts in to a stored grant that lets a user access
+  token from your own OAuth extension grant (for example the jwt-bearer grant of MCP enterprise-managed authorization)
+  pass Core's resource check with no consent screen, no browser session and no refresh token. It is off by default:
+  without it there is no table and nothing changes. With it, `mantle generate --auth` emits the `oauthManagedGrant`
+  table (add it by migration to an existing database; Core runs no DDL), and your grant handler calls
+  `issueManagedGrant` from `@aotter/mantle/auth/oauth` after it has validated the assertion, authenticated the client
+  and matched a verified user. The decision is an amendment to [ADR-0014](https://github.com/aotter/mantle/blob/v0.2.2-alpha.3/docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md);
+  see the [OAuth guide](../guides/oauth.md). (#1998)
+- **MCP App resources.** `McpAppResource.meta` adds host-defined keys to the `_meta` of the `resources/read` content
+  item (top level shallow, `ui` one key deep); the typed fields win. A generated View tool can be marked as a host
+  entry point in place, with a tested example and no new API. `adminMcpApps` and `mediaUploadCard` take
+  `fontDomains`, `prefersBorder` and `meta`; all are opt-in and declare nothing by default. See
+  [MCP Apps](../guides/mcp-apps.md). (#1995, #2006, #2009)
+- **Admin MCP App.** "Export CSV" saves the rows the App holds as `<tool>.csv` through `ui/download-file` when the host
+  offers `downloadFile`, with no server call (#1996). Three view-only app tools, `view_state`, `view_more` and
+  `view_focus`, let the model read and move the open View; none writes data (#1997). The upload card connects without
+  them.
+- **Fixes.**
+  - Parallel `view_more` calls and the "Load more" button load a page once; a page that repeats its cursor ends the
+    list; rows whose `id` is a number are listed and can be focused (#1999).
+  - Host bridge edges: the host origin is pinned only when the App is framed; the upload card does not expose the
+    `view_*` tools; recoverable app-tool cases (no View shown, an unknown id, no more rows) answer as normal results
+    that say what to call instead; `ui/message` text is normalised and refused when blank or over 8,000 characters;
+    download names are made safe; `view_more` gives up after 40 seconds (#2007).
+  - Layout: inline in the conversation the App no longer scrolls inside the frame. It shows the rows that fit and an
+    "N more" control that opens full screen, has a transparent background, 44 px touch targets on touch screens and a
+    "Back to the conversation" toggle (#2008).
+  - The packed-consumer install in the release gate retries and ignores versions published in the last 14 days (#1978).
+- **Dependencies.** The Better Auth family moves to 1.7.14 together (#1988, #2012): `better-auth`, `@better-auth/core`,
+  `@better-auth/oauth-provider`, `@better-auth/mcp`, `@better-auth/cimd` and the SDK's peer `better-auth`, with
+  `@better-auth/utils` 0.5.1. `@aotter/mantle` peers on exact versions and `@better-auth/oauth-provider` 1.7.14 needs
+  `better-auth` and `@better-auth/core` `^1.7.14`, so an application that pins its own Better Auth packages moves all of
+  them to 1.7.14 together; a mixed set fails to install under npm (ERESOLVE). The auth tables generated for SQLite, D1
+  and PostgreSQL are byte-identical to 1.7.12, so there is no auth DDL change and no migration.
+- **Docs.** The [quickstart](../start/quickstart-worker.md) starts from `mantle init` (#1980). The MCP Apps guide
+  describes the View budget by what Claude documents and gives per-host guidance (#2009).
 
 ### Upgrading to 0.2.2-alpha.2
 
