@@ -414,7 +414,10 @@ the host advertises in `hostCapabilities`:
   `ui/message`, which would speak for the user.
 - It declares `availableDisplayModes: ["inline", "fullscreen"]` and offers a
   full-screen toggle (`ui/request-display-mode`) when the host lists
-  `fullscreen` in its context.
+  `fullscreen` in its context. A host reports `fullscreen` in a side panel as
+  well as full screen, so the way back reads "Back to the conversation". A
+  refusal answers the mode the App already has; the App then says the host kept
+  the current view.
 - When the host offers `downloadFile`, a View with rows shows "Export CSV". It
   saves the rows the App holds, "Load more" pages included, in the columns
   shown, as one `text/csv` resource named `<tool>.csv` through

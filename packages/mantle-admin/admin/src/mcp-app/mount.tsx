@@ -42,6 +42,8 @@ function Root({ admin }: { admin: AdminDefinition }) {
   const [context, setContext] = useState<McpUiHostContext | undefined>(undefined);
   const [host, setHost] = useState<HostApi | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  // the host answered a display mode request with the mode the App had
+  const [refused, setRefused] = useState(false);
   useEffect(
     () =>
       connectHost(
@@ -124,20 +126,24 @@ function Root({ admin }: { admin: AdminDefinition }) {
     if (page.mcp)
       pages[toolName(page.mcp.renders)] ??= <CustomPage page={page} surface="mcp-app" language={locale ?? "en"} />;
   const labels = appLabels(locale);
-  // a long form or many columns: the person may ask the host for the whole screen, when it offers one
+  // Sent inside the click: Claude refuses a request without a recent click or key press. A refusal answers the mode
+  // the App has, so only the mode asked for is a grant.
+  const request = (mode: "inline" | "fullscreen") => {
+    void host.requestDisplayMode(mode).then(granted => {
+      setRefused(granted !== mode);
+      if (granted === mode) setContext(current => ({ ...current, displayMode: mode }));
+    });
+  };
+  // a long form or many columns: the person may ask the host for the whole screen, when it offers one. `fullscreen` is
+  // the side panel too, so the way back names the conversation
   const next = context?.displayMode === "fullscreen" ? "inline" : "fullscreen";
   const toggle = context?.availableDisplayModes?.includes("fullscreen") ? (
-    <div className="flex justify-end px-3 pt-3">
-      <button
-        type="button"
-        className="rounded-md border px-3 py-1 text-xs"
-        onClick={() => {
-          void host.requestDisplayMode(next).then(mode => {
-            if (mode) setContext(current => ({ ...current, displayMode: mode }));
-          });
-        }}
-      >
-        {next === "fullscreen" ? labels.fullscreen : labels.exitFullscreen}
+    <div className="flex flex-wrap items-center justify-end gap-2 px-3 pt-3">
+      <span role="status" className="text-muted-foreground text-xs">
+        {refused ? labels.displayRefused : null}
+      </span>
+      <button type="button" className="rounded-md border px-3 py-1 text-xs" onClick={() => request(next)}>
+        {next === "fullscreen" ? labels.fullscreen : labels.toConversation}
       </button>
     </div>
   ) : null;

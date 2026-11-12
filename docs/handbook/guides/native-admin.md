@@ -190,6 +190,9 @@ admin View. Without the host's `serverTools`, `run` is `undefined`. `useHost()` 
 `registerTools`) in a host; `useAdminSurface()` says which. `sendMessage` and `downloadFile` resolve to `"accepted"` (the
 host answered without an error, not proof of delivery), `"refused"` (an error answer, or not offered) or `"unknown"` (no
 answer came, so it may still arrive; do not report a failure); see [the MCP Apps guide](mcp-apps.md#rules-for-a-component-that-renders-in-a-host).
+`requestDisplayMode(mode)` resolves to the mode the host set: a refusal answers the current mode, so compare it with the
+mode asked for. Call it directly in a click or key handler while the App has focus; Claude refuses `fullscreen` without a
+recent click or key press. Claude reports `fullscreen` in its side panel too, so a way back reads "back to the conversation".
 `registerTools` lets a page add app tools the model may call while it is shown, with plain JSON Schema input and its own
 handler; register in a `useEffect` and return what it returns, so the tools go when the page unmounts. Host-to-App tool calls
 are in the MCP Apps draft specification and host support varies; see [a page's own app tools](mcp-apps.md#a-pages-own-app-tools). `@aotter/mantle-admin/hooks` also exports the same hooks untyped, for code without generated types.

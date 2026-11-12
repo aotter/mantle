@@ -141,8 +141,16 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
         ]),
     ).toEqual(["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "light dark", "dark"]);
     await app.getByRole("button", { name: "全螢幕" }).click();
-    await app.getByRole("button", { name: "結束全螢幕" }).waitFor();
+    // the host reports `fullscreen` in its side panel too: the way back names the conversation
+    const back = app.getByRole("button", { name: "返回對話" });
+    await back.waitFor();
     expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen"]);
+    // a refusal answers the current mode: the App says so and keeps its mode
+    await page.evaluate(() => (window as any).host.modeAnswers.push("fullscreen"));
+    await back.click();
+    await app.getByRole("status").filter({ hasText: "主機維持目前的顯示方式。" }).waitFor();
+    expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen", "inline"]);
+    expect(await back.count()).toBe(1);
     await app.getByRole("button", { name: "Review: r1" }).click();
     await app.getByRole("button", { name: "Date", exact: true }).click();
     const date = app.locator('input[type="date"]');

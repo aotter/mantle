@@ -24,7 +24,12 @@ export interface AppLabels {
   /** No answer came: the host's download dialog may still be open, so this is not a failure. */
   readonly exportUnconfirmed: string;
   readonly fullscreen: string;
-  readonly exitFullscreen: string;
+  /** Back from the side panel or full screen: a host reports `fullscreen` for both, so it names neither. */
+  readonly toConversation: string;
+  /** The host answered a display mode request with the mode the App already had. */
+  readonly displayRefused: string;
+  /** Inline under the host's height cap, opening the rest in full screen; `{count}` is the number of rows not shown. */
+  readonly moreRows: string;
 }
 
 const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
@@ -84,7 +89,9 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     exportFailed: "The download did not finish.",
     exportUnconfirmed: "The download could not be confirmed. Check for an open download dialog before exporting again.",
     fullscreen: "Full screen",
-    exitFullscreen: "Exit full screen",
+    toConversation: "Back to the conversation",
+    displayRefused: "The host kept the current view.",
+    moreRows: "{count} more: open full screen",
   },
   "zh-TW": {
     fields: {
@@ -140,7 +147,9 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     exportFailed: "下載未完成。",
     exportUnconfirmed: "無法確認是否已下載。再次匯出前，請先查看是否有開啟中的下載對話框。",
     fullscreen: "全螢幕",
-    exitFullscreen: "結束全螢幕",
+    toConversation: "返回對話",
+    displayRefused: "主機維持目前的顯示方式。",
+    moreRows: "還有 {count} 筆：以全螢幕開啟",
   },
   "zh-CN": {
     fields: {
@@ -196,7 +205,9 @@ const APP_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", AppLabels>> = {
     exportFailed: "下载未完成。",
     exportUnconfirmed: "无法确认是否已下载。再次导出前，请先查看是否有打开的下载对话框。",
     fullscreen: "全屏",
-    exitFullscreen: "退出全屏",
+    toConversation: "返回对话",
+    displayRefused: "主机保持当前的显示方式。",
+    moreRows: "还有 {count} 条：以全屏打开",
   },
 };
 

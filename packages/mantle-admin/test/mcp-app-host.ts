@@ -83,9 +83,11 @@ bridge.onupdatemodelcontext = async params => {
   contexts.push(params);
   return {};
 };
+// a test's own answers, used in order: a refusal answers the view's current mode
+const modeAnswers: string[] = [];
 bridge.onrequestdisplaymode = async ({ mode }) => {
   modes.push(mode);
-  return { mode };
+  return { mode: (modeAnswers.shift() ?? mode) as typeof mode };
 };
 // a test's own answers for downloads, used in order; an Error is an error response, which the App cannot read as a refusal
 bridge.ondownloadfile = async params => {
@@ -144,6 +146,7 @@ Object.assign(window, {
     messages,
     contexts,
     modes,
+    modeAnswers,
     downloads,
     downloadAnswers,
     toolListChanges,
