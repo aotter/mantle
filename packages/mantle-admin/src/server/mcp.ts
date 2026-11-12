@@ -1,7 +1,14 @@
 /** The Admin App is an ordinary contributor to the SDK's public MCP Apps hook. */
 import { ContractError } from "@aotter/mantle/contracts";
 import { declaredMeta } from "../app/declared-meta.js";
-import type { McpAppPage, McpAppRender, McpAppResource, NormalMcpAppResource, NormalMcpApps } from "@aotter/mantle/mcp";
+import type {
+  McpAppCsp,
+  McpAppPage,
+  McpAppRender,
+  McpAppResource,
+  NormalMcpAppResource,
+  NormalMcpApps,
+} from "@aotter/mantle/mcp";
 import type { MediaStorage } from "@aotter/mantle/site";
 /** An archived resources/read page, including its embedded catalogue; application-owned, never caller rows or credentials. */
 export interface AdminMcpSnapshot extends McpAppPage {
@@ -9,7 +16,19 @@ export interface AdminMcpSnapshot extends McpAppPage {
   readonly domain?: string;
   readonly title?: string;
 }
-export interface AdminMcpOptions {
+/** What the Admin App and the upload card pass through to their own resource's `_meta.ui` on `resources/read`. */
+export interface AdminAppResourceOptions extends Pick<McpAppResource, "prefersBorder" | "meta"> {
+  /**
+   * Origins the host serves the font files of its `styles.css.fonts` from, which both Apps apply: added to the
+   * resource's `resourceDomains`, which a host also applies to scripts and styles. By default
+   * `["https://assets.claude.ai"]`, the origin Claude documents for its fonts; `[]` declares none.
+   */
+  readonly fontDomains?: readonly string[];
+}
+/** `csp` with the host font origins in `resourceDomains`; `undefined` when both are empty. */
+const withFonts = (csp: McpAppCsp | undefined, fonts: readonly string[] = ["https://assets.claude.ai"]) =>
+  fonts.length ? { ...csp, resourceDomains: [...new Set([...(csp?.resourceDomains ?? []), ...fonts])] } : csp;
+export interface AdminMcpOptions extends AdminAppResourceOptions {
   readonly catalogue: {
     readonly views: Readonly<Record<string, unknown>>;
     readonly actions: Readonly<Record<string, unknown>>;
@@ -170,10 +189,16 @@ export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcp
   const contribute = (uri: string, html: McpAppResource["html"], alias?: string): NormalMcpApps => {
     // Core's normaliser, loaded on `resources/read` only: a string or a loader, a string or a page.
     const page = async (render: McpAppRender) => {
-      const loaded = await (await import("@aotter/mantle/mcp/apps")).mcpAppPageLoader(html)(render);
-      return { ...loaded, html: embed(loaded.html, render) };
+      const loaded = await (await import("@aotter/mantle/mcp/apps")).mcpAppPageLoader(html)(render),
+        csp = withFonts(loaded.csp, options.fontDomains);
+      return { html: embed(loaded.html, render), ...(csp ? { csp } : {}) };
     };
-    const domain = options.domain !== undefined ? { domain: options.domain } : {};
+    // passed through on the current build's resources; a retained page keeps what its snapshot holds
+    const passed = {
+      ...(options.domain !== undefined ? { domain: options.domain } : {}),
+      ...(options.prefersBorder !== undefined ? { prefersBorder: options.prefersBorder } : {}),
+      ...(options.meta !== undefined ? { meta: options.meta } : {}),
+    };
     const title = options.title ?? "Admin";
     return {
       resources: [
@@ -184,10 +209,10 @@ export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcp
           html: page,
           renders,
           ...(options.appOnly ? { appOnly: options.appOnly } : {}),
-          ...domain,
+          ...passed,
         },
         ...(alias !== undefined && alias !== uri
-          ? [{ uri: alias, name: "mantle-admin-admin-revision", title, html: page, ...domain }]
+          ? [{ uri: alias, name: "mantle-admin-admin-revision", title, html: page, ...passed }]
           : []),
         ...previous.filter(resource => resource.uri !== uri && resource.uri !== alias),
       ],
@@ -206,7 +231,15 @@ export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcp
       page.html,
       options.catalogue,
       page.csp ?? null,
-      { title: options.title ?? "Admin", domain: options.domain ?? null, renders, appOnly: options.appOnly ?? [] },
+      {
+        title: options.title ?? "Admin",
+        domain: options.domain ?? null,
+        renders,
+        appOnly: options.appOnly ?? [],
+        fontDomains: options.fontDomains ?? null,
+        prefersBorder: options.prefersBorder ?? null,
+        meta: options.meta ?? null,
+      },
     ]);
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity));
     const revision = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
@@ -239,7 +272,7 @@ export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcp
 /** The default Admin App URI: stable across deploys, as hosts that prefetch and cache UI templates expect (#1934). */
 const FIXED_URI = "ui://mantle-admin/admin";
 
-export interface MediaUploadCardOptions<Env = never> {
+export interface MediaUploadCardOptions<Env = never> extends AdminAppResourceOptions {
   /**
    * The `media` option the application passes generated `mcp(...)`. Its storage's `uploadOrigin` (the origin its upload
    * URLs PUT to) is the card's CSP `connectDomains`, sent on `resources/read`.
@@ -283,6 +316,8 @@ export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env
         renders: [tool],
         description: "Pick an image and upload it to the media library.",
         ...(options.domain !== undefined ? { domain: options.domain } : {}),
+        ...(options.prefersBorder !== undefined ? { prefersBorder: options.prefersBorder } : {}),
+        ...(options.meta !== undefined ? { meta: options.meta } : {}),
         html: async ({ env }) => {
           const origin = options.media(env as Env).uploadOrigin;
           if (!origin || !URL.canParse(origin) || new URL(origin).origin !== origin)
@@ -291,7 +326,10 @@ export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env
             );
           const { default: html } = await import("./upload-card.js");
           if (!html) throw new Error("mediaUploadCard: the card is built into dist by the package build.");
-          return { html: config ? html.replace("<head>", "<head>" + config) : html, csp: { connectDomains: [origin] } };
+          return {
+            html: config ? html.replace("<head>", "<head>" + config) : html,
+            csp: withFonts({ connectDomains: [origin] }, options.fontDomains)!,
+          };
         },
       },
     ],

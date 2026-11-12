@@ -295,8 +295,9 @@ serveMcpHandler ??= serveMcp(tools, { ...options, apps: {
 } });
 ```
 
-Keep custom `renders`, catalogue extensions, `domain` and `title` in the shared
-definition too. Node 22.18+ can read these generated `.ts` modules; a TypeScript
+Keep custom `renders`, catalogue extensions, `domain`, `title`, `fontDomains`,
+`prefersBorder` and `meta` in the shared definition too: each is part of the
+content-hash URI. Node 22.18+ can read these generated `.ts` modules; a TypeScript
 app using `.ts` import paths enables `allowImportingTsExtensions` with `noEmit`.
 Keep snapshots outside the directory containing `admin.tsx`: Tailwind scans that
 directory, and compiled HTML/JavaScript inside a snapshot can be mistaken for
@@ -462,6 +463,30 @@ row that overflows, and the next cursor resumes at that row, so no row is skippe
 or repeated. A single row over the budget is returned alone, with its cursor, and a
 View without an order (one page, no cursor) is returned whole; any page still over the
 budget carries a notice that hosts may truncate it. The default is 50 rows. REST and native paging keep their 500-row limit.
+
+### Fonts, border and display mode
+
+`adminMcpApps` and `mediaUploadCard` take three options for their own
+resources, sent on `resources/read`:
+
+- `fontDomains`: the origins the host serves the font files of its
+  `styles.css.fonts` from. Both Apps apply that CSS, and a font loads only from
+  an origin in the resource's `resourceDomains`. The default is
+  `["https://assets.claude.ai"]`, the origin Claude's
+  [transparent theming](https://claude.com/docs/connectors/building/mcp-apps/transparent-theming#allow-the-host-font-origin-in-your-csp)
+  page names, added to the `resourceDomains` your build declared. Admin sets
+  this default because its own code applies the host's fonts. A host also
+  applies `resourceDomains` to scripts and styles, so the default lets that
+  origin serve them to the App in every host. Pass `[]` to declare none
+  (Claude's fonts then do not load), or the origins another host documents.
+- `prefersBorder`: sent as `_meta.ui.prefersBorder`. Unset by default, so each
+  host uses its own default.
+- `meta`: host-defined keys, merged as a resource's [`meta`](#mcp-apps) is, for
+  example `meta: { ui: { preferredDisplayMode: 'fullscreen' } }`.
+
+They apply to the current build, at the fixed URI and at its content-hash URI,
+and they are part of that hash. A page kept in `previous` is served with what
+its snapshot holds.
 
 ### App tools: the model reads the open View
 

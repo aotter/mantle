@@ -157,7 +157,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
           tools: new Set([TOOL]),
           request: new Request(`${origin}/mcp/admin`),
         });
-        expect(page.csp).toEqual({ connectDomains: [origin] });
+        expect(page.csp).toEqual({ connectDomains: [origin], resourceDomains: ["https://assets.claude.ai"] });
         response.setHeader("content-type", "text/html");
         response.end(page.html);
         return;
