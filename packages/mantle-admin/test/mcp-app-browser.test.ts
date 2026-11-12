@@ -123,9 +123,11 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
         weight: style.fontWeight,
         dark: document.documentElement.classList.contains("dark"),
         inset: root.paddingBottom,
+        // a mouse: the compact size; a touch screen gets 44 px (the phone-width test)
+        compact: node.getBoundingClientRect().height < 44,
       };
     });
-    expect(look).toEqual({ radius: "3px", weight: "550", dark: true, inset: "24px" });
+    expect(look).toEqual({ radius: "3px", weight: "550", dark: true, inset: "24px", compact: true });
     // no background of its own: the conversation shows through html and body; the shell declares both schemes for the
     // first paint, and the dark theme the host sent is the root's scheme
     expect(

@@ -3,12 +3,13 @@ import { defineConfig, type Plugin } from "vite";
 
 /**
  * The card's look: the host's MCP Apps style variables where it sets them, plain system defaults otherwise. No background:
- * the conversation shows through.
+ * the conversation shows through. On a touch screen a control is at least 44 px tall (Claude's tap target).
  */
 const STYLE = `:root{color-scheme:light dark;font-family:var(--font-sans,system-ui,sans-serif);color:var(--color-text-primary,CanvasText)}
 html,body{margin:0;background:transparent}form{display:grid;gap:.75rem;padding:1rem;max-width:32rem}h1{font-size:1rem;margin:0}label{display:grid;gap:.25rem;font-size:.875rem}
 input,select,button{font:inherit}button{justify-self:start;padding:.375rem .875rem;border-radius:var(--border-radius-md,.375rem);border:1px solid var(--color-border-primary,currentColor);background:transparent;color:inherit;cursor:pointer}
-[hidden]{display:none!important}button:disabled{opacity:.5;cursor:default}progress{width:100%}[role=alert]{color:var(--color-text-danger,#b42318)}p{margin:0;font-size:.875rem;overflow-wrap:anywhere}`;
+[hidden]{display:none!important}button:disabled{opacity:.5;cursor:default}progress{width:100%}[role=alert]{color:var(--color-text-danger,#b42318)}p{margin:0;font-size:.875rem;overflow-wrap:anywhere}
+@media (pointer:coarse){button,select,input[type=file]{min-height:2.75rem}}`;
 
 /**
  * The upload card `mediaUploadCard` serves: one self-contained HTML page, written over the placeholder `tsc` emitted as

@@ -72,4 +72,11 @@
   * { border-color: var(--color-border); }
   html, body { background: transparent; }
   body { color: var(--color-foreground); font-family: var(--font-app); margin: 0; }
+  /*
+   * A finger's target: at least 44 x 44 px for a button or a select on a touch screen (Claude's design guidelines). A
+   * mouse keeps the compact size. A checkbox, switch or radio keeps its drawn size.
+   */
+  @media (pointer: coarse) {
+    button:not([role="checkbox"], [role="switch"], [role="radio"]), select { min-height: 2.75rem; min-width: 2.75rem; }
+  }
 }
