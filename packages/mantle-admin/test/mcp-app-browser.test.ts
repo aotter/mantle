@@ -249,6 +249,8 @@ it("loads the next page of a View through the host and appends its rows, and exp
     const button = app.getByRole("button", { name: "匯出 CSV" }),
       refused = app.getByText("下載未完成。"),
       unconfirmed = app.getByText("無法確認是否已下載。", { exact: false });
+    // the button is disabled only while the request is pending, and nothing is shown then either: wait for the answer
+    await expect.poll(() => button.isEnabled()).toBe(true);
     expect((await refused.count()) + (await unconfirmed.count())).toBe(0);
     await page.evaluate(() => (window as any).host.downloadAnswers.push({ isError: true }));
     await button.click();
@@ -258,7 +260,8 @@ it("loads the next page of a View through the host and appends its rows, and exp
     await unconfirmed.waitFor();
     expect(await refused.count()).toBe(0);
     await button.click();
-    await expect.poll(() => unconfirmed.count()).toBe(0);
+    await expect.poll(() => button.isEnabled()).toBe(true);
+    expect(await unconfirmed.count()).toBe(0);
     expect(await refused.count()).toBe(0);
     expect(await page.evaluate(() => (window as any).host.downloads)).toHaveLength(4);
   } finally {
