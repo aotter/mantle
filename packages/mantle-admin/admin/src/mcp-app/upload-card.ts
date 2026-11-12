@@ -229,5 +229,7 @@ connectHost(
   },
   window,
   "1",
+  // the card shows no View, so the App's view_* tools would only ever answer that none is shown
+  { appTools: false },
 );
 render();

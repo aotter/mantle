@@ -62,7 +62,13 @@ vi.stubGlobal(
     }
   },
 );
-const make = async (capabilities = {}, context = {}, initialize = true, framed = true) => {
+const make = async (
+  capabilities = {},
+  context = {},
+  initialize = true,
+  framed = true,
+  options: Parameters<typeof connectHost>[3] = {},
+) => {
   const ready = vi.fn(),
     input = vi.fn(),
     result = vi.fn(),
@@ -85,7 +91,7 @@ const make = async (capabilities = {}, context = {}, initialize = true, framed =
   } as unknown as Window;
   // a native WebView: no distinct parent
   if (!framed) (win as { parent: unknown }).parent = win;
-  const disconnect = connectHost({ ready, input, result, cancelled, context: changed, error }, win, "9.9.9");
+  const disconnect = connectHost({ ready, input, result, cancelled, context: changed, error }, win, "9.9.9", options);
   const app = sdk.apps.at(-1)!;
   app.capabilities = capabilities;
   app.context = context;
@@ -284,6 +290,16 @@ test("the App's own tools: the same definitions on every mount, answered from wh
   // answering the model's tools sends the host nothing of the App's own
   expect(first.app.callServerTool).not.toHaveBeenCalled();
   second.disconnect();
+});
+
+test("a view without app tools (the upload card) declares no tools capability and serves none", async () => {
+  const { app, host, disconnect } = await make({ serverTools: {} }, {}, true, true, { appTools: false });
+  expect(app.appCapabilities).toEqual({ availableDisplayModes: ["inline", "fullscreen"] });
+  expect(app.onlisttools).toBeUndefined();
+  expect(app.oncalltool).toBeUndefined();
+  expect(() => host.registerTools([])).toThrow("serves no app tools");
+  expect(app.sendToolListChanged).not.toHaveBeenCalled();
+  disconnect();
 });
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));

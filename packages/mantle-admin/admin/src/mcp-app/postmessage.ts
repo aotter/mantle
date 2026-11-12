@@ -121,12 +121,14 @@ export function connectHost(
   },
   win: Window = window,
   version = "0.0.0",
+  /** `appTools: false`: a view with no View to read (the upload card) declares no `tools` and answers no tool calls. */
+  { appTools = true }: { readonly appTools?: boolean } = {},
 ): () => void {
   // `tools`: the App's own view-only tools, always listed, then the tools of the page shown, if it registers any; the host
   // learns of a change (`listChanged`). A host without app tools never asks for them.
   const app = new App(
     { name: "mantle", version },
-    { availableDisplayModes: [...APP_DISPLAY_MODES], tools: { listChanged: true } },
+    { availableDisplayModes: [...APP_DISPLAY_MODES], ...(appTools ? { tools: { listChanged: true } } : {}) },
     { autoResize: false },
   );
   let closed = false,
@@ -156,18 +158,21 @@ export function connectHost(
       void app.sendToolListChanged().catch(() => {});
     });
   };
-  app.onlisttools = async () => ({ tools: tools() });
-  app.oncalltool = ({ name, arguments: args }, extra) => {
-    // looked up at call time: a tool removed with its page is not called
-    const page = closed ? undefined : [...pages].find(page => page.tools.some(tool => tool.name === name));
-    return page
-      ? callPageTool(
-          page.tools.find(tool => tool.name === name)!,
-          args ?? {},
-          AbortSignal.any([extra.mcpReq.signal, page.stop.signal]),
-        )
-      : callAppTool(() => (closed ? null : (shown?.() ?? null)), name, args ?? {}, extra.mcpReq.signal);
-  };
+  // the official App refuses these handlers without the `tools` capability
+  if (appTools) {
+    app.onlisttools = async () => ({ tools: tools() });
+    app.oncalltool = ({ name, arguments: args }, extra) => {
+      // looked up at call time: a tool removed with its page is not called
+      const page = closed ? undefined : [...pages].find(page => page.tools.some(tool => tool.name === name));
+      return page
+        ? callPageTool(
+            page.tools.find(tool => tool.name === name)!,
+            args ?? {},
+            AbortSignal.any([extra.mcpReq.signal, page.stop.signal]),
+          )
+        : callAppTool(() => (closed ? null : (shown?.() ?? null)), name, args ?? {}, extra.mcpReq.signal);
+    };
+  }
   let stopResize: (() => void) | undefined;
   let origin: string | undefined, incomingOrigin: string | undefined;
   // The official transport checks the parent WindowProxy. Keep origin continuity as a
@@ -278,6 +283,7 @@ export function connectHost(
             shown = read;
           },
           registerTools: list => {
+            if (!appTools) throw new Error("This view serves no app tools.");
             const listed = pageToolList(list, pageTools());
             const registration = { tools: [...list], listed, stop: new AbortController() };
             pages.add(registration);

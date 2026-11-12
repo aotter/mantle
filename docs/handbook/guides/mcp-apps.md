@@ -586,7 +586,8 @@ host accepted the message. The bytes never pass through MCP or the host. The car
 original file as the single variant a purpose takes
 ([ADR-0017](../../adr/0017-media-multi-variant-agent-side-optimization.md)); a
 purpose with several variant slots needs an agent that prepares them, and the
-card says so. It needs the host's `serverTools`.
+card says so. It needs the host's `serverTools`. It shows no View, so it declares
+no `tools` capability and lists none of the App's `view_*` tools.
 
 A host that serves several servers' media under one endpoint registers one card
 per server with its own `uri`, a `tool` it names itself (taking `upload_media`'s
