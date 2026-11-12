@@ -188,7 +188,8 @@ export function MantleApp(props: {
     }
   };
 
-  // the same View tool and input through the host, at the cursor of the page shown last; the rows already shown stay
+  // the same View tool and input through the host, at the cursor of the page shown last; the rows already shown stay.
+  // Only the button's start() announces the rows added: rows view_more loads were asked for by the model, not the person.
   const loadMore = async (signal?: AbortSignal) => {
     if (!tool || !call || !cursor) return null;
     const { generation } = pages;

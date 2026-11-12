@@ -57,6 +57,19 @@ test("view_state keeps within the host's text limit, marking ids it leaves out",
   expect(state.ids).toEqual(rows.slice(0, state.ids.length).map(row => row.id));
 });
 
+test("view_state answers an error, never cut JSON, when the View's input alone is over the text limit", async () => {
+  const input = { q: "x".repeat(APP_TOOL_TEXT_LIMIT * 2) };
+  const result = await answer(view({ input }), "view_state");
+  expect(result).toMatchObject({ isError: true });
+  expect(result.content[0]!.text.length).toBeLessThanOrEqual(APP_TOOL_TEXT_LIMIT);
+  // just under the limit: whole, valid JSON
+  const fits = { q: "x".repeat(APP_TOOL_TEXT_LIMIT - 200) };
+  const near = await answer(view({ input: fits }), "view_state");
+  expect(near.isError).toBeUndefined();
+  expect(near.content[0]!.text.length).toBeLessThanOrEqual(APP_TOOL_TEXT_LIMIT);
+  expect(parsed(near).input).toEqual(fits);
+});
+
 test("view_focus shows a row that is on screen, and only one", async () => {
   const shown = view();
   expect(await answer(shown, "view_focus", { id: "r1" })).toEqual({
