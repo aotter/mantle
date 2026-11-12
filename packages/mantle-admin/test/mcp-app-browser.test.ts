@@ -198,9 +198,13 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
       color: node.style.getPropertyValue("--color-text-primary"),
     }));
     expect(root).toEqual({ lang: "zh-TW", theme: "dark", color: "rgb(1, 2, 3)" });
-    // a bounded container: the App scrolls and reports a height within the bound
+    // only a maximum height (the conversation's cap): the host clips the frame, so the App is no scroll container and
+    // reports its content's height (this asserted a bounded, scrolling root before #2003)
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { maxHeight: 200 } }));
-    await expect.poll(() => page.evaluate(() => (window as any).host.sizes.at(-1).height)).toBeLessThanOrEqual(200);
+    await expect
+      .poll(() => app.locator("html").evaluate(html => [html.style.maxHeight, getComputedStyle(html).overflowY]))
+      .toEqual(["", "visible"]);
+    await expect.poll(() => page.evaluate(() => (window as any).host.sizes.at(-1).height)).toBeGreaterThan(200);
     // a fixed height bounds the reported size too
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { height: 120 } }));
     await expect.poll(() => page.evaluate(() => (window as any).host.sizes.at(-1).height)).toBe(120);
@@ -291,6 +295,151 @@ it("loads the next page of a View through the host and appends its rows, and exp
     await server.close();
   }
 }, 45_000);
+
+it("fits the conversation's height cap at phone width: nothing scrolls in the frame, and every row is reached in full screen", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  // twelve rows, more than a 600 px cap holds at phone width, and a next page
+  const CAP = 600,
+    WIDTH = 358;
+  const rows = Array.from({ length: 12 }, (_, i) => ({ id: `r${i + 1}`, version: 1, item: `Item ${i + 1}` }));
+  const open = async () => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    // a phone's inline frame: the host's width, and as tall as the cap allows
+    await page.evaluate(
+      async ([rows, cap, width]) => {
+        const { bridge } = (window as any).host;
+        Object.assign(document.querySelector("iframe")!.style, { width: `${width}px`, height: `${cap}px` });
+        await bridge.setHostContext({ containerDimensions: { width, maxHeight: cap } });
+        await bridge.sendToolInput({ arguments: { limit: 12 } });
+        await bridge.sendToolResult({
+          content: [],
+          structuredContent: { rows, nextCursor: "c2" },
+          _meta: { "net.aotter.mantle/tool": "pending" },
+        });
+      },
+      [rows, CAP, WIDTH] as const,
+    );
+    const app = page.frameLocator("iframe");
+    await app.getByText("Item 1", { exact: true }).waitFor();
+    const items = app.locator('[data-slot="app-rows"] > li');
+    // the frame is not a scroll container: its content fits the cap and is the height it reports
+    const frame = () =>
+      app.locator("html").evaluate(html => ({
+        overflow: getComputedStyle(html).overflowY,
+        maxHeight: html.style.maxHeight,
+        scrolls: html.scrollHeight > html.clientHeight,
+        height: Math.ceil(html.getBoundingClientRect().height),
+      }));
+    const reported = () => page.evaluate(() => (window as any).host.sizes.at(-1)?.height as number);
+    return { context, page, app, items, frame, reported };
+  };
+  try {
+    {
+      const { page, app, items, frame, reported } = await open();
+      const shown = await items.count();
+      expect(shown).toBeGreaterThan(1);
+      expect(shown).toBeLessThan(rows.length);
+      const more = app.getByRole("button", { name: `還有 ${rows.length - shown}+ 筆：以全螢幕開啟` });
+      await more.waitFor();
+      const inline = await frame();
+      expect(inline).toMatchObject({ overflow: "visible", maxHeight: "", scrolls: false });
+      expect(inline.height).toBeLessThanOrEqual(CAP);
+      await expect.poll(reported).toBe(inline.height);
+      // a coarse pointer: 44 px targets
+      expect(await app.locator("html").evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+      for (const button of [
+        more,
+        app.getByRole("button", { name: "Review: r1" }),
+        app.getByRole("button", { name: "全螢幕", exact: true }),
+      ])
+        expect(await button.evaluate(node => (node as HTMLElement).offsetHeight)).toBeGreaterThanOrEqual(44);
+      // the model's tools describe every row held, and say which the conversation shows
+      const tool = (name: string, args = {}) =>
+        page.evaluate(async ([name, args]) => (window as any).host.bridge.callTool({ name, arguments: args }), [
+          name,
+          args,
+        ] as const);
+      expect(JSON.parse((await tool("view_state")).content[0].text)).toMatchObject({
+        rows: 12,
+        inline: shown,
+        ids: rows.map(row => row.id),
+      });
+      expect((await tool("view_focus", { id: "r12" })).content[0].text).toMatch(
+        /^Row r12 is held but the conversation/,
+      );
+      // the documented path: the button asks for full screen from the tap; the host grants it and sends its size
+      await more.tap();
+      await expect.poll(() => page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen"]);
+      await page.evaluate(async width => {
+        const { bridge } = (window as any).host;
+        await bridge.setHostContext({
+          displayMode: "fullscreen",
+          containerDimensions: { width, height: 700 },
+        });
+      }, WIDTH);
+      await expect.poll(() => items.count()).toBe(rows.length);
+      await app.getByRole("button", { name: "載入更多" }).waitFor();
+      await expect.poll(frame).toMatchObject({ overflow: "auto", maxHeight: "700px" });
+      // the row the model asked for, past the cap, is highlighted and scrolled to in full screen
+      expect(await items.nth(11).getAttribute("aria-current")).toBe("true");
+      await expect.poll(() => items.nth(11).isVisible()).toBe(true);
+      // back in the conversation the rows fit the cap again
+      await page.evaluate(async cap => {
+        const { bridge } = (window as any).host;
+        await bridge.setHostContext({
+          displayMode: "inline",
+          containerDimensions: { width: 358, maxHeight: cap },
+        });
+      }, CAP);
+      await expect.poll(() => items.count()).toBe(shown);
+      await expect.poll(frame).toMatchObject({ overflow: "visible", maxHeight: "", scrolls: false });
+      expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
+    }
+    // a host that refuses full screen: the App falls back to scrolling inside the cap, showing every row
+    {
+      const { page, app, items, frame } = await open();
+      const shown = await items.count();
+      await page.evaluate(() => (window as any).host.modeAnswers.push("inline"));
+      await app.getByRole("button", { name: `還有 ${rows.length - shown}+ 筆：以全螢幕開啟` }).tap();
+      await app.getByRole("status").filter({ hasText: "主機維持目前的顯示方式。" }).waitFor();
+      await expect.poll(() => items.count()).toBe(rows.length);
+      await expect.poll(frame).toMatchObject({ overflow: "auto", maxHeight: `${CAP}px`, scrolls: true });
+      await items.nth(11).scrollIntoViewIfNeeded();
+      expect(await items.nth(11).isVisible()).toBe(true);
+      await app.getByRole("button", { name: "載入更多" }).waitFor();
+      // a row action asks no more once refused; its form opens in the scrolling frame
+      await app.getByRole("button", { name: "Review: r12" }).tap();
+      await app.getByRole("button", { name: "執行", exact: true }).waitFor();
+      expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen"]);
+    }
+    // a row action opened in the conversation asks for full screen from the same tap, and opens whether or not it is granted
+    for (const answer of ["fullscreen", "inline"]) {
+      const { page, app } = await open();
+      await page.evaluate(answer => (window as any).host.modeAnswers.push(answer), answer);
+      await app.getByRole("button", { name: "Review: r1" }).tap();
+      await app.getByRole("button", { name: "執行", exact: true }).waitFor();
+      expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen"]);
+      if (answer === "inline") {
+        await app.getByRole("status").filter({ hasText: "主機維持目前的顯示方式。" }).waitFor();
+        expect(await app.locator("html").evaluate(html => getComputedStyle(html).overflowY)).toBe("auto");
+      } else await app.getByRole("button", { name: "返回對話" }).waitFor();
+    }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 60_000);
 
 it("serves the model view-only app tools: read the View, load its next page through the View's own read, show a row", async () => {
   const server = await hostServer();

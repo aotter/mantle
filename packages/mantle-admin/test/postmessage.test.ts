@@ -701,17 +701,24 @@ test("applyHostContext: dark as both .dark and data-theme, only spec style varia
     "--font-text-sm-size": "13px",
     "--font-weight-medium": "550",
   });
+  // only a maximum height (the conversation): the host caps and clips the frame, so the App is not a scroll container and
+  // its content sets the height (this asserted max-height and overflow: auto before #2003)
   expect(style).toMatchObject({
     padding: "10px 1px 20px 2px",
-    maxHeight: "400px",
+    maxHeight: "",
     width: "min(320px, 100%)",
     height: "",
     maxWidth: "",
-    overflow: "auto",
+    overflow: "",
   });
+  // the App's fallback without full screen: bounded by the cap, scrolling inside it, as before
+  applyHostContext({ containerDimensions: { maxHeight: 400, width: 320 } }, doc, { scroll: true });
+  expect(style).toMatchObject({ maxHeight: "400px", height: "", overflow: "auto" });
   applyHostContext({ theme: "light" }, doc);
   expect([...classes]).toEqual([]);
-  // a fixed height is also the measured size's bound
+  // a fixed height (full screen, the side panel) bounds the root, which scrolls; it is also the measured size's bound
   applyHostContext({ containerDimensions: { height: 300 } }, doc);
   expect(style).toMatchObject({ height: "300px", maxHeight: "300px", overflow: "auto" });
+  applyHostContext({ containerDimensions: { maxHeight: 500 } }, doc);
+  expect(style).toMatchObject({ height: "", maxHeight: "", overflow: "" });
 });
