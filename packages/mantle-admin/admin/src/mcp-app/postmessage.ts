@@ -36,7 +36,7 @@ export interface HostApi {
    * without it each call answers that no View is shown.
    */
   serveTools(read: (() => ShownView | null) | undefined): void;
-  /** `AdminHost.registerTools`: a page's tools, listed after `APP_TOOLS` while registered. */
+  /** `AdminHost.registerTools`: a page's tools, listed after `APP_TOOLS` and earlier registrations while registered. */
   registerTools(tools: readonly AdminAppTool[]): () => void;
 }
 
@@ -132,8 +132,16 @@ export function connectHost(
   let closed = false,
     ready = false;
   let shown: (() => ShownView | null) | undefined;
-  let page: { readonly tools: readonly AdminAppTool[]; readonly listed: readonly AppTool[] } | null = null;
-  const tools = () => [...APP_TOOLS, ...(page?.listed ?? [])];
+  // each registration of the page shown; `stop` aborts its calls still running when it is removed
+  const pages = new Set<{
+    readonly tools: readonly AdminAppTool[];
+    readonly listed: readonly AppTool[];
+    readonly stop: AbortController;
+  }>();
+  // by name: a component that registers again (new state in its handler) lists and announces nothing new
+  const pageTools = () =>
+    [...pages].flatMap(page => page.listed).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const tools = () => [...APP_TOOLS, ...pageTools()];
   // what the host was last told: an unmount and a registration of the same tools in one task (a re-render) send nothing
   let announced = JSON.stringify(tools()),
     queued = false;
@@ -151,9 +159,13 @@ export function connectHost(
   app.onlisttools = async () => ({ tools: tools() });
   app.oncalltool = ({ name, arguments: args }, extra) => {
     // looked up at call time: a tool removed with its page is not called
-    const tool = closed ? undefined : page?.tools.find(tool => tool.name === name);
-    return tool
-      ? callPageTool(tool, args ?? {}, extra.mcpReq.signal)
+    const page = closed ? undefined : [...pages].find(page => page.tools.some(tool => tool.name === name));
+    return page
+      ? callPageTool(
+          page.tools.find(tool => tool.name === name)!,
+          args ?? {},
+          AbortSignal.any([extra.mcpReq.signal, page.stop.signal]),
+        )
       : callAppTool(() => (closed ? null : (shown?.() ?? null)), name, args ?? {}, extra.mcpReq.signal);
   };
   let stopResize: (() => void) | undefined;
@@ -260,12 +272,13 @@ export function connectHost(
             shown = read;
           },
           registerTools: list => {
-            const registration = { tools: [...list], listed: pageToolList(list) };
-            page = registration;
+            const listed = pageToolList(list, pageTools());
+            const registration = { tools: [...list], listed, stop: new AbortController() };
+            pages.add(registration);
             changed();
             return () => {
-              if (page !== registration) return;
-              page = null;
+              if (!pages.delete(registration)) return;
+              registration.stop.abort();
               changed();
             };
           },
@@ -298,6 +311,7 @@ export function connectHost(
     closed = true;
     ready = false;
     win.removeEventListener("message", guard, true);
+    for (const page of pages) page.stop.abort();
     stopResize?.();
     void app.close();
   }

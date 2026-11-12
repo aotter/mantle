@@ -23,7 +23,21 @@ function Queue() {
       return `Showing ${args["item"]}.`;
     },
   }]), [host]);
-  return <section className="bg-[#c0ffee]"><h2>queue-page</h2><p>entries:{entries}</p>{only ? <p>only:{only}</p> : null}<ul>{rows.filter(row => !only || row["item"] === only).map(row => <li key={String(row["id"])}>page:{String(row["item"])}</li>)}</ul><p>view:{status}</p>{hasMore ? <button onClick={() => { void loadMore(); }}>More queue</button> : null}</section>;
+  const shown = rows.filter(row => !only || row["item"] === only);
+  return <section className="bg-[#c0ffee]"><h2>queue-page</h2><p>entries:{entries}</p>{only ? <p>only:{only}</p> : null}<QueueCount count={shown.length} /><ul>{shown.map(row => <li key={String(row["id"])}>page:{String(row["item"])}</li>)}</ul><p>view:{status}</p>{hasMore ? <button onClick={() => { void loadMore(); }}>More queue</button> : null}</section>;
+}
+
+/** A component the page renders registers a tool of its own beside the page's: re-registered with the same definition as the count changes. */
+function QueueCount({ count }: { count: number }) {
+  const host = useHost();
+  useEffect(() => host?.registerTools([{
+    name: "queue_count",
+    description: "How many queue items the open Queue page shows.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    handler: () => `${count} shown.`,
+  }]), [host, count]);
+  return null;
 }
 
 function QueueHelp() {

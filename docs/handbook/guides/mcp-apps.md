@@ -453,27 +453,30 @@ function QueuePage() {
 
 - **What the App lists.** `tools/list` always starts with `view_state`,
   `view_more` and `view_focus`, so a host's approval of them holds; while a page
-  is shown they answer that no View's rows are on screen. The page's tools follow
-  while they are registered. Back on a View, the list is the three again.
-- **Lifecycle.** One registration at a time: `registerTools` replaces the tools
-  registered before, and the function it returns removes these (nothing once
-  they were replaced). Return it from the `useEffect`, so the tools go with the
-  page. A call is looked up when it arrives: a removed tool's handler is never
-  called, and the host gets an error result. Each change of the listed
-  definitions sends `notifications/tools/list_changed`; registering the same
-  definitions again (an effect re-run, a new handler) sends nothing. Register
-  again when what a handler reads changes, or have it read state through a ref.
+  is shown they answer that no View's rows are on screen. The page's tools follow,
+  by name, while they are registered. Back on a View, the list is the three again.
+- **Lifecycle.** Each `registerTools` call adds its tools to those registered
+  before, so the page and a component it renders can each register their own;
+  the function it returns removes only that call's tools and aborts their
+  handlers' `signal`. Return it from the `useEffect`, so the tools go with the
+  component that registered them. A call is looked up when it arrives: a
+  removed tool's handler is never called, and the host gets an error result.
+  Each change of the listed definitions sends
+  `notifications/tools/list_changed`; registering the same definitions again
+  (an effect re-run, a new handler) sends nothing. Register again when what a
+  handler reads changes, or have it read state through a ref.
 - **Names.** Letters, digits, `.`, `_` and `-`, up to 128. `view_` names belong
   to the App, so a page's tool never collides with a built-in one;
-  `registerTools` throws on such a name and on a repeated one, and the tools
-  registered before stay.
+  `registerTools` throws on such a name and on one already registered, by this
+  call or another, and the tools registered before stay.
 - **Results.** The handler returns the text the model reads. A throw is an
-  `isError` result with its message; for a mistake the model can fix, prefer a
-  normal answer that says what to change. The App does not check arguments
-  against `inputSchema`: the handler does. `signal` aborts when the host
-  cancels the call.
-- **Limits.** `registerTools` throws when, with the App's own three, the tools
-  break a limit Claude documents: at most 64 tools, 1 MiB of definitions as
+  `isError` result carrying its message, but a host may not pass the message to
+  the model; for a mistake the model can fix, return a normal answer that says
+  what to change. The App does not check arguments against `inputSchema`: the
+  handler does. `signal` aborts when the host cancels the call or the tool is
+  removed.
+- **Limits.** `registerTools` throws when, with the App's own three and those
+  already registered, the tools break a limit Claude documents: at most 64 tools, 1 MiB of definitions as
   JSON, an `inputSchema` with `type: "object"` at its root, at most 64 KiB and 32
   levels deep. A host reads 100,000 characters of result text and waits 45
   seconds, not counting the person's approval: keep answers short, and start

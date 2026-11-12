@@ -81,12 +81,13 @@ export interface AdminHost {
    */
   downloadFile(name: string, text: string, mimeType?: string): Promise<HostRequestOutcome>;
   /**
-   * The page's own app tools, which a host may let the model call while the App is open, after the App's built-in `view_*`
-   * tools. Replaces the tools registered before; the returned function removes these (nothing once replaced), so return it
-   * from the `useEffect` that registers them. Throws on a definition a host would reject: a name outside
-   * `[A-Za-z0-9._-]{1,128}`, starting `view_`, or repeated; an `inputSchema` whose root type is not `object`, over 64 KiB
-   * or nested over 32 levels; more than 64 tools or 1 MiB of definitions with the built-in ones. The host learns of each
-   * change of definitions (`notifications/tools/list_changed`); registering the same definitions again sends nothing.
+   * The page's own app tools, which a host may let the model call while the App is open, listed by name after the App's
+   * built-in `view_*` tools. The page and any component it renders may each register; the returned function
+   * removes only these tools, and aborts their calls still running, so return it from the `useEffect` that registers them.
+   * Throws, adding nothing, on a definition a host would reject: a name outside `[A-Za-z0-9._-]{1,128}`, starting `view_`,
+   * or already registered; an `inputSchema` whose root type is not `object`, over 64 KiB or nested over 32 levels; more
+   * than 64 tools or 1 MiB of definitions with the built-in ones and those registered. The host learns of each change of
+   * definitions (`notifications/tools/list_changed`); registering the same definitions again sends nothing.
    */
   registerTools(tools: readonly AdminAppTool[]): () => void;
 }
@@ -112,8 +113,10 @@ export interface AdminAppTool {
     readonly openWorldHint?: boolean;
   };
   /**
-   * Runs a call: the text the model reads. A throw is an error result with its message; `signal` aborts when the host
-   * cancels. Answer within the host's time limit (Claude: 45 seconds): start longer work and report it from another tool.
+   * Runs a call: the text the model reads. A throw is an error result carrying its message, but a host may not pass the
+   * message to the model, so for a mistake the model can fix return a normal answer that says what to change. `signal`
+   * aborts when the host cancels or the tool is removed. Answer within the host's time limit (Claude: 45 seconds): start
+   * longer work and report it from another tool.
    */
   handler(args: Readonly<Record<string, unknown>>, signal: AbortSignal): string | Promise<string>;
 }

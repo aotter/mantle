@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { APP_TOOLS } from "../admin/src/mcp-app/app-tools";
 import { applyHostContext, connectHost, type HostApi } from "../admin/src/mcp-app/postmessage";
 
 // Adapter semantics only. The browser suite exercises these calls against the real
@@ -291,7 +292,7 @@ const note = (handler = vi.fn((args: Readonly<Record<string, unknown>>) => `note
   handler,
 });
 
-test("a page's tools: listed after the App's own while registered, replaced, removed, and the host told of each change", async () => {
+test("a page's tools: listed after the App's own while registered, re-registered, removed, and the host told of each change", async () => {
   const { app, host, disconnect } = await make({ serverTools: {} });
   const extra = { mcpReq: { signal: new AbortController().signal } };
   const names = async () => (await app.onlisttools({}, extra)).tools.map((tool: { name: string }) => tool.name);
@@ -309,7 +310,7 @@ test("a page's tools: listed after the App's own while registered, replaced, rem
   await tick();
   expect(app.sendToolListChanged).toHaveBeenCalledTimes(1);
   expect(await call("page_note")).toEqual({ content: [{ type: "text", text: "noted a" }] });
-  expect(first.handler).toHaveBeenCalledWith({ text: "a" }, extra.mcpReq.signal);
+  expect(first.handler).toHaveBeenCalledWith({ text: "a" }, expect.any(AbortSignal));
   // a re-render: the effect's cleanup and a new registration of the same definitions in one task tell the host nothing
   const second = note();
   remove();
@@ -319,17 +320,21 @@ test("a page's tools: listed after the App's own while registered, replaced, rem
   await call("page_note");
   expect(first.handler).toHaveBeenCalledOnce();
   expect(second.handler).toHaveBeenCalledOnce();
-  // a replacement: the earlier registration's cleanup no longer removes anything
-  const removeThird = host.registerTools([{ ...note(), name: "page_other" }]);
+  // new definitions: the effect's cleanup and a registration of other tools
   removeSecond();
+  const removeThird = host.registerTools([{ ...note(), name: "page_other" }]);
   expect(await names()).toEqual(["view_state", "view_more", "view_focus", "page_other"]);
   expect(await call("page_note")).toMatchObject({ isError: true, content: [{ text: "Unknown tool: page_note" }] });
   await tick();
   expect(app.sendToolListChanged).toHaveBeenCalledTimes(2);
-  // unmounted: the App's own tools only, and the handler is never called again
+  // unmounted: the App's own tools only, and the handler is never called again; a second cleanup does nothing
   removeThird();
   expect(await names()).toEqual(["view_state", "view_more", "view_focus"]);
   expect(await call("page_other")).toMatchObject({ isError: true });
+  await tick();
+  expect(app.sendToolListChanged).toHaveBeenCalledTimes(3);
+  removeThird();
+  remove();
   await tick();
   expect(app.sendToolListChanged).toHaveBeenCalledTimes(3);
   // closed: nothing is called or announced
@@ -340,6 +345,83 @@ test("a page's tools: listed after the App's own while registered, replaced, rem
   expect(last.handler).not.toHaveBeenCalled();
   await tick();
   expect(app.sendToolListChanged).toHaveBeenCalledTimes(3);
+});
+
+test("a page and a component it renders each register: both listed, a name held by the other refused, each cleanup its own", async () => {
+  const { app, host, disconnect } = await make();
+  const extra = { mcpReq: { signal: new AbortController().signal } };
+  const names = async () => (await app.onlisttools({}, extra)).tools.map((tool: { name: string }) => tool.name);
+  const child = { ...note(), name: "child_tool" };
+  // React runs a child's effect before its parent's
+  const removeChild = host.registerTools([child]);
+  const removeParent = host.registerTools([note()]);
+  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "child_tool", "page_note"]);
+  expect(() => host.registerTools([{ ...note(), name: "child_tool" }])).toThrow("child_tool is registered twice");
+  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "child_tool", "page_note"]);
+  // the child unmounts while the page is shown: the page's tool stays and is still called
+  removeChild();
+  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "page_note"]);
+  expect(await app.oncalltool({ name: "child_tool", arguments: {} }, extra)).toMatchObject({ isError: true });
+  expect(child.handler).not.toHaveBeenCalled();
+  expect(await app.oncalltool({ name: "page_note", arguments: { text: "b" } }, extra)).toEqual({
+    content: [{ type: "text", text: "noted b" }],
+  });
+  // the name is free again once its registration is removed; listed by name, whichever registered first
+  await tick();
+  expect(app.sendToolListChanged).toHaveBeenCalledTimes(2);
+  let removeAgain = host.registerTools([{ ...note(), name: "child_tool" }]);
+  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "child_tool", "page_note"]);
+  await tick();
+  expect(app.sendToolListChanged).toHaveBeenCalledTimes(3);
+  // the earlier registration registers again with the same definitions (its state changed): the host is told nothing
+  removeParent();
+  const removeParentAgain = host.registerTools([note()]);
+  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "child_tool", "page_note"]);
+  removeAgain();
+  removeAgain = host.registerTools([{ ...note(), name: "child_tool" }]);
+  await tick();
+  expect(app.sendToolListChanged).toHaveBeenCalledTimes(3);
+  removeAgain();
+  removeParentAgain();
+  expect(await names()).toEqual(["view_state", "view_more", "view_focus"]);
+  disconnect();
+});
+
+test("a call still running when its tools are removed, or the App disconnects, sees its signal abort", async () => {
+  const { app, host, disconnect } = await make();
+  const cancel = new AbortController();
+  const extra = { mcpReq: { signal: cancel.signal } };
+  const signals: AbortSignal[] = [];
+  const slow = (name: string) => ({
+    ...note(),
+    name,
+    handler: (_args: Readonly<Record<string, unknown>>, signal: AbortSignal) => {
+      signals.push(signal);
+      return new Promise<string>((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new Error("stopped")));
+        setTimeout(() => resolve("done"), 50);
+      });
+    },
+  });
+  const removeFirst = host.registerTools([slow("page_first")]);
+  host.registerTools([slow("page_second")]);
+  const first = app.oncalltool({ name: "page_first", arguments: {} }, extra);
+  const second = app.oncalltool({ name: "page_second", arguments: {} }, extra);
+  removeFirst();
+  expect(signals[0]!.aborted).toBe(true);
+  expect(signals[1]!.aborted).toBe(false);
+  expect(await first).toEqual({ content: [{ type: "text", text: "stopped" }], isError: true });
+  disconnect();
+  expect(signals[1]!.aborted).toBe(true);
+  expect(await second).toMatchObject({ isError: true });
+  // the host's cancellation still reaches a handler
+  const other = await make();
+  other.host.registerTools([slow("page_third")]);
+  const third = other.app.oncalltool({ name: "page_third", arguments: {} }, extra);
+  cancel.abort();
+  expect(signals[2]!.aborted).toBe(true);
+  expect(await third).toMatchObject({ isError: true });
+  other.disconnect();
 });
 
 test("a page tool's throw or non-text answer is an error result; a lost announcement is not the page's error", async () => {
@@ -369,26 +451,49 @@ test("a page tool's throw or non-text answer is an error result; a lost announce
 test("a page's tools that a host would reject are refused when registered, and the registered ones stay", async () => {
   const { app, host, disconnect } = await make();
   const extra = { mcpReq: { signal: new AbortController().signal } };
-  host.registerTools([note()]);
+  const removeNote = host.registerTools([note()]);
   const refused = (tools: object[]) => () => host.registerTools(tools as never);
   expect(refused([{ ...note(), name: "view_state" }])).toThrow('"view_" names are the App\'s own tools');
   expect(refused([{ ...note(), name: "view_page" }])).toThrow("view_");
   expect(refused([note(), note()])).toThrow("registered twice");
   expect(refused([{ ...note(), name: "has space" }])).toThrow("letters, digits");
   expect(refused([{ ...note(), name: "x".repeat(129) }])).toThrow("letters, digits");
-  expect(refused([{ ...note(), inputSchema: { type: "string" } }])).toThrow('type "object"');
-  expect(refused([{ ...note(), inputSchema: undefined }])).toThrow('type "object"');
-  expect(refused([{ ...note(), inputSchema: { type: "object", description: "x".repeat(64 * 1024) } }])).toThrow(
-    "64 KiB",
-  );
-  let deep: Record<string, unknown> = { type: "string" };
-  for (let level = 0; level < 32; level++) deep = { type: "object", properties: { a: deep } };
-  expect(refused([{ ...note(), inputSchema: deep }])).toThrow("32 levels");
-  const many = (count: number, extra = {}) =>
-    Array.from({ length: count }, (_, i) => ({ ...note(), name: `page_${i}`, ...extra }));
-  expect(() => host.registerTools(many(61))).not.toThrow();
+  expect(refused([{ ...note(), name: "page_schema", inputSchema: { type: "string" } }])).toThrow('type "object"');
+  expect(refused([{ ...note(), name: "page_schema", inputSchema: undefined }])).toThrow('type "object"');
+  // 64 KiB of UTF-8 is accepted, one byte more is not ("é" is two bytes)
+  const sized = (size: number) => {
+    const room = size - JSON.stringify({ type: "object", description: "" }).length;
+    return { type: "object", description: "é".repeat(Math.floor(room / 2)) + "x".repeat(room % 2) };
+  };
+  expect(new TextEncoder().encode(JSON.stringify(sized(64 * 1024))).length).toBe(64 * 1024);
+  host.registerTools([{ ...note(), name: "page_sized", inputSchema: sized(64 * 1024) }])();
+  expect(refused([{ ...note(), name: "page_sized", inputSchema: sized(64 * 1024 + 1) }])).toThrow("64 KiB");
+  // each object or array is a level: { enum: [...] } is 2, and each wrapper adds 2 (the object and its properties)
+  const nested = (base: object, wrappers: number) => {
+    let deep = base;
+    for (let level = 0; level < wrappers; level++) deep = { type: "object", properties: { a: deep } };
+    return deep;
+  };
+  host.registerTools([{ ...note(), name: "page_deep", inputSchema: nested({ enum: ["a"] }, 15) }])();
+  expect(refused([{ ...note(), name: "page_deep", inputSchema: nested({ type: "string" }, 16) }])).toThrow("32 levels");
+  // a refusal adds nothing
+  expect((await app.onlisttools({}, extra)).tools).toEqual([
+    ...APP_TOOLS,
+    expect.objectContaining({ name: "page_note" }),
+  ]);
+  removeNote();
+  const many = (count: number, extra = {}, prefix = "page_") =>
+    Array.from({ length: count }, (_, i) => ({ ...note(), name: `${prefix}${i}`, ...extra }));
   expect(refused(many(62))).toThrow("at most 61");
   expect(refused(many(30, { description: "x".repeat(40 * 1024) }))).toThrow("1 MiB");
+  // the limits count every registration: 1 MiB with the tools registered before
+  const removeLarge = host.registerTools(many(20, { description: "x".repeat(40 * 1024) }, "large_"));
+  expect(refused(many(10, { description: "x".repeat(40 * 1024) }))).toThrow("1 MiB");
+  removeLarge();
+  // and 64 tools with the App's own and every registration
+  host.registerTools(many(60));
+  expect(() => host.registerTools([{ ...note(), name: "page_last" }])).not.toThrow();
+  expect(refused([{ ...note(), name: "page_extra" }])).toThrow("at most 61");
   // the 61 registered before the refusals are still listed: with the App's own, a host's 64
   expect((await app.onlisttools({}, extra)).tools).toHaveLength(64);
   disconnect();

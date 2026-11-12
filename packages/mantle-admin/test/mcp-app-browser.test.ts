@@ -707,10 +707,12 @@ it("lists a page's own app tool while the page is shown, calls it to change the 
       });
     });
     await app.getByText("page:Desks").waitFor();
-    // registered by the page's effect, once (React's development double effect included), and announced once
-    await expect.poll(names).toEqual(["view_state", "view_more", "view_focus", "queue_only"]);
+    // registered by the page's effect and by a component it renders (whose effect runs first), once each (React's
+    // development double effect included), and announced once; the component's re-registration as rows arrive sends nothing
+    await expect.poll(names).toEqual(["view_state", "view_more", "view_focus", "queue_count", "queue_only"]);
     await expect.poll(changes).toBe(1);
-    const listed = await page.evaluate(async () => (await (window as any).host.bridge.listTools({})).tools[3]);
+    expect(await tool("queue_count")).toEqual({ content: [{ type: "text", text: "2 shown." }] });
+    const listed = await page.evaluate(async () => (await (window as any).host.bridge.listTools({})).tools[4]);
     expect(listed).toEqual({
       name: "queue_only",
       title: "Show one item",
@@ -729,11 +731,14 @@ it("lists a page's own app tool while the page is shown, calls it to change the 
     });
     await app.getByText("only:Desks").waitFor();
     expect(await app.getByText("page:Laptops").count()).toBe(0);
+    // the component's tool reads what the page shows now, and the list did not change
+    expect(await tool("queue_count")).toEqual({ content: [{ type: "text", text: "1 shown." }] });
+    expect(await changes()).toBe(1);
     // the handler checks its arguments; its throw is an error result
     expect(await tool("queue_only", {})).toEqual({ content: [{ type: "text", text: "Name an item." }], isError: true });
     // the built-in tools stay listed and answer that no View's rows are shown
     expect(await tool("view_state")).toMatchObject({ isError: true });
-    // a View's result replaces the page: its tool is gone and the host is told
+    // a View's result replaces the page: its tools are gone and the host is told once
     await page.evaluate(async () => {
       await (window as any).host.bridge.sendToolResult({
         content: [],
@@ -748,6 +753,7 @@ it("lists a page's own app tool while the page is shown, calls it to change the 
       content: [{ type: "text", text: "Unknown tool: queue_only" }],
       isError: true,
     });
+    expect(await tool("queue_count")).toMatchObject({ isError: true });
     expect(JSON.parse((await tool("view_state")).content[0].text)).toMatchObject({ tool: "pending", ids: ["r1"] });
     // the page's tool reached no server tool: the only calls are its `useView` read
     expect(await page.evaluate(() => (window as any).host.calls)).toEqual([
