@@ -32,6 +32,8 @@ import { d1Shim } from "./apps/d1-shim.js";
 import { FORGED, ISSUER, JWT_BEARER, managedGrantTestExtension, managedTokenRequest } from "./apps/managed-grant.js";
 
 const AUDIENCE = "https://api.example.test/mcp";
+/** A second resource of the same authorization server, configured with managed grants. */
+const OTHER_AUDIENCE = "https://api.example.test/admin/mcp";
 const servers: { stop(force?: boolean): void }[] = [];
 afterAll(() => {
   for (const server of servers) server.stop(true);
@@ -155,7 +157,7 @@ async function makeApp(
         consentPage: "/oauth/consent",
         extensions: [oauthGrantExtension, ...(options.extensionGrants ? [managedGrantTestExtension] : [])],
         scopes: ["mcp", "openid", "offline_access"],
-        resources: [AUDIENCE],
+        resources: options.managedGrants ? [AUDIENCE, OTHER_AUDIENCE] : [AUDIENCE],
         enforcePerClientResources: false,
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
@@ -1802,15 +1804,18 @@ describe("managed grants (opt-in extension-grant binding)", () => {
     });
     expect(registered.status, await registered.clone().text()).toBe(201);
     const clientId = ((await registered.json()) as { client_id: string }).client_id;
-    const issue = async (fields: { scope?: string; grantType?: string; forge?: string } = {}) => {
-      const response = await managedTokenRequest(app.baseURL, {
+    type Fields = { scope?: string; grantType?: string; forge?: string; resource?: string };
+    const request = (fields: Fields = {}) =>
+      managedTokenRequest(app.baseURL, {
         clientId,
         email,
-        resource: AUDIENCE,
+        resource: fields.resource ?? AUDIENCE,
         scope: fields.scope ?? "mcp",
         grantType: fields.grantType,
         forge: fields.forge,
       });
+    const issue = async (fields: Fields = {}) => {
+      const response = await request(fields);
       const body = (await response.json()) as { access_token: string; refresh_token?: string; scope: string };
       expect(response.status, JSON.stringify(body)).toBe(200);
       return body;
@@ -1822,7 +1827,7 @@ describe("managed grants (opt-in extension-grant binding)", () => {
         string,
         unknown
       >[];
-    return { app, context, email, userId: user.id, clientId, issue, use, records };
+    return { app, context, email, userId: user.id, clientId, request, issue, use, records };
   }
 
   test("a managed-grant token passes with no browser session and no refresh token, even when offline_access is asked", async () => {
@@ -1927,6 +1932,60 @@ describe("managed grants (opt-in extension-grant binding)", () => {
     // Unbanning does not restore the grant.
     await refused(use(token));
     expect(records().every(record => record.revoked !== null)).toBe(true);
+  });
+
+  test("a client holds managed grants for several resources at once; renewing one leaves the other alone", async () => {
+    const { app, userId, issue, use, records } = await managedApp();
+    const first = await issue();
+    const other = await issue({ resource: OTHER_AUDIENCE, scope: "mcp openid" });
+    expect(await use(first.access_token)).toMatchObject({ subject: userId });
+    expect(await use(other.access_token, OTHER_AUDIENCE)).toMatchObject({ subject: userId });
+    await expect(use(other.access_token)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    // Renewing the first resource with fewer scopes changes only its own record.
+    await issue();
+    expect(await use(other.access_token, OTHER_AUDIENCE)).toMatchObject({ subject: userId });
+    expect(records().map(record => [record.resources, record.revoked])).toEqual([
+      [JSON.stringify([AUDIENCE]), null],
+      [JSON.stringify([OTHER_AUDIENCE]), null],
+    ]);
+    // Connected apps shows the client once, with the scopes of both grants; disconnecting ends both.
+    const consents = oauthConsents(app.auth as never);
+    const listed = await consents.listOAuthConsents(userId);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]!.scopes.toSorted()).toEqual(["mcp", "openid"]);
+    expect(await consents.revokeOAuthConsent(userId, listed[0]!.id)).toBe(true);
+    await expect(use(first.access_token)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    await expect(use(other.access_token, OTHER_AUDIENCE)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+  });
+
+  test("a token request Better Auth refuses changes no grant and leaves earlier tokens valid", async () => {
+    const { userId, request, issue, use, records } = await managedApp();
+    const refusedFirst = await request({ resource: "https://evil.test/mcp" });
+    expect(refusedFirst.status).toBe(400);
+    expect(((await refusedFirst.json()) as { error: string }).error).toBe("invalid_target");
+    expect(records()).toEqual([]);
+    const { access_token: token } = await issue();
+    const before = records();
+    const refusedRenewal = await request({ resource: "https://evil.test/mcp" });
+    expect(refusedRenewal.status).toBe(400);
+    expect(records()).toEqual(before);
+    expect(await use(token)).toMatchObject({ subject: userId });
+  });
+
+  test("a banned user gets no managed grant, and none asserted during a ban passes after the unban", async () => {
+    const { app, userId, request, issue, use, records } = await managedApp();
+    const root = await app.signIn("root@example.test");
+    app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [root.userId]);
+    expect((await app.post("/admin/ban-user", { userId }, { cookie: root.cookie })).status).toBe(200);
+    const during = await request();
+    expect(during.status).toBe(400);
+    expect(((await during.json()) as { error: string }).error).toBe("invalid_grant");
+    expect(records()).toEqual([]);
+    expect((await app.post("/admin/unban-user", { userId }, { cookie: root.cookie })).status).toBe(200);
+    expect(records()).toEqual([]);
+    // A lapsed ban no longer refuses; a fresh assertion after the unban is a new grant.
+    app.sqlite.run("UPDATE user SET banned = 1, banExpires = ? WHERE id = ?", [Date.now() - 1000, userId]);
+    expect(await use((await issue()).access_token)).toMatchObject({ subject: userId });
   });
 
   test("an unverified-email proof ends the pre-registrant's managed grants", async () => {

@@ -140,7 +140,7 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
 );
 
 (url ? test : test.skip)(
-  "native PostgreSQL managed grant: issued without session or refresh token, resolved, listed and disconnected",
+  "native PostgreSQL managed grant: issued without session or refresh token, per resource, resolved, listed and disconnected",
   async () => {
     const schema = `oauth_${crypto.randomUUID().replaceAll("-", "")}`;
     const admin = new SQL(url!);
@@ -151,7 +151,8 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
     const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: request => handle(request) });
     try {
       const origin = `http://127.0.0.1:${server.port}`,
-        resource = `${origin}/mcp`;
+        resource = `${origin}/mcp`,
+        other = `${origin}/admin/mcp`;
       const options: import("@better-auth/core").BetterAuthOptions = {
         baseURL: origin,
         secret: "oauth-postgres-secret-oauth-postgres-secret",
@@ -164,7 +165,7 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
             consentPage: "/oauth/consent",
             extensions: [oauthGrantExtension, managedGrantTestExtension],
             scopes: ["mcp", "offline_access"],
-            resources: [resource],
+            resources: [resource, other],
             enforcePerClientResources: false,
             allowDynamicClientRegistration: true,
             allowUnauthenticatedClientRegistration: true,
@@ -207,15 +208,30 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
       expect(await sql`SELECT count(*)::int AS n FROM "session"`).toEqual([{ n: 0 }]);
       expect(await sql`SELECT count(*)::int AS n FROM "oauthRefreshToken"`).toEqual([{ n: 0 }]);
       const loader = authLoader(async () => auth as unknown as AuthInstance);
-      const use = () =>
-        resolveCaller(
-          new Request(`${origin}/mcp`, { headers: { authorization: `Bearer ${token.access_token}` } }),
-          loader,
-          {
-            audience: resource,
-          },
-        );
+      const use = (accessToken = token.access_token, audience = resource) =>
+        resolveCaller(new Request(`${origin}/mcp`, { headers: { authorization: `Bearer ${accessToken}` } }), loader, {
+          audience,
+        });
       expect(await use()).toMatchObject({ subject: user.id, credential: "oauth", clientId });
+      // A grant for the second resource is its own record; a refused request changes neither.
+      const issued = await managedTokenRequest(`${origin}/api/auth`, {
+        clientId,
+        email: "pg@example.test",
+        scope: "mcp",
+        resource: other,
+      });
+      const second = (await issued.json()) as { access_token: string };
+      expect(issued.status, JSON.stringify(second)).toBe(200);
+      const refused = await managedTokenRequest(`${origin}/api/auth`, {
+        clientId,
+        email: "pg@example.test",
+        scope: "mcp",
+        resource: "https://evil.test/mcp",
+      });
+      expect(refused.status).toBe(400);
+      expect(await sql`SELECT count(*)::int AS n FROM "oauthManagedGrant" WHERE "revoked" IS NULL`).toEqual([{ n: 2 }]);
+      expect(await use()).toMatchObject({ subject: user.id });
+      expect(await use(second.access_token, other)).toMatchObject({ subject: user.id });
       await sql`UPDATE "oauthClient" SET disabled = true`;
       await expect(use()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
       await sql`UPDATE "oauthClient" SET disabled = false`;
@@ -225,6 +241,7 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
       expect(listed).toMatchObject({ clientId, clientName: "PG assistant", scopes: ["mcp"] });
       expect(await consents.revokeOAuthConsent(user.id, listed!.id)).toBe(true);
       await expect(use()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+      await expect(use(second.access_token, other)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
       expect(await consents.listOAuthConsents(user.id)).toEqual([]);
     } finally {
       server.stop(true);

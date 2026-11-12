@@ -2,7 +2,7 @@
 import type { AuthContext, BetterAuthOptions, BetterAuthPlugin } from "@better-auth/core";
 import { createAuthMiddleware } from "@better-auth/core/api";
 import type { oauthProvider } from "@better-auth/oauth-provider";
-import type { AuthInstance } from "./caller.js";
+import { isBanned, type AuthInstance } from "./caller.js";
 import { nativeAuthRead } from "./adapter.js";
 import { ContractError } from "../kernel/contracts.js";
 
@@ -170,10 +170,12 @@ export const oauthGrantExtension: Extension = {
 
 /**
  * For an adopter's own extension grant handler (for example a jwt-bearer / ID-JAG grant), after the handler has validated the
- * assertion, authenticated the client and matched the user: records or renews the managed grant of that user and client, and
- * issues its tokens without a consent screen, a browser session or a refresh token (`offline_access` is dropped, so Better
- * Auth issues none; a new assertion is the renewal). Requires `oauthGrantRevocation({ managedGrants: true })` and resources,
- * so the access token is a JWT for those audiences. Core validates no assertion and trusts no issuer: `issuer` is kept for audit.
+ * assertion, authenticated the client and matched the user: records or renews the managed grant of that user, client and
+ * resource set, and issues its tokens without a consent screen, a browser session or a refresh token (`offline_access` is
+ * dropped, so Better Auth issues none; a new assertion is the renewal). A banned user is refused. The record is written only
+ * once Better Auth has issued the tokens, so a refused request changes no grant. Requires
+ * `oauthGrantRevocation({ managedGrants: true })` and resources, so the access token is a JWT for those audiences. Core
+ * validates no assertion and trusts no issuer: `issuer` is kept for audit.
  */
 export async function issueManagedGrant(
   { ctx, provider, grantType }: GrantInput,
@@ -191,28 +193,53 @@ export async function issueManagedGrant(
       "auth:oauth",
     );
   const { client, user, resources, issuer } = grant;
+  const db = ctx.context.adapter;
+  // A ban ends grants only when it happens; one asserted during the ban would otherwise pass again after an unban.
+  const stored = await ctx.context.internalAdapter.findUserById(user.id);
+  if (!stored || isBanned(stored))
+    throw ctx.error("BAD_REQUEST", {
+      error: "invalid_grant",
+      error_description: "The user may not be granted access.",
+    });
   const scopes = grant.scopes.filter(scope => scope !== "offline_access");
-  const db = ctx.context.adapter,
-    now = new Date();
+  const now = new Date();
   const data = { scopes, resources, grantType, issuer, updatedAt: now };
-  // One live record per user and client, renewed by each assertion. ponytail: two concurrent first assertions may leave two
-  // live records; both are valid and both end together, as endGrants ends a user's records per client.
-  const record =
-    (await db.update<{ id: string }>({
-      model: MANAGED,
-      where: [pair("userId", user.id), pair("clientId", client.clientId), { field: "revoked", value: null }],
-      update: data,
-    })) ??
-    (await db.create<{ id: string }>({
-      model: MANAGED,
-      data: { ...data, userId: user.id, clientId: client.clientId, createdAt: now },
-    }));
-  minting.set(ctx, record.id);
+  // One live record per user, client and resource set: a client's grants for two resources never replace each other.
+  const key = (list: string[]) => JSON.stringify([...new Set(list)].sort());
+  const live = await db.findMany<{ id: string; resources: string[] }>({
+    model: MANAGED,
+    where: [pair("userId", user.id), pair("clientId", client.clientId), { field: "revoked", value: null }],
+  });
+  const current = live.find(record => key(array(record.resources) ?? []) === key(resources));
+  // A first grant needs its id for the token before issuance, so it starts revoked and goes live only once tokens are issued.
+  // ponytail: a ban or disconnect between the check above and the write below can miss this record; the window is one request.
+  const id =
+    current?.id ??
+    (
+      await db.create<{ id: string }>({
+        model: MANAGED,
+        data: { ...data, userId: user.id, clientId: client.clientId, createdAt: now, revoked: now },
+      })
+    ).id;
+  minting.set(ctx, id);
+  let tokens: Awaited<ReturnType<typeof provider.issueTokens>>;
   try {
-    return await provider.issueTokens({ client, user, scopes, resources });
+    tokens = await provider.issueTokens({ client, user, scopes, resources });
+  } catch (error) {
+    if (!current) await db.delete({ model: MANAGED, where: [pair("id", id)] });
+    throw error;
   } finally {
     minting.delete(ctx);
   }
+  const saved = await db.update({
+    model: MANAGED,
+    where: current ? [pair("id", id), { field: "revoked", value: null }] : [pair("id", id)],
+    update: current ? data : { revoked: null },
+  });
+  // Disconnected while this request was issuing: the tokens name an ended grant, so do not hand them out.
+  if (!saved)
+    throw ctx.error("BAD_REQUEST", { error: "invalid_grant", error_description: "The grant ended during issuance." });
+  return tokens;
 }
 
 export const OAUTH_GRANT_REVOCATION = "mantle-oauth-grant-revocation";
@@ -505,7 +532,8 @@ export function oauthConsents(auth: AuthInstance & { handler(request: Request): 
         [userId],
       );
       if (managedGrants(auth.options)) {
-        // A managed grant is listed once per client, under a prefixed id; a client with a consent is already listed.
+        // Managed grants are listed once per client (one row for all its resources, with their scopes), under a prefixed id; a
+        // client with a consent is already listed.
         const g = (field: string) => `g.${column(MANAGED, field)}`;
         const managed = await exec(
           `SELECT ${MANAGED_ID} || ${g("id")} AS id, ${g("clientId")} AS "clientId", COALESCE(${client("name")}, ${g("clientId")}) AS "clientName", ${g("scopes")} AS scopes
@@ -513,7 +541,13 @@ export function oauthConsents(auth: AuthInstance & { handler(request: Request): 
           WHERE ${g("userId")} = ${param(1)} AND ${g("revoked")} IS NULL ORDER BY ${g("updatedAt")} DESC, ${g("id")} ASC`,
           [userId],
         );
-        for (const row of managed.rows) if (!rows.some(x => x.clientId === row.clientId)) rows.push(row);
+        const consented = new Set(rows.map(row => row.clientId));
+        for (const row of managed.rows) {
+          if (consented.has(row.clientId)) continue;
+          const listed = rows.find(x => x.clientId === row.clientId);
+          if (!listed) rows.push(row);
+          else listed.scopes = [...new Set([...(array(listed.scopes) ?? []), ...(array(row.scopes) ?? [])])];
+        }
       }
       return rows.map(row => ({
         id: row.id as string,
