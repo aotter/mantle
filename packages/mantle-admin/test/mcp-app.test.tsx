@@ -513,4 +513,110 @@ describe("adminMcpApps", () => {
     });
     expect(await embedded(["review_requisition"])).toEqual({ views: {}, actions: { review_requisition: action } });
   });
+
+  // What `resources/read` sends as the content item's `_meta`, through the real handler (#2003).
+  const readMeta = async (apps: Parameters<typeof import("@aotter/mantle/mcp").mcp>[1]["apps"], uri: string) => {
+    const { mcp } = await import("@aotter/mantle/mcp");
+    const api = mcp(
+      ["pending", "upload_media"].map(name => ({
+        name,
+        surface: "public" as const,
+        path: name,
+        description: name,
+        inputSchema: { type: "object" as const },
+        validate: () => ({}),
+        page: async () => ({ rows: [] }),
+      })),
+      { db: () => null, caller: () => ({ kind: "anonymous" as const }), apps },
+    );
+    const response = await api(
+      new Request("https://app.test/mcp/", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "resources/read", params: { uri } }),
+      }),
+      {},
+    );
+    const text = await response!.text();
+    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result.contents[0]
+      ._meta;
+  };
+
+  it("declares the host font origin in resourceDomains by default, beside the CSP the build declared", async () => {
+    const declared =
+      '<head><meta name="mantle-mcp-csp" content=\'{"resourceDomains":["https://cdn.example.test"],"connectDomains":["https://api.example.test"]}\'></head>';
+    const read = (options: object, html = "<head></head>") =>
+      readMeta(
+        { public: adminMcpApps({ catalogue: catalog, renders: ["pending"], html, ...options }) },
+        "ui://mantle-admin/admin",
+      );
+    expect(await read({})).toEqual({ ui: { csp: { resourceDomains: ["https://assets.claude.ai"] } } });
+    expect(await read({}, declared)).toEqual({
+      ui: {
+        csp: {
+          resourceDomains: ["https://cdn.example.test", "https://assets.claude.ai"],
+          connectDomains: ["https://api.example.test"],
+        },
+      },
+    });
+    expect(await read({ fontDomains: [] })).toBeUndefined();
+    expect(await read({ fontDomains: ["https://fonts.host.example"] })).toEqual({
+      ui: { csp: { resourceDomains: ["https://fonts.host.example"] } },
+    });
+  });
+
+  it("passes prefersBorder and meta through to resources/read, at the fixed URI and at the build's hash", async () => {
+    const source = adminMcpApps({
+      catalogue: catalog,
+      renders: ["pending"],
+      html: "<head></head>",
+      prefersBorder: false,
+      meta: { ui: { preferredDisplayMode: "fullscreen" }, "example/key": 1 },
+    });
+    const { resources } =
+      typeof source === "function" ? await source({ env: {}, request: new Request("https://app.test/mcp") }) : source;
+    const expected = {
+      "example/key": 1,
+      ui: {
+        preferredDisplayMode: "fullscreen",
+        csp: { resourceDomains: ["https://assets.claude.ai"] },
+        prefersBorder: false,
+      },
+    };
+    for (const { uri } of resources) expect(await readMeta({ public: source }, uri)).toEqual(expected);
+    expect(resources).toHaveLength(2);
+    // the options are part of the build's identity
+    const plain = adminMcpApps({ catalogue: catalog, renders: ["pending"], html: "<head></head>" });
+    const plainUris = (
+      typeof plain === "function" ? await plain({ env: {}, request: new Request("https://app.test/mcp") }) : plain
+    ).resources.map(r => r.uri);
+    expect(plainUris[1]).not.toBe(resources[1]!.uri);
+  });
+
+  it("the upload card sends its storage origin, the host font origin, prefersBorder and meta on resources/read", async () => {
+    const { mediaUploadCard } = await import("../dist/server/mcp.js");
+    const media = () => ({ uploadOrigin: "https://bucket.example.test" });
+    expect(await readMeta({ public: mediaUploadCard({ media }) }, "ui://mantle-admin/upload")).toEqual({
+      ui: { csp: { connectDomains: ["https://bucket.example.test"], resourceDomains: ["https://assets.claude.ai"] } },
+    });
+    expect(
+      await readMeta(
+        {
+          public: mediaUploadCard({
+            media,
+            fontDomains: [],
+            prefersBorder: true,
+            meta: { ui: { preferredDisplayMode: "fullscreen" } },
+          }),
+        },
+        "ui://mantle-admin/upload",
+      ),
+    ).toEqual({
+      ui: {
+        preferredDisplayMode: "fullscreen",
+        csp: { connectDomains: ["https://bucket.example.test"] },
+        prefersBorder: true,
+      },
+    });
+  });
 });
