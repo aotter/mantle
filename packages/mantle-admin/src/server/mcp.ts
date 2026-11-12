@@ -11,7 +11,7 @@ import type {
 } from "@aotter/mantle/mcp";
 import type { MediaStorage } from "@aotter/mantle/site";
 /** An archived resources/read page, including its embedded catalogue; application-owned, never caller rows or credentials. */
-export interface AdminMcpSnapshot extends McpAppPage {
+export interface AdminMcpSnapshot extends McpAppPage, Pick<McpAppResource, "prefersBorder" | "meta"> {
   readonly uri: string;
   readonly domain?: string;
   readonly title?: string;
@@ -20,14 +20,20 @@ export interface AdminMcpSnapshot extends McpAppPage {
 export interface AdminAppResourceOptions extends Pick<McpAppResource, "prefersBorder" | "meta"> {
   /**
    * Origins the host serves the font files of its `styles.css.fonts` from, which both Apps apply: added to the
-   * resource's `resourceDomains`, which a host also applies to scripts and styles. By default
-   * `["https://assets.claude.ai"]`, the origin Claude documents for its fonts; `[]` declares none.
+   * resource's `resourceDomains`, which a host also applies to scripts and styles. None by default; on Claude,
+   * `["https://assets.claude.ai"]`, the origin it documents for its fonts.
    */
   readonly fontDomains?: readonly string[];
 }
 /** `csp` with the host font origins in `resourceDomains`; `undefined` when both are empty. */
-const withFonts = (csp: McpAppCsp | undefined, fonts: readonly string[] = ["https://assets.claude.ai"]) =>
+const withFonts = (csp: McpAppCsp | undefined, fonts: readonly string[] = []) =>
   fonts.length ? { ...csp, resourceDomains: [...new Set([...(csp?.resourceDomains ?? []), ...fonts])] } : csp;
+/** The options both Apps, and a retained page, pass through to their resource unchanged. */
+const passThrough = (o: Pick<McpAppResource, "domain" | "prefersBorder" | "meta">) => ({
+  ...(o.domain !== undefined ? { domain: o.domain } : {}),
+  ...(o.prefersBorder !== undefined ? { prefersBorder: o.prefersBorder } : {}),
+  ...(o.meta !== undefined ? { meta: o.meta } : {}),
+});
 export interface AdminMcpOptions extends AdminAppResourceOptions {
   readonly catalogue: {
     readonly views: Readonly<Record<string, unknown>>;
@@ -178,7 +184,7 @@ export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcp
       uri: snapshot.uri,
       name: `mantle-admin-previous-${index}`,
       title: snapshot.title ?? "Admin",
-      ...(snapshot.domain !== undefined ? { domain: snapshot.domain } : {}),
+      ...passThrough(snapshot),
       html: async render => ({
         html: embed(base, render, archivedCatalogue),
         ...(snapshot.csp ? { csp: snapshot.csp } : {}),
@@ -193,12 +199,8 @@ export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcp
         csp = withFonts(loaded.csp, options.fontDomains);
       return { html: embed(loaded.html, render), ...(csp ? { csp } : {}) };
     };
-    // passed through on the current build's resources; a retained page keeps what its snapshot holds
-    const passed = {
-      ...(options.domain !== undefined ? { domain: options.domain } : {}),
-      ...(options.prefersBorder !== undefined ? { prefersBorder: options.prefersBorder } : {}),
-      ...(options.meta !== undefined ? { meta: options.meta } : {}),
-    };
+    // on the current build's resources; a retained page keeps what its snapshot holds
+    const passed = passThrough(options);
     const title = options.title ?? "Admin";
     return {
       resources: [
@@ -315,9 +317,7 @@ export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env
         title: options.title ?? "Upload media",
         renders: [tool],
         description: "Pick an image and upload it to the media library.",
-        ...(options.domain !== undefined ? { domain: options.domain } : {}),
-        ...(options.prefersBorder !== undefined ? { prefersBorder: options.prefersBorder } : {}),
-        ...(options.meta !== undefined ? { meta: options.meta } : {}),
+        ...passThrough(options),
         html: async ({ env }) => {
           const origin = options.media(env as Env).uploadOrigin;
           if (!origin || !URL.canParse(origin) || new URL(origin).origin !== origin)

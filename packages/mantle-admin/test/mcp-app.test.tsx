@@ -542,7 +542,7 @@ describe("adminMcpApps", () => {
       ._meta;
   };
 
-  it("declares the host font origin in resourceDomains by default, beside the CSP the build declared", async () => {
+  it("declares no font origin by default, and adds the fontDomains given beside the CSP the build declared", async () => {
     const declared =
       '<head><meta name="mantle-mcp-csp" content=\'{"resourceDomains":["https://cdn.example.test"],"connectDomains":["https://api.example.test"]}\'></head>';
     const read = (options: object, html = "<head></head>") =>
@@ -550,8 +550,13 @@ describe("adminMcpApps", () => {
         { public: adminMcpApps({ catalogue: catalog, renders: ["pending"], html, ...options }) },
         "ui://mantle-admin/admin",
       );
-    expect(await read({})).toEqual({ ui: { csp: { resourceDomains: ["https://assets.claude.ai"] } } });
+    expect(await read({})).toBeUndefined();
     expect(await read({}, declared)).toEqual({
+      ui: {
+        csp: { resourceDomains: ["https://cdn.example.test"], connectDomains: ["https://api.example.test"] },
+      },
+    });
+    expect(await read({ fontDomains: ["https://assets.claude.ai"] }, declared)).toEqual({
       ui: {
         csp: {
           resourceDomains: ["https://cdn.example.test", "https://assets.claude.ai"],
@@ -559,7 +564,6 @@ describe("adminMcpApps", () => {
         },
       },
     });
-    expect(await read({ fontDomains: [] })).toBeUndefined();
     expect(await read({ fontDomains: ["https://fonts.host.example"] })).toEqual({
       ui: { csp: { resourceDomains: ["https://fonts.host.example"] } },
     });
@@ -579,7 +583,6 @@ describe("adminMcpApps", () => {
       "example/key": 1,
       ui: {
         preferredDisplayMode: "fullscreen",
-        csp: { resourceDomains: ["https://assets.claude.ai"] },
         prefersBorder: false,
       },
     };
@@ -593,18 +596,39 @@ describe("adminMcpApps", () => {
     expect(plainUris[1]).not.toBe(resources[1]!.uri);
   });
 
-  it("the upload card sends its storage origin, the host font origin, prefersBorder and meta on resources/read", async () => {
+  it("a retained page keeps the prefersBorder and meta its snapshot holds, not the current build's", async () => {
+    const source = adminMcpApps({
+      catalogue: catalog,
+      renders: ["pending"],
+      html: "<head></head>",
+      prefersBorder: true,
+      meta: { ui: { preferredDisplayMode: "fullscreen" } },
+      previous: [
+        {
+          uri: "ui://mantle-admin/admin/old",
+          html: '<head><script type="application/json" id="mantle-catalog">{"views":{},"actions":{}}</script></head>',
+          prefersBorder: false,
+          meta: { ui: { preferredDisplayMode: "inline" } },
+        },
+      ],
+    });
+    expect(await readMeta({ public: source }, "ui://mantle-admin/admin/old")).toEqual({
+      ui: { preferredDisplayMode: "inline", prefersBorder: false },
+    });
+  });
+
+  it("the upload card sends its storage origin, and the fontDomains, prefersBorder and meta given, on resources/read", async () => {
     const { mediaUploadCard } = await import("../dist/server/mcp.js");
     const media = () => ({ uploadOrigin: "https://bucket.example.test" });
     expect(await readMeta({ public: mediaUploadCard({ media }) }, "ui://mantle-admin/upload")).toEqual({
-      ui: { csp: { connectDomains: ["https://bucket.example.test"], resourceDomains: ["https://assets.claude.ai"] } },
+      ui: { csp: { connectDomains: ["https://bucket.example.test"] } },
     });
     expect(
       await readMeta(
         {
           public: mediaUploadCard({
             media,
-            fontDomains: [],
+            fontDomains: ["https://assets.claude.ai"],
             prefersBorder: true,
             meta: { ui: { preferredDisplayMode: "fullscreen" } },
           }),
@@ -614,7 +638,7 @@ describe("adminMcpApps", () => {
     ).toEqual({
       ui: {
         preferredDisplayMode: "fullscreen",
-        csp: { connectDomains: ["https://bucket.example.test"] },
+        csp: { connectDomains: ["https://bucket.example.test"], resourceDomains: ["https://assets.claude.ai"] },
         prefersBorder: true,
       },
     });

@@ -342,7 +342,9 @@ const tools = new Set([...Object.keys(appDefinition.catalogue.views),
   ...Object.keys(appDefinition.catalogue.actions)]);
 const page = await resource.html({ ...context, tools });
 const snapshot = { uri: resource.uri, title: resource.title, ...page,
-  ...(resource.domain === undefined ? {} : { domain: resource.domain }) };
+  ...(resource.domain === undefined ? {} : { domain: resource.domain }),
+  ...(resource.prefersBorder === undefined ? {} : { prefersBorder: resource.prefersBorder }),
+  ...(resource.meta === undefined ? {} : { meta: resource.meta }) };
 // This application's policy: retain the last two deployed pages for future builds.
 writeFileSync(path, JSON.stringify([...previous.filter(p => p.uri !== snapshot.uri), snapshot].slice(-2)) + '\n');
 ```
@@ -517,22 +519,23 @@ resources, sent on `resources/read`:
 
 - `fontDomains`: the origins the host serves the font files of its
   `styles.css.fonts` from. Both Apps apply that CSS, and a font loads only from
-  an origin in the resource's `resourceDomains`. The default is
-  `["https://assets.claude.ai"]`, the origin Claude's
+  an origin in the resource's `resourceDomains`. None by default, so the App
+  falls back to its own fonts. On Claude, set
+  `fontDomains: ['https://assets.claude.ai']`, the origin Claude's
   [transparent theming](https://claude.com/docs/connectors/building/mcp-apps/transparent-theming#allow-the-host-font-origin-in-your-csp)
-  page names, added to the `resourceDomains` your build declared. Admin sets
-  this default because its own code applies the host's fonts. A host also
-  applies `resourceDomains` to scripts and styles, so the default lets that
-  origin serve them to the App in every host. Pass `[]` to declare none
-  (Claude's fonts then do not load), or the origins another host documents.
+  page names; it is added to the `resourceDomains` your build declared. It is
+  not a default because a host also applies `resourceDomains` to scripts and
+  styles: a default would let one host's origin serve them to the App in every
+  host, for every application. Declare only the origins of the hosts you serve.
 - `prefersBorder`: sent as `_meta.ui.prefersBorder`. Unset by default, so each
   host uses its own default.
 - `meta`: host-defined keys, merged as a resource's [`meta`](#mcp-apps) is, for
   example `meta: { ui: { preferredDisplayMode: 'fullscreen' } }`.
 
 They apply to the current build, at the fixed URI and at its content-hash URI,
-and they are part of that hash. A page kept in `previous` is served with what
-its snapshot holds.
+and they are part of that hash. A page kept in `previous` is served with the
+`csp`, `domain`, `prefersBorder` and `meta` its snapshot holds, which the
+archive script above captures.
 
 ### App tools: the model reads the open View
 
