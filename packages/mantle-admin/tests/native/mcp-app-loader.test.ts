@@ -36,20 +36,22 @@ test("on a Worker the default loader reads /admin/mcp-app.html through env.ASSET
   expect(embedded(html)).toEqual({ views: { pending: { actions: [] } }, actions: {} });
 });
 
-test("the CSP the build wrote into the file is sent with the HTML and the host font origin, which `fontDomains: []` drops", async () => {
+test("the CSP the build wrote into the file is sent with the HTML, plus the fontDomains given", async () => {
   const csp = { resourceDomains: ["https://cdn.example.test"], connectDomains: ["https://api.example.test"] };
   const meta =
     '<meta name="mantle-mcp-csp" content=\'' +
     JSON.stringify(csp).replace(/[<'&]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")) +
     "'>";
   const env = (body: string) => ({ ASSETS: { fetch: async () => new Response(body) } });
-  expect((await page({ fontDomains: [] }, env("<head>" + meta + "</head>"))).csp).toEqual(csp);
-  expect((await page({}, env("<head>" + meta + "</head>"))).csp).toEqual({
+  expect((await page({}, env("<head>" + meta + "</head>"))).csp).toEqual(csp);
+  expect((await page({ fontDomains: ["https://assets.claude.ai"] }, env("<head>" + meta + "</head>"))).csp).toEqual({
     ...csp,
     resourceDomains: [...csp.resourceDomains, "https://assets.claude.ai"],
   });
-  expect((await page({ fontDomains: [] }, env("<head></head>"))).csp).toBeUndefined();
-  expect((await page({}, env("<head></head>"))).csp).toEqual({ resourceDomains: ["https://assets.claude.ai"] });
+  expect((await page({}, env("<head></head>"))).csp).toBeUndefined();
+  expect((await page({ fontDomains: ["https://assets.claude.ai"] }, env("<head></head>"))).csp).toEqual({
+    resourceDomains: ["https://assets.claude.ai"],
+  });
 });
 
 test("the default loader follows the one same-origin redirect the default html_handling answers a .html path with", async () => {
