@@ -129,6 +129,7 @@ describe("MantleApp", () => {
     updateModelContext: vi.fn(),
     requestDisplayMode: vi.fn(),
     downloadFile: vi.fn(),
+    serveTools: vi.fn(),
   });
   const render = (props: Partial<Parameters<typeof MantleApp>[0]> = {}) =>
     renderToStaticMarkup(<MantleApp catalog={catalog} host={host()} result={viewResult} input={{}} {...props} />);

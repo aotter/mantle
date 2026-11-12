@@ -107,7 +107,7 @@ const make = async (capabilities = {}, context = {}, initialize = true) => {
 test("official App owns initialization, with package version, supported layouts and a height-only size report", async () => {
   const { app, win, disconnect } = await make();
   expect(app.info).toEqual({ name: "mantle", version: "9.9.9" });
-  expect(app.appCapabilities).toEqual({ availableDisplayModes: ["inline", "fullscreen"] });
+  expect(app.appCapabilities).toEqual({ availableDisplayModes: ["inline", "fullscreen"], tools: {} });
   const transport = app.connect.mock.calls[0][0];
   expect(transport.source).toBe(win.parent);
   transport.target.postMessage({ hello: "host" }, "*");
@@ -197,6 +197,36 @@ test("a download is one embedded CSV resource named by its file:// URI, with the
   disconnect();
   expect(await host.downloadFile("pending.csv", "x")).toBe(false);
   expect(app.downloadFile).toHaveBeenCalledTimes(3);
+});
+
+test("the App's own tools: the same definitions on every mount, answered from what the App shows, none once closed", async () => {
+  const first = await make({ serverTools: {} }),
+    second = await make();
+  const extra = { mcpReq: { signal: new AbortController().signal } };
+  const listed = await first.app.onlisttools({}, extra);
+  expect(listed.tools.map((tool: { name: string }) => tool.name)).toEqual(["view_state", "view_more", "view_focus"]);
+  expect(JSON.stringify(await second.app.onlisttools({}, extra))).toBe(JSON.stringify(listed));
+  const call = (state: typeof first) => state.app.oncalltool({ name: "view_state", arguments: {} }, extra);
+  expect(await call(first)).toMatchObject({ isError: true });
+  const focus = vi.fn(() => true);
+  first.host.serveTools(() => ({
+    tool: "pending",
+    input: {},
+    rows: [{ id: "r1" }],
+    more: false,
+    loading: false,
+    generation: 1,
+    focus,
+  }));
+  expect(JSON.parse((await call(first)).content[0].text)).toMatchObject({ tool: "pending", ids: ["r1"] });
+  first.host.serveTools(undefined);
+  expect(await call(first)).toMatchObject({ isError: true });
+  first.host.serveTools(() => ({ tool: "p", input: {}, rows: [], more: false, loading: false, generation: 1, focus }));
+  first.disconnect();
+  expect(await call(first)).toMatchObject({ isError: true });
+  // answering the model's tools sends the host nothing of the App's own
+  expect(first.app.callServerTool).not.toHaveBeenCalled();
+  second.disconnect();
 });
 
 test("early and late results, cancellation, context and teardown keep their existing semantics", async () => {

@@ -106,7 +106,10 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
         info: (window as any).host.bridge.getAppVersion(),
         capabilities: (window as any).host.bridge.getAppCapabilities(),
       })),
-    ).toEqual({ info: { name: "mantle", version }, capabilities: { availableDisplayModes: ["inline", "fullscreen"] } });
+    ).toEqual({
+      info: { name: "mantle", version },
+      capabilities: { availableDisplayModes: ["inline", "fullscreen"], tools: {} },
+    });
     // the host's time zone and language, not the iframe's
     expect(await app.locator("time").innerText()).toMatch(/^2026\/10\/1\s晚上11:20$/);
     // the sandbox blocks navigation: the link opens through the host
@@ -241,6 +244,76 @@ it("loads the next page of a View through the host and appends its rows, and exp
         },
       ]);
     expect(await page.evaluate(() => (window as any).host.calls)).toHaveLength(1);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 45_000);
+
+it("serves the model view-only app tools: read the View, load its next page through the View's own read, show a row", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    await page.evaluate(async () => {
+      const { bridge } = (window as any).host;
+      await bridge.sendToolInput({ arguments: { limit: 1 } });
+      await bridge.sendToolResult({
+        content: [],
+        structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops" }], nextCursor: "c2" },
+        _meta: { "net.aotter.mantle/tool": "pending" },
+      });
+    });
+    await app.getByText("Laptops").waitFor();
+    // the host's side of the official protocol: `tools/list` and `tools/call` to the view
+    const tool = (name: string, args = {}) =>
+      page.evaluate(async ([name, args]) => (window as any).host.bridge.callTool({ name, arguments: args }), [
+        name,
+        args,
+      ] as const);
+    const listed = await page.evaluate(() => (window as any).host.bridge.listTools({}));
+    expect(listed.tools.map((tool: { name: string }) => tool.name)).toEqual(["view_state", "view_more", "view_focus"]);
+    const text = (result: { content: { text: string }[] }) => JSON.parse(result.content[0]!.text);
+    expect(text(await tool("view_state"))).toEqual({
+      tool: "pending",
+      input: { limit: 1 },
+      rows: 1,
+      more: true,
+      ids: ["r1"],
+    });
+    expect(text(await tool("view_more"))).toEqual({
+      tool: "pending",
+      input: { limit: 1 },
+      rows: 2,
+      more: false,
+      ids: ["r1", "r2"],
+    });
+    await app.getByText("Desks").waitFor();
+    expect(await tool("view_more")).toMatchObject({ isError: true });
+    expect(await tool("view_focus", { id: "r2" })).toEqual({ content: [{ type: "text", text: "Showing row r2." }] });
+    const desks = app.locator('[data-slot="app-rows"] > li').nth(1);
+    await expect.poll(() => desks.getAttribute("aria-current")).toBe("true");
+    expect(await desks.evaluate(node => getComputedStyle(node).boxShadow)).not.toBe("none");
+    expect(await app.locator('[aria-current="true"]').count()).toBe(1);
+    expect(await tool("view_focus", { id: "r9" })).toMatchObject({ isError: true });
+    // the only server call is Load more's own read of the View; the model's tools reach no row action
+    expect(await page.evaluate(() => (window as any).host.calls)).toEqual([
+      expect.objectContaining({ name: "pending", arguments: { limit: 1, cursor: "c2" } }),
+    ]);
+    // a row action open: the rows are not on screen, so the tools have nothing to read
+    await app.getByRole("button", { name: "Review: r1" }).click();
+    expect(await tool("view_state")).toMatchObject({ isError: true });
+    expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
   } finally {
     await browser.close();
     await server.close();
