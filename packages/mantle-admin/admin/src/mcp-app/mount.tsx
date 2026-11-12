@@ -44,6 +44,9 @@ function Root({ admin }: { admin: AdminDefinition }) {
   const [error, setError] = useState<Error | null>(null);
   // the host answered a display mode request with the mode the App had
   const [refused, setRefused] = useState(false);
+  // In the conversation the App fits its content and opens what exceeds the host's cap in full screen. Without full
+  // screen (not offered, or refused once) it scrolls inside its frame instead, so no row or form is out of reach.
+  const [scroll, setScroll] = useState(false);
   useEffect(
     () =>
       connectHost(
@@ -67,8 +70,11 @@ function Root({ admin }: { admin: AdminDefinition }) {
     [],
   );
   useEffect(() => {
-    if (context) applyHostContext(context);
-  }, [context]);
+    if (context)
+      applyHostContext(context, document, {
+        scroll: scroll || !context.availableDisplayModes?.includes("fullscreen"),
+      });
+  }, [context, scroll]);
   // a host that sends no theme gets the system's: the same `.dark` class a host theme sets, so tokens and `dark:` follow it
   const hostTheme = context?.theme;
   useEffect(() => {
@@ -132,8 +138,16 @@ function Root({ admin }: { admin: AdminDefinition }) {
     void host.requestDisplayMode(mode).then(granted => {
       setRefused(granted !== mode);
       if (granted === mode) setContext(current => ({ ...current, displayMode: mode }));
+      else if (mode === "fullscreen") setScroll(true);
     });
   };
+  // in the conversation, while full screen may open: a row action asks for it, and rows past the host's cap open it
+  const expand =
+    !scroll && context?.displayMode !== "fullscreen" && context?.availableDisplayModes?.includes("fullscreen")
+      ? () => request("fullscreen")
+      : undefined;
+  const box = context?.containerDimensions as { readonly height?: number; readonly maxHeight?: number } | undefined;
+  const maxHeight = expand && box?.height === undefined ? box?.maxHeight : undefined;
   // a long form or many columns: the person may ask the host for the whole screen, when it offers one. `fullscreen` is
   // the side panel too, so the way back names the conversation
   const next = context?.displayMode === "fullscreen" ? "inline" : "fullscreen";
@@ -158,6 +172,8 @@ function Root({ admin }: { admin: AdminDefinition }) {
           input={input}
           cancelled={cancelled}
           pages={pages}
+          {...(expand ? { expand } : {})}
+          {...(maxHeight ? { maxHeight } : {})}
           {...(hostTool ? { hostTool } : {})}
           {...(locale ? { locale } : {})}
           {...(context?.timeZone ? { timeZone: context.timeZone } : {})}

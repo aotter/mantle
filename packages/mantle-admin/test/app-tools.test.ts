@@ -103,6 +103,30 @@ test("view_focus shows a row that is on screen, and only one", async () => {
   expect(shown.focus).toHaveBeenCalledTimes(2);
 });
 
+test("under the conversation's height cap the tools still describe every row held; a row past it is marked, not lost", async () => {
+  // the conversation shows the first row; the App holds three
+  const capped = view({ inline: 1 });
+  expect(parsed(await answer(capped, "view_state"))).toEqual({
+    tool: "pending",
+    input: { limit: 2 },
+    rows: 3,
+    more: true,
+    inline: 1,
+    ids: ["r1", "r2"],
+  });
+  expect(await answer(capped, "view_focus", { id: "r1" })).toEqual({
+    content: [{ type: "text", text: "Showing row r1." }],
+  });
+  // held but not shown inline: highlighted for full screen, which only the person's click can open
+  const below = view({ inline: 1, focus: vi.fn(() => true) });
+  const result = await answer(below, "view_focus", { id: "r2" });
+  expect(result.isError).toBeUndefined();
+  expect(result.content[0]!.text).toMatch(
+    /^Row r2 is held but the conversation shows only the first 1 rows; .*full screen/,
+  );
+  expect(below.focus).toHaveBeenCalledWith("r2");
+});
+
 test("view_more gives up on its read before the host's 45-second limit, and answers", async () => {
   expect(VIEW_MORE_DEADLINE).toBeLessThan(45_000);
   const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValueOnce(AbortSignal.abort());

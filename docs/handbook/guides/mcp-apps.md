@@ -435,8 +435,21 @@ The pinned official client validates host context. Invalid protocol data is not
 reinterpreted by a second Mantle wire parser; connection failures are visible.
 Mantle applies only presentation fields and style variables it supports. `locale` and
 `timeZone` format dates (an unknown zone falls back to the browser's);
-`safeAreaInsets` become root padding; `containerDimensions` bound the root: a
-fixed or maximum height scrolls, and the reported size stays within it.
+`safeAreaInsets` become root padding; `containerDimensions` size the root. A
+fixed `height` (full screen or a side panel) bounds it, and it scrolls inside.
+In the conversation the host gives only `maxHeight`, caps the frame and clips
+what exceeds it, and on a touch screen a vertical pan scrolls the conversation,
+so the App is not its own scroll container there: its content sets the height
+it reports. A View shows as many rows as fit under the cap (at least one), then
+one button that says how many more there are and opens them in full screen
+(`ui/request-display-mode`, from that click). A row action asks for full screen
+as it opens, and opens in the conversation if the host refuses. When the host
+offers no full screen, or refuses it once, the App falls back to scrolling
+inside the cap, so nothing is out of reach. `view_state` and `view_focus` keep
+describing every row the App holds: `view_state` adds `inline`, the number of
+rows the conversation shows, and `view_focus` on a row past them highlights it
+for full screen and says that only the person can open it. A `pages[].mcp` page
+is not cut: under the cap it is reached through the full-screen toggle.
 `theme: "dark"` sets both `data-theme` and the `.dark` class. Only the spec's
 style variables are applied; [Theme](#theme) says how they meet your own.
 
@@ -462,7 +475,7 @@ capability:
 |---|---|---|
 | `view_state` | none | Returns the View tool, its input, the ids of the rows the App holds, the row count and whether more rows exist, as JSON text. |
 | `view_more` | none | Does what "Load more" does: calls the same View tool with the same input and the next cursor, appends the rows, and answers as `view_state`. |
-| `view_focus` | `{ id }` | Scrolls to the shown row with that id and highlights it. |
+| `view_focus` | `{ id }` | Scrolls to the row with that id and highlights it; a row past the conversation's cap is highlighted for full screen. |
 
 They are view-only. They read what the App already holds or make the same
 read "Load more" makes, under the person's own authorization, so they show the

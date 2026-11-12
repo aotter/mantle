@@ -1,4 +1,13 @@
-import { createContext, useContext, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createInteractionController, type InteractionController } from "@aotter/mantle-ui/controller";
 import { OperationPanel } from "@aotter/mantle-ui";
 import { SchemaFields, applyFieldEdits } from "@aotter/mantle-ui/kit";
@@ -149,6 +158,17 @@ export function MantleApp(props: {
    * Procedure's result, when the host's tool is theirs.
    */
   readonly pages?: Readonly<Record<string, ReactNode>>;
+  /**
+   * Asks the host for full screen, inside the click that calls it; absent unless the App is in the conversation and the
+   * host may grant it. A row action calls it as it opens.
+   */
+  readonly expand?: () => void;
+  /**
+   * The conversation's height cap, with `expand`: the rows shown are as many as fit under it (at least one), and one
+   * button under them opens the rest in full screen. The App never scrolls inside the conversation (Claude's design
+   * guidelines: no nested scrolling, and a touch screen pans the conversation).
+   */
+  readonly maxHeight?: number;
 }): ReactNode {
   const { call, capabilities } = props.host;
   const openLink = capabilities.openLinks ? props.host.openLink : undefined;
@@ -167,6 +187,19 @@ export function MantleApp(props: {
   // the row the model asked to see (`view_focus`); a new object each time, so asking again scrolls again
   const [focused, setFocused] = useState<{ id: string } | null>(null);
   const list = useRef<HTMLUListElement>(null);
+  const end = useRef<HTMLDivElement>(null);
+  // How many rows fit under the cap, measured for these rows, this cap and this width; null shows every row. A new
+  // measurement renders every row first, before the browser paints.
+  const [fit, setFit] = useState<{ rows: unknown; cap: unknown; width: number; limit: number | null } | null>(null);
+  const [width, setWidth] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth));
+  useEffect(() => {
+    const resized = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", resized);
+    return () => window.removeEventListener("resize", resized);
+  }, []);
+  const cap = props.expand ? props.maxHeight : undefined;
+  const measured = fit !== null && fit.rows === rows && fit.cap === cap && fit.width === width;
+  const limit = measured ? fit.limit : null;
   // the page Load more asked for last, as "generation:cursor"
   const asked = useRef<string | null>(null);
   useEffect(() => {
@@ -174,10 +207,34 @@ export function MantleApp(props: {
     setStale(false);
     setFocused(null);
   }, [props.result]);
+  // a row past the cap is scrolled to once it shows, in full screen
   useEffect(() => {
     const index = focused && rows ? rows.findIndex(row => rowId(row) === focused.id) : -1;
     list.current?.children[index]?.scrollIntoView({ block: "nearest" });
-  }, [focused]);
+  }, [focused, limit]);
+  useLayoutEffect(() => {
+    const items = list.current?.children,
+      last = end.current;
+    if (cap === undefined || !items?.length || !last) return;
+    const root = document.documentElement,
+      top = root.getBoundingClientRect().top,
+      padding = parseFloat(getComputedStyle(root).paddingBottom) || 0;
+    // the document's height if it ended at this element's bottom: the root's own height may still be full screen's
+    const bottom = (element: Element) => element.getBoundingClientRect().bottom - top + padding;
+    const height = bottom(last);
+    if (!measured) {
+      let count = items.length;
+      if (height > cap) {
+        const below = height - bottom(items[items.length - 1]!);
+        count = 1;
+        while (count < items.length && bottom(items[count]!) + below <= cap) count++;
+      }
+      setFit({ rows, cap, width, limit: count < items.length ? count : null });
+    } else if (limit !== null && limit > 1 && height > cap) {
+      // the button under the rows is taller than what the measurement counted below them
+      setFit({ rows, cap, width, limit: limit - 1 });
+    }
+  });
 
   const refresh = async () => {
     if (!tool || !call) return;
@@ -229,6 +286,7 @@ export function MantleApp(props: {
               setFocused({ id });
               return true;
             },
+            ...(limit !== null ? { inline: limit } : {}),
           }
         : null;
   });
@@ -300,7 +358,7 @@ export function MantleApp(props: {
         />
       ) : null}
       <ul ref={list} data-slot="app-rows" className="grid gap-2 p-3">
-        {rows.map((row, index) => {
+        {(limit === null ? rows : rows.slice(0, limit)).map((row, index) => {
           const id = typeof row["id"] === "string" ? row["id"] : undefined;
           const actions = call ? actionsFor(props.catalog, view, row) : [];
           return (
@@ -337,7 +395,11 @@ export function MantleApp(props: {
                         // Every row repeats the same buttons; name the row too.
                         aria-label={id ? `${title}: ${id}` : undefined}
                         className="rounded-md border px-3 py-1 font-medium"
-                        onClick={() => setOpen({ row: { ...row }, action })}
+                        onClick={() => {
+                          // a form is no inline content: full screen, asked within this click; it opens either way
+                          props.expand?.();
+                          setOpen({ row: { ...row }, action });
+                        }}
                       >
                         {title}
                       </button>
@@ -349,7 +411,13 @@ export function MantleApp(props: {
           );
         })}
       </ul>
-      {call ? (
+      {limit !== null ? (
+        <div className="px-3 pb-3">
+          <button type="button" className="rounded-md border px-3 py-1 text-sm font-medium" onClick={props.expand}>
+            {labels.moreRows.replace("{count}", `${rows.length - limit}${cursor !== undefined ? "+" : ""}`)}
+          </button>
+        </div>
+      ) : call ? (
         <MoreRows
           count={rows.length}
           hasMore={cursor !== undefined}
@@ -360,6 +428,8 @@ export function MantleApp(props: {
           }}
         />
       ) : null}
+      {/* where the App's content ends, whatever height the root has */}
+      <div ref={end} />
     </CellEnv.Provider>
   );
 }

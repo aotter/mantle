@@ -415,7 +415,18 @@ function reportHeight(app: App, win: Window): () => void {
   return () => observer.disconnect();
 }
 
-export function applyHostContext(value: McpUiHostContext, doc: Document = document): void {
+/**
+ * The host's presentation fields on the document root. A fixed height (`fullscreen`: the side panel or full screen) bounds
+ * the root, which scrolls inside it. In the conversation the host gives only `maxHeight`: it caps the frame and clips what
+ * exceeds it, and on a touch screen a vertical pan scrolls the conversation, so the root is not a scroll container there and
+ * its content sets the height it reports. `scroll` bounds it by `maxHeight` and scrolls it all the same: the App's fallback
+ * when the host offers no full screen or refused it.
+ */
+export function applyHostContext(
+  value: McpUiHostContext,
+  doc: Document = document,
+  { scroll = false }: { readonly scroll?: boolean } = {},
+): void {
   const root = doc.documentElement;
   if (value.locale) root.lang = value.locale;
   // `.dark` too, so an application's `.dark {}` overrides apply in a host as in the browser
@@ -438,7 +449,8 @@ export function applyHostContext(value: McpUiHostContext, doc: Document = docume
     for (const key of ["width", "maxWidth"] as const)
       root.style[key] = box[key] === undefined ? "" : `min(${box[key]}px, 100%)`;
     // a bounded frame scrolls its content; the max-height also holds the measured size within a fixed height
-    const bound = Math.min(box.height ?? Infinity, box.maxHeight ?? Infinity);
+    const bound =
+      box.height !== undefined || scroll ? Math.min(box.height ?? Infinity, box.maxHeight ?? Infinity) : Infinity;
     root.style.maxHeight = bound === Infinity ? "" : `${bound}px`;
     root.style.overflow = bound === Infinity ? "" : "auto";
   }

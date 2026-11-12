@@ -17,7 +17,7 @@ export const APP_TOOLS: AppTool[] = [
     name: "view_state",
     title: "Read the open View",
     description:
-      "What the open Mantle App shows: the View tool, its input, the ids of the rows shown and whether more rows exist.",
+      "What the open Mantle App shows: the View tool, its input, the ids of the rows it holds and whether more rows exist.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true },
   },
@@ -65,8 +65,13 @@ export interface ShownView {
   readonly generation: number;
   /** "Load more": the View tool, its input and the next cursor. Absent where the host offers no server tools. */
   readonly loadMore?: (signal: AbortSignal) => Promise<ToolResult | null>;
-  /** Scrolls to and highlights the row with this id; false when no row shown has it. */
+  /** Scrolls to and highlights the row with this id; false when no row held has it. */
   focus(id: string): boolean;
+  /**
+   * How many of `rows` the conversation shows, when the host's height cap leaves the rest to full screen. The tools still
+   * describe every row held: the person reaches the others through the App's button.
+   */
+  readonly inline?: number;
 }
 
 export type AppToolResult = {
@@ -102,7 +107,13 @@ export function cursorAfter(cursor: string | undefined, result: ToolResult): str
 /** view_state's answer: as many row ids as fit the host's limit, marked `truncated` when some do not. */
 function state(view: ShownView, rows: readonly Row[], more: boolean): AppToolResult {
   const ids = rows.flatMap(row => rowId(row) ?? []);
-  const base = { tool: view.tool, input: view.input, rows: rows.length, more };
+  const base = {
+    tool: view.tool,
+    input: view.input,
+    rows: rows.length,
+    more,
+    ...(view.inline !== undefined ? { inline: view.inline } : {}),
+  };
   let budget = APP_TOOL_TEXT_LIMIT - JSON.stringify({ ...base, ids: [], truncated: true }).length;
   // never cut the JSON: a View input over the limit on its own is an error, not a broken answer
   if (budget < 0) return text("The View's input is too large to report.", true);
@@ -137,9 +148,15 @@ export async function callAppTool(
   if (name === "view_state") return state(view, view.rows, view.cursor !== undefined);
   if (name === "view_focus") {
     const id = args["id"];
-    return typeof id === "string" && view.focus(id)
-      ? text(`Showing row ${id}.`)
-      : text("No row shown has this id; nothing was scrolled. Pass one of the ids view_state lists, as text.");
+    if (typeof id !== "string" || !view.focus(id))
+      return text("No row shown has this id; nothing was scrolled. Pass one of the ids view_state lists, as text.");
+    // the App cannot open full screen for the model: a host grants it only after the person's own click
+    const index = view.rows.findIndex(row => rowId(row) === id);
+    return text(
+      view.inline !== undefined && index >= view.inline
+        ? `Row ${id} is held but the conversation shows only the first ${view.inline} rows; it is highlighted for when the person opens the App in full screen with its button under the rows.`
+        : `Showing row ${id}.`,
+    );
   }
   if (!view.loadMore || !view.tool) return text("This host cannot load more rows in the App; nothing was loaded.");
   if (view.cursor === undefined) return text("The View has no more rows; nothing was loaded.");
