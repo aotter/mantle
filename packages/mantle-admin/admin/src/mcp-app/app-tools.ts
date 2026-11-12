@@ -151,11 +151,12 @@ const depth = (value: unknown): number =>
   value !== null && typeof value === "object" ? 1 + Math.max(0, ...Object.values(value).map(depth)) : 0;
 
 /**
- * A page's tools as `tools/list` lists them after `APP_TOOLS`: each definition as JSON, so what is listed is what is
- * measured. Throws on the first definition a host would reject.
+ * A registration's tools as `tools/list` lists them after `APP_TOOLS` and the tools `registered` before: each definition
+ * as JSON, so what is listed is what is measured. Throws on the first definition a host would reject, counting the limits
+ * over the whole list.
  */
-export function pageToolList(tools: readonly AdminAppTool[]): AppTool[] {
-  const names = new Set<string>();
+export function pageToolList(tools: readonly AdminAppTool[], registered: readonly AppTool[] = []): AppTool[] {
+  const names = new Set(registered.map(tool => tool.name));
   const listed = tools.map(({ name, title, description, inputSchema, annotations }) => {
     if (typeof name !== "string" || !/^[A-Za-z0-9._-]{1,128}$/.test(name))
       throw new Error(`App tool name ${JSON.stringify(name)} must be 1 to 128 letters, digits, ".", "_" or "-".`);
@@ -169,9 +170,9 @@ export function pageToolList(tools: readonly AdminAppTool[]): AppTool[] {
       throw new Error(`App tool ${name}: inputSchema must be at most 64 KiB as JSON and 32 levels deep.`);
     return tool;
   });
-  if (APP_TOOLS.length + listed.length > MAX_TOOLS)
-    throw new Error(`A page registers at most ${MAX_TOOLS - APP_TOOLS.length} app tools.`);
-  if (bytes([...APP_TOOLS, ...listed]) > MAX_DEFINITIONS)
+  if (APP_TOOLS.length + registered.length + listed.length > MAX_TOOLS)
+    throw new Error(`A page registers at most ${MAX_TOOLS - APP_TOOLS.length} app tools in all.`);
+  if (bytes([...APP_TOOLS, ...registered, ...listed]) > MAX_DEFINITIONS)
     throw new Error("App tool definitions must be at most 1 MiB as JSON.");
   return listed;
 }
