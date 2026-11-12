@@ -23,7 +23,9 @@ vi.mock("@modelcontextprotocol/ext-apps", () => ({
     openLink = vi.fn(async () => ({}));
     sendMessage = vi.fn(async () => ({}));
     updateModelContext = vi.fn(async () => ({}));
-    requestDisplayMode = vi.fn(async ({ mode }: { mode: string }) => ({ mode }));
+    requestDisplayMode = vi.fn(async ({ mode }: { mode: string }) => ({
+      mode,
+    }));
     downloadFile = vi.fn(async () => ({}));
     sendToolListChanged = vi.fn(async () => {});
     sendSizeChanged = vi.fn(async () => {});
@@ -55,7 +57,9 @@ vi.mock("@modelcontextprotocol/ext-apps", () => ({
   },
 }));
 // the content-height observer: one per connection, disconnected with it
-const observers = vi.hoisted(() => [] as { observed: unknown[]; disconnect: ReturnType<typeof vi.fn> }[]);
+const observers = vi.hoisted(
+  () => [] as { observed: unknown[]; disconnect: ReturnType<typeof vi.fn> }[],
+);
 vi.stubGlobal(
   "ResizeObserver",
   class {
@@ -82,7 +86,10 @@ const make = async (
     cancelled = vi.fn(),
     changed = vi.fn(),
     error = vi.fn();
-  const root = { style: { height: "" }, getBoundingClientRect: () => ({ height: 412.2 }) },
+  const root = {
+      style: { height: "" },
+      getBoundingClientRect: () => ({ height: 412.2 }),
+    },
     body = {};
   const win = {
     parent: { postMessage: vi.fn() },
@@ -98,13 +105,24 @@ const make = async (
   } as unknown as Window;
   // a native WebView: no distinct parent
   if (!framed) (win as { parent: unknown }).parent = win;
-  const disconnect = connectHost({ ready, input, result, cancelled, context: changed, error }, win, "9.9.9", options);
+  const disconnect = connectHost(
+    { ready, input, result, cancelled, context: changed, error },
+    win,
+    "9.9.9",
+    options,
+  );
   const app = sdk.apps.at(-1)!;
   app.capabilities = capabilities;
   app.context = context;
   if (initialize) {
-    const guard = vi.mocked(win.addEventListener).mock.calls[0]![1] as (event: MessageEvent) => void;
-    guard({ source: win.parent, origin: "https://host.test", data: {} } as MessageEvent);
+    const guard = vi.mocked(win.addEventListener).mock.calls[0]![1] as (
+      event: MessageEvent,
+    ) => void;
+    guard({
+      source: win.parent,
+      origin: "https://host.test",
+      data: {},
+    } as MessageEvent);
     app.resolve();
     await Promise.resolve();
   }
@@ -132,16 +150,26 @@ test("official App owns initialization, with package version, supported layouts 
   const transport = app.connect.mock.calls[0][0];
   expect(transport.source).toBe(win.parent);
   transport.target.postMessage({ hello: "host" }, "*");
-  expect(win.parent.postMessage).toHaveBeenCalledWith({ hello: "host" }, "https://host.test");
+  expect(win.parent.postMessage).toHaveBeenCalledWith(
+    { hello: "host" },
+    "https://host.test",
+  );
   // the content height, never the frame's width: the host owns the width (#1931)
   expect(app.sendSizeChanged.mock.calls).toEqual([[{ height: 413 }]]);
   const observer = observers.at(-1)!;
-  expect(observer.observed).toEqual([win.document.documentElement, win.document.body]);
+  expect(observer.observed).toEqual([
+    win.document.documentElement,
+    win.document.body,
+  ]);
   disconnect();
   disconnect();
   expect(observer.disconnect).toHaveBeenCalledOnce();
   expect(app.close).toHaveBeenCalledOnce();
-  expect(win.removeEventListener).toHaveBeenCalledWith("message", expect.any(Function), true);
+  expect(win.removeEventListener).toHaveBeenCalledWith(
+    "message",
+    expect.any(Function),
+    true,
+  );
 });
 
 test("missing capabilities expose no tool call and send no unavailable host requests", async () => {
@@ -149,7 +177,9 @@ test("missing capabilities expose no tool call and send no unavailable host requ
   expect(host.call).toBeUndefined();
   expect(await host.openLink("https://example.com")).toBe(false);
   expect(await host.sendMessage("hi")).toBe("refused");
-  expect(await host.updateModelContext({ content: [{ type: "text", text: "x" }] })).toBe(false);
+  expect(
+    await host.updateModelContext({ content: [{ type: "text", text: "x" }] }),
+  ).toBe(false);
   expect(await host.requestDisplayMode("fullscreen")).toBeNull();
   expect(await host.downloadFile("pending.csv", "id\r\n")).toBe("refused");
   for (const request of [
@@ -166,7 +196,12 @@ test("missing capabilities expose no tool call and send no unavailable host requ
 
 test("host calls use official methods, retain abort signals and limit links and model context", async () => {
   const { app, host, disconnect } = await make(
-    { serverTools: {}, openLinks: {}, message: { text: {} }, updateModelContext: { text: {} } },
+    {
+      serverTools: {},
+      openLinks: {},
+      message: { text: {} },
+      updateModelContext: { text: {} },
+    },
     { availableDisplayModes: ["inline", "fullscreen"] },
   );
   const abort = new AbortController();
@@ -185,14 +220,28 @@ test("host calls use official methods, retain abort signals and limit links and 
   app.openLink.mockRejectedValueOnce(new Error("Request timed out"));
   expect(await host.openLink("https://example.com")).toBe(false);
   app.updateModelContext.mockRejectedValueOnce(new Error("Request timed out"));
-  expect(await host.updateModelContext({ content: [{ type: "text", text: "late" }] })).toBe(false);
-  expect(await host.sendMessage("hi")).toBe("accepted");
-  expect(app.sendMessage).toHaveBeenCalledWith({ role: "user", content: [{ type: "text", text: "hi" }] });
-  expect(await host.updateModelContext({ structuredContent: { secret: 1 } })).toBe(false);
   expect(
-    await host.updateModelContext({ content: [{ type: "text", text: "done" }], structuredContent: { omitted: 1 } }),
+    await host.updateModelContext({
+      content: [{ type: "text", text: "late" }],
+    }),
+  ).toBe(false);
+  expect(await host.sendMessage("hi")).toBe("accepted");
+  expect(app.sendMessage).toHaveBeenCalledWith({
+    role: "user",
+    content: [{ type: "text", text: "hi" }],
+  });
+  expect(
+    await host.updateModelContext({ structuredContent: { secret: 1 } }),
+  ).toBe(false);
+  expect(
+    await host.updateModelContext({
+      content: [{ type: "text", text: "done" }],
+      structuredContent: { omitted: 1 },
+    }),
   ).toBe(true);
-  expect(app.updateModelContext).toHaveBeenCalledWith({ content: [{ type: "text", text: "done" }] });
+  expect(app.updateModelContext).toHaveBeenCalledWith({
+    content: [{ type: "text", text: "done" }],
+  });
   expect(await host.requestDisplayMode("fullscreen")).toBe("fullscreen");
   disconnect();
   await expect(host.call!("review", {})).rejects.toThrow("Invalid tool call");
@@ -203,21 +252,44 @@ test("host calls use official methods, retain abort signals and limit links and 
 test("a message is kept within what Claude accepts: meaningless runs and invisible characters normalised, the rest refused", async () => {
   // invisible characters are dropped, except where an emoji or a script uses them (ZWJ, ZWNJ, variation selector)
   expect(messageText("re\u00ADport\u200B.csv\u2060\uFEFF")).toBe("report.csv");
-  expect(messageText("👩\u200D💻 ❤\uFE0F می\u200Cخواهم")).toBe("👩\u200D💻 ❤\uFE0F می\u200Cخواهم");
+  expect(messageText("👩\u200D💻 ❤\uFE0F می\u200Cخواهم")).toBe(
+    "👩\u200D💻 ❤\uFE0F می\u200Cخواهم",
+  );
   // at most three line breaks and 64 spaces or tabs in a row; the words are untouched
-  expect(messageText("a\n\n\n\n\nb\r\n\r\n\r\n\r\nc\n\n\nd")).toBe("a\n\n\nb\n\n\nc\n\n\nd");
-  expect(messageText(`a${" \t".repeat(40)}b${" ".repeat(64)}c`)).toBe(`a${" \t".repeat(32)}b${" ".repeat(64)}c`);
+  expect(messageText("a\n\n\n\n\nb\r\n\r\n\r\n\r\nc\n\n\nd")).toBe(
+    "a\n\n\nb\n\n\nc\n\n\nd",
+  );
+  // A CRLF is one line break: two or three of them are a paragraph break and stay as they were.
+  expect(messageText("a\r\n\r\nb")).toBe("a\r\n\r\nb");
+  expect(messageText("a\r\n\r\n\r\nb\r\rc")).toBe("a\r\n\r\n\r\nb\r\rc");
+  expect(messageText(`a${" \t".repeat(40)}b${" ".repeat(64)}c`)).toBe(
+    `a${" \t".repeat(32)}b${" ".repeat(64)}c`,
+  );
   // an invisible character between two breaks does not hide a run
   expect(messageText("a\n\n\u200B\n\nb")).toBe("a\n\n\nb");
   // blank, or too long to send whole: refused, never cut
-  for (const blank of ["", " \n\t", "\u200B\u00AD"]) expect(messageText(blank)).toBeNull();
-  expect(messageText("x".repeat(MESSAGE_LIMIT))).toBe("x".repeat(MESSAGE_LIMIT));
+  for (const blank of [
+    "",
+    " \n\t",
+    "\u200B\u00AD",
+    "\u200D",
+    "\uFE0F",
+    " \u200E\u200C\n",
+  ])
+    expect(messageText(blank)).toBeNull();
+  expect(messageText("x".repeat(MESSAGE_LIMIT))).toBe(
+    "x".repeat(MESSAGE_LIMIT),
+  );
   expect(messageText("x".repeat(MESSAGE_LIMIT + 1))).toBeNull();
   // counted after normalising: invisible padding does not push a message over
-  expect(messageText(`${"x".repeat(MESSAGE_LIMIT)}\u200B`)).toBe("x".repeat(MESSAGE_LIMIT));
+  expect(messageText(`${"x".repeat(MESSAGE_LIMIT)}\u200B`)).toBe(
+    "x".repeat(MESSAGE_LIMIT),
+  );
 
   const { app, host, disconnect } = await make({ message: { text: {} } });
-  expect(await host.sendMessage("I uploaded ca\u200Bt.png.\n\n\n\n\nThanks")).toBe("accepted");
+  expect(
+    await host.sendMessage("I uploaded ca\u200Bt.png.\n\n\n\n\nThanks"),
+  ).toBe("accepted");
   expect(app.sendMessage).toHaveBeenCalledWith({
     role: "user",
     content: [{ type: "text", text: "I uploaded cat.png.\n\n\nThanks" }],
@@ -232,21 +304,31 @@ test("a message is kept within what Claude accepts: meaningless runs and invisib
 // The person may confirm in the host: an answer without an error is not delivery, and no answer is not a failure.
 test.each(["sendMessage", "downloadFile"] as const)(
   "%s: an error answer is refused, a timeout, a thrown error or a connection lost in flight is unknown",
-  async method => {
-    const { app, host, disconnect } = await make({ message: { text: {} }, downloadFile: {} });
-    const send = () => (method === "sendMessage" ? host.sendMessage("hi") : host.downloadFile("pending.csv", "x"));
+  async (method) => {
+    const { app, host, disconnect } = await make({
+      message: { text: {} },
+      downloadFile: {},
+    });
+    const send = () =>
+      method === "sendMessage"
+        ? host.sendMessage("hi")
+        : host.downloadFile("pending.csv", "x");
     expect(await send()).toBe("accepted");
     app[method].mockResolvedValueOnce({ isError: true });
     expect(await send()).toBe("refused");
     app[method].mockResolvedValueOnce({ isError: false });
     expect(await send()).toBe("accepted");
-    app[method].mockRejectedValueOnce(Object.assign(new Error("Request timed out"), { code: -32001 }));
+    app[method].mockRejectedValueOnce(
+      Object.assign(new Error("Request timed out"), { code: -32001 }),
+    );
     expect(await send()).toBe("unknown");
     app[method].mockRejectedValueOnce(new Error("Method not found"));
     expect(await send()).toBe("unknown");
     // the official client rejects a request still in flight when its connection closes
     let lose!: (error: Error) => void;
-    app[method].mockReturnValueOnce(new Promise((_, reject) => (lose = reject)));
+    app[method].mockReturnValueOnce(
+      new Promise((_, reject) => (lose = reject)),
+    );
     const inFlight = send();
     disconnect();
     lose(Object.assign(new Error("Connection closed"), { code: -32000 }));
@@ -259,14 +341,24 @@ test.each(["sendMessage", "downloadFile"] as const)(
 
 test("a download is one embedded text resource named by its file:// URI, with the person's time to confirm", async () => {
   const { app, host, disconnect } = await make({ downloadFile: {} });
-  expect(await host.downloadFile("pending.csv", "\uFEFFitem\r\nLaptops\r\n", "text/csv")).toBe("accepted");
+  expect(
+    await host.downloadFile(
+      "pending.csv",
+      "\uFEFFitem\r\nLaptops\r\n",
+      "text/csv",
+    ),
+  ).toBe("accepted");
   expect(app.downloadFile.mock.calls).toEqual([
     [
       {
         contents: [
           {
             type: "resource",
-            resource: { uri: "file:///pending.csv", mimeType: "text/csv", text: "\uFEFFitem\r\nLaptops\r\n" },
+            resource: {
+              uri: "file:///pending.csv",
+              mimeType: "text/csv",
+              text: "\uFEFFitem\r\nLaptops\r\n",
+            },
           },
         ],
       },
@@ -282,9 +374,12 @@ test("a download is one embedded text resource named by its file:// URI, with th
   });
   // the URI's last segment is the saved name: what would change it, or a host replaces anyway, is replaced here
   expect(await host.downloadFile("Q3 a/b?c#d.txt", "x")).toBe("accepted");
-  expect(app.downloadFile.mock.calls[2]![0].contents[0].resource.uri).toBe("file:///Q3 a_b_c_d.txt");
+  expect(app.downloadFile.mock.calls[2]![0].contents[0].resource.uri).toBe(
+    "file:///Q3 a_b_c_d.txt",
+  );
   // a name that names no file is not sent
-  for (const none of ["", ".", ".."]) expect(await host.downloadFile(none, "x")).toBe("refused");
+  for (const none of ["", ".", ".."])
+    expect(await host.downloadFile(none, "x")).toBe("refused");
   // a refusal and a cancellation are the same answer
   app.downloadFile.mockResolvedValueOnce({ isError: true });
   expect(await host.downloadFile("pending.csv", "x")).toBe("refused");
@@ -296,7 +391,9 @@ test("a download is one embedded text resource named by its file:// URI, with th
 // claude.com/docs/connectors/building/mcp-apps/download-files#build-the-contents-of-a-download-request
 test("a download name keeps spaces and replaces what would change the URI's last segment or a host replaces", () => {
   expect(downloadName("Q3 report.csv")).toBe("Q3 report.csv");
-  expect(downloadName('a/b\\c?d#e%20f:g"h*i<j>k|l~m.csv')).toBe("a_b_c_d_e_20f_g_h_i_j_k_l_m.csv");
+  expect(downloadName('a/b\\c?d#e%20f:g"h*i<j>k|l~m.csv')).toBe(
+    "a_b_c_d_e_20f_g_h_i_j_k_l_m.csv",
+  );
   expect(downloadName("..csv")).toBe("..csv");
   for (const none of ["", ".", ".."]) expect(downloadName(none)).toBeNull();
 });
@@ -306,11 +403,25 @@ test("the App's own tools: the same definitions on every mount, answered from wh
     second = await make();
   const extra = { mcpReq: { signal: new AbortController().signal } };
   const listed = await first.app.onlisttools({}, extra);
-  expect(listed.tools.map((tool: { name: string }) => tool.name)).toEqual(["view_state", "view_more", "view_focus"]);
-  expect(JSON.stringify(await second.app.onlisttools({}, extra))).toBe(JSON.stringify(listed));
-  const call = (state: typeof first) => state.app.oncalltool({ name: "view_state", arguments: {} }, extra);
+  expect(listed.tools.map((tool: { name: string }) => tool.name)).toEqual([
+    "view_state",
+    "view_more",
+    "view_focus",
+  ]);
+  expect(JSON.stringify(await second.app.onlisttools({}, extra))).toBe(
+    JSON.stringify(listed),
+  );
+  const call = (state: typeof first) =>
+    state.app.oncalltool({ name: "view_state", arguments: {} }, extra);
   // no View's rows shown: a normal answer that says so
-  const none = { content: [{ type: "text", text: expect.stringContaining("shows no View's rows now") }] };
+  const none = {
+    content: [
+      {
+        type: "text",
+        text: expect.stringContaining("shows no View's rows now"),
+      },
+    ],
+  };
   expect(await call(first)).toEqual(none);
   const focus = vi.fn(() => true);
   first.host.serveTools(() => ({
@@ -322,7 +433,10 @@ test("the App's own tools: the same definitions on every mount, answered from wh
     generation: 1,
     focus,
   }));
-  expect(JSON.parse((await call(first)).content[0].text)).toMatchObject({ tool: "pending", ids: ["r1"] });
+  expect(JSON.parse((await call(first)).content[0].text)).toMatchObject({
+    tool: "pending",
+    ids: ["r1"],
+  });
   first.host.serveTools(undefined);
   expect(await call(first)).toEqual(none);
   first.host.serveTools(() => ({
@@ -342,8 +456,16 @@ test("the App's own tools: the same definitions on every mount, answered from wh
 });
 
 test("a view without app tools (the upload card) declares no tools capability and serves none", async () => {
-  const { app, host, disconnect } = await make({ serverTools: {} }, {}, true, true, { appTools: false });
-  expect(app.appCapabilities).toEqual({ availableDisplayModes: ["inline", "fullscreen"] });
+  const { app, host, disconnect } = await make(
+    { serverTools: {} },
+    {},
+    true,
+    true,
+    { appTools: false },
+  );
+  expect(app.appCapabilities).toEqual({
+    availableDisplayModes: ["inline", "fullscreen"],
+  });
   expect(app.onlisttools).toBeUndefined();
   expect(app.oncalltool).toBeUndefined();
   expect(() => host.registerTools([])).toThrow("serves no app tools");
@@ -351,34 +473,61 @@ test("a view without app tools (the upload card) declares no tools capability an
   disconnect();
 });
 
-const tick = () => new Promise(resolve => setTimeout(resolve, 0));
-const note = (handler = vi.fn((args: Readonly<Record<string, unknown>>) => `noted ${String(args["text"])}`)) => ({
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const note = (
+  handler = vi.fn(
+    (args: Readonly<Record<string, unknown>>) =>
+      `noted ${String(args["text"])}`,
+  ),
+) => ({
   name: "page_note",
   title: "Add a note",
   description: "Adds a note to the open page.",
-  inputSchema: { type: "object" as const, properties: { text: { type: "string" } }, required: ["text"] },
+  inputSchema: {
+    type: "object" as const,
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
   handler,
 });
 
 test("a page's tools: listed after the App's own while registered, re-registered, removed, and the host told of each change", async () => {
   const { app, host, disconnect } = await make({ serverTools: {} });
   const extra = { mcpReq: { signal: new AbortController().signal } };
-  const names = async () => (await app.onlisttools({}, extra)).tools.map((tool: { name: string }) => tool.name);
-  const call = (name: string, args: unknown = { text: "a" }) => app.oncalltool({ name, arguments: args }, extra);
+  const names = async () =>
+    (await app.onlisttools({}, extra)).tools.map(
+      (tool: { name: string }) => tool.name,
+    );
+  const call = (name: string, args: unknown = { text: "a" }) =>
+    app.oncalltool({ name, arguments: args }, extra);
   const first = note();
   const remove = host.registerTools([first]);
-  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "page_note"]);
+  expect(await names()).toEqual([
+    "view_state",
+    "view_more",
+    "view_focus",
+    "page_note",
+  ]);
   // the definition as the host reads it: no handler
   expect((await app.onlisttools({}, extra)).tools[3]).toEqual({
     name: "page_note",
     title: "Add a note",
     description: "Adds a note to the open page.",
-    inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    inputSchema: {
+      type: "object",
+      properties: { text: { type: "string" } },
+      required: ["text"],
+    },
   });
   await tick();
   expect(app.sendToolListChanged).toHaveBeenCalledTimes(1);
-  expect(await call("page_note")).toEqual({ content: [{ type: "text", text: "noted a" }] });
-  expect(first.handler).toHaveBeenCalledWith({ text: "a" }, expect.any(AbortSignal));
+  expect(await call("page_note")).toEqual({
+    content: [{ type: "text", text: "noted a" }],
+  });
+  expect(first.handler).toHaveBeenCalledWith(
+    { text: "a" },
+    expect.any(AbortSignal),
+  );
   // a re-render: the effect's cleanup and a new registration of the same definitions in one task tell the host nothing
   const second = note();
   remove();
@@ -391,8 +540,16 @@ test("a page's tools: listed after the App's own while registered, re-registered
   // new definitions: the effect's cleanup and a registration of other tools
   removeSecond();
   const removeThird = host.registerTools([{ ...note(), name: "page_other" }]);
-  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "page_other"]);
-  expect(await call("page_note")).toMatchObject({ isError: true, content: [{ text: "Unknown tool: page_note" }] });
+  expect(await names()).toEqual([
+    "view_state",
+    "view_more",
+    "view_focus",
+    "page_other",
+  ]);
+  expect(await call("page_note")).toMatchObject({
+    isError: true,
+    content: [{ text: "Unknown tool: page_note" }],
+  });
   await tick();
   expect(app.sendToolListChanged).toHaveBeenCalledTimes(2);
   // unmounted: the App's own tools only, and the handler is never called again; a second cleanup does nothing
@@ -418,33 +575,74 @@ test("a page's tools: listed after the App's own while registered, re-registered
 test("a page and a component it renders each register: both listed, a name held by the other refused, each cleanup its own", async () => {
   const { app, host, disconnect } = await make();
   const extra = { mcpReq: { signal: new AbortController().signal } };
-  const names = async () => (await app.onlisttools({}, extra)).tools.map((tool: { name: string }) => tool.name);
+  const names = async () =>
+    (await app.onlisttools({}, extra)).tools.map(
+      (tool: { name: string }) => tool.name,
+    );
   const child = { ...note(), name: "child_tool" };
   // React runs a child's effect before its parent's
   const removeChild = host.registerTools([child]);
   const removeParent = host.registerTools([note()]);
-  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "child_tool", "page_note"]);
-  expect(() => host.registerTools([{ ...note(), name: "child_tool" }])).toThrow("child_tool is registered twice");
-  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "child_tool", "page_note"]);
+  expect(await names()).toEqual([
+    "view_state",
+    "view_more",
+    "view_focus",
+    "child_tool",
+    "page_note",
+  ]);
+  expect(() => host.registerTools([{ ...note(), name: "child_tool" }])).toThrow(
+    "child_tool is registered twice",
+  );
+  expect(await names()).toEqual([
+    "view_state",
+    "view_more",
+    "view_focus",
+    "child_tool",
+    "page_note",
+  ]);
   // the child unmounts while the page is shown: the page's tool stays and is still called
   removeChild();
-  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "page_note"]);
-  expect(await app.oncalltool({ name: "child_tool", arguments: {} }, extra)).toMatchObject({ isError: true });
+  expect(await names()).toEqual([
+    "view_state",
+    "view_more",
+    "view_focus",
+    "page_note",
+  ]);
+  expect(
+    await app.oncalltool({ name: "child_tool", arguments: {} }, extra),
+  ).toMatchObject({ isError: true });
   expect(child.handler).not.toHaveBeenCalled();
-  expect(await app.oncalltool({ name: "page_note", arguments: { text: "b" } }, extra)).toEqual({
+  expect(
+    await app.oncalltool(
+      { name: "page_note", arguments: { text: "b" } },
+      extra,
+    ),
+  ).toEqual({
     content: [{ type: "text", text: "noted b" }],
   });
   // the name is free again once its registration is removed; listed by name, whichever registered first
   await tick();
   expect(app.sendToolListChanged).toHaveBeenCalledTimes(2);
   let removeAgain = host.registerTools([{ ...note(), name: "child_tool" }]);
-  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "child_tool", "page_note"]);
+  expect(await names()).toEqual([
+    "view_state",
+    "view_more",
+    "view_focus",
+    "child_tool",
+    "page_note",
+  ]);
   await tick();
   expect(app.sendToolListChanged).toHaveBeenCalledTimes(3);
   // the earlier registration registers again with the same definitions (its state changed): the host is told nothing
   removeParent();
   const removeParentAgain = host.registerTools([note()]);
-  expect(await names()).toEqual(["view_state", "view_more", "view_focus", "child_tool", "page_note"]);
+  expect(await names()).toEqual([
+    "view_state",
+    "view_more",
+    "view_focus",
+    "child_tool",
+    "page_note",
+  ]);
   removeAgain();
   removeAgain = host.registerTools([{ ...note(), name: "child_tool" }]);
   await tick();
@@ -463,7 +661,10 @@ test("a call still running when its tools are removed, or the App disconnects, s
   const slow = (name: string) => ({
     ...note(),
     name,
-    handler: (_args: Readonly<Record<string, unknown>>, signal: AbortSignal) => {
+    handler: (
+      _args: Readonly<Record<string, unknown>>,
+      signal: AbortSignal,
+    ) => {
       signals.push(signal);
       return new Promise<string>((resolve, reject) => {
         signal.addEventListener("abort", () => reject(new Error("stopped")));
@@ -478,14 +679,20 @@ test("a call still running when its tools are removed, or the App disconnects, s
   removeFirst();
   expect(signals[0]!.aborted).toBe(true);
   expect(signals[1]!.aborted).toBe(false);
-  expect(await first).toEqual({ content: [{ type: "text", text: "stopped" }], isError: true });
+  expect(await first).toEqual({
+    content: [{ type: "text", text: "stopped" }],
+    isError: true,
+  });
   disconnect();
   expect(signals[1]!.aborted).toBe(true);
   expect(await second).toMatchObject({ isError: true });
   // the host's cancellation still reaches a handler
   const other = await make();
   other.host.registerTools([slow("page_third")]);
-  const third = other.app.oncalltool({ name: "page_third", arguments: {} }, extra);
+  const third = other.app.oncalltool(
+    { name: "page_third", arguments: {} },
+    extra,
+  );
   cancel.abort();
   expect(signals[2]!.aborted).toBe(true);
   expect(await third).toMatchObject({ isError: true });
@@ -506,12 +713,18 @@ test("a page tool's throw or non-text answer is an error result; a lost announce
     { ...note(vi.fn(async () => Promise.reject("gone"))), name: "page_gone" },
   ]);
   const call = (name: string) => app.oncalltool({ name, arguments: {} }, extra);
-  expect(await call("page_note")).toEqual({ content: [{ type: "text", text: "No such row." }], isError: true });
+  expect(await call("page_note")).toEqual({
+    content: [{ type: "text", text: "No such row." }],
+    isError: true,
+  });
   expect(await call("page_count")).toEqual({
     content: [{ type: "text", text: "page_count answered no text." }],
     isError: true,
   });
-  expect(await call("page_gone")).toEqual({ content: [{ type: "text", text: "gone" }], isError: true });
+  expect(await call("page_gone")).toEqual({
+    content: [{ type: "text", text: "gone" }],
+    isError: true,
+  });
   await tick();
   disconnect();
 });
@@ -521,29 +734,64 @@ test("a page's tools that a host would reject are refused when registered, and t
   const extra = { mcpReq: { signal: new AbortController().signal } };
   const removeNote = host.registerTools([note()]);
   const refused = (tools: object[]) => () => host.registerTools(tools as never);
-  expect(refused([{ ...note(), name: "view_state" }])).toThrow('"view_" names are the App\'s own tools');
+  expect(refused([{ ...note(), name: "view_state" }])).toThrow(
+    '"view_" names are the App\'s own tools',
+  );
   expect(refused([{ ...note(), name: "view_page" }])).toThrow("view_");
   expect(refused([note(), note()])).toThrow("registered twice");
-  expect(refused([{ ...note(), name: "has space" }])).toThrow("letters, digits");
-  expect(refused([{ ...note(), name: "x".repeat(129) }])).toThrow("letters, digits");
-  expect(refused([{ ...note(), name: "page_schema", inputSchema: { type: "string" } }])).toThrow('type "object"');
-  expect(refused([{ ...note(), name: "page_schema", inputSchema: undefined }])).toThrow('type "object"');
+  expect(refused([{ ...note(), name: "has space" }])).toThrow(
+    "letters, digits",
+  );
+  expect(refused([{ ...note(), name: "x".repeat(129) }])).toThrow(
+    "letters, digits",
+  );
+  expect(
+    refused([
+      { ...note(), name: "page_schema", inputSchema: { type: "string" } },
+    ]),
+  ).toThrow('type "object"');
+  expect(
+    refused([{ ...note(), name: "page_schema", inputSchema: undefined }]),
+  ).toThrow('type "object"');
   // 64 KiB of UTF-8 is accepted, one byte more is not ("é" is two bytes)
   const sized = (size: number) => {
-    const room = size - JSON.stringify({ type: "object", description: "" }).length;
-    return { type: "object", description: "é".repeat(Math.floor(room / 2)) + "x".repeat(room % 2) };
+    const room =
+      size - JSON.stringify({ type: "object", description: "" }).length;
+    return {
+      type: "object",
+      description: "é".repeat(Math.floor(room / 2)) + "x".repeat(room % 2),
+    };
   };
-  expect(new TextEncoder().encode(JSON.stringify(sized(64 * 1024))).length).toBe(64 * 1024);
-  host.registerTools([{ ...note(), name: "page_sized", inputSchema: sized(64 * 1024) }])();
-  expect(refused([{ ...note(), name: "page_sized", inputSchema: sized(64 * 1024 + 1) }])).toThrow("64 KiB");
+  expect(
+    new TextEncoder().encode(JSON.stringify(sized(64 * 1024))).length,
+  ).toBe(64 * 1024);
+  host.registerTools([
+    { ...note(), name: "page_sized", inputSchema: sized(64 * 1024) },
+  ])();
+  expect(
+    refused([
+      { ...note(), name: "page_sized", inputSchema: sized(64 * 1024 + 1) },
+    ]),
+  ).toThrow("64 KiB");
   // each object or array is a level: { enum: [...] } is 2, and each wrapper adds 2 (the object and its properties)
   const nested = (base: object, wrappers: number) => {
     let deep = base;
-    for (let level = 0; level < wrappers; level++) deep = { type: "object", properties: { a: deep } };
+    for (let level = 0; level < wrappers; level++)
+      deep = { type: "object", properties: { a: deep } };
     return deep;
   };
-  host.registerTools([{ ...note(), name: "page_deep", inputSchema: nested({ enum: ["a"] }, 15) }])();
-  expect(refused([{ ...note(), name: "page_deep", inputSchema: nested({ type: "string" }, 16) }])).toThrow("32 levels");
+  host.registerTools([
+    { ...note(), name: "page_deep", inputSchema: nested({ enum: ["a"] }, 15) },
+  ])();
+  expect(
+    refused([
+      {
+        ...note(),
+        name: "page_deep",
+        inputSchema: nested({ type: "string" }, 16),
+      },
+    ]),
+  ).toThrow("32 levels");
   // a refusal adds nothing
   expect((await app.onlisttools({}, extra)).tools).toEqual([
     ...APP_TOOLS,
@@ -551,16 +799,28 @@ test("a page's tools that a host would reject are refused when registered, and t
   ]);
   removeNote();
   const many = (count: number, extra = {}, prefix = "page_") =>
-    Array.from({ length: count }, (_, i) => ({ ...note(), name: `${prefix}${i}`, ...extra }));
+    Array.from({ length: count }, (_, i) => ({
+      ...note(),
+      name: `${prefix}${i}`,
+      ...extra,
+    }));
   expect(refused(many(62))).toThrow("at most 61");
-  expect(refused(many(30, { description: "x".repeat(40 * 1024) }))).toThrow("1 MiB");
+  expect(refused(many(30, { description: "x".repeat(40 * 1024) }))).toThrow(
+    "1 MiB",
+  );
   // the limits count every registration: 1 MiB with the tools registered before
-  const removeLarge = host.registerTools(many(20, { description: "x".repeat(40 * 1024) }, "large_"));
-  expect(refused(many(10, { description: "x".repeat(40 * 1024) }))).toThrow("1 MiB");
+  const removeLarge = host.registerTools(
+    many(20, { description: "x".repeat(40 * 1024) }, "large_"),
+  );
+  expect(refused(many(10, { description: "x".repeat(40 * 1024) }))).toThrow(
+    "1 MiB",
+  );
   removeLarge();
   // and 64 tools with the App's own and every registration
   host.registerTools(many(60));
-  expect(() => host.registerTools([{ ...note(), name: "page_last" }])).not.toThrow();
+  expect(() =>
+    host.registerTools([{ ...note(), name: "page_last" }]),
+  ).not.toThrow();
   expect(refused([{ ...note(), name: "page_extra" }])).toThrow("at most 61");
   // the 61 registered before the refusals are still listed: with the App's own, a host's 64
   expect((await app.onlisttools({}, extra)).tools).toHaveLength(64);
@@ -580,7 +840,7 @@ test("early and late results, cancellation, context and teardown keep their exis
   expect(state.cancelled).toHaveBeenCalledOnce();
   expect(state.changed).toHaveBeenCalledWith({ theme: "dark" });
   expect(state.app.onteardown()).toEqual({});
-  await new Promise(resolve => setTimeout(resolve, 1));
+  await new Promise((resolve) => setTimeout(resolve, 1));
   expect(state.app.close).toHaveBeenCalledOnce();
   state.app.ontoolresult({ content: [] });
   expect(state.result).toHaveBeenCalledOnce();
@@ -609,7 +869,9 @@ test("result notifications and calls validate consumed data, not ignored optiona
   const state = await make({ serverTools: {} });
   for (const value of [
     { content: [], structuredContent: { rows: [] }, _meta: undefined },
-    { content: [{ type: "text", text: '{"rows":[]}', annotations: undefined }] },
+    {
+      content: [{ type: "text", text: '{"rows":[]}', annotations: undefined }],
+    },
   ]) {
     state.app.ontoolresult(value);
     expect(state.result).toHaveBeenLastCalledWith(value);
@@ -620,12 +882,21 @@ test("result notifications and calls validate consumed data, not ignored optiona
   cyclic.self = cyclic;
   for (const value of [
     { content: [], structuredContent: cyclic },
-    { content: [], structuredContent: JSON.parse('{"rows":[{"__proto__":{"unsafe":true}}]}') },
-    { content: [{ type: "text", text: '{"rows":[{"__proto__":{"unsafe":true}}]}' }] },
+    {
+      content: [],
+      structuredContent: JSON.parse('{"rows":[{"__proto__":{"unsafe":true}}]}'),
+    },
+    {
+      content: [
+        { type: "text", text: '{"rows":[{"__proto__":{"unsafe":true}}]}' },
+      ],
+    },
   ]) {
     state.app.ontoolresult(value);
     state.app.callServerTool.mockResolvedValueOnce(value);
-    await expect(state.host.call!("view", {})).rejects.toThrow("Invalid tool result");
+    await expect(state.host.call!("view", {})).rejects.toThrow(
+      "Invalid tool result",
+    );
   }
   expect(state.result).toHaveBeenCalledTimes(2);
   state.disconnect();
@@ -633,8 +904,15 @@ test("result notifications and calls validate consumed data, not ignored optiona
 
 test("platform origin continuity guard is separate from the official source-window check", async () => {
   const { win, disconnect } = await make();
-  const guard = vi.mocked(win.addEventListener).mock.calls[0]![1] as (event: MessageEvent) => void;
-  const event = (source: unknown, origin: string) => ({ source, origin, data: {}, stopImmediatePropagation: vi.fn() });
+  const guard = vi.mocked(win.addEventListener).mock.calls[0]![1] as (
+    event: MessageEvent,
+  ) => void;
+  const event = (source: unknown, origin: string) => ({
+    source,
+    origin,
+    data: {},
+    stopImmediatePropagation: vi.fn(),
+  });
   const unrelated = event({}, "https://attacker.test");
   guard(unrelated as unknown as MessageEvent);
   const first = event(win.parent, "https://host.test");
@@ -649,8 +927,15 @@ test("platform origin continuity guard is separate from the official source-wind
 test('without a distinct parent (a native WebView) nothing is pinned: no origin is dropped and replies target "*"', async () => {
   const { app, win, disconnect } = await make({}, {}, true, false);
   expect(win.parent).toBe(win);
-  const guard = vi.mocked(win.addEventListener).mock.calls[0]![1] as (event: MessageEvent) => void;
-  const other = { source: win, origin: "https://other.test", data: {}, stopImmediatePropagation: vi.fn() };
+  const guard = vi.mocked(win.addEventListener).mock.calls[0]![1] as (
+    event: MessageEvent,
+  ) => void;
+  const other = {
+    source: win,
+    origin: "https://other.test",
+    data: {},
+    stopImmediatePropagation: vi.fn(),
+  };
   guard(other as unknown as MessageEvent);
   expect(other.stopImmediatePropagation).not.toHaveBeenCalled();
   const transport = app.connect.mock.calls[0][0];
@@ -663,11 +948,16 @@ test('without a distinct parent (a native WebView) nothing is pinned: no origin 
 test("applyHostContext: dark as both .dark and data-theme, only spec style variables, insets and the container's bounds", () => {
   const properties = new Map<string, string>(),
     classes = new Set<string>();
-  const style: Record<string, unknown> = { setProperty: (key: string, value: string) => properties.set(key, value) };
+  const style: Record<string, unknown> = {
+    setProperty: (key: string, value: string) => properties.set(key, value),
+  };
   const root = {
     dataset: {} as Record<string, string>,
     style,
-    classList: { toggle: (name: string, on: boolean) => (on ? classes.add(name) : classes.delete(name)) },
+    classList: {
+      toggle: (name: string, on: boolean) =>
+        on ? classes.add(name) : classes.delete(name),
+    },
   };
   const doc = { documentElement: root } as unknown as Document;
   applyHostContext(
@@ -709,5 +999,9 @@ test("applyHostContext: dark as both .dark and data-theme, only spec style varia
   expect([...classes]).toEqual([]);
   // a fixed height is also the measured size's bound
   applyHostContext({ containerDimensions: { height: 300 } }, doc);
-  expect(style).toMatchObject({ height: "300px", maxHeight: "300px", overflow: "auto" });
+  expect(style).toMatchObject({
+    height: "300px",
+    maxHeight: "300px",
+    overflow: "auto",
+  });
 });

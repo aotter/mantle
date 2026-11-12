@@ -5,9 +5,20 @@ import type {
   McpUiHostContext,
   McpUiUpdateModelContextRequest,
 } from "@modelcontextprotocol/ext-apps";
-import { outputOf, type CallTool, type ToolResult } from "../../../src/app/bridge.js";
+import {
+  outputOf,
+  type CallTool,
+  type ToolResult,
+} from "../../../src/app/bridge.js";
 import type { AdminAppTool, HostRequestOutcome } from "../app/hooks";
-import { APP_TOOLS, callAppTool, callPageTool, pageToolList, type AppTool, type ShownView } from "./app-tools";
+import {
+  APP_TOOLS,
+  callAppTool,
+  callPageTool,
+  pageToolList,
+  type AppTool,
+  type ShownView,
+} from "./app-tools";
 
 /** What the host lets the App do beyond rendering; each request is sent only when the host advertised it. */
 export interface HostApi {
@@ -25,7 +36,9 @@ export interface HostApi {
    */
   sendMessage(text: string): Promise<HostRequestOutcome>;
   /** `ui/update-model-context`: what the model should know at its next turn, without starting one. */
-  updateModelContext(params: McpUiUpdateModelContextRequest["params"]): Promise<boolean>;
+  updateModelContext(
+    params: McpUiUpdateModelContextRequest["params"],
+  ): Promise<boolean>;
   /** `ui/request-display-mode`: the mode the host granted, or null when it offers none other. */
   requestDisplayMode(mode: McpUiDisplayMode): Promise<McpUiDisplayMode | null>;
   /**
@@ -33,7 +46,11 @@ export interface HostApi {
    * in the host. `refused` when the host offers no downloads, refuses or the person cancels (its answer does not tell these
    * apart), or `name` names no file; `unknown` when no answer came, and the host's dialog may still save the file.
    */
-  downloadFile(name: string, text: string, mimeType?: string): Promise<HostRequestOutcome>;
+  downloadFile(
+    name: string,
+    text: string,
+    mimeType?: string,
+  ): Promise<HostRequestOutcome>;
   /**
    * The App's own tools (`APP_TOOLS`), which the host calls for the model: `read` gives what the App shows while it is set;
    * without it each call answers that no View is shown.
@@ -44,7 +61,10 @@ export interface HostApi {
 }
 
 /** The display modes the App can lay itself out for. */
-export const APP_DISPLAY_MODES: readonly McpUiDisplayMode[] = ["inline", "fullscreen"];
+export const APP_DISPLAY_MODES: readonly McpUiDisplayMode[] = [
+  "inline",
+  "fullscreen",
+];
 const MODES: readonly unknown[] = ["inline", "fullscreen", "pip"];
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -55,12 +75,17 @@ function json(value: unknown): boolean {
     stack: [unknown, boolean][] = [[value, false]];
   while (stack.length) {
     const [item, leaving] = stack.pop()!;
-    if (item === null || typeof item === "string" || typeof item === "boolean") continue;
+    if (item === null || typeof item === "string" || typeof item === "boolean")
+      continue;
     if (typeof item === "number") {
       if (!Number.isFinite(item)) return false;
       continue;
     }
-    if (!Array.isArray(item) && (!record(item) || ![Object.prototype, null].includes(Object.getPrototypeOf(item))))
+    if (
+      !Array.isArray(item) &&
+      (!record(item) ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(item)))
+    )
       return false;
     const object = item as object;
     if (leaving) {
@@ -86,20 +111,23 @@ export const MESSAGE_LIMIT = 8_000;
  * direction marks stay: Claude accepts them where an emoji or a script uses them, and dropping one could change the text.
  */
 const INVISIBLE = /[\u00AD\u200B\u2060-\u2064\uFEFF]/g;
+/** A character a person sees: not whitespace, a joiner, a variation selector or a direction mark kept above. */
+const VISIBLE = /[^\s\u200C-\u200F\uFE00-\uFE0F]/;
 
 /**
  * A `ui/message` text within what Claude documents it accepts (claude.com/docs/connectors/building/mcp-apps/send-messages),
  * or null when it cannot be. What carries no meaning is normalised: invisible characters are dropped, runs of more than
- * three line breaks become three, runs of more than 64 spaces or tabs become 64. What would change the message is refused,
- * not repaired: a blank text, or one over `MESSAGE_LIMIT` characters (counted in UTF-16 units, never fewer than a host
- * counts) after that normalising, since cutting it would send the person's words only in part.
+ * three line breaks (`\r\n` counts as one) become three, runs of more than 64 spaces or tabs become 64. What would
+ * change the message is refused, not repaired: a blank text (only whitespace, joiners, variation selectors or direction
+ * marks), or one over `MESSAGE_LIMIT` characters (counted in UTF-16 units, never fewer than a host counts) after that
+ * normalising, since cutting it would send the person's words only in part.
  */
 export function messageText(text: string): string | null {
   const sent = text
     .replace(INVISIBLE, "")
-    .replace(/(?:\r\n|\r|\n){4,}/g, "\n\n\n")
-    .replace(/[ \t]{65,}/g, run => run.slice(0, 64));
-  return sent.trim() && sent.length <= MESSAGE_LIMIT ? sent : null;
+    .replace(/(?:\r\n|\r(?!\n)|\n){4,}/g, "\n\n\n")
+    .replace(/[ \t]{65,}/g, (run) => run.slice(0, 64));
+  return VISIBLE.test(sent) && sent.length <= MESSAGE_LIMIT ? sent : null;
 }
 
 /**
@@ -131,14 +159,15 @@ function result(value: unknown): value is ToolResult {
       record(value) &&
       Array.isArray(value.content) &&
       value.content.every(
-        item =>
+        (item) =>
           record(item) &&
           typeof item.type === "string" &&
           (item.type === "text"
             ? typeof item.text === "string"
             : item.text === undefined || typeof item.text === "string"),
       ) &&
-      (value.structuredContent === undefined || record(value.structuredContent)) &&
+      (value.structuredContent === undefined ||
+        record(value.structuredContent)) &&
       (value._meta === undefined || record(value._meta)) &&
       (value.isError === undefined || typeof value.isError === "boolean")
     )
@@ -166,7 +195,10 @@ export function connectHost(
   // learns of a change (`listChanged`). A host without app tools never asks for them.
   const app = new App(
     { name: "mantle", version },
-    { availableDisplayModes: [...APP_DISPLAY_MODES], ...(appTools ? { tools: { listChanged: true } } : {}) },
+    {
+      availableDisplayModes: [...APP_DISPLAY_MODES],
+      ...(appTools ? { tools: { listChanged: true } } : {}),
+    },
     { autoResize: false },
   );
   let closed = false,
@@ -180,7 +212,9 @@ export function connectHost(
   }>();
   // by name: a component that registers again (new state in its handler) lists and announces nothing new
   const pageTools = () =>
-    [...pages].flatMap(page => page.listed).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    [...pages]
+      .flatMap((page) => page.listed)
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const tools = () => [...APP_TOOLS, ...pageTools()];
   // what the host was last told: an unmount and a registration of the same tools in one task (a re-render) send nothing
   let announced = JSON.stringify(tools()),
@@ -201,14 +235,23 @@ export function connectHost(
     app.onlisttools = async () => ({ tools: tools() });
     app.oncalltool = ({ name, arguments: args }, extra) => {
       // looked up at call time: a tool removed with its page is not called
-      const page = closed ? undefined : [...pages].find(page => page.tools.some(tool => tool.name === name));
+      const page = closed
+        ? undefined
+        : [...pages].find((page) =>
+            page.tools.some((tool) => tool.name === name),
+          );
       return page
         ? callPageTool(
-            page.tools.find(tool => tool.name === name)!,
+            page.tools.find((tool) => tool.name === name)!,
             args ?? {},
             AbortSignal.any([extra.mcpReq.signal, page.stop.signal]),
           )
-        : callAppTool(() => (closed ? null : (shown?.() ?? null)), name, args ?? {}, extra.mcpReq.signal);
+        : callAppTool(
+            () => (closed ? null : (shown?.() ?? null)),
+            name,
+            args ?? {},
+            extra.mcpReq.signal,
+          );
     };
   }
   let stopResize: (() => void) | undefined;
@@ -225,7 +268,8 @@ export function connectHost(
   const framed = win.parent !== win;
   const guard = (event: MessageEvent) => {
     if (event.source !== win.parent) return;
-    if (origin !== undefined && event.origin !== origin) event.stopImmediatePropagation();
+    if (origin !== undefined && event.origin !== origin)
+      event.stopImmediatePropagation();
     else incomingOrigin = event.origin;
   };
   win.addEventListener("message", guard, true);
@@ -233,18 +277,20 @@ export function connectHost(
   app.ontoolinput = ({ arguments: args }) => {
     if (active() && json(args ?? {})) handlers.input(args ?? {});
   };
-  app.ontoolresult = value => {
+  app.ontoolresult = (value) => {
     if (active() && result(value)) handlers.result(value);
   };
   app.ontoolcancelled = () => {
     if (active()) handlers.cancelled();
   };
-  app.onhostcontextchanged = value => {
+  app.onhostcontextchanged = (value) => {
     if (active()) handlers.context(value);
   };
   app.onclose = () => {
     if (ready && !closed) {
-      handlers.error(new Error("MCP host disconnected. Reopen the App to reconnect."));
+      handlers.error(
+        new Error("MCP host disconnected. Reopen the App to reconnect."),
+      );
       disconnect();
     }
   };
@@ -255,15 +301,23 @@ export function connectHost(
     return {};
   };
   const call: CallTool = async (name, args, signal) => {
-    if (!ready || closed || !name || !json(args)) throw new Error("Invalid tool call");
-    const answer = await app.callServerTool({ name, arguments: args }, { signal });
+    if (!ready || closed || !name || !json(args))
+      throw new Error("Invalid tool call");
+    const answer = await app.callServerTool(
+      { name, arguments: args },
+      { signal },
+    );
     if (!result(answer)) throw new Error("Invalid tool result");
     return answer;
   };
   // The official transport targets "*". Narrow delivery after the handshake too,
   // so a navigated parent cannot receive subsequent tool arguments or context.
   const target = {
-    postMessage: (message: unknown) => win.parent.postMessage(message, origin && origin !== "null" ? origin : "*"),
+    postMessage: (message: unknown) =>
+      win.parent.postMessage(
+        message,
+        origin && origin !== "null" ? origin : "*",
+      ),
   } as Window;
   void app
     .connect(new PostMessageTransport(target, win.parent))
@@ -273,11 +327,17 @@ export function connectHost(
       ready = true;
       const capabilities = app.getHostCapabilities() ?? {};
       // nothing is sent once closed; a rejection (timeout, lost connection, an error answer) does not say the host did not act
-      const ask = async (request: () => Promise<unknown>): Promise<HostRequestOutcome> => {
+      const ask = async (
+        request: () => Promise<unknown>,
+      ): Promise<HostRequestOutcome> => {
         if (closed) return "refused";
         try {
           const answer = await request();
-          return !record(answer) ? "unknown" : answer.isError === true ? "refused" : "accepted";
+          return !record(answer)
+            ? "unknown"
+            : answer.isError === true
+              ? "refused"
+              : "accepted";
         } catch {
           return "unknown";
         }
@@ -286,21 +346,34 @@ export function connectHost(
         {
           capabilities,
           ...(capabilities.serverTools ? { call } : {}),
-          openLink: async url =>
-            !!capabilities.openLinks && web(url) && (await ask(() => app.openLink({ url }))) === "accepted",
+          openLink: async (url) =>
+            !!capabilities.openLinks &&
+            web(url) &&
+            (await ask(() => app.openLink({ url }))) === "accepted",
           // every sender comes through here (`useHost().sendMessage`, the upload card): a message the host would
           // refuse is refused without asking it
-          sendMessage: async text => {
+          sendMessage: async (text) => {
             const sent = messageText(text);
             return capabilities.message?.text && sent !== null
-              ? ask(() => app.sendMessage({ role: "user", content: [{ type: "text", text: sent }] }))
+              ? ask(() =>
+                  app.sendMessage({
+                    role: "user",
+                    content: [{ type: "text", text: sent }],
+                  }),
+                )
               : "refused";
           },
           updateModelContext: async ({ content, structuredContent }) => {
             const accepts = capabilities.updateModelContext;
             const sent = {
-              ...(content && accepts?.text && content.every(block => block.type === "text") ? { content } : {}),
-              ...(structuredContent && accepts?.structuredContent ? { structuredContent } : {}),
+              ...(content &&
+              accepts?.text &&
+              content.every((block) => block.type === "text")
+                ? { content }
+                : {}),
+              ...(structuredContent && accepts?.structuredContent
+                ? { structuredContent }
+                : {}),
             };
             return (
               Object.keys(sent).length > 0 &&
@@ -316,20 +389,29 @@ export function connectHost(
               ? ask(() =>
                   app.downloadFile(
                     {
-                      contents: [{ type: "resource", resource: { uri: "file:///" + file, mimeType, text } }],
+                      contents: [
+                        {
+                          type: "resource",
+                          resource: { uri: "file:///" + file, mimeType, text },
+                        },
+                      ],
                     },
                     { timeout: 600_000 },
                   ),
                 )
               : "refused";
           },
-          serveTools: read => {
+          serveTools: (read) => {
             shown = read;
           },
-          registerTools: list => {
+          registerTools: (list) => {
             if (!appTools) throw new Error("This view serves no app tools.");
             const listed = pageToolList(list, pageTools());
-            const registration = { tools: [...list], listed, stop: new AbortController() };
+            const registration = {
+              tools: [...list],
+              listed,
+              stop: new AbortController(),
+            };
             pages.add(registration);
             changed();
             return () => {
@@ -338,8 +420,12 @@ export function connectHost(
               changed();
             };
           },
-          requestDisplayMode: async mode => {
-            if (closed || !app.getHostContext()?.availableDisplayModes?.includes(mode)) return null;
+          requestDisplayMode: async (mode) => {
+            if (
+              closed ||
+              !app.getHostContext()?.availableDisplayModes?.includes(mode)
+            )
+              return null;
             try {
               const result = await app.requestDisplayMode({ mode });
               return MODES.includes(result.mode) ? result.mode : null;
@@ -352,7 +438,7 @@ export function connectHost(
       );
       stopResize = reportHeight(app, win);
     })
-    .catch(error => {
+    .catch((error) => {
       if (!closed) {
         handlers.error(
           new Error(
@@ -407,7 +493,10 @@ function reportHeight(app: App, win: Window): () => void {
   return () => observer.disconnect();
 }
 
-export function applyHostContext(value: McpUiHostContext, doc: Document = document): void {
+export function applyHostContext(
+  value: McpUiHostContext,
+  doc: Document = document,
+): void {
   const root = doc.documentElement;
   if (value.locale) root.lang = value.locale;
   // `.dark` too, so an application's `.dark {}` overrides apply in a host as in the browser
@@ -418,17 +507,20 @@ export function applyHostContext(value: McpUiHostContext, doc: Document = docume
   }
   // only the spec's style variables: a host cannot reach the App's own tokens (its primary color)
   for (const [key, item] of Object.entries(value.styles?.variables ?? {}))
-    if (typeof item === "string" && HOST_STYLE_VARIABLE.test(key)) root.style.setProperty(key, item);
+    if (typeof item === "string" && HOST_STYLE_VARIABLE.test(key))
+      root.style.setProperty(key, item);
   const insets = value.safeAreaInsets,
     box = value.containerDimensions as
       | Partial<Record<"height" | "maxHeight" | "width" | "maxWidth", number>>
       | undefined;
-  if (insets) root.style.padding = `${insets.top}px ${insets.right}px ${insets.bottom}px ${insets.left}px`;
+  if (insets)
+    root.style.padding = `${insets.top}px ${insets.right}px ${insets.bottom}px ${insets.left}px`;
   if (box) {
     root.style.height = box.height === undefined ? "" : `${box.height}px`;
     // the host's width is an upper bound; the frame's own width wins when the host reports a wider one (#1931)
     for (const key of ["width", "maxWidth"] as const)
-      root.style[key] = box[key] === undefined ? "" : `min(${box[key]}px, 100%)`;
+      root.style[key] =
+        box[key] === undefined ? "" : `min(${box[key]}px, 100%)`;
     // a bounded frame scrolls its content; the max-height also holds the measured size within a fixed height
     const bound = Math.min(box.height ?? Infinity, box.maxHeight ?? Infinity);
     root.style.maxHeight = bound === Infinity ? "" : `${bound}px`;
@@ -438,7 +530,9 @@ export function applyHostContext(value: McpUiHostContext, doc: Document = docume
   if (fonts !== undefined) {
     const style =
       doc.getElementById("mantle-host-fonts") ??
-      doc.head.appendChild(Object.assign(doc.createElement("style"), { id: "mantle-host-fonts" }));
+      doc.head.appendChild(
+        Object.assign(doc.createElement("style"), { id: "mantle-host-fonts" }),
+      );
     style.textContent = fonts;
   }
 }
