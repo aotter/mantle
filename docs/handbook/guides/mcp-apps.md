@@ -472,8 +472,9 @@ what was not done and what to call instead: no rows shown, an id `view_focus`
 does not find, no next page, a page already loading, a list replaced while a
 page loaded, a host without server tools. Only an unknown tool, a `view_state`
 whose View input alone is over the limit and a page read that failed are
-`isError` results. The
-definitions are fixed and marked `readOnlyHint`, and an answer is at most
+`isError` results. `view_more` gives up on its read after 40 seconds, inside
+the 45 seconds a host waits, so it answers instead of leaving the host to time
+out. The definitions are fixed and marked `readOnlyHint`, and an answer is at most
 100,000 characters: `view_state` lists as many ids as fit and adds
 `truncated: true`.
 

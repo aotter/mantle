@@ -46,6 +46,12 @@ export const APP_TOOLS: AppTool[] = [
 /** The most result text a host takes from an app tool (Claude: 100,000 characters). */
 export const APP_TOOL_TEXT_LIMIT = 100_000;
 
+/**
+ * How long `view_more` waits for its page. A host stops waiting for an app tool (Claude: 45 seconds, not counting the
+ * person's approval) and tells the model the action might have happened; giving up first lets the tool answer instead.
+ */
+export const VIEW_MORE_DEADLINE = 40_000;
+
 /** The View's rows as the App shows them; the App answers null while it shows no rows (waiting, a page or a row action). */
 export interface ShownView {
   readonly tool: string | null;
@@ -138,7 +144,8 @@ export async function callAppTool(
   if (!view.loadMore || !view.tool) return text("This host cannot load more rows in the App; nothing was loaded.");
   if (view.cursor === undefined) return text("The View has no more rows; nothing was loaded.");
   if (view.loading) return text("The App is loading more rows already; call view_state once they are shown.");
-  const result = await view.loadMore(signal);
+  // a read: giving up only loses the page, which the model or the button can ask for again
+  const result = await view.loadMore(AbortSignal.any([signal, AbortSignal.timeout(VIEW_MORE_DEADLINE)]));
   const added = result && rowsOf(result);
   if (!added) return text("Could not load more rows.", true);
   // a new or refreshed result while the page loaded: the page was for a list that is gone

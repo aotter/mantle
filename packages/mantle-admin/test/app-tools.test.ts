@@ -1,5 +1,12 @@
 import { expect, test, vi } from "vitest";
-import { APP_TOOLS, APP_TOOL_TEXT_LIMIT, callAppTool, rowId, type ShownView } from "../admin/src/mcp-app/app-tools";
+import {
+  APP_TOOLS,
+  APP_TOOL_TEXT_LIMIT,
+  VIEW_MORE_DEADLINE,
+  callAppTool,
+  rowId,
+  type ShownView,
+} from "../admin/src/mcp-app/app-tools";
 
 // Claude's limits for the tools a view registers (claude.com/docs/connectors/building/mcp-apps/app-tools)
 test("the App's tool definitions stay within a host's app-tool limits", () => {
@@ -30,6 +37,7 @@ const view = (over: Partial<ShownView> = {}): ShownView => ({
   ...over,
 });
 const signal = new AbortController().signal;
+const page = { structuredContent: { rows: [{ id: "r3" }] } };
 const answer = async (shown: ShownView | null, name: string, args = {}) => callAppTool(() => shown, name, args, signal);
 const parsed = (result: { content: { text: string }[] }) => JSON.parse(result.content[0]!.text);
 
@@ -95,10 +103,23 @@ test("view_focus shows a row that is on screen, and only one", async () => {
   expect(shown.focus).toHaveBeenCalledTimes(2);
 });
 
+test("view_more gives up on its read before the host's 45-second limit, and answers", async () => {
+  expect(VIEW_MORE_DEADLINE).toBeLessThan(45_000);
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValueOnce(AbortSignal.abort());
+  const slow = view({ loadMore: vi.fn(async (read: AbortSignal) => (read.aborted ? null : page)) });
+  const result = await answer(slow, "view_more");
+  expect(timeout).toHaveBeenCalledWith(VIEW_MORE_DEADLINE);
+  expect(result).toEqual({ content: [{ type: "text", text: "Could not load more rows." }], isError: true });
+  timeout.mockRestore();
+});
+
 test("view_more is Load more: the View's own read, with the host's cancellation; it reads no other server tool", async () => {
   const shown = view();
   expect(parsed(await answer(shown, "view_more"))).toMatchObject({ rows: 4, more: true, ids: ["r1", "r2", "r3"] });
-  expect(shown.loadMore).toHaveBeenCalledWith(signal);
+  // the host's cancellation reaches the read
+  const host = new AbortController();
+  const cancelled = view({ loadMore: vi.fn(async (read: AbortSignal) => (host.abort(), read.aborted ? null : page)) });
+  expect(await callAppTool(() => cancelled, "view_more", {}, host.signal)).toMatchObject({ isError: true });
   // a host that answers the page's own cursor again: the list ends there, not a page loaded forever
   const repeated = view({ loadMore: async () => ({ structuredContent: { rows: [{ id: "r3" }], nextCursor: "c2" } }) });
   expect(parsed(await answer(repeated, "view_more"))).toMatchObject({ rows: 4, more: false });
