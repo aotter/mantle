@@ -29,6 +29,7 @@ import { authLoader, resolveCaller, type AuthInstance } from "../src/auth/caller
 import { d1Adapter } from "../src/auth/adapter.js";
 import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 import { d1Shim } from "./apps/d1-shim.js";
+import { FORGED, ISSUER, JWT_BEARER, managedGrantTestExtension, managedTokenRequest } from "./apps/managed-grant.js";
 
 const AUDIENCE = "https://api.example.test/mcp";
 const servers: { stop(force?: boolean): void }[] = [];
@@ -52,6 +53,10 @@ async function makeApp(
     fullBaseURL?: boolean;
     basePath?: string;
     jwtOptions?: (baseURL: string) => Parameters<typeof jwt>[0];
+    /** `oauthGrantRevocation({ managedGrants: true })`. */
+    managedGrants?: boolean;
+    /** Adds the test extension grants (tests/apps/managed-grant.ts). */
+    extensionGrants?: boolean;
   } = {},
 ) {
   const sqlite = new Database(":memory:");
@@ -144,11 +149,11 @@ async function makeApp(
         ? adminFunction({ adminRoles: ["admin"], ac, roles: { admin: ac.newRole(defaultStatements) } })
         : adminFunction(),
       jwt({ disableSettingJwtHeader: true, ...options.jwtOptions?.(baseURL) }),
-      oauthGrantRevocation(),
+      options.managedGrants ? oauthGrantRevocation({ managedGrants: true }) : oauthGrantRevocation(),
       oauthProvider({
         loginPage: "/sign-in",
         consentPage: "/oauth/consent",
-        extensions: [oauthGrantExtension],
+        extensions: [oauthGrantExtension, ...(options.extensionGrants ? [managedGrantTestExtension] : [])],
         scopes: ["mcp", "openid", "offline_access"],
         resources: [AUDIENCE],
         enforcePerClientResources: false,
@@ -1774,3 +1779,246 @@ for (const basePath of ["/api/auth", "/staff", ""])
     expect(response.status).toBe(200);
     expect(response.headers.getSetCookie().length).toBeGreaterThan(0);
   });
+
+describe("managed grants (opt-in extension-grant binding)", () => {
+  const claimsOf = (token: string) =>
+    JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString()) as Record<string, unknown>;
+  /** A user with no session, a public client allowed the extension grants and refresh tokens, and a token issuer. */
+  async function managedApp() {
+    const app = await makeApp({ managedGrants: true, extensionGrants: true });
+    const context = await app.auth.$context;
+    const email = "member@example.test";
+    const user = await context.internalAdapter.createUser({ email, name: "Member", emailVerified: true });
+    const registered = await app.post("/oauth2/register", {
+      client_name: "assistant",
+      redirect_uris: [REDIRECT],
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code", JWT_BEARER, FORGED, "refresh_token"],
+      response_types: ["code"],
+      scope: "mcp offline_access",
+    });
+    expect(registered.status, await registered.clone().text()).toBe(201);
+    const clientId = ((await registered.json()) as { client_id: string }).client_id;
+    const issue = async (fields: { scope?: string; grantType?: string; forge?: string } = {}) => {
+      const response = await managedTokenRequest(app.baseURL, {
+        clientId,
+        email,
+        resource: AUDIENCE,
+        scope: fields.scope ?? "mcp",
+        grantType: fields.grantType,
+        forge: fields.forge,
+      });
+      const body = (await response.json()) as { access_token: string; refresh_token?: string; scope: string };
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      return body;
+    };
+    const use = (token: string, audience: string = AUDIENCE) =>
+      resolveCaller(app.request({ authorization: `Bearer ${token}` }), app.loader, { audience });
+    const records = () =>
+      app.sqlite.query("SELECT * FROM oauthManagedGrant WHERE userId = ? ORDER BY createdAt").all(user.id) as Record<
+        string,
+        unknown
+      >[];
+    return { app, context, email, userId: user.id, clientId, issue, use, records };
+  }
+
+  test("a managed-grant token passes with no browser session and no refresh token, even when offline_access is asked", async () => {
+    const { app, userId, clientId, issue, use, records } = await managedApp();
+    const token = await issue({ scope: "mcp offline_access" });
+    expect(token.refresh_token).toBeUndefined();
+    expect(token.scope).toBe("mcp");
+    const claims = claimsOf(token.access_token);
+    expect(claims).toMatchObject({ sub: userId, azp: clientId, mantle_managed_grant: records()[0]!.id });
+    expect(claims).not.toHaveProperty("sid");
+    expect(claims).not.toHaveProperty("mantle_consent_id");
+    expect(claims).not.toHaveProperty("mantle_skip_consent");
+    expect(app.sqlite.query("SELECT count(*) AS n FROM session").get()).toEqual({ n: 0 });
+    expect(app.sqlite.query("SELECT count(*) AS n FROM oauthRefreshToken").get()).toEqual({ n: 0 });
+    expect(records()).toMatchObject([
+      { clientId, scopes: '["mcp"]', resources: JSON.stringify([AUDIENCE]), grantType: JWT_BEARER, issuer: ISSUER },
+    ]);
+    expect(records()[0]!.revoked).toBeNull();
+    app.statements.length = 0;
+    expect(await use(token.access_token)).toMatchObject({ subject: userId, credential: "oauth", clientId });
+    // The grant check is one single-row read; no session, consent or refresh-token query.
+    expect(app.statements.filter(sql => sql.includes('"oauthManagedGrant"'))).toHaveLength(1);
+    expect(app.statements.some(sql => /"session"|"oauthConsent"|"oauthRefreshToken"/.test(sql))).toBe(false);
+    // A new assertion renews the same record instead of adding one.
+    await issue();
+    expect(records()).toHaveLength(1);
+  });
+
+  test("refused once the record ended, the client is disabled, or the audience or scopes leave the record", async () => {
+    const { app, records, issue, use } = await managedApp();
+    const { access_token: token } = await issue();
+    const id = records()[0]!.id as string;
+    const refused = (promise: Promise<unknown>) => expect(promise).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    const set = (sql: string, ...values: (string | null)[]) => app.sqlite.run(sql, [...values]);
+    expect(await use(token)).toMatchObject({ kind: "user" });
+
+    set("UPDATE oauthManagedGrant SET scopes = ? WHERE id = ?", '["other"]', id);
+    await refused(use(token));
+    set(
+      "UPDATE oauthManagedGrant SET scopes = ?, resources = ? WHERE id = ?",
+      '["mcp"]',
+      '["https://other.test/mcp"]',
+      id,
+    );
+    await refused(use(token));
+    set("UPDATE oauthManagedGrant SET resources = ? WHERE id = ?", JSON.stringify([AUDIENCE]), id);
+    expect(await use(token)).toMatchObject({ kind: "user" });
+
+    set("UPDATE oauthClient SET disabled = 1");
+    await refused(use(token));
+    set("UPDATE oauthClient SET disabled = 0");
+    expect(await use(token)).toMatchObject({ kind: "user" });
+
+    set("UPDATE oauthManagedGrant SET revoked = ? WHERE id = ?", new Date().toISOString(), id);
+    await refused(use(token));
+  });
+
+  test("a claim alone never passes: forged by the grant handler, signed directly, or naming someone else's record", async () => {
+    const { app, userId, clientId, issue, use, records } = await managedApp();
+    const refused = (promise: Promise<unknown>) => expect(promise).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    // The handler's per-issuance claims win over the extension's in Better Auth, so the stored record is the authority.
+    const forged = await issue({ grantType: FORGED, forge: "no-such-record" });
+    expect(claimsOf(forged.access_token).mantle_managed_grant).toBe("no-such-record");
+    await refused(use(forged.access_token));
+    const base = claimsOf(forged.access_token);
+    expect(base).toMatchObject({ sub: userId, azp: clientId, aud: AUDIENCE, scope: "mcp" });
+    const signed = async (claims: Record<string, unknown>) =>
+      (await app.auth.api.signJWT({ body: { payload: { ...base, ...claims } } })).token;
+    await refused(use(await signed({ mantle_managed_grant: "no-such-record" })));
+    await refused(use(await signed({ mantle_managed_grant: 42 })));
+    // A live record of the same user and client passes only within its own scopes.
+    await issue();
+    const id = records()[0]!.id;
+    expect(await use(await signed({ mantle_managed_grant: id }))).toMatchObject({ subject: userId });
+    await refused(use(await signed({ mantle_managed_grant: id, scope: "mcp offline_access" })));
+    await refused(use(await signed({ mantle_managed_grant: id, sub: "someone-else" })));
+    await refused(use(await signed({ mantle_managed_grant: id, azp: "another-client" })));
+  });
+
+  test("password reset and admin ban end managed grants for good; sign-out and session expiry do not", async () => {
+    const { app, email, userId, issue, use, records } = await managedApp();
+    const refused = (promise: Promise<unknown>) => expect(promise).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    let { access_token: token } = await issue();
+    // The member's own browser session: signing out or expiring it leaves the managed grant alone.
+    const member = await app.signIn(email);
+    expect((await app.post("/sign-out", {}, { cookie: member.cookie })).status).toBe(200);
+    app.sqlite.run("DELETE FROM session WHERE userId = ?", [userId]);
+    expect(await use(token)).toMatchObject({ subject: userId });
+
+    await app.post("/request-password-reset", { email, redirectTo: "/" });
+    const reset = await app.post("/reset-password", { token: app.resets.at(-1)!, newPassword: "a-new-password-123" });
+    expect(reset.status).toBe(200);
+    await refused(use(token));
+    expect(records().every(record => record.revoked !== null)).toBe(true);
+
+    ({ access_token: token } = await issue());
+    expect(await use(token)).toMatchObject({ subject: userId });
+    const root = await app.signIn("root@example.test");
+    app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [root.userId]);
+    expect((await app.post("/admin/ban-user", { userId }, { cookie: root.cookie })).status).toBe(200);
+    expect((await app.post("/admin/unban-user", { userId }, { cookie: root.cookie })).status).toBe(200);
+    // Unbanning does not restore the grant.
+    await refused(use(token));
+    expect(records().every(record => record.revoked !== null)).toBe(true);
+  });
+
+  test("an unverified-email proof ends the pre-registrant's managed grants", async () => {
+    const { app, email, userId, issue, use } = await managedApp();
+    const { access_token: token } = await issue();
+    app.sqlite.run("UPDATE user SET emailVerified = 0 WHERE id = ?", [userId]);
+    await app.post("/sign-in/email-otp", { email, otp: "deliberately-invalid" });
+    await expect(use(token)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+  });
+
+  test("connected apps lists a managed grant once per client and disconnecting it ends the grant", async () => {
+    const { app, userId, clientId, issue, use } = await managedApp();
+    const { access_token: token } = await issue();
+    const consents = oauthConsents(app.auth as never);
+    const [listed, ...rest] = await consents.listOAuthConsents(userId);
+    expect(rest).toEqual([]);
+    expect(listed).toEqual({
+      id: expect.stringMatching(/^managed:/),
+      clientId,
+      clientName: "assistant",
+      scopes: ["mcp"],
+    });
+    expect(await consents.revokeOAuthConsent("someone-else", listed!.id)).toBe(false);
+    expect(await consents.revokeOAuthConsent(userId, listed!.id.slice("managed:".length))).toBe(false);
+    expect(await consents.revokeOAuthConsent(userId, listed!.id)).toBe(true);
+    await expect(use(token)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    expect(await consents.listOAuthConsents(userId)).toEqual([]);
+  });
+
+  test("consent tokens are unchanged beside managed grants, and a consent hides the same client's managed row", async () => {
+    const { app, userId, use } = await managedApp();
+    const member = await app.signIn("member@example.test");
+    expect(member.userId).toBe(userId);
+    const { accessToken, clientId } = await oauthAccessToken(app, member.cookie);
+    expect(await use(accessToken)).toMatchObject({ subject: userId });
+    expect(claimsOf(accessToken)).not.toHaveProperty("mantle_managed_grant");
+    const now = new Date().toISOString();
+    app.sqlite.run(
+      "INSERT INTO oauthManagedGrant (id, userId, clientId, scopes, resources, grantType, issuer, createdAt, updatedAt) VALUES ('m1', ?, ?, '[\"mcp\"]', ?, ?, ?, ?, ?)",
+      [userId, clientId, JSON.stringify([AUDIENCE]), JWT_BEARER, ISSUER, now, now],
+    );
+    const listed = await oauthConsents(app.auth as never).listOAuthConsents(userId);
+    expect(listed.filter(row => row.clientId === clientId)).toHaveLength(1);
+    expect(listed.find(row => row.clientId === clientId)!.id).not.toStartWith("managed:");
+  });
+
+  test("unused, nothing changes: no table, a managed claim takes the consent path, the helper refuses", async () => {
+    const app = await makeApp({ extensionGrants: true });
+    expect(oauthGrantRevocation()).not.toHaveProperty("schema");
+    expect(authSchemaSql(app.auth.options as never, "sqlite").some(sql => sql.includes("oauthManagedGrant"))).toBe(
+      false,
+    );
+    const context = await app.auth.$context;
+    const user = await context.internalAdapter.createUser({ email: "x@example.test", name: "X", emailVerified: true });
+    const registered = await app.post("/oauth2/register", {
+      client_name: "assistant",
+      redirect_uris: [REDIRECT],
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code", JWT_BEARER, FORGED],
+      response_types: ["code"],
+      scope: "mcp",
+    });
+    const clientId = ((await registered.json()) as { client_id: string }).client_id;
+    const fields = { clientId, email: "x@example.test", scope: "mcp", resource: AUDIENCE };
+    expect((await managedTokenRequest(app.baseURL, fields)).status).toBe(500);
+    const forged = (await (
+      await managedTokenRequest(app.baseURL, { ...fields, grantType: FORGED, forge: "anything" })
+    ).json()) as { access_token: string };
+    const failure = await resolveCaller(app.request({ authorization: `Bearer ${forged.access_token}` }), app.loader, {
+      audience: AUDIENCE,
+    }).catch(error => error);
+    expect(failure).toMatchObject({ code: "UNAUTHENTICATED", message: "OAuth token is not bound to a user session." });
+    expect(user.id).toBeTruthy();
+  });
+});
+
+test("managed-grant DDL is declared for both dialects only on opt-in", () => {
+  const options = (managedGrants: boolean) =>
+    ({
+      plugins: [
+        jwt(),
+        managedGrants ? oauthGrantRevocation({ managedGrants: true }) : oauthGrantRevocation(),
+        oauthProvider({ loginPage: "/l", consentPage: "/c" }),
+      ],
+    }) as never;
+  for (const dialect of ["sqlite", "postgres"] as const) {
+    const plain = authSchemaSql(options(false), dialect);
+    const managed = authSchemaSql(options(true), dialect);
+    expect(managed.filter(sql => !plain.includes(sql)).map(sql => sql.replace(/ \(.*/s, ""))).toEqual([
+      'CREATE TABLE IF NOT EXISTS "oauthManagedGrant"',
+      'CREATE INDEX IF NOT EXISTS "oauthManagedGrant_userId_idx" ON "oauthManagedGrant"',
+      'CREATE INDEX IF NOT EXISTS "oauthManagedGrant_clientId_idx" ON "oauthManagedGrant"',
+    ]);
+    expect(managed.find(sql => sql.includes('TABLE IF NOT EXISTS "oauthManagedGrant"'))).toContain(
+      'REFERENCES "oauthClient"("clientId") ON DELETE CASCADE',
+    );
+  }
+});
