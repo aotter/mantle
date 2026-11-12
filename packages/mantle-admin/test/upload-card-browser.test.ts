@@ -12,6 +12,12 @@ const body = async (request: IncomingMessage) => {
   return Buffer.concat(chunks);
 };
 
+const transparent = (html: HTMLElement) => [
+  getComputedStyle(html).backgroundColor,
+  getComputedStyle(document.body).backgroundColor,
+  document.querySelector('meta[name="color-scheme"]')?.getAttribute("content"),
+];
+
 // A host re-serving several servers' media names its own tool and has the card repeat `server` from the tool input.
 it.each([{}, { tool: "open_upload", forward: ["server"] }])(
   "the upload card PUTs the picked image to storage through CORS and commits it (%o)",
@@ -178,6 +184,12 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       const app = page.frameLocator("iframe");
       const upload = app.getByRole("button", { name: "Upload" });
       await expect.poll(() => upload.isEnabled()).toBe(true);
+      // the conversation shows through, and the first paint takes the host's scheme
+      expect(await app.locator("html").evaluate(transparent)).toEqual([
+        "rgba(0, 0, 0, 0)",
+        "rgba(0, 0, 0, 0)",
+        "light dark",
+      ]);
       // the purpose came in the tool input, so no picker shows; the input accepts its types
       expect(await app.locator("#purpose-row").isHidden()).toBe(true);
       expect(await app.getByLabel("Image").getAttribute("accept")).toBe("image/png,image/jpeg");

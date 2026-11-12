@@ -790,6 +790,11 @@ colours (`--color-primary`, `--color-primary-foreground`) and the chart colours
 root with both `data-theme` and the `.dark` class, so your `.dark {}` block and
 `dark:` classes follow it; a host that sends no theme gets the system's colour scheme (`prefers-color-scheme`), as the same `.dark` class, and a theme the host sends wins over it.
 The variables a host does not send fall back to the tokens.
+The App paints no background of its own: `html` and `body` are transparent, so
+the conversation shows through, and the App's HTML (and the upload card's)
+declares `<meta name="color-scheme" content="light dark">`, so a dark host shows
+no light backdrop before the script sets its theme. Text and borders follow that
+theme.
 
 ### A page for an MCP App view: `pages[].mcp`
 

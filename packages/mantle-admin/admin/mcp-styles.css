@@ -61,7 +61,15 @@
   --font-app: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
 }
 
+/*
+ * The conversation shows through: an opaque html or body would hide the host's surface. Until the script sets the host's
+ * theme the root takes either scheme, as the shell's color-scheme meta says (tokens.css says light), so a dark host shows
+ * no light backdrop; text and controls follow the theme the App then sets.
+ */
+:root:not(.dark) { color-scheme: light dark; }
+
 @layer base {
   * { border-color: var(--color-border); }
-  body { background: var(--color-background); color: var(--color-foreground); font-family: var(--font-app); margin: 0; }
+  html, body { background: transparent; }
+  body { color: var(--color-foreground); font-family: var(--font-app); margin: 0; }
 }
