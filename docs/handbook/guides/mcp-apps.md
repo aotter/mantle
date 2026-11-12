@@ -121,24 +121,31 @@ Claude can list an App on its Artifacts page, so people open it without asking
 for it, when one of its tools is marked as a global entry point: the tool's
 `_meta` keeps `ui.resourceUri` and adds `"openai/ui": { entrypoints: [{ type: "global" }] }`.
 That key is a host extension, outside the MCP Apps specification; other hosts may
-ignore it. Core adds no entry-point API: the generated tools are plain objects, so
-give one of them `meta` and pass the array to `mcp()` from `@aotter/mantle/mcp`, as
-an application composes its own tools:
+ignore it. The host offers entry points only to some organizations and only for
+remote Verified directory or custom connectors, so the App must still work when
+it is opened from a conversation. Core adds no entry-point API: the generated
+tools are plain objects, so give one of them `meta` before calling the generated
+`mcp()`:
 
 ```ts
-import { mcp } from '@aotter/mantle/mcp';
-import { tools } from './generated/mcp.js';
+import { mcp, tools } from './generated/mcp.js';
 
 declare const db: (env: Env) => D1Database; // as in service composition
-declare const caller: Parameters<typeof mcp>[1]['caller'];
+declare const caller: Parameters<typeof mcp>[0]['caller'];
 declare function loadAppHtml(): string;
 
-const marked = tools.map(tool => tool.name === 'my_tasks'
-  ? { ...tool, meta: { 'openai/ui': { entrypoints: [{ type: 'global' }] } } } : tool);
-const handler = mcp(marked, { db, caller, apps: { public: { resources: [{
+const entry = tools.find(tool => tool.name === 'my_tasks')!;
+Object.assign(entry, { meta: { ...entry.meta, 'openai/ui': { entrypoints: [{ type: 'global' }] } } });
+const handler = mcp({ db, caller, apps: { public: { resources: [{
   uri: 'ui://my-tasks/build-1', name: 'my-tasks', html: () => loadAppHtml(), renders: ['my_tasks'],
 }] } } });
 ```
+
+Mark the tool in place rather than passing a copied array to the kernel `mcp()`
+from `@aotter/mantle/mcp`: the generated `mcp()` also passes the access targets
+that gateway pins and dry runs check, the manifest's access user fields, and the
+read catalogue that lets a cookie-session read count as read-only, and a kernel
+composition would have to supply each of them again.
 
 `renders` still produces `ui.resourceUri`; the two keys merge. The mark is a
 listing hint and grants nothing: every call of the tool still runs its
@@ -150,7 +157,8 @@ The host's requirements for the marked tool are on Claude's
 [entry points](https://claude.com/docs/connectors/building/mcp-apps/entry-points)
 page; check them there. In short: every input optional, with a useful first
 view for `{}` (a View tool's `limit` and `cursor` are optional, so a View with
-no required input opens on its first page); `ui.visibility` omitted or
+no required input opens on its first page), and since the model may fill an
+optional input, a value is no proof of the user's choice; `ui.visibility` omitted or
 containing `"model"` (not an `appOnly` View); a `title` of at most 60
 characters that leaves out Claude's and Anthropic's names; and a `name` with no
 two underscores in a row, no two dots in a row and no dot next to an underscore.

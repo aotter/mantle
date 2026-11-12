@@ -5,7 +5,8 @@ import { resolve } from "node:path";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { sdkFixtureCaller } from "./apps/fixtures.js";
 import type { Caller } from "../src/kernel/contracts.js";
-import { mcp, type Tool } from "../src/kernel/mcp.js";
+import type { HostProps } from "../src/kernel/host-caller.js";
+import type { Tool } from "../src/kernel/mcp.js";
 
 const uri = "ui://my-tasks/build-1";
 const apps = {
@@ -47,11 +48,12 @@ async function example(run: (generated: string, db: Database) => Promise<void>) 
   }
 }
 
-/** One JSON-RPC request; `params._meta` may declare the client's capabilities. */
+/** One JSON-RPC request; `params._meta` may declare the client's capabilities, `mantle` is a gateway's `ctx.props.mantle`. */
 async function post(
-  handle: (request: Request, env: object) => Promise<Response | undefined>,
+  handle: (request: Request, env: object, ctx?: object) => Promise<Response | undefined>,
   path: string,
   body: object,
+  mantle?: HostProps,
 ) {
   const response = (await handle(
     new Request("https://frontend.test" + path, {
@@ -60,6 +62,7 @@ async function post(
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...body }),
     }),
     {},
+    mantle && { props: { mantle } },
   ))!;
   const text = await response.text();
   return {
@@ -96,12 +99,12 @@ test("frontend App uses authenticated owner scope, independent resource registra
 test("a generated View tool marked as a host entry point keeps its App link, first page and authorization", () =>
   example(async (generated, db) => {
     let caller: Caller = { kind: "anonymous" };
-    const { tools } = await import(generated);
-    // The composition the example README shows: the generated tools, one given the host's entry-point key.
-    const marked = (tools as readonly Tool<Database>[]).map(tool =>
-      tool.name === "my_tasks" ? { ...tool, meta: { "openai/ui": { entrypoints: [{ type: "global" }] } } } : tool,
-    );
-    const handle = mcp(marked, { db: () => db, caller: () => caller, apps });
+    const { tools, mcp } = await import(generated);
+    // The composition the example README shows: mark the generated tool in place, then serve the generated `mcp`,
+    // which keeps its access targets, user fields and read catalogue.
+    const entry = (tools as readonly Tool<Database>[]).find(tool => tool.name === "my_tasks")!;
+    Object.assign(entry, { meta: { ...entry.meta, "openai/ui": { entrypoints: [{ type: "global" }] } } });
+    const handle = mcp({ db: () => db, caller: () => caller, apps });
     // `withApps: false` is a client that declares its capabilities, without MCP Apps.
     const call = (method: string, params: object = {}, withApps = true) =>
       post(handle, "/mcp", {
@@ -128,4 +131,26 @@ test("a generated View tool marked as a host entry point keeps its App link, fir
     expect(plain._meta.ui).toBeUndefined();
     const result = (await call("tools/call", { name: "my_tasks", arguments: {} }, false)).body.result;
     expect(JSON.parse(result.content[0].text).rows.map((row: { id: string }) => row.id)).toEqual(["b1"]);
+    // The generated access targets still load: a gateway caller pinned to the View's hash is served, a stale pin is not.
+    const { targets } = await import(resolve(generated, "../access-targets.ts"));
+    const target = "view:my-tasks",
+      gateway = mcp({ db: () => db, apps, gateway: { tenant: "example" } });
+    const pinned = (targetHash: string): HostProps => ({
+      v: 1,
+      tenant: "example",
+      layer: "member",
+      user: { id: "alice" },
+      authenticatedAs: "fresh",
+      credential: "oauth",
+      requestId: "entry-1",
+      target,
+      targetHash,
+    });
+    const viaGateway = (targetHash: string) =>
+      post(gateway, "/mcp", { method: "tools/call", params: { name: "my_tasks", arguments: {} } }, pinned(targetHash));
+    expect(ids((await viaGateway(targets[target].targetHash)).body.result)).toEqual(["a1", "a2"]);
+    expect(await viaGateway("old")).toEqual({
+      status: 412,
+      body: { error: { code: "TARGET_HASH_MISMATCH", target } },
+    });
   }));
