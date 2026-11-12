@@ -1,6 +1,12 @@
 import { expect, test, vi } from "vitest";
 import { APP_TOOLS } from "../admin/src/mcp-app/app-tools";
-import { applyHostContext, connectHost, type HostApi } from "../admin/src/mcp-app/postmessage";
+import {
+  applyHostContext,
+  connectHost,
+  MESSAGE_LIMIT,
+  messageText,
+  type HostApi,
+} from "../admin/src/mcp-app/postmessage";
 
 // Adapter semantics only. The browser suite exercises these calls against the real
 // official App/AppBridge pair, not a second implementation of their wire protocol.
@@ -190,6 +196,36 @@ test("host calls use official methods, retain abort signals and limit links and 
   disconnect();
   await expect(host.call!("review", {})).rejects.toThrow("Invalid tool call");
   expect(await host.sendMessage("closed")).toBe("refused");
+});
+
+// claude.com/docs/connectors/building/mcp-apps/send-messages#messages-that-claude-accepts
+test("a message is kept within what Claude accepts: meaningless runs and invisible characters normalised, the rest refused", async () => {
+  // invisible characters are dropped, except where an emoji or a script uses them (ZWJ, ZWNJ, variation selector)
+  expect(messageText("re\u00ADport\u200B.csv\u2060\uFEFF")).toBe("report.csv");
+  expect(messageText("👩\u200D💻 ❤\uFE0F می\u200Cخواهم")).toBe("👩\u200D💻 ❤\uFE0F می\u200Cخواهم");
+  // at most three line breaks and 64 spaces or tabs in a row; the words are untouched
+  expect(messageText("a\n\n\n\n\nb\r\n\r\n\r\n\r\nc\n\n\nd")).toBe("a\n\n\nb\n\n\nc\n\n\nd");
+  expect(messageText(`a${" \t".repeat(40)}b${" ".repeat(64)}c`)).toBe(`a${" \t".repeat(32)}b${" ".repeat(64)}c`);
+  // an invisible character between two breaks does not hide a run
+  expect(messageText("a\n\n\u200B\n\nb")).toBe("a\n\n\nb");
+  // blank, or too long to send whole: refused, never cut
+  for (const blank of ["", " \n\t", "\u200B\u00AD"]) expect(messageText(blank)).toBeNull();
+  expect(messageText("x".repeat(MESSAGE_LIMIT))).toBe("x".repeat(MESSAGE_LIMIT));
+  expect(messageText("x".repeat(MESSAGE_LIMIT + 1))).toBeNull();
+  // counted after normalising: invisible padding does not push a message over
+  expect(messageText(`${"x".repeat(MESSAGE_LIMIT)}\u200B`)).toBe("x".repeat(MESSAGE_LIMIT));
+
+  const { app, host, disconnect } = await make({ message: { text: {} } });
+  expect(await host.sendMessage("I uploaded ca\u200Bt.png.\n\n\n\n\nThanks")).toBe("accepted");
+  expect(app.sendMessage).toHaveBeenCalledWith({
+    role: "user",
+    content: [{ type: "text", text: "I uploaded cat.png.\n\n\nThanks" }],
+  });
+  // a message the host would refuse is refused here, without asking it
+  expect(await host.sendMessage(" \u200B ")).toBe("refused");
+  expect(await host.sendMessage("x".repeat(MESSAGE_LIMIT + 1))).toBe("refused");
+  expect(app.sendMessage).toHaveBeenCalledOnce();
+  disconnect();
 });
 
 // The person may confirm in the host: an answer without an error is not delivery, and no answer is not a failure.

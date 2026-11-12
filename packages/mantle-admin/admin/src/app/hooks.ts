@@ -64,7 +64,12 @@ export interface AdminHost {
    * time (a link the person confirms late can still open).
    */
   openLink(url: string): Promise<boolean>;
-  /** `ui/message`: a user message in the conversation, which the person may confirm in the host first. */
+  /**
+   * `ui/message`: a user message in the conversation, which the person may confirm in the host first. Kept within what
+   * Claude accepts: invisible characters such as soft hyphens and zero-width spaces are dropped, and runs of more than
+   * three line breaks or 64 spaces or tabs shortened; a blank text, or one over 8,000 characters after that, is `refused`
+   * without asking the host.
+   */
   sendMessage(text: string): Promise<HostRequestOutcome>;
   /** `ui/update-model-context`: what the model should know at its next turn. */
   updateModelContext(params: {

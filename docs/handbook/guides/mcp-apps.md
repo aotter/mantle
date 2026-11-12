@@ -729,7 +729,13 @@ declare its read View and write Procedure; `useEntry` is unavailable in MCP.
    `"refused"`: the host answered with an error or offers no messages, so it was
    not sent. `"unknown"`: no answer came (a timeout, a lost connection); the host
    may still deliver it, so do not say it failed or resend it in code, and keep
-   the control usable for the person to try again.
+   the control usable for the person to try again. The text is kept within what
+   Claude documents it accepts: invisible characters such as soft hyphens and
+   zero-width spaces are dropped (zero-width joiners and variation selectors,
+   which emoji and scripts use, stay), and runs of more than three line breaks
+   or 64 spaces or tabs are shortened. A blank text, or one over 8,000
+   characters after that, is `"refused"` without asking the host; it is never
+   cut, so shorten a long message yourself.
 7. **Downloads through the host.** The sandbox starts no download from
    `<a download>`, `blob:` or `data:` URLs. When `useHost()?.capabilities.downloadFile`
    is set, `useHost().downloadFile(name, text, mimeType)` asks the host to save a

@@ -19,7 +19,10 @@ export interface HostApi {
    * the person confirms late can still open).
    */
   openLink(url: string): Promise<boolean>;
-  /** `ui/message`: a user message in the conversation, as `HostRequestOutcome`. The App never sends one by itself. */
+  /**
+   * `ui/message`: a user message in the conversation, as `HostRequestOutcome`. The App never sends one by itself. The text
+   * goes through `messageText`; one it refuses (blank, too long) is `refused` without asking the host.
+   */
   sendMessage(text: string): Promise<HostRequestOutcome>;
   /** `ui/update-model-context`: what the model should know at its next turn, without starting one. */
   updateModelContext(params: McpUiUpdateModelContextRequest["params"]): Promise<boolean>;
@@ -73,6 +76,30 @@ function json(value: unknown): boolean {
     }
   }
   return true;
+}
+
+/** The most characters a `ui/message` may carry (Claude: 8,000). */
+export const MESSAGE_LIMIT = 8_000;
+/**
+ * Invisible characters with no part in an emoji or a writing system: soft hyphen, zero-width space, word joiner, the
+ * invisible math operators and the zero-width no-break space. Zero-width (non-)joiners, variation selectors and
+ * direction marks stay: Claude accepts them where an emoji or a script uses them, and dropping one could change the text.
+ */
+const INVISIBLE = /[\u00AD\u200B\u2060-\u2064\uFEFF]/g;
+
+/**
+ * A `ui/message` text within what Claude documents it accepts (claude.com/docs/connectors/building/mcp-apps/send-messages),
+ * or null when it cannot be. What carries no meaning is normalised: invisible characters are dropped, runs of more than
+ * three line breaks become three, runs of more than 64 spaces or tabs become 64. What would change the message is refused,
+ * not repaired: a blank text, or one over `MESSAGE_LIMIT` characters (counted in UTF-16 units, never fewer than a host
+ * counts) after that normalising, since cutting it would send the person's words only in part.
+ */
+export function messageText(text: string): string | null {
+  const sent = text
+    .replace(INVISIBLE, "")
+    .replace(/(?:\r\n|\r|\n){4,}/g, "\n\n\n")
+    .replace(/[ \t]{65,}/g, run => run.slice(0, 64));
+  return sent.trim() && sent.length <= MESSAGE_LIMIT ? sent : null;
 }
 
 /** An absolute http(s) URL: the only links the App asks a host to open. */
@@ -250,10 +277,14 @@ export function connectHost(
           ...(capabilities.serverTools ? { call } : {}),
           openLink: async url =>
             !!capabilities.openLinks && web(url) && (await ask(() => app.openLink({ url }))) === "accepted",
-          sendMessage: async text =>
-            capabilities.message?.text
-              ? ask(() => app.sendMessage({ role: "user", content: [{ type: "text", text }] }))
-              : "refused",
+          // every sender comes through here (`useHost().sendMessage`, the upload card): a message the host would
+          // refuse is refused without asking it
+          sendMessage: async text => {
+            const sent = messageText(text);
+            return capabilities.message?.text && sent !== null
+              ? ask(() => app.sendMessage({ role: "user", content: [{ type: "text", text: sent }] }))
+              : "refused";
+          },
           updateModelContext: async ({ content, structuredContent }) => {
             const accepts = capabilities.updateModelContext;
             const sent = {

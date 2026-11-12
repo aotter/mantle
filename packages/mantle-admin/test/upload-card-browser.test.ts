@@ -189,7 +189,8 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       await expect.poll(() => app.locator("#status").textContent()).toContain("takes image/png or image/jpeg");
       expect(await app.locator("#status").getAttribute("role")).toBe("alert");
       const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(56)]);
-      await app.getByLabel("Image").setInputFiles({ name: "cat.png", mimeType: "image/png", buffer: png });
+      // a raw file name: the zero-width space goes to the server as named, but not into the user message
+      await app.getByLabel("Image").setInputFiles({ name: "c\u200Bat.png", mimeType: "image/png", buffer: png });
       await app.getByLabel("Alt text").fill("A cat");
       await upload.click();
       await app.getByText(/^Uploaded\. Asset id /).waitFor();
@@ -212,7 +213,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
           name: TOOL,
           arguments: {
             purpose: "cover",
-            filename: "cat.png",
+            filename: "c\u200Bat.png",
             variants: [{ mimeType: "image/png", byteSize: 64, role: "primary" }],
             alt: "A cat",
             ...extra,
