@@ -739,10 +739,13 @@ declare its read View and write Procedure; `useEntry` is unavailable in MCP.
 7. **Downloads through the host.** The sandbox starts no download from
    `<a download>`, `blob:` or `data:` URLs. When `useHost()?.capabilities.downloadFile`
    is set, `useHost().downloadFile(name, text, mimeType)` asks the host to save a
-   text file named `name` (with its extension, no `/`; the type defaults to
-   `text/plain`) after the person confirms it. It resolves to the same three
-   outcomes: `"refused"` covers a refusal, a cancellation and a host that offers
-   no downloads; `"unknown"` means the host's dialog may still save the file.
+   text file named `name` (with its extension; the type defaults to
+   `text/plain`) after the person confirms it. The name is the last segment of a
+   `file:///` URI: spaces stay, and `/`, `?`, `#`, which would change that
+   segment, and `%`, `:`, `"`, `*`, `<`, `>`, `|`, `~`, `\`, which Claude
+   replaces anyway, become `_`; an empty name, `.` or `..` is `"refused"`. It
+   resolves to the same three outcomes: `"refused"` covers a refusal, a
+   cancellation and a host that offers no downloads; `"unknown"` means the host's dialog may still save the file.
    Send one when the person asks, and one at a time. Hosts refuse some
    extensions, such as `.exe` or `.js`.
 

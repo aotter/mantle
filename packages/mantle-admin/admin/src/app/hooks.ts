@@ -80,9 +80,10 @@ export interface AdminHost {
   requestDisplayMode(mode: "inline" | "fullscreen" | "pip"): Promise<"inline" | "fullscreen" | "pip" | null>;
   /**
    * `ui/download-file`: a text file saved to the person's device after they confirm it in the host. `name` is the saved
-   * file's name with its extension (`report.csv`), without `/`; `mimeType` defaults to `text/plain`. `refused` when the
-   * host offers no downloads (`capabilities.downloadFile`), refuses, or the person cancels; `unknown` when no answer came,
-   * and the host's dialog may still save the file. Send one at a time, when the person asks for it.
+   * file's name with its extension (`report.csv`); spaces stay, and `/`, `?`, `#`, `\`, `%`, `:`, `"`, `*`, `<`, `>`, `|`
+   * and `~` become `_`. `mimeType` defaults to `text/plain`. `refused` when the host offers no downloads
+   * (`capabilities.downloadFile`), refuses, or the person cancels, or `name` is empty, `.` or `..`; `unknown` when no
+   * answer came, and the host's dialog may still save the file. Send one at a time, when the person asks for it.
    */
   downloadFile(name: string, text: string, mimeType?: string): Promise<HostRequestOutcome>;
   /**
