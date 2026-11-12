@@ -213,7 +213,7 @@ test("the App's own tools: the same definitions on every mount, answered from wh
     tool: "pending",
     input: {},
     rows: [{ id: "r1" }],
-    more: false,
+    cursor: undefined,
     loading: false,
     generation: 1,
     focus,
@@ -221,7 +221,15 @@ test("the App's own tools: the same definitions on every mount, answered from wh
   expect(JSON.parse((await call(first)).content[0].text)).toMatchObject({ tool: "pending", ids: ["r1"] });
   first.host.serveTools(undefined);
   expect(await call(first)).toMatchObject({ isError: true });
-  first.host.serveTools(() => ({ tool: "p", input: {}, rows: [], more: false, loading: false, generation: 1, focus }));
+  first.host.serveTools(() => ({
+    tool: "p",
+    input: {},
+    rows: [],
+    cursor: undefined,
+    loading: false,
+    generation: 1,
+    focus,
+  }));
   first.disconnect();
   expect(await call(first)).toMatchObject({ isError: true });
   // answering the model's tools sends the host nothing of the App's own

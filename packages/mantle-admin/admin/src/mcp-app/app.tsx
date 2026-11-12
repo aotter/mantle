@@ -29,7 +29,7 @@ import {
   type ToolResult,
 } from "../../../src/app/bridge";
 import { web, type HostApi } from "./postmessage";
-import { rowId, type ShownView } from "./app-tools";
+import { cursorAfter, rowId, type ShownView } from "./app-tools";
 import { useLoadMore } from "../lib/use-load-more";
 import { Slot, useViewCellNames } from "../app/slots";
 import type { CellProps } from "../app/slot-props";
@@ -217,7 +217,7 @@ export function MantleApp(props: {
             tool,
             input: props.input ?? {},
             rows,
-            more: cursor !== undefined,
+            cursor,
             get loading() {
               return asked.current === nextPage;
             },
@@ -388,7 +388,12 @@ export function pagesReducer(state: Pages, action: PagesAction): Pages {
   if (action.type === "failed") return { ...state, more: "failed" };
   const next = rowsOf(action.result);
   return next
-    ? { ...state, rows: [...(state.rows ?? []), ...next], cursor: nextCursorOf(action.result), more: "idle" }
+    ? {
+        ...state,
+        rows: [...(state.rows ?? []), ...next],
+        cursor: cursorAfter(state.cursor, action.result),
+        more: "idle",
+      }
     : { ...state, more: "failed" };
 }
 
