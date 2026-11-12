@@ -320,6 +320,83 @@ it("serves the model view-only app tools: read the View, load its next page thro
   }
 }, 45_000);
 
+it("loads a page once when view_more calls, or a view_more and the Load more button, start before the App re-renders", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    const shown = () => app.locator('[data-slot="app-rows"] > li').count();
+    const first = async () => {
+      await page.evaluate(async () => {
+        const { bridge } = (window as any).host;
+        await bridge.sendToolInput({ arguments: { limit: 1 } });
+        await bridge.sendToolResult({
+          content: [],
+          structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops" }], nextCursor: "c2" },
+          _meta: { "net.aotter.mantle/tool": "pending" },
+        });
+      });
+      await expect.poll(shown).toBe(1);
+      await app.getByRole("button", { name: "載入更多" }).waitFor();
+    };
+    const text = (result: { content: { text: string }[] }) => JSON.parse(result.content[0]!.text);
+    await first();
+    // a model's parallel tool calls: one loads the page, the other is told a load is under way
+    const both: { isError?: boolean; content: { text: string }[] }[] = await page.evaluate(async () => {
+      const { bridge } = (window as any).host;
+      const view_more = () => bridge.callTool({ name: "view_more", arguments: {} });
+      return Promise.all([view_more(), view_more()]);
+    });
+    expect(both.filter(result => !result.isError).map(text)).toEqual([
+      { tool: "pending", input: { limit: 1 }, rows: 2, more: false, ids: ["r1", "r2"] },
+    ]);
+    expect(both.filter(result => result.isError).map(result => result.content[0]!.text)).toEqual([
+      "The App is loading more rows already.",
+    ]);
+    await app.getByText("Desks").waitFor();
+    expect(await shown()).toBe(2);
+    expect(
+      text(await page.evaluate(() => (window as any).host.bridge.callTool({ name: "view_state", arguments: {} }))),
+    ).toMatchObject({ rows: 2, ids: ["r1", "r2"] });
+    expect(await page.evaluate(() => (window as any).host.calls)).toEqual([
+      expect.objectContaining({ name: "pending", arguments: { limit: 1, cursor: "c2" } }),
+    ]);
+
+    // the person presses Load more in the same task that delivers a view_more, before React re-renders
+    await first();
+    const frame = page.frames().find(frame => frame !== page.mainFrame())!;
+    await frame.evaluate(() => {
+      const press = async (event: MessageEvent) => {
+        if (event.data?.params?.name !== "view_more") return;
+        window.removeEventListener("message", press);
+        // microtasks only: the App has started the view_more's load, React has not rendered it yet
+        for (let tick = 0; tick < 50; tick++) await null;
+        [...document.querySelectorAll("button")].find(button => button.textContent === "載入更多")!.click();
+      };
+      window.addEventListener("message", press);
+    });
+    const raced = await page.evaluate(() => (window as any).host.bridge.callTool({ name: "view_more", arguments: {} }));
+    expect(raced.isError).toBeUndefined();
+    await app.getByText("Desks").waitFor();
+    expect(await shown()).toBe(2);
+    expect(await page.evaluate(() => (window as any).host.calls)).toHaveLength(2);
+    expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 45_000);
+
 it("renders an application's pages[].mcp page for its View's tool, not the rows, and its data comes through the host's tools", async () => {
   const server = await hostServer();
   await server.listen();
