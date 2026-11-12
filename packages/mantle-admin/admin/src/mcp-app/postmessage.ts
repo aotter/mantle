@@ -6,6 +6,7 @@ import type {
   McpUiUpdateModelContextRequest,
 } from "@modelcontextprotocol/ext-apps";
 import { outputOf, type CallTool, type ToolResult } from "../../../src/app/bridge.js";
+import type { HostRequestOutcome } from "../app/hooks";
 import { APP_TOOLS, callAppTool, type ShownView } from "./app-tools";
 
 /** What the host lets the App do beyond rendering; each request is sent only when the host advertised it. */
@@ -13,19 +14,23 @@ export interface HostApi {
   readonly capabilities: McpUiHostCapabilities;
   /** Server tool calls through the host; absent when the host offers no `serverTools`, so the App is read-only. */
   readonly call?: CallTool;
-  /** `ui/open-link` for an http(s) URL; false when the host cannot open links or refuses. */
+  /**
+   * `ui/open-link` for an http(s) URL; false when the host cannot open links, refuses, or did not answer in time (a link
+   * the person confirms late can still open).
+   */
   openLink(url: string): Promise<boolean>;
-  /** `ui/message`: a user message in the conversation. The App never sends one by itself. */
-  sendMessage(text: string): Promise<boolean>;
+  /** `ui/message`: a user message in the conversation, as `HostRequestOutcome`. The App never sends one by itself. */
+  sendMessage(text: string): Promise<HostRequestOutcome>;
   /** `ui/update-model-context`: what the model should know at its next turn, without starting one. */
   updateModelContext(params: McpUiUpdateModelContextRequest["params"]): Promise<boolean>;
   /** `ui/request-display-mode`: the mode the host granted, or null when it offers none other. */
   requestDisplayMode(mode: McpUiDisplayMode): Promise<McpUiDisplayMode | null>;
   /**
-   * `ui/download-file`: a CSV file saved to the person's device, named `name`, after the host confirms it. False when the
-   * host offers no downloads, refuses or the person cancels; the host's answer does not tell these apart.
+   * `ui/download-file`: a CSV file saved to the person's device, named `name`, after the person confirms it in the host.
+   * `refused` when the host offers no downloads, refuses or the person cancels (its answer does not tell these apart);
+   * `unknown` when no answer came, and the host's dialog may still save the file.
    */
-  downloadFile(name: string, text: string): Promise<boolean>;
+  downloadFile(name: string, text: string): Promise<HostRequestOutcome>;
   /**
    * The App's own tools (`APP_TOOLS`), which the host calls for the model: `read` gives what the App shows while it is set;
    * without it each call answers that no View is shown.
@@ -182,40 +187,52 @@ export function connectHost(
       origin = incomingOrigin;
       ready = true;
       const capabilities = app.getHostCapabilities() ?? {};
-      const ask = async (request: () => Promise<unknown>) => {
-        if (closed) return false;
+      // nothing is sent once closed; a rejection (timeout, lost connection, an error answer) does not say the host did not act
+      const ask = async (request: () => Promise<unknown>): Promise<HostRequestOutcome> => {
+        if (closed) return "refused";
         try {
           const answer = await request();
-          return record(answer) && answer.isError !== true;
+          return !record(answer) ? "unknown" : answer.isError === true ? "refused" : "accepted";
         } catch {
-          return false;
+          return "unknown";
         }
       };
       handlers.ready(
         {
           capabilities,
           ...(capabilities.serverTools ? { call } : {}),
-          openLink: async url => !!capabilities.openLinks && web(url) && ask(() => app.openLink({ url })),
+          openLink: async url =>
+            !!capabilities.openLinks && web(url) && (await ask(() => app.openLink({ url }))) === "accepted",
           sendMessage: async text =>
-            !!capabilities.message?.text &&
-            ask(() => app.sendMessage({ role: "user", content: [{ type: "text", text }] })),
+            capabilities.message?.text
+              ? ask(() => app.sendMessage({ role: "user", content: [{ type: "text", text }] }))
+              : "refused",
           updateModelContext: async ({ content, structuredContent }) => {
             const accepts = capabilities.updateModelContext;
             const sent = {
               ...(content && accepts?.text && content.every(block => block.type === "text") ? { content } : {}),
               ...(structuredContent && accepts?.structuredContent ? { structuredContent } : {}),
             };
-            return Object.keys(sent).length > 0 && json(sent) && ask(() => app.updateModelContext(sent));
+            return (
+              Object.keys(sent).length > 0 &&
+              json(sent) &&
+              (await ask(() => app.updateModelContext(sent))) === "accepted"
+            );
           },
           // the person confirms in the host, so the wait is theirs, not the SDK's default request timeout
           downloadFile: async (name, text) =>
-            !!capabilities.downloadFile &&
-            ask(() =>
-              app.downloadFile(
-                { contents: [{ type: "resource", resource: { uri: "file:///" + name, mimeType: "text/csv", text } }] },
-                { timeout: 600_000 },
-              ),
-            ),
+            capabilities.downloadFile
+              ? ask(() =>
+                  app.downloadFile(
+                    {
+                      contents: [
+                        { type: "resource", resource: { uri: "file:///" + name, mimeType: "text/csv", text } },
+                      ],
+                    },
+                    { timeout: 600_000 },
+                  ),
+                )
+              : "refused",
           serveTools: read => {
             shown = read;
           },

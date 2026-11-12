@@ -127,10 +127,10 @@ test("missing capabilities expose no tool call and send no unavailable host requ
   const { host, app, disconnect } = await make();
   expect(host.call).toBeUndefined();
   expect(await host.openLink("https://example.com")).toBe(false);
-  expect(await host.sendMessage("hi")).toBe(false);
+  expect(await host.sendMessage("hi")).toBe("refused");
   expect(await host.updateModelContext({ content: [{ type: "text", text: "x" }] })).toBe(false);
   expect(await host.requestDisplayMode("fullscreen")).toBeNull();
-  expect(await host.downloadFile("pending.csv", "id\r\n")).toBe(false);
+  expect(await host.downloadFile("pending.csv", "id\r\n")).toBe("refused");
   for (const request of [
     app.callServerTool,
     app.openLink,
@@ -160,7 +160,12 @@ test("host calls use official methods, retain abort signals and limit links and 
   expect(app.openLink).toHaveBeenCalledWith({ url: "https://example.com" });
   app.openLink.mockResolvedValueOnce({ isError: true });
   expect(await host.openLink("https://example.com")).toBe(false);
-  expect(await host.sendMessage("hi")).toBe(true);
+  // links and model context stay yes/no: no answer in time is false
+  app.openLink.mockRejectedValueOnce(new Error("Request timed out"));
+  expect(await host.openLink("https://example.com")).toBe(false);
+  app.updateModelContext.mockRejectedValueOnce(new Error("Request timed out"));
+  expect(await host.updateModelContext({ content: [{ type: "text", text: "late" }] })).toBe(false);
+  expect(await host.sendMessage("hi")).toBe("accepted");
   expect(app.sendMessage).toHaveBeenCalledWith({ role: "user", content: [{ type: "text", text: "hi" }] });
   expect(await host.updateModelContext({ structuredContent: { secret: 1 } })).toBe(false);
   expect(
@@ -170,12 +175,40 @@ test("host calls use official methods, retain abort signals and limit links and 
   expect(await host.requestDisplayMode("fullscreen")).toBe("fullscreen");
   disconnect();
   await expect(host.call!("review", {})).rejects.toThrow("Invalid tool call");
-  expect(await host.sendMessage("closed")).toBe(false);
+  expect(await host.sendMessage("closed")).toBe("refused");
 });
+
+// The person may confirm in the host: an answer without an error is not delivery, and no answer is not a failure.
+test.each(["sendMessage", "downloadFile"] as const)(
+  "%s: an error answer is refused, a timeout, a thrown error or a connection lost in flight is unknown",
+  async method => {
+    const { app, host, disconnect } = await make({ message: { text: {} }, downloadFile: {} });
+    const send = () => (method === "sendMessage" ? host.sendMessage("hi") : host.downloadFile("pending.csv", "x"));
+    expect(await send()).toBe("accepted");
+    app[method].mockResolvedValueOnce({ isError: true });
+    expect(await send()).toBe("refused");
+    app[method].mockResolvedValueOnce({ isError: false });
+    expect(await send()).toBe("accepted");
+    app[method].mockRejectedValueOnce(Object.assign(new Error("Request timed out"), { code: -32001 }));
+    expect(await send()).toBe("unknown");
+    app[method].mockRejectedValueOnce(new Error("Method not found"));
+    expect(await send()).toBe("unknown");
+    // the official client rejects a request still in flight when its connection closes
+    let lose!: (error: Error) => void;
+    app[method].mockReturnValueOnce(new Promise((_, reject) => (lose = reject)));
+    const inFlight = send();
+    disconnect();
+    lose(Object.assign(new Error("Connection closed"), { code: -32000 }));
+    expect(await inFlight).toBe("unknown");
+    // once closed nothing is sent
+    expect(await send()).toBe("refused");
+    expect(app[method]).toHaveBeenCalledTimes(6);
+  },
+);
 
 test("a download is one embedded CSV resource named by its file:// URI, with the person's time to confirm", async () => {
   const { app, host, disconnect } = await make({ downloadFile: {} });
-  expect(await host.downloadFile("pending.csv", "\uFEFFitem\r\nLaptops\r\n")).toBe(true);
+  expect(await host.downloadFile("pending.csv", "\uFEFFitem\r\nLaptops\r\n")).toBe("accepted");
   expect(app.downloadFile.mock.calls).toEqual([
     [
       {
@@ -191,12 +224,10 @@ test("a download is one embedded CSV resource named by its file:// URI, with the
   ]);
   // a refusal and a cancellation are the same answer
   app.downloadFile.mockResolvedValueOnce({ isError: true });
-  expect(await host.downloadFile("pending.csv", "x")).toBe(false);
-  app.downloadFile.mockRejectedValueOnce(new Error("Request timed out"));
-  expect(await host.downloadFile("pending.csv", "x")).toBe(false);
+  expect(await host.downloadFile("pending.csv", "x")).toBe("refused");
   disconnect();
-  expect(await host.downloadFile("pending.csv", "x")).toBe(false);
-  expect(app.downloadFile).toHaveBeenCalledTimes(3);
+  expect(await host.downloadFile("pending.csv", "x")).toBe("refused");
+  expect(app.downloadFile).toHaveBeenCalledTimes(2);
 });
 
 test("the App's own tools: the same definitions on every mount, answered from what the App shows, none once closed", async () => {

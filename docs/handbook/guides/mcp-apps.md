@@ -363,8 +363,13 @@ the host advertises in `hostCapabilities`:
   saves the rows the App holds, "Load more" pages included, in the columns
   shown, as one `text/csv` resource named `<tool>.csv` through
   `ui/download-file`, laid out as Admin's browser export. It makes no server
-  call. The host's answer does not tell a refusal from a cancellation, so
-  either shows that the download did not finish.
+  call. The person confirms the download in the host, so the App waits up to
+  ten minutes. An error answer shows that the download did not finish (the
+  host's answer does not tell a refusal from a cancellation). When no answer
+  comes (a timeout, a lost connection) the host's dialog may still save the
+  file, so the App says the download could not be confirmed, not that it
+  failed. An answer without an error shows nothing: it says the host took the
+  request, not that the file was saved.
 - `appInfo.version` is the `@aotter/mantle-admin` version.
 
 The pinned official client validates host context. Invalid protocol data is not
@@ -444,8 +449,8 @@ The card is `ui://mantle-admin/upload` and renders `upload_media`. The person
 picks an image (and may type alt text); the card reads the purposes with
 `upload_media`, calls it with the file's metadata, PUTs the file straight to the
 target with progress, calls `upload_media` again with the `uploadId`, and sends
-`ui/message` with the asset id (or `ui/update-model-context` when the host takes
-no messages). The bytes never pass through MCP or the host. The card uploads the
+`ui/message` with the asset id, and also `ui/update-model-context` unless the
+host accepted the message. The bytes never pass through MCP or the host. The card uploads the
 original file as the single variant a purpose takes
 ([ADR-0017](../../adr/0017-media-multi-variant-agent-side-optimization.md)); a
 purpose with several variant slots needs an agent that prepares them, and the
@@ -559,7 +564,9 @@ declare its read View and write Procedure; `useEntry` is unavailable in MCP.
 2. **Links through the host.** `<AdminLink>` and `useOpenLink()` open an http(s)
    URL through `ui/open-link`; the sandbox blocks `window.open` and
    `target="_blank"`. An `/admin/...` path has no origin in a host, so
-   `<AdminLink>` shows it as text.
+   `<AdminLink>` shows it as text. `useOpenLink()` resolves `false` when the
+   host cannot or refuses, or does not answer in time; a link the person
+   confirms late can still open.
 3. **No assumed width.** The host sets the frame; a narrow one and a full screen
    must both work.
 4. **Remote assets only from origins you declare.** Something from another origin
@@ -574,6 +581,14 @@ declare its read View and write Procedure; `useEntry` is unavailable in MCP.
 5. **Branch on the surface if you must, but both branches render.**
    `useAdminSurface()` and the `surface` prop say where you are; a component that
    shows nothing in a host is a hole in the host's view.
+6. **Read a message's outcome as the host gives it.** `useHost()?.sendMessage(text)`
+   sends `ui/message` when the person acts, and resolves to one of three
+   outcomes. `"accepted"`: the host answered without an error, which is not
+   proof of delivery (a host may answer before the person agrees to send it).
+   `"refused"`: the host answered with an error or offers no messages, so it was
+   not sent. `"unknown"`: no answer came (a timeout, a lost connection); the host
+   may still deliver it, so do not say it failed or resend it in code, and keep
+   the control usable for the person to try again.
 
 ### Theme
 

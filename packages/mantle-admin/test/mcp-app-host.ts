@@ -16,6 +16,7 @@ const calls: unknown[] = [],
   modes: string[] = [],
   downloads: unknown[] = [];
 // a test's own answers for a View page, by cursor, used in order; an Error fails that call
+const downloadAnswers: unknown[] = [];
 const pages: Record<string, unknown[]> = {};
 // `?read-only`: a host that renders Apps but offers no server tools
 const readOnly = location.search.includes("read-only");
@@ -78,9 +79,12 @@ bridge.onrequestdisplaymode = async ({ mode }) => {
   modes.push(mode);
   return { mode };
 };
+// a test's own answers for downloads, used in order; an Error is an error response, which the App cannot read as a refusal
 bridge.ondownloadfile = async params => {
   downloads.push(params);
-  return {};
+  const answer = downloadAnswers.shift();
+  if (answer instanceof Error) throw answer;
+  return (answer ?? {}) as never;
 };
 bridge.oncalltool = async (params, extra) => {
   calls.push(params);
@@ -133,6 +137,7 @@ Object.assign(window, {
     contexts,
     modes,
     downloads,
+    downloadAnswers,
     pages,
     get ready() {
       return ready;

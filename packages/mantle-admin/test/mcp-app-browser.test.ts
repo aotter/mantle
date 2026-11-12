@@ -244,6 +244,23 @@ it("loads the next page of a View through the host and appends its rows, and exp
         },
       ]);
     expect(await page.evaluate(() => (window as any).host.calls)).toHaveLength(1);
+    // an answer without an error says only that the host took the request: nothing is shown. An error answer did not
+    // finish; an error the App cannot read as the host's refusal is not reported as a failure
+    const button = app.getByRole("button", { name: "匯出 CSV" }),
+      refused = app.getByText("下載未完成。"),
+      unconfirmed = app.getByText("無法確認是否已下載。", { exact: false });
+    expect((await refused.count()) + (await unconfirmed.count())).toBe(0);
+    await page.evaluate(() => (window as any).host.downloadAnswers.push({ isError: true }));
+    await button.click();
+    await refused.waitFor();
+    await page.evaluate(() => (window as any).host.downloadAnswers.push(new Error("The dialog went away.")));
+    await button.click();
+    await unconfirmed.waitFor();
+    expect(await refused.count()).toBe(0);
+    await button.click();
+    await expect.poll(() => unconfirmed.count()).toBe(0);
+    expect(await refused.count()).toBe(0);
+    expect(await page.evaluate(() => (window as any).host.downloads)).toHaveLength(4);
   } finally {
     await browser.close();
     await server.close();

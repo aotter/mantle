@@ -169,8 +169,8 @@ button.addEventListener("click", () => {
       async asset => {
         const text = `I uploaded ${picked.name} to the media library: asset id ${asset.id} (purpose ${purpose.name}).`;
         finish(asset.id);
-        // a user message continues the conversation; a host without one learns it at the model's next turn
-        if (!(await host!.sendMessage(text)))
+        // a user message continues the conversation; unless the host accepted it, the model also learns it at its next turn
+        if ((await host!.sendMessage(text)) !== "accepted")
           await host!.updateModelContext({ content: [{ type: "text", text }], structuredContent: { asset } });
       },
       (error: unknown) => {

@@ -187,7 +187,9 @@ In an MCP host, `useView` and `useOperation` call the View's or operation's admi
 under the caller's MCP authorization; the browser-only hooks read `unavailable` there, so declare the data an App needs as an
 admin View. Without the host's `serverTools`, `run` is `undefined`. `useHost()` is `null` in the browser and the host's API
 (context, capabilities, `openLink`, `sendMessage`, `updateModelContext`, `requestDisplayMode`) in a host; `useAdminSurface()`
-says which. `@aotter/mantle-admin/hooks` also exports the same hooks untyped, for code without generated types.
+says which. `sendMessage` resolves to `"accepted"` (the host answered without an error, not proof of delivery), `"refused"`
+(an error answer, or no messages offered) or `"unknown"` (no answer came, so it may still arrive; do not report a failure);
+see [the MCP Apps guide](mcp-apps.md#rules-for-a-component-that-renders-in-a-host). `@aotter/mantle-admin/hooks` also exports the same hooks untyped, for code without generated types.
 
 `@aotter/mantle-admin/app` and `/hooks`, and so `generated/admin-client.ts`, which imports them, run in the browser only:
 `mantle bundle` refuses them in the Worker's startup graph.
@@ -451,7 +453,8 @@ for one of these slots must:
 3. assume no width: a host sets it;
 4. render something on both surfaces when it branches on `surface` or `useAdminSurface()`.
 
-`useOpenLink()` resolves `false` for anything but an http(s) URL, and when a host cannot or refuses to open it.
+`useOpenLink()` resolves `false` for anything but an http(s) URL, and when a host cannot or refuses to open it or does not
+answer in time (a link the person confirms late can still open).
 
 `mantle bundle` enforces 1 and 2 on the built App (no `/admin/api`, no `document.cookie`, no undeclared remote origin; `window.open`
 and `target="_blank"` warn), and your CSS and Tailwind classes reach the App. The surface table, the theme mapping and the full

@@ -46,15 +46,26 @@ export interface AdminMe {
   readonly image: string | null;
 }
 
+/**
+ * What became of a request the person may confirm in the host (`sendMessage`). `accepted`: the host answered without an
+ * error, which is not proof of delivery (a host can answer before the person agrees). `refused`: the host answered with
+ * an error, does not offer the request, or it was not sent. `unknown`: no answer came (a timeout, a lost connection, an
+ * error thrown on the way); the host may still act on it, so do not report a failure or invite a resend.
+ */
+export type HostRequestOutcome = "accepted" | "refused" | "unknown";
+
 /** What an MCP host lets Admin do beyond rendering. Each is sent only when the host advertised it. */
 export interface AdminHost {
   /** The host's context: theme, locale, time zone, safe area and the rest. */
   readonly context: Readonly<Record<string, unknown>>;
   readonly capabilities: Readonly<Record<string, unknown>>;
-  /** `ui/open-link`: an http(s) URL in the user's browser. False when the host cannot or refuses. */
+  /**
+   * `ui/open-link`: an http(s) URL in the user's browser. False when the host cannot or refuses, or did not answer in
+   * time (a link the person confirms late can still open).
+   */
   openLink(url: string): Promise<boolean>;
-  /** `ui/message`: a user message in the conversation. */
-  sendMessage(text: string): Promise<boolean>;
+  /** `ui/message`: a user message in the conversation, which the person may confirm in the host first. */
+  sendMessage(text: string): Promise<HostRequestOutcome>;
   /** `ui/update-model-context`: what the model should know at its next turn. */
   updateModelContext(params: {
     readonly content?: readonly { readonly type: "text"; readonly text: string }[];
