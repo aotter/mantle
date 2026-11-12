@@ -6,8 +6,8 @@ import type {
   McpUiUpdateModelContextRequest,
 } from "@modelcontextprotocol/ext-apps";
 import { outputOf, type CallTool, type ToolResult } from "../../../src/app/bridge.js";
-import type { HostRequestOutcome } from "../app/hooks";
-import { APP_TOOLS, callAppTool, type ShownView } from "./app-tools";
+import type { AdminAppTool, HostRequestOutcome } from "../app/hooks";
+import { APP_TOOLS, callAppTool, callPageTool, pageToolList, type AppTool, type ShownView } from "./app-tools";
 
 /** What the host lets the App do beyond rendering; each request is sent only when the host advertised it. */
 export interface HostApi {
@@ -26,16 +26,18 @@ export interface HostApi {
   /** `ui/request-display-mode`: the mode the host granted, or null when it offers none other. */
   requestDisplayMode(mode: McpUiDisplayMode): Promise<McpUiDisplayMode | null>;
   /**
-   * `ui/download-file`: a CSV file saved to the person's device, named `name`, after the person confirms it in the host.
-   * `refused` when the host offers no downloads, refuses or the person cancels (its answer does not tell these apart);
-   * `unknown` when no answer came, and the host's dialog may still save the file.
+   * `ui/download-file`: a text file saved to the person's device, named `name`, after the person confirms it in the host.
+   * `refused` when the host offers no downloads, refuses or the person cancels (its answer does not tell these apart), or
+   * `name` has a `/`; `unknown` when no answer came, and the host's dialog may still save the file.
    */
-  downloadFile(name: string, text: string): Promise<HostRequestOutcome>;
+  downloadFile(name: string, text: string, mimeType?: string): Promise<HostRequestOutcome>;
   /**
    * The App's own tools (`APP_TOOLS`), which the host calls for the model: `read` gives what the App shows while it is set;
    * without it each call answers that no View is shown.
    */
   serveTools(read: (() => ShownView | null) | undefined): void;
+  /** `AdminHost.registerTools`: a page's tools, listed after `APP_TOOLS` while registered. */
+  registerTools(tools: readonly AdminAppTool[]): () => void;
 }
 
 /** The display modes the App can lay itself out for. */
@@ -120,18 +122,40 @@ export function connectHost(
   win: Window = window,
   version = "0.0.0",
 ): () => void {
-  // `tools`: the App's own view-only tools, a fixed list (no `listChanged`); a host without app tools never asks for them
+  // `tools`: the App's own view-only tools, always listed, then the tools of the page shown, if it registers any; the host
+  // learns of a change (`listChanged`). A host without app tools never asks for them.
   const app = new App(
     { name: "mantle", version },
-    { availableDisplayModes: [...APP_DISPLAY_MODES], tools: {} },
+    { availableDisplayModes: [...APP_DISPLAY_MODES], tools: { listChanged: true } },
     { autoResize: false },
   );
   let closed = false,
     ready = false;
   let shown: (() => ShownView | null) | undefined;
-  app.onlisttools = async () => ({ tools: APP_TOOLS });
-  app.oncalltool = ({ name, arguments: args }, extra) =>
-    callAppTool(() => (closed ? null : (shown?.() ?? null)), name, args ?? {}, extra.mcpReq.signal);
+  let page: { readonly tools: readonly AdminAppTool[]; readonly listed: readonly AppTool[] } | null = null;
+  const tools = () => [...APP_TOOLS, ...(page?.listed ?? [])];
+  // what the host was last told: an unmount and a registration of the same tools in one task (a re-render) send nothing
+  let announced = JSON.stringify(tools()),
+    queued = false;
+  const changed = () => {
+    if (queued) return;
+    queued = true;
+    queueMicrotask(() => {
+      queued = false;
+      const now = JSON.stringify(tools());
+      if (closed || now === announced) return;
+      announced = now;
+      void app.sendToolListChanged().catch(() => {});
+    });
+  };
+  app.onlisttools = async () => ({ tools: tools() });
+  app.oncalltool = ({ name, arguments: args }, extra) => {
+    // looked up at call time: a tool removed with its page is not called
+    const tool = closed ? undefined : page?.tools.find(tool => tool.name === name);
+    return tool
+      ? callPageTool(tool, args ?? {}, extra.mcpReq.signal)
+      : callAppTool(() => (closed ? null : (shown?.() ?? null)), name, args ?? {}, extra.mcpReq.signal);
+  };
   let stopResize: (() => void) | undefined;
   let origin: string | undefined, incomingOrigin: string | undefined;
   // The official transport checks the parent WindowProxy. Keep origin continuity as a
@@ -220,14 +244,13 @@ export function connectHost(
             );
           },
           // the person confirms in the host, so the wait is theirs, not the SDK's default request timeout
-          downloadFile: async (name, text) =>
-            capabilities.downloadFile
+          // the URI's last segment names the saved file
+          downloadFile: async (name, text, mimeType = "text/plain") =>
+            capabilities.downloadFile && name && !name.includes("/")
               ? ask(() =>
                   app.downloadFile(
                     {
-                      contents: [
-                        { type: "resource", resource: { uri: "file:///" + name, mimeType: "text/csv", text } },
-                      ],
+                      contents: [{ type: "resource", resource: { uri: "file:///" + name, mimeType, text } }],
                     },
                     { timeout: 600_000 },
                   ),
@@ -235,6 +258,16 @@ export function connectHost(
               : "refused",
           serveTools: read => {
             shown = read;
+          },
+          registerTools: list => {
+            const registration = { tools: [...list], listed: pageToolList(list) };
+            page = registration;
+            changed();
+            return () => {
+              if (page !== registration) return;
+              page = null;
+              changed();
+            };
           },
           requestDisplayMode: async mode => {
             if (closed || !app.getHostContext()?.availableDisplayModes?.includes(mode)) return null;

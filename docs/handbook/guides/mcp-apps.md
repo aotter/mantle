@@ -393,8 +393,11 @@ budget carries a notice that hosts may truncate it. The default is 50 rows. REST
 
 ### App tools: the model reads the open View
 
-The App declares the `tools` capability and registers three tools of its own
-("app tools"), which a host may let the model call while the App is open:
+The App declares the `tools` capability (`{ listChanged: true }`) and registers
+three tools of its own ("app tools"), which a host may let the model call while
+the App is open. Host-to-App `tools/list` and `tools/call` are in the MCP Apps
+draft specification, not in the stable `2026-01-26` text, which only names the
+capability:
 
 | Tool | Input | What it does |
 |---|---|---|
@@ -414,8 +417,79 @@ fit and adds `truncated: true`.
 
 Host support varies. Some hosts offer app tools only to some accounts or
 surfaces, and some never call them. A host that does not is unaffected: it
-sees the capability in `ui/initialize` and nothing else changes. Applications
-cannot add their own app tools to the Admin App.
+sees the capability in `ui/initialize` and nothing else changes; the App sends
+`notifications/tools/list_changed` only when a page registers or removes tools
+of its own ([below](#a-pages-own-app-tools)), and a host that does not handle it
+ignores it.
+
+### A page's own app tools
+
+A [`pages[].mcp` page](#a-page-for-an-mcp-app-view-pagesmcp), or any component it
+renders, may register app tools of its own over the App's connection with
+`useHost()?.registerTools(tools)`. Each tool is a name, a description, an
+optional title and annotations, a plain JSON Schema `inputSchema` (no schema
+library) and a `handler` the page supplies:
+
+```tsx
+function QueuePage() {
+  const host = useHost();
+  const [only, setOnly] = useState<string | null>(null);
+  // registered while the page is shown; the returned function removes them on unmount
+  useEffect(() => host?.registerTools([{
+    name: "queue_only",
+    title: "Show one item",
+    description: "Shows only the queue item with this name on the open Queue page.",
+    inputSchema: { type: "object", properties: { item: { type: "string" } }, required: ["item"] },
+    annotations: { readOnlyHint: true },
+    handler: ({ item }) => {
+      if (typeof item !== "string" || !item) throw new Error("Name an item.");
+      setOnly(item);
+      return `Showing ${item}.`;
+    },
+  }]), [host]);
+  // …
+}
+```
+
+- **What the App lists.** `tools/list` always starts with `view_state`,
+  `view_more` and `view_focus`, so a host's approval of them holds; while a page
+  is shown they answer that no View's rows are on screen. The page's tools follow
+  while they are registered. Back on a View, the list is the three again.
+- **Lifecycle.** One registration at a time: `registerTools` replaces the tools
+  registered before, and the function it returns removes these (nothing once
+  they were replaced). Return it from the `useEffect`, so the tools go with the
+  page. A call is looked up when it arrives: a removed tool's handler is never
+  called, and the host gets an error result. Each change of the listed
+  definitions sends `notifications/tools/list_changed`; registering the same
+  definitions again (an effect re-run, a new handler) sends nothing. Register
+  again when what a handler reads changes, or have it read state through a ref.
+- **Names.** Letters, digits, `.`, `_` and `-`, up to 128. `view_` names belong
+  to the App, so a page's tool never collides with a built-in one;
+  `registerTools` throws on such a name and on a repeated one, and the tools
+  registered before stay.
+- **Results.** The handler returns the text the model reads. A throw is an
+  `isError` result with its message; for a mistake the model can fix, prefer a
+  normal answer that says what to change. The App does not check arguments
+  against `inputSchema`: the handler does. `signal` aborts when the host
+  cancels the call.
+- **Limits.** `registerTools` throws when, with the App's own three, the tools
+  break a limit Claude documents: at most 64 tools, 1 MiB of definitions as
+  JSON, an `inputSchema` with `type: "object"` at its root, at most 64 KiB and 32
+  levels deep. A host reads 100,000 characters of result text and waits 45
+  seconds, not counting the person's approval: keep answers short, and start
+  longer work and report it from a second tool.
+- **Keep definitions constant.** A host may ask the person to approve a tool
+  again when its name, title, description or input schema changes. Put what
+  changes in the result.
+- **View-layer only.** A handler runs the page's own code in the App. Anything
+  it does on the server goes through the page's hooks (`useView`,
+  `useOperation`), as the signed-in caller and under the host's server-tool
+  rules; it is not a way around them, and the host's approval of the app tool
+  is not the server's authorization.
+
+A frontend App that is not Admin's (your own `ui://` entry) uses the official
+`@modelcontextprotocol/ext-apps` `App` directly: `app.registerTool` with a
+schema library, or `onlisttools` and `oncalltool` with your own JSON Schema.
 
 Checks against real hosts need an account and a public HTTPS endpoint, so
 they are manual: add the endpoint as a custom connector in each host, call a
@@ -589,6 +663,15 @@ declare its read View and write Procedure; `useEntry` is unavailable in MCP.
    not sent. `"unknown"`: no answer came (a timeout, a lost connection); the host
    may still deliver it, so do not say it failed or resend it in code, and keep
    the control usable for the person to try again.
+7. **Downloads through the host.** The sandbox starts no download from
+   `<a download>`, `blob:` or `data:` URLs. When `useHost()?.capabilities.downloadFile`
+   is set, `useHost().downloadFile(name, text, mimeType)` asks the host to save a
+   text file named `name` (with its extension, no `/`; the type defaults to
+   `text/plain`) after the person confirms it. It resolves to the same three
+   outcomes: `"refused"` covers a refusal, a cancellation and a host that offers
+   no downloads; `"unknown"` means the host's dialog may still save the file.
+   Send one when the person asks, and one at a time. Hosts refuse some
+   extensions, such as `.exe` or `.js`.
 
 ### Theme
 

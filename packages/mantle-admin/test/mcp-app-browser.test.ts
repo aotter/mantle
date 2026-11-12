@@ -108,7 +108,7 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
       })),
     ).toEqual({
       info: { name: "mantle", version },
-      capabilities: { availableDisplayModes: ["inline", "fullscreen"], tools: {} },
+      capabilities: { availableDisplayModes: ["inline", "fullscreen"], tools: { listChanged: true } },
     });
     // the host's time zone and language, not the iframe's
     expect(await app.locator("time").innerText()).toMatch(/^2026\/10\/1\s晚上11:20$/);
@@ -654,6 +654,106 @@ it("renders an application's pages[].mcp page for its View's tool, not the rows,
     await app.getByText("Help unavailable").waitFor();
     expect(await app.locator("h1").allTextContents()).toEqual(["待辦"]);
     expect(await app.getByRole("link", { name: "Queue help" }).count()).toBe(0);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 45_000);
+
+it("lists a page's own app tool while the page is shown, calls it to change the page, and drops it for a View", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    const names = () =>
+      page.evaluate(async () =>
+        ((await (window as any).host.bridge.listTools({})).tools as { name: string }[]).map(tool => tool.name),
+      );
+    const tool = (name: string, args = {}) =>
+      page.evaluate(async ([name, args]) => (window as any).host.bridge.callTool({ name, arguments: args }), [
+        name,
+        args,
+      ] as const);
+    const changes = () => page.evaluate(() => (window as any).host.toolListChanges.length);
+    expect(await names()).toEqual(["view_state", "view_more", "view_focus"]);
+    // the page's `useView` read answers two rows
+    await page.evaluate(async () => {
+      const { bridge, pages } = (window as any).host;
+      pages["undefined"] = [
+        {
+          content: [],
+          structuredContent: {
+            rows: [
+              { id: "r1", item: "Laptops" },
+              { id: "r2", item: "Desks" },
+            ],
+          },
+        },
+      ];
+      await bridge.sendToolResult({
+        content: [],
+        structuredContent: { rows: [] },
+        _meta: { "net.aotter.mantle/tool": "queue" },
+      });
+    });
+    await app.getByText("page:Desks").waitFor();
+    // registered by the page's effect, once (React's development double effect included), and announced once
+    await expect.poll(names).toEqual(["view_state", "view_more", "view_focus", "queue_only"]);
+    await expect.poll(changes).toBe(1);
+    const listed = await page.evaluate(async () => (await (window as any).host.bridge.listTools({})).tools[3]);
+    expect(listed).toEqual({
+      name: "queue_only",
+      title: "Show one item",
+      description: "Shows only the queue item with this name on the open Queue page.",
+      inputSchema: {
+        type: "object",
+        properties: { item: { type: "string", minLength: 1 } },
+        required: ["item"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+    });
+    // the host's `tools/call` runs the page's handler, which changes what the page shows
+    expect(await tool("queue_only", { item: "Desks" })).toEqual({
+      content: [{ type: "text", text: "Showing Desks." }],
+    });
+    await app.getByText("only:Desks").waitFor();
+    expect(await app.getByText("page:Laptops").count()).toBe(0);
+    // the handler checks its arguments; its throw is an error result
+    expect(await tool("queue_only", {})).toEqual({ content: [{ type: "text", text: "Name an item." }], isError: true });
+    // the built-in tools stay listed and answer that no View's rows are shown
+    expect(await tool("view_state")).toMatchObject({ isError: true });
+    // a View's result replaces the page: its tool is gone and the host is told
+    await page.evaluate(async () => {
+      await (window as any).host.bridge.sendToolResult({
+        content: [],
+        structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops" }] },
+        _meta: { "net.aotter.mantle/tool": "pending" },
+      });
+    });
+    await app.locator("mark").getByText("Laptops").waitFor();
+    await expect.poll(names).toEqual(["view_state", "view_more", "view_focus"]);
+    await expect.poll(changes).toBe(2);
+    expect(await tool("queue_only", { item: "Desks" })).toEqual({
+      content: [{ type: "text", text: "Unknown tool: queue_only" }],
+      isError: true,
+    });
+    expect(JSON.parse((await tool("view_state")).content[0].text)).toMatchObject({ tool: "pending", ids: ["r1"] });
+    // the page's tool reached no server tool: the only calls are its `useView` read
+    expect(await page.evaluate(() => (window as any).host.calls)).toEqual([
+      expect.objectContaining({ name: "queue", arguments: {} }),
+    ]);
+    expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
   } finally {
     await browser.close();
     await server.close();

@@ -294,7 +294,10 @@ export function MantleApp(props: {
     <CellEnv.Provider value={{ language, timeZone: props.timeZone, openLink }}>
       {notice}
       {capabilities.downloadFile && tool ? (
-        <ExportRows labels={labels} onExport={() => props.host.downloadFile(`${tool}.csv`, csvText(columns, rows))} />
+        <ExportRows
+          labels={labels}
+          onExport={() => props.host.downloadFile(`${tool}.csv`, csvText(columns, rows), "text/csv")}
+        />
       ) : null}
       <ul ref={list} data-slot="app-rows" className="grid gap-2 p-3">
         {rows.map((row, index) => {

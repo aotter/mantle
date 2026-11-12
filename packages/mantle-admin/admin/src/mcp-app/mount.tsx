@@ -89,6 +89,8 @@ function Root({ admin }: { admin: AdminDefinition }) {
         openLink: host.openLink,
         sendMessage: host.sendMessage,
         requestDisplayMode: host.requestDisplayMode,
+        downloadFile: host.downloadFile,
+        registerTools: host.registerTools,
         updateModelContext: params =>
           host.updateModelContext({
             ...(params.content ? { content: [...params.content] } : {}),

@@ -14,7 +14,8 @@ const calls: unknown[] = [],
   messages: unknown[] = [],
   contexts: unknown[] = [],
   modes: string[] = [],
-  downloads: unknown[] = [];
+  downloads: unknown[] = [],
+  toolListChanges: unknown[] = [];
 // a test's own answers for a View page, by cursor, used in order; an Error fails that call
 const downloadAnswers: unknown[] = [];
 const pages: Record<string, unknown[]> = {};
@@ -57,6 +58,10 @@ let ready = false;
 bridge.oninitialized = () => {
   ready = true;
 };
+// the App's own tools changed: a host would list them again
+bridge.setNotificationHandler("notifications/tools/list_changed", notification => {
+  toolListChanges.push(notification.params ?? {});
+});
 bridge.onsizechange = value => {
   sizes.push(value);
 };
@@ -138,6 +143,7 @@ Object.assign(window, {
     modes,
     downloads,
     downloadAnswers,
+    toolListChanges,
     pages,
     get ready() {
       return ready;

@@ -73,6 +73,49 @@ export interface AdminHost {
   }): Promise<boolean>;
   /** `ui/request-display-mode`: the mode granted, or null when the host offers none other. */
   requestDisplayMode(mode: "inline" | "fullscreen" | "pip"): Promise<"inline" | "fullscreen" | "pip" | null>;
+  /**
+   * `ui/download-file`: a text file saved to the person's device after they confirm it in the host. `name` is the saved
+   * file's name with its extension (`report.csv`), without `/`; `mimeType` defaults to `text/plain`. `refused` when the
+   * host offers no downloads (`capabilities.downloadFile`), refuses, or the person cancels; `unknown` when no answer came,
+   * and the host's dialog may still save the file. Send one at a time, when the person asks for it.
+   */
+  downloadFile(name: string, text: string, mimeType?: string): Promise<HostRequestOutcome>;
+  /**
+   * The page's own app tools, which a host may let the model call while the App is open, after the App's built-in `view_*`
+   * tools. Replaces the tools registered before; the returned function removes these (nothing once replaced), so return it
+   * from the `useEffect` that registers them. Throws on a definition a host would reject: a name outside
+   * `[A-Za-z0-9._-]{1,128}`, starting `view_`, or repeated; an `inputSchema` whose root type is not `object`, over 64 KiB
+   * or nested over 32 levels; more than 64 tools or 1 MiB of definitions with the built-in ones. The host learns of each
+   * change of definitions (`notifications/tools/list_changed`); registering the same definitions again sends nothing.
+   */
+  registerTools(tools: readonly AdminAppTool[]): () => void;
+}
+
+/**
+ * An app tool a page registers (`AdminHost.registerTools`). It runs the page's own code in the App; what it does on the
+ * server goes through the page's hooks, under the caller's authorization. Keep the definition constant: a host may ask the
+ * person to approve a tool again when its name, title, description or input schema changes.
+ */
+export interface AdminAppTool {
+  /** Letters, digits, `.`, `_` and `-`, up to 128; `view_` is the App's own. */
+  readonly name: string;
+  /** What a host's approval prompt names; the name when absent. */
+  readonly title?: string;
+  /** What the tool does; a host may show the model only the first line. */
+  readonly description: string;
+  /** Plain JSON Schema with `type: "object"` at the root. The App does not check arguments against it: the handler does. */
+  readonly inputSchema: { readonly type: "object"; readonly [keyword: string]: unknown };
+  readonly annotations?: {
+    readonly readOnlyHint?: boolean;
+    readonly destructiveHint?: boolean;
+    readonly idempotentHint?: boolean;
+    readonly openWorldHint?: boolean;
+  };
+  /**
+   * Runs a call: the text the model reads. A throw is an error result with its message; `signal` aborts when the host
+   * cancels. Answer within the host's time limit (Claude: 45 seconds): start longer work and report it from another tool.
+   */
+  handler(args: Readonly<Record<string, unknown>>, signal: AbortSignal): string | Promise<string>;
 }
 
 /** One View in a badge batch. */
