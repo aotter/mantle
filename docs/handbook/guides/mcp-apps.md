@@ -4,33 +4,23 @@ Generated `mcp()` accepts app-owned UI resources on either endpoint. Each
 endpoint accepts one contributor or an array; Admin uses the same public hook:
 
 ```ts
-import type { McpApps } from "@aotter/mantle/mcp";
-import { adminMcpApps } from "@aotter/mantle-admin/mcp";
-import { mcp } from "./generated/mcp.js";
-import { mcpAppCatalogues } from "./generated/admin-descriptors.js";
+import type { McpApps } from '@aotter/mantle/mcp';
+import { adminMcpApps } from '@aotter/mantle-admin/mcp';
+import { mcp } from './generated/mcp.js';
+import { mcpAppCatalogues } from './generated/admin-descriptors.js';
 
 declare const db: (env: Env) => D1Database; // as in service composition
-declare const caller: Parameters<typeof mcp>[0]["caller"];
+declare const caller: Parameters<typeof mcp>[0]['caller'];
 declare function loadAppHtml(): string;
 
-const app: McpApps = {
-  resources: [
-    {
-      uri: "ui://my-app/records/build-1",
-      name: "my-app-records",
-      html: () => loadAppHtml(),
-      renders: ["records"],
-    },
-  ],
-};
-const handler = mcp({
-  db,
-  caller,
-  apps: {
-    public: app,
-    admin: adminMcpApps({ catalogue: mcpAppCatalogues.admin }), // or an array with your own contributors
-  },
-});
+const app: McpApps = { resources: [{
+  uri: 'ui://my-app/records/build-1', name: 'my-app-records',
+  html: () => loadAppHtml(), renders: ['records'],
+}] };
+const handler = mcp({ db, caller, apps: {
+  public: app,
+  admin: adminMcpApps({ catalogue: mcpAppCatalogues.admin }), // or an array with your own contributors
+} });
 ```
 
 Use your own `ui://<app>/…` prefix. `ui://mantle-admin/…` is reserved for Admin.
@@ -50,22 +40,16 @@ values; apply the formula the host documents, for Claude
 [Set `ui.domain` for Claude](https://claude.com/docs/connectors/building/mcp-apps/getting-started#set-ui-domain-for-claude):
 
 ```ts
-import type { McpAppsSource } from "@aotter/mantle/mcp";
+import type { McpAppsSource } from '@aotter/mantle/mcp';
 
 declare function loadAppHtml(): string;
 declare function hostDomain(serverUrl: string): string; // the formula your host documents
 
-const app: McpAppsSource = ({ request }) => ({
-  resources: [
-    {
-      uri: "ui://my-app/records/build-1",
-      name: "my-app-records",
-      html: () => loadAppHtml(),
-      renders: ["records"],
-      domain: hostDomain(request.url),
-    },
-  ],
-});
+const app: McpAppsSource = ({ request }) => ({ resources: [{
+  uri: 'ui://my-app/records/build-1', name: 'my-app-records',
+  html: () => loadAppHtml(), renders: ['records'],
+  domain: hostDomain(request.url),
+}] });
 ```
 
 A resource's `meta` adds host-defined keys to the `_meta` of the
@@ -104,26 +88,17 @@ it cannot replace. Hosts give result `_meta` to the App, not the model, so a
 signed upload URL belongs there:
 
 ```ts
-import { withResultMeta, type Tool } from "@aotter/mantle/mcp";
+import { withResultMeta, type Tool } from '@aotter/mantle/mcp';
 
-declare function signUpload(
-  caller: unknown,
-): Promise<{ id: string; url: string; headers: Record<string, string> }>;
+declare function signUpload(caller: unknown): Promise<{ id: string; url: string; headers: Record<string, string> }>;
 
 const uploadTarget: Tool<unknown> = {
-  name: "upload_target",
-  surface: "public",
-  description: "Prepare an upload.",
-  closed: true,
-  meta: { ui: { visibility: ["app"] } },
-  inputSchema: { type: "object", additionalProperties: false },
-  validate: (raw) => raw as Record<string, unknown>,
+  name: 'upload_target', surface: 'public', description: 'Prepare an upload.', closed: true,
+  meta: { ui: { visibility: ['app'] } },
+  inputSchema: { type: 'object', additionalProperties: false }, validate: raw => raw as Record<string, unknown>,
   run: async (_db, caller) => {
     const upload = await signUpload(caller);
-    return withResultMeta(
-      { id: upload.id },
-      { uploadUrl: upload.url, requiredHeaders: upload.headers },
-    );
+    return withResultMeta({ id: upload.id }, { uploadUrl: upload.url, requiredHeaders: upload.headers });
   },
 };
 ```
@@ -153,32 +128,17 @@ tools are plain objects, so give one of them `meta` before calling the generated
 `mcp()`:
 
 ```ts
-import { mcp, tools } from "./generated/mcp.js";
+import { mcp, tools } from './generated/mcp.js';
 
 declare const db: (env: Env) => D1Database; // as in service composition
-declare const caller: Parameters<typeof mcp>[0]["caller"];
+declare const caller: Parameters<typeof mcp>[0]['caller'];
 declare function loadAppHtml(): string;
 
-const entry = tools.find((tool) => tool.name === "my_tasks")!;
-Object.assign(entry, {
-  meta: { ...entry.meta, "openai/ui": { entrypoints: [{ type: "global" }] } },
-});
-const handler = mcp({
-  db,
-  caller,
-  apps: {
-    public: {
-      resources: [
-        {
-          uri: "ui://my-tasks/build-1",
-          name: "my-tasks",
-          html: () => loadAppHtml(),
-          renders: ["my_tasks"],
-        },
-      ],
-    },
-  },
-});
+const entry = tools.find(tool => tool.name === 'my_tasks')!;
+Object.assign(entry, { meta: { ...entry.meta, 'openai/ui': { entrypoints: [{ type: 'global' }] } } });
+const handler = mcp({ db, caller, apps: { public: { resources: [{
+  uri: 'ui://my-tasks/build-1', name: 'my-tasks', html: () => loadAppHtml(), renders: ['my_tasks'],
+}] } } });
 ```
 
 Mark the tool in place rather than passing a copied array to the kernel `mcp()`
@@ -219,7 +179,8 @@ owns protocol negotiation, messages and connection lifecycle; the separate brows
 source/origin guard is not a protocol implementation. That guard keeps the host's
 origin after the handshake only when the App is framed; without a distinct parent
 (`window.parent === window`, as in a native WebView) it pins nothing and leaves the
-official transport's own checks. That unframed case is not yet confirmed on a mobile host.
+official transport's own checks. That unframed case is not yet confirmed on a
+mobile host.
 
 Applications own domain components and build entries. A frontend MCP App uses its
 own React entry, official ext-apps and optionally mantle-ui, registered through
@@ -241,20 +202,9 @@ When combining a custom renderer with Admin, partition ownership explicitly:
 ```ts
 // Both views already belong to this endpoint. Custom resources use their own prefix.
 const adminApps = [
-  adminMcpApps({
-    catalogue: mcpAppCatalogues.admin,
-    renders: ["pending_requests"],
-  }),
-  {
-    resources: [
-      {
-        uri: "ui://my-app/details/build-2",
-        name: "my-details",
-        html: () => loadAppHtml(),
-        renders: ["request_details"],
-      },
-    ],
-  },
+  adminMcpApps({ catalogue: mcpAppCatalogues.admin, renders: ['pending_requests'] }),
+  { resources: [{ uri: 'ui://my-app/details/build-2', name: 'my-details',
+    html: () => loadAppHtml(), renders: ['request_details'] }] },
 ];
 ```
 
@@ -330,7 +280,7 @@ For the default built loader, share the exact declaration in
 `src/mcp-app-definition.ts` (no `html` or `previous`):
 
 ```ts
-import { mcpAppCatalogues } from "../generated/admin-descriptors.ts";
+import { mcpAppCatalogues } from '../generated/admin-descriptors.ts';
 export const appDefinition = { catalogue: mcpAppCatalogues.admin };
 ```
 
@@ -339,15 +289,10 @@ it only inside the service's MCP branch, before constructing the handler, so oth
 routes do not parse archived full-page HTML at startup:
 
 ```ts
-const { default: previous } = await import("../mcp-app-previous.json", {
-  with: { type: "json" },
-});
-serveMcpHandler ??= serveMcp(tools, {
-  ...options,
-  apps: {
-    admin: adminMcpApps({ ...appDefinition, previous }),
-  },
-});
+const { default: previous } = await import('../mcp-app-previous.json', { with: { type: 'json' } });
+serveMcpHandler ??= serveMcp(tools, { ...options, apps: {
+  admin: adminMcpApps({ ...appDefinition, previous }),
+} });
 ```
 
 Keep custom `renders`, catalogue extensions, `domain` and `title` in the shared
@@ -362,45 +307,25 @@ this application-owned `scripts/archive-mcp-app.mjs`, then commit the snapshot
 for the next build. Run it in the deployment script, not as a manual cache fix:
 
 ```js
-import { readFileSync, writeFileSync } from "node:fs";
-import { resolveMcpApps } from "@aotter/mantle/mcp/apps";
-import { adminMcpApps } from "@aotter/mantle-admin/mcp";
-import { appDefinition } from "../src/mcp-app-definition.ts";
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolveMcpApps } from '@aotter/mantle/mcp/apps';
+import { adminMcpApps } from '@aotter/mantle-admin/mcp';
+import { appDefinition } from '../src/mcp-app-definition.ts';
 
-const path = "mcp-app-previous.json";
-const previous = JSON.parse(readFileSync(path, "utf8"));
-const context = {
-  env: {},
-  request: new Request("https://archive.invalid/mcp"),
-};
-const { resources } = await resolveMcpApps(
-  adminMcpApps({
-    ...appDefinition,
-    html: readFileSync("dist/client/admin/mcp-app.html", "utf8"),
-  }),
-  context,
-);
+const path = 'mcp-app-previous.json';
+const previous = JSON.parse(readFileSync(path, 'utf8'));
+const context = { env: {}, request: new Request('https://archive.invalid/mcp') };
+const { resources } = await resolveMcpApps(adminMcpApps({ ...appDefinition,
+  html: readFileSync('dist/client/admin/mcp-app.html', 'utf8') }), context);
 // The build's own content-hash URI (an explicit `uri` contributes only that URI).
-const resource =
-  resources.find((r) => /\/admin\/[a-f0-9]{64}$/.test(r.uri)) ?? resources[0];
-const tools = new Set([
-  ...Object.keys(appDefinition.catalogue.views),
-  ...Object.keys(appDefinition.catalogue.actions),
-]);
+const resource = resources.find(r => /\/admin\/[a-f0-9]{64}$/.test(r.uri)) ?? resources[0];
+const tools = new Set([...Object.keys(appDefinition.catalogue.views),
+  ...Object.keys(appDefinition.catalogue.actions)]);
 const page = await resource.html({ ...context, tools });
-const snapshot = {
-  uri: resource.uri,
-  title: resource.title,
-  ...page,
-  ...(resource.domain === undefined ? {} : { domain: resource.domain }),
-};
+const snapshot = { uri: resource.uri, title: resource.title, ...page,
+  ...(resource.domain === undefined ? {} : { domain: resource.domain }) };
 // This application's policy: retain the last two deployed pages for future builds.
-writeFileSync(
-  path,
-  JSON.stringify(
-    [...previous.filter((p) => p.uri !== snapshot.uri), snapshot].slice(-2),
-  ) + "\n",
-);
+writeFileSync(path, JSON.stringify([...previous.filter(p => p.uri !== snapshot.uri), snapshot].slice(-2)) + '\n');
 ```
 
 To observe every page as a host reads it (to audit reads, or to store the page a
@@ -408,32 +333,24 @@ deployment actually served), wrap the contributor. `resolveMcpApps` returns it i
 form, so the wrapper needs no option on `adminMcpApps` and no shape checks:
 
 ```ts
-import { resolveMcpApps } from "@aotter/mantle/mcp/apps";
-import { adminMcpApps, type AdminMcpSnapshot } from "@aotter/mantle-admin/mcp";
-import { appDefinition } from "./mcp-app-definition.ts";
+import { resolveMcpApps } from '@aotter/mantle/mcp/apps';
+import { adminMcpApps, type AdminMcpSnapshot } from '@aotter/mantle-admin/mcp';
+import { appDefinition } from './mcp-app-definition.ts';
 
 declare const keep: (snapshot: AdminMcpSnapshot) => Promise<void>;
 
 const admin = adminMcpApps(appDefinition);
-export const observedAdmin = async (context: {
-  env: unknown;
-  request: Request;
-}) => ({
-  resources: (await resolveMcpApps(admin, context)).resources.map(
-    (resource) => ({
-      ...resource,
-      html: async (render: Parameters<typeof resource.html>[0]) => {
-        const page = await resource.html(render);
-        await keep({
-          uri: resource.uri,
-          ...page,
-          ...(resource.title === undefined ? {} : { title: resource.title }),
-          ...(resource.domain === undefined ? {} : { domain: resource.domain }),
-        });
-        return page;
-      },
-    }),
-  ),
+export const observedAdmin = async (context: { env: unknown; request: Request }) => ({
+  resources: (await resolveMcpApps(admin, context)).resources.map(resource => ({
+    ...resource,
+    html: async (render: Parameters<typeof resource.html>[0]) => {
+      const page = await resource.html(render);
+      await keep({ uri: resource.uri, ...page,
+        ...(resource.title === undefined ? {} : { title: resource.title }),
+        ...(resource.domain === undefined ? {} : { domain: resource.domain }) });
+      return page;
+    },
+  })),
 });
 ```
 
@@ -538,11 +455,11 @@ the App is open. Host-to-App `tools/list` and `tools/call` are in the MCP Apps
 draft specification, not in the stable `2026-01-26` text, which only names the
 capability:
 
-| Tool         | Input    | What it does                                                                                                                                 |
-| ------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `view_state` | none     | Returns the View tool, its input, the ids of the rows the App holds, the row count and whether more rows exist, as JSON text.                |
-| `view_more`  | none     | Does what "Load more" does: calls the same View tool with the same input and the next cursor, appends the rows, and answers as `view_state`. |
-| `view_focus` | `{ id }` | Scrolls to the shown row with that id and highlights it.                                                                                     |
+| Tool | Input | What it does |
+|---|---|---|
+| `view_state` | none | Returns the View tool, its input, the ids of the rows the App holds, the row count and whether more rows exist, as JSON text. |
+| `view_more` | none | Does what "Load more" does: calls the same View tool with the same input and the next cursor, appends the rows, and answers as `view_state`. |
+| `view_focus` | `{ id }` | Scrolls to the shown row with that id and highlights it. |
 
 They are view-only. They read what the App already holds or make the same
 read "Load more" makes, under the person's own authorization, so they show the
@@ -557,8 +474,8 @@ does not find, no next page, a page already loading, a list replaced while a
 page loaded, a host without server tools. Only an unknown tool, a `view_state`
 whose View input alone is over the limit and a page read that failed are
 `isError` results. `view_more` gives up on its read after 40 seconds, inside
-the 45 seconds Claude waits (other hosts may differ), so it answers instead of leaving the host to time
-out. The definitions are fixed and marked `readOnlyHint`, and an answer is at most
+the 45 seconds Claude waits (other hosts may differ), so it answers instead of
+leaving the host to time out. The definitions are fixed and marked `readOnlyHint`, and an answer is at most
 100,000 characters: `view_state` lists as many ids as fit and adds
 `truncated: true`.
 
@@ -582,30 +499,18 @@ function QueuePage() {
   const host = useHost();
   const [only, setOnly] = useState<string | null>(null);
   // registered while the page is shown; the returned function removes them on unmount
-  useEffect(
-    () =>
-      host?.registerTools([
-        {
-          name: "queue_only",
-          title: "Show one item",
-          description:
-            "Shows only the queue item with this name on the open Queue page.",
-          inputSchema: {
-            type: "object",
-            properties: { item: { type: "string" } },
-            required: ["item"],
-          },
-          annotations: { readOnlyHint: true },
-          handler: ({ item }) => {
-            if (typeof item !== "string" || !item)
-              throw new Error("Name an item.");
-            setOnly(item);
-            return `Showing ${item}.`;
-          },
-        },
-      ]),
-    [host],
-  );
+  useEffect(() => host?.registerTools([{
+    name: "queue_only",
+    title: "Show one item",
+    description: "Shows only the queue item with this name on the open Queue page.",
+    inputSchema: { type: "object", properties: { item: { type: "string" } }, required: ["item"] },
+    annotations: { readOnlyHint: true },
+    handler: ({ item }) => {
+      if (typeof item !== "string" || !item) throw new Error("Name an item.");
+      setOnly(item);
+      return `Showing ${item}.`;
+    },
+  }]), [host]);
   // …
 }
 ```
@@ -667,24 +572,18 @@ prebuilt. Register it beside the Admin App, with the same `media` function you
 pass `mcp(...)`:
 
 ```ts
-import { adminMcpApps, mediaUploadCard } from "@aotter/mantle-admin/mcp";
-import type { MediaStorage } from "@aotter/mantle/site";
-import { mcp } from "./generated/mcp.js";
-import { mcpAppCatalogues } from "./generated/admin-descriptors.js";
+import { adminMcpApps, mediaUploadCard } from '@aotter/mantle-admin/mcp';
+import type { MediaStorage } from '@aotter/mantle/site';
+import { mcp } from './generated/mcp.js';
+import { mcpAppCatalogues } from './generated/admin-descriptors.js';
 
 declare const options: Parameters<typeof mcp>[0];
 declare function storage(env: unknown): MediaStorage; // e.g. r2MediaStorage(...)
 
-const handler = mcp({
-  ...options,
-  media: storage,
-  apps: {
-    admin: [
-      adminMcpApps({ catalogue: mcpAppCatalogues.admin }),
-      mediaUploadCard({ media: storage }),
-    ],
-  },
-});
+const handler = mcp({ ...options, media: storage, apps: { admin: [
+  adminMcpApps({ catalogue: mcpAppCatalogues.admin }),
+  mediaUploadCard({ media: storage }),
+] } });
 ```
 
 The card is `ui://mantle-admin/upload` and renders `upload_media`. The person
@@ -722,14 +621,7 @@ rule on `Origin`: the request carries no cookies, and some clients (iOS) send no
 example, as R2 CORS JSON:
 
 ```json
-[
-  {
-    "AllowedOrigins": ["https://your-host-sandbox.example"],
-    "AllowedMethods": ["PUT"],
-    "AllowedHeaders": ["content-type"],
-    "MaxAgeSeconds": 3600
-  }
-]
+[{ "AllowedOrigins": ["https://your-host-sandbox.example"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
 ```
 
 Use the sandbox origin each host documents for its Apps (a host that honours
@@ -746,12 +638,12 @@ Tailwind classes and CSS. Browser-only record/input overrides do not mount there
 
 ### Which slots render where
 
-| Slot                                                                                                                | Browser | MCP host                                                                                                  |
-| ------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
-| `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `SignIn`, `list.actions:<schema>`                  | yes     | never: the App has no shell, sidebar or router                                                            |
-| `cell:view:<view>.<column>`                                                                                         | yes     | yes: each column of the rows the host's View tool returned                                                |
-| `cell:<schema>.<field>`, `input:<schema>.<field>`, `record.aside:<schema>`, `record.actions:<schema>`, `RecordView` | yes     | never: browser-only record/collection slots; their `surface` is `"browser"` (`mantle bundle` reminds you) |
-| `pages[]`, `nav`, `home`, nav badges                                                                                | yes     | only a page that declares `mcp` (below)                                                                   |
+| Slot | Browser | MCP host |
+| --- | --- | --- |
+| `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `SignIn`, `list.actions:<schema>` | yes | never: the App has no shell, sidebar or router |
+| `cell:view:<view>.<column>` | yes | yes: each column of the rows the host's View tool returned |
+| `cell:<schema>.<field>`, `input:<schema>.<field>`, `record.aside:<schema>`, `record.actions:<schema>`, `RecordView` | yes | never: browser-only record/collection slots; their `surface` is `"browser"` (`mantle bundle` reminds you) |
+| `pages[]`, `nav`, `home`, nav badges | yes | only a page that declares `mcp` (below) |
 
 A component for a `both` slot gets `surface` (`"browser"` or `"mcp-app"`). The
 record/collection slots keep `surface: "browser"` for an explicit, truthful contract.
@@ -789,22 +681,9 @@ component follows the same public contract:
 function Approve({ id }: { id: string }) {
   const { run, pending } = useOperation("approve");
   const [message, setMessage] = useState("");
-  return (
-    <>
-      <button
-        disabled={!run || pending}
-        onClick={() => {
-          void run?.({ id }).then(
-            () => setMessage("Done"),
-            () => setMessage("Not available"),
-          );
-        }}
-      >
-        Approve
-      </button>
-      <p role="status">{message}</p>
-    </>
-  );
+  return <><button disabled={!run || pending} onClick={() => {
+    void run?.({ id }).then(() => setMessage("Done"), () => setMessage("Not available"));
+  }}>Approve</button><p role="status">{message}</p></>;
 }
 ```
 
@@ -884,25 +763,25 @@ The App's colours come from three layers, later over earlier:
    font only, laid over the tokens. The table lists, for each host variable the
    App reads, the Tailwind theme variable it feeds.
 
-| Host variable                  | App theme variable                                                                                                                         |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--color-background-primary`   | `--color-background`, `--color-card`, `--color-popover`                                                                                    |
-| `--color-text-primary`         | `--color-foreground`, `--color-card-foreground`, `--color-popover-foreground`, `--color-secondary-foreground`, `--color-accent-foreground` |
-| `--color-background-secondary` | `--color-muted`, `--color-secondary`, `--color-accent`                                                                                     |
-| `--color-text-secondary`       | `--color-muted-foreground`                                                                                                                 |
-| `--color-border-primary`       | `--color-border`, `--color-input`                                                                                                          |
-| `--color-ring-primary`         | `--color-ring`                                                                                                                             |
-| `--color-text-danger`          | `--color-destructive`                                                                                                                      |
-| `--border-radius-sm`           | `--radius-sm`                                                                                                                              |
-| `--border-radius-md`           | `--radius-md`                                                                                                                              |
-| `--border-radius-lg`           | `--radius-lg`                                                                                                                              |
-| `--font-text-xs-size`          | `--text-xs`                                                                                                                                |
-| `--font-text-xs-line-height`   | `--text-xs--line-height`                                                                                                                   |
-| `--font-text-sm-size`          | `--text-sm`                                                                                                                                |
-| `--font-text-sm-line-height`   | `--text-sm--line-height`                                                                                                                   |
-| `--font-text-md-size`          | `--text-base`                                                                                                                              |
-| `--font-text-md-line-height`   | `--text-base--line-height`                                                                                                                 |
-| `--font-sans`                  | `--font-app` (the App's font)                                                                                                              |
+| Host variable | App theme variable |
+| --- | --- |
+| `--color-background-primary` | `--color-background`, `--color-card`, `--color-popover` |
+| `--color-text-primary` | `--color-foreground`, `--color-card-foreground`, `--color-popover-foreground`, `--color-secondary-foreground`, `--color-accent-foreground` |
+| `--color-background-secondary` | `--color-muted`, `--color-secondary`, `--color-accent` |
+| `--color-text-secondary` | `--color-muted-foreground` |
+| `--color-border-primary` | `--color-border`, `--color-input` |
+| `--color-ring-primary` | `--color-ring` |
+| `--color-text-danger` | `--color-destructive` |
+| `--border-radius-sm` | `--radius-sm` |
+| `--border-radius-md` | `--radius-md` |
+| `--border-radius-lg` | `--radius-lg` |
+| `--font-text-xs-size` | `--text-xs` |
+| `--font-text-xs-line-height` | `--text-xs--line-height` |
+| `--font-text-sm-size` | `--text-sm` |
+| `--font-text-sm-line-height` | `--text-sm--line-height` |
+| `--font-text-md-size` | `--text-base` |
+| `--font-text-md-line-height` | `--text-base--line-height` |
+| `--font-sans` | `--font-app` (the App's font) |
 
 `--font-mono` and `--font-weight-*` apply as the host gives them. The primary
 colours (`--color-primary`, `--color-primary-foreground`) and the chart colours
@@ -918,18 +797,11 @@ A custom page may also be an App view. Name a View that has an admin MCP tool:
 
 ```tsx
 export default defineAdmin(admin, {
-  pages: [
-    {
-      path: "queue",
-      title: "Queue",
-      element: <QueuePage />,
-      header: {
-        description: "Items awaiting review",
-        actions: <QueueActions />,
-      },
-      mcp: { renders: "pending-requests" },
-    },
-  ],
+  pages: [{
+    path: "queue", title: "Queue", element: <QueuePage />,
+    header: { description: "Items awaiting review", actions: <QueueActions /> },
+    mcp: { renders: "pending-requests" },
+  }],
 });
 ```
 
@@ -999,14 +871,7 @@ import type { AppAdminTypes } from "../generated/admin-client.js";
 import { QueuePage } from "./queue-page.js"; // native hooks, host-safe components
 import "./shared.css";
 export const shared = {
-  pages: [
-    {
-      path: "queue",
-      title: "Queue",
-      element: <QueuePage />,
-      mcp: { renders: "queue" },
-    },
-  ],
+  pages: [{ path: "queue", title: "Queue", element: <QueuePage />, mcp: { renders: "queue" } }],
 } satisfies AdminConfig<AppAdminTypes>;
 ```
 
@@ -1018,14 +883,7 @@ import { shared } from "./admin-shared.js";
 import { BrowserReport } from "./browser-report.js";
 export default defineAdmin(admin, {
   ...shared,
-  pages: [
-    ...shared.pages,
-    {
-      path: "browser-report",
-      title: "Browser report",
-      element: <BrowserReport />,
-    },
-  ],
+  pages: [...shared.pages, { path: "browser-report", title: "Browser report", element: <BrowserReport /> }],
 });
 ```
 
