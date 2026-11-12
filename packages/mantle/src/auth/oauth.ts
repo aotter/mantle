@@ -172,8 +172,8 @@ export const oauthGrantExtension: Extension = {
  * For an adopter's own extension grant handler (for example a jwt-bearer / ID-JAG grant), after the handler has validated the
  * assertion, authenticated the client and matched the user: records or renews the managed grant of that user, client and
  * resource set, and issues its tokens without a consent screen, a browser session or a refresh token (`offline_access` is
- * dropped, so Better Auth issues none; a new assertion is the renewal). A banned user is refused. The record is written only
- * once Better Auth has issued the tokens, so a refused request changes no grant. Requires
+ * dropped, so Better Auth issues none; a new assertion is the renewal). A banned user is refused. A refused request changes no
+ * grant, and one the user's grants are ended during fails with invalid_grant. Requires
  * `oauthGrantRevocation({ managedGrants: true })` and resources, so the access token is a JWT for those audiences. Core
  * validates no assertion and trusts no issuer: `issuer` is kept for audit.
  */
@@ -194,13 +194,6 @@ export async function issueManagedGrant(
     );
   const { client, user, resources, issuer } = grant;
   const db = ctx.context.adapter;
-  // A ban ends grants only when it happens; one asserted during the ban would otherwise pass again after an unban.
-  const stored = await ctx.context.internalAdapter.findUserById(user.id);
-  if (!stored || isBanned(stored))
-    throw ctx.error("BAD_REQUEST", {
-      error: "invalid_grant",
-      error_description: "The user may not be granted access.",
-    });
   const scopes = grant.scopes.filter(scope => scope !== "offline_access");
   const now = new Date();
   const data = { scopes, resources, grantType, issuer, updatedAt: now };
@@ -211,19 +204,27 @@ export async function issueManagedGrant(
     where: [pair("userId", user.id), pair("clientId", client.clientId), { field: "revoked", value: null }],
   });
   const current = live.find(record => key(array(record.resources) ?? []) === key(resources));
-  // A first grant needs its id for the token before issuance, so it starts revoked and goes live only once tokens are issued.
-  // ponytail: a ban or disconnect between the check above and the write below can miss this record; the window is one request.
+  // A first grant needs its id for the token, so it is created live before the ban check: from here on a ban, reset or
+  // disconnect reaches it through endGrants and the guarded update below refuses. No token names it until issuance returns;
+  // until then it may show on connected apps, and disconnecting it there ends this request too.
   const id =
     current?.id ??
     (
       await db.create<{ id: string }>({
         model: MANAGED,
-        data: { ...data, userId: user.id, clientId: client.clientId, createdAt: now, revoked: now },
+        data: { ...data, userId: user.id, clientId: client.clientId, createdAt: now, revoked: null },
       })
     ).id;
-  minting.set(ctx, id);
   let tokens: Awaited<ReturnType<typeof provider.issueTokens>>;
   try {
+    // A ban ends grants only when it happens; one asserted during the ban would otherwise pass again after an unban.
+    const stored = await ctx.context.internalAdapter.findUserById(user.id);
+    if (!stored || isBanned(stored))
+      throw ctx.error("BAD_REQUEST", {
+        error: "invalid_grant",
+        error_description: "The user may not be granted access.",
+      });
+    minting.set(ctx, id);
     tokens = await provider.issueTokens({ client, user, scopes, resources });
   } catch (error) {
     if (!current) await db.delete({ model: MANAGED, where: [pair("id", id)] });
@@ -233,8 +234,8 @@ export async function issueManagedGrant(
   }
   const saved = await db.update({
     model: MANAGED,
-    where: current ? [pair("id", id), { field: "revoked", value: null }] : [pair("id", id)],
-    update: current ? data : { revoked: null },
+    where: [pair("id", id), { field: "revoked", value: null }],
+    update: data,
   });
   // Disconnected while this request was issuing: the tokens name an ended grant, so do not hand them out.
   if (!saved)

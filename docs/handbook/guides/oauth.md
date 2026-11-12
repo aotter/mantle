@@ -241,10 +241,11 @@ What Core supplies is the binding that lets such a token pass `resolveCaller`:
   records (or renews) one live grant per user, client and resource set, with its
   scopes, resources, grant type and the asserting issuer (kept for audit only),
   and issues the tokens through Better Auth's shared token path. A client's
-  grants for two resources of one server are separate records. The record is
-  written only once the tokens are issued, so a request Better Auth refuses
-  (for example an unknown `resource`) changes no grant. A user banned at that
-  moment is refused.
+  grants for two resources of one server are separate records. A request
+  Better Auth refuses (for example an unknown `resource`) changes no grant, and
+  a ban, password reset or disconnect that lands while the tokens are being
+  issued ends that grant too, so the request fails with `invalid_grant`. A user
+  banned at that moment is refused.
 - The access token names that record (`mantle_managed_grant`) instead of a
   consent. `resolveCaller` accepts it with no browser session and no refresh
   token, only while the record is live, belongs to the token's user and client,

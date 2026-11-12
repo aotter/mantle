@@ -29,7 +29,14 @@ import { authLoader, resolveCaller, type AuthInstance } from "../src/auth/caller
 import { d1Adapter } from "../src/auth/adapter.js";
 import { authSchemaSql } from "../src/infrastructure/authSchema.js";
 import { d1Shim } from "./apps/d1-shim.js";
-import { FORGED, ISSUER, JWT_BEARER, managedGrantTestExtension, managedTokenRequest } from "./apps/managed-grant.js";
+import {
+  FORGED,
+  inFlight,
+  ISSUER,
+  JWT_BEARER,
+  managedGrantTestExtension,
+  managedTokenRequest,
+} from "./apps/managed-grant.js";
 
 const AUDIENCE = "https://api.example.test/mcp";
 /** A second resource of the same authorization server, configured with managed grants. */
@@ -1985,6 +1992,62 @@ describe("managed grants (opt-in extension-grant binding)", () => {
     expect(records()).toEqual([]);
     // A lapsed ban no longer refuses; a fresh assertion after the unban is a new grant.
     app.sqlite.run("UPDATE user SET banned = 1, banExpires = ? WHERE id = ?", [Date.now() - 1000, userId]);
+    expect(await use((await issue()).access_token)).toMatchObject({ subject: userId });
+  });
+
+  test("a ban, password reset or disconnect that lands while tokens are being issued ends the new grant", async () => {
+    const { app, email, userId, request, issue, use, records } = await managedApp();
+    const root = await app.signIn("root@example.test");
+    app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [root.userId]);
+    const ok = async (response: Promise<Response>) => expect((await response).status).toBe(200);
+    const consents = oauthConsents(app.auth as never);
+    const events: [string, () => Promise<void>][] = [
+      [
+        "ban and unban",
+        async () => {
+          await ok(app.post("/admin/ban-user", { userId }, { cookie: root.cookie }));
+          await ok(app.post("/admin/unban-user", { userId }, { cookie: root.cookie }));
+        },
+      ],
+      [
+        "password reset",
+        async () => {
+          await app.post("/request-password-reset", { email, redirectTo: "/" });
+          await ok(
+            app.post("/reset-password", { token: app.resets.at(-1)!, newPassword: `pw-${crypto.randomUUID()}` }),
+          );
+        },
+      ],
+      [
+        "disconnect",
+        async () => {
+          // The in-flight grant is listed, and disconnecting it is honoured.
+          const [listed] = await consents.listOAuthConsents(userId);
+          expect(await consents.revokeOAuthConsent(userId, listed!.id)).toBe(true);
+        },
+      ],
+    ];
+    for (const renewal of [false, true])
+      for (const [name, event] of events) {
+        app.sqlite.run("DELETE FROM oauthManagedGrant");
+        if (renewal) await issue();
+        let issued = "";
+        inFlight.run = async () => {
+          inFlight.run = undefined;
+          await event();
+        };
+        try {
+          const response = await request();
+          const body = (await response.json()) as { error?: string; access_token?: string };
+          issued = body.access_token ?? "";
+          expect([name, renewal, response.status, body.error]).toEqual([name, renewal, 400, "invalid_grant"]);
+        } finally {
+          inFlight.run = undefined;
+        }
+        expect(records().every(record => record.revoked !== null)).toBe(true);
+        if (issued) await expect(use(issued)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+      }
+    // Once the event has passed, a fresh assertion is a new grant.
     expect(await use((await issue()).access_token)).toMatchObject({ subject: userId });
   });
 
