@@ -191,11 +191,19 @@ export function MantleApp(props: {
   // How many rows fit under the cap, measured for these rows, this cap and this width; null shows every row. A new
   // measurement renders every row first, before the browser paints.
   const [fit, setFit] = useState<{ rows: unknown; cap: unknown; width: number; limit: number | null } | null>(null);
-  const [width, setWidth] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth));
+  const [width, setWidth] = useState(() => (typeof document === "undefined" ? 0 : document.documentElement.clientWidth));
+  // The document's size changes with no render of its own too (a host font that arrives late, an image in a cell): each
+  // change renders again, so a new width measures again and content grown past the cap shows one row fewer.
+  const [, resized] = useReducer((count: number) => count + 1, 0);
   useEffect(() => {
-    const resized = () => setWidth(window.innerWidth);
-    window.addEventListener("resize", resized);
-    return () => window.removeEventListener("resize", resized);
+    if (typeof ResizeObserver === "undefined") return;
+    const root = document.documentElement;
+    const observer = new ResizeObserver(() => {
+      setWidth(root.clientWidth);
+      resized();
+    });
+    observer.observe(root);
+    return () => observer.disconnect();
   }, []);
   const cap = props.expand ? props.maxHeight : undefined;
   const measured = fit !== null && fit.rows === rows && fit.cap === cap && fit.width === width;

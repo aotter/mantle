@@ -443,6 +443,17 @@ it("fits the conversation's height cap at phone width: nothing scrolls in the fr
       await app.getByRole("button", { name: "執行", exact: true }).waitFor();
       expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen"]);
     }
+    // content that grows with no render of the App's own (a host font arriving late): still within the cap, button shown
+    {
+      const { app, items, frame, reported } = await open();
+      const shown = await items.count();
+      await app.locator("html").evaluate(html => (html.style.fontSize = "125%"));
+      await expect.poll(() => items.count()).toBeLessThan(shown);
+      await expect.poll(async () => (await frame()).height).toBeLessThanOrEqual(CAP);
+      await expect.poll(reported).toBeLessThanOrEqual(CAP);
+      expect(await frame()).toMatchObject({ overflow: "visible", scrolls: false });
+      await app.getByRole("button", { name: /^還有 \d+\+ 筆/ }).waitFor();
+    }
     // a row action opened in the conversation asks for full screen from the same tap, and opens whether or not it is granted
     for (const answer of ["fullscreen", "inline"]) {
       const { page, app } = await open();
