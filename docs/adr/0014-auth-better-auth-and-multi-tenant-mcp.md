@@ -3,11 +3,12 @@
 ## Status
 
 Accepted. Amended 2026-05-14, 2026-05-15, 2026-06-30, 2026-07-15,
-2026-08-03, 2026-08-22, 2026-09-18, 2026-09-21, and 2026-09-22.
+2026-08-03, 2026-08-22, 2026-09-18, 2026-09-21, 2026-09-22, 2026-10-02 and
+2026-11-12.
 
 ## Date
 
-2026-05-09 (last amended 2026-09-22)
+2026-05-09 (last amended 2026-11-12)
 
 > **Current authority:** the original decision below records the rejected
 > Better-Auth-for-MCP design. The 2026-08-22 Better Auth 1.7 amendment is
@@ -936,3 +937,51 @@ every unauthenticated request for the same reason.
   `tools/call` that needs identity answers `401`.
 - Nothing is configured: the rule follows from the plan, so a project that adds a public tool reopens discovery by
   declaring it.
+
+## 2026-11-12 amendment — managed grants for consent-less extension-grant tokens
+
+Issue #1990. The 2026-09-22 amendment made the `jwt-bearer` (ID-JAG) grant of MCP
+enterprise-managed authorization adopter code. Its tokens went through the shared
+token path, but `assertActiveUserGrant` refused them: they have no consent row, no
+browser session and, as such a client asks, no refresh token. Core now offers one
+opt-in binding for them, a **managed grant**. Whether to support enterprise-managed
+authorization stays the adopter's decision; Core only provides the binding.
+
+1. **Opt-in.** `oauthGrantRevocation({ managedGrants: true })` declares an
+   `oauthManagedGrant` table through Better Auth's plugin schema, so generated
+   `schema.sql` carries it for SQLite/D1 and PostgreSQL; Core runs no DDL. Without
+   the option, schema, queries and token checks are unchanged, and the
+   `mantle_managed_grant` claim is ignored.
+2. **Record.** `issueManagedGrant(handlerInput, { client, user, scopes, resources,
+   issuer })`, called by the adopter's grant handler after it validated the
+   assertion, keeps one live record per user and client: scopes, resources, grant
+   type, asserting issuer (audit only) and a `revoked` date. A new assertion renews
+   that record rather than adding one.
+3. **Claim.** While `issueManagedGrant` mints, `oauthGrantExtension` stamps
+   `mantle_managed_grant` (the record id) in place of the consent claims.
+4. **Check.** `assertActiveUserGrant` accepts a token naming a managed grant only
+   when that record is unrevoked, has the token's `sub` and `azp`, covers the
+   requested audience (also in the token's `aud`) and every token scope, and its
+   client is enabled. It needs no `sid`, consent or refresh token, and it is one
+   single-row read. Better Auth lets a grant handler's per-issuance claims override
+   extension claims, so the claim is only a pointer: the stored record decides.
+5. **No refresh token.** `issueManagedGrant` drops `offline_access`, so Better Auth
+   issues no refresh token, even when the client asked for it. Renewal is a new
+   assertion.
+6. **Revocation.** The events `oauthGrantRevocation()` already handles (password
+   reset or admin password change, password change that signs out other devices,
+   ban, admin session revocation, unverified-email proof) and a disconnect mark the
+   user's managed grants revoked. Sign-out and session expiry do not end them.
+7. **Visibility.** The connected-apps list shows live managed grants, one entry per
+   client not already listed by a consent, under a `managed:`-prefixed id (consent
+   and managed-grant ids come from different tables and may coincide), so a user
+   can disconnect them. A disconnect ends every grant of that client, as before.
+
+Rejected: reusing `oauthConsent` (a later interactive authorization would find a
+consent that never happened and skip the screen); asking adopters to issue
+`offline_access` refresh tokens (against the client's guidance, and renewable
+without a new assertion); letting `resolveCredential` return an `oauth` Caller
+(removes a deliberate guard and moves token verification into every
+application); and validating ID-JAG in Core (rejected by the 2026-09-22
+amendment, not reopened). Assertion validation, trusted-issuer storage, admin
+settings and account matching remain adopter code.
