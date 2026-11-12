@@ -386,6 +386,32 @@ or repeated. A single row over the budget is returned alone, with its cursor, an
 View without an order (one page, no cursor) is returned whole; any page still over the
 budget carries a notice that hosts may truncate it. The default is 50 rows. REST and native paging keep their 500-row limit.
 
+### App tools: the model reads the open View
+
+The App declares the `tools` capability and registers three tools of its own
+("app tools"), which a host may let the model call while the App is open:
+
+| Tool | Input | What it does |
+|---|---|---|
+| `view_state` | none | Returns the View tool, its input, the ids of the rows the App holds, the row count and whether more rows exist, as JSON text. |
+| `view_more` | none | Does what "Load more" does: calls the same View tool with the same input and the next cursor, appends the rows, and answers as `view_state`. |
+| `view_focus` | `{ id }` | Scrolls to the shown row with that id and highlights it. |
+
+They are view-only. They read what the App already holds or make the same
+read "Load more" makes, under the person's own authorization, so they show the
+model nothing the person could not see in the App. No app tool writes, runs a
+row action or Procedure, or leaves the View; writes stay server tools that the
+model calls under the host's approval. While no View's rows are on screen
+(waiting for a result, a `pages[].mcp` page, an open row action) every tool
+answers with an error. The definitions are fixed and marked `readOnlyHint`,
+and an answer is at most 100,000 characters: `view_state` lists as many ids as
+fit and adds `truncated: true`.
+
+Host support varies. Some hosts offer app tools only to some accounts or
+surfaces, and some never call them. A host that does not is unaffected: it
+sees the capability in `ui/initialize` and nothing else changes. Applications
+cannot add their own app tools to the Admin App.
+
 Checks against real hosts need an account and a public HTTPS endpoint, so
 they are manual: add the endpoint as a custom connector in each host, call a
 View tool with an App, and check light and dark themes, a narrow window,

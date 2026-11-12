@@ -6,6 +6,7 @@ import type {
   McpUiUpdateModelContextRequest,
 } from "@modelcontextprotocol/ext-apps";
 import { outputOf, type CallTool, type ToolResult } from "../../../src/app/bridge.js";
+import { APP_TOOLS, callAppTool, type ShownView } from "./app-tools";
 
 /** What the host lets the App do beyond rendering; each request is sent only when the host advertised it. */
 export interface HostApi {
@@ -25,6 +26,11 @@ export interface HostApi {
    * host offers no downloads, refuses or the person cancels; the host's answer does not tell these apart.
    */
   downloadFile(name: string, text: string): Promise<boolean>;
+  /**
+   * The App's own tools (`APP_TOOLS`), which the host calls for the model: `read` gives what the App shows while it is set;
+   * without it each call answers that no View is shown.
+   */
+  serveTools(read: (() => ShownView | null) | undefined): void;
 }
 
 /** The display modes the App can lay itself out for. */
@@ -109,13 +115,18 @@ export function connectHost(
   win: Window = window,
   version = "0.0.0",
 ): () => void {
+  // `tools`: the App's own view-only tools, a fixed list (no `listChanged`); a host without app tools never asks for them
   const app = new App(
     { name: "mantle", version },
-    { availableDisplayModes: [...APP_DISPLAY_MODES] },
+    { availableDisplayModes: [...APP_DISPLAY_MODES], tools: {} },
     { autoResize: false },
   );
   let closed = false,
     ready = false;
+  let shown: (() => ShownView | null) | undefined;
+  app.onlisttools = async () => ({ tools: APP_TOOLS });
+  app.oncalltool = ({ name, arguments: args }, extra) =>
+    callAppTool(() => (closed ? null : (shown?.() ?? null)), name, args ?? {}, extra.mcpReq.signal);
   let stopResize: (() => void) | undefined;
   let origin: string | undefined, incomingOrigin: string | undefined;
   // The official transport checks the parent WindowProxy. Keep origin continuity as a
@@ -205,6 +216,9 @@ export function connectHost(
                 { timeout: 600_000 },
               ),
             ),
+          serveTools: read => {
+            shown = read;
+          },
           requestDisplayMode: async mode => {
             if (closed || !app.getHostContext()?.availableDisplayModes?.includes(mode)) return null;
             try {

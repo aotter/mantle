@@ -29,6 +29,7 @@ import {
   type ToolResult,
 } from "../../../src/app/bridge";
 import { web, type HostApi } from "./postmessage";
+import type { ShownView } from "./app-tools";
 import { useLoadMore } from "../lib/use-load-more";
 import { Slot, useViewCellNames } from "../app/slots";
 import type { CellProps } from "../app/slot-props";
@@ -162,10 +163,18 @@ export function MantleApp(props: {
   const { rows, cursor, more } = pages;
   const [stale, setStale] = useState(false);
   const [open, setOpen] = useState<{ row: Row; action: AppRowAction } | null>(null);
+  // the row the model asked to see (`view_focus`); a new object each time, so asking again scrolls again
+  const [focused, setFocused] = useState<{ id: string } | null>(null);
+  const list = useRef<HTMLUListElement>(null);
   useEffect(() => {
     dispatch({ type: "reset", result: props.result });
     setStale(false);
+    setFocused(null);
   }, [props.result]);
+  useEffect(() => {
+    const index = focused && rows ? rows.findIndex(row => row["id"] === focused.id) : -1;
+    list.current?.children[index]?.scrollIntoView({ block: "nearest" });
+  }, [focused]);
 
   const refresh = async () => {
     if (!tool || !call) return;
@@ -180,23 +189,52 @@ export function MantleApp(props: {
   };
 
   // the same View tool and input through the host, at the cursor of the page shown last; the rows already shown stay
-  const loadMore = async () => {
-    if (!tool || !call || !cursor) return;
+  const loadMore = async (signal?: AbortSignal) => {
+    if (!tool || !call || !cursor) return null;
     const { generation } = pages;
     dispatch({ type: "loading" });
     try {
-      dispatch({ type: "loaded", generation, result: await call(tool, { ...props.input, cursor }) });
+      const result = await call(tool, { ...props.input, cursor }, signal);
+      dispatch({ type: "loaded", generation, result });
+      return result;
     } catch {
       dispatch({ type: "failed", generation });
+      return null;
     }
   };
+
+  const page =
+    tool && props.pages && Object.prototype.hasOwnProperty.call(props.pages, tool) ? props.pages[tool] : undefined;
+  // what the App's own tools read: the rows while they are on screen, not under a page or a row action
+  const shown = useRef<ShownView | null>(null);
+  useEffect(() => {
+    shown.current =
+      rows && page === undefined && !(open && tool && call)
+        ? {
+            tool,
+            input: props.input ?? {},
+            rows,
+            more: cursor !== undefined,
+            loading: pages.more === "loading",
+            generation: pages.generation,
+            ...(call ? { loadMore } : {}),
+            focus: id => {
+              if (!rows.some(row => row["id"] === id)) return false;
+              setFocused({ id });
+              return true;
+            },
+          }
+        : null;
+  });
+  useEffect(() => {
+    props.host.serveTools(() => shown.current);
+    return () => props.host.serveTools(undefined);
+  }, [props.host]);
 
   if (!props.result)
     return (
       <p className="text-muted-foreground p-4 text-sm">{props.cancelled ? labels.viewCancelled : labels.waiting}</p>
     );
-  const page =
-    tool && props.pages && Object.prototype.hasOwnProperty.call(props.pages, tool) ? props.pages[tool] : undefined;
   // a Procedure's result has no rows: its page is shown for any result that is not a failure
   if (!rows && page !== undefined && !props.result.isError) return <div data-slot="app-page">{page}</div>;
   if (!rows) {
@@ -252,12 +290,16 @@ export function MantleApp(props: {
       {capabilities.downloadFile && tool ? (
         <ExportRows labels={labels} onExport={() => props.host.downloadFile(`${tool}.csv`, csvText(columns, rows))} />
       ) : null}
-      <ul data-slot="app-rows" className="grid gap-2 p-3">
+      <ul ref={list} data-slot="app-rows" className="grid gap-2 p-3">
         {rows.map((row, index) => {
           const id = typeof row["id"] === "string" ? row["id"] : undefined;
           const actions = call ? actionsFor(props.catalog, view, row) : [];
           return (
-            <li key={id ?? index} className="grid gap-2 rounded-md border p-3 text-sm">
+            <li
+              key={id ?? index}
+              aria-current={id !== undefined && focused?.id === id ? "true" : undefined}
+              className="aria-[current=true]:ring-ring grid gap-2 rounded-md border p-3 text-sm aria-[current=true]:ring-2"
+            >
               <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-3 gap-y-1">
                 {columns.map(field => (
                   <div key={field} className="contents">
