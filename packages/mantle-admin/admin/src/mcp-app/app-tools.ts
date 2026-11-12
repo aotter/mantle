@@ -112,6 +112,9 @@ function state(view: ShownView, rows: readonly Row[], more: boolean): AppToolRes
 /**
  * Answers the host's `tools/call` for one of `APP_TOOLS`. `read` gives what the App shows now; the only server call is
  * `ShownView.loadMore`, the View tool's own read.
+ * A host may hand the model an error result without its text (Claude does), so what the model can act on (no rows shown,
+ * an id not shown, no next page, a page already loading, a list replaced) is a normal answer that says what was not done
+ * and what to call instead. `isError` is kept for real failures: an unknown tool, an answer too large to give, a failed read.
  */
 export async function callAppTool(
   read: () => ShownView | null,
@@ -121,23 +124,26 @@ export async function callAppTool(
 ): Promise<AppToolResult> {
   if (!APP_TOOLS.some(tool => tool.name === name)) return text(`Unknown tool: ${name}`, true);
   const view = read();
-  if (!view) return text("The App shows no View's rows now.", true);
+  if (!view)
+    return text(
+      "The App shows no View's rows now (it waits for a result, or shows a page or a row action); nothing was done.",
+    );
   if (name === "view_state") return state(view, view.rows, view.cursor !== undefined);
   if (name === "view_focus") {
     const id = args["id"];
     return typeof id === "string" && view.focus(id)
       ? text(`Showing row ${id}.`)
-      : text("No row shown has this id; view_state lists them.", true);
+      : text("No row shown has this id; nothing was scrolled. Pass one of the ids view_state lists, as text.");
   }
-  if (!view.loadMore || !view.tool) return text("This host cannot load more rows in the App.", true);
-  if (view.cursor === undefined) return text("The View has no more rows.", true);
-  if (view.loading) return text("The App is loading more rows already.", true);
+  if (!view.loadMore || !view.tool) return text("This host cannot load more rows in the App; nothing was loaded.");
+  if (view.cursor === undefined) return text("The View has no more rows; nothing was loaded.");
+  if (view.loading) return text("The App is loading more rows already; call view_state once they are shown.");
   const result = await view.loadMore(signal);
   const added = result && rowsOf(result);
   if (!added) return text("Could not load more rows.", true);
   // a new or refreshed result while the page loaded: the page was for a list that is gone
   if ((read()?.generation ?? view.generation) !== view.generation)
-    return text("The View was replaced; call view_state.", true);
+    return text("The View was replaced while the page loaded, so the page was dropped; call view_state.");
   return state(view, [...view.rows, ...added], cursorAfter(view.cursor, result) !== undefined);
 }
 

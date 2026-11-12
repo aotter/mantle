@@ -319,20 +319,27 @@ it("serves the model view-only app tools: read the View, load its next page thro
       ids: ["r1", "r2"],
     });
     await app.getByText("Desks").waitFor();
-    expect(await tool("view_more")).toMatchObject({ isError: true });
+    // the model can act on these: normal answers saying what was not done, not errors a host may blank
+    expect(await tool("view_more")).toEqual({
+      content: [{ type: "text", text: "The View has no more rows; nothing was loaded." }],
+    });
     expect(await tool("view_focus", { id: "r2" })).toEqual({ content: [{ type: "text", text: "Showing row r2." }] });
     const desks = app.locator('[data-slot="app-rows"] > li').nth(1);
     await expect.poll(() => desks.getAttribute("aria-current")).toBe("true");
     expect(await desks.evaluate(node => getComputedStyle(node).boxShadow)).not.toBe("none");
     expect(await app.locator('[aria-current="true"]').count()).toBe(1);
-    expect(await tool("view_focus", { id: "r9" })).toMatchObject({ isError: true });
+    expect(await tool("view_focus", { id: "r9" })).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("No row shown has this id") }],
+    });
     // the only server call is Load more's own read of the View; the model's tools reach no row action
     expect(await page.evaluate(() => (window as any).host.calls)).toEqual([
       expect.objectContaining({ name: "pending", arguments: { limit: 1, cursor: "c2" } }),
     ]);
     // a row action open: the rows are not on screen, so the tools have nothing to read
     await app.getByRole("button", { name: "Review: r1" }).click();
-    expect(await tool("view_state")).toMatchObject({ isError: true });
+    expect(await tool("view_state")).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("shows no View's rows now") }],
+    });
     expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
   } finally {
     await browser.close();
@@ -377,11 +384,13 @@ it("loads a page once when view_more calls, or a view_more and the Load more but
       const view_more = () => bridge.callTool({ name: "view_more", arguments: {} });
       return Promise.all([view_more(), view_more()]);
     });
-    expect(both.filter(result => !result.isError).map(text)).toEqual([
+    expect(both.map(result => result.isError)).toEqual([undefined, undefined]);
+    const loaded = both.filter(result => result.content[0]!.text.startsWith("{"));
+    expect(loaded.map(text)).toEqual([
       { tool: "pending", input: { limit: 1 }, rows: 2, more: false, ids: ["r1", "r2"] },
     ]);
-    expect(both.filter(result => result.isError).map(result => result.content[0]!.text)).toEqual([
-      "The App is loading more rows already.",
+    expect(both.filter(result => !loaded.includes(result)).map(result => result.content[0]!.text)).toEqual([
+      "The App is loading more rows already; call view_state once they are shown.",
     ]);
     await app.getByText("Desks").waitFor();
     expect(await shown()).toBe(2);
@@ -736,8 +745,10 @@ it("lists a page's own app tool while the page is shown, calls it to change the 
     expect(await changes()).toBe(1);
     // the handler checks its arguments; its throw is an error result
     expect(await tool("queue_only", {})).toEqual({ content: [{ type: "text", text: "Name an item." }], isError: true });
-    // the built-in tools stay listed and answer that no View's rows are shown
-    expect(await tool("view_state")).toMatchObject({ isError: true });
+    // the built-in tools stay listed and answer, as a normal result, that no View's rows are shown
+    expect(await tool("view_state")).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("shows no View's rows now") }],
+    });
     // a View's result replaces the page: its tools are gone and the host is told once
     await page.evaluate(async () => {
       await (window as any).host.bridge.sendToolResult({

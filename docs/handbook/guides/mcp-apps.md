@@ -466,9 +466,16 @@ model nothing the person could not see in the App. No app tool writes, runs a
 row action or Procedure, or leaves the View; writes stay server tools that the
 model calls under the host's approval. While no View's rows are on screen
 (waiting for a result, a `pages[].mcp` page, an open row action) every tool
-answers with an error. The definitions are fixed and marked `readOnlyHint`,
-and an answer is at most 100,000 characters: `view_state` lists as many ids as
-fit and adds `truncated: true`.
+answers that, and does nothing. A host may hand the model an error result
+without its text, so whatever the model can act on is a normal answer that says
+what was not done and what to call instead: no rows shown, an id `view_focus`
+does not find, no next page, a page already loading, a list replaced while a
+page loaded, a host without server tools. Only an unknown tool, a `view_state`
+whose View input alone is over the limit and a page read that failed are
+`isError` results. The
+definitions are fixed and marked `readOnlyHint`, and an answer is at most
+100,000 characters: `view_state` lists as many ids as fit and adds
+`truncated: true`.
 
 Host support varies. Some hosts offer app tools only to some accounts or
 surfaces, and some never call them. A host that does not is unaffected: it
@@ -508,7 +515,7 @@ function QueuePage() {
 
 - **What the App lists.** `tools/list` always starts with `view_state`,
   `view_more` and `view_focus`, so a host's approval of them holds; while a page
-  is shown they answer that no View's rows are on screen. The page's tools follow,
+  is shown they answer, as a normal result, that no View's rows are on screen. The page's tools follow,
   by name, while they are registered. Back on a View, the list is the three again.
 - **Lifecycle.** Each `registerTools` call adds its tools to those registered
   before, so the page and a component it renders can each register their own;

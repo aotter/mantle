@@ -262,7 +262,9 @@ test("the App's own tools: the same definitions on every mount, answered from wh
   expect(listed.tools.map((tool: { name: string }) => tool.name)).toEqual(["view_state", "view_more", "view_focus"]);
   expect(JSON.stringify(await second.app.onlisttools({}, extra))).toBe(JSON.stringify(listed));
   const call = (state: typeof first) => state.app.oncalltool({ name: "view_state", arguments: {} }, extra);
-  expect(await call(first)).toMatchObject({ isError: true });
+  // no View's rows shown: a normal answer that says so
+  const none = { content: [{ type: "text", text: expect.stringContaining("shows no View's rows now") }] };
+  expect(await call(first)).toEqual(none);
   const focus = vi.fn(() => true);
   first.host.serveTools(() => ({
     tool: "pending",
@@ -275,7 +277,7 @@ test("the App's own tools: the same definitions on every mount, answered from wh
   }));
   expect(JSON.parse((await call(first)).content[0].text)).toMatchObject({ tool: "pending", ids: ["r1"] });
   first.host.serveTools(undefined);
-  expect(await call(first)).toMatchObject({ isError: true });
+  expect(await call(first)).toEqual(none);
   first.host.serveTools(() => ({
     tool: "p",
     input: {},
@@ -286,7 +288,7 @@ test("the App's own tools: the same definitions on every mount, answered from wh
     focus,
   }));
   first.disconnect();
-  expect(await call(first)).toMatchObject({ isError: true });
+  expect(await call(first)).toEqual(none);
   // answering the model's tools sends the host nothing of the App's own
   expect(first.app.callServerTool).not.toHaveBeenCalled();
   second.disconnect();
@@ -597,7 +599,7 @@ test("platform origin continuity guard is separate from the official source-wind
   disconnect();
 });
 
-test("without a distinct parent (a native WebView) nothing is pinned: no origin is dropped and replies target \"*\"", async () => {
+test('without a distinct parent (a native WebView) nothing is pinned: no origin is dropped and replies target "*"', async () => {
   const { app, win, disconnect } = await make({}, {}, true, false);
   expect(win.parent).toBe(win);
   const guard = vi.mocked(win.addEventListener).mock.calls[0]![1] as (event: MessageEvent) => void;
