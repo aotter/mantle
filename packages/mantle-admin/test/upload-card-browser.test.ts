@@ -34,7 +34,7 @@ import {AppBridge,PostMessageTransport} from '@modelcontextprotocol/ext-apps/app
 const frame=document.createElement('iframe');frame.sandbox='allow-scripts';document.body.append(frame);
 window.host={calls:[],messages:[]};
 const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{}});
-bridge.oninitialized=()=>{void bridge.sendToolInput({arguments:{purpose:'cover',server:'shop'}});};
+bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();void bridge.sendToolInput({arguments:{purpose:'cover',server:'shop'}});};
 bridge.oncalltool=async params=>{window.host.calls.push(params);return (await fetch('/tool',{method:'POST',body:JSON.stringify(params)})).json();};
 bridge.onmessage=async params=>{window.host.messages.push(params);return {};};
 bridge.onsizechange=()=>{};
@@ -196,9 +196,12 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       const id = (await app.locator("form").getAttribute("data-asset"))!;
       expect(objects.get(id)).toEqual({ type: "image/png", bytes: png });
       expect(preflights).toEqual(["null"]);
-      const { calls, messages } = await page.evaluate(
-        () => (window as unknown as { host: { calls: unknown[]; messages: unknown[] } }).host,
+      const { calls, messages, appCapabilities } = await page.evaluate(
+        () =>
+          (window as unknown as { host: { calls: unknown[]; messages: unknown[]; appCapabilities: unknown } }).host,
       );
+      // the card shows no View: it lists no app tools for the host to route a call to
+      expect(appCapabilities).not.toHaveProperty("tools");
       expect(
         calls.map(call => ({
           name: (call as { name: string }).name,
