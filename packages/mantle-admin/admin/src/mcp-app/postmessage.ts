@@ -26,7 +26,12 @@ export interface HostApi {
   sendMessage(text: string): Promise<HostRequestOutcome>;
   /** `ui/update-model-context`: what the model should know at its next turn, without starting one. */
   updateModelContext(params: McpUiUpdateModelContextRequest["params"]): Promise<boolean>;
-  /** `ui/request-display-mode`: the mode the host granted, or null when it offers none other. */
+  /**
+   * `ui/request-display-mode`: the mode the host set, which is the App's current mode when it refuses (compare it with
+   * the mode asked for), or null when the host does not list `mode` in `availableDisplayModes` or no valid answer came.
+   * Call it directly in a click or key handler, while the App has focus: Claude refuses `fullscreen` without a recent
+   * click or key press in the view.
+   */
   requestDisplayMode(mode: McpUiDisplayMode): Promise<McpUiDisplayMode | null>;
   /**
    * `ui/download-file`: a text file saved to the person's device, named `downloadName(name)`, after the person confirms it

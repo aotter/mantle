@@ -76,7 +76,13 @@ export interface AdminHost {
     readonly content?: readonly { readonly type: "text"; readonly text: string }[];
     readonly structuredContent?: Readonly<Record<string, unknown>>;
   }): Promise<boolean>;
-  /** `ui/request-display-mode`: the mode granted, or null when the host offers none other. */
+  /**
+   * `ui/request-display-mode`: the mode the host set. A refusal resolves with the current mode, so compare the answer
+   * with the mode asked for; null when the host does not list `mode` in `context.availableDisplayModes` or no valid answer
+   * came. Call it directly in a click or key handler while the App has focus (do not cancel the button's `mousedown`):
+   * Claude refuses `fullscreen` without a recent click or key press in the view. Claude reports `fullscreen` in its side
+   * panel too, so label a way back "back to the conversation", not "exit full screen".
+   */
   requestDisplayMode(mode: "inline" | "fullscreen" | "pip"): Promise<"inline" | "fullscreen" | "pip" | null>;
   /**
    * `ui/download-file`: a text file saved to the person's device after they confirm it in the host. `name` is the saved
