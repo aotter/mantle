@@ -32,7 +32,38 @@ export {
 const newQueryClient = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, staleTime: 10_000 } } });
 
-function Root({ admin }: { admin: AdminDefinition }) {
+type HostHandlers = Parameters<typeof connectHost>[0];
+
+/**
+ * Connects to the host now, before React renders, so `ui/notifications/initialized` goes out as early as it can (a view
+ * replacing a full-screen one has 15 seconds on Claude). What the host sends waits, in order, for `listen`.
+ */
+function connectNow(): (handlers: HostHandlers) => void {
+  const queue: (readonly [keyof HostHandlers, unknown[]])[] = [];
+  let target: HostHandlers | undefined;
+  const relay =
+    (name: keyof HostHandlers) =>
+    (...args: unknown[]) =>
+      target ? (target[name] as (...args: unknown[]) => void)(...args) : void queue.push([name, args]);
+  connectHost(
+    {
+      ready: relay("ready"),
+      input: relay("input"),
+      result: relay("result"),
+      cancelled: relay("cancelled"),
+      context: relay("context"),
+      error: relay("error"),
+    },
+    window,
+    __MANTLE_VERSION__,
+  );
+  return handlers => {
+    target = handlers;
+    for (const [name, args] of queue.splice(0)) (handlers[name] as (...args: unknown[]) => void)(...args);
+  };
+}
+
+function Root({ admin, listen }: { admin: AdminDefinition; listen: (handlers: HostHandlers) => void }) {
   // the server embeds it once, when it builds the surface
   const catalog = useMemo(() => readCatalog(), []);
   const [client] = useState(newQueryClient);
@@ -49,25 +80,21 @@ function Root({ admin }: { admin: AdminDefinition }) {
   const [scroll, setScroll] = useState(false);
   useEffect(
     () =>
-      connectHost(
-        {
-          ready: (host, context) => {
-            setContext(context);
-            setHost(host);
-          },
-          input: setInput,
-          result: value => {
-            setCancelled(false);
-            setResult(value);
-          },
-          cancelled: () => setCancelled(true),
-          context: value => setContext(current => ({ ...current, ...value })),
-          error: setError,
+      listen({
+        ready: (host, context) => {
+          setContext(context);
+          setHost(host);
         },
-        window,
-        __MANTLE_VERSION__,
-      ),
-    [],
+        input: setInput,
+        result: value => {
+          setCancelled(false);
+          setResult(value);
+        },
+        cancelled: () => setCancelled(true),
+        context: value => setContext(current => ({ ...current, ...value })),
+        error: setError,
+      }),
+    [listen],
   );
   useEffect(() => {
     if (context)
@@ -189,9 +216,10 @@ function Root({ admin }: { admin: AdminDefinition }) {
  * the host's tools.
  */
 export function mountMcpApp(admin: AdminDefinition): void {
+  const listen = connectNow();
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <Root admin={admin} />
+      <Root admin={admin} listen={listen} />
     </StrictMode>,
   );
 }
