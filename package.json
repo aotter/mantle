@@ -45,7 +45,7 @@
   "packageManager": "pnpm@9.15.0",
   "pnpm": {
     "overrides": {
-      "@better-auth/mcp>@better-auth/oauth-provider": "1.7.12"
+      "@better-auth/mcp>@better-auth/oauth-provider": "1.7.14"
     }
   }
 }
