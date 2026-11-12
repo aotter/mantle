@@ -41,8 +41,11 @@ test("view_state reads the shown View: its tool, input, row ids and whether more
     more: true,
     ids: ["r1", "r2"],
   });
-  // no rows on screen (waiting, a page, a row action): nothing to read
-  expect(await answer(null, "view_state")).toMatchObject({ isError: true });
+  // no rows on screen (waiting, a page, a row action): a normal answer the model reads, not an error a host may blank
+  const none = await answer(null, "view_state");
+  expect(none.isError).toBeUndefined();
+  expect(none.content[0]!.text).toContain("shows no View's rows now");
+  // a tool the App does not have is a real failure
   expect(await answer(view(), "delete_row")).toMatchObject({ isError: true });
 });
 
@@ -83,8 +86,12 @@ test("view_focus shows a row that is on screen, and only one", async () => {
   expect(await answer(shown, "view_focus", { id: "r1" })).toEqual({
     content: [{ type: "text", text: "Showing row r1." }],
   });
-  expect(await answer(shown, "view_focus", { id: "r9" })).toMatchObject({ isError: true });
-  expect(await answer(shown, "view_focus", { id: 1 })).toMatchObject({ isError: true });
+  // an id not shown: the model can pass another, so the answer says what to change instead of an error
+  for (const id of ["r9", 1]) {
+    const missed = await answer(shown, "view_focus", { id });
+    expect(missed.isError).toBeUndefined();
+    expect(missed.content[0]!.text).toContain("view_state lists");
+  }
   expect(shown.focus).toHaveBeenCalledTimes(2);
 });
 
@@ -95,14 +102,17 @@ test("view_more is Load more: the View's own read, with the host's cancellation;
   // a host that answers the page's own cursor again: the list ends there, not a page loaded forever
   const repeated = view({ loadMore: async () => ({ structuredContent: { rows: [{ id: "r3" }], nextCursor: "c2" } }) });
   expect(parsed(await answer(repeated, "view_more"))).toMatchObject({ rows: 4, more: false });
-  // the tools get no server call of their own: `loadMore` is the only way out, and every refusal skips it
-  for (const refused of [
-    view({ cursor: undefined }),
-    view({ loading: true }),
-    view({ tool: null }),
-    view({ loadMore: undefined }),
-  ]) {
-    expect(await answer(refused, "view_more")).toMatchObject({ isError: true });
+  // the tools get no server call of their own: `loadMore` is the only way out, and every refusal skips it. A refusal is
+  // a normal answer saying what was not done: the model can act on it, and a host may not pass an error's text on.
+  for (const [refused, says] of [
+    [view({ cursor: undefined }), "no more rows"],
+    [view({ loading: true }), "call view_state"],
+    [view({ tool: null }), "cannot load more rows"],
+    [view({ loadMore: undefined }), "cannot load more rows"],
+  ] as const) {
+    const result = await answer(refused, "view_more");
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]!.text).toContain(says);
     if (refused.loadMore) expect(refused.loadMore).not.toHaveBeenCalled();
   }
   for (const name of ["view_state", "view_focus"]) {
@@ -126,5 +136,7 @@ test("view_more is Load more: the View's own read, with the host's cancellation;
     },
   });
   current = replaced;
-  expect(await callAppTool(() => current, "view_more", {}, signal)).toMatchObject({ isError: true });
+  const dropped = await callAppTool(() => current, "view_more", {}, signal);
+  expect(dropped.isError).toBeUndefined();
+  expect(dropped.content[0]!.text).toContain("call view_state");
 });
