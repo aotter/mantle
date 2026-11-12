@@ -12,6 +12,9 @@ export const ISSUER = "https://idp.example.test";
 
 type Extension = NonNullable<Parameters<typeof oauthProvider>[0]["extensions"]>[number];
 
+/** Test hook: runs inside `issueManagedGrant` just before Better Auth issues the tokens, to land an event mid-issuance. */
+export const inFlight: { run?: () => Promise<void> } = {};
+
 export const managedGrantTestExtension: Extension = {
   grants: {
     [JWT_BEARER]: async input => {
@@ -20,13 +23,21 @@ export const managedGrantTestExtension: Extension = {
       const { client } = await input.provider.authenticateClient({ requireCredentials: false, scopes });
       const found = await input.ctx.context.internalAdapter.findUserByEmail(body.assertion ?? "");
       if (!found) throw input.ctx.error("BAD_REQUEST", { error: "invalid_grant" });
-      return issueManagedGrant(input, {
-        client,
-        user: found.user,
-        scopes,
-        resources: [body.resource!],
-        issuer: ISSUER,
-      });
+      const { provider } = input;
+      const issueTokens: typeof provider.issueTokens = async params => {
+        await inFlight.run?.();
+        return provider.issueTokens(params);
+      };
+      return issueManagedGrant(
+        { ...input, provider: { ...provider, issueTokens } },
+        {
+          client,
+          user: found.user,
+          scopes,
+          resources: [body.resource!],
+          issuer: ISSUER,
+        },
+      );
     },
     [FORGED]: async input => {
       const body = input.ctx.body as Record<string, string>;

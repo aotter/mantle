@@ -958,10 +958,14 @@ authorization stays the adopter's decision; Core only provides the binding.
    resources, grant type, asserting issuer (audit only) and a `revoked` date. A new
    assertion for the same resources renews that record rather than adding one;
    one for other resources has its own record, so a client's grants for two
-   resources of one server never replace each other. The record is written only
-   after Better Auth has issued the tokens, so a refused token request changes no
-   grant. A user banned at that moment is refused, so no grant asserted during a
-   ban passes after the unban.
+   resources of one server never replace each other. A first grant's record is
+   created live before the ban check and issuance, so a ban, reset or disconnect
+   that lands while tokens are issued ends it like any live grant; a renewal is
+   written only after Better Auth has issued the tokens, and only to a record
+   still live. Either way such a request fails with `invalid_grant`. A first
+   grant whose issuance Better Auth refuses is deleted, so a refused token
+   request changes no grant. A user banned at that moment is refused, so no
+   grant asserted during a ban passes after the unban.
 3. **Claim.** While `issueManagedGrant` mints, `oauthGrantExtension` stamps
    `mantle_managed_grant` (the record id) in place of the consent claims.
 4. **Check.** `assertActiveUserGrant` accepts a token naming a managed grant only
