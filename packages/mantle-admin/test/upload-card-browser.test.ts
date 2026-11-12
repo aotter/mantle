@@ -197,8 +197,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       expect(objects.get(id)).toEqual({ type: "image/png", bytes: png });
       expect(preflights).toEqual(["null"]);
       const { calls, messages, appCapabilities } = await page.evaluate(
-        () =>
-          (window as unknown as { host: { calls: unknown[]; messages: unknown[]; appCapabilities: unknown } }).host,
+        () => (window as unknown as { host: { calls: unknown[]; messages: unknown[]; appCapabilities: unknown } }).host,
       );
       // the card shows no View: it lists no app tools for the host to route a call to
       expect(appCapabilities).not.toHaveProperty("tools");
