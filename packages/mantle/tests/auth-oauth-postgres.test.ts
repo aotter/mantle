@@ -175,7 +175,10 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
       const auth = betterAuth(options);
       handle = request => auth.handler(request);
       const { internalAdapter } = await auth.$context;
-      const user = await internalAdapter.createUser({ email: "pg@example.test", name: "PG", emailVerified: true });
+      const user = await internalAdapter.createUser(
+        { email: "pg@example.test", name: "PG", emailVerified: true },
+        { method: "admin" },
+      );
       const registered = await auth.handler(
         new Request(`${origin}/api/auth/oauth2/register`, {
           method: "POST",
