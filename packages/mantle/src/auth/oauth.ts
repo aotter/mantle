@@ -1,5 +1,5 @@
 /** Optional provider integration. Better Auth owns signatures, PKCE, redirects and token rotation. */
-import type { AuthContext, BetterAuthPlugin } from "@better-auth/core";
+import type { AuthContext, BetterAuthOptions, BetterAuthPlugin } from "@better-auth/core";
 import { createAuthMiddleware } from "@better-auth/core/api";
 import type { oauthProvider } from "@better-auth/oauth-provider";
 import type { AuthInstance } from "./caller.js";
@@ -16,9 +16,25 @@ const array = (value: unknown): string[] | null => {
   }
 };
 
+type Extension = NonNullable<Parameters<typeof oauthProvider>[0]["extensions"]>[number];
+type GrantInput = Parameters<NonNullable<Extension["grants"]>[string]>[0];
+type IssueParams = Parameters<GrantInput["provider"]["issueTokens"]>[0];
+
+const MANAGED = "oauthManagedGrant";
+/** Connected-app ids of managed grants; consent and managed-grant ids come from different tables and may coincide. */
+const MANAGED_PREFIX = "managed:",
+  MANAGED_ID = `'${MANAGED_PREFIX}'`;
+/** The opt-in: `oauthGrantRevocation({ managedGrants: true })` declares the managed-grant table. */
+const managedGrants = (options: BetterAuthOptions) =>
+  !!options.plugins?.some(plugin => plugin.id === OAUTH_GRANT_REVOCATION && plugin.schema?.[MANAGED]);
+/** The managed grant an `issueManagedGrant` call is minting on this request; read by `oauthGrantExtension`. */
+const minting = new WeakMap<object, string>();
+
 /**
  * Fail closed for unbound tokens; reconsent cannot resurrect an issued JWT. As in Better Auth, an `offline_access` grant outlives
  * the browser session: without a live session it stands on an unrevoked, unexpired offline refresh token for the same user and client.
+ * With managed grants enabled, a token naming one (`mantle_managed_grant`) stands on that live record alone: no session, consent
+ * or refresh token. A claim is never enough: the stored record must match user, client, resource and scopes.
  */
 export async function assertActiveUserGrant(
   auth: AuthInstance,
@@ -32,12 +48,39 @@ export async function assertActiveUserGrant(
     mantle_consent_id: id,
     mantle_consent_reference: reference,
     mantle_skip_consent: skip,
+    mantle_managed_grant: managed,
   } = claims;
   const tokenScopes =
     typeof claims.scope === "string" ? claims.scope.split(/\s+/).filter(Boolean) : array(claims.scope);
   const offline = !!tokenScopes?.includes("offline_access");
+  const requested = typeof audience === "string" ? [audience] : audience;
+  const tokenAudiences = typeof claims.aud === "string" ? [claims.aud] : (array(claims.aud) ?? []);
+  const covers = (resources: string[] | null, scopes: string[] | null | undefined) =>
+    !!resources &&
+    !!scopes &&
+    !!tokenScopes &&
+    requested.some(x => resources.includes(x) && tokenAudiences.includes(x)) &&
+    tokenScopes.every(x => scopes.includes(x));
+  const subject = [sub, azp].every(x => typeof x === "string" && x.length);
+  if (managed !== undefined && managedGrants(auth.options)) {
+    if (!subject || typeof managed !== "string" || !managed)
+      throw new ContractError("UNAUTHENTICATED", "OAuth token is not bound to a user session.");
+    const { exec, param, table, column } = nativeAuthRead(auth.options);
+    const g = (field: string) => `g.${column(MANAGED, field)}`,
+      client = (field: string) => `client.${column("oauthClient", field)}`;
+    const { rows } = await exec(
+      `SELECT ${g("resources")} AS resources, ${g("scopes")} AS scopes, ${client("disabled")} AS disabled
+      FROM ${table(MANAGED)} g JOIN ${table("oauthClient")} client ON ${client("clientId")} = ${g("clientId")}
+      WHERE ${g("id")} = ${param(1)} AND ${g("userId")} = ${param(2)} AND ${g("clientId")} = ${param(3)} AND ${g("revoked")} IS NULL`,
+      [managed, sub, azp],
+    );
+    const grant = rows[0];
+    if (!grant || grant.disabled || !covers(array(grant.resources), array(grant.scopes)))
+      throw new ContractError("UNAUTHENTICATED", "OAuth authorization grant is no longer active.");
+    return { id: sub as string };
+  }
   if (
-    ![sub, azp].every(x => typeof x === "string" && x.length) ||
+    !subject ||
     !((offline && sid == null) || (typeof sid === "string" && sid.length)) ||
     !((skip === true && id === null) || (typeof id === "string" && id.length))
   )
@@ -78,27 +121,23 @@ export async function assertActiveUserGrant(
       : array(claims.aud)
     : array(grant?.resources);
   const scopes = firstParty ? (array(grant?.clientScopes) ?? provider?.options?.scopes) : array(grant?.scopes);
-  const requested = typeof audience === "string" ? [audience] : audience;
-  const tokenAudiences = typeof claims.aud === "string" ? [claims.aud] : (array(claims.aud) ?? []);
   if (
     !grant ||
     !live ||
     grant.disabled ||
     (!firstParty && (!grant.consentId || (grant.reference ?? null) !== reference)) ||
-    !resources ||
-    !scopes ||
-    !tokenScopes ||
-    !requested.some(x => resources.includes(x) && tokenAudiences.includes(x)) ||
-    !tokenScopes.every(x => scopes.includes(x))
+    !covers(resources, scopes)
   )
     throw new ContractError("UNAUTHENTICATED", "OAuth authorization grant is no longer active.");
   return { id: sub as string };
 }
 
 /** Add first to oauthProvider/mcp extensions; Better Auth retains ownership of referenceId. */
-export const oauthGrantExtension: NonNullable<Parameters<typeof oauthProvider>[0]["extensions"]>[number] = {
+export const oauthGrantExtension: Extension = {
   claims: {
     accessToken: async ({ ctx, user, client, referenceId, grantType, scopes, sessionId }) => {
+      const managed = minting.get(ctx);
+      if (managed) return { mantle_managed_grant: managed };
       // Narrowing away offline_access on refresh would mint a session-bound token for a session that has already ended.
       if (grantType === "refresh_token" && !scopes.includes("offline_access")) {
         const session = sessionId
@@ -129,6 +168,53 @@ export const oauthGrantExtension: NonNullable<Parameters<typeof oauthProvider>[0
   },
 };
 
+/**
+ * For an adopter's own extension grant handler (for example a jwt-bearer / ID-JAG grant), after the handler has validated the
+ * assertion, authenticated the client and matched the user: records or renews the managed grant of that user and client, and
+ * issues its tokens without a consent screen, a browser session or a refresh token (`offline_access` is dropped, so Better
+ * Auth issues none; a new assertion is the renewal). Requires `oauthGrantRevocation({ managedGrants: true })` and resources,
+ * so the access token is a JWT for those audiences. Core validates no assertion and trusts no issuer: `issuer` is kept for audit.
+ */
+export async function issueManagedGrant(
+  { ctx, provider, grantType }: GrantInput,
+  grant: Pick<IssueParams, "client"> & {
+    user: NonNullable<IssueParams["user"]>;
+    scopes: string[];
+    resources: string[];
+    issuer: string;
+  },
+) {
+  if (!managedGrants(ctx.context.options))
+    throw new ContractError(
+      "AUTH_CONFIGURATION_ERROR",
+      "issueManagedGrant requires oauthGrantRevocation({ managedGrants: true }) and its table.",
+      "auth:oauth",
+    );
+  const { client, user, resources, issuer } = grant;
+  const scopes = grant.scopes.filter(scope => scope !== "offline_access");
+  const db = ctx.context.adapter,
+    now = new Date();
+  const data = { scopes, resources, grantType, issuer, updatedAt: now };
+  // One live record per user and client, renewed by each assertion. ponytail: two concurrent first assertions may leave two
+  // live records; both are valid and both end together, as endGrants ends a user's records per client.
+  const record =
+    (await db.update<{ id: string }>({
+      model: MANAGED,
+      where: [pair("userId", user.id), pair("clientId", client.clientId), { field: "revoked", value: null }],
+      update: data,
+    })) ??
+    (await db.create<{ id: string }>({
+      model: MANAGED,
+      data: { ...data, userId: user.id, clientId: client.clientId, createdAt: now },
+    }));
+  minting.set(ctx, record.id);
+  try {
+    return await provider.issueTokens({ client, user, scopes, resources });
+  } finally {
+    minting.delete(ctx);
+  }
+}
+
 export const OAUTH_GRANT_REVOCATION = "mantle-oauth-grant-revocation";
 /** Password resets (all channels) and an admin password change: the old credential may be compromised, so every session ends too. */
 const RESETS = [
@@ -149,10 +235,14 @@ const PROVING = ["/sign-in/email-otp", "/magic-link/verify"];
  * change ends every OAuth grant of that user: tokens, consents and unredeemed codes. So does an email OTP or magic-link
  * sign-in attempt on an unverified user: Better Auth strips what was set up before that proof, possibly by someone else
  * who registered the address first, and Mantle ends that party's grants before the attempt is checked.
+ *
+ * `managedGrants: true` opts in to managed grants (`issueManagedGrant`): it declares their table, so `schema.sql` gains it, and
+ * the same events, and a disconnect, end them. Sign-out and session expiry do not.
  */
-export function oauthGrantRevocation() {
+export function oauthGrantRevocation(options: { managedGrants?: boolean } = {}) {
   return {
     id: OAUTH_GRANT_REVOCATION,
+    ...(options.managedGrants ? { schema: MANAGED_SCHEMA } : {}),
     hooks: {
       // Better Auth consumes the reset token, so its user rides this request's own context to the after hook.
       before: [
@@ -185,7 +275,7 @@ export function oauthGrantRevocation() {
               typeof email === "string" && email
                 ? await ctx.context.internalAdapter.findUserByEmail(email.toLowerCase())
                 : null;
-            if (found && !found.user.emailVerified) await endGrants(ctx.context.adapter, found.user.id);
+            if (found && !found.user.emailVerified) await endGrants(ctx.context, found.user.id);
           }),
         },
       ],
@@ -230,7 +320,7 @@ export function oauthGrantRevocation() {
             if (typeof userId !== "string" || !userId) return;
             // Sessions first: a live session (perhaps the attacker's) could otherwise authorize a new grant after endGrants.
             if (RESETS.includes(path)) await ctx.context.internalAdapter.deleteUserSessions(userId);
-            await endGrants(ctx.context.adapter, userId);
+            await endGrants(ctx.context, userId);
           }),
         },
       ],
@@ -275,17 +365,38 @@ async function magicLinkEmail(context: AuthContext, token: unknown): Promise<unk
   }
 }
 
-/** Ends a user's grants (for one client, or all): consents, tokens and unredeemed authorization codes. */
-async function endGrants(db: AuthContext["adapter"], userId: string, clientId?: string) {
+const MANAGED_SCHEMA = {
+  [MANAGED]: {
+    fields: {
+      userId: { type: "string", required: true, references: { model: "user", field: "id" }, index: true },
+      clientId: {
+        type: "string",
+        required: true,
+        references: { model: "oauthClient", field: "clientId" },
+        index: true,
+      },
+      scopes: { type: "string[]", required: true },
+      resources: { type: "string[]", required: true },
+      grantType: { type: "string", required: true },
+      issuer: { type: "string", required: true },
+      revoked: { type: "date", required: false },
+      createdAt: { type: "date", required: true },
+      updatedAt: { type: "date", required: true },
+    },
+  },
+} satisfies BetterAuthPlugin["schema"];
+
+/** Ends a user's grants (for one client, or all): consents, managed grants, tokens and unredeemed authorization codes. */
+async function endGrants(context: AuthContext, userId: string, clientId?: string) {
+  const db = context.adapter;
   const where = [pair("userId", userId), ...(clientId ? [pair("clientId", clientId)] : [])];
   // Delete first: even if cleanup fails, every issued JWT fails the live-grant check immediately.
   await db.deleteMany({ model: "oauthConsent", where });
+  const live = [...where, { field: "revoked", value: null }];
+  if (managedGrants(context.options))
+    await db.updateMany({ model: MANAGED, where: live, update: { revoked: new Date() } });
   for (const model of ["oauthRefreshToken", "oauthAccessToken"])
-    await db.updateMany({
-      model,
-      where: [...where, { field: "revoked", value: null }],
-      update: { revoked: new Date() },
-    });
+    await db.updateMany({ model, where: live, update: { revoked: new Date() } });
   // An unredeemed code would mint a new token lineage after reconsent.
   const code = (v: string) => {
     const x = authCode(v);
@@ -340,7 +451,7 @@ export interface OAuthConsentInfo {
 
 /** Signed-query and consent APIs over the same application-owned instance and adapter (including renamed tables). */
 export function oauthConsents(auth: AuthInstance & { handler(request: Request): Promise<Response> }) {
-  const adapter = async () => ((await auth.$context) as AuthContext).adapter;
+  const context = async () => (await auth.$context) as AuthContext;
   return {
     getOAuthConsentRequest: async (request: Request): Promise<OAuthConsentRequest | null> => {
       const url = new URL(request.url),
@@ -393,6 +504,17 @@ export function oauthConsents(auth: AuthInstance & { handler(request: Request): 
         WHERE ${c("userId")} = ${param(1)} ORDER BY ${c("updatedAt")} DESC, ${c("id")} ASC`,
         [userId],
       );
+      if (managedGrants(auth.options)) {
+        // A managed grant is listed once per client, under a prefixed id; a client with a consent is already listed.
+        const g = (field: string) => `g.${column(MANAGED, field)}`;
+        const managed = await exec(
+          `SELECT ${MANAGED_ID} || ${g("id")} AS id, ${g("clientId")} AS "clientId", COALESCE(${client("name")}, ${g("clientId")}) AS "clientName", ${g("scopes")} AS scopes
+          FROM ${table(MANAGED)} g LEFT JOIN ${table("oauthClient")} client ON ${client("clientId")} = ${g("clientId")}
+          WHERE ${g("userId")} = ${param(1)} AND ${g("revoked")} IS NULL ORDER BY ${g("updatedAt")} DESC, ${g("id")} ASC`,
+          [userId],
+        );
+        for (const row of managed.rows) if (!rows.some(x => x.clientId === row.clientId)) rows.push(row);
+      }
       return rows.map(row => ({
         id: row.id as string,
         clientId: row.clientId as string,
@@ -401,13 +523,22 @@ export function oauthConsents(auth: AuthInstance & { handler(request: Request): 
       }));
     },
     revokeOAuthConsent: async (userId: string, consentId: string): Promise<boolean> => {
-      const db = await adapter();
-      const consent = await db.findOne<{ clientId: string }>({
-        model: "oauthConsent",
-        where: [pair("id", consentId), pair("userId", userId)],
-      });
-      if (!consent) return false;
-      await endGrants(db, userId, consent.clientId);
+      const ctx = await context();
+      const managed = consentId.startsWith(MANAGED_PREFIX) && managedGrants(auth.options);
+      const grant = await ctx.adapter.findOne<{ clientId: string }>(
+        managed
+          ? {
+              model: MANAGED,
+              where: [
+                pair("id", consentId.slice(MANAGED_PREFIX.length)),
+                pair("userId", userId),
+                { field: "revoked", value: null },
+              ],
+            }
+          : { model: "oauthConsent", where: [pair("id", consentId), pair("userId", userId)] },
+      );
+      if (!grant) return false;
+      await endGrants(ctx, userId, grant.clientId);
       return true;
     },
   };
