@@ -82,6 +82,41 @@ test("shared JSON body limit rejects declared and actual bytes", async () => {
   expect(await body(new Request("https://app.test", { method: "POST", body: '{"x":1}' }), 7)).toEqual({ x: 1 });
 });
 
+test("an application's own route reads a JSON body with its own refusal", async () => {
+  class Refused extends Error {}
+  const refuse = (message: string): never => {
+    throw new Refused(message);
+  };
+  const post = (text: string | ReadableStream<Uint8Array>, headers?: Record<string, string>) =>
+    new Request("https://app.test/own", { method: "POST", body: text, headers, duplex: "half" } as RequestInit);
+  const refusal = async (request: Request, limit = 16) => {
+    const error = await body(request, limit, refuse).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(Refused);
+    return (error as Error).message;
+  };
+  expect(await body(post('{"email":"a@b.c"}'), 16 + 2, refuse)).toEqual({ email: "a@b.c" });
+  expect(await body(post(""), 16, refuse)).toEqual({});
+  expect(await refusal(post("{"))).toBe("Expected a JSON body.");
+  for (const text of ["[]", "null", "3"]) expect(await refusal(post(text))).toBe("Expected a JSON object.");
+  expect(await refusal(post(`{"x":"${"a".repeat(20)}"}`))).toBe("Request body exceeds 16 bytes.");
+  // chunked, no content-length: refused once the streamed bytes pass the limit
+  const chunks = new ReadableStream<Uint8Array>({
+    start(c) {
+      for (let i = 0; i < 4; i++) c.enqueue(new TextEncoder().encode('{"a":1}'));
+      c.close();
+    },
+  });
+  expect(await refusal(post(chunks))).toBe("Request body exceeds 16 bytes.");
+  // a declared length over the limit is refused before the body is read
+  const unread = new ReadableStream<Uint8Array>({
+    pull() {
+      throw Error("declared oversized stream was read");
+    },
+  });
+  expect(await refusal(post(unread, { "content-length": "17" }))).toBe("Request body exceeds 16 bytes.");
+  expect(unread.locked).toBe(false);
+});
+
 test("native REST database acquisition is lazy and memoized even for undefined handles", async () => {
   let calls = 0;
   const fetch = nativeRest(
