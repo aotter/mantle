@@ -60,8 +60,8 @@ importers:
         specifier: 3.3.1
         version: 3.3.1
       libpg-query:
-        specifier: 18.1.5
-        version: 18.1.5
+        specifier: 18.2.2
+        version: 18.2.2
       pgsql-deparser:
         specifier: 18.3.12
         version: 18.3.12
@@ -3222,8 +3222,8 @@ packages:
     resolution: {integrity: sha512-nbD8lB9EB3wNdMhOCdx5Li8DxnLbvKByylRLcJ1h+4SkrowVeECAyZlyiKMThF7xFdRz0jSQ2MoJr+wXux2y0Q==}
     engines: {node: '>=20.0.0'}
 
-  libpg-query@18.1.5:
-    resolution: {integrity: sha512-xsksgH106LyVUylIp2bJz1MPFmVVIGKbB8belGWmh+J8/i38w8eM1twDIBnd97tzeNQFctH9MWKMthl22+fWcQ==}
+  libpg-query@18.2.2:
+    resolution: {integrity: sha512-BOKY0X05vnxkFe+FD8JH71sSO560UKoSRv9Fsy67zapmryhqcew+4Hq0Phu8a6mcENklK7LiHJi0d0j8DbIb4A==}
 
   lightningcss-android-arm64@1.32.0:
     resolution: {integrity: sha512-YK7/ClTt4kAK0vo6w3X+Pnm0D2cf2vPHbhOXdoNti1Ga0al1P4TBZhwjATvjNwLEBCnKvjJc2jQgHXH0NEwlAg==}
@@ -7247,7 +7247,7 @@ snapshots:
 
   kysely@0.28.17: {}
 
-  libpg-query@18.1.5:
+  libpg-query@18.2.2:
     dependencies:
       '@pgsql/types': 18.0.0
 
