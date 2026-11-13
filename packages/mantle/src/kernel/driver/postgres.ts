@@ -1,4 +1,10 @@
-/** Bun.SQL's PostgreSQL shape (`Postgres`); postgres.js satisfies it as it is. */
+/**
+ * Bun.SQL's PostgreSQL shape (`Postgres`); postgres.js satisfies it as it is.
+ * Assumed of Hyperdrive, unproven by local Wrangler (it connects directly): its transaction-mode pool keeps BEGIN..COMMIT
+ * on one connection, and it reports an origin connection lost mid-statement without a definitive SQLSTATE (none, or
+ * class 08/57/XX), so `postgresOutcome` answers OUTCOME_UNKNOWN rather than a false rollback. `read` also assumes the
+ * config disables query caching (handbook deploy-and-operate): a cached read would serve stale rows, versions and grants.
+ */
 import type { Bound } from "../binds.js";
 import type { TransactionOptions } from "../store.js";
 import {
