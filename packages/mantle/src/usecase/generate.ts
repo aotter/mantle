@@ -13,7 +13,7 @@ import {
   q,
   driverModule,
 } from "../domain/entry.js";
-import { authLines as auth } from "../domain/input.js";
+import { authLines as auth, conversions } from "../domain/input.js";
 import { recipesOf } from "../domain/recipes.js";
 import { emitTtl } from "./ttl.js";
 import { emitPublishing } from "./publishing.js";
@@ -21,7 +21,7 @@ import { emitStores } from "./stores.js";
 import { emitPaging } from "./paging.js";
 import { emitWeb } from "./web.js";
 import { emitMcp } from "./mcp.js";
-import { emitValidation } from "./validation.js";
+import { emitValidation, type TypedInput } from "./validation.js";
 import { refuseDeclarations } from "./refusals.js";
 import { emitHandlers } from "./handlers.js";
 import { emitAdminDescriptors } from "./adminDescriptors.js";
@@ -82,9 +82,10 @@ export function generate(input: GenerateInput): GenerateResult {
       if (!bind || bind.k !== "input")
         return `readonly ${q(name)}${schema.required?.includes(name) ? "" : "?"}: ${typeOf(field)};`;
       const type = String(bind.type);
+      // A string is bound as JSON text, which is what the surfaces' conversion (`convertInput`) passes.
       const driverType =
         type === "json"
-          ? typeOf(field)
+          ? [...new Set([typeOf(field), "string"])].join(" | ")
           : type === "date"
             ? "string"
             : type === "timestamptz"
@@ -149,6 +150,8 @@ export function generate(input: GenerateInput): GenerateResult {
     procedures: string[] = [],
     refProcedures: string[] = [];
   const entries: Record<string, string> = {};
+  // Each Procedure's `input` in its validation module returns the input its bare function takes.
+  const typed: Record<string, TypedInput> = {};
   const base = "@aotter/mantle/";
   const refNames = emitHandlers(plan, target !== "cloudflare-d1", typeOf, declarations, refProcedures);
   const hasHandlers = refNames.length > 0;
@@ -206,7 +209,10 @@ export function generate(input: GenerateInput): GenerateResult {
   for (const [index, [name, procedure]] of Object.entries(plan.procedures).sort().entries()) {
     const path = `procedures/${name}`,
       fn = `procedure${index}`;
-    if (!("sql" in procedure.handler)) continue;
+    if (!("sql" in procedure.handler)) {
+      typed[name] = { from: "../../generated.js", name: `Procedure${index}Input`, convert: "" };
+      continue;
+    }
     const modes = lowered.procedures[name];
     if (!modes?.caller || !modes.trusted) {
       refuse(path, PROCEDURE_UNLOWERED);
@@ -235,6 +241,15 @@ export function generate(input: GenerateInput): GenerateResult {
     );
     procedures.push(`[${q(name)}]: ${fn}`);
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
+    typed[name] = {
+      from: `../../procedures/${encodeURIComponent(name)}.js`,
+      name: "Input",
+      convert: conversions(
+        procedure.input?.properties,
+        [...modes.caller, ...modes.trusted].flatMap(s => s.binds),
+        target,
+      ),
+    };
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry(
       "procedure",
       name,
@@ -248,7 +263,7 @@ export function generate(input: GenerateInput): GenerateResult {
   const surfaces = {
     ...emitPaging(plan, lowered, target, refuse, paging),
     ...emitPaging(plan, input.wireLowered ?? lowered, target, refuse, paging, true),
-    ...emitValidation(plan, refuse),
+    ...emitValidation(plan, refuse, typed),
     ...emitRest(plan, lowered, target, input.description),
     ...emitWeb(plan, lowered, target),
     ...emitMcp(plan, lowered, target, input.description, refuse, site ? mediaPolicies(site) : undefined),

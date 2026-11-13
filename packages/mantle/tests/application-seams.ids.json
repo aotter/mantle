@@ -4,6 +4,7 @@
   "origin-rule-and-errors",
   "call-tool",
   "input-conversion",
+  "procedure-input",
   "tool-meta",
   "app-resource-meta",
   "managed-grant",

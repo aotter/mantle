@@ -255,6 +255,16 @@ for (const stack of STACKS) {
           const { results } = await procedures["add-note"](db, caller, input);
           expect(results[0][0]).toMatchObject({ title: "Direct", body: null });
         });
+        await exercising(["procedure-input"], async () => {
+          const { draft } = await module("procedure-input.ts");
+          const [omitted] = (await draft(db, caller, { title: "Draft" })).results[0];
+          expect(omitted).toMatchObject({ title: "Draft", pinned: null, tags: null });
+          const [given] = (await draft(db, caller, { title: "Pinned", pinned: true, tags: ["a"] })).results[0];
+          expect([Boolean(given.pinned), typeof given.tags === "string" ? JSON.parse(given.tags) : given.tags]).toEqual(
+            [true, ["a"]],
+          );
+          await expect(draft(db, caller, { title: 1 })).rejects.toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
+        });
         // a bearer caller: a cookie session's tool call also needs the origin rule
         const bearer = (await import("@aotter/mantle/testing")).authenticatedAs(
           { id: "note-owner", role: "user" },

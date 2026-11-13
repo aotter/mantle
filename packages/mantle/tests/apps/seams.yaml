@@ -14,6 +14,7 @@ spec:
       title: {type: string}
       body: {type: string}
       tags: {type: array, items: {type: string}}
+      pinned: {type: boolean}
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -47,3 +48,22 @@ metadata: {name: add-note-mcp}
 spec:
   source: {kind: mcp, surface: public}
   target: {procedure: add-note}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: add-draft}
+spec:
+  description: Add a draft note.
+  requires: {auth: {all: [ctx.user]}}
+  input:
+    type: object
+    required: [title]
+    additionalProperties: false
+    properties:
+      title: {type: string}
+      pinned: {type: boolean}
+      tags: {type: array, items: {type: string}}
+  output: {type: object}
+  handler:
+    sql: |
+      INSERT INTO notes (title, pinned, tags) VALUES (input.title, input.pinned, input.tags) RETURNING id, title, pinned, tags

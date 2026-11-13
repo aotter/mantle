@@ -86,6 +86,14 @@ export const SEAMS: readonly Seam[] = [
     check: "packages/mantle/tests/seams/input-conversion.ts",
   },
   {
+    id: "procedure-input",
+    package: "@aotter/mantle",
+    entry: "generated validation/procedures/<name>.ts input(raw)",
+    stacks: ALL,
+    decided: SEAM,
+    check: "packages/mantle/tests/seams/procedure-input.ts",
+  },
+  {
     id: "tool-meta",
     package: "@aotter/mantle",
     subpath: "./mcp",

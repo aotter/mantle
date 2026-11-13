@@ -206,6 +206,7 @@ test("all four Store wiring points reject missing, extra and wrong handlers", as
       await writeFile(
         consumer,
         `import { type Handlers, procedures, store } from "./generated.js";
+import { input } from "./validation/procedures/app-note.js";
 const good: Handlers = { "app-note": async (ctx, input) => {
   await ctx.store.views["notes-list"]({});
   const [row] = await ctx.store.batch([ctx.store.collection("notes").insert(input)]);
@@ -214,6 +215,8 @@ const good: Handlers = { "app-note": async (ctx, input) => {
 } };
 async function check(db: Parameters<typeof store>[0], caller: Parameters<typeof store>[1]) {
   const title: string = (await store(db, caller, { handlers: good }).procedures["app-note"]({ title: "t" })).title;
+  // a ref Procedure's validated input needs no cast
+  await store(db, caller, { handlers: good }).procedures["app-note"](input({ title: "t" }));
   // @ts-expect-error handlers required at wiring point
   store(db, caller);
   // @ts-expect-error options must supply handlers
