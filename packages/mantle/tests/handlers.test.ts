@@ -310,6 +310,14 @@ test("ctx.transaction makes a handler's writes atomic, joins an outer transactio
       }),
     ).rejects.toBe(failure);
     expect(titles()).toEqual(["fail plain", "ok tx"]);
+    // So does a handler reached through a Store given the transaction's own handle.
+    await expect(
+      data.transaction(async (_tx: any, raw: unknown) => {
+        await app.store(raw, caller, { handlers }).procedures["app-note"]({ title: "joined raw" });
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    expect(titles()).toEqual(["fail plain", "ok tx"]);
   } finally {
     db.close();
   }
