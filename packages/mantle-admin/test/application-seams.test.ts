@@ -68,6 +68,8 @@ it("the required Admin seams run", async () => {
   try {
     const { app } = await import("./seams/admin-app-tools.js");
     expect(app.resources[0]!.renders).toContain("seam_tool");
+    const { admin } = await import("./seams/page-renders.js");
+    expect(admin.pages[0]!.mcp?.renders).toBe("seam_tool");
     const { card } = await import("./seams/upload-card.js");
     expect(card.resources[0]!.renders).toEqual(["upload_to_folder"]);
     const page = await (card.resources[0]!.html as (render: unknown) => Promise<{ html: string }>)({

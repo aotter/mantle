@@ -146,6 +146,16 @@ export const SEAMS: readonly Seam[] = [
     check: "packages/mantle-admin/test/seams/admin-app-tools.ts",
   },
   {
+    id: "page-renders-tool",
+    package: "@aotter/mantle-admin",
+    subpath: "./app",
+    exports: ["defineAdmin"],
+    entry: "defineAdmin(meta, { pages: [{ mcp: { renders } }] })",
+    stacks: [],
+    decided: SEAM,
+    check: "packages/mantle-admin/test/seams/page-renders.ts",
+  },
+  {
     id: "upload-card-tool",
     package: "@aotter/mantle-admin",
     subpath: "./mcp",

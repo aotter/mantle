@@ -236,11 +236,13 @@ export interface AdminPage<T extends AdminTypes = AdminTypes> {
   /**
    * Also the page of an MCP App: when the host called this tool, the App shows `element` instead of a View's rows, or for
    * a Procedure's result, in the `mcp-app` surface (browser-only hooks read `unavailable`, links go through the host).
-   * `renders` names an admin View that has an MCP tool, or an admin operation whose tool `adminMcpApps({ tools })` lists;
-   * `tsc` refuses any other name. The page reads its data through the hooks, so in a host without server tools it shows
+   * `renders` names an admin View that has an MCP tool, or a tool `adminMcpApps({ tools })` lists: an admin operation or
+   * one of the application's own. Generated names are suggested; any other string is accepted, and a page whose tool the App
+   * does not render is never shown. The page reads its data through the hooks, so in a host without server tools it shows
    * what its components make of `unavailable`. When several pages name one tool, the first is shown.
    */
-  readonly mcp?: { readonly renders: McpViews<T> | Name<keyof T["operations"]> };
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+  readonly mcp?: { readonly renders: McpViews<T> | Name<keyof T["operations"]> | (string & {}) };
 }
 
 /** Declare a project group for every `uiSchema.nav.group` the manifest uses; `tsc` refuses a missing one, and refuses Admin's own group ids. */
