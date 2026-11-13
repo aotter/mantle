@@ -255,8 +255,10 @@ function customAdapter(
         : [];
       const { rows } = await run(s => {
         const list = wanted ? [...new Set([...wanted, ...needed])].map(ident).join(", ") : "*";
-        const paging = `${o.limit !== undefined ? ` LIMIT ${Math.trunc(o.limit)}` : ""}${o.offset ? ` OFFSET ${Math.trunc(o.offset)}` : ""}`;
-        const primary = `SELECT ${list} FROM ${ident(model)}${s.where(modelKey, o.where)}${order()}${paging}`;
+        const where = s.where(modelKey, o.where);
+        // Bound, not printed: on PostgreSQL every distinct statement text is another prepared statement on the connection.
+        const paging = `${o.limit !== undefined ? ` LIMIT ${s.bind(Math.trunc(o.limit))}` : ""}${o.offset ? ` OFFSET ${s.bind(Math.trunc(o.offset))}` : ""}`;
+        const primary = `SELECT ${list} FROM ${ident(model)}${where}${order()}${paging}`;
         if (!o.join) return primary;
         const entries = Object.entries(o.join);
         const names = joinColumns(o.join);
@@ -267,7 +269,7 @@ function customAdapter(
               c.relation === "one-to-one"
                 ? ident(joined)
                 : `(SELECT *, ROW_NUMBER() OVER (PARTITION BY ${ident(c.on.to)} ORDER BY ${idOf(c.modelKey ?? getDefaultModelName(joined))}) AS "__rn" FROM ${ident(joined)} WHERE ${ident(c.on.to)} IN (SELECT ${ident(c.on.from)} FROM "primary"))`;
-            return ` LEFT JOIN ${source} AS "j${i}" ON "j${i}".${ident(c.on.to)} = "primary".${ident(c.on.from)}${c.relation === "one-to-one" ? "" : ` AND "j${i}"."__rn" <= ${Math.trunc(c.limit ?? 100)}`}`;
+            return ` LEFT JOIN ${source} AS "j${i}" ON "j${i}".${ident(c.on.to)} = "primary".${ident(c.on.from)}${c.relation === "one-to-one" ? "" : ` AND "j${i}"."__rn" <= ${s.bind(Math.trunc(c.limit ?? 100))}`}`;
           })
           .join("");
         const joinSelect = entries
