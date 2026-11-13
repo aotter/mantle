@@ -1,5 +1,5 @@
 /** Shared request-time core of the generated surfaces: input failures and declared bind conversion. */
-import { ContractError } from "./contracts.js";
+import { ContractError } from "./contract-error.js";
 
 /** INPUT_VALIDATION_FAILED at `path`. */
 export function invalid(message: string, path: string): never {
