@@ -9,6 +9,7 @@ import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import { SEAMS, type Seam } from "../../mantle/tests/application-seams.js";
+import { consumerProblems } from "../../mantle/tests/application-seams-guard.js";
 
 const REGISTRY = "packages/mantle/tests/application-seams.ts";
 const root = resolve(import.meta.dirname, "../../..");
@@ -30,32 +31,35 @@ it("every registered Admin seam is an exported subpath with its named exports", 
   }
 });
 
-it("each Admin seam's application module typechecks from public imports and without casts", async () => {
-  for (const file of files)
-    if (
-      /@aotter\/mantle\/internal\/|\bas (?:any|never|unknown)\b|@ts-(?:ignore|expect-error)/.test(
-        await readFile(file, "utf8"),
-      )
-    )
-      throw new Error(guard(seamsOf(file), `${basename(file)} must use public imports only and no casts.`));
-  const program = ts.createProgram(files, {
-    strict: true,
-    noEmit: true,
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.NodeNext,
-    moduleResolution: ts.ModuleResolutionKind.NodeNext,
-    lib: ["lib.es2023.d.ts", "lib.dom.d.ts"],
-    skipLibCheck: true,
-    types: [],
+const options: ts.CompilerOptions = {
+  strict: true,
+  noEmit: true,
+  target: ts.ScriptTarget.ES2022,
+  module: ts.ModuleKind.NodeNext,
+  moduleResolution: ts.ModuleResolutionKind.NodeNext,
+  lib: ["lib.es2023.d.ts", "lib.dom.d.ts"],
+  skipLibCheck: true,
+  types: [],
+};
+
+it("each Admin seam's application module imports public subpaths only, has no casts and typechecks", async () => {
+  const failures = files.flatMap(file => {
+    const problems = consumerProblems(file, options);
+    return problems.length
+      ? [guard(seamsOf(file), `Its application module is not plain application code:\n${problems.join("\n")}`)]
+      : [];
   });
-  const failures = ts
-    .getPreEmitDiagnostics(program)
-    .map(d =>
-      guard(
-        seamsOf(d.file?.fileName ?? ""),
-        `Its application module no longer typechecks: ${basename(d.file?.fileName ?? "")} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`,
+  const program = ts.createProgram(files, options);
+  failures.push(
+    ...ts
+      .getPreEmitDiagnostics(program)
+      .map(d =>
+        guard(
+          seamsOf(d.file?.fileName ?? ""),
+          `Its application module no longer typechecks: ${basename(d.file?.fileName ?? "")} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`,
+        ),
       ),
-    );
+  );
   expect(failures.join("\n\n")).toBe("");
 }, 60_000);
 

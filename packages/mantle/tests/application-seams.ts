@@ -4,13 +4,14 @@
  * or ADR-lite) and a migration note; adding public surface for applications adds an entry here and a consumer check in
  * the same PR (CONTRIBUTING.md, "Application seams").
  *
- * `check` is a hand-written application module (public imports only, no casts) that `application-seams.test.ts`
- * of its package typechecks against the built package and, where the seam has run-time behaviour, executes on each
- * stack in `stacks`. `stacks: []` marks a seam with no database (it behaves the same on every stack).
+ * `check` is a hand-written application module (public imports only, no casts) that `application-seams.test.ts` of its
+ * package typechecks against the built package on each stack in `stacks` and, unless `run` is false, executes there.
+ * `stacks: []` marks a seam with no database: it is checked once and behaves the same on every stack.
+ * `application-seams.ids.json` pins the ids: removing one fails the tests until the snapshot changes in review too.
  */
 
-/** The three production stacks Mantle commits to. */
-export const STACKS = ["cloudflare-d1", "cloudflare-postgres", "bun-postgres"] as const;
+/** The four stacks Mantle commits to. */
+export const STACKS = ["cloudflare-d1", "cloudflare-postgres", "bun-postgres", "bun-sqlite"] as const;
 export type Stack = (typeof STACKS)[number];
 
 export interface Seam {
@@ -28,6 +29,10 @@ export interface Seam {
   readonly decided: string;
   /** The hand-written consumer module, from the repository root. */
   readonly check: string;
+  /** A stack whose dialect needs its own module for the same capability. */
+  readonly stackChecks?: Partial<Record<Stack, string>>;
+  /** false: typechecked only; its behaviour is tested elsewhere (named in `decided` or a comment). */
+  readonly run?: false;
 }
 
 export const SEAMS: readonly Seam[] = [
@@ -36,10 +41,11 @@ export const SEAMS: readonly Seam[] = [
     package: "@aotter/mantle",
     entry: "generated store(db, caller).transaction(fn, options): fn(tx, db), db the transaction's native handle",
     capability: "An application runs its own SQL and generated Procedures in one transaction.",
-    // D1 has no interactive transaction; bun-sqlite has the seam too and is covered by the Store tests.
-    stacks: ["cloudflare-postgres", "bun-postgres"],
+    // D1 has no interactive transaction.
+    stacks: ["cloudflare-postgres", "bun-postgres", "bun-sqlite"],
     decided: "docs/adr/adr-lite-2015-application-sql-in-transactions.md",
     check: "packages/mantle/tests/seams/transaction.ts",
+    stackChecks: { "bun-sqlite": "packages/mantle/tests/seams/transaction-sqlite.ts" },
   },
   {
     id: "json-body",
@@ -106,7 +112,7 @@ export const SEAMS: readonly Seam[] = [
     entry: "McpAppResource.meta (apps option of mcp(...))",
     capability: "An application serves its own MCP App resource with host metadata.",
     stacks: STACKS,
-    decided: "docs/handbook/guides/mcp-apps.md",
+    decided: "#1995, docs/handbook/guides/mcp-apps.md",
     check: "packages/mantle/tests/seams/own-tools.ts",
   },
   {
@@ -118,8 +124,9 @@ export const SEAMS: readonly Seam[] = [
     capability: "An application issues tokens for an OAuth extension grant without a consent screen.",
     // Better Auth's own tables; run-time behaviour is tested in tests/auth-caller.test.ts and auth-oauth-postgres.test.ts.
     stacks: [],
-    decided: "#1990, docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md",
+    decided: "#1998, docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md",
     check: "packages/mantle/tests/seams/managed-grant.ts",
+    run: false,
   },
   {
     id: "host-tools",
@@ -129,8 +136,10 @@ export const SEAMS: readonly Seam[] = [
     entry: "useHost().registerTools(tools)",
     capability: "An application page in the Admin MCP App registers its own app tools.",
     stacks: [],
-    decided: "docs/handbook/guides/native-admin.md",
+    decided: "#2005, docs/handbook/guides/native-admin.md",
     check: "packages/mantle-admin/test/seams/host-tools.ts",
+    // a React hook in a host; its behaviour is tested in the Admin MCP App tests
+    run: false,
   },
   {
     id: "admin-app-tools",

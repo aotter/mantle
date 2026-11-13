@@ -1,8 +1,13 @@
 /**
- * Protected application seams (application-seams.ts): each seam's hand-written consumer module is typechecked against
- * the built package, as an application imports it, on every production stack it applies to, and executed where the
- * seam has run-time behaviour: cloudflare-d1 over a bun:sqlite D1 stand-in, cloudflare-postgres (postgres.js) and
- * bun-postgres (Bun.SQL) against MANTLE_NEXT_WORKER_PG_URL / MANTLE_NEXT_BUN_PG_URL. A failure names the seam.
+ * Protected application seams (application-seams.ts). Each seam's hand-written consumer module is checked for the shape
+ * of application code (public subpaths that resolve to dist, no casts), typechecked against the built package on every
+ * stack it applies to, and executed where it runs:
+ * - bun-sqlite on real bun:sqlite;
+ * - cloudflare-d1 on the D1 stand-in over bun:sqlite (tests/apps/d1-shim.ts), not workerd;
+ * - cloudflare-postgres with postgres.js and bun-postgres with Bun.SQL, both under Bun, against
+ *   MANTLE_NEXT_WORKER_PG_URL / MANTLE_NEXT_BUN_PG_URL (set in PR CI; locally `pnpm with-pg`). Without them those runs
+ *   are skipped and the test prints which seams did not run. workerd and Hyperdrive coverage is in verify-native.
+ * A failure names the seam, the registry and the rule.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { SQL } from "bun";
@@ -15,17 +20,32 @@ import { pathToFileURL } from "node:url";
 import { generateOrThrow, loadFixtureSources, writeGenerated } from "./apps/link.js";
 import { d1Shim } from "./apps/d1-shim.js";
 import { SEAMS, STACKS, type Seam, type Stack } from "./application-seams.js";
+import { consumerProblems } from "./application-seams-guard.js";
+import pinned from "./application-seams.ids.json";
 
 const REGISTRY = "packages/mantle/tests/application-seams.ts";
 const root = resolve(import.meta.dir, "../../..");
 const core = SEAMS.filter(seam => seam.package === "@aotter/mantle");
-const guard = (seams: readonly Seam[], problem: string) =>
+const guard = (seams: readonly Pick<Seam, "id">[], problem: string) =>
   `${seams.map(seam => seam.id).join(", ")}: protected application seam (registry: ${REGISTRY}). ${problem}\n` +
   'Removing, moving or narrowing a registered seam needs an ADR or ADR-lite and a migration note (CONTRIBUTING.md, "Application seams").';
-/** Where a stack-free seam's module is typechecked: the first stack's directory. */
+/** The stacks a seam is checked on: a seam with no database once, on the first. */
 const stacksOf = (seam: Seam): readonly Stack[] => (seam.stacks.length ? seam.stacks : [STACKS[0]]);
+const moduleOf = (seam: Seam, stack: Stack) => seam.stackChecks?.[stack] ?? seam.check;
+const options: ts.CompilerOptions = {
+  strict: true,
+  noEmit: true,
+  target: ts.ScriptTarget.ES2022,
+  module: ts.ModuleKind.NodeNext,
+  moduleResolution: ts.ModuleResolutionKind.NodeNext,
+  skipLibCheck: true,
+  types: ["node", "bun-types"],
+  typeRoots: [resolve(import.meta.dir, "../node_modules/@types"), resolve(import.meta.dir, "../node_modules")],
+};
 
 let dir = "";
+/** Each copied consumer module and the seams it checks. */
+const copies = new Map<string, Seam[]>();
 beforeAll(async () => {
   await mkdir(resolve(import.meta.dir, "apps/.generated"), { recursive: true });
   dir = await mkdtemp(resolve(import.meta.dir, "apps/.generated/seams-"));
@@ -33,13 +53,29 @@ beforeAll(async () => {
   for (const stack of STACKS) {
     // unlinked: generated code and the seam modules import @aotter/mantle/* through the exports map, as an application does
     await writeGenerated(resolve(dir, stack, "generated"), await generateOrThrow(stack, sources), false);
-    for (const seam of core.filter(seam => stacksOf(seam).includes(stack)))
-      await copyFile(resolve(root, seam.check), resolve(dir, stack, basename(seam.check)));
+    for (const seam of core.filter(seam => stacksOf(seam).includes(stack))) {
+      const copy = resolve(dir, stack, basename(moduleOf(seam, stack)));
+      await copyFile(resolve(root, moduleOf(seam, stack)), copy);
+      copies.set(copy, [...(copies.get(copy) ?? []), seam]);
+    }
   }
 });
 afterAll(() => rm(dir, { recursive: true, force: true }));
 
-test("every registered seam is an exported, documented subpath with its named exports", async () => {
+test("the registered seam ids are pinned", () => {
+  const ids = SEAMS.map(seam => seam.id);
+  const removed = pinned.filter(id => !ids.includes(id));
+  if (removed.length)
+    throw new Error(
+      guard(
+        removed.map(id => ({ id })),
+        "It was removed from the registry.",
+      ),
+    );
+  expect(ids.filter(id => !pinned.includes(id))).toEqual([]); // a new seam is added to application-seams.ids.json too
+});
+
+test("every registered seam is an exported subpath outside ./internal/ with its named exports", async () => {
   const exportsMap = JSON.parse(await readFile(resolve(import.meta.dir, "../package.json"), "utf8")).exports;
   for (const seam of core) {
     if (!seam.subpath) continue;
@@ -52,53 +88,79 @@ test("every registered seam is an exported, documented subpath with its named ex
   }
 });
 
-test("each seam's application module typechecks on the stacks it applies to, from public imports and without casts", async () => {
-  const roots = core.flatMap(seam => stacksOf(seam).map(stack => resolve(dir, stack, basename(seam.check))));
-  for (const file of new Set(roots)) {
-    const source = await readFile(file, "utf8");
-    const seams = core.filter(seam => basename(seam.check) === basename(file));
-    if (/@aotter\/mantle\/internal\/|\bas (?:any|never|unknown)\b|@ts-(?:ignore|expect-error)/.test(source))
-      throw new Error(guard(seams, `${basename(file)} must use public imports only and no casts.`));
-  }
-  const program = ts.createProgram([...new Set(roots)], {
-    strict: true,
-    noEmit: true,
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.NodeNext,
-    moduleResolution: ts.ModuleResolutionKind.NodeNext,
-    skipLibCheck: true,
-    types: ["node", "bun-types"],
-    typeRoots: [resolve(import.meta.dir, "../node_modules/@types"), resolve(import.meta.dir, "../node_modules")],
+test("each seam's application module imports public subpaths only, has no casts and typechecks on its stacks", () => {
+  const failures = [...copies].flatMap(([file, seams]) => {
+    const problems = consumerProblems(file, options);
+    return problems.length
+      ? [guard(seams, `Its application module is not plain application code:\n${problems.join("\n")}`)]
+      : [];
   });
-  const problems = new Map<string, string[]>();
+  const program = ts.createProgram([...copies.keys()], options);
+  const byFile = new Map<string, string[]>();
   for (const d of ts.getPreEmitDiagnostics(program)) {
     const file = d.file?.fileName ?? "";
-    const text = `${file.slice(dir.length + 1)} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`;
-    problems.set(basename(file), [...(problems.get(basename(file)) ?? []), text]);
+    byFile.set(file, [
+      ...(byFile.get(file) ?? []),
+      `${file.slice(dir.length + 1)} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`,
+    ]);
   }
-  const failures = [...problems].map(([file, texts]) =>
-    guard(
-      core.filter(seam => basename(seam.check) === file),
-      `Its application module no longer typechecks:\n${texts.join("\n")}`,
-    ),
-  );
+  for (const [file, texts] of byFile)
+    failures.push(
+      guard(
+        copies.get(file) ?? [{ id: "(generated code)" }],
+        `Its application module no longer typechecks:\n${texts.join("\n")}`,
+      ),
+    );
   expect(failures.join("\n\n")).toBe("");
 }, 60_000);
 
-type Handle = { db: unknown; end(): Promise<unknown> | unknown };
+test("the consumer-module guard refuses plumbing, escapes, computed imports and casts", async () => {
+  const { writeFile } = await import("node:fs/promises");
+  const cases: Record<string, string> = {
+    plumbing: 'import { convert } from "@aotter/mantle/internal/surface";',
+    unexported: 'import { x } from "@aotter/mantle/nonexistent";',
+    escape: 'import { x } from "../../outside.js";',
+    computed: 'const name = "@aotter/mantle/rest"; export const m = await import(name);',
+    required: "const name = 'x'; export const m = require(name);",
+    as: "export const n = (1 as\n   unknown);",
+    angle: "export const n = <any>1;",
+    annotation: "export let n: any = 1;",
+    nonNull: "export const n = [1].pop()!;",
+    nocheck: "// @ts-nocheck\nexport const n = 1;",
+  };
+  for (const [name, text] of Object.entries(cases)) {
+    const file = resolve(dir, "cloudflare-d1", `guard-${name}.ts`);
+    await writeFile(file, text);
+    expect([name, consumerProblems(file, options).length > 0]).toEqual([name, true]);
+  }
+  const fine = resolve(dir, "cloudflare-d1", "guard-fine.ts");
+  await writeFile(
+    fine,
+    'import { body } from "@aotter/mantle/rest";\nexport const s = ["a"] as const;\nexport { body };',
+  );
+  expect(consumerProblems(fine, options)).toEqual([]);
+});
+
+type Handle = { db: unknown; sql(text: string): Promise<Record<string, unknown>[]>; end(): Promise<unknown> | unknown };
 const owner = async () =>
   (await import("@aotter/mantle/testing")).authenticatedAs({ id: "note-owner", role: "user" }, { scopes: ["mcp"] });
 const generatedSchema = (stack: Stack) => readFile(resolve(dir, stack, "generated/schema.sql"), "utf8");
 const urls: Record<Stack, string | undefined> = {
   "cloudflare-d1": "memory",
+  "bun-sqlite": "memory",
   "cloudflare-postgres": process.env.MANTLE_NEXT_WORKER_PG_URL,
   "bun-postgres": process.env.MANTLE_NEXT_BUN_PG_URL,
 };
 async function open(stack: Stack): Promise<Handle> {
-  if (stack === "cloudflare-d1") {
+  if (stack === "cloudflare-d1" || stack === "bun-sqlite") {
     const sqlite = new Database(":memory:");
     sqlite.exec(await generatedSchema(stack));
-    return { db: d1Shim(sqlite), end: () => sqlite.close() };
+    sqlite.exec("CREATE TABLE note_log (key INTEGER NOT NULL, title TEXT NOT NULL)");
+    return {
+      db: stack === "bun-sqlite" ? sqlite : d1Shim(sqlite),
+      sql: async text => sqlite.query(text).all() as Record<string, unknown>[],
+      end: () => sqlite.close(),
+    };
   }
   const schema = "seams_" + crypto.randomUUID().replaceAll("-", "");
   const sql: any =
@@ -110,6 +172,7 @@ async function open(stack: Stack): Promise<Handle> {
   await sql.unsafe(await generatedSchema(stack));
   return {
     db: sql,
+    sql: async text => [...(await sql.unsafe(text, []))],
     end: async () => {
       await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
       await (stack === "bun-postgres" ? sql.close() : sql.end({ timeout: 1 }));
@@ -130,14 +193,40 @@ const exercising = async (ids: readonly string[], body: () => Promise<void>) => 
     );
   }
 };
+const apps = {
+  "io.modelcontextprotocol/clientCapabilities": {
+    extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } },
+  },
+};
+const rpc = async (
+  serve: (request: Request, env: object) => Promise<Response | undefined>,
+  method: string,
+  params: object = {},
+) => {
+  const response = await serve(
+    new Request("https://notes.example/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: apps } }),
+    }),
+    {},
+  );
+  const text = await response!.text();
+  return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result;
+};
 
-for (const stack of STACKS)
+for (const stack of STACKS) {
+  const runs = core.filter(seam => seam.run !== false && seam.stacks.includes(stack)).map(seam => seam.id);
+  if (!urls[stack])
+    console.warn(
+      `application seams NOT RUN on ${stack} (no ${stack === "bun-postgres" ? "MANTLE_NEXT_BUN_PG_URL" : "MANTLE_NEXT_WORKER_PG_URL"}): ${runs.join(", ")}`,
+    );
   (urls[stack] ? test : test.skip)(
-    `${stack}: the application seams run`,
+    `${stack}: the application seams run (${runs.join(", ")})`,
     async () => {
       const module = (name: string) => import(pathToFileURL(resolve(dir, stack, name)).href);
       const caller = await owner();
-      const { db, end } = await open(stack);
+      const { db, sql, end } = await open(stack);
       try {
         await exercising(["json-body", "origin-rule-and-errors", "call-tool"], async () => {
           const { addNoteRoute } = await module("own-route.ts");
@@ -171,30 +260,32 @@ for (const stack of STACKS)
           expect(results[0][0]).toMatchObject({ title: "Direct", body: null });
         });
         await exercising(["own-tools", "app-resource-meta"], async () => {
-          const { serveMcp } = await module("own-tools.ts");
-          const listed = await serveMcp(db, caller)(
-            new Request("https://notes.example/mcp", {
-              method: "POST",
-              headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-              body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
-            }),
-            {},
+          // a bearer caller, as a remote MCP client is: a cookie session's tool call also needs the origin rule
+          const bearer = (await import("@aotter/mantle/testing")).authenticatedAs(
+            { id: "note-owner", role: "user" },
+            { scopes: ["mcp"], credential: "oauth" },
           );
-          const text = await listed.text();
-          const tools = JSON.parse(text.startsWith("event:") ? text.split("data: ")[1].split("\n")[0] : text).result
-            .tools;
+          const serve = (await module("own-tools.ts")).serveMcp(db, bearer);
+          const { tools } = await rpc(serve, "tools/list");
           expect(tools.map((tool: { name: string }) => tool.name).sort()).toEqual(["add_note", "note_summary"]);
-          expect(tools.find((tool: { name: string }) => tool.name === "note_summary")._meta).toMatchObject({
-            "example/listing": { kind: "summary" },
-          });
+          const summary = tools.find((tool: { name: string }) => tool.name === "note_summary");
+          expect(summary._meta).toMatchObject({ "example/listing": { kind: "summary" } });
+          const called = await rpc(serve, "tools/call", { name: "note_summary", arguments: {} });
+          expect(called.structuredContent).toEqual({ notes: 0 });
+          expect(called._meta).toMatchObject({ "example/view": { compact: true } });
+          const read = await rpc(serve, "resources/read", { uri: "ui://notes/summary" });
+          expect(read.contents[0]._meta).toMatchObject({ "example/host": { border: false } });
         });
-        if (stack !== "cloudflare-d1")
+        if (runs.includes("transaction-handle"))
           await exercising(["transaction-handle"], async () => {
-            const { addNotesLocked } = await module("transaction.ts");
+            const { addNotesLocked } = await module(
+              basename(moduleOf(core.find(s => s.id === "transaction-handle")!, stack)),
+            );
             await addNotesLocked(db, caller, 7, "Locked");
-            const sql = db as { unsafe(text: string, values: unknown[]): Promise<{ title: string }[]> };
-            const rows = await sql.unsafe("SELECT title FROM notes WHERE title LIKE 'Locked%' ORDER BY title", []);
+            const rows = await sql("SELECT title FROM notes WHERE title LIKE 'Locked%' ORDER BY title");
             expect(rows.map(row => row.title)).toEqual(["Locked", "Locked (copy)"]);
+            if (stack === "bun-sqlite")
+              expect(await sql("SELECT key, title FROM note_log")).toEqual([{ key: 7, title: "Locked" }]);
           });
       } finally {
         await end();
@@ -202,3 +293,4 @@ for (const stack of STACKS)
     },
     60_000,
   );
+}
