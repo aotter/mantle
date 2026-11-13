@@ -1,10 +1,10 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { bundle } from "../src/infrastructure/bundle.js";
+import { bundle, pruneUnreachable } from "../src/infrastructure/bundle.js";
 
 /**
  * A package like Admin's MCP module: one export dynamically imports a large card, another a fetch helper, a third a
@@ -48,9 +48,15 @@ async function build(worker: string) {
   return { chunks, worker: await import(pathToFileURL(join(out, "worker.js")).href) };
 }
 
-test("a bundle uploads no chunk that only tree-shaken code imported", async () => {
+test("a bundle uploads no chunk that only tree-shaken code imported, and names what it removed", async () => {
+  const log = spyOn(console, "log").mockImplementation(() => {});
   const { chunks, worker } = await build('import { plain } from "lib";\nexport default { fetch: () => plain };');
+  const removed = log.mock.calls.map(args => String(args[0])).filter(line => line.startsWith("Removed "));
+  log.mockRestore();
   expect(chunks).toEqual([]);
+  expect(removed).toHaveLength(1);
+  expect(removed[0]).toMatch(/^Removed \d+ chunk\(s\) \(\d+ B\) no import from the entry reaches: /);
+  for (const name of ["card-", "fetch-", "report-", "dead-report-", "en-", "fr-"]) expect(removed[0]).toContain(name);
   expect(worker.default.fetch()).toBe(1);
 });
 
@@ -72,4 +78,48 @@ test("chunks an app can import at run time stay and load, including shared, side
   expect(await worker.default.fetchImage()).toBe("fetched:ran");
   expect(await worker.default.locale("fr")).toBe("bonjour");
   expect(await worker.default.report()).toStartWith("report:");
+});
+
+test("an import graph pruning cannot read fails the build and deletes nothing", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "mantle-bundle-prune-"));
+  const entry = join(dir, "worker.ts"),
+    out = join(dir, "out");
+  await mkdir(join(out, "chunks"), { recursive: true });
+  for (const name of ["worker.js", "chunks/a.js", "chunks/b.js"]) await writeFile(join(out, name), "");
+  const output = (imports: string[], entryPoint?: string) => ({
+    bytes: 1,
+    inputs: {},
+    imports: imports.map(path => ({ path, kind: "dynamic-import" as const })),
+    exports: [],
+    ...(entryPoint ? { entryPoint } : {}),
+  });
+  const metafile = (outputs: Record<string, ReturnType<typeof output>>) => ({ inputs: {}, outputs });
+  // an import of an output the metafile does not list
+  expect(() =>
+    pruneUnreachable(
+      metafile({
+        [join(out, "worker.js")]: output([join(out, "chunks/gone.js")], entry),
+        [join(out, "chunks/a.js")]: output([]),
+      }),
+      entry,
+    ),
+  ).toThrow(
+    /chunks\/gone\.js, which esbuild's metafile does not list[\s\S]*Nothing was removed[\s\S]*esbuild version @aotter\/mantle depends on/,
+  );
+  // no output for the entry, then two
+  expect(() => pruneUnreachable(metafile({ [join(out, "chunks/a.js")]: output([]) }), entry)).toThrow(
+    /lists 0 JavaScript outputs for the entry[\s\S]*Nothing was removed/,
+  );
+  expect(() =>
+    pruneUnreachable(
+      metafile({ [join(out, "worker.js")]: output([], entry), [join(out, "chunks/a.js")]: output([], entry) }),
+      entry,
+    ),
+  ).toThrow("lists 2 JavaScript outputs for the entry");
+  expect((readdirSync(out, { recursive: true }) as string[]).sort()).toEqual([
+    "chunks",
+    "chunks/a.js",
+    "chunks/b.js",
+    "worker.js",
+  ]);
 });
