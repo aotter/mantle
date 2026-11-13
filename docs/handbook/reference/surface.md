@@ -36,8 +36,10 @@ The generated `validation/views/<name>.ts` and
 `validation/procedures/<name>.ts` export `validate(unknown)`. View validators
 also export `query(URLSearchParams)` returning `{ input, limit?, cursor? }`. Each declared Procedure's validator, with or
 without a surface, also exports `input(raw: unknown)`: it validates `raw`, applies the surfaces' input conversion
-(`convertInput`, below) to a copy, and returns the input type of the Procedure's bare function (`procedures/<name>.ts`)
-or, for a ref Procedure, of its Store procedure. A JSON-bound field's input type admits a string, bound as JSON text.
+(`convertInput`, below) to a shallow copy and returns it, typed as what the Procedure's bare function
+(`procedures/<name>.ts`) or, for a ref Procedure, its Store procedure takes. A JSON-bound field is then `JsonText` (from
+`@aotter/mantle/contracts`), a branded string the bare function accepts beside the structured value; its `Input` type is
+unchanged, and that function's `Converted` type is the converted form.
 REST and MCP use the same generated checks, with no runtime schema interpreter.
 Supported checks are types/unions and nullable, required/properties/additionalProperties,
 arrays/items and length bounds, enum, `const`, local `$defs`/`$ref`, string length/pattern,

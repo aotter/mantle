@@ -74,7 +74,12 @@ export function generate(input: GenerateInput): GenerateResult {
   if (lowered.dialect.name !== expected || plan.dialect.name !== expected)
     refuse("target", `Target '${target}' needs canonical '${expected}' compilation and lowering.`);
   const driver = driverFor(target);
-  const queryInputType = (schema: JsonSchema | undefined, statements: readonly LoweredStatement[]) => {
+  // `converted`: each JSON-bound field as the JSON text the surfaces' conversion (`convertInput`) makes of it.
+  const queryInputType = (
+    schema: JsonSchema | undefined,
+    statements: readonly LoweredStatement[],
+    converted = false,
+  ) => {
     if (!schema?.properties) return typeOf(schema);
     const binds = statements.flatMap(s => s.binds).filter(b => b.k === "input");
     const properties = Object.entries(schema.properties).map(([name, field]) => {
@@ -82,10 +87,17 @@ export function generate(input: GenerateInput): GenerateResult {
       if (!bind || bind.k !== "input")
         return `readonly ${q(name)}${schema.required?.includes(name) ? "" : "?"}: ${typeOf(field)};`;
       const type = String(bind.type);
-      // A string is bound as JSON text, which is what the surfaces' conversion (`convertInput`) passes.
+      // null is added once, below
+      const base = {
+        ...field,
+        nullable: false,
+        type: Array.isArray(field.type) ? field.type.filter(each => each !== "null") : field.type,
+      };
       const driverType =
         type === "json"
-          ? [...new Set([typeOf(field), "string"])].join(" | ")
+          ? converted
+            ? "JsonText"
+            : typeOf(base)
           : type === "date"
             ? "string"
             : type === "timestamptz"
@@ -93,10 +105,10 @@ export function generate(input: GenerateInput): GenerateResult {
               : isSqlite
                 ? type === "bool" || parseNumeric(type)
                   ? "number"
-                  : typeOf(field)
+                  : typeOf(base)
                 : parseNumeric(type)
                   ? "number | string"
-                  : typeOf(field);
+                  : typeOf(base);
       const nullable =
         field.nullable === true ||
         (Array.isArray(field.type) && field.type.includes("null")) ||
@@ -227,11 +239,16 @@ export function generate(input: GenerateInput): GenerateResult {
     const steps = (statements: readonly LoweredStatement[]) =>
       `[${statements.map(s => step(s, path, fieldNames, s.kind === "row")).join(", ")}] as const`;
     const same = steps(modes.caller) === steps(modes.trusted);
+    const statements = [...modes.caller, ...modes.trusted],
+      inputType = queryInputType(procedure.input, statements),
+      convertedType = queryInputType(procedure.input, statements, true),
+      converted = convertedType !== inputType;
     declarations.push(
-      `export type Procedure${index}Input = ${queryInputType(procedure.input, [...modes.caller, ...modes.trusted])};`,
+      `export type Procedure${index}Input = ${inputType};`,
+      ...(converted ? [`export type Procedure${index}Converted = ${convertedType};`] : []),
       `const ${fn}Caller = ${steps(modes.caller)};`,
       ...(same ? [] : [`const ${fn}Trusted = ${steps(modes.trusted)};`]),
-      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input): Promise<Output> {`,
+      `async function ${fn}(db: Database, caller: Caller, raw: Procedure${index}Input${converted ? ` | Procedure${index}Converted` : ""}): Promise<Output> {`,
       ...(modes.caller.some(s => s.kind !== "read") ? [`  await _fresh(caller, ${q(path)});`] : []),
       ...auth(procedure.requires, path),
       ...(user.used ? ["  USER.modeOf(caller);"] : []),
@@ -243,17 +260,17 @@ export function generate(input: GenerateInput): GenerateResult {
     declarations.push(`export { ${fn} as ${exportName("procedure", name)} };`);
     typed[name] = {
       from: `../../procedures/${encodeURIComponent(name)}.js`,
-      name: "Input",
+      name: converted ? "Converted" : "Input",
       convert: conversions(
         procedure.input?.properties,
-        [...modes.caller, ...modes.trusted].flatMap(s => s.binds),
+        statements.flatMap(s => s.binds),
         target,
       ),
     };
     entries[`procedures/${encodeURIComponent(name)}.ts`] = entry(
       "procedure",
       name,
-      `Procedure${index}Input as Input`,
+      `Procedure${index}Input as Input${converted ? `, Procedure${index}Converted as Converted` : ""}`,
       `export type { Output } from "${base}contracts";\n`,
     );
   }
@@ -313,6 +330,7 @@ export function generate(input: GenerateInput): GenerateResult {
   const contracts = [
     ...(target.endsWith("postgres") ? ["type Postgres as Database", ...(views.length ? ["type Unsafe"] : [])] : []),
     "type Caller",
+    ...(/\bJsonText\b/.test(code) ? ["type JsonText"] : []),
     ...(hasHandlers ? ["ContractError"] : []),
     ...(/^  deny\(/m.test(code)
       ? ["deny", ...(/\bisAdmin\(/.test(code) ? ["isAdmin"] : []), ...(/\bisUser\(/.test(code) ? ["isUser"] : [])]

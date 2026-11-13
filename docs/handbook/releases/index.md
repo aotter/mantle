@@ -48,10 +48,9 @@ move, and never booting 0.2 against a 0.1.x database.
   forwarded arguments, and reads the purposes again if the input arrives later. Pass `inputTimeoutMs: false` to keep
   waiting as before. A value that is not a positive integer up to 2,147,483,647 throws at configuration.
 - **Typed input for a bare Procedure.** Each declared Procedure's `validation/procedures/<name>.ts` also exports
-  `input(raw)`, which validates, converts as the surfaces do and returns the Procedure's input type, so calling it directly
-  needs no cast or `?? null`. A JSON-bound field's generated input type now also admits a string (bound as JSON text, as
-  before): `tags: ReadonlyArray<string> | null` → `tags: ReadonlyArray<string> | string | null`. Code that only passes
-  such inputs needs no change. See [the generated surface](../reference/surface.md).
+  `input(raw)`, which validates and converts a copy as the surfaces do, typed so that the bare Procedure takes it with
+  no cast or `?? null`; a JSON-bound field is the branded `JsonText`. Existing generated input types are unchanged
+  (#2022). See [the generated surface](../reference/surface.md).
 - `pages[].mcp.renders` in `defineAdmin` accepts an application's own tool names without a cast; generated names are still
   suggested, but a misspelt name is no longer a type error.
 - `checkMcpApp` from `@aotter/mantle-admin/testing` takes `inspect({ tool, theme, frame })`, called with the open App after

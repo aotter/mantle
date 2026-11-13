@@ -121,6 +121,12 @@ export type Row = Record<string, unknown>;
  * stringified, `bool` becomes 0/1 (SQLite and D1 only) and `""` passes through. Fields outside the table are untouched.
  */
 export { convert as convertInput, type Conversions } from "./surface.js";
+declare const jsonText: unique symbol;
+/**
+ * A JSON value's text as `convertInput` makes it of a `json` field. A generated Procedure binds it as it is; its generated
+ * `input(raw)` types each JSON-bound field so.
+ */
+export type JsonText = string & { readonly [jsonText]: true };
 /** Static declared-column conversions, used only by selected transport boundaries. */
 export type WireColumns = ReadonlyArray<readonly [field: string, type: "json" | "bool" | "int"]>;
 export function wireRows(rows: readonly Row[], fields: WireColumns = []): readonly Row[] {
