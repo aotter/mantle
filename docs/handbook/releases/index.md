@@ -54,7 +54,7 @@ move, and never booting 0.2 against a 0.1.x database.
 - `pages[].mcp.renders` in `defineAdmin` also accepts an application's own tool names that it declares by merging
   `interface AdminMcpTools` from `@aotter/mantle-admin/app`; other names are still refused.
 - `checkMcpApp` from `@aotter/mantle-admin/testing` takes `inspect({ tool, theme, frame })`, called with the open App after
-  each scenario's built-in checks.
+  each scenario's built-in checks (at most 10 s each).
 - `body(request, limit?, refuse?)` from `@aotter/mantle/rest` takes an optional `refuse(message)` for its refusals; a
   `limit` that is not a positive safe integer throws a `TypeError`. `convertInput(input, convert)` is exported from
   `@aotter/mantle/contracts`.

@@ -32,8 +32,9 @@ export interface CheckMcpAppOptions {
   readonly html?: string;
   // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
   /**
-   * Called for each scenario after its built-in checks, with the App's frame while it is still open. What it throws or
-   * rejects with is reported as that scenario's problem.
+   * Called for each scenario after its built-in checks, with the App's frame while it is still open; not called when the
+   * frame never opened. What it throws or rejects with, or not settling within 10 s, is that scenario's problem; requests
+   * and console errors it causes are collected as before.
    */
   readonly inspect?: (app: McpAppScenario) => void | Promise<void>;
 }
@@ -43,7 +44,7 @@ export interface McpAppScenario {
   /** The tool whose result the App renders. */
   readonly tool: string;
   readonly theme: "light" | "dark";
-  /** The App's sandboxed frame; `frame.page()` is the host page. */
+  /** The App's sandboxed frame (a type of the optional peer `playwright-core`). */
   readonly frame: Frame;
 }
 
@@ -56,6 +57,8 @@ interface Manifest {
 /** After the last request or console message, how long the App is left quiet before the run is judged, and the longest it waits. */
 const QUIET_MS = 400,
   SETTLE_CAP_MS = 5_000;
+/** The longest `inspect` may take for one scenario. */
+const INSPECT_MS = 10_000;
 
 /** The spec's default CSP for an App that declares none, with what the App declared added as a host adds it. */
 function policy(csp: McpCsp): string {
@@ -283,20 +286,36 @@ export async function checkMcpApp({
           await page.waitForTimeout(100);
         }
         if (theme === "dark" && !shown.dark) note("the App did not take the host's dark theme (no .dark on its root)");
-        // a request or an error may come after the first paint: wait for quiet
-        last = Date.now();
-        const quiet = Date.now();
-        while (Date.now() - last < QUIET_MS && Date.now() - quiet < SETTLE_CAP_MS) await page.waitForTimeout(50);
+        // a request or an error may come after the first paint, or after `inspect`: wait for quiet
+        const settle = async () => {
+          last = Date.now();
+          const quiet = Date.now();
+          while (Date.now() - last < QUIET_MS && Date.now() - quiet < SETTLE_CAP_MS) await page.waitForTimeout(50);
+        };
+        await settle();
         const host = await state();
         if (!host || host.state.height <= 0) note("the App reported no size (size-changed with a positive height)");
         for (const error of host?.errors ?? []) note(`host error: ${error}`);
         const opened = frame();
-        if (inspect && opened)
+        if (inspect && opened) {
+          let timer: ReturnType<typeof setTimeout> | undefined;
           try {
-            await inspect({ tool, theme, frame: opened });
+            await Promise.race([
+              inspect({ tool, theme, frame: opened }),
+              new Promise((_, reject) => {
+                timer = setTimeout(
+                  () => reject(new Error(`inspect did not settle within ${INSPECT_MS} ms`)),
+                  INSPECT_MS,
+                );
+              }),
+            ]);
           } catch (error) {
             note(error instanceof Error ? error.message : String(error));
+          } finally {
+            clearTimeout(timer);
           }
+          await settle();
+        }
         await context.close();
       }
   } finally {

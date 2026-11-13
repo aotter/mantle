@@ -167,7 +167,7 @@ parent origin after the official handshake and narrows subsequent message delive
 `generated/admin-mcp-app.check.mjs`: it loads the built App in the official `AppBridge` under the spec's default CSP and fails on a network
 request, a console error, an exception or a missing size. It needs the optional peer `playwright-core` and Chrome (`MANTLE_TEST_CHROMIUM`);
 without a browser it fails. An optional `inspect({ tool, theme, frame })` is called with each scenario's open App after the
-built-in checks; what it throws is reported. See [Run the compatibility test](../../docs/handbook/guides/mcp-apps.md#run-the-compatibility-test).
+built-in checks (not when the frame never opened, at most 10 s); what it throws is reported. `frame` is a `playwright-core` type. See [Run the compatibility test](../../docs/handbook/guides/mcp-apps.md#run-the-compatibility-test).
 
 Unsafe native integer versions remain exact in transport; generic UI
 interactions require safe numeric versions. Entries outside that range are
