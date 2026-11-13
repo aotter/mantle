@@ -136,7 +136,13 @@ for (const target of selected ? [selected as Target] : targets) {
   } else {
     const postgres = target === "cloudflare-postgres";
     const connectionString = process.env.MANTLE_NEXT_WORKER_PG_URL;
-    if (postgres) assert.ok(connectionString, "MANTLE_NEXT_WORKER_PG_URL must identify a disposable local database");
+    if (postgres) {
+      assert.ok(connectionString, "MANTLE_NEXT_WORKER_PG_URL must identify a disposable local database");
+      // Wrangler rejects a Hyperdrive localConnectionString without a password, even when the server trusts the client.
+      assert.ok(new URL(connectionString).password, "MANTLE_NEXT_WORKER_PG_URL needs user:password@ for Wrangler");
+    }
+    // Local Hyperdrive: workerd, nodejs_compat and postgres.js over a direct connection to the database. Hyperdrive's
+    // transaction-mode pooler, query cache and edge limits are bypassed; only a deployed Hyperdrive config shows them.
     const workerFile = resolve(directory, "worker.ts");
     const schema = `mantle_next_${Date.now()}_${process.pid}`;
     const sql = unstable_splitSqlQuery(ddl);
@@ -206,7 +212,8 @@ for (const target of selected ? [selected as Target] : targets) {
     try {
       let ready = false;
       for (let attempt = 0; attempt < 90; attempt++) {
-        if (worker.exitCode !== null) throw Error("local Wrangler exited; inspect private wrangler.log");
+        if (worker.exitCode !== null)
+          throw Error(`local Wrangler exited; inspect ${resolve(privateDir, "wrangler.log")}`);
         try {
           const response = await fetch("http://127.0.0.1:8998/health", { signal: AbortSignal.timeout(1000) });
           ready = response.status === 200;
@@ -214,7 +221,7 @@ for (const target of selected ? [selected as Target] : targets) {
         if (ready) break;
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      assert.ok(ready, "actual local Wrangler readiness timeout; inspect private wrangler.log");
+      assert.ok(ready, `actual local Wrangler readiness timeout; inspect ${resolve(privateDir, "wrangler.log")}`);
       const response = await fetch("http://127.0.0.1:8998/verify", { signal: AbortSignal.timeout(120000) });
       result = await response.json();
       assert.equal(response.status, 200, JSON.stringify(result));
