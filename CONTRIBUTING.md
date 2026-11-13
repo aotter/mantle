@@ -61,8 +61,14 @@ running the application's own SQL in a Store transaction, reading a JSON body on
 tool or applying the generated input conversion directly, serving its own MCP tools and Apps, issuing extension-grant
 tokens, registering a page's app tools. Each is listed, by the capability it gives, in the registry
 [`packages/mantle/tests/application-seams.ts`](packages/mantle/tests/application-seams.ts), with the stacks it applies
-to and the decision that keeps it. Its hand-written consumer module is typechecked against the built package and run on
-those stacks by `application-seams.test.ts` in Core and Admin, part of `pnpm test` and of PR CI.
+to and the decision that keeps it. Its hand-written consumer module (public subpaths that resolve to `dist`, no casts)
+is typechecked against the built package on each of those stacks by `application-seams.test.ts` in Core and Admin,
+part of `pnpm test` and of PR CI, and executed where the seam runs: bun-sqlite on bun:sqlite, cloudflare-d1 on the
+D1 stand-in over bun:sqlite (not workerd), cloudflare-postgres with postgres.js and bun-postgres with Bun.SQL, both under
+Bun and only when the PostgreSQL URLs are set (PR CI sets them; without them the test prints the seams that did not
+run). workerd and Hyperdrive are covered by `test:native`, not by these checks. A seam marked `run: false` (managed
+grants, a page's app tools) is typechecked only; the registry names where its behaviour is tested.
+`application-seams.ids.json` pins the ids.
 
 - Removing, moving or narrowing a registered seam (a subpath, export, parameter, option or its behaviour) needs an
   accepted ADR or ADR-lite and a migration note in the release notes that names the replacement. Moving plumbing under
@@ -133,10 +139,10 @@ workspace and runs the reference service from exact packed tarballs. Use
 package filters while iterating. Native four-target conformance is separate
 (`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14).
 
-Mantle commits to three production stacks: `cloudflare-d1`, `cloudflare-postgres` (postgres.js, usually through
-Hyperdrive) and `bun-postgres` (Bun.SQL). A change that touches what applications run works, is typed and is tested on
-all three; a capability that is inherently dialect-specific says which of them it covers. `bun-sqlite` remains a
-generate target and stays in the native four-target conformance.
+Mantle commits to four stacks, its four targets: `cloudflare-d1`, `cloudflare-postgres` (postgres.js, usually
+through Hyperdrive), `bun-postgres` (Bun.SQL) and `bun-sqlite` (bun:sqlite). A change that touches what applications
+run works, is typed and is tested on all four; a capability that is inherently dialect-specific (D1 has no interactive
+transaction, for example) says which of them it covers.
 
 PostgreSQL is a first-class target. Its tests skip unless `MANTLE_PG_URL`,
 `MANTLE_NEXT_BUN_PG_URL` and `MANTLE_NEXT_WORKER_PG_URL` name a disposable

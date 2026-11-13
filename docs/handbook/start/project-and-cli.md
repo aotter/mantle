@@ -40,8 +40,8 @@ module the entry never imports.
 | `cloudflare-d1` | sqlite | D1 binding/session |
 | `cloudflare-postgres` | postgres | postgres.js, usually with Hyperdrive |
 
-`cloudflare-d1`, `cloudflare-postgres` and `bun-postgres` are the three production stacks Mantle commits to: the
-public entry points an application builds on are typed and tested on each of them. Other handles may adapt to the same
+Mantle commits to all four as production stacks: the public entry points an application builds on are typed and
+tested on each one they apply to. Other handles may adapt to the same
 [structural driver contracts](../guides/adapter-guide.md). Dialects are exactly postgres and sqlite in 0.2.
 
 | Option | Meaning |
