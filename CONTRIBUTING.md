@@ -54,6 +54,22 @@ so wrapping a returned value never needs the SDK's own normalisation.
 live at the repository root and in `.agents/skills`; do not merge the two
 audiences or copy maintainer policy into shipped skills.
 
+### Application seams
+
+Some public entry points exist on purpose for hand-written application code beyond mounting the generated modules:
+running the application's own SQL in a Store transaction, reading a JSON body on its own route, calling a generated
+tool or applying the generated input conversion directly, serving its own MCP tools and Apps, issuing extension-grant
+tokens, registering a page's app tools. Each is listed, by the capability it gives, in the registry
+[`packages/mantle/tests/application-seams.ts`](packages/mantle/tests/application-seams.ts), with the stacks it applies
+to and the decision that keeps it. Its hand-written consumer module is typechecked against the built package and run on
+those stacks by `application-seams.test.ts` in Core and Admin, part of `pnpm test` and of PR CI.
+
+- Removing, moving or narrowing a registered seam (a subpath, export, parameter, option or its behaviour) needs an
+  accepted ADR or ADR-lite and a migration note in the release notes that names the replacement. Moving plumbing under
+  `./internal/` is such a move when a seam lives there.
+- Adding public surface for applications adds a registry entry and its consumer module in the same PR.
+- Describe a seam by the generic capability only, with invented, neutral fixtures.
+
 ## Hard invariants
 
 - `src/build/spec` keeps the closed v2 grammar (`cms.mantle.aotter.net/v2`), diagnostics
