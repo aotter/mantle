@@ -36,48 +36,52 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ### Upgrading to 0.2.2-alpha.4
 
-- **Application SQL in a Store transaction.** `store(db, caller).transaction((tx, db) => …, { isolation })` now declares
-  its second argument, the transaction's native handle, so an application runs its own SQL with generated Procedures in
-  one transaction without a cast. Code that imports `transaction` from `@aotter/mantle/internal/driver/postgres`
-  (0.2.2-alpha.2 and alpha.3) switches to it; that path stays for generated code, with no promise. A multi-statement
-  Procedure that fails inside a transaction now rolls it back even if the error is caught, as a batch already did,
-  and on PostgreSQL a transaction in which any statement failed now rejects on every client (Bun.SQL 1.3 resolved it
-  although nothing was written) (#2015). See [your own SQL in a Store transaction](../concepts/runtime-and-adapters.md#your-own-sql-in-a-store-transaction).
-- **Removed subpaths name their replacement.** Importing `@aotter/mantle/json-body`, `@aotter/mantle/driver/postgres`
-  or `@aotter/mantle/surface` (removed in 0.2.2-alpha.2) now throws an error naming the replacement instead of failing
-  to resolve: `body` from `@aotter/mantle/rest`; `store(db, caller).transaction((tx, db) => …)` for your own SQL; and
-  `convertInput` or `ContractError` from `@aotter/mantle/contracts`. These stubs ship until 0.2.2 and are deleted after
-  it.
-- **The upload card stops waiting for tool input.** With `forward`, `mediaUploadCard`'s card waited for the host's tool
-  input forever; now it waits at most `inputTimeoutMs` (5,000 ms by default) after connecting, then calls without the
-  forwarded arguments, and reads the purposes again if the input arrives later. Pass `inputTimeoutMs: false` to keep
-  waiting as before. A value that is not a positive integer up to 2,147,483,647 throws at configuration.
-- **Typed input for a bare Procedure.** Each declared Procedure's `validation/procedures/<name>.ts` also exports
-  `input(raw)`, which validates and converts a copy as the surfaces do, typed so that the bare Procedure takes it with
-  no cast or `?? null`; a JSON-bound field is the branded `JsonText`. Existing generated input types are unchanged
-  (#2022). See [the generated surface](../reference/surface.md).
-- `pages[].mcp.renders` in `defineAdmin` also accepts an application's own tool names that it declares by merging
-  `interface AdminMcpTools` from `@aotter/mantle-admin/app`; other names are still refused.
-- `checkMcpApp` from `@aotter/mantle-admin/testing` takes `inspect({ tool, theme, frame })`, called with the open App after
-  each scenario's built-in checks (at most 10 s each).
+Pin the selected packages to `0.2.2-alpha.4` and regenerate. One breaking change; everything else is additive or a fix.
+
+- **Breaking: a transaction in which a statement failed never commits (#2017).** Before: a multi-step Procedure that
+  failed after an earlier step wrote, inside an outer `store(db, caller).transaction`, could still commit that step when
+  the caller caught the error, and on PostgreSQL a transaction with a caught or unawaited failed statement could resolve
+  although nothing was written. After: such a transaction is rolled back and rejects with the failed statement's own
+  error on every client. No replacement: code that relied on the partial write must catch the failure inside its own
+  transaction or write in a separate one.
+- **Application SQL in a Store transaction (#2017).** `transaction((tx, db) => …, { isolation })` now declares its second
+  argument, the transaction's native handle, so an application runs its own SQL with generated Procedures atomically
+  without a cast. Code importing `transaction` from `@aotter/mantle/internal/driver/postgres` (0.2.2-alpha.2 and
+  alpha.3) switches to it. See [your own SQL in a Store
+  transaction](../concepts/runtime-and-adapters.md#your-own-sql-in-a-store-transaction).
+- **Removed subpaths name their replacement (#2024).** Importing `@aotter/mantle/json-body`,
+  `@aotter/mantle/driver/postgres` or `@aotter/mantle/surface` (removed in 0.2.2-alpha.2) now throws an error naming
+  the replacement instead of failing to resolve: `body` from `@aotter/mantle/rest`; `store(db, caller).transaction((tx,
+  db) => …)` for your own SQL; `convertInput` or `ContractError` from `@aotter/mantle/contracts`. The stubs ship until
+  0.2.2 and are deleted after it.
+- **The upload card stops waiting for tool input (#2021).** With `forward`, `mediaUploadCard` waited for the host's tool
+  input forever; now it waits at most `inputTimeoutMs` (5,000 ms by default), then calls without the forwarded
+  arguments. Pass `inputTimeoutMs: false` to keep waiting. A value that is not a positive integer up to 2,147,483,647
+  throws at configuration.
 - `body(request, limit?, refuse?)` from `@aotter/mantle/rest` takes an optional `refuse(message)` for its refusals; a
   `limit` that is not a positive safe integer throws a `TypeError`. `convertInput(input, convert)` is exported from
-  `@aotter/mantle/contracts`.
-- **postgres.js: Mantle's statements are named prepared statements.** Mantle's driver now calls
-  `unsafe(text, values, { prepare: true })`; before, postgres.js sent every Mantle statement unnamed and describe-first,
-  which Cloudflare says Hyperdrive's transaction pooling "does not reliably support". A client created with
-  `prepare: false` still keeps statements unnamed; Bun.SQL is unchanged. Before upgrading a `cloudflare-postgres`
-  application, confirm its Hyperdrive configuration has query caching disabled, as Mantle already requires: Hyperdrive
-  did not cache unprepared queries, and now can. An adapter implementing `Postgres` may ignore the new third argument
-  (#2018). See [PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md). A migration that changes the
-  result columns of a statement a connection has already prepared (for example adds a column a `RETURNING *` returns)
-  makes that statement fail once inside a transaction with `0A000 cached plan must not change result type`: a
-  definite PostgreSQL error, so the write is rolled back and reported as failed, never `OUTCOME_UNKNOWN`.
-- **Better Auth on `cloudflare-postgres`: do not keep a postgres.js client per isolate.** The handbook said "per
-  isolate with `max: 1`" was fine; in workerd such a client fails every other request ("Cannot perform I/O on behalf of
-  a different request"). Keep the Better Auth instance per isolate and give `postgresAdapter` and
-  `postgresBootstrapAdmin` a handle that resolves the current request's client; the tested `src/db.ts` and `src/auth.ts`
-  are in [PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md#better-auth-on-postgresql) (#2018).
+  `@aotter/mantle/contracts` (#2021).
+- **Typed input for a bare Procedure (#2023).** `validation/procedures/<name>.ts` also exports `input(raw)`, which
+  validates and converts a copy as the surfaces do, typed so the bare Procedure takes it with no cast; a JSON-bound
+  field is the branded `JsonText`. Existing generated input types are unchanged. See [the generated
+  surface](../reference/surface.md). `pages[].mcp.renders` in `defineAdmin` also accepts application tool names declared
+  by merging `interface AdminMcpTools` from `@aotter/mantle-admin/app`, and `checkMcpApp` from
+  `@aotter/mantle-admin/testing` takes `inspect({ tool, theme, frame })` (#2023).
+- **postgres.js: Mantle's statements are named prepared statements (#2020).** The driver now calls
+  `unsafe(text, values, { prepare: true })`; before, postgres.js sent every statement unnamed, which Hyperdrive's
+  transaction pooling does not reliably support. A client created with `prepare: false` keeps them unnamed; Bun.SQL is
+  unchanged. Before upgrading a `cloudflare-postgres` application, confirm its Hyperdrive configuration has query
+  caching disabled, as Mantle already requires. A migration that changes the result columns of an already prepared
+  statement makes it fail once inside a transaction with `0A000 cached plan must not change result type`, a definite
+  error: the write is rolled back, never `OUTCOME_UNKNOWN`. See [PostgreSQL through
+  Hyperdrive](../cloudflare/postgres-hyperdrive.md).
+- **Better Auth on `cloudflare-postgres`: no postgres.js client per isolate (#2020).** A client kept per isolate with
+  `max: 1` fails every other request in workerd ("Cannot perform I/O on behalf of a different request"). Keep the
+  Better Auth instance per isolate and give `postgresAdapter` and `postgresBootstrapAdmin` a handle that resolves the
+  current request's client; the tested `src/db.ts` and `src/auth.ts` are in the PostgreSQL through Hyperdrive page.
+- `mantle bundle` uploads only the chunks the Worker entry can import (#2014).
+
+Not verified on a real host: Hyperdrive transaction pooling and named statements (local Wrangler connects directly).
 
 ### Upgrading to 0.2.2-alpha.3
 

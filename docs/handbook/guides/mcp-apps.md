@@ -683,7 +683,7 @@ target with progress, calls `upload_media` again with the `uploadId`, and sends
 `ui/message` with the asset id, and also `ui/update-model-context` unless the
 host accepted the message. The bytes never pass through MCP or the host. The card uploads the
 original file as the single variant a purpose takes
-([ADR-0017](https://github.com/aotter/mantle/blob/v0.2.2-alpha.3/docs/adr/0017-media-multi-variant-agent-side-optimization.md)); a
+([ADR-0017](https://github.com/aotter/mantle/blob/v0.2.2-alpha.4/docs/adr/0017-media-multi-variant-agent-side-optimization.md)); a
 purpose with several variant slots needs an agent that prepares them, and the
 card says so. It needs the host's `serverTools`. It shows no View, so it declares
 no `tools` capability and lists none of the App's `view_*` tools.
