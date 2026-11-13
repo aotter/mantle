@@ -151,8 +151,10 @@ dist-tag DELETE only added failure and re-run state.
    version PR head, and link the green run from the version PR. A promotion
    PR into `main` runs the same workflow by itself.
 5. Freeze the PR head for self review; that Full checks run must pass before
-   merge, besides the PR's own `develop` CI, which skips the Chrome, Wrangler/D1
-   and packed-example checks. Merge into
+   merge, besides the PR's own `develop` CI, which runs `test:native` but not
+   Full checks' Wrangler/D1 integration step, the CLI and Admin native-server
+   tests, worker-consumer, examples, doc examples, OSS plugin, Chrome or size
+   checks. Merge into
    `develop` by rebase or with a merge commit: the controller needs the tip to
    be the commit GitHub records as that PR's merge, which both produce. A
    promotion into `main` is different and always takes a merge commit (below).

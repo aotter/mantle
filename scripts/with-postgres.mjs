@@ -2,10 +2,17 @@
 /**
  * Runs a command against a throwaway local PostgreSQL cluster: initdb into a temp directory, trust auth on
  * 127.0.0.1 and a free port, the PostgreSQL variables Full checks sets, then always stop and delete the cluster.
- * When all three variables are already set, the command runs against them unchanged.
+ * When all three variables are already set, the command runs against them unchanged; one or two set is an error.
  *
  *   node scripts/with-postgres.mjs <command> [args...]
  *   node scripts/with-postgres.mjs --notice   prints one line when PostgreSQL tests would skip
+ *
+ * ponytail: limits. SIGINT/SIGTERM/SIGHUP stop the cluster, but `kill -9` of this script leaves the postmaster, its
+ * directory and the command running, and a signal sent to this process alone reaches only its direct child, so that
+ * child's own children may outlive it. Manual cleanup: the start line names the directory; run
+ * `pg_ctl -D <dir>/data -m immediate stop` (as the postgres or nobody user when root) and delete <dir>. The free port is
+ * found with listen(0) and closed before PostgreSQL binds it; if another process takes it first, pg_ctl start fails and
+ * the run stops (no retry).
  */
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, chownSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -15,21 +22,33 @@ import { join, resolve } from "node:path";
 
 const names = ["MANTLE_PG_URL", "MANTLE_NEXT_BUN_PG_URL", "MANTLE_NEXT_WORKER_PG_URL"];
 const missing = names.filter(name => !process.env[name]);
+const set = names.filter(name => process.env[name]);
 const [command, ...args] = process.argv.slice(2);
 
 if (command === "--notice") {
-  if (missing.length) {
+  if (set.length) {
+    if (missing.length)
+      console.log(
+        `\nPostgreSQL tests PARTLY SKIPPED (${missing.join(", ")} unset). Set all three, or run: pnpm check:pg`,
+      );
+  } else {
     const files = spawnSync("git", ["grep", "-l", "-E", "MANTLE_(NEXT_(BUN|WORKER)_)?PG_URL", "--", "*.test.ts"], {
       cwd: resolve(import.meta.dirname, ".."),
       encoding: "utf8",
     }).stdout?.match(/\n/g)?.length;
     console.log(
-      `\nPostgreSQL tests SKIPPED (${missing.join(", ")} unset${files ? `; ${files} test files have PostgreSQL cases` : ""}). Run them: pnpm check:pg`,
+      `\nPostgreSQL tests SKIPPED (${names.join(", ")} unset${files ? `; ${files} test files have PostgreSQL cases` : ""}). Run them: pnpm check:pg`,
     );
   }
   process.exit(0);
 }
 if (!command) throw new Error("Usage: with-postgres.mjs <command> [args...] | --notice");
+if (set.length && missing.length) {
+  console.error(
+    `with-postgres: set all three PostgreSQL variables or none (set: ${set.join(", ")}; unset: ${missing.join(", ")})`,
+  );
+  process.exit(1);
+}
 
 let child;
 let cleanup = () => {};
@@ -72,12 +91,16 @@ if (missing.length) {
     process.exit(1);
   }
 
-  const dir = mkdtempSync(join(tmpdir(), "mantle-pg-"));
+  // initdb and postgres refuse to run as root: as root (a container), run the cluster as an unprivileged user, in /tmp
+  // because that user may not be able to enter root's TMPDIR.
+  const root = process.getuid?.() === 0;
+  const user = root ? ["postgres", "nobody"].find(name => id("-u", name)) : undefined;
+  if (root && !user) {
+    console.error("with-postgres: as root, the cluster runs as the postgres or nobody user, and neither exists");
+    process.exit(1);
+  }
+  const dir = mkdtempSync(join(root ? "/tmp" : tmpdir(), "mantle-pg-"));
   const data = join(dir, "data");
-  // initdb and postgres refuse to run as root: as root (a container), run the cluster as an unprivileged user.
-  const user = process.getuid?.() === 0 ? ["postgres", "nobody"].find(name => id("-u", name)) : undefined;
-  if (process.getuid?.() === 0 && !user)
-    throw new Error("with-postgres: running as root needs a postgres or nobody user");
   const owner = user ? { uid: Number(id("-u", user)), gid: Number(id("-g", user)) } : {};
   if (user) chownSync(dir, owner.uid, owner.gid);
   const pg = (name, args, stdio = "inherit") => spawnSync(join(binDir, name), args, { ...owner, stdio });
