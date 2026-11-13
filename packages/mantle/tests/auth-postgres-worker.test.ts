@@ -59,16 +59,12 @@ export default {
       admin = new SQL(url!);
     const target = new URL(url!);
     target.pathname = `/${database}`;
-    const dir = await mkdtemp(join(base, "tests/apps/.auth-postgres-")),
+    // Under the gitignored .generated directory: the worker resolves @aotter/mantle, postgres and better-auth from here.
+    await mkdir(join(base, "tests/apps/.generated"), { recursive: true });
+    const dir = await mkdtemp(join(base, "tests/apps/.generated/auth-postgres-")),
       state = await mkdtemp(join(tmpdir(), "mantle-auth-postgres-"));
-    const port = await new Promise<number>(done => {
-      const probe = createServer().listen(0, "127.0.0.1", () => {
-        const { port } = probe.address() as AddressInfo;
-        probe.close(() => done(port));
-      });
-    });
-    const origin = `http://127.0.0.1:${port}`,
-      email = "officer@example.test";
+    let origin = "http://127.0.0.1";
+    const email = "officer@example.test";
     const env = {
       BETTER_AUTH_SECRET: "auth-worker-fixture-secret-0123456789abcdef",
       PUBLIC_ORIGIN: origin,
@@ -93,56 +89,76 @@ export default {
       await db.unsafe(generated.files["schema.sql"]!);
       await writeFile(join(dir, "worker.ts"), worker);
       const config = join(state, "wrangler.json");
-      await writeFile(
-        config,
-        JSON.stringify({
-          name: "mantle-auth-postgres-local",
-          main: join(dir, "worker.ts"),
-          compatibility_date: "2026-09-28",
-          compatibility_flags: ["nodejs_compat"],
-          vars: env,
-          hyperdrive: [
-            { binding: "HYPERDRIVE", id: "00000000000000000000000000000001", localConnectionString: target.toString() },
-          ],
-        }),
-      );
-      log = await open(join(state, "wrangler.log"), "w");
-      wrangler = spawn(
-        "node",
-        [
-          join(base, "node_modules/wrangler/bin/wrangler.js"),
-          "dev",
-          "--local",
-          "--config",
-          config,
-          "--ip",
-          "127.0.0.1",
-          "--port",
-          String(port),
-          "--inspector-port",
-          "0",
-          "--persist-to",
-          join(state, "state"),
-        ],
-        {
-          cwd: base,
-          detached: true,
-          env: {
-            ...process.env,
-            WRANGLER_SEND_METRICS: "false",
-            NO_PROXY: "127.0.0.1,localhost",
-            no_proxy: "127.0.0.1,localhost",
-          },
-          stdio: ["ignore", log.fd, log.fd],
-        },
-      );
+      // PUBLIC_ORIGIN names the port, so it is chosen before Wrangler starts; another process can take it first, and
+      // Wrangler then exits with "Address already in use": try another port.
       let ready = false;
-      for (let attempt = 0; attempt < 60 && !ready; attempt++) {
-        if (wrangler.exitCode !== null) throw Error(await readFile(join(state, "wrangler.log"), "utf8"));
-        try {
-          ready = (await fetch(`${origin}/health`, { signal: AbortSignal.timeout(1000) })).ok;
-        } catch {}
-        if (!ready) await new Promise(done => setTimeout(done, 1000));
+      for (let start = 0; start < 5 && !ready; start++) {
+        const port = await new Promise<number>(done => {
+          const probe = createServer().listen(0, "127.0.0.1", () => {
+            const { port } = probe.address() as AddressInfo;
+            probe.close(() => done(port));
+          });
+        });
+        origin = env.PUBLIC_ORIGIN = `http://127.0.0.1:${port}`;
+        await writeFile(
+          config,
+          JSON.stringify({
+            name: "mantle-auth-postgres-local",
+            main: join(dir, "worker.ts"),
+            compatibility_date: "2026-09-28",
+            compatibility_flags: ["nodejs_compat"],
+            vars: env,
+            hyperdrive: [
+              {
+                binding: "HYPERDRIVE",
+                id: "00000000000000000000000000000001",
+                localConnectionString: target.toString(),
+              },
+            ],
+          }),
+        );
+        await log?.close();
+        log = await open(join(state, "wrangler.log"), "w");
+        wrangler = spawn(
+          "node",
+          [
+            join(base, "node_modules/wrangler/bin/wrangler.js"),
+            "dev",
+            "--local",
+            "--config",
+            config,
+            "--ip",
+            "127.0.0.1",
+            "--port",
+            String(port),
+            "--inspector-port",
+            "0",
+            "--persist-to",
+            join(state, "state"),
+          ],
+          {
+            cwd: base,
+            detached: true,
+            env: {
+              ...process.env,
+              WRANGLER_SEND_METRICS: "false",
+              NO_PROXY: "127.0.0.1,localhost",
+              no_proxy: "127.0.0.1,localhost",
+            },
+            stdio: ["ignore", log.fd, log.fd],
+          },
+        );
+        for (let attempt = 0; attempt < 60 && !ready; attempt++) {
+          if (wrangler.exitCode !== null) {
+            const text = await readFile(join(state, "wrangler.log"), "utf8");
+            if (text.includes("Address already in use")) break;
+            throw Error(text);
+          }
+          try {
+            ready = (await fetch(`${origin}/health`, { signal: AbortSignal.timeout(1000) })).ok;
+          } catch {}
+          if (!ready) await new Promise(done => setTimeout(done, 1000));
+        }
       }
       expect(ready).toBe(true);
 
