@@ -15,6 +15,9 @@ export default defineConfig({
     include: withBrowser ? browser : ["test/**/*.test.{ts,tsx}", "admin/{src,test}/**/*.test.{ts,tsx}"],
     exclude: withBrowser ? [] : browser,
     typecheck: { enabled: false },
+    // Each browser file launches Chrome and a Vite server. In parallel they starve each other on a small runner and a
+    // page misses its 10 s wait, so they run one file at a time.
+    fileParallelism: !withBrowser,
     // several tests run tsc or import the built library, which takes seconds while the workspace tests run in parallel
     testTimeout: 60_000,
   },
