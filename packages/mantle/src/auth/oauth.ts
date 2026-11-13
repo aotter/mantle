@@ -132,6 +132,7 @@ export async function assertActiveUserGrant(
   return { id: sub as string };
 }
 
+// Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
 /** Add first to oauthProvider/mcp extensions; Better Auth retains ownership of referenceId. */
 export const oauthGrantExtension: Extension = {
   claims: {
@@ -168,6 +169,7 @@ export const oauthGrantExtension: Extension = {
   },
 };
 
+// Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
 /**
  * For an adopter's own extension grant handler (for example a jwt-bearer / ID-JAG grant), after the handler has validated the
  * assertion, authenticated the client and matched the user: records or renews the managed grant of that user, client and

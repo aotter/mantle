@@ -123,11 +123,12 @@ export type Send<Env, Database, Handlers> = (
 const headers = { "cache-control": "private, no-store" };
 const DEFAULT_BODY_LIMIT = 1_000_000;
 const fail: (message: string) => never = message => invalid(message, "rest");
+// Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
 /**
- * A request's JSON object body, for an application's own routes as well as the generated ones. It refuses a body over
+ * A request's JSON object body. It refuses a body over
  * `limit` bytes (a declared `content-length` before reading, a streamed one as soon as it passes the limit), text that is
- * not JSON, and JSON that is not an object; an empty body is `{}`. Each refusal calls `refuse(message)` to throw the
- * application's own error, such as its own path; when it returns instead, or without it, the refusal is
+ * not JSON, and JSON that is not an object; an empty body is `{}`. Each refusal calls `refuse(message)`; when it returns
+ * instead of throwing, or without it, the refusal is
  * `INPUT_VALIDATION_FAILED` at path `rest`. A `limit` that is not a positive safe integer is a `TypeError`.
  */
 export async function body(

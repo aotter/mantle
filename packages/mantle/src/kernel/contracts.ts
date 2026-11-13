@@ -113,13 +113,12 @@ export function wire(error: unknown): {
 
 /** One result row. */
 export type Row = Record<string, unknown>;
+// Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
 /**
  * The input half of the generated surfaces' transport conversion, the same function REST, MCP, web and Admin call: it
  * turns validated boundary input into the driver input a generated View or Procedure binds, in place. For each
  * `[field, type]` of a generated route's or tool's `convert` table, a missing or null value becomes `null`, `json` is
  * stringified, `bool` becomes 0/1 (SQLite and D1 only) and `""` passes through. Fields outside the table are untouched.
- * Use it where an application calls generated functions directly with input a surface would have converted, such as a
- * test harness.
  */
 export { convert as convertInput, type Conversions } from "./surface.js";
 /** Static declared-column conversions, used only by selected transport boundaries. */
@@ -230,4 +229,5 @@ export interface Postgres {
 /** What a read or a single statement needs: a transaction handle suits it too. */
 export type Unsafe = Pick<Postgres, "unsafe">;
 
+// Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
 export { checkOrigin, surfaceCaller, surfaceError, surfaceFailure } from "./surface-failure.js";

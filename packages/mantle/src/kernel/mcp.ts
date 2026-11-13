@@ -4,6 +4,7 @@ import type { Conversions } from "./surface.js";
 import { linkApps, linkSurface, resourcesOf, type McpAppsSource } from "./mcp-apps.js";
 // ponytail: a lazy forwarder keeps the public export without pulling paging and call code into every Worker's startup graph.
 type Call = typeof import("./mcp-call.js");
+// Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
 export const callTool: Call["callTool"] = async (...args) => (await import("./mcp-call.js")).callTool(...args);
 export const callToolLazy: Call["callToolLazy"] = async (...args) =>
   (await import("./mcp-call.js")).callToolLazy(...args);
@@ -107,6 +108,7 @@ export interface Tool<Database, Handlers = never> {
   readonly path?: string;
   readonly page?: (db: Database, caller: Caller, input: never, paging: Paging) => Promise<unknown>;
   readonly run?: (db: Database, caller: Caller, input: never, handlers: Handlers, call: ToolCall) => Promise<unknown>;
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
   /**
    * Merged into this tool's `_meta` in `tools/list` (top level shallow, `ui` one level deep) with what its App links produce;
    * a contradicting value fails at `mcp(...)`. `ui.visibility: ["app"]` hides the tool from clients without MCP Apps.
@@ -115,6 +117,7 @@ export interface Tool<Database, Handlers = never> {
   readonly meta?: Readonly<Record<string, unknown>>;
 }
 
+// Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
 export { withResultMeta, type ResultWithMeta } from "./result-meta.js";
 /** What a `tools/call` tells a tool beside its input. */
 export interface ToolCall {
