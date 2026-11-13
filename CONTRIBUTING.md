@@ -117,6 +117,11 @@ workspace and runs the reference service from exact packed tarballs. Use
 package filters while iterating. Native four-target conformance is separate
 (`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14).
 
+Mantle commits to three production stacks: `cloudflare-d1`, `cloudflare-postgres` (postgres.js, usually through
+Hyperdrive) and `bun-postgres` (Bun.SQL). A change that touches what applications run works, is typed and is tested on
+all three; a capability that is inherently dialect-specific says which of them it covers. `bun-sqlite` remains a
+generate target and stays in the native four-target conformance.
+
 PostgreSQL is a first-class target. Its tests skip unless `MANTLE_PG_URL`,
 `MANTLE_NEXT_BUN_PG_URL` and `MANTLE_NEXT_WORKER_PG_URL` name a disposable
 database, and `pnpm check` then ends with a `PostgreSQL tests SKIPPED` line.
