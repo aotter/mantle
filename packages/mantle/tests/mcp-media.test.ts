@@ -3,7 +3,8 @@ import { fixtureCaller } from "./apps/fixtures.js";
 import { test, expect, spyOn } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SQL } from "bun";
-import { mkdtemp, rm } from "node:fs/promises";
+import { readdirSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 import { mediaError } from "../src/kernel/media.js";
@@ -305,6 +306,39 @@ test("a query-only Worker excludes media MCP and the SDK from its bundle", async
   }
 });
 
+for (const target of ["cloudflare-d1", "cloudflare-postgres"] as const)
+  test(`${target}: a Worker uploads the media fetch chunk only when it can upload media`, async () => {
+    const generated = await generateFromSources({
+      target,
+      sources: { sources: [{ sourceId: "media.yaml", text: source }] },
+      site,
+    });
+    if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+    const dir = await mkdtemp(join(import.meta.dir, ".media-fetch-bundle-"));
+    try {
+      await writeGenerated(dir, generated.files);
+      const { bundle } = await import("../src/infrastructure/bundle.js");
+      const uploaded = async (name: string, code: string) => {
+        await writeFile(join(dir, `${name}.ts`), code);
+        const metafile = await bundle(join(dir, `${name}.ts`), join(dir, name));
+        return {
+          chunks: readdirSync(join(dir, name), { recursive: true }).filter(file => /media-fetch-/.test(String(file))),
+          inputs: Object.values(metafile.outputs).flatMap(output => Object.keys(output.inputs)),
+        };
+      };
+      // upload_media fetches a source URL through the chunk
+      expect((await uploaded("tools", 'export { mcp } from "./mcp.ts";')).chunks).toHaveLength(1);
+      // the site's media library without upload_media: media.ts is uploaded, its import("./media-fetch.js") tree-shaken
+      const library = await uploaded(
+        "site",
+        `export { createSite } from ${JSON.stringify(join(import.meta.dir, "../src/kernel/site.ts"))};`,
+      );
+      expect(library.inputs.some(path => /kernel\/media\.ts$/.test(path))).toBe(true);
+      expect(library.chunks).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 test("media errors retain their HTTP status outside the core status vocabulary", () => {
   expect(wire(mediaError("MEDIA_ASSET_NOT_FOUND", "missing")).status).toBe(404);
   expect(wire(mediaError("PARTIAL_FAILURE", "retry")).status).toBe(503);

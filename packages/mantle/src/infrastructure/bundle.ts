@@ -21,6 +21,33 @@ export function startupGraph(metafile: Metafile, entry: string): string[] {
   return [...visited];
 }
 
+/**
+ * esbuild emits a chunk for every `import()` it reads, also one whose caller tree shaking removed (an unused
+ * `mediaUploadCard`), and Wrangler uploads every module under the Worker directory. Deletes the JavaScript outputs that
+ * no static or dynamic import from the entry reaches, from disk and from the metafile.
+ */
+function pruneUnreachable(metafile: Metafile, entry: string): void {
+  const reached = new Set<string>();
+  const visit = (name: string) => {
+    const output = metafile.outputs[name];
+    if (!output) throw new Error(`esbuild's metafile lists no output ${name}, so the Worker's imports cannot be read.`);
+    if (reached.has(name)) return;
+    reached.add(name);
+    for (const imported of output.imports) if (!imported.external) visit(imported.path);
+  };
+  const roots = Object.keys(metafile.outputs).filter(name => {
+    const output = metafile.outputs[name]!;
+    return output.entryPoint && physical(output.entryPoint) === physical(entry) && !name.endsWith(".css");
+  });
+  if (roots.length !== 1) throw new Error(`esbuild's metafile lists ${roots.length} outputs for the entry ${entry}.`);
+  visit(roots[0]!);
+  for (const name of Object.keys(metafile.outputs))
+    if (name.endsWith(".js") && !reached.has(name)) {
+      rmSync(resolve(name));
+      delete metafile.outputs[name];
+    }
+}
+
 const refused: ReadonlyArray<readonly [RegExp, string]> = [
   [
     /(?:^|\/)node_modules\/(?:better-auth(?:\/|$)|@better-auth\/)/,
@@ -351,6 +378,7 @@ export async function bundle(entry: string, outdir: string): Promise<Metafile> {
       },
     ],
   });
+  pruneUnreachable(result.metafile, entry);
   if (
     Object.keys(result.metafile.inputs).some(input =>
       /(?:^|\/)mantle\/(?:src|dist)\/testing\//.test(resolve(input).replaceAll("\\", "/")),
