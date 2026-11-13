@@ -43,7 +43,7 @@ For package README or package-local docs changes, prefer the matching area label
 |---|---|---|---|
 | `release-gate` | Blocks a public release or release-quality claim. | Must be resolved or explicitly deferred before release. | The gate is closed or deferred by maintainer decision. |
 | `v0.1.0` | Required for the v0.1.0 release gate. | Track in the v0.1.0 release pass. | The item lands or is moved out of v0.1.0. |
-| `breaking-change` | Semver-relevant breaking change. | Generated release notes must call it out. | The change is redesigned to be non-breaking. |
+| `breaking-change` | Semver-relevant breaking change. | Generated release notes must call it out; the PR body's Migration section declares each item, and the "Breaking changes declared" PR check requires both when it detects one (CONTRIBUTING.md, "Breaking changes"). | The change is redesigned to be non-breaking. |
 | `skip-release-notes` | Release bookkeeping with no user-facing change. | Excluded from generated GitHub Release notes. | The PR contains a user-facing change. |
 | `needs-adr` | Architecture, trust boundary, package boundary, or long-lived decision needs an ADR or ADR-lite proposal. | Do not merge implementation until the decision is captured. | ADR/proposal lands or maintainer confirms an existing ADR covers it. |
 | `needs-grammar-revise` | Manifest grammar or closed-enum change. | Requires grammar-revise round before code/types change. | Grammar decision lands or the change no longer affects grammar. |
