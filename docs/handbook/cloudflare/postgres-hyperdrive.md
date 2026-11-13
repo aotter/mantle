@@ -16,14 +16,41 @@ Mantle is tested with and the reasons, quoting Cloudflare's documentation.
 
 ## The client
 
-Create one client per request, inside the handler:
+Create one client per request, inside the handler. Objects that live for the isolate (a Better Auth instance, Mantle's
+REST, MCP and Admin surfaces) must not hold a client: a postgres.js client kept at module scope answers its first
+request, and under local Wrangler the next request then fails with "Cannot perform I/O on behalf of a different
+request" (the one after that reconnects and succeeds, and so on). Give those objects a handle that resolves the current
+request's client instead. Save this as `src/db.ts`:
 
 ```ts
+// src/db.ts: one postgres.js client per request, reachable from objects built once per isolate.
+import { AsyncLocalStorage } from "node:async_hooks";
 import postgres from "postgres";
+import type { Postgres } from "@aotter/mantle/contracts";
 
-export const client = (env: { HYPERDRIVE: Hyperdrive }) =>
-  postgres(env.HYPERDRIVE.connectionString, { max: 1, fetch_types: false });
+const clients = new AsyncLocalStorage<Postgres>();
+
+/** Runs `fn` with a fresh client; nothing needs to close it (Hyperdrive cleans up when the request ends). */
+export function withRequestDb<T>(env: { HYPERDRIVE: Hyperdrive }, fn: () => T): T {
+  return clients.run(postgres(env.HYPERDRIVE.connectionString, { max: 1, fetch_types: false }), fn);
+}
+
+function current(): Postgres {
+  const client = clients.getStore();
+  if (!client) throw new Error("No PostgreSQL client for this request: call it inside withRequestDb.");
+  return client;
+}
+
+/** The current request's client, for objects built once per isolate. Pass it wherever Mantle takes a `Postgres`. */
+export const requestDb: Postgres = {
+  unsafe: (text, values, options) => current().unsafe(text, values, options),
+  begin: (options, fn) => current().begin(options, fn),
+};
 ```
+
+The client connects on its first query, so creating one on a request that never touches the database costs nothing.
+Background work the request hands to `ctx.waitUntil` (Better Auth's tasks through `withAuthTasks`) keeps the request's
+context and so its client; do not call `sql.end()` yourself, or such a task finds the client closed.
 
 | Option | Setting | Why |
 | --- | --- | --- |
@@ -63,3 +90,105 @@ the same number of round trips as before and one that repeats a statement makes 
   rolled back, never as `OUTCOME_UNKNOWN`. With a client per request, only statements the same request already ran are
   exposed. Bun.SQL has always prepared every statement this way.
 - **Bun.SQL** ignores the third argument and prepares every parameterised statement itself; nothing changes there.
+
+## Better Auth on PostgreSQL
+
+Keep one Better Auth instance per isolate, as the D1 [app shell](../../examples/app-shell/README.md) does, and give
+`postgresAdapter` the request handle from `src/db.ts`. The instance and its plugins are built once, behind `authLoader`
+and a dynamic import, so Better Auth stays out of Worker startup and requests that never read a session never load it;
+every query it sends goes to the client of the request it serves. Building Better Auth per request instead also works,
+but costs about 0.6 ms of CPU per authenticated request (median of 50 constructions with the `admin`, `emailOTP` and
+`jwt` plugins, Bun 1.4 on one machine; about 7 ms for the first) and does not fit the app shell, which also installs
+its in-process JWKS fetch once per isolate.
+
+`src/auth.ts`, the PostgreSQL counterpart of the app shell's (add its hardening, sign-up gate and MCP plugins the same way):
+
+```ts
+// src/auth.ts: Better Auth over the request's client; loaded only on a request that needs auth.
+import { betterAuth } from "better-auth/minimal";
+import { admin, emailOTP } from "better-auth/plugins";
+import type { BetterAuthOptions } from "better-auth/types";
+import { postgresAdapter } from "@aotter/mantle/auth/adapter";
+import { postgresBootstrapAdmin } from "@aotter/mantle/auth/identity";
+import { requestDb } from "./db.js";
+
+export type AuthEnv = { BETTER_AUTH_SECRET: string; PUBLIC_ORIGIN: string; ADMIN_EMAIL: string };
+
+export function authOptions(env: AuthEnv) {
+  const origin = env.PUBLIC_ORIGIN || "https://example.invalid";
+  const plugins = [
+    admin({ defaultRole: "user", adminRoles: ["admin"] }),
+    emailOTP({
+      sendVerificationOTP: async ({ email, otp }) => {
+        // Replace with a real sender (guides/email.md) before deploying.
+        if (!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) throw new Error("Configure an email sender.");
+        console.log(`${email}: one-time code is ${otp}`);
+      },
+    }),
+  ];
+  const bootstrap = env.ADMIN_EMAIL
+    ? postgresBootstrapAdmin(requestDb, { match: "email", value: env.ADMIN_EMAIL }, () => ({ options: { plugins } }))
+    : async () => {};
+  return {
+    database: postgresAdapter(requestDb),
+    secret: env.BETTER_AUTH_SECRET || "schema-generation-placeholder-secret",
+    baseURL: origin,
+    basePath: "/api/auth",
+    plugins,
+    databaseHooks: { user: { create: { after: bootstrap }, update: { after: bootstrap } } },
+    session: { storeSessionInDatabase: true },
+    verification: { storeInDatabase: true },
+  } satisfies BetterAuthOptions;
+}
+
+export const createAuth = (env: AuthEnv) => betterAuth(authOptions(env));
+```
+
+The Worker entry wraps each request in `withRequestDb` and passes `requestDb` to generated code and to Mantle's
+surfaces (`rest({ db: () => requestDb, … })`), so auth and data share the request's one client:
+
+```ts
+// src/index.ts: one Better Auth instance per isolate, one PostgreSQL client per request.
+import { authLoader, resolveCaller } from "@aotter/mantle/auth";
+import { authRoutes } from "@aotter/mantle/auth/routes";
+import { withAuthTasks } from "@aotter/mantle/auth/hardening";
+import { surfaceFailure } from "@aotter/mantle/contracts";
+import { requestDb, withRequestDb } from "./db.js";
+import type { AuthEnv } from "./auth.js";
+
+type Env = AuthEnv & { HYPERDRIVE: Hyperdrive };
+let auth: ReturnType<typeof authLoader<ReturnType<typeof import("./auth.js").createAuth>>> | undefined;
+
+export default {
+  fetch: (request: Request, env: Env, ctx: ExecutionContext) =>
+    withRequestDb(env, async () => {
+      auth ??= authLoader(() => import("./auth.js").then(m => m.createAuth(env)));
+      try {
+        const own = await withAuthTasks(ctx.waitUntil.bind(ctx), () =>
+          authRoutes(auth!, { methods: [{ kind: "email-otp" }] })(request),
+        );
+        if (own) return own;
+        const caller = await resolveCaller(request, auth);
+        // Generated code takes the handle as it would a client: procedures.book(requestDb, caller, input).
+        const [{ now }] = await requestDb.unsafe("SELECT now()::text AS now", []);
+        return Response.json({ caller: caller.kind, now });
+      } catch (error) {
+        return surfaceFailure(error);
+      }
+    }),
+};
+```
+
+`tests/auth-postgres-worker.test.ts` runs `src/db.ts` and `src/auth.ts` from this page unchanged in workerd under local
+Wrangler, through a Hyperdrive binding, with a generated Procedure in place of the `SELECT`: email-OTP sign-in (which
+makes the first user admin through `postgresBootstrapAdmin`, a transaction), three cookie-authenticated requests in the
+same isolate and an authenticated write.
+
+### When the connection is lost
+
+A write whose connection fails after it was sent (Hyperdrive or the origin drops it, or the request's client is
+closed) may have committed. Mantle reports it as `OUTCOME_UNKNOWN` ("The write outcome is unknown; reconcile before
+retrying."), which `surfaceFailure` answers with HTTP 503: read the row again before deciding whether to retry. A failure
+PostgreSQL answers with an error (a constraint, a serialization failure, `0A000`) is reported as that error and
+nothing was written. Better Auth's own writes go through the same driver, so a lost connection during sign-in reaches
+Better Auth as an error and the sign-in fails; the user signs in again.

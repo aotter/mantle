@@ -50,6 +50,11 @@ move, and never booting 0.2 against a 0.1.x database.
   application, confirm its Hyperdrive configuration has query caching disabled, as Mantle already requires: Hyperdrive
   did not cache unprepared queries, and now can. An adapter implementing `Postgres` may ignore the new third argument
   (#2018). See [PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md).
+- **Better Auth on `cloudflare-postgres`: do not keep a postgres.js client per isolate.** The handbook said "per
+  isolate with `max: 1`" was fine; in workerd such a client fails every other request ("Cannot perform I/O on behalf of
+  a different request"). Keep the Better Auth instance per isolate and give `postgresAdapter` and
+  `postgresBootstrapAdmin` a handle that resolves the current request's client; the tested `src/db.ts` and `src/auth.ts`
+  are in [PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md#better-auth-on-postgresql) (#2018).
 
 ### Upgrading to 0.2.2-alpha.3
 

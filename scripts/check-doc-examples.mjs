@@ -37,6 +37,8 @@ for (const page of nativePages) {
     symlinkSync(nativeSdk, join(project, "node_modules/@aotter/mantle"), "dir");
     symlinkSync(join(nativeSdk, "node_modules/better-auth"), join(project, "node_modules/better-auth"), "dir");
     symlinkSync(join(nativeSdk, "node_modules/postgres"), join(project, "node_modules/postgres"), "dir");
+    mkdirSync(join(project, "node_modules/@types"), { recursive: true });
+    symlinkSync(join(nativeSdk, "node_modules/@types/node"), join(project, "node_modules/@types/node"), "dir");
     symlinkSync(
       join(nativeSdk, "node_modules/@cloudflare/workers-types"),
       join(project, "node_modules/@cloudflare/workers-types"),
@@ -53,9 +55,11 @@ for (const page of nativePages) {
     }
     const code = [...source.matchAll(/^```ts\n([\s\S]*?)^```$/gm)].map(match => match[1]);
     for (const [index, block] of code.entries()) {
-      const directory = block.includes("../generated/") ? join(project, "src") : project;
+      // A block that starts with `// src/<name>.ts` is that file, so sibling blocks can import it.
+      const named = block.match(/^\/\/ (src\/[\w-]+\.ts)\b/)?.[1];
+      const directory = named || block.includes("../generated/") ? join(project, "src") : project;
       mkdirSync(directory, { recursive: true });
-      writeFileSync(join(directory, `example${index}.ts`), block);
+      writeFileSync(named ? join(project, named) : join(directory, `example${index}.ts`), block);
     }
     writeFileSync(
       join(project, "tsconfig.json"),
@@ -67,7 +71,8 @@ for (const page of nativePages) {
           strict: true,
           noEmit: true,
           skipLibCheck: true,
-          types: ["@cloudflare/workers-types"],
+          // nodejs_compat: Workers code may import node:async_hooks
+          types: ["@cloudflare/workers-types", "node"],
         },
         include: ["**/*.ts"],
       }),

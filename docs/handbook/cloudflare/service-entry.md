@@ -162,7 +162,7 @@ the same version. `none` keeps `index.html`
 available by name. `adminShell(request, assets)` passes
 paths relative to the Admin directory, so the app fetches them under `/admin/`:
 `path => env.ASSETS.fetch(new Request(new URL("/admin/" + path, request.url), request))`. Admin assets are not a public database
-API. PostgreSQL uses application-owned Hyperdrive/postgres.js wiring,
+API. PostgreSQL uses application-owned Hyperdrive/postgres.js wiring ([PostgreSQL through Hyperdrive](postgres-hyperdrive.md)),
 with Hyperdrive query caching disabled for authority and mutation visibility.
 
 Commit `.dev.vars.example` containing variable names and placeholders only:

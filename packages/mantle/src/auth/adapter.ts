@@ -453,8 +453,9 @@ export function d1Adapter(db: D1Like) {
 
 /**
  * PostgreSQL through Bun.SQL or postgres.js (the `Postgres` contract the data layer uses). Transactions use `begin`,
- * which pins every statement to one connection. On Workers, create the postgres.js client per request (or per isolate
- * with `max: 1`), as for the data layer.
+ * which pins every statement to one connection. On Workers a postgres.js client must not outlive its request: for an
+ * instance kept per isolate, pass a handle that resolves the current request's client (handbook: PostgreSQL through
+ * Hyperdrive).
  */
 export function postgresAdapter(sql: Postgres) {
   const executor =
