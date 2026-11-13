@@ -119,7 +119,7 @@ package filters while iterating. Native four-target conformance is separate
 
 PostgreSQL is a first-class target. Its tests skip unless `MANTLE_PG_URL`,
 `MANTLE_NEXT_BUN_PG_URL` and `MANTLE_NEXT_WORKER_PG_URL` name a disposable
-database, and `pnpm test` then ends with a `PostgreSQL tests SKIPPED` line.
+database, and `pnpm check` then ends with a `PostgreSQL tests SKIPPED` line.
 `pnpm check:pg` runs `pnpm check` and `test:native` against a throwaway local
 cluster (`scripts/with-postgres.mjs`: initdb in a temp directory, deleted
 afterwards; as root it runs the server as `postgres` or `nobody`); with the

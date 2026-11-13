@@ -20,7 +20,7 @@
   "scripts": {
     "build": "pnpm -r --filter '@aotter/mantle*' build",
     "typecheck": "pnpm -r --filter '@aotter/mantle*' typecheck",
-    "test": "pnpm -r --parallel --filter '@aotter/mantle*' test && node scripts/with-postgres.mjs --notice",
+    "test": "pnpm -r --parallel --filter '@aotter/mantle*' test",
     "format": "biome format --write",
     "check:format": "biome format",
     "check:boundaries": "node scripts/check-boundaries.mjs",
@@ -29,7 +29,7 @@
     "check:doc-html": "node scripts/check-doc-html.mjs",
     "check:plugin-manifests": "node scripts/sync-plugin-manifests.mjs --check",
     "check:release": "node scripts/release-tag-order.mjs --self-test",
-    "check": "pnpm run check:boundaries && pnpm run check:format && pnpm run check:skills && pnpm run check:doc-html && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm --filter @aotter/mantle exec bun scripts/check-size.ts && pnpm --filter @aotter/mantle exec bun scripts/check-package.ts && pnpm check:ui-size && pnpm check:doc-examples && pnpm check:oss-plugin && pnpm typecheck && pnpm check:worker-consumer && MANTLE_NATIVE_TESTS=1 pnpm test",
+    "check": "pnpm run check:boundaries && pnpm run check:format && pnpm run check:skills && pnpm run check:doc-html && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm --filter @aotter/mantle exec bun scripts/check-size.ts && pnpm --filter @aotter/mantle exec bun scripts/check-package.ts && pnpm check:ui-size && pnpm check:doc-examples && pnpm check:oss-plugin && pnpm typecheck && MANTLE_NATIVE_TESTS=1 pnpm test && pnpm check:worker-consumer && node scripts/with-postgres.mjs --notice",
     "check:pg": "node scripts/with-postgres.mjs sh -c 'pnpm check && pnpm --filter @aotter/mantle test:native'",
     "with-pg": "node scripts/with-postgres.mjs",
     "check:worker-consumer": "node scripts/check-worker-consumer.mjs",
