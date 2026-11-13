@@ -9,6 +9,9 @@ import { SQL } from "bun";
 import { createServer, connect, type AddressInfo } from "node:net";
 import postgres from "postgres";
 import { procedure, read, run, transaction } from "../src/kernel/driver/postgres.js";
+import { postgresAdapter } from "../src/auth/adapter.js";
+import { authSchemaSql } from "../src/infrastructure/authSchema.js";
+import type { Postgres } from "../src/kernel/contracts.js";
 
 const url = process.env.MANTLE_PG_URL;
 
@@ -151,3 +154,53 @@ const first = ["P(named)DH", "B(named)ES"],
   },
   30000,
 );
+
+for (const driver of ["postgres.js", "Bun.SQL"] as const)
+  (url ? test : test.skip)(
+    `${driver}: paging Better Auth through 60 offsets leaves a bounded number of prepared statements`,
+    async () => {
+      const schema = `paging_${crypto.randomUUID().replaceAll("-", "")}`;
+      const native =
+        driver === "Bun.SQL"
+          ? new SQL(url!, { max: 1 })
+          : postgres(url!, { max: 1, fetch_types: false, onnotice: () => {} });
+      const db: Postgres = native;
+      try {
+        await db.unsafe(`CREATE SCHEMA "${schema}"`, []);
+        await db.unsafe(`SET search_path TO "${schema}"`, []);
+        for (const statement of authSchemaSql({}, "postgres")) await db.unsafe(statement, []);
+        const adapter = postgresAdapter(db)({});
+        for (let i = 0; i < 3; i++)
+          await adapter.create({
+            model: "user",
+            data: {
+              name: `u${i}`,
+              email: `u${i}@example.test`,
+              emailVerified: true,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
+        const prepared = async () =>
+          Number((await db.unsafe("SELECT count(*) AS n FROM pg_prepared_statements", []))[0].n);
+        const page = (offset: number) =>
+          adapter.findMany<{ email: string }>({
+            model: "user",
+            where: [{ field: "emailVerified", value: true }],
+            limit: 2,
+            offset,
+            sortBy: { field: "email", direction: "asc" },
+          });
+        const before = await prepared();
+        for (let offset = 1; offset <= 60; offset++) await page(offset);
+        expect((await page(1)).map(user => user.email)).toEqual(["u1@example.test", "u2@example.test"]);
+        // One statement for the paged read (the probe has no binds, so it is a simple query), not one per offset.
+        expect((await prepared()) - before).toBe(1);
+      } finally {
+        await db.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`, []);
+        if (driver === "Bun.SQL") await (native as SQL).close();
+        else await (native as ReturnType<typeof postgres>).end();
+      }
+    },
+    30000,
+  );
