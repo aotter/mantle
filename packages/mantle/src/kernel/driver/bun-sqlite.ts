@@ -80,13 +80,17 @@ export async function transaction<T>(db: Handle, fn: (tx: Handle) => Promise<T>)
   return enqueue(db, async () => {
     db.exec("BEGIN IMMEDIATE");
     let active = true;
-    const tx: Handle = {
-      query: sql => {
+    // after the end these would run on the Database outside any transaction
+    const live =
+      <A extends unknown[], R>(fn: (...args: A) => R) =>
+      (...args: A): R => {
         if (!active) throw new Error("Transaction has ended.");
-        return db.query(sql);
-      },
-      exec: db.exec.bind(db),
-      transaction: db.transaction.bind(db),
+        return fn(...args);
+      };
+    const tx: Handle = {
+      query: live(sql => db.query(sql)),
+      exec: live(sql => db.exec(sql)),
+      transaction: live(fn => db.transaction(fn)),
     };
     const marks: { failure?: { error: unknown } } = {};
     transactions.set(tx, marks);

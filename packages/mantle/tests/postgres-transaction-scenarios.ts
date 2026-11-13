@@ -121,8 +121,9 @@ export async function verifyApplicationTransaction(env: ApplicationTransactionEn
     assert.equal(await ledger(), 1);
     assert.equal(await bookings(), 4);
     ok();
-    // So does a failed statement of the application's own, caught: PostgreSQL aborted the transaction, and the
-    // rejection is that known rollback, not OUTCOME_UNKNOWN.
+    // So does a failed statement of the application's own, caught or never awaited: PostgreSQL aborted the
+    // transaction, so it rejects with that statement's error before any COMMIT, on every client (Bun.SQL before 1.4
+    // resolves a COMMIT the server answered with ROLLBACK), and never as OUTCOME_UNKNOWN.
     await assert.rejects(
       store().transaction(async (_tx: any, sql: Db) => {
         await sql.unsafe("INSERT INTO app_ledger (key, note) VALUES ($1, $2)", [4, "before duplicate"]);
@@ -130,7 +131,14 @@ export async function verifyApplicationTransaction(env: ApplicationTransactionEn
           await sql.unsafe("INSERT INTO app_ledger (key, note) VALUES ($1, $2)", [1, "duplicate"]);
         } catch {}
       }),
-      (error: any) => error?.code !== "OUTCOME_UNKNOWN",
+      (error: any) => sqlstate(error) === "23505",
+    );
+    await assert.rejects(
+      store().transaction(async (_tx: any, sql: Db) => {
+        await sql.unsafe("INSERT INTO app_ledger (key, note) VALUES ($1, $2)", [4, "before unawaited"]);
+        void sql.unsafe("SELECT 1 / 0", []).then(undefined, () => {});
+      }),
+      (error: any) => sqlstate(error) === "22012",
     );
     assert.equal(await ledger(), 1);
     ok();
@@ -194,7 +202,8 @@ export async function verifyApplicationTransaction(env: ApplicationTransactionEn
         },
         { isolation: "read committed" },
       );
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // the contender is blocked on the lock (seen by the server), not merely not yet scheduled
+      while (!(await count("SELECT count(*) AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted")));
       assert.deepEqual(order, ["first-locked"]);
       release();
       await Promise.all([first, contender]);
@@ -226,6 +235,19 @@ export async function verifyApplicationTransaction(env: ApplicationTransactionEn
       assert.equal(begins, before + 1);
       assert.equal((await other.unsafe("SELECT note FROM app_ledger WHERE key = 100", []))[0].note, "other");
     }
+    ok();
+
+    // A joined Procedure's statement fails on the server (a unique index): the transaction rejects with the CONFLICT the
+    // caller caught, not the native error it wraps.
+    await db.unsafe("CREATE UNIQUE INDEX bookings_unique_seat ON bookings (item) WHERE item = 'unique-seat'", []);
+    await procedures.book(other, alice, { item: "unique-seat" });
+    let unique: any;
+    await assert.rejects(
+      store().transaction(async (tx: any) => {
+        await tx.procedures.book({ item: "unique-seat" }).catch((error: unknown) => (unique = error));
+      }),
+      (error: unknown) => error === unique && unique.code === "CONFLICT" && unique.fields?.kind === "unique",
+    );
     ok();
 
     // The connection drops after the callback resolved, before COMMIT is answered: the outcome is unknown.

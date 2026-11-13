@@ -106,7 +106,9 @@ export async function procedure(db: Postgres, steps: readonly Bound[], path: str
     try {
       return await execute(db);
     } catch (error) {
-      if (steps.length > 1) joined.failure ??= { error };
+      // the transaction rejects with the mapped error (CONFLICT) rather than the native one it wraps
+      if (joined.failure ? joined.failure.error === (error as Error).cause : steps.length > 1)
+        joined.failure = { error };
       throw error;
     }
   if (steps.length === 1) {
@@ -146,20 +148,26 @@ export async function transaction<T>(
       );
     return await db.begin(`isolation level ${level}`, async handle => {
       let active = true;
+      const marks: { failure?: { error: unknown } } = {};
+      // A failed statement aborted the transaction even if caught (or never awaited), and Bun.SQL before 1.4 resolves
+      // the COMMIT the server answers with ROLLBACK: settle every statement and refuse to commit after a failure.
+      let settled: Promise<unknown> = Promise.resolve();
       const tx: Postgres = {
         unsafe: (sql, values) => {
           if (!active) throw new Error("Transaction has ended.");
-          return handle.unsafe(sql, values);
+          const result = Promise.resolve(handle.unsafe(sql, values));
+          settled = Promise.all([settled, result.catch(error => (marks.failure ??= { error }))]);
+          return result;
         },
         begin: async () => {
           throw new Error("Nested transactions are not supported.");
         },
       };
-      const marks: { failure?: { error: unknown } } = {};
       transactions.set(tx, marks);
       state.handle = tx;
       try {
         const result = await context.run(state, () => fn(tx));
+        await settled;
         if (marks.failure) throw marks.failure.error;
         committing = true;
         return result;
