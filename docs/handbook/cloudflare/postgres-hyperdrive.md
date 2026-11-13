@@ -48,9 +48,33 @@ export const requestDb: Postgres = {
 };
 ```
 
-The client connects on its first query, so creating one on a request that never touches the database costs nothing.
-Background work the request hands to `ctx.waitUntil` (Better Auth's tasks through `withAuthTasks`) keeps the request's
-context and so its client; do not call `sql.end()` yourself, or such a task finds the client closed.
+`src/db.ts` imports `node:async_hooks`, so the Worker needs the `nodejs_compat` compatibility flag, which postgres.js
+already requires. The client connects on its first query, so creating one on a request that never touches the
+database costs nothing. Background work the request hands to `ctx.waitUntil` (Better Auth's tasks through
+`withAuthTasks`) keeps the request's context and so its client; do not call `sql.end()` yourself, or such a task finds
+the client closed.
+
+Every other handler that reaches the database through `requestDb` (directly, through generated code or through Better
+Auth) wraps its work the same way; outside `withRequestDb`, `requestDb` throws:
+
+```ts
+// src/jobs.ts: a cron trigger and a queue consumer; each invocation gets its own client, like a request.
+import { requestDb, withRequestDb } from "./db.js";
+
+type Env = { HYPERDRIVE: Hyperdrive };
+export default {
+  scheduled: (_controller: ScheduledController, env: Env, ctx: ExecutionContext) =>
+    ctx.waitUntil(
+      withRequestDb(env, async () => {
+        await requestDb.unsafe("SELECT 1", []);
+      }),
+    ),
+  queue: (batch: MessageBatch<{ id: string }>, env: Env) =>
+    withRequestDb(env, async () => {
+      for (const message of batch.messages) await requestDb.unsafe("SELECT $1::text", [message.body.id]);
+    }),
+};
+```
 
 | Option | Setting | Why |
 | --- | --- | --- |

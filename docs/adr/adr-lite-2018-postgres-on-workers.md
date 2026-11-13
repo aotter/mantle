@@ -86,7 +86,9 @@ pools in the global scope. Instead, create a new client inside each handler invo
 6. **The handbook page's `src/db.ts` and `src/auth.ts` are the tested code**: `tests/auth-postgres-worker.test.ts`
    extracts them and runs them in workerd under local Wrangler through a Hyperdrive binding (email-OTP sign-in with the
    bootstrap admin transaction, three cookie-authenticated requests in one isolate, a generated two-statement
-   Procedure), and `check:doc-examples` typechecks the page.
+   Procedure). That test runs wherever `MANTLE_NEXT_WORKER_PG_URL` is set: the PR CI test job on every PR into
+   `develop`, Full checks and `pnpm check:pg`. `check:doc-examples` typechecks the page's TypeScript blocks; it runs in
+   Full checks, in the release workflow's `pnpm check` and in local `pnpm check`/`check:pg`, not in the PR CI.
 
 Rejected: building Better Auth per request (measured about 0.6 ms of CPU per construction, median of 50 with the
 `admin`, `emailOTP` and `jwt` plugins on Bun 1.4, about 7 ms for the first; it sends no queries, but it does not fit
