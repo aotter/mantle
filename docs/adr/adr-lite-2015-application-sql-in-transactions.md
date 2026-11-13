@@ -20,7 +20,8 @@ outer handle, and passes the raw transaction handle to its callback as an undecl
 Reading the source also showed a gap: a generated multi-statement Procedure that joined a transaction and failed after
 an earlier statement wrote (for example a stale-version `UPDATE` after an `INSERT`) left that write in the transaction.
 If the caller caught the error, the transaction committed half of the Procedure. On bun:sqlite the same held. Bun.SQL
-also reported a COMMIT of an aborted transaction as `OUTCOME_UNKNOWN`, although the server had answered ROLLBACK.
+1.4 reported a COMMIT of an aborted transaction as `OUTCOME_UNKNOWN`, although the server had answered ROLLBACK, and
+Bun.SQL 1.3 reported it as committed.
 
 ## Decision
 
@@ -35,7 +36,14 @@ also reported a COMMIT of an aborted transaction as `OUTCOME_UNKNOWN`, although 
 3. **A failed multi-statement Procedure makes a joined transaction rollback-only**, as a failed batch already did. Both
    transaction drivers record the first such failure on the transaction handle, and the transaction throws it instead
    of committing. A failed single statement changed nothing and does not poison it.
-4. **Bun.SQL's `ERR_POSTGRES_COMMIT_ROLLED_BACK` is a definitive rollback**, not `OUTCOME_UNKNOWN`.
+4. **A failed PostgreSQL statement makes the transaction rollback-only before COMMIT.** PostgreSQL has aborted it, but
+   Bun.SQL 1.3 (the version CI pins) resolves a COMMIT the server answered with ROLLBACK, and neither client notices a
+   statement that failed after the callback returned. The transaction handle waits for every statement it ran and
+   throws the first failure instead of committing; a generated call's mapped error (`CONFLICT`) replaces the native
+   error it wraps. Bun.SQL 1.4's `ERR_POSTGRES_COMMIT_ROLLED_BACK`, raised only when the server answered COMMIT with
+   ROLLBACK, is also a definitive rollback, not `OUTCOME_UNKNOWN`.
+5. **A ref handler's `ctx.transaction` joins by handle**: it joins the open Store transaction whose handle it was given,
+   also through a Store or generated call built from the declared `db`, instead of refusing a nested one.
 
 Raw SQL on the handle runs with the database role's rights, outside the Caller, scope, TTL, publishing and system-column
 rules and outside `authorize`; generated code in the same transaction keeps its rules. The handbook says so beside the
@@ -53,5 +61,6 @@ example.
 ## Acceptance
 
 - `tests/postgres-transaction.test.ts`: the documented example typechecks from public imports on both PostgreSQL
-  targets, and D1 has no `transaction`; the scenarios run on Bun.SQL and postgres.js and fail without decision 3.
+  targets and bun:sqlite, and D1 has no `transaction`; the scenarios run on Bun.SQL and postgres.js and fail without
+  decisions 3 or 4 (decision 4 also on Bun 1.3.14); `tests/handlers.test.ts` fails without decision 5.
 - `scripts/verify-native.ts` runs the same scenarios on `bun-postgres` and inside workerd for `cloudflare-postgres`.

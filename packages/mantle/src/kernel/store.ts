@@ -227,8 +227,8 @@ type Interactive<T extends Record<string, Table>, O, H> = {
   /**
    * One native transaction. `tx` is this Store bound to it; `db` is the transaction's own handle, for the application's
    * SQL and for generated Views/Procedures, which join it. Statements on `db` run with the database role's rights,
-   * outside the row rules. A failed multi-statement Procedure or batch rolls it back even if caught; on PostgreSQL, so does
-   * any failed statement.
+   * outside the row rules; never send transaction control on it. A failed multi-statement Procedure or batch rolls it
+   * back even if caught; on PostgreSQL, so does any failed statement.
    */
   transaction<R>(fn: (tx: Tx<T, O>, db: H) => Promise<R>, options?: TransactionOptions): Promise<R>;
 };
@@ -254,17 +254,21 @@ interface Prepared {
   readonly policy: Map<boolean, Policy>;
 }
 
-const transactionStores = new WeakSet<object>();
+/** Handles of open Store transactions (the `db` their callbacks receive). */
+const transactionHandles = new WeakSet<object>();
 
 /**
  * A ref handler's `ctx.transaction` on drivers with interactive transactions: it opens one on the handler's Store, or
- * joins the one that Store already runs in (a handler called through `tx.procedures`), so the handler need not know.
+ * joins the one its handle already runs in (a handler called through `tx.procedures`, or through a Store or generated
+ * call given the transaction's handle), so the handler need not know.
  */
 export function handlerTransaction(store: object, db: unknown) {
   const open = (store as { transaction: (fn: (tx: unknown, db: unknown) => Promise<unknown>) => Promise<unknown> })
     .transaction;
   return <R>(fn: (ctx: { store: any; db: any }) => Promise<R>): Promise<R> =>
-    transactionStores.has(store) ? fn({ store, db }) : (open((tx, txDb) => fn({ store: tx, db: txDb })) as Promise<R>);
+    transactionHandles.has(db as object)
+      ? fn({ store, db })
+      : (open((tx, txDb) => fn({ store: tx, db: txDb })) as Promise<R>);
 }
 
 export function createStore<
@@ -418,6 +422,7 @@ export function createStore<
           return drv.transaction!(
             db,
             async tx => {
+              transactionHandles.add(tx as object);
               const result = await fn(make(tx, caller, state, options), tx);
               if (state.failure) throw state.failure.error;
               return result;
@@ -427,7 +432,6 @@ export function createStore<
         },
       }),
     };
-    if (transaction) transactionStores.add(store);
     return store;
   }
 
