@@ -289,6 +289,12 @@ export interface MediaUploadCardOptions<Env = never> extends AdminAppResourceOpt
   readonly tool?: string;
   /** Arguments of the rendering call's input the card repeats on each of its calls, such as a host's `server`. */
   readonly forward?: readonly string[];
+  /**
+   * With `forward`, how long after connecting the card waits for the host's tool input before it calls without the
+   * forwarded arguments, so a host that never sends the input gets the server's answer instead of a card that waits
+   * forever. 5,000 ms by default.
+   */
+  readonly inputTimeoutMs?: number;
   readonly title?: string;
   /** Passed through as `_meta.ui.domain`, for a host that serves each App from its own origin. */
   readonly domain?: string;
@@ -301,12 +307,13 @@ export interface MediaUploadCardOptions<Env = never> extends AdminAppResourceOpt
 export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env>): NormalMcpApps {
   const uri = options.uri ?? "ui://mantle-admin/upload",
     tool = options.tool ?? "upload_media",
-    forward = options.forward ?? [];
+    forward = options.forward ?? [],
+    inputTimeoutMs = options.inputTimeoutMs;
   // `<` escaped: the config sits in a script element
   const config =
     tool === "upload_media" && !forward.length
       ? ""
-      : `<script type="application/json" id="mantle-upload-config">${JSON.stringify({ tool, forward }).replace(/</g, "\\u003c")}</script>`;
+      : `<script type="application/json" id="mantle-upload-config">${JSON.stringify({ tool, forward, inputTimeoutMs }).replace(/</g, "\\u003c")}</script>`;
   if (!/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(uri))
     throw new ContractError("INPUT_VALIDATION_FAILED", "Admin App resources use ui://mantle-admin/….", "mcp/apps");
   return {

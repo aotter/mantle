@@ -10,10 +10,14 @@ import { outputOf, type ToolResult } from "../../../src/app/bridge.js";
 
 /** `@aotter/mantle/media`'s `UPLOAD_META`: the result `_meta` key with the upload targets. */
 const UPLOAD_META = "net.aotter.mantle/upload";
-/** `mediaUploadCard`'s `tool` and `forward`, written into the page by the server (absent: `upload_media`, nothing forwarded). */
+/**
+ * `mediaUploadCard`'s `tool`, `forward` and `inputTimeoutMs`, written into the page by the server (absent: `upload_media`,
+ * nothing forwarded).
+ */
 const config = JSON.parse(document.getElementById("mantle-upload-config")?.textContent ?? "{}") as {
   tool?: string;
   forward?: string[];
+  inputTimeoutMs?: number;
 };
 const TOOL = config.tool ?? "upload_media",
   forward = config.forward ?? [];
@@ -49,7 +53,9 @@ const alt = $<HTMLInputElement>("alt"),
   progress = $<HTMLProgressElement>("progress"),
   status = $<HTMLParagraphElement>("status");
 
-// the forwarded arguments come from the rendering call's input, so every call waits for it when there are any
+// the forwarded arguments come from the rendering call's input, so every call waits for it when there are any; a host
+// that never sends it does not leave the card waiting: after `inputTimeoutMs` from connecting, calls go without them and
+// the server's refusal (or answer) shows as for any call
 const bound: Record<string, unknown> = {};
 let inputArrived!: () => void;
 const input = forward.length
@@ -189,6 +195,7 @@ connectHost(
   {
     ready: (connected, context) => {
       host = connected;
+      if (forward.length) setTimeout(inputArrived, config.inputTimeoutMs ?? 5_000);
       applyHostContext(context);
       render();
       // the policy, from the server: it is the authority on purposes, types and caps

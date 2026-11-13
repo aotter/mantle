@@ -19,9 +19,10 @@ const transparent = (html: HTMLElement) => [
 ];
 
 // A host re-serving several servers' media names its own tool and has the card repeat `server` from the tool input.
-it.each([{}, { tool: "open_upload", forward: ["server"] }])(
+// A host that never sends the tool input: after `inputTimeoutMs` the card calls without `server`, and shows the refusal.
+it.each([{}, { tool: "open_upload", forward: ["server"] }, { forward: ["server"], inputTimeoutMs: 300, silent: true }])(
   "the upload card PUTs the picked image to storage through CORS and commits it (%o)",
-  async (options: { tool?: string; forward?: string[] }) => {
+  async ({ silent, ...options }: { tool?: string; forward?: string[]; inputTimeoutMs?: number; silent?: boolean }) => {
     const TOOL = options.tool ?? "upload_media",
       extra = options.forward ? { server: "shop" } : {};
     const root = resolve(import.meta.dirname, "../../.."),
@@ -40,7 +41,7 @@ import {AppBridge,PostMessageTransport} from '@modelcontextprotocol/ext-apps/app
 const frame=document.createElement('iframe');frame.sandbox='allow-scripts';document.body.append(frame);
 window.host={calls:[],messages:[]};
 const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{}});
-bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();void bridge.sendToolInput({arguments:{purpose:'cover',server:'shop'}});};
+bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : "void bridge.sendToolInput({arguments:{purpose:'cover',server:'shop'}});"}};
 bridge.oncalltool=async params=>{window.host.calls.push(params);return (await fetch('/tool',{method:'POST',body:JSON.stringify(params)})).json();};
 bridge.onmessage=async params=>{window.host.messages.push(params);return {};};
 bridge.onsizechange=()=>{};
@@ -183,6 +184,14 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       await page.goto(origin);
       const app = page.frameLocator("iframe");
       const upload = app.getByRole("button", { name: "Upload" });
+      if (silent) {
+        await expect.poll(() => app.locator("#status").textContent()).toBe(`unexpected call ${TOOL} undefined`);
+        expect(await app.locator("#status").getAttribute("role")).toBe("alert");
+        const { calls } = await page.evaluate(() => (window as unknown as { host: { calls: unknown[] } }).host);
+        expect(calls).toMatchObject([{ name: TOOL, arguments: {} }]);
+        expect(errors).toEqual([]);
+        return;
+      }
       await expect.poll(() => upload.isEnabled()).toBe(true);
       // the conversation shows through, and the first paint takes the host's scheme
       expect(await app.locator("html").evaluate(transparent)).toEqual([
