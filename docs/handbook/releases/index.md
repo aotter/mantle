@@ -43,6 +43,13 @@ move, and never booting 0.2 against a 0.1.x database.
   Procedure that fails inside a transaction now rolls it back even if the error is caught, as a batch already did,
   and on PostgreSQL a transaction in which any statement failed now rejects on every client (Bun.SQL 1.3 resolved it
   although nothing was written) (#2015). See [your own SQL in a Store transaction](../concepts/runtime-and-adapters.md#your-own-sql-in-a-store-transaction).
+- **The upload card stops waiting for tool input.** With `forward`, `mediaUploadCard`'s card waited for the host's tool
+  input forever; now it waits at most `inputTimeoutMs` (5,000 ms by default) after connecting, then calls without the
+  forwarded arguments, and reads the purposes again if the input arrives later. Pass `inputTimeoutMs: false` to keep
+  waiting as before. A value that is not a positive integer up to 2,147,483,647 throws at configuration.
+- `body(request, limit?, refuse?)` from `@aotter/mantle/rest` takes an optional `refuse(message)` for its refusals; a
+  `limit` that is not a positive safe integer throws a `TypeError`. `convertInput(input, convert)` is exported from
+  `@aotter/mantle/contracts`.
 - **postgres.js: Mantle's statements are named prepared statements.** Mantle's driver now calls
   `unsafe(text, values, { prepare: true })`; before, postgres.js sent every Mantle statement unnamed and describe-first,
   which Cloudflare says Hyperdrive's transaction pooling "does not reliably support". A client created with

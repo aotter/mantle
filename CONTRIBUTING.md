@@ -54,6 +54,24 @@ so wrapping a returned value never needs the SDK's own normalisation.
 live at the repository root and in `.agents/skills`; do not merge the two
 audiences or copy maintainer policy into shipped skills.
 
+### Application seams
+
+Some public entry points are required by applications although Core has no internal use for them. They are listed in
+[`packages/mantle/tests/application-seams.ts`](packages/mantle/tests/application-seams.ts) (ids pinned in
+`application-seams.ids.json`), and their source carries the marker "Application seam: applications depend on this".
+`application-seams.test.ts` in Core and Admin, part of `pnpm test` and of PR CI, checks each one's consumer module
+(public subpaths that resolve to `dist`, no casts), typechecks it on each of its stacks and executes it unless it is
+marked typecheck-only: bun-sqlite on bun:sqlite, cloudflare-d1 on the D1 stand-in over bun:sqlite (not workerd), and
+the PostgreSQL stacks with postgres.js and Bun.SQL under Bun when the PostgreSQL URLs are set (the test prints what did
+not run otherwise). workerd and Hyperdrive are covered by `test:native`.
+
+- Do not remove, move or narrow a registered seam because Core has no use for it. Doing so needs an accepted ADR or
+  ADR-lite and a migration note that names the replacement
+  ([decision](docs/adr/adr-lite-application-seams.md)).
+- New public surface that applications depend on adds a registry entry, its id and its consumer module in the same PR.
+- Entries, consumer modules and tests say that a seam is required, not what it is for; fixtures stay minimal and
+  neutral.
+
 ## Hard invariants
 
 - `src/build/spec` keeps the closed v2 grammar (`cms.mantle.aotter.net/v2`), diagnostics
@@ -116,6 +134,11 @@ self-checks, builds, compiles the documented examples, typechecks, tests the
 workspace and runs the reference service from exact packed tarballs. Use
 package filters while iterating. Native four-target conformance is separate
 (`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14).
+
+Mantle commits to four stacks, its four targets: `cloudflare-d1`, `cloudflare-postgres` (postgres.js, usually
+through Hyperdrive), `bun-postgres` (Bun.SQL) and `bun-sqlite` (bun:sqlite). A change that touches what applications
+run works, is typed and is tested on all four; a capability that is inherently dialect-specific (D1 has no interactive
+transaction, for example) says which of them it covers.
 
 PostgreSQL is a first-class target. Its tests skip unless `MANTLE_PG_URL`,
 `MANTLE_NEXT_BUN_PG_URL` and `MANTLE_NEXT_WORKER_PG_URL` name a disposable

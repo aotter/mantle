@@ -43,6 +43,7 @@ export interface McpAppResource {
   readonly prefersBorder?: boolean;
   /** `_meta.ui.domain`: the dedicated sandbox origin a host should serve this App from, in the form that host documents. */
   readonly domain?: string;
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
   /**
    * Host-defined keys merged into the `resources/read` content item's `_meta` (top level shallow, `ui` one key deep).
    * The typed fields above win over `meta.ui` keys of the same name. It is not sent on `resources/list`.

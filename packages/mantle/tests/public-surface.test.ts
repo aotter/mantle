@@ -95,3 +95,17 @@ test.each(["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"]
     expect([...imported].filter(name => !exported.has(name))).toEqual([]);
   },
 );
+
+test("convertInput is the generated surfaces' own input conversion, not a copy", async () => {
+  const { convertInput } = await import("../src/kernel/contracts.js");
+  const { convert } = await import("../src/kernel/surface.js");
+  expect(convertInput).toBe(convert);
+  const input: Record<string, unknown> = { tags: ["a"], text: "x", on: true, kept: 1 };
+  convertInput(input, [
+    ["tags", "json"],
+    ["on", "bool"],
+    ["text", ""],
+    ["missing", ""],
+  ]);
+  expect(input).toEqual({ tags: '["a"]', text: "x", on: 1, kept: 1, missing: null });
+});

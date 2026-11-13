@@ -1,6 +1,7 @@
 import type { GatewayOptions } from "@aotter/mantle/contracts";
 /** Optional Admin API: generated data and native calls, with one fresh admin session per request. */
 import {
+  convertInput as convert,
   deny,
   isAdmin,
   ContractError,
@@ -9,6 +10,7 @@ import {
   type Authorize,
   type Gateway,
   type RequestContext,
+  type Conversions,
 } from "@aotter/mantle/contracts";
 import {
   nativeRest,
@@ -20,7 +22,6 @@ import {
 } from "@aotter/mantle/rest";
 import { userOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
-import { convert, type Conversions } from "@aotter/mantle/internal/surface";
 import { siteInfo, type MantleSite, type MediaStorageOption } from "@aotter/mantle/site";
 import { csv } from "./csv.js";
 export type Admin =

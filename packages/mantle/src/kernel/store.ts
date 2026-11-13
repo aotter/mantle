@@ -224,6 +224,7 @@ type BoundOperations<O> = {
 };
 type Tx<T extends Record<string, Table>, O> = Store<T> & BoundOperations<O>;
 type Interactive<T extends Record<string, Table>, O, H> = {
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
   /**
    * One native transaction. `tx` is this Store bound to it; `db` is the transaction's own handle, for the application's
    * SQL and for generated Views/Procedures, which join it. Statements on `db` run with the database role's rights,

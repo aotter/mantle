@@ -50,14 +50,15 @@ export interface AdminMcpOptions extends AdminAppResourceOptions {
    * An explicit resource URI. Without it, tools link the fixed `ui://mantle-admin/admin`, which hosts that prefetch and
    * cache the template keep across deploys, and the current build also answers at its content-hash URI for
    * conversations that hold one. Change it only for an App that saved conversations must not load, e.g.
-   * `ui://mantle-admin/admin/v2`, or to scope the App per site for a host that re-serves several sites' Apps, e.g.
-   * `ui://mantle-admin/<site>/admin`. The given URI is then the only one: the resource and every tool it renders link
+   * `ui://mantle-admin/admin/v2`, or to give it a URI of the application's choosing, e.g.
+   * `ui://mantle-admin/<name>/admin`. The given URI is then the only one: the resource and every tool it renders link
    * it, and no content-hash alias is served (`previous` keeps older URIs answering).
    */
   readonly uri?: string;
   readonly title?: string;
   /** Views rendered by this App; all catalogue Views by default. Partition explicitly before registering another renderer. */
   readonly renders?: readonly string[];
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
   /**
    * Other tools of this endpoint whose results this App renders: Procedures, or the application's own tools. The App
    * shows the page declared for the tool (`pages[].mcp`), or the result's rows when it has any. The endpoint refuses
@@ -280,15 +281,24 @@ export interface MediaUploadCardOptions<Env = never> extends AdminAppResourceOpt
    * URLs PUT to) is the card's CSP `connectDomains`, sent on `resources/read`.
    */
   readonly media: (env: Env) => Pick<MediaStorage, "uploadOrigin">;
-  /** `ui://mantle-admin/upload` by default. A host serving several servers' cards gives each its own. */
+  /** `ui://mantle-admin/upload` by default. */
   readonly uri?: string;
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
   /**
-   * The tool the card renders and calls, `upload_media` by default: a host that re-serves several servers' media under
-   * one endpoint names its own tool, which takes `upload_media`'s arguments plus the `forward` ones.
+   * The tool the card renders and calls, `upload_media` by default. Another tool takes `upload_media`'s arguments plus
+   * the `forward` ones.
    */
   readonly tool?: string;
-  /** Arguments of the rendering call's input the card repeats on each of its calls, such as a host's `server`. */
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+  /** Arguments of the rendering call's input the card repeats on each of its calls. */
   readonly forward?: readonly string[];
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+  /**
+   * With `forward`, how long after connecting the card waits for the host's tool input before it calls without the
+   * forwarded arguments; an input that arrives later is used from then on and the purposes are read again. 5,000 ms by default; a
+   * positive integer up to 2,147,483,647, or `false` to wait until the input arrives.
+   */
+  readonly inputTimeoutMs?: number | false;
   readonly title?: string;
   /** Passed through as `_meta.ui.domain`, for a host that serves each App from its own origin. */
   readonly domain?: string;
@@ -301,12 +311,23 @@ export interface MediaUploadCardOptions<Env = never> extends AdminAppResourceOpt
 export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env>): NormalMcpApps {
   const uri = options.uri ?? "ui://mantle-admin/upload",
     tool = options.tool ?? "upload_media",
-    forward = options.forward ?? [];
+    forward = options.forward ?? [],
+    inputTimeoutMs = options.inputTimeoutMs;
+  if (
+    inputTimeoutMs !== undefined &&
+    inputTimeoutMs !== false &&
+    !(Number.isSafeInteger(inputTimeoutMs) && inputTimeoutMs > 0 && inputTimeoutMs <= 2_147_483_647)
+  )
+    throw new ContractError(
+      "INPUT_VALIDATION_FAILED",
+      "mediaUploadCard: inputTimeoutMs is a positive integer of milliseconds up to 2147483647, or false to wait for the tool input.",
+      "mcp/apps",
+    );
   // `<` escaped: the config sits in a script element
   const config =
     tool === "upload_media" && !forward.length
       ? ""
-      : `<script type="application/json" id="mantle-upload-config">${JSON.stringify({ tool, forward }).replace(/</g, "\\u003c")}</script>`;
+      : `<script type="application/json" id="mantle-upload-config">${JSON.stringify({ tool, forward, inputTimeoutMs }).replace(/</g, "\\u003c")}</script>`;
   if (!/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(uri))
     throw new ContractError("INPUT_VALIDATION_FAILED", "Admin App resources use ui://mantle-admin/….", "mcp/apps");
   return {
