@@ -63,14 +63,21 @@ What Mantle promises on PostgreSQL (Bun.SQL and postgres.js, so both `bun-postgr
   or `"read uncommitted"`, and anything else is `INPUT_VALIDATION_FAILED` before any SQL. There is no read-only option.
 - **Failures you catch still roll back.** A failed multi-statement Procedure or `tx.batch` makes the transaction
   rollback-only even if `fn` catches it: the transaction rejects with that error and nothing commits. On PostgreSQL any
-  failed statement, yours or generated, aborts the transaction the same way; the rejection is the known rollback
-  (postgres.js rethrows the statement's error, Bun.SQL reports `ERR_POSTGRES_COMMIT_ROLLED_BACK`), never
-  `OUTCOME_UNKNOWN`. A single-statement Store write or Procedure that fails its row check (`CONFLICT` with no SQL error)
-  changed nothing, and catching it leaves the transaction usable. Prefer letting errors propagate.
+  failed statement, yours or generated, caught or never awaited, aborts the transaction the same way: Mantle waits for
+  every statement on `sql`, sends no COMMIT after a failure, and rejects with the first failure (the statement's native
+  error, or the `CONFLICT` a generated call turned it into), never `OUTCOME_UNKNOWN`, on Bun.SQL and postgres.js alike.
+  A single-statement Store write or Procedure that fails its row check (`CONFLICT` with no SQL error) changed nothing,
+  and catching it leaves the transaction usable. Prefer letting errors propagate.
+- **Mantle owns the transaction.** Do not send `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET TRANSACTION` or a
+  session-level `SET` on `sql`. Mantle does not parse your SQL to refuse them: a `COMMIT` there ends the transaction
+  early, every later statement (generated ones included) then commits on its own, and Mantle's COMMIT only draws a
+  server warning. A savepoint does not make a failed statement recoverable either: the transaction still rejects.
 - **No nesting.** Opening a transaction inside one, on `sql` or on a Store built from it, is refused; there are no
   savepoints. Using the outer `db` or its Store inside is `INPUT_VALIDATION_FAILED`.
-- **No retry.** A serialization failure or deadlock (`40001`, `40P01`) is `CONFLICT` with `kind: "serialization"`; the
-  transaction rolled back and is not retried. A COMMIT whose answer is lost (a dropped connection) is
+- **No retry.** A serialization failure or deadlock (`40001`, `40P01`), from your statements or generated ones or at
+  COMMIT, is `CONFLICT` with `kind: "serialization"`; the transaction rolled back and is not retried. At the default
+  `serializable` level expect it under concurrent writes: to retry, run the whole `store(...).transaction(...)` call
+  again, re-reading what `fn` decided on. A COMMIT whose answer is lost (a dropped connection) is
   `OUTCOME_UNKNOWN`: reconcile before acting on it again.
 - **Authorization.** SQL you run on `sql` has the database role's rights: no Caller, scope, TTL, publishing or
   system-column rule and no `authorize` applies to it. Generated Views, Procedures and `tx` inside the same transaction
@@ -79,14 +86,15 @@ What Mantle promises on PostgreSQL (Bun.SQL and postgres.js, so both `bun-postgr
 
 On bun:sqlite the handle is the `Database` (`Handle` from `@aotter/mantle/driver/bun-sqlite`), the transaction is
 `BEGIN IMMEDIATE` and ignores `isolation`, and a failed SQLite statement does not abort the transaction by itself. D1
-has no interactive transaction; use a batch or a multi-statement Procedure.
+has no interactive transaction; use a batch or a multi-statement Procedure. The `Database` handle also stops working
+when `fn` settles.
 
 **On Workers through Hyperdrive.** The driver contract runs every statement of `begin` on one connection, and Hyperdrive
 pools by transaction: it keeps one database connection for a transaction until it ends (Cloudflare's documented
 behaviour; Mantle's own tests run in workerd against Wrangler's local Hyperdrive binding, which connects directly).
-Session state does not survive between transactions there, so use
-transaction-scoped forms: `pg_advisory_xact_lock` rather than `pg_advisory_lock`, `SET LOCAL` rather than `SET`; both end
-with the transaction. Keep the callback short and make no external calls inside it: the open transaction holds its
+Session state does not survive between transactions there (Cloudflare resets a connection returned to the pool and
+does not support session-level advisory locks), so use transaction-scoped forms: `pg_advisory_xact_lock` rather than
+`pg_advisory_lock`, `SET LOCAL` rather than `SET`; both end with the transaction. Keep the callback short and make no external calls inside it: the open transaction holds its
 connection and locks for as long as the Worker request awaits. Mantle sets no timeout; the Worker's limits and the role's
 `statement_timeout` and `idle_in_transaction_session_timeout` apply. Statement preparation is the postgres.js client's
 option, unchanged by Mantle. Disable Hyperdrive query caching as for every Mantle database

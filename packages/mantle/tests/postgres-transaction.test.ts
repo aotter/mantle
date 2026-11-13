@@ -47,6 +47,24 @@ export function refused(db: Postgres, caller: Caller) {
       );
       roots.push(consumer);
     }
+    const sqlite = resolve(dir, "bun-sqlite");
+    await writeGenerated(sqlite, await files("bun-sqlite"), false);
+    await writeFile(
+      resolve(sqlite, "consumer.ts"),
+      `import type { Caller } from "@aotter/mantle/contracts";
+import type { Handle } from "@aotter/mantle/driver/bun-sqlite";
+import { procedures, store } from "./generated.js";
+export function book(db: Handle, caller: Caller) {
+  return store(db, caller).transaction(async (tx, raw) => {
+    const handle: Handle = raw;
+    handle.query("INSERT INTO app_ledger (key, note) VALUES (?, ?)").run(1, "booked");
+    await procedures.book(raw, caller, { item: "seat" });
+    return tx.procedures.book({ item: "seat" });
+  });
+}
+`,
+    );
+    roots.push(resolve(sqlite, "consumer.ts"));
     const d1 = resolve(dir, "cloudflare-d1");
     await writeGenerated(d1, await files("cloudflare-d1"), false);
     await writeFile(
@@ -106,6 +124,16 @@ test("bun-sqlite: a caught multi-step Procedure failure still rolls back the tra
     ).rejects.toMatchObject({ code: "CONFLICT" });
     expect(caught?.code).toBe("CONFLICT");
     expect(items()).toEqual(before);
+    // The handle is the transaction's only while it runs: afterwards none of it reaches the Database.
+    let leaked!: Database;
+    await app.store(db, alice).transaction(async (_tx: any, raw: Database) => void (leaked = raw));
+    for (const use of [
+      () => leaked.query("INSERT INTO app_ledger (key, note) VALUES (2, 'late')"),
+      () => leaked.exec("INSERT INTO app_ledger (key, note) VALUES (2, 'late')"),
+      () => leaked.transaction(() => {}),
+    ])
+      expect(use).toThrow("Transaction has ended.");
+    expect(items()).toEqual(before);
   } finally {
     db.close();
   }
@@ -136,7 +164,7 @@ for (const target of ["bun-postgres", "cloudflare-postgres"] as const) {
           },
           end,
         });
-        expect(result.checks).toBe(11);
+        expect(result.checks).toBe(12);
       } finally {
         await admin.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
         await end(admin);
