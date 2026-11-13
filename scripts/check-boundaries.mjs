@@ -120,6 +120,8 @@ function checkNextFolderImports() {
     usecase: ["build", "domain", "kernel"],
     infrastructure: ["build", "domain", "usecase", "kernel"],
     build: [],
+    // Removed-subpath stubs import nothing, so they cost no surface any bytes.
+    removed: [],
   };
   const root = join(ROOT, "packages/mantle/src");
   for (const [folder, reach] of Object.entries(folders))

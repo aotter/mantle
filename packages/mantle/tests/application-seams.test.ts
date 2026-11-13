@@ -116,6 +116,7 @@ test("the consumer-module guard refuses plumbing, escapes, computed imports and 
   const cases: Record<string, string> = {
     plumbing: 'import { convert } from "@aotter/mantle/internal/surface";',
     unexported: 'import { x } from "@aotter/mantle/nonexistent";',
+    removed: 'import { body } from "@aotter/mantle/json-body";',
     escape: 'import { x } from "../../outside.js";',
     computed: 'const name = "@aotter/mantle/rest"; export const m = await import(name);',
     required: "const name = 'x'; export const m = require(name);",

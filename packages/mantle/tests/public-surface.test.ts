@@ -41,18 +41,35 @@ const DEVELOPER = [
 const HOST = ["./host-caller", "./host-access", "./describe"];
 /** Generated-code plumbing: imported by `mantle generate` output, regenerated with the SDK, no compatibility promise. */
 const INTERNAL = "./internal/";
-
+/**
+ * Removed subpaths kept as throwing stubs (CONTRIBUTING.md, "Removed public subpaths"), registered with `removedIn`,
+ * `replacement` and `removeAfter` in `removed-subpaths.json`. Each throws `<specifier> was removed in <removedIn>:
+ * <replacement>` on import; `scripts/check-breaking.mjs` fails once the version is past `removeAfter`.
+ */
+const REMOVED: Record<string, { removedIn: string; replacement: string; removeAfter: string }> = JSON.parse(
+  await readFile(resolve(import.meta.dir, "../removed-subpaths.json"), "utf8"),
+);
 const root = resolve(import.meta.dir, "../../..");
 const subpaths = async () =>
   Object.keys(JSON.parse(await readFile(resolve(import.meta.dir, "../package.json"), "utf8")).exports as object);
 
 test("every exported subpath is classified as developer API, host contract or internal plumbing", async () => {
   const exported = await subpaths();
-  const classified = [...DEVELOPER, ...HOST];
+  const classified = [...DEVELOPER, ...HOST, ...Object.keys(REMOVED)];
   expect(new Set(classified).size).toBe(classified.length);
   expect(classified.filter(name => name.startsWith(INTERNAL))).toEqual([]);
   expect(exported.filter(name => !name.startsWith(INTERNAL) && !classified.includes(name))).toEqual([]);
   expect(classified.filter(name => !exported.includes(name))).toEqual([]);
+});
+
+test.each(Object.entries(REMOVED))("the %s stub throws its documented message", async (key, stub) => {
+  const target: string = JSON.parse(await readFile(resolve(import.meta.dir, "../package.json"), "utf8")).exports[key];
+  expect(target).toStartWith("./dist/removed/");
+  const thrown = await import(resolve(import.meta.dir, "..", target)).then(
+    () => undefined,
+    (error: Error) => error.message,
+  );
+  expect(thrown).toBe(`@aotter/mantle${key.slice(1)} was removed in ${stub.removedIn}: ${stub.replacement}`);
 });
 
 async function files(directory: string): Promise<string[]> {

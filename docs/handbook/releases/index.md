@@ -43,6 +43,11 @@ move, and never booting 0.2 against a 0.1.x database.
   Procedure that fails inside a transaction now rolls it back even if the error is caught, as a batch already did,
   and on PostgreSQL a transaction in which any statement failed now rejects on every client (Bun.SQL 1.3 resolved it
   although nothing was written) (#2015). See [your own SQL in a Store transaction](../concepts/runtime-and-adapters.md#your-own-sql-in-a-store-transaction).
+- **Removed subpaths name their replacement.** Importing `@aotter/mantle/json-body`, `@aotter/mantle/driver/postgres`
+  or `@aotter/mantle/surface` (removed in 0.2.2-alpha.2) now throws an error naming the replacement instead of failing
+  to resolve: `body` from `@aotter/mantle/rest`; `store(db, caller).transaction((tx, db) => …)` for your own SQL; and
+  `convertInput` or `ContractError` from `@aotter/mantle/contracts`. These stubs ship until 0.2.2 and are deleted after
+  it.
 - **The upload card stops waiting for tool input.** With `forward`, `mediaUploadCard`'s card waited for the host's tool
   input forever; now it waits at most `inputTimeoutMs` (5,000 ms by default) after connecting, then calls without the
   forwarded arguments, and reads the purposes again if the input arrives later. Pass `inputTimeoutMs: false` to keep
