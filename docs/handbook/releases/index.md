@@ -51,8 +51,8 @@ move, and never booting 0.2 against a 0.1.x database.
   `input(raw)`, which validates and converts a copy as the surfaces do, typed so that the bare Procedure takes it with
   no cast or `?? null`; a JSON-bound field is the branded `JsonText`. Existing generated input types are unchanged
   (#2022). See [the generated surface](../reference/surface.md).
-- `pages[].mcp.renders` in `defineAdmin` accepts an application's own tool names without a cast; generated names are still
-  suggested, but a misspelt name is no longer a type error.
+- `pages[].mcp.renders` in `defineAdmin` also accepts an application's own tool names that it declares by merging
+  `interface AdminMcpTools` from `@aotter/mantle-admin/app`; other names are still refused.
 - `checkMcpApp` from `@aotter/mantle-admin/testing` takes `inspect({ tool, theme, frame })`, called with the open App after
   each scenario's built-in checks.
 - `body(request, limit?, refuse?)` from `@aotter/mantle/rest` takes an optional `refuse(message)` for its refusals; a

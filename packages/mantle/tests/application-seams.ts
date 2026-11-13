@@ -150,7 +150,7 @@ export const SEAMS: readonly Seam[] = [
     package: "@aotter/mantle-admin",
     subpath: "./app",
     exports: ["defineAdmin"],
-    entry: "defineAdmin(meta, { pages: [{ mcp: { renders } }] })",
+    entry: "interface AdminMcpTools; defineAdmin(meta, { pages: [{ mcp: { renders } }] })",
     stacks: [],
     decided: SEAM,
     check: "packages/mantle-admin/test/seams/page-renders.ts",

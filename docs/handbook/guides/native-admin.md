@@ -413,8 +413,8 @@ plugin's is the built-in component, and the application's own `components` are o
 load. `mantle bundle` builds that App from this same entry (`<assets>/admin/mcp-app.html`) and fails it on an origin that is not
 declared. The build writes the declaration into the file, and `adminMcpApps` sends it to the host as `_meta.ui.csp` on `resources/read`.
 A page may also be an MCP App view: `pages: [{ path, title, element, mcp: { renders: "<view>" } }]`, where `renders` is an admin
-View that has an MCP tool or a tool `adminMcpApps({ tools })` lists (the generated `admin-client.ts` names are suggested; any
-other string is accepted).
+View that has an MCP tool (`tsc` checks it against the generated `admin-client.ts`), an admin operation, or an application tool
+declared in `interface AdminMcpTools` that `adminMcpApps({ tools })` lists.
 
 Authorization is unchanged by any of this. A component that shows or hides something grants or denies nothing; the server
 checks every route, View and Procedure.

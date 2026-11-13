@@ -1,6 +1,12 @@
 /** Required application seam `page-renders-tool` (packages/mantle/tests/application-seams.ts). Public imports only, no casts. */
 import { defineAdmin } from "@aotter/mantle-admin/app";
 
+declare module "@aotter/mantle-admin/app" {
+  interface AdminMcpTools {
+    seam_tool: true;
+  }
+}
+
 interface Types {
   readonly views: { readonly tasks: { readonly input: object; readonly row: object; readonly mcp: true } };
   readonly collections: { readonly tasks: { readonly data: object } };

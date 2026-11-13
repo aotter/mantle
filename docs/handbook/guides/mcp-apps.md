@@ -940,9 +940,10 @@ of the default rows table, in the host's frame and theme. The page reads its own
 through the hooks (`useView("pending-requests", input)` calls the View's tool through
 the host), so use only `both` hooks and components, and render something sensible
 when a hook reads `unavailable`.
-The generated `admin-client.ts` records, for each View, `true` when it is an admin MCP tool and `null` when not; those
-Views and the admin operations are the names `renders` suggests. Any other string, such as an application's own tool
-listed in `adminMcpApps({ tools })`, is accepted; a page whose tool the App does not render is never shown. When several
+The generated `admin-client.ts` records, for each View, `true` when it is an admin MCP tool and `null` when not; `tsc`
+refuses a `renders` that is misspelt, names a collection, or names a View with no
+admin MCP tool. An application's own tool listed in `adminMcpApps({ tools })` is accepted once declared:
+`declare module "@aotter/mantle-admin/app" { interface AdminMcpTools { approve_request: true } }`. When several
 pages name one View, the first is shown.
 
 ### What `mantle bundle` checks

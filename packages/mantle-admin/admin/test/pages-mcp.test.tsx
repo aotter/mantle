@@ -11,6 +11,11 @@ interface Types {
   readonly operations: Record<never, never>;
 }
 const admin: AdminMeta<Types> = {};
+declare module "../src/app/define-admin" {
+  interface AdminMcpTools {
+    approve_request: true;
+  }
+}
 
 // tsc checks this file (`pnpm typecheck`): a `// @ts-expect-error` that stops erroring fails it
 describe("pages[].mcp", () => {
@@ -20,9 +25,18 @@ describe("pages[].mcp", () => {
     expect(defineAdmin(admin, { pages: [{ path: "plain", title: "Plain", element: <p>plain</p> }] }).pages[0]!.mcp).toBeUndefined();
   });
 
-  it("names an application's own tool, which `adminMcpApps({ tools })` lists, without a cast", () => {
-    const page = { path: "approve", title: "Approve", element: null, mcp: { renders: "approve_request" } };
+  it("names an application's own tool declared in AdminMcpTools, without a cast", () => {
+    const page = { path: "approve", title: "Approve", element: null, mcp: { renders: "approve_request" } } as const;
     expect(defineAdmin(admin, { pages: [page] }).pages[0]!.mcp).toEqual({ renders: "approve_request" });
+  });
+
+  it("refuses a View without an admin MCP tool, a misspelt View, and an undeclared name", () => {
+    // @ts-expect-error this View has no admin MCP tool, so no host can open it
+    defineAdmin(admin, { pages: [{ path: "audit", title: "Audit", element: null, mcp: { renders: "internal-audit" } }] });
+    // @ts-expect-error a misspelt View
+    defineAdmin(admin, { pages: [{ path: "queue", title: "Queue", element: null, mcp: { renders: "pending-request" } }] });
+    // @ts-expect-error a collection is not a View
+    defineAdmin(admin, { pages: [{ path: "queue", title: "Queue", element: null, mcp: { renders: "requests" } }] });
   });
 
   it("accepts any View name where there are no generated types (the built-in entry)", () => {
