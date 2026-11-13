@@ -82,8 +82,9 @@ dist-tag DELETE only added failure and re-run state.
   directly, rebased or force-updated. Both branches share one ruleset: PR, one
   approval, resolved threads and a current-base `Typecheck + tests` check.
   On a PR into `main` that check is the whole Full checks suite, for every
-  author. On a PR into `develop` it runs for Dependabot only and is skipped,
-  which counts as passing, for everyone else.
+  author. On a ready PR into `develop` it is the PR CI (`ci.yml`: typecheck,
+  package tests against a PostgreSQL service and `test:native`), for every
+  author; on a draft it is skipped, which counts as passing.
 - Stable is the only release that moves `latest`. A prerelease channel keeps
   its last version when a later stable publishes.
 - Publish uses `--tag mantle-release`. `mantle-release` is an internal
@@ -121,8 +122,11 @@ dist-tag DELETE only added failure and re-run state.
 3. Review API compatibility and migration instructions for actual consumers.
    Frozen legacy consumers stay on their pinned version; do not make them
    follow new Core.
-4. Run `pnpm check`, including the reference service from exact packed
-   tarballs, skills, release invariants, types and tests. The controller runs
+4. Run `pnpm check:pg` (`pnpm check` and `test:native` against a throwaway
+   PostgreSQL), including the reference service from exact packed
+   tarballs, skills, release invariants, types and tests; plain `pnpm check`
+   skips every PostgreSQL test. The version PR body says which of the two ran.
+   The controller runs
    the same `pnpm check` against a PostgreSQL service (`MANTLE_PG_URL`), then
    four-target native conformance (`test:native`), before it tags. Inspect the `@aotter/mantle` docs payload
    (`scripts/sync-package-docs.mjs`: the upgrade guide, handbook, selected
@@ -147,7 +151,8 @@ dist-tag DELETE only added failure and re-run state.
    version PR head, and link the green run from the version PR. A promotion
    PR into `main` runs the same workflow by itself.
 5. Freeze the PR head for self review; that Full checks run must pass before
-   merge, since a PR into `develop` runs no CI of its own. Merge into
+   merge, besides the PR's own `develop` CI, which skips the Chrome, Wrangler/D1
+   and packed-example checks. Merge into
    `develop` by rebase or with a merge commit: the controller needs the tip to
    be the commit GitHub records as that PR's merge, which both produce. A
    promotion into `main` is different and always takes a merge commit (below).

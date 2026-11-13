@@ -2,8 +2,9 @@ name: Full checks
 
 # The gate on `main`: every PR into `main` (promotion, hotfix) runs the whole suite, whoever opened it. Drafts run too.
 # Manual as well: Actions → Full checks → Run workflow (on any branch; the dispatch entry comes from main). Run it
-# before an alpha, which releases from `develop` and never passes this gate, or when a change may behave
-# differently on Linux. PRs into `develop` otherwise rely on local `pnpm check`.
+# before an alpha, which releases from `develop` and never passes this gate, or on a branch before merging a change to
+# the PostgreSQL driver/dialect, auth, the kernel request pipeline or generator output. PRs into `develop` run the
+# lighter ci.yml (typecheck, package tests and test:native against PostgreSQL) plus local `pnpm check:pg`.
 on:
   pull_request:
     branches: [main]

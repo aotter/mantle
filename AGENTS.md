@@ -18,8 +18,20 @@ Repository safety gates:
   the default branch, so pass `--base develop` — an unspecified base targets
   `main`, which takes only promotion and hotfix PRs.
 - Keep Runtime adapter-neutral and the v2 manifest grammar closed.
-- Use the narrowest relevant check while editing; run `pnpm check` for broad
+- Use the narrowest relevant check while editing; run `pnpm check:pg` for broad
   changes.
+
+PostgreSQL is a first-class target (production runs Cloudflare Workers + PostgreSQL):
+
+- A PR's local evidence is `pnpm check:pg` (`pnpm check` plus `test:native` against a
+  throwaway PostgreSQL), not plain `pnpm check`, which skips every PostgreSQL test and
+  says so on its last line. The PR body names which of the two ran.
+- Before merging a change to the PostgreSQL driver/dialect, auth, the kernel request
+  pipeline or generator output, dispatch Linux Full checks on the branch
+  (`gh workflow run full-checks.yml --ref <branch>`) and link the green run.
+- Local Wrangler runs `cloudflare-postgres` over a direct database connection, not
+  Hyperdrive. Claim nothing about Hyperdrive pooling, caching or limits without
+  evidence from a deployed Hyperdrive configuration.
 
 `CLAUDE.md` is a compatibility pointer, not a second instruction authority.
 Applications read version-matched instructions from their installed Core

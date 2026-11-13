@@ -1,10 +1,11 @@
 name: CI
 
-# ponytail: CI gates `main` only. A PR into `main` runs the whole suite for every author (full-checks.yml); a PR into
-# `develop` merges on a local `pnpm check` (exit code 0) plus review and is fixed forward.
-# The one exception is here: Dependabot PRs into `develop`. dependabot-automerge.yml approves and queues patch and
-# digest bumps, and nobody ran those locally, so these light jobs are what the auto-merge waits for.
-# For every other author the jobs skip, and a skipped required check counts as passing.
+# ponytail: every ready PR into `develop` runs these two light jobs, whoever opened it, so PostgreSQL is tested before
+# merge rather than first at release (#1979 broke a PostgreSQL-only test that local runs had skipped). Package tests run
+# against a PostgreSQL 16 service with full-checks.yml's variables, plus native four-target conformance (`test:native`,
+# including `cloudflare-postgres` under local Wrangler). Linux Full checks (full-checks.yml) still gates `main` and runs
+# by hand before a release; this workflow does not replace it. Drafts skip until marked ready, and a skipped required
+# check counts as passing. dependabot-automerge.yml queues Dependabot patch and digest bumps behind these jobs.
 on:
   pull_request:
     branches: [develop]
@@ -24,7 +25,7 @@ jobs:
   lint:
     name: Typecheck + tests
     needs: [typecheck, tests]
-    if: ${{ always() && !github.event.pull_request.draft && github.event.pull_request.user.login == 'dependabot[bot]' }}
+    if: ${{ always() && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     steps:
       - name: Require both jobs
@@ -35,7 +36,7 @@ jobs:
 
   typecheck:
     name: Typecheck + gates
-    if: ${{ !github.event.pull_request.draft && github.event.pull_request.user.login == 'dependabot[bot]' }}
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -77,10 +78,21 @@ jobs:
         run: pnpm run check:release && node scripts/check-packed-consumer.mjs --self-test
 
   tests:
-    name: Package tests
-    if: ${{ !github.event.pull_request.draft && github.event.pull_request.user.login == 'dependabot[bot]' }}
+    name: Package tests (PostgreSQL)
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: mantle, POSTGRES_PASSWORD: mantle, POSTGRES_DB: mantle }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    # Same values as full-checks.yml. Wrangler's local Hyperdrive binding needs the password in the URL.
+    env:
+      MANTLE_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+      MANTLE_NEXT_BUN_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+      MANTLE_NEXT_WORKER_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -102,3 +114,6 @@ jobs:
 
       - name: Test packages concurrently
         run: pnpm test
+
+      - name: Native four-target conformance
+        run: pnpm --filter @aotter/mantle test:native

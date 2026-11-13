@@ -13,7 +13,7 @@ checkout dependency; the frozen legacy line is never changed by one.
 Prepare a same-repository release PR: prove the new version/tag unused,
 preview native release notes and correct PR metadata, align package/plugin
 versions and the versioned reference-service links (see
-docs/release-process.md step 2), inspect the packed docs payload, run `pnpm check` and
+docs/release-process.md step 2), inspect the packed docs payload, run `pnpm check:pg` and
 `pnpm check:init-audit` (the `mantle init` app installs without high or critical advisories;
 needs the network) and review its exact SHA. The reference consumer gate runs
 from packed packages outside workspace links. After bumping `package.json`, regenerate

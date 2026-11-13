@@ -16,9 +16,9 @@
 
 ## Test plan
 
-- [ ] `pnpm build`
-- [ ] `pnpm typecheck`
-- [ ] `pnpm test`
+- [ ] `pnpm check:pg` (PostgreSQL included)
+- [ ] Only `pnpm check`, PostgreSQL tests skipped, because:
+- [ ] Linux Full checks run on this branch (link; needed for PostgreSQL driver/dialect, auth, kernel request pipeline or generator output changes):
 - [ ] Not run / not applicable:
 - [ ] Other:
 
