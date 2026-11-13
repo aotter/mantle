@@ -214,7 +214,11 @@ export type PostgresResult = any[] & { readonly count: number | null };
  * COMMIT only after `fn` resolves.
  */
 export interface Postgres {
-  unsafe(text: string, values: any[]): PromiseLike<PostgresResult>;
+  /**
+   * Mantle passes `{ prepare: true }` for its own statements: postgres.js otherwise sends `unsafe` as an unnamed,
+   * describe-first statement whatever the client's `prepare`. Bun.SQL and adapters may ignore it.
+   */
+  unsafe(text: string, values: any[], options?: { prepare?: boolean }): PromiseLike<PostgresResult>;
   /** The transaction handle only needs `unsafe`: postgres.js 3.4.9 types it without `begin`. */
   begin<T>(options: string, fn: (tx: Unsafe) => Promise<T>): PromiseLike<T>;
 }

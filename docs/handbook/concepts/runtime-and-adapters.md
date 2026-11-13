@@ -17,7 +17,7 @@ Destructive changes and type changes need explicit data migration. Mantle drops 
 
 ## Drivers and dialects
 
-The driver layer is open: handles are structural contracts, not a registration API. PostgreSQL needs `unsafe(text, values)` and `begin(options, fn)` from `@aotter/mantle/contracts`; SQLite uses D1's prepare/bind/all/batch shape or bun:sqlite's query/transaction shape. Bun.SQL and postgres.js fit directly. See [adapting a driver](../guides/postgres-adapters.md).
+The driver layer is open: handles are structural contracts, not a registration API. PostgreSQL needs `unsafe(text, values, options?)` and `begin(options, fn)` from `@aotter/mantle/contracts`; SQLite uses D1's prepare/bind/all/batch shape or bun:sqlite's query/transaction shape. Bun.SQL and postgres.js fit directly. See [adapting a driver](../guides/postgres-adapters.md).
 
 Users may supply anything that executes the emitted SQL, including WASM SQLite persisted to IndexedDB, at their own risk. Mantle promises behavior only on supported drivers: bun:sqlite, D1, Bun.SQL and postgres.js. A structural match alone does not prove transaction, result or error semantics.
 
@@ -96,6 +96,8 @@ Session state does not survive between transactions there (Cloudflare resets a c
 does not support session-level advisory locks), so use transaction-scoped forms: `pg_advisory_xact_lock` rather than
 `pg_advisory_lock`, `SET LOCAL` rather than `SET`; both end with the transaction. Keep the callback short and make no external calls inside it: the open transaction holds its
 connection and locks for as long as the Worker request awaits. Mantle sets no timeout; the Worker's limits and the role's
-`statement_timeout` and `idle_in_transaction_session_timeout` apply. Statement preparation is the postgres.js client's
-option, unchanged by Mantle. Disable Hyperdrive query caching as for every Mantle database
+`statement_timeout` and `idle_in_transaction_session_timeout` apply. Mantle sends its own statements as named prepared
+statements (`unsafe(text, values, { prepare: true })`); `sql.unsafe` that your code calls keeps postgres.js's unprepared
+default unless you pass the option. The client options Mantle recommends on Workers, and why, are in
+[PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md). Disable Hyperdrive query caching as for every Mantle database
 ([deploy and operate](../cloudflare/deploy-and-operate.md)).
