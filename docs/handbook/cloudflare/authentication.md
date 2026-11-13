@@ -5,7 +5,7 @@ Mantle supplies the database adapter, schema generation and caller resolution:
 
 | Mantle | What it does |
 | --- | --- |
-| `@aotter/mantle/auth/adapter` | `d1Adapter(env.DB)` / `postgresAdapter(sql)`: Better Auth's `database` on the same native handle as your data, no Kysely. `postgresAdapter` takes the PostgreSQL client the data layer uses, postgres.js (`cloudflare-postgres`, usually through Hyperdrive) or Bun.SQL; on Workers create that client per request, or per isolate with `max: 1`. Both pass Better Auth's official adapter suite (`@better-auth/test-utils/adapter`). |
+| `@aotter/mantle/auth/adapter` | `d1Adapter(env.DB)` / `postgresAdapter(sql)`: Better Auth's `database` on the same native handle as your data, no Kysely. `postgresAdapter` takes the PostgreSQL client the data layer uses, postgres.js (`cloudflare-postgres`, usually through Hyperdrive) or Bun.SQL; on Workers create the client per request and give a Better Auth instance kept for the isolate a handle that resolves the current request's client ([PostgreSQL through Hyperdrive](postgres-hyperdrive.md#better-auth-on-postgresql)); a postgres.js client kept at module scope fails on the next request. Both pass Better Auth's official adapter suite (`@better-auth/test-utils/adapter`). |
 | `mantle generate … --auth ./auth.ts` | Adds the tables Better Auth declares for your options (`getSchema`) to `schema.sql`. |
 | `@aotter/mantle/generate/auth` | Programmatic `generateFromSources({ target, sources, auth: authOptions, ... })`; the selected entry types `auth` as Better Auth options. |
 | `@aotter/mantle/auth` | `authLoader` and `resolveCaller(request, loader, { audience })`: the `Caller` that generated queries take. |

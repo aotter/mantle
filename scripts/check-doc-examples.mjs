@@ -18,6 +18,7 @@ const HANDBOOK = [
   "guides/email.md",
   "guides/sql-patterns.md",
   "guides/revisions.md",
+  "cloudflare/postgres-hyperdrive.md",
 ];
 const requested = process.argv.slice(2).map(path => resolve(path));
 const nativePages = requested.length ? requested : HANDBOOK.map(page => join(root, "docs/handbook", page));
@@ -26,7 +27,7 @@ for (const page of nativePages) {
   const blocks = [...source.matchAll(/^```yaml\n([\s\S]*?)^```$/gm)].map(match => match[1]);
   if (
     !blocks.some(block => block.includes("apiVersion: cms.mantle.aotter.net/v2")) &&
-    !["postgres-adapters.md", "email.md"].some(name => page.endsWith("/" + name))
+    !["postgres-adapters.md", "email.md", "postgres-hyperdrive.md"].some(name => page.endsWith("/" + name))
   )
     throw new Error(`${page}: no v2 manifest block`);
   const project = mkdtempSync(join(tmpdir(), "mantle-native-docs-"));
@@ -35,6 +36,9 @@ for (const page of nativePages) {
     mkdirSync(join(project, "node_modules/@cloudflare"), { recursive: true });
     symlinkSync(nativeSdk, join(project, "node_modules/@aotter/mantle"), "dir");
     symlinkSync(join(nativeSdk, "node_modules/better-auth"), join(project, "node_modules/better-auth"), "dir");
+    symlinkSync(join(nativeSdk, "node_modules/postgres"), join(project, "node_modules/postgres"), "dir");
+    mkdirSync(join(project, "node_modules/@types"), { recursive: true });
+    symlinkSync(join(nativeSdk, "node_modules/@types/node"), join(project, "node_modules/@types/node"), "dir");
     symlinkSync(
       join(nativeSdk, "node_modules/@cloudflare/workers-types"),
       join(project, "node_modules/@cloudflare/workers-types"),
@@ -51,9 +55,11 @@ for (const page of nativePages) {
     }
     const code = [...source.matchAll(/^```ts\n([\s\S]*?)^```$/gm)].map(match => match[1]);
     for (const [index, block] of code.entries()) {
-      const directory = block.includes("../generated/") ? join(project, "src") : project;
+      // A block that starts with `// src/<name>.ts` is that file, so sibling blocks can import it.
+      const named = block.match(/^\/\/ (src\/[\w-]+\.ts)\b/)?.[1];
+      const directory = named || block.includes("../generated/") ? join(project, "src") : project;
       mkdirSync(directory, { recursive: true });
-      writeFileSync(join(directory, `example${index}.ts`), block);
+      writeFileSync(named ? join(project, named) : join(directory, `example${index}.ts`), block);
     }
     writeFileSync(
       join(project, "tsconfig.json"),
@@ -65,7 +71,8 @@ for (const page of nativePages) {
           strict: true,
           noEmit: true,
           skipLibCheck: true,
-          types: ["@cloudflare/workers-types"],
+          // nodejs_compat: Workers code may import node:async_hooks
+          types: ["@cloudflare/workers-types", "node"],
         },
         include: ["**/*.ts"],
       }),

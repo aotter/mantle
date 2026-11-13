@@ -1,6 +1,6 @@
 # Application-owned PostgreSQL adapters
 
-Bun.SQL and postgres.js satisfy `Postgres` from `@aotter/mantle/contracts` directly. Other drivers need `unsafe(text, values)` returning a row array with `.count`, and `begin(options, fn)` pinning one connection until the callback resolves and COMMIT succeeds. Preserve native SQLSTATE/severity evidence; generated writes classify uncertain commits.
+Bun.SQL and postgres.js satisfy `Postgres` from `@aotter/mantle/contracts` directly. Other drivers need `unsafe(text, values)` returning a row array with `.count` (Mantle passes a third argument, `{ prepare: true }`, which an adapter may ignore), and `begin(options, fn)` pinning one connection until the callback resolves and COMMIT succeeds. Preserve native SQLSTATE/severity evidence; generated writes classify uncertain commits.
 
 This node-postgres adapter accepts an app-owned `pg.Pool` through its structural shape:
 

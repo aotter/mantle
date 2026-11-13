@@ -23,9 +23,11 @@ import { context, guard } from "./transaction-context.js";
 const transactions = new WeakMap<Postgres, { failure?: { error: unknown } }>();
 const ISOLATION: readonly string[] = ["serializable", "repeatable read", "read committed", "read uncommitted"];
 
+/** postgres.js prepares named statements only when asked (its client `prepare: false` still wins); Bun.SQL always does. */
+const PREPARE = { prepare: true };
 export const read = (db: Unsafe, sql: string, binds: unknown[]): PromiseLike<PostgresResult> => {
   guard(db);
-  return db.unsafe(sql, binds);
+  return db.unsafe(sql, binds, PREPARE);
 };
 export async function run(db: Unsafe, sql: string, binds: unknown[]): Promise<{ rows: any[]; changes: number }> {
   const rows = await read(db, sql, binds);
@@ -153,9 +155,9 @@ export async function transaction<T>(
       // the COMMIT the server answers with ROLLBACK: settle every statement and refuse to commit after a failure.
       let settled: Promise<unknown> = Promise.resolve();
       const tx: Postgres = {
-        unsafe: (sql, values) => {
+        unsafe: (sql, values, options) => {
           if (!active) throw new Error("Transaction has ended.");
-          const result = Promise.resolve(handle.unsafe(sql, values));
+          const result = Promise.resolve(handle.unsafe(sql, values, options));
           settled = Promise.all([settled, result.catch(error => (marks.failure ??= { error }))]);
           return result;
         },
