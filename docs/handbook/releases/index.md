@@ -49,7 +49,10 @@ move, and never booting 0.2 against a 0.1.x database.
   `prepare: false` still keeps statements unnamed; Bun.SQL is unchanged. Before upgrading a `cloudflare-postgres`
   application, confirm its Hyperdrive configuration has query caching disabled, as Mantle already requires: Hyperdrive
   did not cache unprepared queries, and now can. An adapter implementing `Postgres` may ignore the new third argument
-  (#2018). See [PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md).
+  (#2018). See [PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md). A migration that changes the
+  result columns of a statement a connection has already prepared (for example adds a column a `RETURNING *` returns)
+  makes that statement fail once inside a transaction with `0A000 cached plan must not change result type`: a
+  definite PostgreSQL error, so the write is rolled back and reported as failed, never `OUTCOME_UNKNOWN`.
 - **Better Auth on `cloudflare-postgres`: do not keep a postgres.js client per isolate.** The handbook said "per
   isolate with `max: 1`" was fine; in workerd such a client fails every other request ("Cannot perform I/O on behalf of
   a different request"). Keep the Better Auth instance per isolate and give `postgresAdapter` and
