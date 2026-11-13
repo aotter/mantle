@@ -48,7 +48,7 @@ The rules are in [schema installation and migrations](../concepts/runtime-and-ad
 
 For D1, create a migration with `pnpm exec wrangler d1 migrations create <database> <name>`, review its SQL, then rehearse `pnpm exec wrangler d1 migrations apply <database> --local` against copied data. Apply the reviewed migrations to the target before `wrangler deploy`. Initial DDL may be placed in the first migration for a new database.
 
-For PostgreSQL, use the app's migration tool and deployment credentials. Plan lock waits and long index builds there; request credentials need no DDL privileges. Configure session settings on the role/database as described in [native execution](../guides/native-execution.md#postgresql-settings). Hyperdrive query caching must be disabled for authority and mutation visibility.
+For PostgreSQL, use the app's migration tool and deployment credentials. Plan lock waits and long index builds there; request credentials need no DDL privileges. Configure session settings on the role/database as described in [native execution](../guides/native-execution.md#postgresql-settings). Hyperdrive query caching must be disabled for authority and mutation visibility. A transaction that mixes the application's own SQL with generated Procedures uses transaction-scoped locks and settings under Hyperdrive; see [your own SQL in a Store transaction](../concepts/runtime-and-adapters.md#your-own-sql-in-a-store-transaction).
 
 ## Latency placement and D1 read replication
 

@@ -34,6 +34,15 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ## 0.2.2 — in preparation
 
+### Upgrading to 0.2.2-alpha.4
+
+- **Application SQL in a Store transaction.** `store(db, caller).transaction((tx, db) => …, { isolation })` now declares
+  its second argument, the transaction's native handle, so an application runs its own SQL with generated Procedures in
+  one transaction without a cast. Code that imports `transaction` from `@aotter/mantle/internal/driver/postgres`
+  (0.2.2-alpha.2 and alpha.3) switches to it; that path stays for generated code, with no promise. A multi-statement
+  Procedure that fails inside a transaction now rolls it back even if the error is caught, as a batch already did
+  (#2015). See [your own SQL in a Store transaction](../concepts/runtime-and-adapters.md#your-own-sql-in-a-store-transaction).
+
 ### Upgrading to 0.2.2-alpha.3
 
 Pin the selected packages to `0.2.2-alpha.3` and regenerate: generated output now marks scope-gated targets, and
