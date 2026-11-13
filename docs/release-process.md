@@ -232,6 +232,23 @@ gh release edit v<version> --notes-file notes.md
 Add the version's entry to [Releases](handbook/releases/index.md) in the same
 pass, so the handbook and the GitHub release describe the same thing.
 
+### What the handbook's release notes keep
+
+The handbook records how to upgrade from one stable release to the next.
+Prerelease notes are working notes for people testing that prerelease, not a
+permanent record:
+
+- An alpha, beta or RC entry is short: what to pin, what a tester must change
+  to keep running, and what is not yet verified. It does not need a full
+  migration guide for a change that a later prerelease may reshape or undo.
+  GitHub's generated notes already list every merged PR.
+- When the stable is cut, replace that line's prerelease subsections with one
+  "Upgrading from `<previous stable>`" section that describes the final state
+  only. A change that was introduced and then reworked or reverted between
+  prereleases appears once, as it shipped, or not at all.
+- Do not edit the notes of a prerelease that is already published to match
+  this: its packed docs are immutable. Apply it from the next version PR on.
+
 After publication, move docs/examples that were pinned to a packed checkout
 back to registry installation with an updated lockfile, and close the gate
 issue with the run link and completion evidence.

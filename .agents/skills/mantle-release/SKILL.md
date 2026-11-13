@@ -26,7 +26,12 @@ docs/release-process.md: pin
 `promote/<version>` at that develop merge SHA, PR it into main, merge with a
 merge commit, dispatch with `--ref main`. Stable also needs recorded owner
 acceptance on the version's release-gate issue, and its entry added to
-docs/handbook/releases/index.md. Do not infer permission to publish from an
+docs/handbook/releases/index.md. That page keeps stable-to-stable upgrade
+notes: a prerelease entry stays brief (what to pin, what a tester must change,
+what is unverified), and at stable the line's prerelease subsections are
+replaced by one "Upgrading from `<previous stable>`" section describing the
+final state only (docs/release-process.md, "What the handbook's release notes
+keep"). Do not infer permission to publish from an
 implementation PR. Before every release, alpha included, run Linux Full checks
 on the frozen version PR head (docs/release-process.md step 4). Before an alpha
 or beta, also run the startup and request-cost checkpoint below.
