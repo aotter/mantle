@@ -942,7 +942,9 @@ the host), so use only `both` hooks and components, and render something sensibl
 when a hook reads `unavailable`.
 The generated `admin-client.ts` records, for each View, `true` when it is an admin MCP tool and `null` when not; `tsc`
 refuses a `renders` that is misspelt, names a collection, or names a View with no
-admin MCP tool. When several pages name one View, the first is shown.
+admin MCP tool. An application's own tool listed in `adminMcpApps({ tools })` is accepted once declared:
+`declare module "@aotter/mantle-admin/app" { interface AdminMcpTools { approve_request: true } }`. When several
+pages name one View, the first is shown.
 
 ### What `mantle bundle` checks
 
@@ -1064,7 +1066,11 @@ claim to test them. A Procedure action form does not mount these slots.
 It needs `playwright-core` (`npm install -D playwright-core`) and Chrome or Chromium:
 run `npx playwright-core install chromium`, or set `MANTLE_TEST_CHROMIUM` to a Chrome or
 Chromium executable. With no browser the test fails, saying so; it never skips. Import
-`checkMcpApp` from `@aotter/mantle-admin/testing` to call it yourself. For a real host
+`checkMcpApp` from `@aotter/mantle-admin/testing` to call it yourself:
+`checkMcpApp({ catalogue, html?, inspect? })`. `inspect({ tool, theme, frame })` is called for each scenario after its
+built-in checks, with the App's Playwright `Frame` still open (not when the frame never opened); what it throws, or not
+settling within 10 s, is that scenario's problem, and requests and console errors it causes are collected. `frame`'s
+type comes from the optional peer `playwright-core`. For a real host
 (Claude's custom connector, ChatGPT), follow the manual checks under
 [The Admin App in a host](#the-admin-app-in-a-host).
 

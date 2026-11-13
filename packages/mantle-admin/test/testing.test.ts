@@ -70,6 +70,32 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
     expect(await attempt(await build("ok", ""))).toBeUndefined();
   }, 180_000);
 
+  it("calls inspect with each scenario's open App after the built-in checks, and reports what it throws, logs or leaves unsettled", async () => {
+    const html = await build("inspect", "");
+    const seen: string[] = [];
+    const message = await checkMcpApp({
+      catalogue,
+      html,
+      inspect: async ({ tool, theme, frame }) => {
+        seen.push(`${tool} ${theme} ${await frame.locator('[data-slot="app-page"], [data-slot="app-rows"]').count()}`);
+        if (tool === "queue" && theme === "dark") throw new Error("inspect-failure");
+        if (tool === "pending" && theme === "light") await frame.evaluate(() => console.error("inspect-console"));
+        if (tool === "pending" && theme === "dark") await new Promise(() => undefined);
+      },
+    }).then(
+      () => undefined,
+      (error: Error) => error.message,
+    );
+    expect(seen.sort()).toEqual(["pending dark 1", "pending light 1", "queue dark 1", "queue light 1"]);
+    expect(message).toContain("page for queue, dark host: inspect-failure");
+    expect(message).toContain("cell:view:pending.item, light host: console error: inspect-console");
+    expect(message).toContain("cell:view:pending.item, dark host: inspect did not settle within 10000 ms");
+    expect(message).not.toContain("page for queue, light host");
+    // the seam's consumer module, against the same App
+    const { check } = await import("./seams/mcp-app-inspect.js");
+    await expect(check(html)).resolves.toBeUndefined();
+  }, 180_000);
+
   it("fails an override that makes a network request at render, which the build cannot see, naming the URL", async () => {
     // the origin is put together at run time
     const html = await build(

@@ -86,6 +86,14 @@ export const SEAMS: readonly Seam[] = [
     check: "packages/mantle/tests/seams/input-conversion.ts",
   },
   {
+    id: "procedure-input",
+    package: "@aotter/mantle",
+    entry: "generated validation/procedures/<name>.ts input(raw)",
+    stacks: ALL,
+    decided: SEAM,
+    check: "packages/mantle/tests/seams/procedure-input.ts",
+  },
+  {
     id: "tool-meta",
     package: "@aotter/mantle",
     subpath: "./mcp",
@@ -136,6 +144,27 @@ export const SEAMS: readonly Seam[] = [
     stacks: [],
     decided: "#1969",
     check: "packages/mantle-admin/test/seams/admin-app-tools.ts",
+  },
+  {
+    id: "page-renders-tool",
+    package: "@aotter/mantle-admin",
+    subpath: "./app",
+    exports: ["defineAdmin"],
+    entry: "interface AdminMcpTools; defineAdmin(meta, { pages: [{ mcp: { renders } }] })",
+    stacks: [],
+    decided: SEAM,
+    check: "packages/mantle-admin/test/seams/page-renders.ts",
+  },
+  {
+    id: "mcp-app-inspect",
+    package: "@aotter/mantle-admin",
+    subpath: "./testing",
+    exports: ["checkMcpApp"],
+    entry: "checkMcpApp({ catalogue, html, inspect })",
+    stacks: [],
+    decided: SEAM,
+    check: "packages/mantle-admin/test/seams/mcp-app-inspect.ts",
+    run: false, // executed in test/testing.test.ts (a browser test)
   },
   {
     id: "upload-card-tool",

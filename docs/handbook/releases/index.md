@@ -47,6 +47,14 @@ move, and never booting 0.2 against a 0.1.x database.
   input forever; now it waits at most `inputTimeoutMs` (5,000 ms by default) after connecting, then calls without the
   forwarded arguments, and reads the purposes again if the input arrives later. Pass `inputTimeoutMs: false` to keep
   waiting as before. A value that is not a positive integer up to 2,147,483,647 throws at configuration.
+- **Typed input for a bare Procedure.** Each declared Procedure's `validation/procedures/<name>.ts` also exports
+  `input(raw)`, which validates and converts a copy as the surfaces do, typed so that the bare Procedure takes it with
+  no cast or `?? null`; a JSON-bound field is the branded `JsonText`. Existing generated input types are unchanged
+  (#2022). See [the generated surface](../reference/surface.md).
+- `pages[].mcp.renders` in `defineAdmin` also accepts an application's own tool names that it declares by merging
+  `interface AdminMcpTools` from `@aotter/mantle-admin/app`; other names are still refused.
+- `checkMcpApp` from `@aotter/mantle-admin/testing` takes `inspect({ tool, theme, frame })`, called with the open App after
+  each scenario's built-in checks (at most 10 s each).
 - `body(request, limit?, refuse?)` from `@aotter/mantle/rest` takes an optional `refuse(message)` for its refusals; a
   `limit` that is not a positive safe integer throws a `TypeError`. `convertInput(input, convert)` is exported from
   `@aotter/mantle/contracts`.

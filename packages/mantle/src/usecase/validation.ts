@@ -187,6 +187,8 @@ const condition = (type: string): string =>
 const typeCheck = (types: readonly string[]) =>
   `if (!(${types.map(type => `(${condition(type)})`).join(" || ")})) fail(path, ${q(`Expected ${types.join(" or ")}.`)});`;
 
+/** A Procedure's typed `input`: its bare input type (`name` exported from `from`) and its surfaces' `convert` table. */
+export type TypedInput = { readonly from: string; readonly name: string; readonly convert: string };
 export function emitValidation(
   plan: {
     views: Readonly<Record<string, { input?: JsonSchema }>>;
@@ -195,6 +197,7 @@ export function emitValidation(
   refuse: (path: string, message: string) => void = (path, message) => {
     throw Error(`${path}: ${message}`);
   },
+  typed: Readonly<Record<string, TypedInput>> = {},
 ): Record<string, string> {
   const files: Record<string, string> = {};
   for (const [kind, operations] of [
@@ -390,9 +393,17 @@ export function emitValidation(
         ...(measured ? ["bytes"] : []),
         ...(fields ? ["query as read"] : []),
       ];
-      const code = `${helpers.length ? `import { ${helpers.join(", ")} } from "@aotter/mantle/internal/validation";\n` : ""}${formats.size ? `import { ${[...formats].join(", ")} } from "@aotter/mantle/internal/scalars";\n` : ""}${[...patterns].map(([pattern, name]) => `const ${name} = new RegExp(${q(pattern)});\n`).join("")}${functions.join("\n")}
+      // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+      // `input(raw)`: `validate`, then the surfaces' conversion (`convertInput`) on a shallow copy, typed as the bare Procedure's
+      // input with each JSON-bound field as `JsonText`.
+      const typedInput = kind === "procedures" ? typed[name] : undefined;
+      const code = `${helpers.length ? `import { ${helpers.join(", ")} } from "@aotter/mantle/internal/validation";\n` : ""}${typedInput ? `${typedInput.convert ? 'import { convert } from "@aotter/mantle/internal/surface";\n' : ""}import type { ${typedInput.name === "Input" ? "Input" : `${typedInput.name} as Input`} } from ${q(typedInput.from)};\n` : ""}${formats.size ? `import { ${[...formats].join(", ")} } from "@aotter/mantle/internal/scalars";\n` : ""}${[...patterns].map(([pattern, name]) => `const ${name} = new RegExp(${q(pattern)});\n`).join("")}${functions.join("\n")}
 export function validate(raw:unknown):Record<string,unknown> { ${validate}(raw,${q(base)}${recursive ? ",0" : ""}); return raw as Record<string,unknown>; }
-${fields ? `export const query = (params:URLSearchParams) => read(params, validate, ${q(`${kind}/${name}`)}, ${q(fields)});\n` : ""}`;
+${fields ? `export const query = (params:URLSearchParams) => read(params, validate, ${q(`${kind}/${name}`)}, ${q(fields)});\n` : ""}${
+  typedInput
+    ? `export function input(raw:unknown):Input { const value = { ...validate(raw) };${typedInput.convert ? ` convert(value, ${typedInput.convert});` : ""} return value as Input; }\n`
+    : ""
+}`;
       files[file] = code;
     }
   return files;

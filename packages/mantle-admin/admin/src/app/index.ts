@@ -8,6 +8,7 @@ export type {
   AdminComponents,
   AdminConfig,
   AdminMcpCsp,
+  AdminMcpTools,
   AdminNav,
   AdminPage,
   AdminPageHeader,
