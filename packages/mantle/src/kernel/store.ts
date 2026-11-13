@@ -223,8 +223,14 @@ type BoundOperations<O> = {
   };
 };
 type Tx<T extends Record<string, Table>, O> = Store<T> & BoundOperations<O>;
-type Interactive<T extends Record<string, Table>, O> = {
-  transaction<R>(fn: (tx: Tx<T, O>) => Promise<R>, options?: TransactionOptions): Promise<R>;
+type Interactive<T extends Record<string, Table>, O, H> = {
+  /**
+   * One native transaction. `tx` is this Store bound to it; `db` is the transaction's own handle, for the application's
+   * SQL and for generated Views/Procedures, which join it. Statements on `db` run with the database role's rights,
+   * outside the row rules. A failed multi-statement Procedure or batch rolls it back even if caught; on PostgreSQL, so does
+   * any failed statement.
+   */
+  transaction<R>(fn: (tx: Tx<T, O>, db: H) => Promise<R>, options?: TransactionOptions): Promise<R>;
 };
 
 interface Policy {
@@ -277,7 +283,7 @@ export function createStore<
   db: H,
   caller: Caller,
   ...options: [C] extends [never] ? [] : [options: C]
-) => Store<T> & BoundOperations<O> & (D extends Required<Pick<Driver<H>, "transaction">> ? Interactive<T, O> : {}) {
+) => Store<T> & BoundOperations<O> & (D extends Required<Pick<Driver<H>, "transaction">> ? Interactive<T, O, H> : {}) {
   const prepared = new Map<string, Prepared>();
   const prepare = (name: string): Prepared => {
     let p = prepared.get(name);

@@ -24,6 +24,7 @@ import { storeEnv, verifyStore } from "../tests/store-scenarios.js";
 import { verifyTtl } from "../tests/ttl-scenarios.js";
 import { verifyPublishing } from "../tests/publishing-scenarios.js";
 import { verifySearch } from "../tests/search-scenarios.js";
+import { verifyApplicationTransaction } from "../tests/postgres-transaction-scenarios.js";
 const base = resolve(import.meta.dir, "..");
 const targets: Target[] = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"];
 const args = process.argv.slice(2);
@@ -47,6 +48,7 @@ const sources = await loadFixtureSources(
   "publishing.yaml",
   "search.yaml",
   "user-fields.yaml",
+  "app-transaction.yaml",
 );
 for (const target of selected ? [selected as Target] : targets) {
   const files = await generateOrThrow(target, sources);
@@ -130,6 +132,15 @@ for (const target of selected ? [selected as Target] : targets) {
           ...(await sql.unsafe(postgresOracleSql(text), [...values])),
         ]),
       );
+      (result as any).applicationTransaction = await verifyApplicationTransaction({
+        app: bare,
+        connect: async () => {
+          const db = new SQL({ url: connectionString, max: 1 });
+          await db.unsafe(`SET search_path TO ${schema}`);
+          return db;
+        },
+        end: db => (db as SQL).close(),
+      });
     } finally {
       await sql.close();
     }
@@ -148,7 +159,7 @@ for (const target of selected ? [selected as Target] : targets) {
     const sql = unstable_splitSqlQuery(ddl);
     await writeFile(
       workerFile,
-      `import * as bare from './generated.ts';\nimport { verifyBareApplication, handwrittenListSql } from '${resolve(base, "tests/native-scenarios.ts")}';\nimport { postgresOracleSql } from '${resolve(base, "tests/apps/oracle.ts")}';\nimport { user, fixtureCallerFactory } from '${resolve(base, "tests/apps/fixtures.ts")}';\nimport { authenticatedAs as userCaller } from '@aotter/mantle/testing';\nimport { verifyUserFields } from '${resolve(base, "tests/user-fields-scenarios.ts")}';\nfixtureCallerFactory(userCaller);\nimport { storeEnv, verifyStore } from '${resolve(base, "tests/store-scenarios.ts")}';\nimport { verifyPublishing } from '${resolve(base, "tests/publishing-scenarios.ts")}';\nimport { verifyTtl } from '${resolve(base, "tests/ttl-scenarios.ts")}';\nimport { verifySearch } from '${resolve(base, "tests/search-scenarios.ts")}';\nconst bareViews = bare.views, bareProcedures = bare.procedures;\n${postgres ? `import postgres from 'postgres';` : ""}\nexport default { async fetch(_request, env) {\n if (new URL(_request.url).pathname === '/health') return new Response('ready');\n const db = ${postgres ? "postgres(env.HYPERDRIVE.connectionString,{max:1})" : "env.DB"};\n try {\n${postgres ? ` if (!new URL(_request.url).pathname.startsWith('/read-')) { await db.unsafe('CREATE SCHEMA ${schema}'); await db.unsafe('SET search_path TO ${schema}'); await db.unsafe(${JSON.stringify(ddl)}); }` : ` if (!new URL(_request.url).pathname.startsWith('/read-')) for (const sql of ${JSON.stringify(sql)}) await db.prepare(sql).run();`}\n if (new URL(_request.url).pathname.startsWith('/read-')) {\n   ${postgres ? `await db.unsafe('SET search_path TO ${schema}');` : ""}\n   const subject='purchase-owner-a'; const owner=user(subject);\n   let rows; for(let batch=0;batch<20;batch++){\n     if(new URL(_request.url).pathname === '/read-generated') rows=await bareViews['purchase-list'](db,owner,{});\n     else { if(owner.kind !== 'user') throw new Error('UNAUTHENTICATED'); const text=new URL(_request.url).pathname === '/read-native-canonical' ? ${JSON.stringify(canonicalSql)} : ${postgres ? "postgresOracleSql(handwrittenListSql(false))" : "handwrittenListSql(true)"}; rows=${postgres ? "await db.unsafe(text,[subject])" : "(await db.prepare(text).bind(subject).all()).results"}; }\n   }\n   return Response.json(rows);\n }\n const result = await verifyBareApplication(async (kind,name,owner,input) => structuredClone(await (kind==='view'?bareViews:bareProcedures)[name](db,owner===null?{kind:'anonymous'}:user(owner),input)), async (sql,values=[]) => ${postgres ? "structuredClone(await db.unsafe(postgresOracleSql(sql),values))" : "(await db.prepare(sql).bind(...values).all()).results"}, ${!postgres}, ${includeBench});\n const handle = db; const nativeSql = async (sql,values=[]) => ${postgres ? "[...await handle.unsafe(postgresOracleSql(sql),values)]" : "(await db.prepare(sql).bind(...values).all()).results"};\n result.userFields = await verifyUserFields(bare, handle, userCaller);\n result.publishing = await verifyPublishing(bare, handle);\n result.search = await verifySearch(bare, handle);\n await verifyTtl(bare, handle, ${!postgres}, nativeSql);\n result.store = await verifyStore(storeEnv(bare, handle, ${!postgres}, nativeSql));\n return Response.json(result);\n } catch(error) { return Response.json({error:String(error),stack:error.stack,actual:Array.isArray(error.actual)?error.actual[0]:error.actual,expected:Array.isArray(error.expected)?error.expected[0]:error.expected},{status:500}); } finally { ${postgres ? "await db.end();" : ""} }\n} };\n`,
+      `import * as bare from './generated.ts';\nimport { verifyBareApplication, handwrittenListSql } from '${resolve(base, "tests/native-scenarios.ts")}';\nimport { postgresOracleSql } from '${resolve(base, "tests/apps/oracle.ts")}';\nimport { user, fixtureCallerFactory } from '${resolve(base, "tests/apps/fixtures.ts")}';\nimport { authenticatedAs as userCaller } from '@aotter/mantle/testing';\nimport { verifyUserFields } from '${resolve(base, "tests/user-fields-scenarios.ts")}';\nfixtureCallerFactory(userCaller);\nimport { storeEnv, verifyStore } from '${resolve(base, "tests/store-scenarios.ts")}';\nimport { verifyPublishing } from '${resolve(base, "tests/publishing-scenarios.ts")}';\nimport { verifyTtl } from '${resolve(base, "tests/ttl-scenarios.ts")}';\nimport { verifySearch } from '${resolve(base, "tests/search-scenarios.ts")}';\nimport { verifyApplicationTransaction } from '${resolve(base, "tests/postgres-transaction-scenarios.ts")}';\nconst bareViews = bare.views, bareProcedures = bare.procedures;\n${postgres ? `import postgres from 'postgres';` : ""}\nexport default { async fetch(_request, env) {\n if (new URL(_request.url).pathname === '/health') return new Response('ready');\n const db = ${postgres ? "postgres(env.HYPERDRIVE.connectionString,{max:1})" : "env.DB"};\n try {\n${postgres ? ` if (!new URL(_request.url).pathname.startsWith('/read-')) { await db.unsafe('CREATE SCHEMA ${schema}'); await db.unsafe('SET search_path TO ${schema}'); await db.unsafe(${JSON.stringify(ddl)}); }` : ` if (!new URL(_request.url).pathname.startsWith('/read-')) for (const sql of ${JSON.stringify(sql)}) await db.prepare(sql).run();`}\n if (new URL(_request.url).pathname.startsWith('/read-')) {\n   ${postgres ? `await db.unsafe('SET search_path TO ${schema}');` : ""}\n   const subject='purchase-owner-a'; const owner=user(subject);\n   let rows; for(let batch=0;batch<20;batch++){\n     if(new URL(_request.url).pathname === '/read-generated') rows=await bareViews['purchase-list'](db,owner,{});\n     else { if(owner.kind !== 'user') throw new Error('UNAUTHENTICATED'); const text=new URL(_request.url).pathname === '/read-native-canonical' ? ${JSON.stringify(canonicalSql)} : ${postgres ? "postgresOracleSql(handwrittenListSql(false))" : "handwrittenListSql(true)"}; rows=${postgres ? "await db.unsafe(text,[subject])" : "(await db.prepare(text).bind(subject).all()).results"}; }\n   }\n   return Response.json(rows);\n }\n const result = await verifyBareApplication(async (kind,name,owner,input) => structuredClone(await (kind==='view'?bareViews:bareProcedures)[name](db,owner===null?{kind:'anonymous'}:user(owner),input)), async (sql,values=[]) => ${postgres ? "structuredClone(await db.unsafe(postgresOracleSql(sql),values))" : "(await db.prepare(sql).bind(...values).all()).results"}, ${!postgres}, ${includeBench});\n const handle = db; const nativeSql = async (sql,values=[]) => ${postgres ? "[...await handle.unsafe(postgresOracleSql(sql),values)]" : "(await db.prepare(sql).bind(...values).all()).results"};\n result.userFields = await verifyUserFields(bare, handle, userCaller);\n result.publishing = await verifyPublishing(bare, handle);\n result.search = await verifySearch(bare, handle);\n await verifyTtl(bare, handle, ${!postgres}, nativeSql);\n result.store = await verifyStore(storeEnv(bare, handle, ${!postgres}, nativeSql));\n${postgres ? ` result.applicationTransaction = await verifyApplicationTransaction({ app: bare, connect: async () => { const c = postgres(env.HYPERDRIVE.connectionString,{max:1}); await c.unsafe('SET search_path TO ${schema}'); return c; }, end: c => c.end({ timeout: 1 }) });\n` : ""} return Response.json(result);\n } catch(error) { return Response.json({error:String(error),stack:error.stack,actual:Array.isArray(error.actual)?error.actual[0]:error.actual,expected:Array.isArray(error.expected)?error.expected[0]:error.expected},{status:500}); } finally { ${postgres ? "await db.end();" : ""} }\n} };\n`,
     );
     const config = {
       name: "mantle-next-native-local",
@@ -275,6 +286,7 @@ for (const target of selected ? [selected as Target] : targets) {
       checks: report.checks,
       userFieldChecks: (result as any).userFields,
       storeChecks: (result as any).store?.checks,
+      applicationTransactionChecks: (result as any).applicationTransaction?.checks,
       searchChecks: (result as any).search?.checks,
       seededRows: report.seededRows,
       ...(report.benchmark
