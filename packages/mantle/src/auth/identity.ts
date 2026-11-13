@@ -377,8 +377,8 @@ export function postgresBootstrapAdmin(db: Postgres, rule: BootstrapRule, source
       db,
       async tx => {
         const auth = typeof source === "function" ? source() : source;
-        await tx.unsafe("SELECT pg_advisory_xact_lock(hashtext($1))", [authNames(auth.options).table("user")]);
-        return tx.unsafe(promote(postgres.dialect, "$1", auth), [id]);
+        await pgRead(tx, "SELECT pg_advisory_xact_lock(hashtext($1))", [authNames(auth.options).table("user")]);
+        return pgRead(tx, promote(postgres.dialect, "$1", auth), [id]);
       },
       { isolation: "read committed" },
       "identity/bootstrap",

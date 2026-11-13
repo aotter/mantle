@@ -18,6 +18,7 @@ const HANDBOOK = [
   "guides/email.md",
   "guides/sql-patterns.md",
   "guides/revisions.md",
+  "cloudflare/postgres-hyperdrive.md",
 ];
 const requested = process.argv.slice(2).map(path => resolve(path));
 const nativePages = requested.length ? requested : HANDBOOK.map(page => join(root, "docs/handbook", page));
@@ -26,7 +27,7 @@ for (const page of nativePages) {
   const blocks = [...source.matchAll(/^```yaml\n([\s\S]*?)^```$/gm)].map(match => match[1]);
   if (
     !blocks.some(block => block.includes("apiVersion: cms.mantle.aotter.net/v2")) &&
-    !["postgres-adapters.md", "email.md"].some(name => page.endsWith("/" + name))
+    !["postgres-adapters.md", "email.md", "postgres-hyperdrive.md"].some(name => page.endsWith("/" + name))
   )
     throw new Error(`${page}: no v2 manifest block`);
   const project = mkdtempSync(join(tmpdir(), "mantle-native-docs-"));
@@ -35,6 +36,7 @@ for (const page of nativePages) {
     mkdirSync(join(project, "node_modules/@cloudflare"), { recursive: true });
     symlinkSync(nativeSdk, join(project, "node_modules/@aotter/mantle"), "dir");
     symlinkSync(join(nativeSdk, "node_modules/better-auth"), join(project, "node_modules/better-auth"), "dir");
+    symlinkSync(join(nativeSdk, "node_modules/postgres"), join(project, "node_modules/postgres"), "dir");
     symlinkSync(
       join(nativeSdk, "node_modules/@cloudflare/workers-types"),
       join(project, "node_modules/@cloudflare/workers-types"),

@@ -43,6 +43,13 @@ move, and never booting 0.2 against a 0.1.x database.
   Procedure that fails inside a transaction now rolls it back even if the error is caught, as a batch already did,
   and on PostgreSQL a transaction in which any statement failed now rejects on every client (Bun.SQL 1.3 resolved it
   although nothing was written) (#2015). See [your own SQL in a Store transaction](../concepts/runtime-and-adapters.md#your-own-sql-in-a-store-transaction).
+- **postgres.js: Mantle's statements are named prepared statements.** Mantle's driver now calls
+  `unsafe(text, values, { prepare: true })`; before, postgres.js sent every Mantle statement unnamed and describe-first,
+  which Cloudflare says Hyperdrive's transaction pooling "does not reliably support". A client created with
+  `prepare: false` still keeps statements unnamed; Bun.SQL is unchanged. Before upgrading a `cloudflare-postgres`
+  application, confirm its Hyperdrive configuration has query caching disabled, as Mantle already requires: Hyperdrive
+  did not cache unprepared queries, and now can. An adapter implementing `Postgres` may ignore the new third argument
+  (#2018). See [PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md).
 
 ### Upgrading to 0.2.2-alpha.3
 

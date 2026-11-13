@@ -193,6 +193,10 @@
           "link": "/cloudflare/media-r2"
         },
         {
+          "text": "PostgreSQL through Hyperdrive",
+          "link": "/cloudflare/postgres-hyperdrive"
+        },
+        {
           "text": "Deploy and operate",
           "link": "/cloudflare/deploy-and-operate"
         },
