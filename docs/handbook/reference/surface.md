@@ -145,8 +145,9 @@ Known paths with another method return 405 with an `Allow` header. All responses
 are validated together, with path parameters taking precedence. Bodies larger
 than 1,000,000 bytes are refused; `content-length` is checked before reading. The same reader is public for the
 application's own routes: `body(request, limit?, refuse?)` from `@aotter/mantle/rest` answers the JSON object body
-(empty is `{}`) and calls `refuse(message)`, which must throw, for a body over `limit`, text that is not JSON or JSON
-that is not an object; without `refuse` the failure is `INPUT_VALIDATION_FAILED` at `rest`
+(empty is `{}`) and calls `refuse(message)` to throw the application's own error for a body over `limit`, text that is
+not JSON or JSON that is not an object; without `refuse`, or when it returns, the failure is `INPUT_VALIDATION_FAILED`
+at `rest`. A `limit` that is not a positive safe integer throws a `TypeError`
 ([example](trigger.md#calling-the-procedure-from-your-own-route)).
 A resolver's `ContractError` keeps its status (an expired token is 401 with its challenge); any other resolver exception returns a redacted 500. Cookie-origin refusals retain
 `path: "request:origin"`; REST and MCP share the kernel check.

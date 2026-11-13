@@ -85,8 +85,9 @@ export async function closeFromForm(request: Request, db: Handle, caller: Caller
 ```
 
 `body` refuses a declared `content-length` over the limit before reading, stops a streamed body as soon as it passes
-the limit, and refuses text that is not a JSON object; an empty body is `{}`. Without `refuse` it throws
-`INPUT_VALIDATION_FAILED` at path `rest`. Import it with `await import('@aotter/mantle/rest')` inside the route when
+the limit, and refuses text that is not a JSON object; an empty body is `{}`. Without `refuse`, or when it returns
+instead of throwing, the refusal is `INPUT_VALIDATION_FAILED` at path `rest`; a `limit` that is not a positive safe
+integer throws a `TypeError`. Import it with `await import('@aotter/mantle/rest')` inside the route when
 the Worker does not mount generated REST, so the module stays off its startup graph.
 
 ## Input rules

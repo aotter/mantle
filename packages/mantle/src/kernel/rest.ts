@@ -126,16 +126,22 @@ const fail: (message: string) => never = message => invalid(message, "rest");
 /**
  * A request's JSON object body, for an application's own routes as well as the generated ones. It refuses a body over
  * `limit` bytes (a declared `content-length` before reading, a streamed one as soon as it passes the limit), text that is
- * not JSON, and JSON that is not an object; an empty body is `{}`. Each refusal calls `refuse(message)`, which must throw:
- * by default `INPUT_VALIDATION_FAILED` at path `rest`, or the application's own error, such as its own path.
+ * not JSON, and JSON that is not an object; an empty body is `{}`. Each refusal calls `refuse(message)` to throw the
+ * application's own error, such as its own path; when it returns instead, or without it, the refusal is
+ * `INPUT_VALIDATION_FAILED` at path `rest`. A `limit` that is not a positive safe integer is a `TypeError`.
  */
 export async function body(
   request: Request,
   limit = DEFAULT_BODY_LIMIT,
-  refuse: (message: string) => never = fail,
+  refuse?: (message: string) => never,
 ): Promise<Record<string, unknown>> {
-  if (Number(request.headers.get("content-length")) > limit) refuse(`Request body exceeds ${limit} bytes.`);
-  return (await import("./json-body.js")).body(request, limit, refuse);
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError("Body limit must be a positive safe integer.");
+  const refusal = (message: string): never => {
+    refuse?.(message);
+    return fail(message);
+  };
+  if (Number(request.headers.get("content-length")) > limit) refusal(`Request body exceeds ${limit} bytes.`);
+  return (await import("./json-body.js")).body(request, limit, refusal);
 }
 
 /** Shared matching/auth/error envelope; selected dispatch is supplied by the surface. */

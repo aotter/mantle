@@ -117,6 +117,26 @@ test("an application's own route reads a JSON body with its own refusal", async 
   expect(unread.locked).toBe(false);
 });
 
+test("a refusal that returns instead of throwing still refuses", async () => {
+  const calls: string[] = [];
+  const careless = (message: string) => void calls.push(message) as never;
+  const post = (text: string | ReadableStream<Uint8Array>, headers?: Record<string, string>) =>
+    new Request("https://app.test/own", { method: "POST", body: text, headers, duplex: "half" } as RequestInit);
+  const refused = { code: "INPUT_VALIDATION_FAILED", path: "rest" };
+  await expect(body(post(`{"x":"${"a".repeat(32)}"}`), 16, careless)).rejects.toMatchObject(refused);
+  await expect(body(post("[1]"), 16, careless)).rejects.toMatchObject(refused);
+  await expect(body(post("{"), 16, careless)).rejects.toMatchObject(refused);
+  const unread = new ReadableStream<Uint8Array>({
+    pull() {
+      throw Error("declared oversized stream was read");
+    },
+  });
+  calls.length = 0;
+  await expect(body(post(unread, { "content-length": "17" }), 16, careless)).rejects.toMatchObject(refused);
+  expect(calls).toEqual(["Request body exceeds 16 bytes."]);
+  expect(unread.locked).toBe(false);
+});
+
 test("native REST database acquisition is lazy and memoized even for undefined handles", async () => {
   let calls = 0;
   const fetch = nativeRest(
@@ -234,10 +254,17 @@ test("JSON body stream bounds bytes, cancels overflow and preserves split UTF-8"
     ),
   ).rejects.toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
   expect(unconsumed.locked).toBe(false);
-  for (const limit of [0, -1, NaN, Infinity])
-    await expect(body(new Request("https://app.test", { method: "POST", body: "{}" }), limit)).rejects.toMatchObject({
-      code: "INPUT_VALIDATION_FAILED",
-    });
+  // a limit that is not a positive safe integer is the route's programming error, never the request's
+  for (const limit of [0, -1, 1.5, NaN, Infinity]) {
+    let refused = 0;
+    await expect(
+      body(new Request("https://app.test", { method: "POST", body: "{}" }), limit, message => {
+        refused++;
+        throw Error(message);
+      }),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(refused).toBe(0);
+  }
 });
 
 test("ordinary REST GET startup excludes the request-only JSON reader", async () => {
