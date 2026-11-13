@@ -92,6 +92,7 @@ export interface AdminHost {
    * answer came, and the host's dialog may still save the file. Send one at a time, when the person asks for it.
    */
   downloadFile(name: string, text: string, mimeType?: string): Promise<HostRequestOutcome>;
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
   /**
    * The page's own app tools, which a host may let the model call while the App is open, listed by name after the App's
    * built-in `view_*` tools. The page and any component it renders may each register; the returned function

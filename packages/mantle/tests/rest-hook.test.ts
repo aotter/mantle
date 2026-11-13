@@ -82,6 +82,61 @@ test("shared JSON body limit rejects declared and actual bytes", async () => {
   expect(await body(new Request("https://app.test", { method: "POST", body: '{"x":1}' }), 7)).toEqual({ x: 1 });
 });
 
+test("body() throws the refusal the caller supplies", async () => {
+  class Refused extends Error {}
+  const refuse = (message: string): never => {
+    throw new Refused(message);
+  };
+  const post = (text: string | ReadableStream<Uint8Array>, headers?: Record<string, string>) =>
+    new Request("https://app.test/own", { method: "POST", body: text, headers, duplex: "half" } as RequestInit);
+  const refusal = async (request: Request, limit = 16) => {
+    const error = await body(request, limit, refuse).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(Refused);
+    return (error as Error).message;
+  };
+  expect(await body(post('{"title":"a note"}'), 16 + 4, refuse)).toEqual({ title: "a note" });
+  expect(await body(post(""), 16, refuse)).toEqual({});
+  expect(await refusal(post("{"))).toBe("Expected a JSON body.");
+  for (const text of ["[]", "null", "3"]) expect(await refusal(post(text))).toBe("Expected a JSON object.");
+  expect(await refusal(post(`{"x":"${"a".repeat(20)}"}`))).toBe("Request body exceeds 16 bytes.");
+  // chunked, no content-length: refused once the streamed bytes pass the limit
+  const chunks = new ReadableStream<Uint8Array>({
+    start(c) {
+      for (let i = 0; i < 4; i++) c.enqueue(new TextEncoder().encode('{"a":1}'));
+      c.close();
+    },
+  });
+  expect(await refusal(post(chunks))).toBe("Request body exceeds 16 bytes.");
+  // a declared length over the limit is refused before the body is read
+  const unread = new ReadableStream<Uint8Array>({
+    pull() {
+      throw Error("declared oversized stream was read");
+    },
+  });
+  expect(await refusal(post(unread, { "content-length": "17" }))).toBe("Request body exceeds 16 bytes.");
+  expect(unread.locked).toBe(false);
+});
+
+test("a refusal that returns instead of throwing still refuses", async () => {
+  const calls: string[] = [];
+  const careless = (message: string) => void calls.push(message) as never;
+  const post = (text: string | ReadableStream<Uint8Array>, headers?: Record<string, string>) =>
+    new Request("https://app.test/own", { method: "POST", body: text, headers, duplex: "half" } as RequestInit);
+  const refused = { code: "INPUT_VALIDATION_FAILED", path: "rest" };
+  await expect(body(post(`{"x":"${"a".repeat(32)}"}`), 16, careless)).rejects.toMatchObject(refused);
+  await expect(body(post("[1]"), 16, careless)).rejects.toMatchObject(refused);
+  await expect(body(post("{"), 16, careless)).rejects.toMatchObject(refused);
+  const unread = new ReadableStream<Uint8Array>({
+    pull() {
+      throw Error("declared oversized stream was read");
+    },
+  });
+  calls.length = 0;
+  await expect(body(post(unread, { "content-length": "17" }), 16, careless)).rejects.toMatchObject(refused);
+  expect(calls).toEqual(["Request body exceeds 16 bytes."]);
+  expect(unread.locked).toBe(false);
+});
+
 test("native REST database acquisition is lazy and memoized even for undefined handles", async () => {
   let calls = 0;
   const fetch = nativeRest(
@@ -199,10 +254,17 @@ test("JSON body stream bounds bytes, cancels overflow and preserves split UTF-8"
     ),
   ).rejects.toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
   expect(unconsumed.locked).toBe(false);
-  for (const limit of [0, -1, NaN, Infinity])
-    await expect(body(new Request("https://app.test", { method: "POST", body: "{}" }), limit)).rejects.toMatchObject({
-      code: "INPUT_VALIDATION_FAILED",
-    });
+  // a limit that is not a positive safe integer is the route's programming error, never the request's
+  for (const limit of [0, -1, 1.5, NaN, Infinity]) {
+    let refused = 0;
+    await expect(
+      body(new Request("https://app.test", { method: "POST", body: "{}" }), limit, message => {
+        refused++;
+        throw Error(message);
+      }),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(refused).toBe(0);
+  }
 });
 
 test("ordinary REST GET startup excludes the request-only JSON reader", async () => {

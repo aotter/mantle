@@ -688,10 +688,11 @@ purpose with several variant slots needs an agent that prepares them, and the
 card says so. It needs the host's `serverTools`. It shows no View, so it declares
 no `tools` capability and lists none of the App's `view_*` tools.
 
-A host that serves several servers' media under one endpoint registers one card
-per server with its own `uri`, a `tool` it names itself (taking `upload_media`'s
-arguments) and `forward`, the input arguments the card repeats on every call:
-`mediaUploadCard({ media, uri: "ui://mantle-admin/upload/shop", tool: "open_upload", forward: ["server"] })`.
+`tool` names the tool the card renders and calls (default `upload_media`; another tool takes `upload_media`'s
+arguments) and `forward` lists the arguments of the rendering call's input that the card repeats on every call, for
+example `mediaUploadCard({ media, tool: "upload_to_folder", forward: ["folder"] })`. With `forward`, calls wait for the
+host's tool input at most `inputTimeoutMs` after connecting (5,000 ms by default; `false` waits until it arrives),
+then go without it; an input that arrives later is used from then on and the purposes are read again.
 
 The targets reach the card in the result `_meta` (`net.aotter.mantle/upload`)
 when the request declares MCP Apps support and the card is registered;

@@ -1,0 +1,49 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: notes}
+spec:
+  title: Notes
+  lifecycle: operational
+  scope: "owner = auth.uid()"
+  indexes: [[owner, title]]
+  schema:
+    type: object
+    required: [owner, title]
+    properties:
+      owner: {type: string}
+      title: {type: string}
+      body: {type: string}
+      tags: {type: array, items: {type: string}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: add-note}
+spec:
+  description: Add a note.
+  requires: {auth: {all: [ctx.user]}}
+  input:
+    type: object
+    required: [title]
+    additionalProperties: false
+    properties:
+      title: {type: string, maxLength: 200}
+      body: {type: string}
+      tags: {type: array, items: {type: string}}
+  output: {type: object}
+  handler:
+    sql: |
+      INSERT INTO notes (title, body, tags) VALUES (input.title, input.body, input.tags) RETURNING id, title, body
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: add-note-http}
+spec:
+  source: {kind: http, method: POST, path: /api/notes}
+  target: {procedure: add-note}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: add-note-mcp}
+spec:
+  source: {kind: mcp, surface: public}
+  target: {procedure: add-note}

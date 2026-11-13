@@ -53,6 +53,7 @@ By default, pair every HTTP Trigger with an MCP Trigger so the same operation is
 
 A source is `http` or `mcp`. A `schedule` or `lifecycle` source fails validation with `INVALID_MANIFEST_ENVELOPE` at `/spec/source/kind`: wire `scheduled()` yourself, or write a custom handler. For signed webhooks, verify the original raw Request in the app and call a generated Procedure with validated input; do not route it through a JSON boundary before signature verification.
 
+
 ## Input rules
 
 The admin MCP tool below lists `reason` and `closed` without the rules, and its

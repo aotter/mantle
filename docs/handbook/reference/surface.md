@@ -143,7 +143,10 @@ use `/api/views/<name>`; HTTP Triggers keep their declared method and path.
 Known paths with another method return 405 with an `Allow` header. All responses use
 `cache-control: private, no-store`. JSON bodies and decoded path parameters
 are validated together, with path parameters taking precedence. Bodies larger
-than 1,000,000 bytes are refused; `content-length` is checked before reading.
+than 1,000,000 bytes are refused; `content-length` is checked before reading. `body(request, limit?, refuse?)` from `@aotter/mantle/rest` is
+that reader: it answers the JSON object body (empty is `{}`) and refuses a body over `limit`, text that is not JSON and
+JSON that is not an object by calling `refuse(message)`; without `refuse`, or when it returns, the refusal is
+`INPUT_VALIDATION_FAILED` at `rest`. A `limit` that is not a positive safe integer throws a `TypeError`.
 A resolver's `ContractError` keeps its status (an expired token is 401 with its challenge); any other resolver exception returns a redacted 500. Cookie-origin refusals retain
 `path: "request:origin"`; REST and MCP share the kernel check.
 
@@ -395,6 +398,11 @@ subquery of one, or a `COALESCE` of those) is converted like a declared JSON col
 is a JSON value on every target. Other expressions without declared column lineage stay native.
 Malformed persisted JSON becomes a redacted internal failure. The conversion
 adds no database operations and does not mutate native query rows.
+
+A generated route or tool carries `convert`, a table of `[field, type]`; the surface applies it to validated input
+before calling the generated function: a missing or null field becomes `null`, a `json` field is stringified and a
+`bool` field becomes 0/1 on SQLite and D1. `convertInput(input, convert)` from `@aotter/mantle/contracts` is that
+function. `callTool(tool, input, db, caller, handlers)` from `@aotter/mantle/mcp` validates, converts and runs one tool.
 
 Bare Views, Store rows, native SQL Procedure `{ results }` and application-owned
 ref outputs retain their native contracts, except that a Store row's `version` is a
