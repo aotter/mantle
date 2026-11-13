@@ -2,7 +2,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync,
 import { createRequire } from "node:module";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { build, type Metafile } from "esbuild";
+import { build, version as esbuildVersion, type Metafile } from "esbuild";
 import { INPUTS_FILE, authTableSql, extraRoles, generatedTarget, staleInputs } from "./inputs.js";
 
 /** Only static imports run at startup; dynamic imports remain separate uploaded modules. */
@@ -24,28 +24,39 @@ export function startupGraph(metafile: Metafile, entry: string): string[] {
 /**
  * esbuild emits a chunk for every `import()` it reads, also one whose caller tree shaking removed (an unused
  * `mediaUploadCard`), and Wrangler uploads every module under the Worker directory. Deletes the JavaScript outputs that
- * no static or dynamic import from the entry reaches, from disk and from the metafile.
+ * no static or dynamic import from the entry reaches, from disk and from the metafile, and names them in one line. An
+ * import graph it cannot read fails the build before anything is deleted.
  */
-function pruneUnreachable(metafile: Metafile, entry: string): void {
+export function pruneUnreachable(metafile: Metafile, entry: string): void {
+  const unreadable = (problem: string) =>
+    new Error(
+      `mantle bundle cannot tell which chunks the Worker imports: ${problem}. Nothing was removed and the build failed. Build with the esbuild version @aotter/mantle depends on (this is esbuild ${esbuildVersion}), or report this message to Mantle.`,
+    );
   const reached = new Set<string>();
-  const visit = (name: string) => {
+  const visit = (name: string, importer?: string) => {
     const output = metafile.outputs[name];
-    if (!output) throw new Error(`esbuild's metafile lists no output ${name}, so the Worker's imports cannot be read.`);
+    if (!output) throw unreadable(`${importer} imports ${name}, which esbuild's metafile does not list as an output`);
     if (reached.has(name)) return;
     reached.add(name);
-    for (const imported of output.imports) if (!imported.external) visit(imported.path);
+    for (const imported of output.imports) if (!imported.external) visit(imported.path, name);
   };
   const roots = Object.keys(metafile.outputs).filter(name => {
     const output = metafile.outputs[name]!;
     return name.endsWith(".js") && output.entryPoint && physical(output.entryPoint) === physical(entry);
   });
-  if (roots.length !== 1) throw new Error(`esbuild's metafile lists ${roots.length} outputs for the entry ${entry}.`);
+  if (roots.length !== 1)
+    throw unreadable(`esbuild's metafile lists ${roots.length} JavaScript outputs for the entry ${entry}, not one`);
   visit(roots[0]!);
-  for (const name of Object.keys(metafile.outputs))
-    if (name.endsWith(".js") && !reached.has(name)) {
-      rmSync(resolve(name));
-      delete metafile.outputs[name];
-    }
+  const removed = Object.keys(metafile.outputs).filter(name => name.endsWith(".js") && !reached.has(name));
+  if (!removed.length) return;
+  const bytes = removed.reduce((total, name) => total + metafile.outputs[name]!.bytes, 0);
+  for (const name of removed) {
+    rmSync(resolve(name));
+    delete metafile.outputs[name];
+  }
+  console.log(
+    `Removed ${removed.length} chunk(s) (${bytes} B) no import from the entry reaches: ${removed.map(name => basename(name)).join(", ")}.`,
+  );
 }
 
 const refused: ReadonlyArray<readonly [RegExp, string]> = [
