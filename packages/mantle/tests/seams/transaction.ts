@@ -1,14 +1,10 @@
-/**
- * Application seam `transaction-handle` (packages/mantle/tests/application-seams.ts): the application's own SQL and generated
- * Procedures in one PostgreSQL transaction. Public imports only, no casts.
- */
+/** Required application seam `transaction-handle` (packages/mantle/tests/application-seams.ts). Public imports only, no casts. */
 import type { Caller } from "@aotter/mantle/contracts";
 import { procedures, store } from "./generated/generated.js";
 
 type Db = Parameters<typeof store>[0];
 
-/** Two notes under a transaction advisory lock, committed together at read committed. */
-export function addNotesLocked(db: Db, caller: Caller, key: number, title: string) {
+export function inOneTransaction(db: Db, caller: Caller, key: number, title: string) {
   return store(db, caller).transaction(
     async (tx, sql) => {
       await sql.unsafe("SELECT pg_advisory_xact_lock($1)", [key]);

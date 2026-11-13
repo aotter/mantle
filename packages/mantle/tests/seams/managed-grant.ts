@@ -1,13 +1,8 @@
-/**
- * Application seam `managed-grant` (packages/mantle/tests/application-seams.ts): an OAuth extension grant whose tokens are issued
- * without a consent screen. Typechecked only; its behaviour is tested in auth-caller and auth-oauth-postgres. Public
- * imports only, no casts.
- */
+/** Required application seam `managed-grant` (packages/mantle/tests/application-seams.ts). Public imports only, no casts. */
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { issueManagedGrant, oauthGrantExtension } from "@aotter/mantle/auth/oauth";
 
-/** The application's own assertion check: it returns the verified user and what the assertion grants. */
-export type VerifyAssertion = (
+export type Verify = (
   assertion: string,
   clientId: string,
 ) => Promise<{
@@ -17,7 +12,7 @@ export type VerifyAssertion = (
   issuer: string;
 }>;
 
-export const extensionGrant = (grantType: string, verify: VerifyAssertion) =>
+export const provider = (grantType: string, verify: Verify) =>
   oauthProvider({
     loginPage: "/sign-in",
     consentPage: "/oauth/consent",

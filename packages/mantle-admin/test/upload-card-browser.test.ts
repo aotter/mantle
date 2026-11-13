@@ -18,14 +18,14 @@ const transparent = (html: HTMLElement) => [
   document.querySelector('meta[name="color-scheme"]')?.getAttribute("content"),
 ];
 
-// A host re-serving several servers' media names its own tool and has the card repeat `server` from the tool input.
-// A host that never sends the tool input: after `inputTimeoutMs` the card calls without `server`, and shows the refusal.
-// A host that sends it after that: the card reads the purposes again with it, and the upload goes to that server.
+// `tool` and `forward`: the card calls its own tool and repeats `folder` from the tool input.
+// No tool input: after `inputTimeoutMs` the card calls without `folder` and shows the refusal.
+// A late tool input: the card reads the purposes again with it and the upload carries it.
 it.each([
   {},
-  { tool: "open_upload", forward: ["server"] },
-  { forward: ["server"], inputTimeoutMs: 300, silent: true },
-  { forward: ["server"], inputTimeoutMs: 300, late: true },
+  { tool: "upload_to_folder", forward: ["folder"] },
+  { forward: ["folder"], inputTimeoutMs: 300, silent: true },
+  { forward: ["folder"], inputTimeoutMs: 300, late: true },
 ])(
   "the upload card PUTs the picked image to storage through CORS and commits it (%o)",
   async ({
@@ -40,7 +40,7 @@ it.each([
     late?: boolean;
   }) => {
     const TOOL = options.tool ?? "upload_media",
-      extra = options.forward ? { server: "shop" } : {};
+      extra = options.forward ? { folder: "docs" } : {};
     const root = resolve(import.meta.dirname, "../../.."),
       pkg = resolve(import.meta.dirname, "..");
     const { build } = createRequire(resolve(root, "packages/mantle/package.json"))("esbuild");
@@ -57,7 +57,7 @@ import {AppBridge,PostMessageTransport} from '@modelcontextprotocol/ext-apps/app
 const frame=document.createElement('iframe');frame.sandbox='allow-scripts';document.body.append(frame);
 window.host={calls:[],messages:[]};
 const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{}});
-bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : late ? "setTimeout(()=>void bridge.sendToolInput({arguments:{purpose:'cover',server:'shop'}}),800);" : "void bridge.sendToolInput({arguments:{purpose:'cover',server:'shop'}});"}};
+bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : late ? "setTimeout(()=>void bridge.sendToolInput({arguments:{purpose:'cover',folder:'docs'}}),800);" : "void bridge.sendToolInput({arguments:{purpose:'cover',folder:'docs'}});"}};
 bridge.oncalltool=async params=>{window.host.calls.push(params);return (await fetch('/tool',{method:'POST',body:JSON.stringify(params)})).json();};
 bridge.onmessage=async params=>{window.host.messages.push(params);return {};};
 bridge.onsizechange=()=>{};
@@ -142,11 +142,11 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       if (url === "/tool") {
         const {
           name,
-          arguments: { server, ...args },
+          arguments: { folder, ...args },
         } = JSON.parse(String(await body(request)));
         try {
-          if (name !== TOOL || server !== (options.forward ? "shop" : undefined))
-            throw new Error(`unexpected call ${name} ${server}`);
+          if (name !== TOOL || folder !== (options.forward ? "docs" : undefined))
+            throw new Error(`unexpected call ${name} ${folder}`);
           const out = (await uploadMedia(library, policies, args, { apps: true })) as Record<string | symbol, unknown>;
           const [data, meta] = Symbol.for("net.aotter.mantle/result") in out ? [out.data, out._meta] : [out, undefined];
           response.end(

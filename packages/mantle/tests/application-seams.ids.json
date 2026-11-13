@@ -4,7 +4,7 @@
   "origin-rule-and-errors",
   "call-tool",
   "input-conversion",
-  "own-tools",
+  "tool-meta",
   "app-resource-meta",
   "managed-grant",
   "host-tools",

@@ -82,7 +82,7 @@ test("shared JSON body limit rejects declared and actual bytes", async () => {
   expect(await body(new Request("https://app.test", { method: "POST", body: '{"x":1}' }), 7)).toEqual({ x: 1 });
 });
 
-test("an application's own route reads a JSON body with its own refusal", async () => {
+test("body() throws the refusal the caller supplies", async () => {
   class Refused extends Error {}
   const refuse = (message: string): never => {
     throw new Refused(message);
@@ -94,7 +94,7 @@ test("an application's own route reads a JSON body with its own refusal", async 
     expect(error).toBeInstanceOf(Refused);
     return (error as Error).message;
   };
-  expect(await body(post('{"email":"a@b.c"}'), 16 + 2, refuse)).toEqual({ email: "a@b.c" });
+  expect(await body(post('{"title":"a note"}'), 16 + 4, refuse)).toEqual({ title: "a note" });
   expect(await body(post(""), 16, refuse)).toEqual({});
   expect(await refusal(post("{"))).toBe("Expected a JSON body.");
   for (const text of ["[]", "null", "3"]) expect(await refusal(post(text))).toBe("Expected a JSON object.");

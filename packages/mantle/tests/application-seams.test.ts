@@ -1,13 +1,10 @@
 /**
- * Protected application seams (application-seams.ts). Each seam's hand-written consumer module is checked for the shape
- * of application code (public subpaths that resolve to dist, no casts), typechecked against the built package on every
- * stack it applies to, and executed where it runs:
- * - bun-sqlite on real bun:sqlite;
- * - cloudflare-d1 on the D1 stand-in over bun:sqlite (tests/apps/d1-shim.ts), not workerd;
- * - cloudflare-postgres with postgres.js and bun-postgres with Bun.SQL, both under Bun, against
- *   MANTLE_NEXT_WORKER_PG_URL / MANTLE_NEXT_BUN_PG_URL (set in PR CI; locally `pnpm with-pg`). Without them those runs
- *   are skipped and the test prints which seams did not run. workerd and Hyperdrive coverage is in verify-native.
- * A failure names the seam, the registry and the rule.
+ * Required application seams (application-seams.ts). Each consumer module is checked for public subpaths that resolve to
+ * dist and no casts, typechecked against the built package on every stack it applies to, and executed there:
+ * bun-sqlite on bun:sqlite; cloudflare-d1 on the D1 stand-in over bun:sqlite (tests/apps/d1-shim.ts), not workerd;
+ * cloudflare-postgres with postgres.js and bun-postgres with Bun.SQL, both under Bun, when MANTLE_NEXT_WORKER_PG_URL /
+ * MANTLE_NEXT_BUN_PG_URL are set (PR CI sets them; locally `pnpm with-pg`), else the test prints what did not run.
+ * workerd and Hyperdrive are covered by verify-native.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { SQL } from "bun";
@@ -27,7 +24,7 @@ const REGISTRY = "packages/mantle/tests/application-seams.ts";
 const root = resolve(import.meta.dir, "../../..");
 const core = SEAMS.filter(seam => seam.package === "@aotter/mantle");
 const guard = (seams: readonly Pick<Seam, "id">[], problem: string) =>
-  `${seams.map(seam => seam.id).join(", ")}: protected application seam (registry: ${REGISTRY}). ${problem}\n` +
+  `${seams.map(seam => seam.id).join(", ")}: required application seam (registry: ${REGISTRY}). ${problem}\n` +
   'Removing, moving or narrowing a registered seam needs an ADR or ADR-lite and a migration note (CONTRIBUTING.md, "Application seams").';
 /** The stacks a seam is checked on: a seam with no database once, on the first. */
 const stacksOf = (seam: Seam): readonly Stack[] => (seam.stacks.length ? seam.stacks : [STACKS[0]]);
@@ -62,7 +59,7 @@ beforeAll(async () => {
 });
 afterAll(() => rm(dir, { recursive: true, force: true }));
 
-test("the registered seam ids are pinned", () => {
+test("the required seam ids are pinned", () => {
   const ids = SEAMS.map(seam => seam.id);
   const removed = pinned.filter(id => !ids.includes(id));
   if (removed.length)
@@ -75,7 +72,7 @@ test("the registered seam ids are pinned", () => {
   expect(ids.filter(id => !pinned.includes(id))).toEqual([]); // a new seam is added to application-seams.ids.json too
 });
 
-test("every registered seam is an exported subpath outside ./internal/ with its named exports", async () => {
+test("every required seam is an exported subpath outside ./internal/ with its named exports", async () => {
   const exportsMap = JSON.parse(await readFile(resolve(import.meta.dir, "../package.json"), "utf8")).exports;
   for (const seam of core) {
     if (!seam.subpath) continue;
@@ -88,11 +85,11 @@ test("every registered seam is an exported subpath outside ./internal/ with its 
   }
 });
 
-test("each seam's application module imports public subpaths only, has no casts and typechecks on its stacks", () => {
+test("each required seam's consumer module imports public subpaths only, has no casts and typechecks on its stacks", () => {
   const failures = [...copies].flatMap(([file, seams]) => {
     const problems = consumerProblems(file, options);
     return problems.length
-      ? [guard(seams, `Its application module is not plain application code:\n${problems.join("\n")}`)]
+      ? [guard(seams, `Its consumer module is not public, cast-free code:\n${problems.join("\n")}`)]
       : [];
   });
   const program = ts.createProgram([...copies.keys()], options);
@@ -108,7 +105,7 @@ test("each seam's application module imports public subpaths only, has no casts 
     failures.push(
       guard(
         copies.get(file) ?? [{ id: "(generated code)" }],
-        `Its application module no longer typechecks:\n${texts.join("\n")}`,
+        `Its consumer module no longer typechecks:\n${texts.join("\n")}`,
       ),
     );
   expect(failures.join("\n\n")).toBe("");
@@ -187,7 +184,7 @@ const exercising = async (ids: readonly string[], body: () => Promise<void>) => 
     throw new Error(
       guard(
         core.filter(seam => ids.includes(seam.id)),
-        `It no longer behaves as its application module expects: ${error instanceof Error ? error.message : error}`,
+        `Its consumer module no longer runs as required: ${error instanceof Error ? error.message : error}`,
       ),
       { cause: error },
     );
@@ -204,7 +201,7 @@ const rpc = async (
   params: object = {},
 ) => {
   const response = await serve(
-    new Request("https://notes.example/mcp", {
+    new Request("https://seam.example/mcp", {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: apps } }),
@@ -219,69 +216,68 @@ for (const stack of STACKS) {
   const runs = core.filter(seam => seam.run !== false && seam.stacks.includes(stack)).map(seam => seam.id);
   if (!urls[stack])
     console.warn(
-      `application seams NOT RUN on ${stack} (no ${stack === "bun-postgres" ? "MANTLE_NEXT_BUN_PG_URL" : "MANTLE_NEXT_WORKER_PG_URL"}): ${runs.join(", ")}`,
+      `required application seams NOT RUN on ${stack} (no ${stack === "bun-postgres" ? "MANTLE_NEXT_BUN_PG_URL" : "MANTLE_NEXT_WORKER_PG_URL"}): ${runs.join(", ")}`,
     );
   (urls[stack] ? test : test.skip)(
-    `${stack}: the application seams run (${runs.join(", ")})`,
+    `${stack}: the required application seams run (${runs.join(", ")})`,
     async () => {
       const module = (name: string) => import(pathToFileURL(resolve(dir, stack, name)).href);
       const caller = await owner();
       const { db, sql, end } = await open(stack);
       try {
-        await exercising(["json-body", "origin-rule-and-errors", "call-tool"], async () => {
-          const { addNoteRoute } = await module("own-route.ts");
-          const post = (body: string, origin = "https://notes.example") =>
-            addNoteRoute(
-              new Request("https://notes.example/notes", {
-                method: "POST",
-                headers: { origin, "content-type": "application/json" },
-                body,
-              }),
-              db,
-              caller,
-            );
-          const added = await post('{"title":"First","tags":["a"]}');
-          expect(added.status).toBe(200);
-          expect((await added.json()).results[0][0]).toMatchObject({ title: "First", body: null });
-          const large = await post(JSON.stringify({ title: "x".repeat(4096) }));
-          expect(large.status).toBe(400);
-          expect((await large.json()).error).toMatchObject({ code: "INPUT_VALIDATION_FAILED", path: "note-form" });
-          const foreign = await post('{"title":"Second"}', "https://elsewhere.example");
-          expect(foreign.status).toBe(403);
-          expect((await foreign.json()).error.path).toBe("request:origin");
+        await exercising(["json-body"], async () => {
+          const { read } = await module("json-body.ts");
+          const post = (body: string) => new Request("https://seam.example/", { method: "POST", body });
+          expect(await read(post('{"a":1}'))).toEqual({ a: 1 });
+          await expect(read(post(JSON.stringify({ a: "x".repeat(64) })))).rejects.toMatchObject({ path: "seam" });
+        });
+        await exercising(["origin-rule-and-errors"], async () => {
+          const { guarded } = await module("origin-rule.ts");
+          const post = (origin: string) =>
+            new Request("https://seam.example/", { method: "POST", headers: { origin } });
+          expect(guarded(post("https://seam.example"), caller).status).toBe(204);
+          const refused = guarded(post("https://other.example"), caller);
+          expect(refused.status).toBe(403);
+          expect((await refused.json()).error.path).toBe("request:origin");
+        });
+        await exercising(["call-tool"], async () => {
+          const { call } = await module("call-tool.ts");
+          const { results } = await call(db, caller, { title: "First", tags: ["a"] });
+          expect(results[0][0]).toMatchObject({ title: "First", body: null });
+          await expect(call(db, caller, { title: 1 })).rejects.toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
         });
         await exercising(["input-conversion"], async () => {
-          const { addNoteInput } = await module("direct-call.ts");
-          const input = addNoteInput({ title: "Direct", tags: ["b", "c"] });
+          const { converted } = await module("input-conversion.ts");
+          const input = converted({ title: "Direct", tags: ["b", "c"] });
           expect(input).toEqual({ title: "Direct", body: null, tags: '["b","c"]' });
           // the converted input is what the generated Procedure binds on this stack
           const { procedures } = await module("generated/generated.ts");
           const { results } = await procedures["add-note"](db, caller, input);
           expect(results[0][0]).toMatchObject({ title: "Direct", body: null });
         });
-        await exercising(["own-tools", "app-resource-meta"], async () => {
-          // a bearer caller, as a remote MCP client is: a cookie session's tool call also needs the origin rule
-          const bearer = (await import("@aotter/mantle/testing")).authenticatedAs(
-            { id: "note-owner", role: "user" },
-            { scopes: ["mcp"], credential: "oauth" },
-          );
-          const serve = (await module("own-tools.ts")).serveMcp(db, bearer);
+        // a bearer caller: a cookie session's tool call also needs the origin rule
+        const bearer = (await import("@aotter/mantle/testing")).authenticatedAs(
+          { id: "note-owner", role: "user" },
+          { scopes: ["mcp"], credential: "oauth" },
+        );
+        await exercising(["tool-meta"], async () => {
+          const serve = (await module("tool-meta.ts")).serve(db, bearer);
           const { tools } = await rpc(serve, "tools/list");
-          expect(tools.map((tool: { name: string }) => tool.name).sort()).toEqual(["add_note", "note_summary"]);
-          const summary = tools.find((tool: { name: string }) => tool.name === "note_summary");
-          expect(summary._meta).toMatchObject({ "example/listing": { kind: "summary" } });
-          const called = await rpc(serve, "tools/call", { name: "note_summary", arguments: {} });
-          expect(called.structuredContent).toEqual({ notes: 0 });
-          expect(called._meta).toMatchObject({ "example/view": { compact: true } });
-          const read = await rpc(serve, "resources/read", { uri: "ui://notes/summary" });
-          expect(read.contents[0]._meta).toMatchObject({ "example/host": { border: false } });
+          expect(tools[0]._meta).toMatchObject({ "example/listed": { a: 1 } });
+          const called = await rpc(serve, "tools/call", { name: "seam_tool", arguments: {} });
+          expect(called.structuredContent).toEqual({ ok: true });
+          expect(called._meta).toMatchObject({ "example/result": { b: 2 } });
+        });
+        await exercising(["app-resource-meta"], async () => {
+          const serve = (await module("resource-meta.ts")).serve(db, bearer);
+          const read = await rpc(serve, "resources/read", { uri: "ui://seam/app" });
+          expect(read.contents[0]._meta).toMatchObject({ "example/resource": { c: 3 } });
         });
         if (runs.includes("transaction-handle"))
           await exercising(["transaction-handle"], async () => {
-            const { addNotesLocked } = await module(
-              basename(moduleOf(core.find(s => s.id === "transaction-handle")!, stack)),
-            );
-            await addNotesLocked(db, caller, 7, "Locked");
+            const transaction = core.find(seam => seam.id === "transaction-handle");
+            const { inOneTransaction } = await module(basename(transaction ? moduleOf(transaction, stack) : ""));
+            await inOneTransaction(db, caller, 7, "Locked");
             const rows = await sql("SELECT title FROM notes WHERE title LIKE 'Locked%' ORDER BY title");
             expect(rows.map(row => row.title)).toEqual(["Locked", "Locked (copy)"]);
             if (stack === "bun-sqlite")
