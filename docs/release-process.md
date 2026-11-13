@@ -100,6 +100,17 @@ dist-tag DELETE only added failure and re-run state.
 1. Fetch Core refs, prove the version and tag unused. Preview GitHub generated
    notes since the previous tag; correct PR metadata and label release-only
    PRs skip-release-notes. Do not duplicate release entries in CHANGELOG.md.
+   Once the version's entry in [Releases](handbook/releases/index.md) is
+   written, run `node scripts/check-breaking.mjs --release-notes <version>
+   [--since <tag>]` (needs `gh`, tags and full history): it fails for every PR
+   labelled `breaking-change` and merged since `--since` that the version's
+   section does not mark breaking (a Breaking heading, a `**Breaking` item, or
+   a paragraph starting "Breaking" and the list after it). `--since` defaults
+   to the previous tag for a prerelease and to the previous stable tag for a
+   stable, whose section covers the whole line.
+   A version past a removed-subpath stub's `removeAfter` fails
+   `scripts/check-breaking.mjs` (in `pnpm check`) until the version PR deletes
+   that stub ([CONTRIBUTING](../CONTRIBUTING.md#removed-public-subpaths)).
 2. Align every workspace package, plugin and marketplace ref to the version.
    The controller checks package.json files and plugin manifests only; docs
    pins and the reference service's exact `@aotter/mantle*` dependencies are
@@ -249,10 +260,17 @@ permanent record:
   to keep running, and what is not yet verified. It does not need a full
   migration guide for a change that a later prerelease may reshape or undo.
   GitHub's generated notes already list every merged PR.
+- Brief never drops a breaking item. Each one is a `**Breaking: …**` item (or
+  sits under a Breaking heading) that references its PR and gives one
+  before → after line plus either the replacement or "no replacement yet"
+  with an issue link. The PR's Migration section is its source, and a fix,
+  feature or PR body is never the only place a break is announced.
 - When the stable is cut, replace that line's prerelease subsections with one
   "Upgrading from `<previous stable>`" section that describes the final state
-  only. A change that was introduced and then reworked or reverted between
-  prereleases appears once, as it shipped, or not at all.
+  only, with full upgrade notes for each breaking item: what to change, the
+  replacement, and the stubs that release still ships. A change that was
+  introduced and then reworked or reverted between prereleases appears once,
+  as it shipped, or not at all.
 - Do not edit the notes of a prerelease that is already published to match
   this: its packed docs are immutable. Apply it from the next version PR on.
 
