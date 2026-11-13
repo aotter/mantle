@@ -115,4 +115,4 @@ These retain their issue-based filenames and original decision status.
 | [#1937 Human-approved actions](adr-lite-1937-human-approval.md) | Accepted (revision 3): no Core change |
 | [#1971 Admin request pipeline](adr-lite-1971-admin-request-pipeline.md) | Accepted (Option B) |
 | [#2015 Application SQL in a Store transaction](adr-lite-2015-application-sql-in-transactions.md) | Accepted: the Store transaction declares its handle; no public driver module |
-| [#2018 PostgreSQL on Workers through Hyperdrive](adr-lite-2018-postgres-on-workers.md) | Proposed: Mantle prepares its own postgres.js statements |
+| [#2018 PostgreSQL on Workers through Hyperdrive](adr-lite-2018-postgres-on-workers.md) | Proposed: Mantle prepares its own postgres.js statements; Better Auth per isolate over a request-scoped client |

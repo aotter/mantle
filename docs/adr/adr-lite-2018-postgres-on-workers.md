@@ -31,7 +31,7 @@ Recorded locally through a TCP proxy (postgres.js 3.4.9, `max: 1`, `fetch_types:
 
 Inside `begin` the same holds per statement. Bun.SQL ignores a third argument and always prepares named statements.
 
-## Decision
+## Decision: statement preparation (P1-1)
 
 1. **Mantle's driver passes `{ prepare: true }`** to `unsafe` for every statement it sends (`read`, and therefore
    `run`, Procedures, the Store, `postgresAdapter`, the identity helpers). The `Postgres` contract's `unsafe` gains an
@@ -48,7 +48,7 @@ Rejected: an opt-in Mantle option (every Workers application would have to find 
 the handbook already promised that the client's option governs); routing Mantle's SQL through tagged templates (a
 second code path for one driver, and the generated SQL is already text with `$n` binds).
 
-## Consequences
+### Consequences
 
 - With a client per request, each statement is prepared once per request: a request that runs each statement once
   makes the same round trips as before (two per parameterised statement), and a repeated statement costs one. An
@@ -63,3 +63,40 @@ second code path for one driver, and the generated SQL is already text with `$n`
   one). It is a PostgreSQL error, so the write is reported as failed and rolled back. Bun.SQL already behaved this way.
 - Hyperdrive's behaviour with named statements (statement reuse across its pooled origin connections, any limits) can
   only be confirmed on a deployed configuration.
+
+## Context: Better Auth on Workers (P1-2)
+
+The handbook and `postgresAdapter`'s docstring said to create the postgres.js client "per request, or per isolate with
+`max: 1`". Reproduced under `wrangler dev --local` with a Hyperdrive `localConnectionString`: a client cached at module
+scope answered request 1, failed request 2 with "Cannot perform I/O on behalf of a different request", reconnected on
+request 3 and failed request 4. Cloudflare's connection-lifecycle page: "Do not create database clients or connection
+pools in the global scope. Instead, create a new client inside each handler invocation". The only auth wiring shown
+(the D1 app shell) keeps one Better Auth instance per isolate over `d1Adapter(env.DB)`, and `postgresAdapter`,
+`postgresBootstrapAdmin` and `postgresIdentity` had run only under Bun.
+
+## Decision: request-scoped handle, one Better Auth instance per isolate (P1-2)
+
+4. **The documented wiring keeps one Better Auth instance per isolate over a request-scoped `Postgres` handle**: an
+   application-owned `src/db.ts` creates the postgres.js client per request inside `AsyncLocalStorage.run`, and
+   `requestDb` (a `Postgres` whose `unsafe` and `begin` call the current request's client) goes to `postgresAdapter`,
+   `postgresBootstrapAdmin` and generated code. Better Auth stays behind `authLoader` and a dynamic import, so the
+   entry-static closure is unchanged.
+5. **No new SDK export.** The handle is about twenty lines of application code on a Node API workerd provides under
+   `nodejs_compat`; Mantle adds it to its own surface when applications ask for it (an extension point request).
+6. **The handbook page's `src/db.ts` and `src/auth.ts` are the tested code**: `tests/auth-postgres-worker.test.ts`
+   extracts them and runs them in workerd under local Wrangler through a Hyperdrive binding (email-OTP sign-in with the
+   bootstrap admin transaction, three cookie-authenticated requests in one isolate, a generated two-statement
+   Procedure), and `check:doc-examples` typechecks the page.
+
+Rejected: building Better Auth per request (measured about 0.6 ms of CPU per construction, median of 50 with the
+`admin`, `emailOTP` and `jwt` plugins on Bun 1.4, about 7 ms for the first; it sends no queries, but it does not fit
+the app shell, which installs its in-process JWKS fetch once per isolate); a client per isolate with `max: 1`
+(reproduced failing); a Mantle option to make `postgresAdapter` take a function (the same request scoping, as SDK
+surface, before anyone asked for it).
+
+### Consequences
+
+- Auth and data share the request's one client when the entry passes `requestDb` to Mantle's surfaces.
+- A query outside `withRequestDb` throws instead of reusing another request's client.
+- Background tasks a request hands to `waitUntil` keep its context and client; the application does not end the
+  client.
