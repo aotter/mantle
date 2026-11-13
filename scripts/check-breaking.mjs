@@ -10,6 +10,7 @@
  *   node scripts/check-breaking.mjs --event <path>      CI on the PR merge commit: HEAD^1 is the base, HEAD^2 the PR
  *                                                       head; body and labels from the pull_request event payload
  *   node scripts/check-breaking.mjs --base <ref> --body <file>
+ *   node scripts/check-breaking.mjs --release-notes <version> [--since <tag>]   maintainer check before a release (gh)
  *   node scripts/check-breaking.mjs --self-test
  */
 import assert from "node:assert/strict";
@@ -371,6 +372,112 @@ function check(cwd, args) {
   return status;
 }
 
+/**
+ * PR numbers marked breaking in the section whose heading names `version`: under a heading containing "Breaking", in
+ * a list item starting `**Breaking`, or in a paragraph starting `Breaking` / `**Breaking` and the list that follows it.
+ */
+export function breakingRefs(markdown, version) {
+  const lines = markdown.split("\n");
+  const token = new RegExp(`(?<![\\w.-])${version.replace(/[.]/g, "\\.")}(?![\\w.-])`);
+  const start = lines.findIndex(line => /^#{1,6}\s/.test(line) && token.test(line));
+  if (start < 0) return undefined;
+  const level = lines[start].match(/^#+/)[0].length;
+  const refs = new Set();
+  let heading = 0,
+    item,
+    paragraph = false,
+    blank = false;
+  const breaking = text => /^(?:\*\*)?Breaking\b/i.test(text);
+  for (const line of lines.slice(start + 1)) {
+    const depth = line.match(/^(#{1,6})\s/)?.[1].length;
+    if (depth && depth <= level) break;
+    if (depth) {
+      heading = /breaking/i.test(line) ? depth : heading && depth > heading ? heading : 0;
+      paragraph = false;
+    }
+    const bullet = line.match(/^(\s*)[-*+]\s+(.*)$/);
+    if (bullet) item = { indent: bullet[1].length, breaking: breaking(bullet[2]) };
+    else if (!depth && line.trim()) {
+      if (item && line.search(/\S/) <= item.indent) item = undefined;
+      if (!item && line.search(/\S/) === 0) paragraph = breaking(line) || (!blank && paragraph);
+    }
+    blank = !line.trim();
+    if (heading || paragraph || item?.breaking)
+      for (const [, number] of line.matchAll(/#(\d+)\b/g)) refs.add(Number(number));
+  }
+  return refs;
+}
+
+function releaseNotes(cwd, version, since) {
+  if (!versionKey(version)) {
+    console.error("check-breaking: FAILED: usage: --release-notes <X.Y.Z[-alpha|beta|rc.N]> [--since <tag>]");
+    return 1;
+  }
+  try {
+    // A stable covers its whole line since the previous stable tag; a prerelease, since the previous tag.
+    const stable = versionKey(version)[3] === 3 ? ["--exclude", "v*-*"] : [];
+    since ??= tryGit(
+      cwd,
+      "describe",
+      "--tags",
+      "--abbrev=0",
+      "--match",
+      "v[0-9]*",
+      "--exclude",
+      `v${version}`,
+      ...stable,
+    );
+    if (!since) {
+      console.error(
+        "check-breaking: FAILED: no previous tag in this checkout (fetch tags and full history, or pass --since <tag>)",
+      );
+      return 1;
+    }
+    const date = git(cwd, "log", "-1", "--format=%cI", since).trim();
+    const merged = JSON.parse(
+      execFileSync(
+        "gh",
+        [
+          "pr",
+          "list",
+          "--state",
+          "merged",
+          "--base",
+          "develop",
+          "--label",
+          LABEL,
+          "--search",
+          `merged:>=${date}`,
+        ].concat(["--json", "number,title,mergeCommit", "--limit", "200"]),
+        { cwd, encoding: "utf8" },
+      ),
+    ).filter(pr => {
+      const sha = pr.mergeCommit?.oid;
+      const inHead = sha && spawnSync("git", ["merge-base", "--is-ancestor", sha, "HEAD"], { cwd }).status === 0;
+      return inHead && spawnSync("git", ["merge-base", "--is-ancestor", sha, since], { cwd }).status !== 0;
+    });
+    const file = "docs/handbook/releases/index.md";
+    const refs = breakingRefs(readFileSync(join(cwd, file), "utf8"), version);
+    const missing = refs ? merged.filter(pr => !refs.has(pr.number)) : merged;
+    console.log(
+      `check-breaking: ${merged.length} PR(s) labelled ${LABEL} since ${since}: ${merged.map(pr => `#${pr.number}`).join(" ") || "none"}`,
+    );
+    if (!refs && merged.length) console.error(`check-breaking: FAILED: ${file} has no heading naming ${version}`);
+    for (const pr of refs ? missing : [])
+      console.error(
+        `check-breaking: FAILED: #${pr.number} "${pr.title}" is labelled ${LABEL} but is not marked breaking (a Breaking heading, a "**Breaking" item or a "Breaking" paragraph) in the ${version} section of ${file}`,
+      );
+    return missing.length ? 1 : 0;
+  } catch (error) {
+    const reason =
+      error.code === "ENOENT"
+        ? `${error.path} is not installed or not on PATH`
+        : error.stderr?.toString().trim() || error.message;
+    console.error(`check-breaking: FAILED: ${reason}`);
+    return 1;
+  }
+}
+
 function selfTest() {
   const pkg = (exports, peers = {}, version = "1.0.0", extra = {}) => ({
     version,
@@ -549,6 +656,33 @@ function selfTest() {
   assert.equal(resolveRange("c", "catalog:", catalogs(yaml)), "^2");
   assert.equal(resolveRange("c", "^3", catalogs(yaml)), "^3");
 
+  // Release notes: PR numbers marked breaking in the version's section only.
+  const notes = [
+    "## 1.1.0 — in preparation",
+    "### Upgrading to 1.1.0-alpha.2",
+    "- **Breaking: a.** Text",
+    "  continues (#10).",
+    "- Feature (#11).",
+    "### Upgrading to 1.1.0-alpha.1",
+    "- **Breaking: b** (#12)",
+    "",
+    "Breaking changes:",
+    "- d (#16)",
+    "- e (#17)",
+    "",
+    "Other changes (#18).",
+    "## 1.0.0",
+    "### Breaking",
+    "- c (#13)",
+    "#### Details (#14)",
+    "### Other (#15)",
+  ].join("\n");
+  assert.deepEqual([...breakingRefs(notes, "1.1.0-alpha.2")], [10]);
+  assert.deepEqual([...breakingRefs(notes, "1.1.0-alpha.1")], [12, 16, 17]);
+  assert.deepEqual([...breakingRefs(notes, "1.1.0")], [10, 12, 16, 17]);
+  assert.deepEqual([...breakingRefs(notes, "1.0.0")], [13, 14]);
+  assert.equal(breakingRefs(notes, "2.0.0"), undefined);
+
   const scratch = run => {
     const dir = mkdtempSync(join(tmpdir(), "check-breaking-"));
     try {
@@ -646,5 +780,9 @@ function selfTest() {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   if (args[0] === "--self-test") selfTest();
+  else if (args[0] === "--release-notes")
+    process.exit(
+      releaseNotes(process.cwd(), args[1], args.includes("--since") ? args[args.indexOf("--since") + 1] : undefined),
+    );
   else process.exit(check(process.cwd(), args));
 }

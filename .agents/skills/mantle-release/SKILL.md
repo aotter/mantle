@@ -28,10 +28,17 @@ merge commit, dispatch with `--ref main`. Stable also needs recorded owner
 acceptance on the version's release-gate issue, and its entry added to
 docs/handbook/releases/index.md. That page keeps stable-to-stable upgrade
 notes: a prerelease entry stays brief (what to pin, what a tester must change,
-what is unverified), and at stable the line's prerelease subsections are
-replaced by one "Upgrading from `<previous stable>`" section describing the
-final state only (docs/release-process.md, "What the handbook's release notes
-keep"). Do not infer permission to publish from an
+what is unverified) but every breaking item keeps one before → after line and
+either its replacement or "no replacement yet" with an issue link; at stable the
+line's prerelease subsections are replaced by one "Upgrading from `<previous
+stable>`" section describing the final state with full upgrade notes
+(docs/release-process.md, "What the handbook's release notes keep"). Before
+freezing the version PR, run `node scripts/check-breaking.mjs --release-notes
+<version> [--since <tag>]`: every PR labelled `breaking-change` since `--since`
+(default: the previous tag, or the previous stable tag for a stable) must be
+marked breaking in that version's section. Delete removed-subpath stubs whose
+`removeAfter` the new version passes (`pnpm check` fails until you do;
+CONTRIBUTING.md, "Removed public subpaths"). Do not infer permission to publish from an
 implementation PR. Before every release, alpha included, run Linux Full checks
 on the frozen version PR head (docs/release-process.md step 4). Before an alpha
 or beta, also run the startup and request-cost checkpoint below.
