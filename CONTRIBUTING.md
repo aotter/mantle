@@ -72,6 +72,40 @@ not run otherwise). workerd and Hyperdrive are covered by `test:native`.
 - Entries, consumer modules and tests say that a seam is required, not what it is for; fixtures stay minimal and
   neutral.
 
+### Breaking changes
+
+A breaking change is a checked state, not only a label. `scripts/check-breaking.mjs` compares a PR with its base and
+finds, in every published package: an `exports` key removed, moved under `./internal/`, newly resolving to a stub under
+`./dist/removed/`, or losing a condition (`types`, `import`, a plain target that no longer has `default`); a `bin` name
+removed or renamed; a peer dependency range changed (after resolving `catalog:`), a required peer added, or an optional
+peer made required; a stub deleted before its `removeAfter`; and a commit subject with `!`. Adding exports or
+conditions, moving a target file while keeping its conditions, moving or removing `./internal/*` keys, deleting a stub
+after its `removeAfter`, adding an optional peer, and the release version PR's lockstep peer bump (every published
+version changes and the peer follows its workspace package) are not breaking.
+
+Each item is declared in the PR body's "Migration" section, one line per item: `before` → `after`, where the after side
+names the replacement in backticks or says "no replacement". The line for an export, `bin` name or peer must name it.
+A `!` commit says something broke but not what, so the guard only counts: the section needs at least as many complete
+lines as there are `!` commits, and a line that already names an export or peer counts towards that. The PR also carries
+the `breaking-change` label, and a PR with that label needs at least one Migration line.
+
+The guard runs in its own PR workflow, "Breaking changes declared" (`.github/workflows/breaking-changes.yml`), on the
+PR merge commit: its first parent is the current base and `HEAD^1..HEAD^2` are the PR's own commits, so changes that
+reached `develop` meanwhile, or that a branch merged in from `develop`, are not blamed on the PR. It reads the body and
+labels from the event payload and reruns when they change. `pnpm check` runs its self-test and the guard against
+`origin/develop`; locally it lists what it found and prints a notice that the body was not checked, unless
+`--body <file>` or `MANTLE_PR_BODY` names one: `node scripts/check-breaking.mjs --body pr-body.md`. A stub past its
+`removeAfter` fails in every mode.
+
+The guard cannot see, so the author declares by hand (label plus Migration line): `engines`, `type` or `main` changes,
+narrower wildcard (`./x/*`) patterns, `BREAKING CHANGE:` footers without `!`, removed or renamed named exports inside
+a kept subpath, type changes, behaviour changes and generated output.
+
+A Dependabot update that changes a published peer range (Core peers on exact Better Auth versions from the default
+catalog, so their patch bumps do) fails the guard and stalls its auto-merge. A maintainer adds the `breaking-change`
+label and a Migration line such as ``- `better-auth` `1.7.14` → `1.7.15` `` with the upgrade note; the body edit reruns
+the check and the queued merge proceeds.
+
 ## Hard invariants
 
 - `src/build/spec` keeps the closed v2 grammar (`cms.mantle.aotter.net/v2`), diagnostics
@@ -207,7 +241,8 @@ maintainer check with a dedicated database, never CI.
 - Start non-trivial work from an issue. Use the templates and labels described
   in [`docs/labels.md`](docs/labels.md).
 - A PR body states outcome, scope/non-goals, commands actually run, omitted
-  checks, and related issues/ADRs. Use `Closes #N` only when complete.
+  checks, and related issues/ADRs. Use `Closes #N` only when complete. A
+  breaking change also fills its Migration section ([Breaking changes](#breaking-changes)).
 - Architecture, grammar, persistence, trust-boundary, auth, MCP, and public
   transport changes need an existing accepted decision or an ADR-lite/ADR as
   appropriate.

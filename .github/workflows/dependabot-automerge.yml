@@ -7,6 +7,13 @@
 # into `develop`; once CI is green
 # `gh pr merge --auto` queues the merge.
 #
+# Breaking changes: a bump that changes a published peer range (for example
+# `@aotter/mantle`'s exact Better Auth peers, which resolve from the default
+# catalog) fails breaking-changes.yml until a maintainer adds the
+# `breaking-change` label and a Migration line to the PR body
+# (CONTRIBUTING.md, "Breaking changes"); the edit reruns that check and the
+# queued merge proceeds once it is green.
+#
 # Lockfile note: unlike mantle-starters, this repo's dependabot setup
 # *does* regenerate `pnpm-lock.yaml` correctly (single root workspace
 # vs starters' per-dir lockfiles), so no separate lockfile-fixup
