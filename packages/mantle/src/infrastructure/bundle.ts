@@ -37,7 +37,7 @@ function pruneUnreachable(metafile: Metafile, entry: string): void {
   };
   const roots = Object.keys(metafile.outputs).filter(name => {
     const output = metafile.outputs[name]!;
-    return output.entryPoint && physical(output.entryPoint) === physical(entry) && !name.endsWith(".css");
+    return name.endsWith(".js") && output.entryPoint && physical(output.entryPoint) === physical(entry);
   });
   if (roots.length !== 1) throw new Error(`esbuild's metafile lists ${roots.length} outputs for the entry ${entry}.`);
   visit(roots[0]!);
