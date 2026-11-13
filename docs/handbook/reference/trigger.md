@@ -53,42 +53,6 @@ By default, pair every HTTP Trigger with an MCP Trigger so the same operation is
 
 A source is `http` or `mcp`. A `schedule` or `lifecycle` source fails validation with `INVALID_MANIFEST_ENVELOPE` at `/spec/source/kind`: wire `scheduled()` yourself, or write a custom handler. For signed webhooks, verify the original raw Request in the app and call a generated Procedure with validated input; do not route it through a JSON boundary before signature verification.
 
-### Calling the Procedure from your own route
-
-A route the application writes beside the generated surfaces (a form post, a webhook after its signature check) reads
-its body with `body(request, limit, refuse)` from `@aotter/mantle/rest` and calls the Procedure through its generated
-tool with `callTool(tool, input, db, caller, handlers)` from `@aotter/mantle/mcp`. `callTool` runs the tool's own
-validation and input conversion, then the Procedure with its `requires` checks, without the MCP transport; the route
-still owns the Origin rule for cookie sessions and any application `authorize`.
-
-```ts
-import { body } from '@aotter/mantle/rest';
-import { callTool } from '@aotter/mantle/mcp';
-import { checkOrigin, ContractError, surfaceFailure, type Caller } from '@aotter/mantle/contracts';
-import type { Handle } from '@aotter/mantle/driver/d1';
-import { tools } from './generated/mcp.js';
-
-const closeTicket = tools.find(tool => tool.target?.kind === 'procedure' && tool.target.name === 'close-ticket')!;
-
-export async function closeFromForm(request: Request, db: Handle, caller: Caller): Promise<Response> {
-  try {
-    checkOrigin(request, caller);
-    // Its own size limit and error path: each refusal throws what `refuse` throws.
-    const input = await body(request, 4096, message => {
-      throw new ContractError('INPUT_VALIDATION_FAILED', message, 'close-form');
-    });
-    return Response.json(await callTool(closeTicket, input, db, caller, {}));
-  } catch (error) {
-    return surfaceFailure(error);
-  }
-}
-```
-
-`body` refuses a declared `content-length` over the limit before reading, stops a streamed body as soon as it passes
-the limit, and refuses text that is not a JSON object; an empty body is `{}`. Without `refuse`, or when it returns
-instead of throwing, the refusal is `INPUT_VALIDATION_FAILED` at path `rest`; a `limit` that is not a positive safe
-integer throws a `TypeError`. Import it with `await import('@aotter/mantle/rest')` inside the route when
-the Worker does not mount generated REST, so the module stays off its startup graph.
 
 ## Input rules
 

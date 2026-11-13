@@ -47,9 +47,9 @@ move, and never booting 0.2 against a 0.1.x database.
   input forever; now it waits at most `inputTimeoutMs` (5,000 ms by default) after connecting, then calls without the
   forwarded arguments, and reads the purposes again if the input arrives later. Pass `inputTimeoutMs: false` to keep
   waiting as before. A value that is not a positive integer up to 2,147,483,647 throws at configuration.
-- **`body(request, limit, refuse)`** from `@aotter/mantle/rest` takes the application's own refusal for its own routes;
-  `convertInput` from `@aotter/mantle/contracts` is the generated surfaces' input conversion, for code that calls
-  generated functions directly.
+- `body(request, limit?, refuse?)` from `@aotter/mantle/rest` takes an optional `refuse(message)` for its refusals; a
+  `limit` that is not a positive safe integer throws a `TypeError`. `convertInput(input, convert)` is exported from
+  `@aotter/mantle/contracts`.
 
 ### Upgrading to 0.2.2-alpha.3
 

@@ -56,25 +56,21 @@ audiences or copy maintainer policy into shipped skills.
 
 ### Application seams
 
-Some public entry points exist on purpose for hand-written application code beyond mounting the generated modules:
-running the application's own SQL in a Store transaction, reading a JSON body on its own route, calling a generated
-tool or applying the generated input conversion directly, serving its own MCP tools and Apps, issuing extension-grant
-tokens, registering a page's app tools. Each is listed, by the capability it gives, in the registry
-[`packages/mantle/tests/application-seams.ts`](packages/mantle/tests/application-seams.ts), with the stacks it applies
-to and the decision that keeps it. Its hand-written consumer module (public subpaths that resolve to `dist`, no casts)
-is typechecked against the built package on each of those stacks by `application-seams.test.ts` in Core and Admin,
-part of `pnpm test` and of PR CI, and executed where the seam runs: bun-sqlite on bun:sqlite, cloudflare-d1 on the
-D1 stand-in over bun:sqlite (not workerd), cloudflare-postgres with postgres.js and bun-postgres with Bun.SQL, both under
-Bun and only when the PostgreSQL URLs are set (PR CI sets them; without them the test prints the seams that did not
-run). workerd and Hyperdrive are covered by `test:native`, not by these checks. A seam marked `run: false` (managed
-grants, a page's app tools) is typechecked only; the registry names where its behaviour is tested.
-`application-seams.ids.json` pins the ids.
+Some public entry points are required by applications although Core has no internal use for them. They are listed in
+[`packages/mantle/tests/application-seams.ts`](packages/mantle/tests/application-seams.ts) (ids pinned in
+`application-seams.ids.json`), and their source carries the marker "Application seam: applications depend on this".
+`application-seams.test.ts` in Core and Admin, part of `pnpm test` and of PR CI, checks each one's consumer module
+(public subpaths that resolve to `dist`, no casts), typechecks it on each of its stacks and executes it unless it is
+marked typecheck-only: bun-sqlite on bun:sqlite, cloudflare-d1 on the D1 stand-in over bun:sqlite (not workerd), and
+the PostgreSQL stacks with postgres.js and Bun.SQL under Bun when the PostgreSQL URLs are set (the test prints what did
+not run otherwise). workerd and Hyperdrive are covered by `test:native`.
 
-- Removing, moving or narrowing a registered seam (a subpath, export, parameter, option or its behaviour) needs an
-  accepted ADR or ADR-lite and a migration note in the release notes that names the replacement. Moving plumbing under
-  `./internal/` is such a move when a seam lives there.
-- Adding public surface for applications adds a registry entry and its consumer module in the same PR.
-- Describe a seam by the generic capability only, with invented, neutral fixtures.
+- Do not remove, move or narrow a registered seam because Core has no use for it. Doing so needs an accepted ADR or
+  ADR-lite and a migration note that names the replacement
+  ([decision](docs/adr/adr-lite-application-seams.md)).
+- New public surface that applications depend on adds a registry entry, its id and its consumer module in the same PR.
+- Entries, consumer modules and tests say that a seam is required, not what it is for; fixtures stay minimal and
+  neutral.
 
 ## Hard invariants
 

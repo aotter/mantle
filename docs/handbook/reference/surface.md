@@ -143,12 +143,10 @@ use `/api/views/<name>`; HTTP Triggers keep their declared method and path.
 Known paths with another method return 405 with an `Allow` header. All responses use
 `cache-control: private, no-store`. JSON bodies and decoded path parameters
 are validated together, with path parameters taking precedence. Bodies larger
-than 1,000,000 bytes are refused; `content-length` is checked before reading. The same reader is public for the
-application's own routes: `body(request, limit?, refuse?)` from `@aotter/mantle/rest` answers the JSON object body
-(empty is `{}`) and calls `refuse(message)` to throw the application's own error for a body over `limit`, text that is
-not JSON or JSON that is not an object; without `refuse`, or when it returns, the failure is `INPUT_VALIDATION_FAILED`
-at `rest`. A `limit` that is not a positive safe integer throws a `TypeError`
-([example](trigger.md#calling-the-procedure-from-your-own-route)).
+than 1,000,000 bytes are refused; `content-length` is checked before reading. `body(request, limit?, refuse?)` from `@aotter/mantle/rest` is
+that reader: it answers the JSON object body (empty is `{}`) and refuses a body over `limit`, text that is not JSON and
+JSON that is not an object by calling `refuse(message)`; without `refuse`, or when it returns, the refusal is
+`INPUT_VALIDATION_FAILED` at `rest`. A `limit` that is not a positive safe integer throws a `TypeError`.
 A resolver's `ContractError` keeps its status (an expired token is 401 with its challenge); any other resolver exception returns a redacted 500. Cookie-origin refusals retain
 `path: "request:origin"`; REST and MCP share the kernel check.
 
@@ -401,13 +399,10 @@ is a JSON value on every target. Other expressions without declared column linea
 Malformed persisted JSON becomes a redacted internal failure. The conversion
 adds no database operations and does not mutate native query rows.
 
-The input half is public too. A generated route or tool carries `convert`, its table of `[field, type]`, and the
-surface applies it to validated input before calling the generated function: a missing or null field becomes `null`,
-a `json` field is stringified and a `bool` field becomes 0/1 on SQLite and D1. To call a generated tool without its
-transport (a test harness, or a host that calls generated operations directly), use `callTool(tool, input, db, caller, handlers)` from
-`@aotter/mantle/mcp`, which validates, converts and runs it
-([example](trigger.md#calling-the-procedure-from-your-own-route)). With another table, `convertInput(input, convert)` from
-`@aotter/mantle/contracts` is the same function the surfaces call, so it follows any change to these rules.
+A generated route or tool carries `convert`, a table of `[field, type]`; the surface applies it to validated input
+before calling the generated function: a missing or null field becomes `null`, a `json` field is stringified and a
+`bool` field becomes 0/1 on SQLite and D1. `convertInput(input, convert)` from `@aotter/mantle/contracts` is that
+function. `callTool(tool, input, db, caller, handlers)` from `@aotter/mantle/mcp` validates, converts and runs one tool.
 
 Bare Views, Store rows, native SQL Procedure `{ results }` and application-owned
 ref outputs retain their native contracts, except that a Store row's `version` is a
