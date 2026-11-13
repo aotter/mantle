@@ -156,6 +156,17 @@ export const SEAMS: readonly Seam[] = [
     check: "packages/mantle-admin/test/seams/page-renders.ts",
   },
   {
+    id: "mcp-app-inspect",
+    package: "@aotter/mantle-admin",
+    subpath: "./testing",
+    exports: ["checkMcpApp"],
+    entry: "checkMcpApp({ catalogue, html, inspect })",
+    stacks: [],
+    decided: SEAM,
+    check: "packages/mantle-admin/test/seams/mcp-app-inspect.ts",
+    run: false, // executed in test/testing.test.ts (a browser test)
+  },
+  {
     id: "upload-card-tool",
     package: "@aotter/mantle-admin",
     subpath: "./mcp",

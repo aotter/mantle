@@ -163,10 +163,11 @@ progress and cancellation. Admin adapts advertised host capabilities to its exis
 parent origin after the official handshake and narrows subsequent message delivery to that origin (opaque origins require
 `*`); protocol parsing stays in the official client. Closing the App rejects pending calls without retrying uncertain writes.
 
-`@aotter/mantle-admin/testing` exports `checkMcpApp({ catalogue, html })`, the compatibility test `mantle generate --admin` writes as
+`@aotter/mantle-admin/testing` exports `checkMcpApp({ catalogue, html, inspect })`, the compatibility test `mantle generate --admin` writes as
 `generated/admin-mcp-app.check.mjs`: it loads the built App in the official `AppBridge` under the spec's default CSP and fails on a network
 request, a console error, an exception or a missing size. It needs the optional peer `playwright-core` and Chrome (`MANTLE_TEST_CHROMIUM`);
-without a browser it fails. See [Run the compatibility test](../../docs/handbook/guides/mcp-apps.md#run-the-compatibility-test).
+without a browser it fails. An optional `inspect({ tool, theme, frame })` is called with each scenario's open App after the
+built-in checks; what it throws is reported. See [Run the compatibility test](../../docs/handbook/guides/mcp-apps.md#run-the-compatibility-test).
 
 Unsafe native integer versions remain exact in transport; generic UI
 interactions require safe numeric versions. Entries outside that range are

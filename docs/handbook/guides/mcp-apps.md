@@ -1065,7 +1065,9 @@ claim to test them. A Procedure action form does not mount these slots.
 It needs `playwright-core` (`npm install -D playwright-core`) and Chrome or Chromium:
 run `npx playwright-core install chromium`, or set `MANTLE_TEST_CHROMIUM` to a Chrome or
 Chromium executable. With no browser the test fails, saying so; it never skips. Import
-`checkMcpApp` from `@aotter/mantle-admin/testing` to call it yourself. For a real host
+`checkMcpApp` from `@aotter/mantle-admin/testing` to call it yourself:
+`checkMcpApp({ catalogue, html?, inspect? })`. `inspect({ tool, theme, frame })` is called for each scenario after its
+built-in checks, with the App's Playwright `Frame` still open; what it throws is reported as that scenario's problem. For a real host
 (Claude's custom connector, ChatGPT), follow the manual checks under
 [The Admin App in a host](#the-admin-app-in-a-host).
 

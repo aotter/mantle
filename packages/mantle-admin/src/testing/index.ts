@@ -7,7 +7,7 @@
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { Page, Route } from "playwright-core";
+import type { Frame, Page, Route } from "playwright-core";
 import { declared, type Kind, type McpCsp } from "../build/mcp-check.js";
 import { declaredMeta } from "../app/declared-meta.js";
 import { toolName } from "../app/tool-name.js";
@@ -30,6 +30,21 @@ export interface CheckMcpAppOptions {
   readonly catalogue: McpAppCatalogue;
   /** The built App; `dist/client/admin/mcp-app.html` by default. */
   readonly html?: string;
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+  /**
+   * Called for each scenario after its built-in checks, with the App's frame while it is still open. What it throws or
+   * rejects with is reported as that scenario's problem.
+   */
+  readonly inspect?: (app: McpAppScenario) => void | Promise<void>;
+}
+
+/** One scenario's opened App, for `inspect`. */
+export interface McpAppScenario {
+  /** The tool whose result the App renders. */
+  readonly tool: string;
+  readonly theme: "light" | "dark";
+  /** The App's sandboxed frame; `frame.page()` is the host page. */
+  readonly frame: Frame;
 }
 
 /** What `mantle bundle` records in the file: the Views the application's `cell:view:` slots and `pages[].mcp` pages render. */
@@ -128,6 +143,7 @@ const kindOf = (type: string): Kind =>
 export async function checkMcpApp({
   catalogue,
   html: file = "dist/client/admin/mcp-app.html",
+  inspect,
 }: CheckMcpAppOptions): Promise<void> {
   const html = readFileSync(file, "utf8");
   const manifest = declaredMeta<Manifest>(html, "mantle-mcp-app");
@@ -274,6 +290,13 @@ export async function checkMcpApp({
         const host = await state();
         if (!host || host.state.height <= 0) note("the App reported no size (size-changed with a positive height)");
         for (const error of host?.errors ?? []) note(`host error: ${error}`);
+        const opened = frame();
+        if (inspect && opened)
+          try {
+            await inspect({ tool, theme, frame: opened });
+          } catch (error) {
+            note(error instanceof Error ? error.message : String(error));
+          }
         await context.close();
       }
   } finally {

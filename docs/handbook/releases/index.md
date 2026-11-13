@@ -54,6 +54,8 @@ move, and never booting 0.2 against a 0.1.x database.
   such inputs needs no change. See [the generated surface](../reference/surface.md).
 - `pages[].mcp.renders` in `defineAdmin` accepts an application's own tool names without a cast; generated names are still
   suggested, but a misspelt name is no longer a type error.
+- `checkMcpApp` from `@aotter/mantle-admin/testing` takes `inspect({ tool, theme, frame })`, called with the open App after
+  each scenario's built-in checks.
 - `body(request, limit?, refuse?)` from `@aotter/mantle/rest` takes an optional `refuse(message)` for its refusals; a
   `limit` that is not a positive safe integer throws a `TypeError`. `convertInput(input, convert)` is exported from
   `@aotter/mantle/contracts`.

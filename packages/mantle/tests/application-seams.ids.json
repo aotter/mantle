@@ -11,5 +11,6 @@
   "host-tools",
   "admin-app-tools",
   "page-renders-tool",
+  "mcp-app-inspect",
   "upload-card-tool"
 ]
