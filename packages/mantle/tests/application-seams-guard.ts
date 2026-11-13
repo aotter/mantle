@@ -16,8 +16,9 @@ const exportsOf = (name: string) =>
 
 /**
  * The problems in one consumer module: an `@aotter/*` import that does not resolve through its package's exports map
- * to `dist` by a key outside `./internal/`, a relative import out of the module's directory, a computed `import()` or
- * `require`, and any cast: `as` (except `as const`), `<T>x`, `x!`, an `any` type or a `@ts-` directive.
+ * to `dist` by a key outside `./internal/`, or resolves to a removed-subpath stub (`dist/removed/`), a relative import
+ * out of the module's directory, a computed `import()` or `require`, and any cast: `as` (except `as const`), `<T>x`,
+ * `x!`, an `any` type or a `@ts-` directive.
  */
 export function consumerProblems(file: string, options: ts.CompilerOptions): string[] {
   const text = readFileSync(file, "utf8");
@@ -45,6 +46,8 @@ export function consumerProblems(file: string, options: ts.CompilerOptions): str
       problems.push(
         `${at(node)}: ${value} does not resolve to ${name}'s dist through its exports map (${resolved || "unresolved"})`,
       );
+    else if (resolved.startsWith(resolve(packages[name]!, "dist", "removed") + sep))
+      problems.push(`${at(node)}: ${value} is a removed-subpath stub, not a seam`);
   };
   const visit = (node: ts.Node): void => {
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier)

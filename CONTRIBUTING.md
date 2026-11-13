@@ -106,6 +106,30 @@ catalog, so their patch bumps do) fails the guard and stalls its auto-merge. A m
 label and a Migration line such as ``- `better-auth` `1.7.14` → `1.7.15` `` with the upgrade note; the body edit reruns
 the check and the queued merge proceeds.
 
+### Removed public subpaths
+
+A public subpath (any exports key outside `./internal/`) that is removed or moved while an application-facing
+replacement exists keeps a throwing stub. Without such a replacement, the Migration line says "no replacement" and no
+stub is added.
+
+- **Shape.** The exports key stays and resolves to `./dist/removed/<name>.js`, built from `src/removed/<name>.ts`, which
+  imports nothing (so no surface's startup bytes change), declares the old value names so an import links, and throws
+  on evaluation: `<specifier> was removed in <version>: <replacement>`. The replacement names the new export and module,
+  or the handbook section to follow, and says which old names have none. Every call of a declared value is a type
+  error, and one with arguments shows the message as the expected type. An old type name stays as an alias of the
+  message, so `import type` still compiles and a value of that type shows the message; a type that existed only to be
+  imported, never used, stays silent.
+- **Registered and tested.** `removed-subpaths.json` beside the package's package.json records `removedIn`,
+  `replacement` and `removeAfter`. For Core, `tests/public-surface.test.ts` classifies the key from it and imports the
+  stub to prove it throws exactly that message, and the seam guard refuses a consumer module that imports a stub.
+- **How long.** `removeAfter` is the first stable release at or after the removal, so an upgrade from one stable to the
+  next always meets the stub. `scripts/check-breaking.mjs` (in `pnpm check` and the PR workflow) fails once the package
+  version is past `removeAfter`, and treats deleting the stub earlier as a breaking change to declare.
+- **Removal.** The first version PR after `removeAfter` deletes the exports key, the source file and the registry entry,
+  with a one-line release note.
+- **Declared.** The Migration line names the replacement and may say "removed with stub", which the guard checks
+  against the exports map. A removal whose line names a replacement but adds no stub fails the guard.
+
 ## Hard invariants
 
 - `src/build/spec` keeps the closed v2 grammar (`cms.mantle.aotter.net/v2`), diagnostics
