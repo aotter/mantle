@@ -14,6 +14,11 @@
   names per MCP Trigger. Its SDK loads only through a request-time dynamic import.
 - HTTP/MCP Triggers declare exposure only; they are the only Trigger sources.
   Host scheduling is a separate capability.
+- On PostgreSQL and bun:sqlite, generated `store(db, caller).transaction(fn, { isolation? })` calls
+  `fn(tx, db)` with the transaction's native handle as `db`, typed as the handle passed to `store` (`Postgres` from
+  `@aotter/mantle/contracts`, or the bun:sqlite `Handle`). It is the supported way to run application SQL in the same
+  transaction as generated Procedures; no driver module is imported for it
+  ([your own SQL in a Store transaction](../concepts/runtime-and-adapters.md#your-own-sql-in-a-store-transaction)).
 - Native Admin retains selected 0.2 paths and the console contracts; see
   [Native Admin](../guides/native-admin.md) for app-mounted
   `adminBindings()` and `entries(bindings.schemas, bindings.adapter)`.

@@ -114,3 +114,4 @@ These retain their issue-based filenames and original decision status.
 | [#1936 Sign-in methods beyond email OTP](adr-lite-1936-sign-in-methods.md) | Accepted (revision 3): seams only; no passkey UI in Admin |
 | [#1937 Human-approved actions](adr-lite-1937-human-approval.md) | Accepted (revision 3): no Core change |
 | [#1971 Admin request pipeline](adr-lite-1971-admin-request-pipeline.md) | Accepted (Option B) |
+| [#2015 Application SQL in a Store transaction](adr-lite-2015-application-sql-in-transactions.md) | Accepted: the Store transaction declares its handle; no public driver module |
