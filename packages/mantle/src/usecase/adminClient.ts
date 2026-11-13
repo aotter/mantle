@@ -87,7 +87,7 @@ export function emitAdminClient(plan: RuntimePlan, typeOf: TypeOf): Record<strin
   ].sort();
   const custom = used.filter(group => !BUILT_IN_NAV_GROUPS.has(group));
   const union = (names: readonly string[]) => (names.length ? names.map(name => q(name)).join(" | ") : "never");
-  // whether an admin View is an MCP tool, which a page declared for an MCP App (`pages[].mcp.renders`) must have
+  // whether an admin View is an MCP tool: only such a View is a name `pages[].mcp.renders` takes (besides operations and `AdminMcpTools`)
   const toolOf = (name: string) => hasTool("view", name) || null;
   const rows = views.map(
     ([name], n) => `import type { WireRow as View${n}Wire } from "./views/${encodeURIComponent(name)}.js";`,
