@@ -403,7 +403,7 @@ adds no database operations and does not mutate native query rows.
 The input half is public too. A generated route or tool carries `convert`, its table of `[field, type]`, and the
 surface applies it to validated input before calling the generated function: a missing or null field becomes `null`,
 a `json` field is stringified and a `bool` field becomes 0/1 on SQLite and D1. To call a generated tool without its
-transport (a test harness, an in-browser preview host), use `callTool(tool, input, db, caller, handlers)` from
+transport (a test harness, or a host that calls generated operations directly), use `callTool(tool, input, db, caller, handlers)` from
 `@aotter/mantle/mcp`, which validates, converts and runs it
 ([example](trigger.md#calling-the-procedure-from-your-own-route)). With another table, `convertInput(input, convert)` from
 `@aotter/mantle/contracts` is the same function the surfaces call, so it follows any change to these rules.
