@@ -43,6 +43,13 @@ move, and never booting 0.2 against a 0.1.x database.
   Procedure that fails inside a transaction now rolls it back even if the error is caught, as a batch already did,
   and on PostgreSQL a transaction in which any statement failed now rejects on every client (Bun.SQL 1.3 resolved it
   although nothing was written) (#2015). See [your own SQL in a Store transaction](../concepts/runtime-and-adapters.md#your-own-sql-in-a-store-transaction).
+- **The upload card stops waiting for tool input.** With `forward`, `mediaUploadCard`'s card waited for the host's tool
+  input forever; now it waits at most `inputTimeoutMs` (5,000 ms by default) after connecting, then calls without the
+  forwarded arguments, and reads the purposes again if the input arrives later. Pass `inputTimeoutMs: false` to keep
+  waiting as before. A value that is not a positive integer up to 2,147,483,647 throws at configuration.
+- **`body(request, limit, refuse)`** from `@aotter/mantle/rest` takes the application's own refusal for its own routes;
+  `convertInput` from `@aotter/mantle/contracts` is the generated surfaces' input conversion, for code that calls
+  generated functions directly.
 
 ### Upgrading to 0.2.2-alpha.3
 

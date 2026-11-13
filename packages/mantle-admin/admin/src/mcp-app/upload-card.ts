@@ -6,6 +6,7 @@
  * ponytail: English only; take the host context's locale when hosts ask for another.
  */
 import { applyHostContext, connectHost, type HostApi } from "./postmessage";
+import { forwardedInput } from "./forwarded-input";
 import { outputOf, type ToolResult } from "../../../src/app/bridge.js";
 
 /** `@aotter/mantle/media`'s `UPLOAD_META`: the result `_meta` key with the upload targets. */
@@ -17,7 +18,7 @@ const UPLOAD_META = "net.aotter.mantle/upload";
 const config = JSON.parse(document.getElementById("mantle-upload-config")?.textContent ?? "{}") as {
   tool?: string;
   forward?: string[];
-  inputTimeoutMs?: number;
+  inputTimeoutMs?: number | false;
 };
 const TOOL = config.tool ?? "upload_media",
   forward = config.forward ?? [];
@@ -53,22 +54,12 @@ const alt = $<HTMLInputElement>("alt"),
   progress = $<HTMLProgressElement>("progress"),
   status = $<HTMLParagraphElement>("status");
 
-// the forwarded arguments come from the rendering call's input, so every call waits for it when there are any; a host
-// that never sends it does not leave the card waiting: after `inputTimeoutMs` from connecting, calls go without them and
-// the server's refusal (or answer) shows as for any call
-const bound: Record<string, unknown> = {};
-let inputArrived!: () => void;
-const input = forward.length
-  ? new Promise<void>(resolve => {
-      inputArrived = resolve;
-    })
-  : Promise.resolve();
+// calls repeat the `forward` arguments of the rendering call's input; after the input arrives late, the purposes are read again
+const forwarded = forwardedInput(forward, config.inputTimeoutMs ?? 5_000, () => readPurposes());
 const bind =
   (call: NonNullable<HostApi["call"]>): NonNullable<HostApi["call"]> =>
-  async (name, args, signal) => {
-    await input;
-    return call(name, { ...args, ...bound }, signal);
-  };
+  async (name, args, signal) =>
+    call(name, await forwarded.args(args), signal);
 let host: HostApi | undefined,
   purposes: readonly Purpose[] = [],
   asked: string | undefined,
@@ -191,32 +182,38 @@ button.addEventListener("click", () => {
 });
 select.addEventListener("change", render);
 
+/** The policy, from the server: it is the authority on purposes, types and caps. Only the latest read applies. */
+let reads = 0;
+function readPurposes() {
+  if (!host?.call) return;
+  const read = ++reads;
+  void bind(host.call)(TOOL, {}).then(
+    result => {
+      if (read !== reads) return;
+      const out = outputOf(result);
+      if (!result.isError && record(out) && Array.isArray(out.purposes)) {
+        purposes = out.purposes as Purpose[];
+        say("");
+      } else say(failure(result, "The media purposes could not be read."), true);
+      render();
+    },
+    () => {
+      if (read === reads) say("The media purposes could not be read.", true);
+    },
+  );
+}
+
 connectHost(
   {
     ready: (connected, context) => {
       host = connected;
-      if (forward.length) setTimeout(inputArrived, config.inputTimeoutMs ?? 5_000);
+      forwarded.connected();
       applyHostContext(context);
       render();
-      // the policy, from the server: it is the authority on purposes, types and caps
-      if (connected.call)
-        void bind(connected.call)(TOOL, {}).then(
-          result => {
-            const out = outputOf(result);
-            if (!result.isError && record(out) && Array.isArray(out.purposes)) {
-              purposes = out.purposes as Purpose[];
-              say("");
-            } else say(failure(result, "The media purposes could not be read."), true);
-            render();
-          },
-          () => {
-            say("The media purposes could not be read.", true);
-          },
-        );
+      readPurposes();
     },
     input: args => {
-      for (const name of forward) if (args[name] !== undefined) bound[name] = args[name];
-      inputArrived?.();
+      forwarded.input(args);
       if (typeof args.purpose === "string") {
         asked = args.purpose;
         render();

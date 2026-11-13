@@ -695,7 +695,8 @@ arguments) and `forward`, the input arguments the card repeats on every call:
 Its calls wait for the host's tool input, which hosts deliver only after the App connects and do not promise. With
 `forward`, the card waits at most `inputTimeoutMs` after connecting (5,000 ms by default), then calls without the
 forwarded arguments, so the server's answer or refusal shows in the card instead of a card that never loads its
-purposes. An input that arrives later still applies to the calls after it.
+purposes. An input that arrives later applies to the calls after it, and the card reads the purposes again with it.
+`inputTimeoutMs: false` waits until the input arrives.
 
 The targets reach the card in the result `_meta` (`net.aotter.mantle/upload`)
 when the request declares MCP Apps support and the card is registered;

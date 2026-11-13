@@ -20,9 +20,25 @@ const transparent = (html: HTMLElement) => [
 
 // A host re-serving several servers' media names its own tool and has the card repeat `server` from the tool input.
 // A host that never sends the tool input: after `inputTimeoutMs` the card calls without `server`, and shows the refusal.
-it.each([{}, { tool: "open_upload", forward: ["server"] }, { forward: ["server"], inputTimeoutMs: 300, silent: true }])(
+// A host that sends it after that: the card reads the purposes again with it, and the upload goes to that server.
+it.each([
+  {},
+  { tool: "open_upload", forward: ["server"] },
+  { forward: ["server"], inputTimeoutMs: 300, silent: true },
+  { forward: ["server"], inputTimeoutMs: 300, late: true },
+])(
   "the upload card PUTs the picked image to storage through CORS and commits it (%o)",
-  async ({ silent, ...options }: { tool?: string; forward?: string[]; inputTimeoutMs?: number; silent?: boolean }) => {
+  async ({
+    silent,
+    late,
+    ...options
+  }: {
+    tool?: string;
+    forward?: string[];
+    inputTimeoutMs?: number;
+    silent?: boolean;
+    late?: boolean;
+  }) => {
     const TOOL = options.tool ?? "upload_media",
       extra = options.forward ? { server: "shop" } : {};
     const root = resolve(import.meta.dirname, "../../.."),
@@ -41,7 +57,7 @@ import {AppBridge,PostMessageTransport} from '@modelcontextprotocol/ext-apps/app
 const frame=document.createElement('iframe');frame.sandbox='allow-scripts';document.body.append(frame);
 window.host={calls:[],messages:[]};
 const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{}});
-bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : "void bridge.sendToolInput({arguments:{purpose:'cover',server:'shop'}});"}};
+bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : late ? "setTimeout(()=>void bridge.sendToolInput({arguments:{purpose:'cover',server:'shop'}}),800);" : "void bridge.sendToolInput({arguments:{purpose:'cover',server:'shop'}});"}};
 bridge.oncalltool=async params=>{window.host.calls.push(params);return (await fetch('/tool',{method:'POST',body:JSON.stringify(params)})).json();};
 bridge.onmessage=async params=>{window.host.messages.push(params);return {};};
 bridge.onsizechange=()=>{};
@@ -192,7 +208,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         expect(errors).toEqual([]);
         return;
       }
-      await expect.poll(() => upload.isEnabled()).toBe(true);
+      await expect.poll(() => upload.isEnabled(), { timeout: 10_000 }).toBe(true);
       // the conversation shows through, and the first paint takes the host's scheme
       expect(await app.locator("html").evaluate(transparent)).toEqual([
         "rgba(0, 0, 0, 0)",
@@ -229,6 +245,8 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
           arguments: (call as { arguments: unknown }).arguments,
         })),
       ).toEqual([
+        // a late input: the first read went without it and was refused, then the purposes were read again with it
+        ...(late ? [{ name: TOOL, arguments: {} }] : []),
         { name: TOOL, arguments: { ...extra } },
         {
           name: TOOL,

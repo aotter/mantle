@@ -292,9 +292,10 @@ export interface MediaUploadCardOptions<Env = never> extends AdminAppResourceOpt
   /**
    * With `forward`, how long after connecting the card waits for the host's tool input before it calls without the
    * forwarded arguments, so a host that never sends the input gets the server's answer instead of a card that waits
-   * forever. 5,000 ms by default.
+   * forever; an input that arrives later is used from then on and the purposes are read again. 5,000 ms by default; a
+   * positive integer up to 2,147,483,647, or `false` to wait until the input arrives.
    */
-  readonly inputTimeoutMs?: number;
+  readonly inputTimeoutMs?: number | false;
   readonly title?: string;
   /** Passed through as `_meta.ui.domain`, for a host that serves each App from its own origin. */
   readonly domain?: string;
@@ -309,6 +310,16 @@ export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env
     tool = options.tool ?? "upload_media",
     forward = options.forward ?? [],
     inputTimeoutMs = options.inputTimeoutMs;
+  if (
+    inputTimeoutMs !== undefined &&
+    inputTimeoutMs !== false &&
+    !(Number.isSafeInteger(inputTimeoutMs) && inputTimeoutMs > 0 && inputTimeoutMs <= 2_147_483_647)
+  )
+    throw new ContractError(
+      "INPUT_VALIDATION_FAILED",
+      "mediaUploadCard: inputTimeoutMs is a positive integer of milliseconds up to 2147483647, or false to wait for the tool input.",
+      "mcp/apps",
+    );
   // `<` escaped: the config sits in a script element
   const config =
     tool === "upload_media" && !forward.length
