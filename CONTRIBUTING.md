@@ -100,7 +100,7 @@ Requirements: Node.js 22.22 or newer and pnpm 9 or newer.
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm check
+pnpm check:pg   # pnpm check + test:native against a throwaway PostgreSQL
 ```
 
 Formatting is owned by Biome: run `pnpm format`, and `pnpm check` fails on
@@ -114,20 +114,26 @@ cost bytes.
 `pnpm check` runs the boundary, skill, plugin-manifest and release
 self-checks, builds, compiles the documented examples, typechecks, tests the
 workspace and runs the reference service from exact packed tarballs. Use
-package filters while iterating. PostgreSQL tests skip unless `MANTLE_PG_URL`
-names a disposable database; native Bun conformance is separate
+package filters while iterating. Native four-target conformance is separate
 (`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14).
 
-CI gates `main` only. A PR into `main` (promotion or hotfix) runs the **Full checks** workflow for every author,
-and its `Typecheck + tests` status passes only when the whole suite does. A PR into `develop` merges on a local
-`pnpm check` (judge by its exit code) plus review; CI runs nothing for it, and a failure found later is fixed forward.
-The exception is Dependabot: its PRs into `develop` run the light PR CI (`.github/workflows/ci.yml`), because patch and
-digest bumps merge automatically once it is green.
-That PR CI builds once in each of two parallel jobs: typecheck plus boundaries,
-skills, plugin manifests, startup graphs/budgets and release/packed-consumer
-self-tests; and the three packages’ tests running concurrently. Both jobs use
-the pnpm store cache and must pass the combined required status.
-Its tests skip PostgreSQL; Full checks retains PostgreSQL-backed coverage.
+PostgreSQL is a first-class target. Its tests skip unless `MANTLE_PG_URL`,
+`MANTLE_NEXT_BUN_PG_URL` and `MANTLE_NEXT_WORKER_PG_URL` name a disposable
+database, and `pnpm test` then ends with a `PostgreSQL tests SKIPPED` line.
+`pnpm check:pg` runs `pnpm check` and `test:native` against a throwaway local
+cluster (`scripts/with-postgres.mjs`: initdb in a temp directory, deleted
+afterwards; as root it runs the server as `postgres` or `nobody`); with the
+three variables already set (for example a `postgres:16` container) it uses
+them instead. `pnpm with-pg <command>` runs any command the same way, such as
+`pnpm with-pg pnpm --filter @aotter/mantle test`. A PR's local evidence is
+`pnpm check:pg`, and the PR body states whether that or plain `pnpm check` ran.
+
+Every ready PR into `develop` runs the PR CI (`.github/workflows/ci.yml`), for every author; drafts skip until marked
+ready. It builds once in each of two parallel jobs: typecheck plus boundaries, skills, plugin manifests, startup
+graphs/budgets and release/packed-consumer self-tests; and the three packages’ tests, including every PostgreSQL test,
+against a PostgreSQL 16 service, then `test:native`. Both must pass the required `Typecheck + tests` status. Dependabot
+patch and digest bumps merge automatically once it is green. A PR into `main` (promotion or hotfix) runs the
+**Full checks** workflow instead, and there `Typecheck + tests` passes only when the whole suite does.
 Build typechecks library sources; `pnpm typecheck` checks the remaining test,
 app, example and config roots (including their imports). Run build first.
 Build before running package tests locally; `pnpm test` does not rebuild or pack.
@@ -135,8 +141,8 @@ Package and upload bytes are reports; cold-start checks remain gates.
 
 Full checks (`.github/workflows/full-checks.yml`) also runs by hand
 (Actions → Full checks → Run workflow on the branch). Do that before every release, alpha included (an alpha releases
-from `develop` and never passes the `main` gate), or when a change to drivers, auth,
-generator output or Admin UI may behave differently on Linux. It runs native
+from `develop` and never passes the `main` gate), before merging a change to the PostgreSQL driver/dialect, auth, the
+kernel request pipeline or generator output, or when an Admin UI change may behave differently on Linux. It runs native
 four-target and Wrangler/D1 integrations, packed-consumer checks, doc examples,
 OSS plugin validation, the two Chrome sandbox-boundary tests (design preview
 and MCP App host bridge), and size reports. Run the boundaries locally with
@@ -145,8 +151,19 @@ Admin sign-in/list/edit/publish/translation browser flow is covered by maintaine
 manual acceptance; the packed worker-consumer smoke checks the service and Admin
 API round trip. Shared Store, publishing and search scenarios run through
 `test:native`; focused unit tests retain security and correctness invariants.
-`pnpm check` remains the broad local/release check; the release workflow is
-unchanged.
+`pnpm check:pg` is the broad local/release check.
+
+The `cloudflare-postgres` target runs the generated code in workerd under local
+Wrangler with a Hyperdrive binding whose `localConnectionString` points at the
+test database. Cloudflare documents that this mode connects "directly to the
+database without going through Hyperdrive" and that "Hyperdrive's connection
+pooling and query caching do not take effect". It therefore shows the Worker
+runtime, `nodejs_compat`, postgres.js and transactions, but not Hyperdrive's
+transaction-mode pooling, named prepared statements through the pooler, query
+caching, or its connection and statement limits. A claim about those needs a
+deployed Hyperdrive configuration; `wrangler dev --remote` uses one, but runs on
+Cloudflare against that configuration's real database, so it is an opt-in
+maintainer check with a dedicated database, never CI.
 
 ## Branches, commits, and pull requests
 
