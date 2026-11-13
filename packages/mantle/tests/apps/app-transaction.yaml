@@ -1,0 +1,37 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: bookings}
+spec:
+  title: Bookings
+  lifecycle: operational
+  scope: "owner = auth.uid()"
+  indexes: [[owner, item]]
+  schema: {type: object, required: [owner, item], properties: {owner: {type: string}, item: {type: string}}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: book}
+spec:
+  requires: {auth: {all: [ctx.user]}}
+  input: {type: object, required: [item], additionalProperties: false, properties: {item: {type: string}}}
+  output: {type: object}
+  handler:
+    sql: |
+      INSERT INTO bookings (item) VALUES (input.item);
+      INSERT INTO bookings (item) VALUES ('receipt') RETURNING id;
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: rebook}
+spec:
+  requires: {auth: {all: [ctx.user]}}
+  input:
+    type: object
+    required: [id, item, version]
+    additionalProperties: false
+    properties: {id: {type: string}, item: {type: string}, version: {type: integer}}
+  output: {type: object}
+  handler:
+    sql: |
+      INSERT INTO bookings (item) VALUES ('rebook-marker');
+      UPDATE bookings SET item = input.item WHERE id = input.id AND version = input.version RETURNING id;

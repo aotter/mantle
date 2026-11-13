@@ -19,7 +19,8 @@ import {
 } from "../contracts.js";
 import { context, guard } from "./transaction-context.js";
 
-const transactions = new WeakSet<Postgres>();
+/** Open transaction handles; `failure` makes one rollback-only. */
+const transactions = new WeakMap<Postgres, { failure?: { error: unknown } }>();
 const ISOLATION: readonly string[] = ["serializable", "repeatable read", "read committed", "read uncommitted"];
 
 export const read = (db: Unsafe, sql: string, binds: unknown[]): PromiseLike<PostgresResult> => {
@@ -41,6 +42,8 @@ const check = (path: string, e: any): ContractError =>
 /** A structured server ErrorResponse proves rollback; missing evidence is uncertain. */
 export function definitive(error: unknown): boolean {
   if (error instanceof ContractError) return error.code === "CONFLICT";
+  // Bun.SQL's COMMIT of a transaction a failed statement aborted: the server answered ROLLBACK.
+  if ((error as { code?: unknown } | null)?.code === "ERR_POSTGRES_COMMIT_ROLLED_BACK") return true;
   const state = sqlstate(error);
   return (
     typeof state === "string" &&
@@ -97,7 +100,15 @@ export async function procedure(db: Postgres, steps: readonly Bound[], path: str
     }
     return results;
   };
-  if (transactions.has(db)) return execute(db);
+  const joined = transactions.get(db);
+  // Earlier steps of a failed Procedure must not commit with the transaction it joined, even if the caller catches.
+  if (joined)
+    try {
+      return await execute(db);
+    } catch (error) {
+      if (steps.length > 1) joined.failure ??= { error };
+      throw error;
+    }
   if (steps.length === 1) {
     try {
       return await execute(db);
@@ -144,10 +155,12 @@ export async function transaction<T>(
           throw new Error("Nested transactions are not supported.");
         },
       };
-      transactions.add(tx);
+      const marks: { failure?: { error: unknown } } = {};
+      transactions.set(tx, marks);
       state.handle = tx;
       try {
         const result = await context.run(state, () => fn(tx));
+        if (marks.failure) throw marks.failure.error;
         committing = true;
         return result;
       } finally {

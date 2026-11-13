@@ -15,7 +15,8 @@ export interface Handle {
   transaction(fn: (db: any) => any): (db: any) => any;
 }
 
-const transactions = new WeakSet<Handle>();
+/** Open transaction handles; `failure` makes one rollback-only. */
+const transactions = new WeakMap<Handle, { failure?: { error: unknown } }>();
 const queues = new WeakMap<Handle, Promise<void>>();
 /** Only queued transactions make otherwise synchronous statements wait; a rejection cannot poison the queue. */
 function enqueue<T>(db: Handle, fn: () => T | PromiseLike<T>): Promise<T> {
@@ -61,7 +62,16 @@ export async function procedure(db: Handle, steps: readonly Bound[], path: strin
           : conflict(path, false, undefined, s.step);
       return rows;
     });
-  return available(db, () => (transactions.has(db) || steps.length === 1 ? execute(db) : db.transaction(execute)(db)));
+  const joined = transactions.get(db);
+  // Earlier steps of a failed Procedure must not commit with the transaction it joined, even if the caller catches.
+  if (joined)
+    try {
+      return await available(db, () => execute(db));
+    } catch (error) {
+      if (steps.length > 1) joined.failure ??= { error };
+      throw error;
+    }
+  return available(db, () => (steps.length === 1 ? execute(db) : db.transaction(execute)(db)));
 }
 
 export async function transaction<T>(db: Handle, fn: (tx: Handle) => Promise<T>): Promise<T> {
@@ -78,10 +88,12 @@ export async function transaction<T>(db: Handle, fn: (tx: Handle) => Promise<T>)
       exec: db.exec.bind(db),
       transaction: db.transaction.bind(db),
     };
-    transactions.add(tx);
+    const marks: { failure?: { error: unknown } } = {};
+    transactions.set(tx, marks);
     const state = { outer: db as object | undefined, handle: tx as object | undefined };
     try {
       const result = await context.run(state, () => fn(tx));
+      if (marks.failure) throw marks.failure.error;
       db.exec("COMMIT");
       return result;
     } catch (error) {
