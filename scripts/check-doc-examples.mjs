@@ -19,6 +19,7 @@ const HANDBOOK = [
   "guides/sql-patterns.md",
   "guides/revisions.md",
   "cloudflare/postgres-hyperdrive.md",
+  "cloudflare/sign-in-methods.md",
 ];
 const requested = process.argv.slice(2).map(path => resolve(path));
 const nativePages = requested.length ? requested : HANDBOOK.map(page => join(root, "docs/handbook", page));
@@ -27,7 +28,9 @@ for (const page of nativePages) {
   const blocks = [...source.matchAll(/^```yaml\n([\s\S]*?)^```$/gm)].map(match => match[1]);
   if (
     !blocks.some(block => block.includes("apiVersion: cms.mantle.aotter.net/v2")) &&
-    !["postgres-adapters.md", "email.md", "postgres-hyperdrive.md"].some(name => page.endsWith("/" + name))
+    !["postgres-adapters.md", "email.md", "postgres-hyperdrive.md", "sign-in-methods.md"].some(name =>
+      page.endsWith("/" + name),
+    )
   )
     throw new Error(`${page}: no v2 manifest block`);
   const project = mkdtempSync(join(tmpdir(), "mantle-native-docs-"));
