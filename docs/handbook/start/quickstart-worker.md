@@ -128,8 +128,9 @@ curl "$O/api/views/tickets-by-state?ticketState=open"
 
 Add Schemas, Views, Procedures and Triggers as more files in `manifests/` ([four atoms](../concepts/four-atoms.md);
 patterns in `mantle help examples`), then `pnpm generate`. Visitor pages, webhooks and callbacks go in `src/routes.ts`.
-The app's `README.md` covers handlers, seed data, `pnpm smoke` and `pnpm accept`. Before deploying, replace the console
-code sender in `src/auth.ts` ([email](../guides/email.md)) and follow [deploy and operate](../cloudflare/deploy-and-operate.md).
+The app's `README.md` covers handlers, seed data, `pnpm smoke` and `pnpm accept`. Before deploying, choose how users
+sign in ([email code, GitHub, or email and password](../cloudflare/sign-in-methods.md)): the console code sender works
+only locally. Then follow [before the first deploy](../cloudflare/deploy-and-operate.md#before-the-first-deploy).
 
 ## Without init: mount generated REST in your own Worker
 
