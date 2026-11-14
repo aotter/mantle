@@ -34,6 +34,15 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ## 0.2.2 — in preparation
 
+### Upgrading to 0.2.2-alpha.5
+
+- **Choosing how users sign in, and the first deploy (handbook).**
+  [Choose how users sign in](../cloudflare/sign-in-methods.md) compares the email code, GitHub sign-in and email and
+  password, with a recipe for each from the `mantle init` app;
+  [before the first deploy](../cloudflare/deploy-and-operate.md#before-the-first-deploy) takes the user through the
+  Cloudflare account, `wrangler login`, the database and the secrets. No package changes; `init` still writes the email
+  code.
+
 ### Upgrading to 0.2.2-alpha.4
 
 Pin the selected packages to `0.2.2-alpha.4` and regenerate. One breaking change; everything else is additive or a fix.
