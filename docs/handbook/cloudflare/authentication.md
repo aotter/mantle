@@ -14,6 +14,9 @@ Mantle supplies the database adapter, schema generation and caller resolution:
 
 > **Verification status:** the GitHub social-provider and magic-link recipes have not yet been exercised end to end against real deployed provider flows.
 
+To choose between the email code, GitHub sign-in, and email and password, with a recipe for each, see
+[Choose how users sign in](sign-in-methods.md).
+
 Copy `src/auth.ts` from the [app shell](../../examples/app-shell/README.md), which CI runs from the packed packages;
 installed, it is `node_modules/@aotter/mantle/docs/examples/app-shell/src/auth.ts`. Its essentials:
 

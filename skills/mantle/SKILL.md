@@ -22,4 +22,6 @@ its docs one topic at a time.
    and with the questions the brief leaves open, and wait for one go-ahead. Then build, show the Developer UI, accept
    and measure without stopping. Never report done without acceptance and performance; end with what each found and
    changed, and each layer as CONVERGED, BLOCKED or UNVERIFIED.
-4. **Deploy, delete remote data or publish nothing unless the user asks for that exact action.**
+4. **Deploy, delete remote data or publish nothing unless the user asks for that exact action.** Before a first
+   deploy, `mantle help deploy-and-operate` takes the user through choosing how their users sign in, a Cloudflare
+   account and `wrangler login`; the user types secrets into Wrangler, never into chat.

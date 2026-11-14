@@ -34,6 +34,11 @@ Write it in the user's language and in business terms: no Schema, SQL, route, to
   ([acceptance](../guides/agent-workflow-acceptance.md#plan-the-run)).
 - **How you will check it is fast:** how much sample data, and what "fast enough" means for each page
   ([performance](../guides/performance.md#plan-the-pass)).
+- **How users will sign in once deployed.** Locally the email code prints in the dev log; a deployment needs one of
+  three methods: email code (needs an email sender), GitHub sign-in (needs a GitHub OAuth App; the app stores no
+  password) or email and password (no outside setup, but Workers Paid and manual admin steps). Give the
+  one-line cost of each from [Choose how users sign in](../cloudflare/sign-in-methods.md) and recommend GitHub unless
+  the users lack GitHub accounts. Assumed answer: keep the email code and ask again before deploying.
 - **What you will do on the user's machine,** such as starting the app and opening the browser for them and for the
   testers. Say it; do not ask. Ask only for what you cannot do yourself, such as a deployment or a credential.
 - **Questions:** every rule the brief leaves open, such as limits, deadlines, who may see or change what, and what
@@ -43,7 +48,8 @@ After the go-ahead, do every step below without stopping, and end with the repor
 for what the plan did not cover and needs the user: a credential, a deployment, a destructive action or a change of
 scope.
 
-1. `mantle init`, install, then read the app's `README.md` and search for `AGENT:`.
+1. `mantle init`, install, then read the app's `README.md` and search for `AGENT:`. If the user chose GitHub or email
+   and password, apply that recipe now (`mantle help sign-in-methods`), so acceptance runs with it.
 2. Map the brief to the [four atoms](../concepts/four-atoms.md): Schemas, Views, Procedures, Triggers.
    Decide what each role (`admin`, `user`) does on each surface: Admin, MCP, REST and any visitor pages.
 3. For each need, find the pattern in `mantle help examples` (the **Combining** table) and read that example's
@@ -73,7 +79,9 @@ scope.
    and the [performance summary](../guides/performance.md#summarise-for-the-user), then the layered status.
 
 The first verified sign-in with `ADMIN_EMAIL` becomes the admin. Further administrators are added in Admin:
-**More → Administrators** invites by email, and **More → Members** grants Admin to an existing member.
+**More → Administrators** invites by email, and **More → Members** grants Admin to an existing member. With email and
+password, the first admin is [promoted by hand](../cloudflare/sign-in-methods.md#the-first-admin) and invitations do
+not work.
 [Authentication](../cloudflare/authentication.md#identity-helpers) documents the same operations as an API.
 
 ## Other tasks
@@ -81,6 +89,6 @@ The first verified sign-in with `ADMIN_EMAIL` becomes the admin. Further adminis
 | Task | Read |
 | --- | --- |
 | Upgrade Mantle | [Upgrade an application](../releases/index.md#upgrade-an-application) |
-| Deploy, only when the user asks | [Deploy and operate](../cloudflare/deploy-and-operate.md) |
+| Deploy, only when the user asks | [Before the first deploy](../cloudflare/deploy-and-operate.md#before-the-first-deploy): sign-in method, Cloudflare account, `wrangler login`, database and secrets, with the user at each step |
 | A slow page, first request or query | [Performance pass](../guides/performance.md) |
 | Stale media uploads, only when the user asks | [Clean up stale uploads](../cloudflare/media-r2.md#clean-up-stale-uploads) |

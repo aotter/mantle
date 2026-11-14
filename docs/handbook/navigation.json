@@ -185,6 +185,10 @@
           "link": "/cloudflare/service-entry"
         },
         {
+          "text": "Choose how users sign in",
+          "link": "/cloudflare/sign-in-methods"
+        },
+        {
           "text": "Authentication",
           "link": "/cloudflare/authentication"
         },
