@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, Images, Search, Trash2, Upload, type LucideIcon } from "lucide-react";
+import { Check, Copy, ExternalLink, FileText, Images, Search, Trash2, Upload, type LucideIcon } from "lucide-react";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { t } from "../../app/i18n";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
@@ -12,7 +12,7 @@ import { Input } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { useConfirm } from "../../ui/confirm-dialog";
 import { EmptyState, ErrorBox, LoadMore, PageHeader } from "../../ui/page";
-import { uploadMediaAsset } from "./media-upload";
+import { acceptFor, selectPurpose, uploadMediaAsset } from "./media-upload";
 import { pagedQueryOptions } from "../../lib/queries";
 import { formatTimestampMs } from "../content/field-render";
 
@@ -89,7 +89,7 @@ export function MediaBrowser({
   }, [queryClient]);
 
   async function uploadFiles(files: FileList | File[]): Promise<void> {
-    const list = Array.from(files).filter(f => f.type.startsWith("image/"));
+    const list = Array.from(files);
     if (list.length === 0) return;
     setUploading(true);
     setUploadError(null);
@@ -106,8 +106,10 @@ export function MediaBrowser({
       // Refresh if ANY upload succeeded so the new assets appear.
       if (succeeded > 0) refresh();
       if (failures.length > 0) {
-        const detail = failures[0]?.reason;
-        const detailMsg = detail instanceof Error ? detail.message : String(detail);
+        // every failed file says why: a batch can mix types the purpose takes with ones it does not
+        const detailMsg = failures
+          .map(({ reason }) => (reason instanceof Error ? reason.message : String(reason)))
+          .join(" ");
         setUploadError(
           `${t(language, "media.uploadFailed", {
             count: String(failures.length),
@@ -161,7 +163,7 @@ export function MediaBrowser({
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
+            accept={acceptFor(selectPurpose(purposes, preferredPurpose))}
             multiple
             className="hidden"
             onChange={e => {
@@ -258,6 +260,8 @@ function MediaTile({
   const [caption, setCaption] = React.useState(item.caption ?? "");
   const [copied, setCopied] = React.useState(false);
   const dirty = alt !== (item.alt ?? "") || caption !== (item.caption ?? "");
+  // an item without a type predates files that are not images
+  const image = !item.mime || item.mime.startsWith("image/");
 
   const save = useMutation({
     mutationFn: () => api.patch<MediaLibraryItem>(`/media/${encodeURIComponent(item.id)}`, { alt, caption }),
@@ -288,11 +292,17 @@ function MediaTile({
   return (
     <div className="flex flex-col overflow-hidden rounded-lg border bg-card">
       <div className="relative aspect-square bg-muted/40">
-        {item.primaryUrl ? (
+        {item.primaryUrl && image ? (
           <img src={item.primaryUrl} alt={item.alt ?? ""} loading="lazy" className="size-full object-cover" />
         ) : (
-          <div className="flex size-full items-center justify-center text-muted-foreground">
-            <Images className="size-6" aria-hidden />
+          <div
+            className="flex size-full flex-col items-center justify-center gap-2 p-3 text-center text-muted-foreground"
+            data-media-file={image ? undefined : ""}
+          >
+            {image ? <Images className="size-6" aria-hidden /> : <FileText className="size-6" aria-hidden />}
+            {image ? null : (
+              <span className="line-clamp-2 break-all text-xs">{item.filename ?? item.mime ?? item.id}</span>
+            )}
           </div>
         )}
         {onPick ? (
@@ -328,12 +338,14 @@ function MediaTile({
 
         {onPick ? null : (
           <>
-            <Input
-              value={alt}
-              placeholder={t(language, "media.altPlaceholder")}
-              aria-label={t(language, "media.alt")}
-              onChange={e => setAlt(e.target.value)}
-            />
+            {image || item.alt ? (
+              <Input
+                value={alt}
+                placeholder={t(language, "media.altPlaceholder")}
+                aria-label={t(language, "media.alt")}
+                onChange={e => setAlt(e.target.value)}
+              />
+            ) : null}
             <Input
               value={caption}
               placeholder={t(language, "media.captionPlaceholder")}

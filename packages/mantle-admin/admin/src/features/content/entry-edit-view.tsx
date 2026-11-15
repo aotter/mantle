@@ -6,14 +6,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ExternalLink,
+  FileText,
   Globe,
   Images,
-  ImagePlus,
   LockKeyhole,
   Plus,
   RotateCcw,
   Save,
   Send,
+  Upload,
 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
@@ -54,7 +55,7 @@ import {
 } from "../../ui/page";
 import { useConfirm } from "../../ui/confirm-dialog";
 import { StatusBadge } from "../../ui/status-badge";
-import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
+import { acceptFor, primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
 import { MediaBrowser } from "../media/media-library-view";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@aotter/mantle-ui/kit";
 import { collectionSummaryKey } from "./collection-view";
@@ -979,14 +980,14 @@ function MediaAssetField({
           disabled={uploading || mediaPurposes.length === 0}
           title={purpose ?? t(language, "entryEdit.noMediaPurpose")}
         >
-          <ImagePlus className="size-4" aria-hidden />
+          <Upload className="size-4" aria-hidden />
           {uploading ? t(language, "entryEdit.uploadingMedia") : t(language, "entryEdit.uploadMedia")}
         </Button>
       </div>
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept={acceptFor(mediaPurposes.find(p => p.name === purpose))}
         className="hidden"
         onChange={event => {
           const file = event.currentTarget.files?.[0];
@@ -1045,7 +1046,9 @@ function MediaAssetThumbnail({
       className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted/40"
       title={isError ? t(language, "entryEdit.mediaMissing") : assetId}
     >
-      {asset?.primaryUrl ? (
+      {asset?.mime && !asset.mime.startsWith("image/") ? (
+        <FileText className="size-4 text-muted-foreground" aria-hidden />
+      ) : asset?.primaryUrl ? (
         <img src={asset.primaryUrl} alt="" className="size-full object-cover" />
       ) : (
         <Images className="size-4 text-muted-foreground" aria-hidden />

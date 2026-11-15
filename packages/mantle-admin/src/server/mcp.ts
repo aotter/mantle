@@ -304,7 +304,7 @@ export interface MediaUploadCardOptions<Env = never> extends AdminAppResourceOpt
   readonly domain?: string;
 }
 /**
- * The upload card, an MCP App that renders `upload_media` on `/mcp/admin`: the person picks an image, the card uploads it
+ * The upload card, an MCP App that renders `upload_media` on `/mcp/admin`: the person picks a file, the card uploads it
  * straight to storage and commits it. Register it beside `adminMcpApps(...)` when `mcp(...)` has `media`. The page loads
  * on `resources/read` only.
  */
@@ -337,7 +337,7 @@ export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env
         name: "mantle-admin-upload",
         title: options.title ?? "Upload media",
         renders: [tool],
-        description: "Pick an image and upload it to the media library.",
+        description: "Pick a file and upload it to the media library.",
         ...passThrough(options),
         html: async ({ env }) => {
           const origin = options.media(env as Env).uploadOrigin;

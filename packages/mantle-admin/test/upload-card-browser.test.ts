@@ -21,16 +21,19 @@ const transparent = (html: HTMLElement) => [
 // `tool` and `forward`: the card calls its own tool and repeats `folder` from the tool input.
 // No tool input: after `inputTimeoutMs` the card calls without `folder` and shows the refusal.
 // A late tool input: the card reads the purposes again with it and the upload carries it.
+// `anyFile`: a purpose that takes any type gets a PDF, with no alt text.
 it.each([
   {},
   { tool: "upload_to_folder", forward: ["folder"] },
   { forward: ["folder"], inputTimeoutMs: 300, silent: true },
   { forward: ["folder"], inputTimeoutMs: 300, late: true },
+  { anyFile: true },
 ])(
-  "the upload card PUTs the picked image to storage through CORS and commits it (%o)",
+  "the upload card PUTs the picked file to storage through CORS and commits it (%o)",
   async ({
     silent,
     late,
+    anyFile,
     ...options
   }: {
     tool?: string;
@@ -38,9 +41,11 @@ it.each([
     inputTimeoutMs?: number;
     silent?: boolean;
     late?: boolean;
+    anyFile?: boolean;
   }) => {
     const TOOL = options.tool ?? "upload_media",
-      extra = options.forward ? { folder: "docs" } : {};
+      extra = options.forward ? { folder: "docs" } : {},
+      purpose = anyFile ? "notes" : "cover";
     const root = resolve(import.meta.dirname, "../../.."),
       pkg = resolve(import.meta.dirname, "..");
     const { build } = createRequire(resolve(root, "packages/mantle/package.json"))("esbuild");
@@ -57,7 +62,7 @@ import {AppBridge,PostMessageTransport} from '@modelcontextprotocol/ext-apps/app
 const frame=document.createElement('iframe');frame.sandbox='allow-scripts';document.body.append(frame);
 window.host={calls:[],messages:[]};
 const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{}});
-bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : late ? "setTimeout(()=>void bridge.sendToolInput({arguments:{purpose:'cover',folder:'docs'}}),800);" : "void bridge.sendToolInput({arguments:{purpose:'cover',folder:'docs'}});"}};
+bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : late ? "setTimeout(()=>void bridge.sendToolInput({arguments:{purpose:'cover',folder:'docs'}}),800);" : `void bridge.sendToolInput({arguments:{purpose:'${purpose}',folder:'docs'}});`}};
 bridge.oncalltool=async params=>{window.host.calls.push(params);return (await fetch('/tool',{method:'POST',body:JSON.stringify(params)})).json();};
 bridge.onmessage=async params=>{window.host.messages.push(params);return {};};
 bridge.onsizechange=()=>{};
@@ -118,6 +123,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
     const policies = [
       { name: "cover", required: ["image/png,image/jpeg"], maxBytes: { "image/png": 1000, "image/jpeg": 1000 } },
       { name: "gallery", required: ["image/webp", "image/jpeg"], maxBytes: { "image/webp": 1000, "image/jpeg": 1000 } },
+      { name: "notes", required: ["*/*"], maxBytes: { "*/*": 1000 } },
     ];
     const server = createServer(async (request, response) => {
       const url = request.url ?? "/";
@@ -215,24 +221,34 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         "rgba(0, 0, 0, 0)",
         "light dark",
       ]);
-      // the purpose came in the tool input, so no picker shows; the input accepts its types
+      // the purpose came in the tool input, so no picker shows; the input accepts its types, or any file
       expect(await app.locator("#purpose-row").isHidden()).toBe(true);
-      expect(await app.getByLabel("Image").getAttribute("accept")).toBe("image/png,image/jpeg");
-      // a type the purpose does not take is refused before any call
-      await app
-        .getByLabel("Image")
-        .setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
-      await upload.click();
-      await expect.poll(() => app.locator("#status").textContent()).toContain("takes image/png or image/jpeg");
-      expect(await app.locator("#status").getAttribute("role")).toBe("alert");
-      const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(56)]);
-      // a raw file name: the zero-width space goes to the server as named, but not into the user message
-      await app.getByLabel("Image").setInputFiles({ name: "c\u200Bat.png", mimeType: "image/png", buffer: png });
-      await app.getByLabel("Alt text").fill("A cat");
+      expect(await app.getByLabel("File").getAttribute("accept")).toBe(anyFile ? "" : "image/png,image/jpeg");
+      const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(56)]),
+        pdf = Buffer.from("%PDF-1.7\n%%EOF\n");
+      if (anyFile) {
+        // alt text is for images: a PDF gets none
+        await app.getByLabel("File").setInputFiles({ name: "report.pdf", mimeType: "application/pdf", buffer: pdf });
+        expect(await app.locator("#alt-row").isHidden()).toBe(true);
+      } else {
+        // a type the purpose does not take is refused before any call
+        await app
+          .getByLabel("File")
+          .setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
+        expect(await app.locator("#alt-row").isHidden()).toBe(true);
+        await upload.click();
+        await expect.poll(() => app.locator("#status").textContent()).toContain("takes image/png or image/jpeg");
+        expect(await app.locator("#status").getAttribute("role")).toBe("alert");
+        // a raw file name: the zero-width space goes to the server as named, but not into the user message
+        await app.getByLabel("File").setInputFiles({ name: "c\u200Bat.png", mimeType: "image/png", buffer: png });
+        await app.getByLabel("Alt text").fill("A cat");
+      }
       await upload.click();
       await app.getByText(/^Uploaded\. Asset id /).waitFor();
       const id = (await app.locator("form").getAttribute("data-asset"))!;
-      expect(objects.get(id)).toEqual({ type: "image/png", bytes: png });
+      expect(objects.get(id)).toEqual(
+        anyFile ? { type: "application/pdf", bytes: pdf } : { type: "image/png", bytes: png },
+      );
       expect(preflights).toEqual(["null"]);
       const { calls, messages, appCapabilities } = await page.evaluate(
         () => (window as unknown as { host: { calls: unknown[]; messages: unknown[]; appCapabilities: unknown } }).host,
@@ -250,20 +266,31 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         { name: TOOL, arguments: { ...extra } },
         {
           name: TOOL,
-          arguments: {
-            purpose: "cover",
-            filename: "c\u200Bat.png",
-            variants: [{ mimeType: "image/png", byteSize: 64, role: "primary" }],
-            alt: "A cat",
-            ...extra,
-          },
+          arguments: anyFile
+            ? {
+                purpose,
+                filename: "report.pdf",
+                variants: [{ mimeType: "application/pdf", byteSize: pdf.length, role: "primary" }],
+              }
+            : {
+                purpose,
+                filename: "c\u200Bat.png",
+                variants: [{ mimeType: "image/png", byteSize: 64, role: "primary" }],
+                alt: "A cat",
+                ...extra,
+              },
         },
-        { name: TOOL, arguments: { uploadId: id, purpose: "cover", ...extra } },
+        { name: TOOL, arguments: { uploadId: id, purpose, ...extra } },
       ]);
       expect(messages).toEqual([
         {
           role: "user",
-          content: [{ type: "text", text: `I uploaded cat.png to the media library: asset id ${id} (purpose cover).` }],
+          content: [
+            {
+              type: "text",
+              text: `I uploaded ${anyFile ? "report.pdf" : "cat.png"} to the media library: asset id ${id} (purpose ${purpose}).`,
+            },
+          ],
         },
       ]);
       // a finished upload offers no second upload of the same file

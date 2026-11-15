@@ -35,7 +35,9 @@ export async function uploadMediaAsset(args: {
   if (!purpose) {
     throw new Error(t(language, "media.noPurpose"));
   }
-  const variants = await prepareImageVariants(args.file, purpose, language);
+  const variants = await prepareVariants(args.file, purpose, language);
+  // alt text describes an image; another file has none unless one is given
+  const alt = args.alt ?? (args.file.type.startsWith("image/") ? defaultAlt(args.file) : undefined);
   const created = await api.post<MediaUploadResponse>("/media/uploads", {
     filename: args.file.name,
     purpose: purpose.name,
@@ -44,7 +46,7 @@ export async function uploadMediaAsset(args: {
       byteSize: variant.blob.size,
       role: variant.role,
     })),
-    alt: args.alt ?? defaultAlt(args.file),
+    alt,
     caption: args.caption,
   });
 
@@ -64,7 +66,7 @@ export async function uploadMediaAsset(args: {
   }
 
   return api.post<CommittedMediaAsset>(`/media/uploads/${encodeURIComponent(created.uploadGroupId)}/commit`, {
-    alt: args.alt ?? defaultAlt(args.file),
+    alt,
     caption: args.caption,
   });
 }
@@ -106,13 +108,58 @@ export function primaryPublicUrl(asset: CommittedMediaAsset): string | null {
   return variant?.publicUrl ?? null;
 }
 
+/** A purpose whose slots all name concrete image types: an image is re-encoded into them. */
+const imagePurpose = (policy: MediaPurposePolicy) =>
+  expandRequired(policy.required)
+    .flat()
+    .every(mime => mime.startsWith("image/") && !mime.endsWith("/*"));
+
+/** The token of `slot` that takes `mimeType`: the type itself, else its `type/*`, else `*\/*`. */
+const acceptedBy = (slot: readonly string[], mimeType: string) =>
+  [mimeType, mimeType.replace(/\/.*/, "/*"), "*/*"].find(token => slot.includes(token));
+
+/**
+ * The file input's `accept` for uploads to `policy`: any image for an image purpose (it is re-encoded), else the types
+ * of its one slot, or anything when that slot takes any type.
+ */
+export function acceptFor(policy: MediaPurposePolicy | null | undefined): string {
+  if (!policy) return "";
+  if (imagePurpose(policy)) return "image/*";
+  const slots = expandRequired(policy.required);
+  return slots.length === 1 && !slots[0]!.includes("*/*") ? slots[0]!.join(",") : "";
+}
+
+/** An image purpose gets the image re-encoded into its slots; any other takes the file as it is, as its one variant. */
+async function prepareVariants(
+  file: File,
+  policy: MediaPurposePolicy,
+  language: AdminLanguage,
+): Promise<PreparedVariant[]> {
+  if (imagePurpose(policy)) return prepareImageVariants(file, policy, language);
+  const mimeType = file.type || "application/octet-stream",
+    slots = expandRequired(policy.required);
+  const token = slots.length === 1 ? acceptedBy(slots[0]!, mimeType) : undefined;
+  if (!token)
+    throw new Error(
+      t(language, "media.typeRejected", {
+        name: file.name,
+        mime: mimeType,
+        purpose: policy.name,
+        types: slots.flat().join(", "),
+      }),
+    );
+  if (file.size > (policy.maxBytes[token] ?? 0))
+    throw new Error(t(language, "media.tooLarge", { purpose: policy.name, max: String(policy.maxBytes[token] ?? 0) }));
+  return [{ mimeType, role: "primary", blob: file }];
+}
+
 async function prepareImageVariants(
   file: File,
   policy: MediaPurposePolicy,
   language: AdminLanguage,
 ): Promise<PreparedVariant[]> {
   if (!file.type.startsWith("image/") || file.type === "image/svg+xml") {
-    throw new Error(t(language, "media.rasterOnly"));
+    throw new Error(t(language, "media.rasterOnly", { name: file.name, mime: file.type || "?", purpose: policy.name }));
   }
   const slots = expandRequired(policy.required);
   if (slots.length === 0) {
