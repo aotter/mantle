@@ -120,3 +120,60 @@ test("mantle bundle keeps building after a failed entry, and an output directory
     await expect(bundleApp(entry, join(dir, "dist"))).rejects.toThrow("not written by mantle bundle");
   });
 });
+
+test("mantle bundle deletes only the directory it recorded for this assets directory, and ignores an unreadable record", async () => {
+  const { dir, entry, client } = await app();
+  await inDir(dir, async () => {
+    const dist = join(dir, "dist"),
+      record = join(dist, ".mantle-client");
+    await writeFile(join(dir, "src/client/spa.ts"), "console.log(1);\n");
+    await bundleApp(entry, dist);
+    // a record naming a directory elsewhere, or one whose path only ends alike, deletes nothing
+    for (const elsewhere of [join(dir, "victim/assets/client"), join(dir, "x/myassets/client"), join(dir, "other")]) {
+      await mkdir(elsewhere, { recursive: true });
+      await writeFile(join(elsewhere, "keep.txt"), "keep");
+      await writeFile(record, JSON.stringify({ dir: elsewhere }));
+      await rm(join(client, "assets/client"), { recursive: true });
+      await bundleApp(entry, dist);
+      expect(await readFile(join(elsewhere, "keep.txt"), "utf8")).toBe("keep");
+      expect(existsSync(join(client, "assets/client/spa.js"))).toBe(true);
+    }
+    // a truncated or malformed record is treated as absent
+    for (const text of ['{"dir": "/tm', "", "[]", '{"dir": 1}']) {
+      await writeFile(record, text);
+      await rm(join(client, "assets/client"), { recursive: true });
+      await bundleApp(entry, dist);
+      expect(existsSync(join(client, "assets/client/spa.js"))).toBe(true);
+    }
+    // the recorded directory of this build is removed
+    await rm(join(dir, "src/client/spa.ts"));
+    await bundleApp(entry, dist);
+    expect(existsSync(join(client, "assets/client"))).toBe(false);
+  });
+});
+
+test("mantle bundle skips dotfiles, declaration, test and spec files, and compares entry names without case", async () => {
+  const { dir, entry, client } = await app();
+  await inDir(dir, async () => {
+    for (const name of ["spa.tsx", ".hidden.ts", "spa.test.tsx", "spa.spec.ts", "types.d.ts", "notes.md", "retest.ts"])
+      await writeFile(join(dir, "src/client", name), "console.log(1);\n");
+    await bundleApp(entry, join(dir, "dist"));
+    expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["retest.js", "spa.js"]);
+    await writeFile(join(dir, "src/client/Spa.ts"), "console.log(2);\n");
+    await expect(bundleApp(entry, join(dir, "dist"))).rejects.toThrow("compared without case");
+  });
+});
+
+test("mantle bundle writes the CSS an entry imports beside its JavaScript, and refuses an unloadable import", async () => {
+  const { dir, entry, client } = await app();
+  await inDir(dir, async () => {
+    await writeFile(join(dir, "src/client/spa.css"), "body{color:red}\n");
+    await writeFile(join(dir, "src/client/spa.ts"), "import './spa.css';\nconsole.log(1);\n");
+    await bundleApp(entry, join(dir, "dist"));
+    expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["spa.css", "spa.js"]);
+    expect(await readFile(join(client, "assets/client/spa.css"), "utf8")).toContain("color");
+    await writeFile(join(dir, "src/client/logo.png"), "x");
+    await writeFile(join(dir, "src/client/spa.ts"), "import logo from './logo.png';\nconsole.log(logo);\n");
+    await expect(bundleApp(entry, join(dir, "dist"))).rejects.toThrow();
+  });
+});
