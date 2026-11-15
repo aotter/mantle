@@ -517,3 +517,36 @@ test("mantle bundle: public/ is copied into the assets directory; files it copie
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("mantle bundle builds client entries beside Admin, and for a bun-* target too, without touching Admin's output", async () => {
+  const { dir, entry } = await app();
+  const cwd = process.cwd();
+  try {
+    process.chdir(dir);
+    await mkdir(join(dir, "src/client"));
+    await writeFile(join(dir, "src/client/spa.ts"), "console.log('spa');\n");
+    const dist = join(dir, "dist");
+    await bundleApp(entry, dist);
+    expect(readdirSync(join(dist, "client")).sort()).toEqual(["_headers", "admin", "assets"]);
+    expect(await readFile(join(dist, "client/_headers"), "utf8")).not.toContain("assets/client");
+    expect(existsSync(join(dist, "client/assets/client/spa.js"))).toBe(true);
+    expect(existsSync(join(dist, "client/admin/index.html"))).toBe(true);
+    const generated = join(dir, "generated"),
+      manifest = join(dir, "app.yaml");
+    await mkdir(generated);
+    await writeFile(manifest, "kind: Schema\n");
+    await writeFile(join(generated, "generated.ts"), "export const store = 1;\n");
+    await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "bun-sqlite"));
+    await writeFile(
+      join(dir, "src/server.ts"),
+      'import { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(String(store)) });\n',
+    );
+    await rm(dist, { recursive: true });
+    await bundleApp(join(dir, "src/server.ts"), dist);
+    expect(existsSync(join(dist, "worker"))).toBe(false);
+    expect(existsSync(join(dist, "client/assets/client/spa.js"))).toBe(true);
+  } finally {
+    process.chdir(cwd);
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);

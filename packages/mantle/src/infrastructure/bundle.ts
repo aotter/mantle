@@ -170,7 +170,16 @@ export async function bundleApp(
     return;
   }
   apart();
+  const clientEntries = clientEntryFiles(source);
+  const client = join(assets, CLIENT_DIR);
+  cleanClient(outdir);
+  // before copyPublic, which would otherwise copy the app's file into the directory the build then empties
+  if (clientEntries.length && existsSync(join("public", CLIENT_DIR)))
+    throw new Error(
+      `public/${CLIENT_DIR} is reserved for the browser entries in ${relative(process.cwd(), join(dirname(source), "client"))}; move those files elsewhere under public/.`,
+    );
   copyPublic(outdir, assets);
+  await bundleClient(clientEntries, client, outdir);
   if (dirs.some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"))) {
     // Packages are external here, so only the app's own imports of the Admin server are seen; one reached through another package is not.
     if (
@@ -202,6 +211,65 @@ export async function bundleApp(
     await bundleAdmin(source, outdir, join(assets, "admin"));
     adminHeaders(assets);
   }
+}
+
+/** Where the application's browser entries are written, under the assets directory (served at `/assets/client/<name>.js`). */
+const CLIENT_DIR = join("assets", "client");
+
+/** The browser entries: `.ts` and `.tsx` files directly in `client/` beside the Worker entry (subdirectories hold their helpers). */
+function clientEntryFiles(source: string): string[] {
+  const dir = join(dirname(source), "client");
+  if (!existsSync(dir)) return [];
+  const files = readdirSync(dir, { withFileTypes: true })
+    .filter(entry => entry.isFile() && /\.tsx?$/.test(entry.name) && !entry.name.endsWith(".d.ts"))
+    .map(entry => entry.name)
+    .sort();
+  const names = files.map(file => file.replace(/\.tsx?$/, ""));
+  const twice = names.find((name, index) => names.indexOf(name) !== index);
+  if (twice !== undefined)
+    throw new Error(
+      `${relative(process.cwd(), dir)} has ${twice}.ts and ${twice}.tsx: both would be built to ${twice}.js.`,
+    );
+  return files.map(file => join(dir, file));
+}
+
+/** Removes the directory the previous build wrote, listed in `<outdir>/.mantle-client`, so a deleted entry is not served again. */
+function cleanClient(outdir: string): void {
+  const record = join(outdir, ".mantle-client");
+  if (!existsSync(record)) return;
+  const { dir } = JSON.parse(readFileSync(record, "utf8")) as { dir: string };
+  if (dir.endsWith(CLIENT_DIR)) rmSync(dir, { recursive: true, force: true });
+  rmSync(record, { force: true });
+}
+
+/**
+ * Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+ * `mantle bundle` builds each browser entry (`client/<name>.ts|tsx` beside the Worker entry) into `<assets>/assets/client/<name>.js`:
+ * one minified ES2022 browser file per entry, `react` resolved from the application, no source map, stable name.
+ */
+async function bundleClient(entries: string[], out: string, outdir: string): Promise<void> {
+  if (!entries.length) return;
+  if (existsSync(out))
+    throw new Error(
+      `${relative(process.cwd(), out)} exists and was not written by mantle bundle; it is reserved for the browser entries.`,
+    );
+  assertCleanable("The browser entry output directory", out, entries[0]!);
+  // recorded first: a build that fails halfway is cleaned by the next one
+  mkdirSync(outdir, { recursive: true });
+  writeFileSync(join(outdir, ".mantle-client"), JSON.stringify({ dir: resolve(out) }));
+  await build({
+    entryPoints: entries,
+    outdir: out,
+    bundle: true,
+    minify: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    jsx: "automatic",
+    define: { "process.env.NODE_ENV": '"production"' },
+    logLevel: "warning",
+    absWorkingDir: process.cwd(),
+  });
 }
 
 /**
