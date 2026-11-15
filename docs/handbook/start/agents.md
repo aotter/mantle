@@ -61,6 +61,11 @@ scope.
    - Visitor pages (anything anonymous and indexable) follow `mantle help public-pages`: server-rendered HTML,
      canonical and Open Graph tags, JSON-LD and an answer block on detail pages, Markdown alternates, `/sitemap.xml`,
      `/robots.txt` and `/llms.txt`. A brief that names a site, shop or catalogue for visitors includes all of them.
+   - Public pages plus an interactive area (saved items, a dashboard, a planner): keep the public pages server-rendered
+     and put the React app under one prefix such as `/app/*`, as the recipes example does (`mantle help examples`:
+     `src/routes.ts`, `src/spa/`, `build-spa.mjs`, `manifests/saved-recipes.yaml`). Indexable content is never only in the
+     SPA; its shell is `noindex` and absent from the sitemap and `llms.txt`, it sends anonymous visitors to sign in, and
+     it reads Views and writes through REST Triggers (`mantle help public-pages`, "Public pages plus a React app").
 4. `pnpm generate`, implement every handler it lists, `pnpm check`, then `pnpm smoke`.
 5. **Show the user the wiring.** As soon as the manifests generate, run `pnpm accept --open`: it starts the app,
    signs the admin in without a one-time code and opens the Developer UI (`/admin/dev`) in the user's browser, showing

@@ -46,6 +46,11 @@ Pin the selected packages to `0.2.2-alpha.5` and regenerate.
   [before the first deploy](../cloudflare/deploy-and-operate.md#before-the-first-deploy) takes the user through the
   Cloudflare account, `wrangler login`, the database and the secrets. No package changes; `init` still writes the email
   code.
+- **Example: public pages plus a React app (#2036).** The recipes example adds "my saved recipes", a React single-page
+  app under `/app` next to its server-rendered pages: a Schema owned by the member, a View, a Procedure with REST
+  Triggers, a `noindex` shell that is left out of the sitemap and `llms.txt`, and the checks in its `smoke.mjs`.
+  [Public pages](../guides/public-pages.md#public-pages-plus-a-react-app) and the agent guide point to it. The app shell
+  now lists `esbuild` and `@types/react-dom` as dev dependencies (the example builds its app with them). The published packages are unchanged.
 
 ### Upgrading to 0.2.2-alpha.4
 
