@@ -86,11 +86,11 @@ export function mediaDefinitions(policies: readonly Purpose[] = []) {
   return [
     define(
       "upload_media",
-      "Upload one image to the media library in two calls; bytes never pass through MCP and file content is never accepted as base64. " +
-        "1. Call with purpose, filename and variants (one per slot the purpose takes, exactly one primary; optimize the image locally first). The result has an uploadId and the upload targets, which expire in 15 minutes and serve this one upload. PUT each variant's bytes to its target url with its headers. " +
+      "Upload one file (an image, a PDF or any type the purpose takes) to the media library in two calls; bytes never pass through MCP and file content is never accepted as base64. " +
+        "1. Call with purpose, filename and variants (one per slot the purpose takes, exactly one primary; optimize an image locally first). The result has an uploadId and the upload targets, which expire in 15 minutes and serve this one upload. PUT each variant's bytes to its target url with its headers. " +
         "2. Call with { uploadId } to commit, and store the returned asset id in fields that reference media_assets.id, never an upload URL. An unknown or expired uploadId needs a new first call. " +
         "Called with only a purpose, it returns that purpose's accepted types and byte caps; a host that shows MCP Apps opens an upload card where the person picks the file, and the card commits it and reports the asset id. " +
-        "With purpose and sourceUrl (a public https image) or file (an attachment), the server fetches the image and commits it in one call; that takes a purpose with a single variant slot.",
+        "With purpose and sourceUrl (a public https file) or file (an attachment), the server fetches the file and commits it in one call; that takes a purpose with a single variant slot.",
       input({
         purpose,
         filename: { type: "string", maxLength: 255 },
@@ -162,7 +162,7 @@ export function mediaDefinitions(policies: readonly Purpose[] = []) {
     define(
       "list_media_assets",
       old(
-        "use find_media. List committed image assets, newest first, with their permanent variants and alt/caption. Search matches id, alt or caption; reuse only a returned cursor.",
+        "use find_media. List committed media assets, newest first, with their permanent variants and alt/caption. Search matches id, alt or caption; reuse only a returned cursor.",
       ),
       input(paging),
       "list",

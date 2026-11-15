@@ -13,13 +13,27 @@ export interface R2Bucket {
   put(
     key: string,
     body: ReadableStream,
-    options: { httpMetadata: { contentType: string }; customMetadata: Record<string, string> },
+    options: {
+      httpMetadata: { contentType: string; contentDisposition?: string };
+      customMetadata: Record<string, string>;
+    },
   ): Promise<unknown>;
   delete(key: string | string[]): Promise<void>;
 }
 /** `aws4fetch`'s `AwsClient` has this shape. */
 export interface S3Signer {
-  sign(url: string, init: { method: "PUT" | "GET"; aws: { signQuery: true; service: "s3" } }): Promise<{ url: string }>;
+  /**
+   * A query-signed URL. A PUT passes its `Content-Type` in `headers` with `allHeaders: true`, so the signature covers it
+   * (`X-Amz-SignedHeaders`) and the upload URL refuses another type.
+   */
+  sign(
+    url: string,
+    init: {
+      method: "PUT" | "GET";
+      headers?: Readonly<Record<string, string>>;
+      aws: { signQuery: true; service: "s3"; allHeaders?: true };
+    },
+  ): Promise<{ url: string }>;
 }
 
 export interface R2MediaStorageOptions {
@@ -29,6 +43,13 @@ export interface R2MediaStorageOptions {
   readonly endpoint: string;
   /** The bucket's public URL, or `null` for a private bucket: its variants then get no `publicUrl`, and reads go through `signRead`. */
   readonly publicBase: string | null;
+  /**
+   * `true` by default: a type that is not a raster image, PDF, audio or video is stored with `Content-Disposition:
+   * attachment` and private reads are signed to answer with it, and HTML, SVG, XML and JavaScript uploads are refused.
+   * `false` turns both off, for a bucket served from an isolated origin: its own registrable domain, with nothing on it
+   * that sets cookies.
+   */
+  readonly safeDelivery?: boolean;
 }
 
 const EXT: Record<string, string> = {
@@ -37,10 +58,26 @@ const EXT: Record<string, string> = {
   "image/webp": "webp",
   "image/avif": "avif",
   "image/gif": "gif",
+  "image/svg+xml": "svg",
+  "application/pdf": "pdf",
+  "application/zip": "zip",
+  "application/json": "json",
+  "text/plain": "txt",
+  "text/csv": "csv",
+  "audio/mpeg": "mp3",
+  "video/mp4": "mp4",
+  "video/webm": "webm",
 };
 const UPLOADS = "uploads/";
 const fail = (code: string, message: string, options?: ErrorOptions) => mediaError(code, message, "media/r2", options);
-const ext = (mimeType: string) => EXT[mimeType] ?? "bin";
+/** The type's extension, else the caller's filename's (never one a static host would serve as a page or script), else `bin`. */
+const ext = (mimeType: string, filename: string) => {
+  const named = /\.([a-z0-9]{1,10})$/.exec(filename.toLowerCase())?.[1];
+  return (
+    EXT[mimeType] ??
+    (named && !/^([xsp]?html?|xht|mht(ml)?|php\d?|svgz?|[cm]?js|xml|xslt?)$/.test(named) ? named : "bin")
+  );
+};
 const cancel = (o?: { body: ReadableStream } | null) => o?.body.cancel().catch(() => undefined);
 
 /** Returns every optional member of `MediaStorage` (`uploadOrigin`, `signRead`), so a wrapper calls them without checks. */
@@ -49,6 +86,7 @@ export function r2MediaStorage({
   signer,
   endpoint,
   publicBase,
+  safeDelivery = true,
 }: R2MediaStorageOptions): Required<MediaStorage> {
   if (!publicBase && publicBase !== null)
     throw fail(
@@ -57,25 +95,34 @@ export function r2MediaStorage({
     );
   const base = publicBase?.replace(/\/+$/, "");
   const s3 = endpoint.replace(/\/+$/, "");
-  const signed = async (method: "PUT" | "GET", storageKey: string, seconds: number) => {
+  const signed = async (storageKey: string, seconds: number, disposition?: string) => {
     const target = new URL(`${s3}/${storageKey}`);
     target.searchParams.set("X-Amz-Expires", String(seconds));
-    return (await signer.sign(target.href, { method, aws: { signQuery: true, service: "s3" } })).url;
+    if (disposition) target.searchParams.set("response-content-disposition", disposition);
+    return (await signer.sign(target.href, { method: "GET", aws: { signQuery: true, service: "s3" } })).url;
   };
   return {
+    safeDelivery,
     uploadOrigin: new URL(s3).origin,
-    async createUpload({ uploadGroupId, purpose, variants, now, expiresAt }) {
+    async createUpload({ uploadGroupId, purpose, filename, variants, now, expiresAt }) {
       const ttl = Math.max(60, Math.floor((expiresAt - now) / 1000));
       return {
         capabilities: await Promise.all(
           variants.map(async v => {
             // server-made keys, one directory per asset so its variants list together
-            const storageKey = `${UPLOADS}${purpose}/${uploadGroupId}/${v.role}.${ext(v.mimeType)}`;
+            const storageKey = `${UPLOADS}${purpose}/${uploadGroupId}/${v.role}.${ext(v.mimeType, filename)}`;
             return {
               mimeType: v.mimeType,
               role: v.role,
               method: "PUT" as const,
-              uploadUrl: await signed("PUT", storageKey, ttl),
+              // the type is signed: a PUT with another Content-Type fails the signature
+              uploadUrl: (
+                await signer.sign(`${s3}/${storageKey}?X-Amz-Expires=${ttl}`, {
+                  method: "PUT",
+                  headers: { "content-type": v.mimeType },
+                  aws: { signQuery: true, service: "s3", allHeaders: true },
+                })
+              ).url,
               storageKey,
               requiredHeaders: { "Content-Type": v.mimeType },
             };
@@ -104,13 +151,14 @@ export function r2MediaStorage({
       const out: MediaVariant[] = [];
       try {
         for (const [i, spec] of variants.entries()) {
-          const key = `committed/${uploadGroupId}/${attempt}/${spec.role}.${ext(spec.mimeType)}`;
+          const key = `committed/${uploadGroupId}/${attempt}/${spec.role}.${ext(spec.mimeType, filename)}`;
           const o = await bucket.get(spec.storageKey);
           // an upload URL may PUT again between the check and the copy: the copy must be what was checked
           if (!o || o.size !== heads[i]!.size || o.httpMetadata?.contentType !== spec.mimeType) {
             await cancel(o);
             throw fail("MEDIA_OBJECT_NOT_FOUND", `variant ${spec.role} of '${uploadGroupId}' changed during commit`);
           }
+          // The body streams from get to put, never whole in memory; the binding has no server-side copy.
           // Remember a possibly published key before awaiting put: a failed response may still have stored it.
           out.push({
             mimeType: spec.mimeType,
@@ -121,7 +169,10 @@ export function r2MediaStorage({
           });
           try {
             await bucket.put(key, o.body, {
-              httpMetadata: { contentType: spec.mimeType },
+              httpMetadata: {
+                contentType: spec.mimeType,
+                ...(spec.contentDisposition ? { contentDisposition: spec.contentDisposition } : {}),
+              },
               customMetadata: {
                 ...o.customMetadata,
                 committedAt: String(now),
@@ -164,6 +215,6 @@ export function r2MediaStorage({
     },
 
     deleteObject: ({ storageKey }) => bucket.delete(storageKey),
-    signRead: ({ storageKey, expiresIn }) => signed("GET", storageKey, expiresIn),
+    signRead: ({ storageKey, expiresIn, contentDisposition }) => signed(storageKey, expiresIn, contentDisposition),
   };
 }

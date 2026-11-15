@@ -7,7 +7,12 @@ export interface SiteIcon {
 }
 export interface MediaPurposePolicy {
   readonly name: string;
+  /**
+   * One slot per variant, each a comma-separated list of the media types it takes. `type/*` takes any type of that
+   * top-level type and `*\/*` any type at all; a variant fills the slot naming its own type first.
+   */
   readonly required: readonly string[];
+  /** The byte cap of each type or wildcard named in `required`. */
   readonly maxBytes: Readonly<Record<string, number>>;
   /**
    * `"public"` (the default when omitted) stores this purpose's assets in the public storage, each variant with a
@@ -84,6 +89,13 @@ export type MediaStorageOption = MediaStorage | { readonly public: MediaStorage;
 
 /** Object storage for media. The bytes go to `uploadUrl` directly, never through the Worker. */
 export interface MediaStorage {
+  /**
+   * `false` when this storage serves its objects from an isolated origin: Mantle then accepts active content (HTML,
+   * SVG, XML, JavaScript) and asks for no `Content-Disposition`. Otherwise (the default) such uploads are refused, and
+   * `commitUpload` and `signRead` receive a `contentDisposition` for every type not shown inline, which the storage must
+   * deliver the object with.
+   */
+  readonly safeDelivery?: boolean;
   /** The origin every `uploadUrl` PUTs to, such as the bucket's S3 endpoint: what an MCP App that uploads declares in its CSP `connectDomains`. */
   readonly uploadOrigin?: string;
   /** One short-lived PUT capability per variant, keyed under `uploadGroupId`. */
@@ -122,6 +134,8 @@ export interface MediaStorage {
       readonly role: MediaVariantRole;
       readonly storageKey: string;
       readonly maxBytes: number;
+      /** The `Content-Disposition` to store the committed object with, when safe delivery asks for one. */
+      readonly contentDisposition?: string;
     }[];
     readonly alt?: string;
     readonly caption?: string;
@@ -136,7 +150,12 @@ export interface MediaStorage {
    * check (for example in a `ref` handler), with a `storageKey` from the asset's variants. A signed URL is a bearer
    * capability: an MCP tool returns it only in the result `_meta` (`withResultMeta`), never in model-visible content.
    */
-  signRead?(args: { readonly storageKey: string; readonly expiresIn: number }): Promise<string>;
+  signRead?(args: {
+    readonly storageKey: string;
+    readonly expiresIn: number;
+    /** The `Content-Disposition` the read must answer with, when safe delivery asks for one. */
+    readonly contentDisposition?: string;
+  }): Promise<string>;
 }
 
 /** The media use cases. Each checks its own input, so any surface can hand it a request body. */

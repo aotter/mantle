@@ -316,7 +316,12 @@ test("R2 refuses changed GET snapshots and rolls back copied public objects on f
     publicBase: "https://media.test",
     signer: {
       async sign(url, init) {
-        expect(init).toEqual({ method: "PUT", aws: { signQuery: true, service: "s3" } });
+        // the upload URL signs the declared Content-Type
+        expect(init).toEqual({
+          method: "PUT",
+          headers: { "content-type": "image/png" },
+          aws: { signQuery: true, service: "s3", allHeaders: true },
+        });
         expect(new URL(url).searchParams.get("X-Amz-Expires")).toBe("900");
         return { url };
       },
@@ -440,6 +445,7 @@ test("site and media projections preserve the Admin SPA envelope and null conven
     variants: [],
     primaryUrl: null,
     mime: null,
+    filename: null,
     byteSize: null,
     alt: null,
     caption: null,
