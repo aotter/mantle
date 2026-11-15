@@ -5,6 +5,8 @@
  *   - a full mime type:           `"image/jpeg"`, `"image/avif"`
  *   - a comma-list of full mimes: `"image/jpg,image/png"` (either is OK)
  *   - a shorthand subtype:        `"webp"` → `"image/webp"`, `"jpg"` → `"image/jpeg"`
+ *   - a wildcard:                 `"application/*"`, or `"*\/*"` for any type; a variant fills the
+ *                                 slot naming its own type first, then its `type/*`, then `*\/*`
  *
  * Whitespace around commas and around full entries is tolerated; the
  * grammar mirrors the HTML `<input accept="...">` attribute editors

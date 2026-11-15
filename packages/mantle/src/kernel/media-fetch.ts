@@ -1,6 +1,7 @@
-/** One image from a public https URL for `upload_media`; loaded only when a call names one. */
+/** One file from a public https URL for `upload_media`; loaded only when a call names one. */
 import { ContractError } from "./contracts.js";
 import { mediaError } from "./media.js";
+import { MEDIA_TYPE } from "./media-type.js";
 
 const REDIRECTS = 3;
 const TIMEOUT_MS = 20_000;
@@ -57,7 +58,8 @@ export function publicUrl(value: string, base?: string): URL {
   return url;
 }
 
-/** The accepted image types by their leading bytes: what was fetched decides the type, not its header. */
+const SNIFFED = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"];
+/** These image types by their leading bytes: for them, what was fetched decides the type, not its header. */
 function sniff(b: Uint8Array): string | undefined {
   const ascii = (from: number, to: number) => String.fromCharCode(...b.subarray(from, to));
   if (b[0] === 0x89 && ascii(1, 4) === "PNG") return "image/png";
@@ -69,19 +71,22 @@ function sniff(b: Uint8Array): string | undefined {
 }
 
 /**
- * GET one image of at most `maxBytes` from a public https URL, following at most three redirects, each checked again.
+ * GET one file of at most `maxBytes` from a public https URL, following at most three redirects, each checked again.
+ * A PNG, JPEG, GIF, WebP or AVIF image is typed by its bytes; anything else by the response Content-Type, without its
+ * parameters, which must then be a valid media type and none of those five.
  * Refusals are `MEDIA_SOURCE_REJECTED`, `MEDIA_VARIANT_SIZE_EXCEEDED` or `MEDIA_MIME_REJECTED`; an unreachable source is `MEDIA_SOURCE_FAILED`.
  */
-export async function fetchImage(
+export async function fetchSource(
   source: string,
   maxBytes: number,
+  accept: string,
 ): Promise<{ readonly bytes: Uint8Array<ArrayBuffer>; readonly mimeType: string; readonly filename: string }> {
   let url = publicUrl(source),
     response: Response;
   const signal = AbortSignal.timeout(TIMEOUT_MS);
   for (let hops = 0; ; hops++) {
     try {
-      response = await fetch(url, { redirect: "manual", signal, headers: { accept: "image/*" } });
+      response = await fetch(url, { redirect: "manual", signal, headers: { accept } });
     } catch {
       throw fail("MEDIA_SOURCE_FAILED", `${url.host} could not be fetched`);
     }
@@ -120,8 +125,13 @@ export async function fetchImage(
   }
   const bytes = new Uint8Array(size);
   chunks.reduce((at, chunk) => (bytes.set(chunk, at), at + chunk.byteLength), 0);
-  const mimeType = sniff(bytes);
-  if (!mimeType) throw fail("MEDIA_MIME_REJECTED", "the source is not a PNG, JPEG, GIF, WebP or AVIF image");
+  const header = response.headers.get("content-type")?.split(";")[0]!.trim().toLowerCase() ?? "";
+  const mimeType = sniff(bytes) ?? (MEDIA_TYPE.test(header) && !SNIFFED.includes(header) ? header : undefined);
+  if (!mimeType)
+    throw fail(
+      "MEDIA_MIME_REJECTED",
+      "the source is neither a PNG, JPEG, GIF, WebP or AVIF image nor sent with a valid Content-Type",
+    );
   let name = url.pathname.split("/").pop() ?? "";
   try {
     name = decodeURIComponent(name);

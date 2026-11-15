@@ -11,6 +11,7 @@ import type {
   MediaPurposePolicy,
 } from "./site-types.js";
 import { withResultMeta } from "./result-meta.js";
+import { acceptedBy, active, inline, MEDIA_TYPE } from "./media-type.js";
 import { likeTooLong } from "./where.js";
 export interface MediaDatabase {
   read(sql: string, binds: unknown[]): Row[] | PromiseLike<Row[]>;
@@ -25,6 +26,7 @@ const STATUS = new Map(
   Object.entries({
     MEDIA_PURPOSE_REJECTED: 400,
     MEDIA_SVG_REJECTED: 400,
+    MEDIA_ACTIVE_CONTENT_REJECTED: 400,
     MEDIA_MIME_REJECTED: 400,
     MEDIA_VARIANTS_INCOMPLETE: 400,
     MEDIA_VARIANT_SIZE_EXCEEDED: 400,
@@ -65,8 +67,6 @@ const rejected = (results: PromiseSettledResult<unknown>[]) =>
   results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
 const bad = (expected: string) => fail("INPUT_VALIDATION_FAILED", `expected ${expected}`);
 
-/** SVG is refused: object storage does not sanitize it, and an SVG can carry script. */
-const ALLOWED = new Set(["image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"]);
 /** Modern formats a skipped optimization makes larger than the fallback. */
 const MODERN = new Set(["image/avif", "image/webp"]);
 const ROLES = new Set<unknown>(["primary", "alternate", "fallback"]);
@@ -115,16 +115,21 @@ function texts(body: unknown) {
   } as { alt?: string; caption?: string };
 }
 
-/** Exactly one variant per required slot, nothing outside them, and exactly one primary. */
+/**
+ * Exactly one variant per required slot, nothing outside them, and exactly one primary. A variant fills the slot naming
+ * its type, else its `type/*`, else `*\/*`. Unless the storage turns safe delivery off, SVG and other active content is
+ * refused. Returns each variant's byte cap.
+ */
 function checkVariants(
   policy: MediaPurposePolicy,
   variants: readonly { mimeType: string; byteSize: number; role: MediaVariantRole }[],
+  storage: MediaStorage,
 ) {
   const slots = policy.required.map(slot => slot.split(","));
-  const slotOf = new Map(slots.flatMap((mimes, i) => mimes.map(m => [m, i] as const)));
-  const filled = variants.map(v => slotOf.get(v.mimeType));
+  const taken = variants.map(v => acceptedBy(slots.flat(), v.mimeType));
+  const filled = taken.map(token => slots.findIndex(slot => slot.includes(token!)));
   if (
-    filled.includes(undefined) ||
+    filled.includes(-1) ||
     new Set(filled).size !== variants.length ||
     filled.length !== slots.length ||
     variants.filter(v => v.role === "primary").length !== 1
@@ -134,12 +139,20 @@ function checkVariants(
       `purpose '${policy.name}' takes one variant for each of ${JSON.stringify(policy.required)}, exactly one of them primary`,
     );
   for (const v of variants) {
+    if (!MEDIA_TYPE.test(v.mimeType))
+      throw fail("MEDIA_MIME_REJECTED", `${v.mimeType} is not a lowercase type/subtype without parameters`);
+    if (storage.safeDelivery === false) continue;
     if (v.mimeType === "image/svg+xml")
       throw fail("MEDIA_SVG_REJECTED", "SVG uploads are refused: object storage does not sanitize them");
-    if (!ALLOWED.has(v.mimeType)) throw fail("MEDIA_MIME_REJECTED", `${v.mimeType} is not an accepted image type`);
+    if (active(v.mimeType))
+      throw fail(
+        "MEDIA_ACTIVE_CONTENT_REJECTED",
+        `${v.mimeType} can run script in a browser; it is refused unless the media storage turns safeDelivery off`,
+      );
   }
-  for (const v of variants) {
-    const cap = policy.maxBytes[v.mimeType] ?? 0;
+  const caps = taken.map(token => policy.maxBytes[token!] ?? 0);
+  for (const [i, v] of variants.entries()) {
+    const cap = caps[i]!;
     if (v.byteSize > cap)
       throw fail(
         "MEDIA_VARIANT_SIZE_EXCEEDED",
@@ -155,6 +168,20 @@ function checkVariants(
       "MEDIA_VARIANTS_SUSPICIOUS_SIZE",
       `${heavy.mimeType} (${heavy.byteSize}B) is larger than ${fallback!.mimeType} (${fallback!.byteSize}B): optimize it before uploading`,
     );
+  return caps;
+}
+/**
+ * The `Content-Disposition` a variant is delivered with: `attachment` for a type not shown inline, unless the storage
+ * turns safe delivery off. The filename is the caller's, so it is reduced to printable ASCII and also sent RFC 8187-encoded.
+ */
+function disposition(storage: MediaStorage, mimeType: string, filename = "") {
+  if (storage.safeDelivery === false || inline(mimeType)) return {};
+  const ascii = filename.replace(/[^\x20-\x7e]|["\\]/g, "_"),
+    utf8 = encodeURIComponent(filename.replace(/[\ud800-\udfff]/gu, "\ufffd")).replace(
+      /['()*]/g,
+      c => `%${c.charCodeAt(0).toString(16)}`,
+    );
+  return { contentDisposition: filename ? `attachment; filename="${ascii}"; filename*=UTF-8''${utf8}` : "attachment" };
 }
 
 const COLUMNS = "id, created_at, alt, caption, variants, metadata";
@@ -269,18 +296,18 @@ export function mediaLibrary(
       const policy = declared.find(p => p.name === purpose);
       if (!policy) throw fail("MEDIA_PURPOSE_REJECTED", `purpose '${purpose}' is not declared`);
       const asked = variants as unknown as { mimeType: string; byteSize: number; role: MediaVariantRole }[];
-      checkVariants(policy, asked);
+      const isPrivate = policy.visibility === "private",
+        storage = storeOf(isPrivate);
+      const caps = checkVariants(policy, asked, storage);
       const at = now();
       const expiresAt = at + TTL_MS;
       // bearer-equivalent until commit: storage keys under it must not be guessable
       const uploadGroupId = `${await tag()}_${crypto.randomUUID()}`;
-      const isPrivate = policy.visibility === "private",
-        storage = storeOf(isPrivate);
-      const specs = asked.map(({ mimeType, byteSize, role }) => ({
+      const specs = asked.map(({ mimeType, byteSize, role }, i) => ({
         mimeType,
         byteSize,
         role,
-        maxBytes: policy.maxBytes[mimeType]!,
+        maxBytes: caps[i]!,
       }));
       let capabilities;
       try {
@@ -369,6 +396,7 @@ export function mediaLibrary(
             role: v.role,
             storageKey: v.storageKey,
             maxBytes: Math.min(v.maxBytes, v.expectedSize),
+            ...disposition(storage, v.mimeType, record.filename),
           })),
           ...((patch.alt ?? record.alt) !== undefined ? { alt: patch.alt ?? record.alt } : {}),
           ...((patch.caption ?? record.caption) !== undefined ? { caption: patch.caption ?? record.caption } : {}),
@@ -510,7 +538,11 @@ export function mediaLibrary(
           asset.variants.map(async ({ mimeType, role, storageKey }) => ({
             mimeType,
             role,
-            url: await storage.signRead!({ storageKey, expiresIn }),
+            url: await storage.signRead!({
+              storageKey,
+              expiresIn,
+              ...disposition(storage, mimeType, asset.metadata?.filename),
+            }),
           })),
         );
       } catch (error) {
@@ -540,6 +572,7 @@ export function mediaItem(asset: MediaAsset) {
     variants: asset.variants,
     primaryUrl: primary?.publicUrl ?? null,
     mime: primary?.mimeType ?? null,
+    filename: asset.metadata?.filename ?? null,
     byteSize: primary?.byteSize ?? null,
     alt: asset.alt ?? null,
     caption: asset.caption ?? null,
@@ -553,7 +586,7 @@ export const UPLOAD_META = "net.aotter.mantle/upload";
 
 /**
  * `upload_media`, one mode per call: `{ uploadId }` commits; `variants` returns the targets (in the result `_meta` when the
- * client renders MCP Apps, else in the data, for an agent that PUTs itself); `sourceUrl` or `file` fetches one public image
+ * client renders MCP Apps, else in the data, for an agent that PUTs itself); `sourceUrl` or `file` fetches one public file
  * and commits it; a bare purpose returns the policy. `policies` are the site's expanded purposes.
  */
 export async function uploadMedia(
@@ -583,11 +616,12 @@ export async function uploadMedia(
     const accepts = policy.required[0]!.split(",");
     const url = sourceUrl ?? obj(file).download_url;
     if (typeof url !== "string") throw bad("sourceUrl: string, or file: { download_url, file_id }");
-    const fetched = await (await import("./media-fetch.js")).fetchImage(
+    const fetched = await (await import("./media-fetch.js")).fetchSource(
       url,
       Math.max(...accepts.map(mime => policy.maxBytes[mime] ?? 0)),
+      accepts.every(mime => mime.startsWith("image/")) ? "image/*" : "*/*",
     );
-    if (!accepts.includes(fetched.mimeType))
+    if (!acceptedBy(accepts, fetched.mimeType))
       throw fail(
         "MEDIA_MIME_REJECTED",
         `the source is ${fetched.mimeType}; purpose '${policy.name}' takes ${accepts.join(" or ")}`,
