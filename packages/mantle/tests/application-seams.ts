@@ -176,4 +176,13 @@ export const SEAMS: readonly Seam[] = [
     decided: "#1965",
     check: "packages/mantle-admin/test/seams/upload-card.ts",
   },
+  {
+    id: "client-entries",
+    package: "@aotter/mantle",
+    entry: "mantle bundle <entry> <outdir>: client/<name>.ts|tsx beside the entry -> <assets>/assets/client/<name>.js",
+    stacks: [],
+    decided: "#2036",
+    check: "packages/mantle/tests/seams/client-entry.ts",
+    run: false, // built and read back in tests/bundle-client.test.ts
+  },
 ];

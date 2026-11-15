@@ -146,7 +146,9 @@ running it. `mantle bundle` writes `<assets>/_headers` with `nosniff` and a one-
 `immutable` cache for Admin's content-hashed `/admin/assets/*` (an existing `_headers`
 is not edited: the build prints the rule to add). `mantle bundle` also copies the
 working directory's `public/` into the assets directory (removing what it copied last
-time; `public/admin` is refused). `/assets/*` is excluded by default, so
+time; `public/admin` is refused, and `public/assets/client` when the app has browser entries). The application's browser entries
+(`client/<name>.ts|tsx` beside the Worker entry) are built into `<assets>/assets/client/<name>.js`, answered by
+the edge at `/assets/client/<name>.js` ([reference](../start/project-and-cli.md#outputs)). `/assets/*` is excluded by default, so
 `public/assets/*` is answered by the edge; other public files reach the Worker first,
 which can serve them with `env.ASSETS.fetch(request)` as the app shell does. Cloudflare
 sends `Cache-Control: public, max-age=0, must-revalidate` and an ETag by default; set
@@ -192,7 +194,7 @@ larger sweeps' cursors for a later invocation instead of scanning without a boun
 
 On Bun, reuse a process-owned `Database` or `SQL` pool and call the same generated
 surfaces from `Bun.serve({fetch})`. Bun runs the server as TypeScript, so
-`mantle bundle` builds only Admin for it: the `bun-*` target that
+`mantle bundle` builds only Admin (and the browser entries, `dist/client/assets/client/<name>.js`) for it: the `bun-*` target that
 `generated/.mantle-inputs.json` records skips the Worker bundle, and Admin goes
 to `dist/client/admin` (`--assets` as on Workers) when the server imports
 `@aotter/mantle-admin/server`. Add it as the build script and run it before

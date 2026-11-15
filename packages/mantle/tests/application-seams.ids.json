@@ -12,5 +12,6 @@
   "admin-app-tools",
   "page-renders-tool",
   "mcp-app-inspect",
-  "upload-card-tool"
+  "upload-card-tool",
+  "client-entries"
 ]
