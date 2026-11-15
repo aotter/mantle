@@ -1,0 +1,116 @@
+# "My saved recipes" for the signed-in member (the /app single-page app). Rows belong to the member: `scope` narrows every
+# read and write to owner = auth.uid(), so no View, Procedure or Admin call sees another member's saves.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: saved_recipes}
+spec:
+  title: Saved recipes
+  lifecycle: operational
+  scope: "owner = auth.uid()"
+  # A scoped Schema's unique index starts with the scope field: one save per member and recipe.
+  uniqueIndexes: [[owner, slug]]
+  indexes: [[owner, createdAt, id]]
+  searchableFields: [slug]
+  uiSchema: {list: {primaryField: slug}}
+  schema:
+    type: object
+    # Written by the save-recipe Procedure only; Admin reads it.
+    readOnly: true
+    required: [owner, slug]
+    properties:
+      # The member's id, filled from the verified caller when a Procedure inserts without it.
+      owner: {type: string}
+      slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}
+---
+# The member's saved recipes, newest first. The join reads published recipes only; unpublishing one hides it here.
+# A public View still needs a signed-in member: `requires` refuses anonymous callers.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: my_saved_recipes}
+spec:
+  surface: public
+  description: The signed-in member's saved recipes.
+  requires: {auth: {all: [ctx.user]}}
+  sql: |
+    SELECT s.slug, r.title, r.summary FROM saved_recipes s JOIN recipes r ON r.slug = s.slug ORDER BY s.created_at DESC, s.id DESC
+---
+# The member-facing entry: a ref handler checks that the recipe is published, then runs save-recipe-write.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: save_recipe}
+spec:
+  title: Save a recipe
+  description: Save a published recipe for the signed-in member. Saving it again changes nothing.
+  requires: {auth: {all: [ctx.user]}}
+  input:
+    type: object
+    required: [slug]
+    additionalProperties: false
+    properties:
+      slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}
+  output: {type: object}
+  handler: {ref: save_recipe}
+---
+# Internal (no Trigger). `owner` is left out: Mantle fills it from the caller, never from request input.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: save_recipe_write}
+spec:
+  requires: {auth: {all: [ctx.user]}}
+  input:
+    type: object
+    required: [slug]
+    properties:
+      slug: {type: string}
+  output: {type: object}
+  handler:
+    sql: |
+      INSERT INTO saved_recipes (slug) VALUES (input.slug) ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug RETURNING slug
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: unsave_recipe}
+spec:
+  title: Unsave a recipe
+  description: Remove a recipe from the signed-in member's saved recipes. Removing one that is not saved changes nothing.
+  requires: {auth: {all: [ctx.user]}}
+  input:
+    type: object
+    required: [slug]
+    additionalProperties: false
+    properties:
+      slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}
+  output: {type: object}
+  handler:
+    sql: |
+      DELETE FROM saved_recipes WHERE slug = input.slug RETURNING slug
+---
+# The SPA writes only through these two REST Triggers; the slug comes from the path and is validated by the input schema.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: save_recipe_http}
+spec:
+  source: {kind: http, method: PUT, path: "/api/saved-recipes/{slug}"}
+  target: {procedure: save_recipe}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: unsave_recipe_http}
+spec:
+  source: {kind: http, method: DELETE, path: "/api/saved-recipes/{slug}"}
+  target: {procedure: unsave_recipe}
+---
+# "Your AI" saves and unsaves over the member MCP endpoint (/mcp) with the member's own sign-in.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: save_recipe_mcp}
+spec:
+  source: {kind: mcp, surface: public}
+  target: {procedure: save_recipe}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: unsave_recipe_mcp}
+spec:
+  source: {kind: mcp, surface: public}
+  target: {procedure: unsave_recipe}

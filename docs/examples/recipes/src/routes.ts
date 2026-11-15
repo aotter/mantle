@@ -3,10 +3,14 @@ import { store } from "../generated/generated.js";
 import { translationLocales } from "../generated/translations.js";
 import recipePage from "../generated/paged/views/published_recipes.js";
 import translationPage from "../generated/paged/views/published_translations.js";
+import { handlers } from "./handlers.js";
+import { signInPage, signInRedirect } from "./sign-in.js";
 import { DEFAULT_LOCALE, LOCALES, type Locale, type Recipe, listHtml, llmsTxt, recipeHtml, recipeMarkdown, robotsTxt, sitemapXml } from "./pages.js";
 
 // Visitor pages always read as anonymous, even for a signed-in admin, so drafts never reach public HTML.
 const visitor: Caller = { kind: "anonymous" };
+// The app under /app: /app, /app/ and any deeper path without a dot (a deep link). A path with a dot is a missing file.
+const app = /^\/app(?:\/[^.]*)?$/;
 const page = /^\/(zh-TW|en)\/(?:recipes\/([a-z0-9-]+?)(\.md)?)?$/;
 
 /**
@@ -17,9 +21,14 @@ const page = /^\/(zh-TW|en)\/(?:recipes\/([a-z0-9-]+?)(\.md)?)?$/;
  *   /{locale}/recipes/{slug}.md  Markdown alternate
  *   /llms.txt                  published recipes for AI agents
  *   /sitemap.xml, /robots.txt  every published URL in every locale; robots keeps crawlers out of /admin/
+ *   /sign-in                   member sign-in (the shell's src/sign-in.ts), where /app sends anonymous visitors
+ *   /app, /app/...             "my saved recipes" single-page app (src/spa): members only, noindex, never in sitemap or llms.txt
  */
-export async function appRoutes(request: Request, env: Env, _context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
+export async function appRoutes(request: Request, env: Env, context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
   const url = new URL(request.url), match = page.exec(url.pathname);
+  if (app.test(url.pathname)) return appShell(request, env, context.caller);
+  // The shell's member sign-in page: the app's anonymous visitors land here from /app (src/sign-in.ts).
+  if (url.pathname === "/sign-in" && request.method === "GET") return signInPage();
   if (!["/", "/llms.txt", "/sitemap.xml", "/robots.txt"].includes(url.pathname) && !match) return undefined;
   if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET, HEAD" } });
   // Absolute links use the configured origin, not the request Host.
@@ -53,7 +62,7 @@ async function list(env: Env, locale: Locale) {
 
 /** One published recipe in `locale` plus the locales it is published in (for hreflang). */
 async function read(env: Env, slug: string, locale: Locale): Promise<{ recipe: Recipe; locales: Locale[] } | undefined> {
-  const recipes = store(env.DB, visitor);
+  const recipes = store(env.DB, visitor, { handlers });
   const parent = await recipes.collection("recipes").first({ where: { slug } });
   if (!parent) return undefined;
   const translated = (await translationLocales(env.DB, visitor, "recipes", [parent]))[parent.id] ?? [];
@@ -68,4 +77,17 @@ async function read(env: Env, slug: string, locale: Locale): Promise<{ recipe: R
 function send(request: Request, body: string, type: string, headers: Record<string, string> = {}) {
   // AGENT: choose a cache policy (and purge on publish) once pages sit behind a CDN.
   return new Response(request.method === "HEAD" ? null : body, { headers: { "content-type": type, "cache-control": "no-store", ...headers } });
+}
+
+/**
+ * The SPA shell for every deep link under /app. Anonymous visitors go to /sign-in and come back; everyone else gets
+ * public/app/index.html from ASSETS (built with the app), which carries `noindex`. The header repeats it for clients
+ * that read headers, not markup. Data and writes go through /api: the shell holds no data and no authority.
+ */
+async function appShell(request: Request, env: Env, caller: () => Promise<Caller>) {
+  if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET, HEAD" } });
+  if ((await caller()).kind === "anonymous") return signInRedirect(request);
+  const shell = await env.ASSETS.fetch(new Request(new URL("/app/index.html", request.url)));
+  if (!shell.ok) return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
+  return new Response(request.method === "HEAD" ? null : shell.body, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
 }

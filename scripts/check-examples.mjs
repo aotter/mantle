@@ -35,6 +35,11 @@ for (const example of PACKAGED) {
       throw new Error(`${example} must pin ${name}@${expected} (has ${dependencies[name] ?? "none"})`);
   }
 }
+// recipes' build-spa.mjs bundles the /app React app with esbuild, which the shell declares: the exact version `mantle bundle` ships.
+const { esbuild } = JSON.parse(readFileSync(join(root, "packages/mantle/package.json"), "utf8")).dependencies;
+const shell = JSON.parse(readFileSync(join(examples, "app-shell/package.json"), "utf8")).devDependencies;
+if (shell.esbuild !== esbuild)
+  throw new Error(`app-shell must pin esbuild@${esbuild} (has ${shell.esbuild ?? "none"})`);
 const args = process.argv.slice(2);
 const fresh = args[0] === "--fresh";
 const selected = fresh ? [] : args;

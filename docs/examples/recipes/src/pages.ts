@@ -11,8 +11,8 @@ export interface Listed { slug: string; title: string; summary: string }
 
 // AGENT: move UI strings to your translation workflow when you add locales.
 const text = {
-  "zh-TW": { site: "食譜", description: "家常食譜，中英對照。", how: "需要多久？", answer: (m: number, s: number) => `總共約 ${m} 分鐘，可供 ${s} 人份。`, ingredients: "材料", steps: "步驟", all: "所有食譜", name: "繁體中文" },
-  en: { site: "Recipes", description: "Home recipes in Traditional Chinese and English.", how: "How long does it take?", answer: (m: number, s: number) => `About ${m} minutes in total; serves ${s}.`, ingredients: "Ingredients", steps: "Steps", all: "All recipes", name: "English" },
+  "zh-TW": { site: "食譜", description: "家常食譜，中英對照。", how: "需要多久？", answer: (m: number, s: number) => `總共約 ${m} 分鐘，可供 ${s} 人份。`, ingredients: "材料", steps: "步驟", all: "所有食譜", save: "儲存這道食譜（需登入）", name: "繁體中文" },
+  en: { site: "Recipes", description: "Home recipes in Traditional Chinese and English.", how: "How long does it take?", answer: (m: number, s: number) => `About ${m} minutes in total; serves ${s}.`, ingredients: "Ingredients", steps: "Steps", all: "All recipes", save: "Save this recipe (sign in required)", name: "English" },
 } satisfies Record<Locale, unknown>;
 
 const escape = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -72,7 +72,9 @@ export function recipeHtml(origin: string, locale: Locale, r: Recipe, locales: r
     // Short answer block: one question and a one-sentence answer that search and answer engines can quote.
     + `<section id="quick-answer"><h2>${escape(t.how)}</h2><p>${escape(t.answer(r.total_minutes, r.servings))}</p></section>`
     + `<h2>${escape(t.ingredients)}</h2><ul>${lines(r.ingredients).map(i => `<li>${escape(i)}</li>`).join("")}</ul>`
-    + `<h2>${escape(t.steps)}</h2><ol>${lines(r.steps).map(s => `<li>${escape(s)}</li>`).join("")}</ol></article>`;
+    + `<h2>${escape(t.steps)}</h2><ol>${lines(r.steps).map(s => `<li>${escape(s)}</li>`).join("")}</ol></article>`
+    // The one link into the signed-in app (src/spa): the page itself is complete without it.
+    + `<p><a href="/app/recipes/${r.slug}" rel="nofollow">${escape(t.save)}</a></p>`;
   return documentHtml(locale, head, body);
 }
 

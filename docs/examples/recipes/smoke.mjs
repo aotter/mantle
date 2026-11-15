@@ -3,6 +3,8 @@
 import assert from "node:assert/strict";
 import { smoke } from "./smoke-kit.mjs";
 
+await import("./build-spa.mjs"); // the /app single-page app is not part of `mantle bundle`
+
 const recipe = {
   slug: "scallion-pancake", title: "蔥油餅", summary: "外酥內軟的蔥油餅 </script>", total_minutes: 25, servings: 2,
   ingredients: "中筋麵粉 200 克\n熱水 120 毫升\n青蔥 3 根", steps: "揉麵團並靜置\n擀開撒蔥捲起\n小火煎至金黃",
@@ -99,4 +101,69 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   const robots = await call("GET", "/robots.txt");
   assert.ok(robots.body.includes("Disallow: /admin/") && robots.body.includes(`Sitemap: ${origin}/sitemap.xml`));
   step("llms.txt, sitemap (both locales), robots and the locale lists show the published recipe; / redirects to the default locale");
+
+  // The /app single-page app next to the server-rendered pages: its shell is noindex, members only, and never listed.
+  const slug = "scallion-pancake", deep = `/app/recipes/${slug}`;
+  assert.ok(html.includes(`<a href="${deep}" rel="nofollow">`), "the public detail page links into the app");
+  assert.ok(!html.includes("noindex") && zh.headers.get("x-robots-tag") === null, "public pages stay indexable");
+  for (const body of [sitemap.body, llms.body]) assert.ok(!body.includes("/app"), "the app is not listed in sitemap.xml or llms.txt");
+  assert.ok(!robots.body.includes("/app"), "robots.txt must not hide the noindex the shell sends");
+  const anonymous = await fetch(`${origin}${deep}?x=1`, { redirect: "manual" });
+  assert.equal(anonymous.status, 303);
+  assert.equal(anonymous.headers.get("location"), `/sign-in?return=${encodeURIComponent(`${deep}?x=1`)}`);
+  assert.equal((await fetch(`${origin}/app/`, { redirect: "manual" })).status, 303);
+  const signInPage = await call("GET", "/sign-in");
+  assert.equal(signInPage.status, 200);
+  assert.ok(signInPage.body.includes(`<meta name="robots" content="noindex">`), "the sign-in page is noindex");
+  step("an anonymous visit to /app/... is sent to sign in, with the deep link as the way back");
+
+  const member = await signIn("member@example.test"), other = await signIn("other@example.test");
+  for (const path of ["/app", "/app/", deep, "/app/some/deep/link"]) {
+    const shell = await call("GET", path, { cookie: member });
+    assert.equal(shell.status, 200, path);
+    assert.match(shell.headers.get("content-type"), /^text\/html/);
+    assert.equal(shell.headers.get("x-robots-tag"), "noindex");
+    assert.ok(shell.body.includes(`<meta name="robots" content="noindex">`) && shell.body.includes(`<div id="root">`), path);
+    assert.ok(!shell.body.includes("蔥油餅"), "the shell holds no recipe content");
+  }
+  const bundle = await call("GET", "/assets/spa.js");
+  assert.equal(bundle.status, 200);
+  assert.match(bundle.headers.get("content-type"), /javascript/);
+  // Not every unknown path is the app: other URLs and missing files under /app stay 404.
+  for (const path of ["/nope", "/application", "/app.js", "/app/missing.js", "/zh-TW/nope", "/assets/missing.js"]) {
+    assert.equal((await call("GET", path, { cookie: member })).status, 404, path);
+  }
+  assert.equal((await call("POST", deep, { cookie: member })).status, 405);
+  step("/app and its deep links return the noindex shell for a member; the bundle is served; other unknown paths are 404");
+
+  // The SPA reads Views and writes only through the REST Triggers; each member sees and changes only their own saves.
+  const draft = await create("recipes", { ...recipe, slug: "draft-soup", title: "Draft soup", summary: "Not published" });
+  assert.ok(draft.id);
+  const save = (cookie, name) => call("PUT", `/api/saved-recipes/${name}`, { cookie });
+  const mine = async cookie => (await call("GET", "/api/views/my_saved_recipes", { cookie })).body.rows;
+  assert.equal((await call("GET", "/api/views/my_saved_recipes")).status, 401);
+  assert.equal((await save(undefined, slug)).status, 401);
+  assert.equal((await save(member, "draft-soup")).status, 404);
+  assert.equal((await save(member, "no-such-recipe")).status, 404);
+  assert.equal((await save(member, "Not A Slug")).status, 400);
+  assert.deepEqual(await mine(member), []);
+  assert.equal((await save(member, slug)).status, 200);
+  assert.equal((await save(member, slug)).status, 200, "saving twice changes nothing");
+  assert.deepEqual((await mine(member)).map(row => row.slug), [slug]);
+  assert.equal((await mine(member))[0].title, "蔥油餅");
+  assert.deepEqual(await mine(other), [], "another member sees none of it");
+  // Another member's unsave matches none of their own rows (scope), so it changes nothing.
+  assert.equal((await call("DELETE", `/api/saved-recipes/${slug}`, { cookie: other })).status, 200);
+  assert.equal((await mine(member)).length, 1, "another member cannot unsave it");
+  assert.ok((await call("GET", "/api/views/published_recipes")).body.rows.some(row => row.slug === slug), "the app lists recipes from the public View");
+  step("save and unsave are REST-only, idempotent, published-only and private to each member");
+
+  assert.equal((await call("DELETE", `/api/saved-recipes/${slug}`, { cookie: member })).status, 200);
+  assert.deepEqual(await mine(member), []);
+  assert.equal((await call("DELETE", `/api/saved-recipes/${slug}`, { cookie: member })).status, 200, "unsaving twice changes nothing");
+  assert.equal((await save(member, slug)).status, 200);
+  const unpublished = await call("POST", `/admin/api/entries/${parent.id}/unpublish?collection=recipes`, { cookie: admin, body: { expectedVersion: published.body.entry.version } });
+  assert.equal(unpublished.status, 200, JSON.stringify(unpublished.body));
+  assert.deepEqual(await mine(member), [], "an unpublished recipe leaves the member's list");
+  step("unsave removes it; unpublishing a recipe hides it from the saved list");
 });
