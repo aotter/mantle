@@ -5,6 +5,8 @@ import { MEDIA_TYPE } from "./media-type.js";
 
 const REDIRECTS = 3;
 const TIMEOUT_MS = 20_000;
+/** Many image hosts (Wikimedia among them) refuse a request without a descriptive User-Agent. */
+const USER_AGENT = "Mantle (+https://github.com/aotter/mantle)";
 const fail = (code: string, message: string) => mediaError(code, message, "media/source");
 
 /** Reserved, private, shared, loopback, link-local, documentation, benchmark, multicast and broadcast IPv4 blocks. */
@@ -86,7 +88,7 @@ export async function fetchSource(
   const signal = AbortSignal.timeout(TIMEOUT_MS);
   for (let hops = 0; ; hops++) {
     try {
-      response = await fetch(url, { redirect: "manual", signal, headers: { accept } });
+      response = await fetch(url, { redirect: "manual", signal, headers: { accept, "user-agent": USER_AGENT } });
     } catch {
       throw fail("MEDIA_SOURCE_FAILED", `${url.host} could not be fetched`);
     }

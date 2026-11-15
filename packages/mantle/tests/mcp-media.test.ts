@@ -631,6 +631,7 @@ test("upload_media prepares, commits and fetches; find, update and delete_media;
     const answer = sources[url];
     if (!answer) throw Error("unexpected fetch " + url);
     expect(init?.redirect).toBe("manual");
+    expect(new Headers(init?.headers).get("user-agent")).toMatch(/^Mantle \(\+https:\/\//);
     return answer();
   }) as typeof fetch;
   try {
