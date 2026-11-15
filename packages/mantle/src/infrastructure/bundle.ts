@@ -172,7 +172,7 @@ export async function bundleApp(
   apart();
   const clientEntries = clientEntryFiles(source);
   const client = join(assets, CLIENT_DIR);
-  cleanClient(outdir);
+  cleanClient(outdir, assets, source);
   // before copyPublic, which would otherwise copy the app's file into the directory the build then empties
   if (clientEntries.length && existsSync(join("public", CLIENT_DIR)))
     throw new Error(
@@ -216,30 +216,54 @@ export async function bundleApp(
 /** Where the application's browser entries are written, under the assets directory (served at `/assets/client/<name>.js`). */
 const CLIENT_DIR = join("assets", "client");
 
-/** The browser entries: `.ts` and `.tsx` files directly in `client/` beside the Worker entry (subdirectories hold their helpers). */
+/**
+ * The browser entries: `.ts` and `.tsx` files directly in `client/` beside the Worker entry (subdirectories hold their
+ * helpers). Dotfiles, declaration files and `*.test.*` / `*.spec.*` files are not entries.
+ */
 function clientEntryFiles(source: string): string[] {
   const dir = join(dirname(source), "client");
   if (!existsSync(dir)) return [];
   const files = readdirSync(dir, { withFileTypes: true })
-    .filter(entry => entry.isFile() && /\.tsx?$/.test(entry.name) && !entry.name.endsWith(".d.ts"))
+    .filter(
+      entry =>
+        entry.isFile() &&
+        /\.tsx?$/.test(entry.name) &&
+        !entry.name.startsWith(".") &&
+        !/\.d\.ts$|\.(?:test|spec)\.tsx?$/.test(entry.name),
+    )
     .map(entry => entry.name)
     .sort();
-  const names = files.map(file => file.replace(/\.tsx?$/, ""));
-  const twice = names.find((name, index) => names.indexOf(name) !== index);
-  if (twice !== undefined)
-    throw new Error(
-      `${relative(process.cwd(), dir)} has ${twice}.ts and ${twice}.tsx: both would be built to ${twice}.js.`,
-    );
+  // compared without case: `B.ts` and `b.ts` are one file on a case-insensitive filesystem
+  const seen = new Map<string, string>();
+  for (const file of files) {
+    const key = file.replace(/\.tsx?$/, "").toLowerCase(),
+      other = seen.get(key);
+    if (other)
+      throw new Error(
+        `${relative(process.cwd(), dir)} has ${other} and ${file}: both would be built to ${key}.js (names are compared without case).`,
+      );
+    seen.set(key, file);
+  }
   return files.map(file => join(dir, file));
 }
 
-/** Removes the directory the previous build wrote, listed in `<outdir>/.mantle-client`, so a deleted entry is not served again. */
-function cleanClient(outdir: string): void {
+/**
+ * Removes the directory the previous build wrote, so a deleted entry is not served again. The record
+ * `<outdir>/.mantle-client` is trusted only when it names exactly this build's `<assets>/assets/client`; an unreadable
+ * record or any other path is ignored and never deleted.
+ */
+function cleanClient(outdir: string, assets: string, source: string): void {
   const record = join(outdir, ".mantle-client");
   if (!existsSync(record)) return;
-  const { dir } = JSON.parse(readFileSync(record, "utf8")) as { dir: string };
-  if (dir.endsWith(CLIENT_DIR)) rmSync(dir, { recursive: true, force: true });
+  let dir: unknown;
+  try {
+    ({ dir } = JSON.parse(readFileSync(record, "utf8")) as { dir?: unknown });
+  } catch {}
   rmSync(record, { force: true });
+  const own = join(assets, CLIENT_DIR);
+  if (typeof dir !== "string" || physical(dir) !== physical(own)) return;
+  assertCleanable("The browser entry output directory", own, source);
+  if (within(own, dir)) rmSync(own, { recursive: true, force: true });
 }
 
 /**

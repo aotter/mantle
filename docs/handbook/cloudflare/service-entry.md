@@ -194,7 +194,7 @@ larger sweeps' cursors for a later invocation instead of scanning without a boun
 
 On Bun, reuse a process-owned `Database` or `SQL` pool and call the same generated
 surfaces from `Bun.serve({fetch})`. Bun runs the server as TypeScript, so
-`mantle bundle` builds only Admin (and the browser entries, `dist/client/assets/client/<name>.js`) for it: the `bun-*` target that
+`mantle bundle` builds only Admin (and the browser entries, `dist/client/assets/client/<name>.js`, stable names: root `bunAdminAssets` at `dist/client/admin` as above, or at the assets directory, where it revalidates `/assets/client/` but caches every other `/assets/` file as immutable) for it: the `bun-*` target that
 `generated/.mantle-inputs.json` records skips the Worker bundle, and Admin goes
 to `dist/client/admin` (`--assets` as on Workers) when the server imports
 `@aotter/mantle-admin/server`. Add it as the build script and run it before
