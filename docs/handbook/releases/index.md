@@ -36,8 +36,25 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ### Upgrading to 0.2.2-alpha.5
 
-Pin the selected packages to `0.2.2-alpha.5` and regenerate.
+Pin the selected packages to `0.2.2-alpha.5` and regenerate. One breaking change; everything else is additive or a fix.
 
+- **Media purposes take any file type (#2034).** A purpose slot may name `*/*` or `type/*`, with a `maxBytes` entry of
+  its own; `upload_media` (directly, by `sourceUrl` or `file`), the upload card and the Admin media library take a PDF,
+  an archive or any other file such a purpose allows, and the library shows it as a file tile. Image purposes behave as
+  before. By default HTML, XML (SVG among them) and JavaScript are refused and a type not shown inline is delivered as
+  an attachment; `r2MediaStorage({ safeDelivery: false })` turns that off for an isolated media origin
+  ([safe delivery](../cloudflare/media-r2.md#safe-delivery)). A purpose with a wildcard or a type that is not an image
+  requires `X-Content-Type-Options: nosniff` on the media origin at the edge, and that origin must never be in a
+  `script-src` or `style-src` or a path of the application's own origin. Upload URLs now sign their `Content-Type`
+  (`S3Signer.sign` receives `headers` and `allHeaders: true`), so a PUT with another type is refused; an application
+  signer must sign the headers it is given. A custom `MediaStorage` must honour the `contentDisposition` that
+  `commitUpload` and `signRead` pass, or set `safeDelivery: false`; nothing changes for the image types it served
+  before. The Admin media item adds `filename`.
+- **Breaking: generation refuses a purpose type that is not a media type (#2034).** Before: a `required` token such as
+  `heic` (a shorthand Mantle does not expand) or `image/png;q=1` generated, and no upload could use that token. After:
+  generation fails with `invalid-mime` unless every token is a shorthand Mantle expands (`jpg`, `jpeg`, `png`, `webp`,
+  `avif`, `gif`, `svg`), a lowercase `type/subtype` without parameters, `type/*` or `*/*`. Replace the token with the
+  full type (`image/heic`, with its `maxBytes` key) or remove it.
 - **Generated Admin bindings typecheck for a Schema without `required` (#2032).** `generated/admin-bindings.ts`
   failed `tsc` with TS2345 when a Schema declared no `required`. Regenerating fixes it; behaviour is unchanged.
 - **Choosing how users sign in, and the first deploy (handbook).**

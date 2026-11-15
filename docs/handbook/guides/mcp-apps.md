@@ -677,7 +677,7 @@ const handler = mcp({ ...options, media: storage, apps: { admin: [
 ```
 
 The card is `ui://mantle-admin/upload` and renders `upload_media`. The person
-picks an image (and may type alt text); the card reads the purposes with
+picks a file (and may type alt text for an image); the file input accepts the purpose's types, any file for `*/*`; the card reads the purposes with
 `upload_media`, calls it with the file's metadata, PUTs the file straight to the
 target with progress, calls `upload_media` again with the `uploadId`, and sends
 `ui/message` with the asset id, and also `ui/update-model-context` unless the

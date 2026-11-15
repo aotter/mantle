@@ -437,7 +437,7 @@ input and advertises read-only/destructive/open-world hints.
 
 | Tool | Does |
 |---|---|
-| `upload_media` | Upload one image, in two calls (below). |
+| `upload_media` | Upload one file, in two calls (below). |
 | `find_media` | Committed assets by `ids` (ids not found come back in `missing`), or newest first with `limit`, `cursor` and `search` (the exact id, or text in alt or caption; a search longer than 48 characters matches the id alone). Read-only. |
 | `update_media` | Set `alt` or `caption` of `id`; an omitted field is unchanged, an empty string clears it. |
 | `delete_media` | Delete `id`'s objects and record (`destructiveHint`, so hosts confirm). A partial failure is retried with the same id. |
@@ -467,7 +467,7 @@ failures say what was expected. With the [upload card](../guides/mcp-apps.md#the
 registered, an MCP Apps host shows it for this call.
 
 `{ purpose, sourceUrl }` and `{ purpose, file: { download_url, file_id } }` have the
-server fetch one image and run both steps in one call. `file` is the tool's
+server fetch one file and run both steps in one call. `file` is the tool's
 `openai/fileParams` argument, so a host that hands the tool a chat attachment
 passes its download URL. Either takes a purpose with one variant slot. The fetch
 accepts only `https` on the default port, without credentials, to a public host:
@@ -475,8 +475,11 @@ IPv6 literals, private, loopback, link-local, shared, reserved and multicast
 IPv4 addresses, single-label names and names such as `localhost`, `*.local` and
 `*.internal` are `MEDIA_SOURCE_REJECTED`, as is each redirect target (at most
 three). The body is capped at the purpose's byte cap
-(`MEDIA_VARIANT_SIZE_EXCEEDED`) and must sniff as PNG, JPEG, GIF, WebP or AVIF
-(`MEDIA_MIME_REJECTED`); an unreachable source is `MEDIA_SOURCE_FAILED` and a
+(`MEDIA_VARIANT_SIZE_EXCEEDED`). A PNG, JPEG, GIF, WebP or AVIF image is typed
+by its bytes; any other file by the response Content-Type without its parameters,
+which must be a valid type the purpose takes (`MEDIA_MIME_REJECTED`) and passes
+the same [safe-delivery](../cloudflare/media-r2.md#safe-delivery) checks as an upload.
+The request asks for `image/*` when the purpose takes only images, else `*/*`; an unreachable source is `MEDIA_SOURCE_FAILED` and a
 storage PUT failure `MEDIA_STORAGE_FAILED`. Names are checked, not resolved:
 Workers cannot reach private addresses, and on another runtime restrict the
 server's egress to the public internet. File content is never accepted as base64.
