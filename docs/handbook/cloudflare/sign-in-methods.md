@@ -15,7 +15,7 @@ address (Better Auth answers "account not linked").
 | The app stores | Hashed one-time codes, for minutes | No password: the GitHub account id, profile and GitHub's access token, encrypted | A hash of every password |
 | Who can join | Anyone who receives mail at the address, unless `src/signup.ts` restricts it | Anyone with a GitHub account, unless `src/signup.ts` restricts it | Anyone who types an address: addresses are not checked |
 | What it costs | A sender; Cloudflare's own needs your domain on Cloudflare | Every user needs a GitHub account | Workers Paid, from $5 a month ([pricing](https://developers.cloudflare.com/workers/platform/pricing/)); you make the first admin by hand in a terminal; only an admin can reset a password |
-| If it is misconfigured | No code arrives: nobody signs in, the admin included | GitHub refuses the callback or the secret: nobody signs in | On Workers Free, sign-up and sign-in fail on the CPU limit |
+| If it is misconfigured | No code arrives: nobody signs in, the admin included | GitHub refuses the callback or the secret: nobody signs in | On Workers Free, sign-up and sign-in fail on the CPU limit under load (error 1102) |
 
 **Recommended: GitHub sign-in.** The application never holds a password, so a copied database or log leaks none, and
 GitHub checks the address and can require two-factor sign-in. Email code also holds no password, but needs a sender.
@@ -125,9 +125,11 @@ callback set it ([`guardGithubLogin`](authentication.md#auth-ts)). `mantle gener
 Admin's sign-in page has no password form, so the application adds one through the Admin `SignIn` slot
 ([Customising Admin](../guides/native-admin.md#sign-in)) and turns on Better Auth's `emailAndPassword`. What that means:
 
-- **Workers Paid.** Better Auth hashes each password with scrypt; one hash took 70–100 ms of CPU in local workerd, and
-  every sign-up and sign-in computes one. Workers Free allows 10 ms of CPU per request, Paid 30 s
-  ([limits](https://developers.cloudflare.com/workers/platform/limits/#cpu-time)). Do not lower the hash cost to fit.
+- **Workers Paid.** Better Auth hashes each password with scrypt, and every sign-up and sign-in computes one. On a
+  deployed Worker one hash took about 75–100 ms of CPU (median; up to 175 ms). Workers Free allows 10 ms of CPU per
+  request, Paid 30 s ([limits](https://developers.cloudflare.com/workers/platform/limits/#cpu-time)). On Free, single
+  sign-ins may pass, but with 10 at a time about one in five failed with error 1102; on Paid none did. Do not lower the
+  hash cost to fit.
 - **Addresses are not checked.** Without an email sender nothing proves an address, so whoever types one first owns it,
   even one that `src/signup.ts` allows by exact address. Do not trust `email` for access. For a closed group, turn off
   sign-up after the first admin exists and create accounts as an admin ([below](#a-closed-group)).
@@ -343,4 +345,4 @@ await fetch("/api/auth/admin/set-user-password", { method: "POST", headers: { "c
   body: JSON.stringify({ userId: "<id>", newPassword: "<temporary password>" }) });
 ```
 
-Verified on `wrangler dev --local`: every step of this recipe, with `--local` for `--remote`; not CPU time on Cloudflare.
+Verified on `wrangler dev --local`: every step of this recipe, with `--local` for `--remote`. The CPU figures are from a deployed Worker on Workers Free and Paid (Better Auth 1.7.14).
