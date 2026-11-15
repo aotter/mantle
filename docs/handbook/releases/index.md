@@ -51,6 +51,12 @@ Pin the selected packages to `0.2.2-alpha.5` and regenerate.
   app), served at `/assets/client/<name>.js` without running the Worker. Nothing changes for an app without a `client/`
   entry. With such an entry `public/assets/client` is refused, as `public/admin` is. Reference:
   [project and CLI](../start/project-and-cli.md#outputs).
+- **Example: public pages plus a React app (#2036).** The recipes example adds "my saved recipes", a React single-page
+  app under `/app` next to its server-rendered pages: a Schema owned by the member, a View, a Procedure with REST
+  Triggers, a `noindex` shell that is left out of the sitemap and `llms.txt`, and the checks in its `smoke.mjs`.
+  [Public pages](../guides/public-pages.md#public-pages-plus-a-react-app) and the agent guide point to it. Its React
+  app is `src/client/spa.tsx`, built by `mantle bundle` (above). The app shell now lists `@types/react-dom` as a dev
+  dependency, for that app's types.
 
 ### Upgrading to 0.2.2-alpha.4
 
