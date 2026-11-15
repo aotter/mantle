@@ -107,6 +107,7 @@ function checkNextFolderImports() {
   // Pure kernel leaves (no I/O, no runtime state, relative imports only among themselves) the compiler shares instead of copying.
   const compilerLeaves = [
     "kernel/contract-error.js",
+    "kernel/media-type.js",
     "kernel/scalars.js",
     "kernel/search.js",
     "kernel/user-field-name.js",
