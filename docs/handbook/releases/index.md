@@ -34,6 +34,13 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ## 0.2.2 — in preparation
 
+### Upgrading to 0.2.2-alpha.5
+
+Pin the selected packages to `0.2.2-alpha.5` and regenerate.
+
+- **Generated Admin bindings typecheck for a Schema without `required` (#2032).** `generated/admin-bindings.ts`
+  failed `tsc` with TS2345 when a Schema declared no `required`. Regenerating fixes it; behaviour is unchanged.
+
 ### Upgrading to 0.2.2-alpha.4
 
 Pin the selected packages to `0.2.2-alpha.4` and regenerate. One breaking change; everything else is additive or a fix.
