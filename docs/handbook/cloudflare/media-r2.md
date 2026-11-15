@@ -63,7 +63,12 @@ same with its `safeDelivery` property; when it is not `false`, it must store and
 
 R2 cannot store `X-Content-Type-Options: nosniff` per object on a public bucket; add it, for every response of the media
 domain, at the edge (a Cloudflare Transform Rule or a Worker in front of the bucket). It is required as soon as a
-purpose takes a wildcard or a type that is not an image.
+purpose takes a wildcard or a type that is not an image. On an R2 custom domain, a Response Header Transform Rule
+on the zone does it on every plan: **Rules → Transform Rules → Modify Response Header**, match
+`http.host eq "media.example.com"`, and **Set static** `X-Content-Type-Options` to `nosniff`. The same rule can
+also set `Content-Security-Policy` to `sandbox`, which gives any document served from the media domain an opaque
+origin with scripts off; check that the inline types your purposes take (PDF in particular) still display in the
+browsers you support before adding it.
 
 The Admin media library item carries `filename`, the uploaded file's name when the storage kept it (the R2 adapter
 does), or `null`.
@@ -101,7 +106,9 @@ CSV, JSON, ZIP, MP3, MP4, WebM), else from the filename (1 to 10 lowercase lette
 extension such as `html`, `svg` or `js`), else `bin`. Delivery uses the stored Content-Type, not the extension. The
 commit streams each object from `get` to `put` through the Worker; the R2 binding has no server-side copy. Serve the `committed/` prefix on the public domain. An R2 custom domain serves every key, `uploads/` included, so block
 `uploads/` on it at the edge (a WAF custom rule or a Worker route on that path that answers 404), and add a bucket
-lifecycle rule for abandoned upload keys. Mantle 0.1.x wrote
+lifecycle rule for abandoned upload keys. `r2MediaStorage` keeps both prefixes in one bucket; a
+custom `MediaStorage` can instead take uploads in a private bucket with no public domain and copy checked objects to the
+public bucket in `commitUpload`, so `uploads/` is never on a public origin. Mantle 0.1.x wrote
 `<purpose>/<group>/<role>.<ext>` keys (`<group>/<role>.<ext>` when the purpose was not a plain slug); an asset reads its keys from the stored `storageKey` and `publicUrl` of each
 variant, so 0.1.x assets keep working while their prefixes stay served.
 
