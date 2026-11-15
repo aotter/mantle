@@ -305,6 +305,26 @@ for (const target of ["bun-sqlite", "cloudflare-d1", "bun-postgres", "cloudflare
   );
 }
 
+test("purpose types are strict at generation; wildcards need their own byte cap", async () => {
+  const generate = (required: string[], maxBytes: Record<string, number>) =>
+    generateFromSources({
+      target: "bun-sqlite",
+      sources: { sources: [{ sourceId: "notes.yaml", text: source }] },
+      site: { media: { purposes: [{ name: "files", required, maxBytes }] } },
+    });
+  expect((await generate(["*/*"], { "*/*": 1 })).ok).toBe(true);
+  expect((await generate(["video/*,application/pdf"], { "video/*": 1, "application/pdf": 1 })).ok).toBe(true);
+  for (const token of ["application/pdf;q=1", "*/pdf", "video/**", "pdf/", `application/${"x".repeat(128)}`, "a b/c"]) {
+    const result = await generate([token], { [token]: 1 });
+    expect([token, result.ok]).toEqual([token, false]);
+    expect(JSON.stringify(!result.ok && result.diagnostics)).toContain("lowercase type/subtype");
+  }
+  const missing = await generate(["*/*"], { "application/pdf": 1 });
+  expect(JSON.stringify(!missing.ok && missing.diagnostics)).toContain("maxBytes is missing entries: */*");
+  const overlap = await generate(["*/*", "*/*"], { "*/*": 1 });
+  expect(JSON.stringify(!overlap.ok && overlap.diagnostics)).toContain("overlapping");
+});
+
 test("upload_media takes a PDF directly and from sourceUrl, for a public and a private purpose", async () => {
   const result = await generateFromSources({
     target: "bun-sqlite",

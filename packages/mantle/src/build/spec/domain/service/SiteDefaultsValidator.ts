@@ -6,6 +6,7 @@ import {
 } from "../model/SiteConfig.js";
 import { expandPolicyRequired, parseMimeAccept } from "../model/MediaMimeAccept.js";
 import { canonicalizeLocaleList, containsScriptSubtagLocale } from "./LocaleCanonicalizer.js";
+import { validAccept } from "../../../../kernel/media-type.js";
 
 /**
  * Synchronous fail-fast for `siteDefaults`. Throws
@@ -48,6 +49,7 @@ export interface MediaPurposeIssue {
     | "invalid-slug"
     | "empty-required"
     | "empty-required-slot"
+    | "invalid-mime"
     | "overlapping-slot-mimes"
     | "maxBytes-missing-mime"
     | "maxBytes-non-positive"
@@ -69,6 +71,8 @@ export class InvalidMediaPurposesError extends Error {
                 return `${tag} declares no required slots (need at least one)`;
               case "empty-required-slot":
                 return `${tag} has a required slot that parses to zero mimes: ${i.detail}`;
+              case "invalid-mime":
+                return `${tag} names media types that are not a lowercase type/subtype without parameters (at most 127 characters each), type/* or */*: ${i.detail}`;
               case "overlapping-slot-mimes":
                 return `${tag} has slots with overlapping mime sets (variant→slot mapping is ambiguous): ${i.detail}`;
               case "maxBytes-missing-mime":
@@ -168,6 +172,11 @@ function collectMediaPurposeIssues(purposes: ReadonlyArray<MediaPurposePolicy>):
         reason: "empty-required-slot",
         detail: emptySlots.map(s => `'${s.raw}'`).join(", "),
       });
+      continue;
+    }
+    const invalid = slots.flat().filter(mime => !validAccept(mime));
+    if (invalid.length > 0) {
+      out.push({ name: p.name, reason: "invalid-mime", detail: invalid.map(m => JSON.stringify(m)).join(", ") });
       continue;
     }
     // Variant → slot mapping is by mime: each supplied mime must
