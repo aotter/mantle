@@ -110,6 +110,7 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   assert.equal(anonymous.status, 303);
   assert.equal(anonymous.headers.get("location"), `/sign-in?return=${encodeURIComponent(`${deep}?x=1`)}`);
   assert.equal((await fetch(`${origin}/app/`, { redirect: "manual" })).status, 303);
+  assert.equal((await fetch(`${origin}/app/index.html`, { redirect: "manual" })).status, 404, "the shell file is not served around the sign-in check");
   const signInPage = await call("GET", "/sign-in");
   assert.equal(signInPage.status, 200);
   assert.ok(signInPage.body.includes(`<meta name="robots" content="noindex">`), "the sign-in page is noindex");
@@ -128,7 +129,7 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   assert.equal(bundle.status, 200);
   assert.match(bundle.headers.get("content-type"), /javascript/);
   // Not every unknown path is the app: other URLs and missing files under /app stay 404.
-  for (const path of ["/nope", "/application", "/app.js", "/app/missing.js", "/zh-TW/nope", "/assets/client/missing.js"]) {
+  for (const path of ["/nope", "/application", "/app.js", "/app/missing.js", "/app/index.html", "/zh-TW/nope", "/assets/client/missing.js"]) {
     assert.equal((await call("GET", path, { cookie: member })).status, 404, path);
   }
   assert.equal((await call("POST", deep, { cookie: member })).status, 405);

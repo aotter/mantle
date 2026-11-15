@@ -27,6 +27,8 @@ const page = /^\/(zh-TW|en)\/(?:recipes\/([a-z0-9-]+?)(\.md)?)?$/;
 export async function appRoutes(request: Request, env: Env, context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
   const url = new URL(request.url), match = page.exec(url.pathname);
   if (app.test(url.pathname)) return appShell(request, env, context.caller);
+  // The shell file is public/app/index.html: without this the static fallback would serve it to anyone, past the sign-in check.
+  if (url.pathname === "/app/index.html") return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
   // The shell's member sign-in page: the app's anonymous visitors land here from /app (src/sign-in.ts).
   if (url.pathname === "/sign-in" && request.method === "GET") return signInPage();
   if (!["/", "/llms.txt", "/sitemap.xml", "/robots.txt"].includes(url.pathname) && !match) return undefined;
