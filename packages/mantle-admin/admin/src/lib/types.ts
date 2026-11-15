@@ -286,6 +286,8 @@ export interface MediaLibraryItem {
   variants: MediaAssetVariant[];
   primaryUrl: string | null;
   mime: string | null;
+  /** The uploaded file's name, when the storage kept it. */
+  filename?: string | null;
   byteSize: number | null;
   alt: string | null;
   caption: string | null;

@@ -1,5 +1,5 @@
 /**
- * The upload card `mediaUploadCard` serves for `upload_media`: the person picks one image, the card calls `upload_media`
+ * The upload card `mediaUploadCard` serves for `upload_media`: the person picks one file, the card calls `upload_media`
  * through the host, PUTs the file straight to storage with progress, calls `upload_media` again to commit, and tells the
  * model the asset id. It uploads the original as the single variant a purpose takes (ADR-0017); a purpose with several
  * variant slots needs an agent that prepares them.
@@ -38,10 +38,10 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 document.body.innerHTML = `<form id="card" aria-busy="true" novalidate>
-<h1>Upload an image</h1>
+<h1>Upload a file</h1>
 <label id="purpose-row" hidden>Purpose <select id="purpose"></select></label>
-<label>Image <input id="file" type="file" required></label>
-<label>Alt text <input id="alt" type="text" maxlength="1000" placeholder="Describe the image"></label>
+<label>File <input id="file" type="file" required></label>
+<label id="alt-row" hidden>Alt text <input id="alt" type="text" maxlength="1000" placeholder="Describe the image"></label>
 <button id="upload" type="button" disabled>Upload</button>
 <progress id="progress" max="1" value="0" hidden></progress>
 <p id="status" role="status"></p>
@@ -77,6 +77,11 @@ const failure = (result: ToolResult, fallback: string) => {
   return typeof diagnostic?.message === "string" ? diagnostic.message : fallback;
 };
 const current = () => purposes.find(p => p.name === (asked ?? select.value));
+/** The token of `accepts` that takes `type`: the type itself, else its `type/*`, else `*\/*`. */
+const acceptedBy = (accepts: readonly string[], type: string) =>
+  [type, type.replace(/\/.*/, "/*"), "*/*"].find(token => accepts.includes(token));
+/** A file the browser cannot type is sent as bytes. */
+const typeOf = (picked: File) => picked.type || "application/octet-stream";
 
 function render() {
   const names = purposes.map(p => p.name);
@@ -84,7 +89,11 @@ function render() {
   if (asked && names.includes(asked)) select.value = asked;
   $("purpose-row").hidden = !!asked || names.length < 2;
   const purpose = current();
-  file.accept = purpose?.required.length === 1 ? purpose.required[0]! : "image/*";
+  // `*/*` is no `accept` token: an empty one offers every file
+  const accepts = purpose?.required.length === 1 ? purpose.required[0]!.split(",") : [];
+  file.accept = accepts.includes("*/*") ? "" : accepts.join(",");
+  // alt text describes an image
+  $("alt-row").hidden = !file.files?.[0]?.type.startsWith("image/");
   button.disabled = busy || done || !host?.call || !purpose;
   form.setAttribute("aria-busy", String(busy || !host));
   if (!host) say("Connecting to the MCP host…");
@@ -123,15 +132,16 @@ async function upload(picked: File, purpose: Purpose, call: NonNullable<HostApi[
     throw new Error(
       `'${purpose.name}' takes ${purpose.required.length} variants (${purpose.required.join("; ")}); ask the agent to prepare and upload them.`,
     );
-  if (!accepts.includes(picked.type))
-    throw new Error(`'${purpose.name}' takes ${accepts.join(" or ")}, not ${picked.type || "this file"}.`);
-  const cap = purpose.maxBytes[picked.type] ?? 0;
-  if (picked.size > cap) throw new Error(`The image is ${picked.size} bytes; '${purpose.name}' takes at most ${cap}.`);
-  const text = alt.value.trim();
+  const type = typeOf(picked),
+    token = acceptedBy(accepts, type);
+  if (!token) throw new Error(`'${purpose.name}' takes ${accepts.join(" or ")}, not ${type}.`);
+  const cap = purpose.maxBytes[token] ?? 0;
+  if (picked.size > cap) throw new Error(`The file is ${picked.size} bytes; '${purpose.name}' takes at most ${cap}.`);
+  const text = type.startsWith("image/") ? alt.value.trim() : "";
   const created = await call(TOOL, {
     purpose: purpose.name,
     filename: picked.name.slice(0, 255) || "upload",
-    variants: [{ mimeType: picked.type, byteSize: picked.size, role: "primary" }],
+    variants: [{ mimeType: type, byteSize: picked.size, role: "primary" }],
     ...(text ? { alt: text } : {}),
   });
   if (created.isError) throw new Error(failure(created, "The upload could not be prepared."));
@@ -181,6 +191,7 @@ button.addEventListener("click", () => {
     });
 });
 select.addEventListener("change", render);
+file.addEventListener("change", render);
 
 /** The policy, from the server: it is the authority on purposes, types and caps. Only the latest read applies. */
 let reads = 0;
