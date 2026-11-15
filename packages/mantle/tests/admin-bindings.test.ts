@@ -703,8 +703,24 @@ metadata: {name: app-test-mcp}
 spec: {source: {kind: mcp, surface: admin}, target: {procedure: app-test}}
 `,
     };
+    // A Schema without `required` must still typecheck (an untyped `[]` infers `never[]`).
+    const optional = {
+      sourceId: "optional.yaml",
+      text: `apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: {name: memos}
+spec:
+  title: Memos
+  lifecycle: publishing
+  schema: {type: object, additionalProperties: false, properties: {title: {type: string}}}
+`,
+    };
     for (const target of ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const) {
-      const result = await generateFromSources({ target, admin: true, sources: { sources: [source, board, ref] } });
+      const result = await generateFromSources({
+        target,
+        admin: true,
+        sources: { sources: [source, board, ref, optional] },
+      });
       if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
       const out = join(dir, target);
       await writeGenerated(out, result.files, false);
