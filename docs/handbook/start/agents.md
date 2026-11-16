@@ -94,27 +94,32 @@ not work.
 
 Before adding a file, a function or a dependency, stop at the first line that holds:
 
-1. **Does the brief need it?** If nobody asked for it, leave it out and say so in the report.
-2. **Can a manifest say it?** A read is a View, a rule or a write of several rows is a Procedure, an HTTP or MCP entry is
-   a Trigger. A manifest change regenerates the SQL, types, REST, MCP and Admin together; hand-written code covers one.
-3. **Is it already generated or shipped?** Use the generated bindings and the Store before writing SQL or `fetch` by
-   hand, the Admin console before an admin page of your own, and the app shell's files before a new one.
-4. **Does the platform do it?** A database constraint, an HTML element or a Web API before a library.
+1. **Does the brief or this handbook need it?** What neither asks for, leave out and name in the final report.
+   What a handbook page requires (the visitor-page set, acceptance, the performance pass) is never left out.
+2. **Can a manifest say it?** A read is a View, with its own REST and MCP surface. A rule, or a write of several rows,
+   is a Procedure, and a Trigger gives it an HTTP or MCP entry. A constraint is a Schema key (`required`, `checks`,
+   `uniqueIndexes`). A manifest change regenerates the SQL, types, REST, MCP and Admin together; hand-written code
+   covers one of them.
+3. **Is it already generated or shipped?** Use the generated bindings and the Store (single-row writes included)
+   before writing SQL or `fetch` by hand, the Admin console before an admin page of your own, and the app shell's
+   files before a new one.
+4. **Does the platform do it?** An HTML element or a Web API before a library.
 5. **Does an installed dependency do it?** Add none for what a few lines do.
 6. **Only then write it,** once, in the smallest form that works.
 
 Keep each piece to one job:
 
-- A handler does only what SQL cannot: calling another service, sending email, the side effects of a Procedure. A
-  business rule in a handler is a rule only that entry enforces.
+- A `ref` handler does only what SQL cannot: calling another service, sending email, the side effects of its
+  Procedure. A business rule written in handler code around separate writes does not hold for Admin, the Store or
+  another Procedure writing the same rows; in a Procedure's SQL or a Schema constraint it holds for all of them.
 - One query or rule has one home. When two handlers or pages need the same read, both use one View; when two need the
   same check, it moves into the Procedure they call.
 - `src/routes.ts` holds visitor pages and callbacks, `src/schedule.ts` scheduled work; neither reimplements what a
   generated surface already serves.
 
-When you cut a corner on purpose (a naive scan, a fixed limit, one request per item), leave a `ponytail:` comment that
-names the ceiling and what to do when it is reached. Never cut input validation, authorization, or handling that
-prevents data loss.
+When you cut a corner on purpose (a naive scan, a fixed limit, one request per item), mark it with a comment that
+starts with `ponytail:` (a deliberate shortcut) and names the ceiling and what to do when it is reached, and list
+these in the final report. Never cut input validation, authorization, or handling that prevents data loss.
 
 ## Other tasks
 
