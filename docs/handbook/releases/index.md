@@ -65,8 +65,8 @@ Pin the selected packages to `0.2.2-alpha.5` and regenerate. One breaking change
   code.
 - **The agent entry page says in which order to write app code (handbook).** `mantle help` now carries
   [Write the least code](../start/agents.md#write-the-least-code): manifest before hand-written code, generated
-  bindings and the shipped Admin before your own, one home for each query and rule, and a `ponytail:` comment on a
-  deliberate shortcut. No package changes.
+  bindings and the shipped Admin before your own, one home for each query and rule, and a `ponytail:` comment that
+  marks a deliberate shortcut. No code changes.
 - **`mantle bundle` builds the application's browser entries (#2036).** A `.ts` or `.tsx` file directly in `client/`
   beside the Worker entry is built into `<assets>/assets/client/<name>.js` (esbuild, minified ES2022, `react` from the
   app), served at `/assets/client/<name>.js` without running the Worker. Nothing changes for an app without a `client/`
