@@ -36,6 +36,8 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ### Upgrading to 0.2.2-alpha.6
 
+Pin the selected packages to `0.2.2-alpha.6` and regenerate.
+
 - **Direct upload and the manual card are separate (#2050).** `upload_media` keeps presigned PUT targets visible to
   agents. `mediaUploadCard()` now renders and calls the new `open_media_upload` fallback, with the same prepare/commit
   arguments. Update hard-coded default card tool names; explicitly passing `tool: "upload_media"` retains the earlier
@@ -51,6 +53,9 @@ move, and never booting 0.2 against a 0.1.x database.
   with localized labels (`schemaVersion` stays 1); afterwards, a label-only edit in a locale other than English shows
   as `behavior` changed. `@aotter/mantle/mcp/labels` exports the rule (`localizedSchema`, `localizedText`) for
   schemas an application publishes itself.
+- **The built-in OAuth consent and connected-apps pages match Mantle UI (#2044).** `GET /oauth/consent` and
+  `GET /oauth/consents` render as a centred card in light and dark, with a primary Connect button and the return host
+  and scopes as monospace chips. Still no script, the same CSP, forms and fields. Nothing to change.
 
 ### Upgrading to 0.2.2-alpha.5
 

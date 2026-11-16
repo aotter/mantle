@@ -1162,7 +1162,9 @@ describe("OAuth grant revocation and consent routes", () => {
       new Request(`${origin}/oauth/consents`, { headers: { cookie, "accept-language": "zh-TW" } }),
     );
     expect(page!.status).toBe(200);
-    expect(await page!.text()).toContain("中斷連線");
+    const body = await page!.text();
+    expect(body).toContain("中斷連線");
+    expect(body).not.toContain("<script");
     expect(page!.headers.get("content-security-policy")).toContain("script-src 'none'");
     expect(
       (await routes(
