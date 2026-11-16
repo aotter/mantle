@@ -3,7 +3,7 @@ import { userReferences } from "../domain/userReferences.js";
 import { rowPolicy, type RuntimePlan, type PlanSchema, type RowMode } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
 import type { Dialect } from "../kernel/dialect/common.js";
-import { renderTerm } from "../kernel/store.js";
+import { renderTerm } from "../kernel/store-rules.js";
 import { dialect as SQLITE } from "../kernel/dialect/sqlite.js";
 import { dialect as POSTGRES } from "../kernel/dialect/postgres.js";
 import { declaredType } from "../domain/columns.js";

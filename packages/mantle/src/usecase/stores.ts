@@ -8,7 +8,7 @@
 import { NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, type RuntimePlan } from "../build/compiler.js";
 import { declaredType, inputType, nativeType } from "../domain/columns.js";
 import { q } from "../domain/entry.js";
-import { expand, SCOPE, TTL, type Fact, type Lock, type Rules } from "../kernel/store.js";
+import { expand, SCOPE, TTL, type Fact, type Lock, type Rules } from "../kernel/store-rules.js";
 import { refChecks, userScopeTerm } from "../build/compiler.js";
 import { publishRequired } from "./publishing.js";
 

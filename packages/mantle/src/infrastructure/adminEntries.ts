@@ -10,7 +10,7 @@ import { recipesOf } from "../domain/recipes.js";
 import type { Dialect } from "../kernel/dialect/common.js";
 import type { GenerateDiagnostic } from "../domain/model.js";
 import { lockCondition, refChecks } from "../build/compiler.js";
-import { renderTerm, type Term } from "../kernel/store.js";
+import { renderTerm, type Term } from "../kernel/store-rules.js";
 import type { Recipe } from "../kernel/binds.js";
 
 type Schema = RuntimePlan["schemas"][string];
