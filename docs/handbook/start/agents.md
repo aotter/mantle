@@ -66,7 +66,8 @@ scope.
      `src/routes.ts`, `src/client/spa.tsx`, `manifests/saved-recipes.yaml`). Indexable content is never only in the
      SPA; its shell is `noindex` and absent from the sitemap and `llms.txt`, it sends anonymous visitors to sign in, and
      it reads Views and writes through REST Triggers (`mantle help public-pages`, "Public pages plus a React app").
-4. `pnpm generate`, implement every handler it lists, `pnpm check`, then `pnpm smoke`.
+4. `pnpm generate`, implement every handler it lists, `pnpm check`, then `pnpm smoke`. Write app code in the
+   order of [Write the least code](#write-the-least-code).
 5. **Show the user the wiring.** As soon as the manifests generate, run `pnpm accept --open`: it starts the app,
    signs the admin in without a one-time code and opens the Developer UI (`/admin/dev`) in the user's browser, showing
    the Schemas, Views, Procedures and Triggers and how they connect, with each surface's routes and tools. Tell the user
@@ -88,6 +89,32 @@ The first verified sign-in with `ADMIN_EMAIL` becomes the admin. Further adminis
 password, the first admin is [promoted by hand](../cloudflare/sign-in-methods.md#the-first-admin) and invitations do
 not work.
 [Authentication](../cloudflare/authentication.md#identity-helpers) documents the same operations as an API.
+
+## Write the least code
+
+Before adding a file, a function or a dependency, stop at the first line that holds:
+
+1. **Does the brief need it?** If nobody asked for it, leave it out and say so in the report.
+2. **Can a manifest say it?** A read is a View, a rule or a write of several rows is a Procedure, an HTTP or MCP entry is
+   a Trigger. A manifest change regenerates the SQL, types, REST, MCP and Admin together; hand-written code covers one.
+3. **Is it already generated or shipped?** Use the generated bindings and the Store before writing SQL or `fetch` by
+   hand, the Admin console before an admin page of your own, and the app shell's files before a new one.
+4. **Does the platform do it?** A database constraint, an HTML element or a Web API before a library.
+5. **Does an installed dependency do it?** Add none for what a few lines do.
+6. **Only then write it,** once, in the smallest form that works.
+
+Keep each piece to one job:
+
+- A handler does only what SQL cannot: calling another service, sending email, the side effects of a Procedure. A
+  business rule in a handler is a rule only that entry enforces.
+- One query or rule has one home. When two handlers or pages need the same read, both use one View; when two need the
+  same check, it moves into the Procedure they call.
+- `src/routes.ts` holds visitor pages and callbacks, `src/schedule.ts` scheduled work; neither reimplements what a
+  generated surface already serves.
+
+When you cut a corner on purpose (a naive scan, a fixed limit, one request per item), leave a `ponytail:` comment that
+names the ceiling and what to do when it is reached. Never cut input validation, authorization, or handling that
+prevents data loss.
 
 ## Other tasks
 
