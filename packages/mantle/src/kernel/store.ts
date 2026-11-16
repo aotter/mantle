@@ -12,8 +12,18 @@ import { condition } from "./where.js";
 
 import { decodeCursor, encodeCursor } from "./paging.js";
 export { decodeCursor, encodeCursor };
-export * from "./store-rules.js";
-import { expand, renderTerm, SCOPE, TTL, type Fact, type Lock, type Rules, type Term } from "./store-rules.js";
+export { expand, renderTerm, SCOPE, TTL, type Fact, type Lock, type ParentPolicy, type Rules, type Term };
+import {
+  expand,
+  renderTerm,
+  SCOPE,
+  TTL,
+  type Fact,
+  type Lock,
+  type ParentPolicy,
+  type Rules,
+  type Term,
+} from "./store-rules.js";
 
 /** The probe's answer for an update that would leave a published row unpublishable; no lock name has a dot. */
 export const REQUIRED = "publishing.required";
