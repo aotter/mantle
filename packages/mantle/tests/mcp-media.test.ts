@@ -328,7 +328,7 @@ for (const target of ["cloudflare-d1", "cloudflare-postgres"] as const)
       };
       // upload_media fetches a source URL through the chunk
       expect((await uploaded("tools", 'export { mcp } from "./mcp.ts";')).chunks).toHaveLength(1);
-      // the site's media library without upload_media: media.ts is uploaded, its import("./media-fetch.js") tree-shaken
+      // the site's media library without upload_media: media.ts is uploaded, the import("./media-fetch.js") of media-tools.ts tree-shaken
       const library = await uploaded(
         "site",
         `export { createSite } from ${JSON.stringify(join(import.meta.dir, "../src/kernel/site.ts"))};`,

@@ -163,10 +163,10 @@ kernel <- domain <- usecase <- infrastructure
 
 - `kernel/` contains native request primitives. `auth/` owns selected Auth integration.
 - `domain/`, `usecase/` and `infrastructure/` are the layers of the generator, not of a request: `domain/` is the
-  generator's model and may read the compiler's output (`build/compiler.js`) and pure kernel helpers.
+  generator's model and may read `build/` and `kernel/`.
 - Inside `kernel/` the surfaces and media are tops, held by file name: `mcp*`, `rest*`, `web*` and
-  `media*`/`r2-media`/`site*`. No other kernel file imports them and they do not import each other; what two of them
-  share goes in a shared kernel file. `scripts/check-boundaries.mjs` enforces this and the folder rules.
+  `media*`/`r2-media`/`site*` (the leaves `media-type` and `site-types` are shared). No other kernel file imports
+  them and they do not import each other; what two of them share goes in a shared kernel file. `scripts/check-boundaries.mjs` enforces this and the folder rules.
 - `domain/` does not import `usecase/` or `infrastructure/`; `usecase/` does not
   import `infrastructure/`. Build-time layers may consume the one private compiler.
 - Infrastructure owns source loading, CLI envelopes and deployment assembly.

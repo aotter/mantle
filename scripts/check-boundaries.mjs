@@ -165,17 +165,25 @@ function checkNextFolderImports() {
 
 /**
  * Inside `src/kernel` the surfaces and media are tops: nothing else in the kernel imports them, and they do not import
- * each other. Files belong to an area by name, so a new `mcp-*.ts`, `rest-*.ts`, `web-*.ts` or `media-*.ts` is held to it.
+ * each other. Files directly in `src/kernel` belong to an area by name, so a new `mcp-*.ts`, `rest-*.ts`, `web-*.ts` or
+ * `media-*.ts` is held to it.
  */
 function checkKernelAreas() {
-  const areas = { mcp: /^mcp/, rest: /^rest/, web: /^web/, media: /^(?:media|r2-media|site)/ };
-  const areaOf = name => Object.keys(areas).find(area => areas[area].test(name));
+  const areas = {
+    mcp: /^mcp(?:-|\.ts$)/,
+    rest: /^rest(?:-|\.ts$)/,
+    web: /^web(?:-|\.ts$)/,
+    media: /^(?:media|r2-media|site)(?:-|\.ts$)/,
+  };
+  // Type and constant leaves any kernel file may read.
+  const shared = ["media-type.ts", "site-types.ts"];
+  const areaOf = name => (shared.includes(name) ? undefined : Object.keys(areas).find(area => areas[area].test(name)));
   const root = join(ROOT, "packages/mantle/src/kernel");
   for (const file of listFiles(root, p => p.endsWith(".ts"))) {
     const own = areaOf(relative(root, file));
     for (const spec of importSpecifiers(file)) {
       if (!spec.startsWith(".")) continue;
-      const target = relative(root, join(dirname(file), spec));
+      const target = `${relative(root, join(dirname(file), spec)).replace(/\.js$/, "")}.ts`;
       if (target.startsWith("..")) continue;
       const area = areaOf(target);
       if (area && area !== own) fail(file, `kernel ${own ?? "shared"} code may not import the ${area} area: '${spec}'`);
