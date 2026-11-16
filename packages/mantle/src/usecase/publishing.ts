@@ -2,7 +2,7 @@
 import { rowPolicy, type RuntimePlan } from "../build/compiler.js";
 import { dialect as sqlite } from "../kernel/dialect/sqlite.js";
 import { dialect as postgres } from "../kernel/dialect/postgres.js";
-import { renderTerm, type Lock } from "../kernel/store.js";
+import { renderTerm, type Lock } from "../kernel/store-rules.js";
 import { publishedParent } from "./translations.js";
 import { entry, exportName, q } from "../domain/entry.js";
 

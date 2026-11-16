@@ -7,7 +7,7 @@ import { userCaller } from "../src/kernel/user-caller.js";
 import { hasRole, fieldsOf } from "../src/kernel/caller-identity.js";
 import { userBinds, modeOf, userRefs, isAll, scopeInsert } from "../src/kernel/user-fields.js";
 import { binds } from "../src/kernel/binds.js";
-import { renderTerm } from "../src/kernel/store.js";
+import { renderTerm } from "../src/kernel/store-rules.js";
 import { dialect } from "../src/kernel/dialect/sqlite.js";
 import { isAdmin, hasAdminRole } from "../src/kernel/contracts.js";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
