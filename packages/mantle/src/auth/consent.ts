@@ -136,7 +136,7 @@ const page = (l: Locale, title: string, main: string) =>
   "button{font:inherit;font-weight:500;min-height:2.5rem;padding:0 1rem;color:var(--sf);background:var(--s);border:1px solid var(--b);border-radius:.625rem;cursor:pointer}" +
   "button:hover{background-image:linear-gradient(rgb(128 128 128/14%) 0 0)}button:focus-visible{outline:2px solid var(--r);outline-offset:2px}[value=approve]{color:#fff;background-color:var(--p);border-color:var(--p)}" +
   "main>form{display:flex;gap:.5rem;margin-top:1.5rem}main>form button{flex:1}@media(max-width:40rem){main>form{flex-direction:column}}" +
-  "section{display:grid;grid-template-columns:1fr auto;gap:.25rem 1rem;align-items:center;padding:1rem 0;border-top:1px solid var(--b)}section:last-child{padding-bottom:0}section>*{min-width:0;justify-self:start}section form{grid-area:1/2/3}" +
+  "section{display:grid;grid-template-columns:1fr auto;gap:.25rem 1rem;align-items:center;padding:1rem 0;border-top:1px solid var(--b)}section:last-child{padding-bottom:0}section>*{min-width:0;justify-self:start}section form{grid-area:1/2/3}section code{color:var(--m);background:none;border:0;padding:0}" +
   `</style></head><body><main>${main}</main></body></html>`;
 
 function consentHtml(l: Locale, model: OAuthConsentRequest | null): string {
