@@ -38,7 +38,7 @@ move, and never booting 0.2 against a 0.1.x database.
 
 Pin the selected packages to `0.2.2-alpha.5` and regenerate. One breaking change; everything else is additive or a fix.
 
-- **Media purposes take any file type (#2034).** A purpose slot may name `*/*` or `type/*`, with a `maxBytes` entry of
+- **Media purposes take any file type (#2035).** A purpose slot may name `*/*` or `type/*`, with a `maxBytes` entry of
   its own; `upload_media` (directly, by `sourceUrl` or `file`), the upload card and the Admin media library take a PDF,
   an archive or any other file such a purpose allows, and the library shows it as a file tile. Image purposes behave as
   before. By default HTML, XML (SVG among them) and JavaScript are refused and a type not shown inline is delivered as
@@ -50,11 +50,14 @@ Pin the selected packages to `0.2.2-alpha.5` and regenerate. One breaking change
   signer must sign the headers it is given. A custom `MediaStorage` must honour the `contentDisposition` that
   `commitUpload` and `signRead` pass, or set `safeDelivery: false`; nothing changes for the image types it served
   before. The Admin media item adds `filename`.
-- **Breaking: generation refuses a purpose type that is not a media type (#2034).** Before: a `required` token such as
+- **Breaking: generation refuses a purpose type that is not a media type (#2035).** Before: a `required` token such as
   `heic` (a shorthand Mantle does not expand) or `image/png;q=1` generated, and no upload could use that token. After:
   generation fails with `invalid-mime` unless every token is a shorthand Mantle expands (`jpg`, `jpeg`, `png`, `webp`,
   `avif`, `gif`, `svg`), a lowercase `type/subtype` without parameters, `type/*` or `*/*`. Replace the token with the
   full type (`image/heic`, with its `maxBytes` key) or remove it.
+- **`sourceUrl` fetches send a `User-Agent` (#2035).** `upload_media` by `sourceUrl` now requests the file as
+  `Mantle (+https://github.com/aotter/mantle)`; hosts that refuse a request without one answered
+  `MEDIA_SOURCE_FAILED` before. Nothing to change.
 - **Generated Admin bindings typecheck for a Schema without `required` (#2032).** `generated/admin-bindings.ts`
   failed `tsc` with TS2345 when a Schema declared no `required`. Regenerating fixes it; behaviour is unchanged.
 - **Choosing how users sign in, and the first deploy (handbook).**
@@ -67,12 +70,12 @@ Pin the selected packages to `0.2.2-alpha.5` and regenerate. One breaking change
   [Write the least code](../start/agents.md#write-the-least-code): manifest before hand-written code, generated
   bindings and the shipped Admin before your own, one home for each query and rule, and a `ponytail:` comment that
   marks a deliberate shortcut. No code changes.
-- **`mantle bundle` builds the application's browser entries (#2036).** A `.ts` or `.tsx` file directly in `client/`
+- **`mantle bundle` builds the application's browser entries (#2038).** A `.ts` or `.tsx` file directly in `client/`
   beside the Worker entry is built into `<assets>/assets/client/<name>.js` (esbuild, minified ES2022, `react` from the
   app), served at `/assets/client/<name>.js` without running the Worker. Nothing changes for an app without a `client/`
   entry. With such an entry `public/assets/client` is refused, as `public/admin` is. Reference:
   [project and CLI](../start/project-and-cli.md#outputs).
-- **Example: public pages plus a React app (#2036).** The recipes example adds "my saved recipes", a React single-page
+- **Example: public pages plus a React app (#2038).** The recipes example adds "my saved recipes", a React single-page
   app under `/app` next to its server-rendered pages: a Schema owned by the member, a View, a Procedure with REST
   Triggers, a `noindex` shell that is left out of the sitemap and `llms.txt`, and the checks in its `smoke.mjs`.
   [Public pages](../guides/public-pages.md#public-pages-plus-a-react-app) and the agent guide point to it. Its React
