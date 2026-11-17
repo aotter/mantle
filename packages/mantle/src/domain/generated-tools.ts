@@ -36,7 +36,7 @@ const policyText = (policies: readonly Purpose[]) =>
           .join(", plus ")}`,
     )
     .join("; ");
-/** The media tools: the four 0.2 tools, then the seven earlier names, deprecated and removed in 0.3. `policies` are the site's expanded purposes, when generation knows them. */
+/** The direct media tools, seven deprecated aliases removed in 0.3, and the manual card fallback. `policies` are the site's expanded purposes, when generation knows them. */
 export function mediaDefinitions(policies: readonly Purpose[] = []) {
   const define = (
     name: string,
