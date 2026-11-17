@@ -1,10 +1,10 @@
 /**
  * Host platform contract v1. This fixture changes only together with a `v` bump.
  *
- * Evolution rule: `hostCaller` refuses unknown top-level keys, so the contract evolves only by bumping `v`, never by
+ * Evolution rule: `hostCaller` refuses unknown top-level keys, so input props evolve only by bumping `v`, never by
  * adding an optional key. A `mantle describe` report without a `hostContract` field means the application accepts
  * `v: 1` only; the core release that introduces a later version adds `hostContract` to its describe report, listing
- * the versions it accepts.
+ * the versions it accepts. ADR-0046 amendment #2050 adds caller-facing messages to 4xx responses.
  *
  * Fixed `ctx.props.mantle` inputs and the exact outputs a host observes: the caller `hostCaller` builds, every refusal
  * it makes, and what REST, MCP and web answer and report to `onAccess` in gateway mode. The expectations live in
@@ -16,7 +16,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fieldsOf, hasRole, rolesOf } from "../src/kernel/caller-identity.js";
 import { ContractError, isAdmin } from "../src/kernel/contracts.js";
-import { hostCaller, type HostProps } from "../src/kernel/host-caller.js";
+import { hostCaller, hostFailure, type HostProps } from "../src/kernel/host-caller.js";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { gatewaySource, mantleProps } from "./gateway-fixture.js";
 import { describeOf, fill, prober, variants } from "./match-target-fixture.js";
@@ -64,6 +64,38 @@ const source = [
 ].join("\n---\n");
 const without = (props: object, ...keys: string[]) =>
   Object.fromEntries(Object.entries(props).filter(([key]) => !keys.includes(key)));
+
+test("host failures preserve caller-facing 4xx messages and omit internal messages", async () => {
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    for (const layer of ["admin", "member"] as const) {
+      const caller = hostCaller(base({ layer }), { tenant: "example", fields });
+      for (const status of [400, 401, 403, 404, 409, 412, 422, 429]) {
+        const response = hostFailure(
+          new ContractError("COMPANY_NOT_FOUND", "Company was not found.", "companyId", { status }),
+          caller,
+        );
+        expect(response.status).toBe(status === 401 ? 403 : status);
+        expect(response.headers.get("www-authenticate")).toBeNull();
+        expect((await response.json()).error).toEqual({
+          code: status === 401 ? "AUTH_DENIED" : "COMPANY_NOT_FOUND",
+          message: "Company was not found.",
+          target: "companyId",
+        });
+      }
+      for (const error of [
+        new Error("private driver details"),
+        new ContractError("INTERNAL", "private driver details", "", { status: 500 }),
+        new ContractError("UPSTREAM", "private driver details", "", { status: 503 }),
+      ]) {
+        const response = hostFailure(error, caller);
+        expect((await response.json()).error.message).toBeUndefined();
+      }
+    }
+  } finally {
+    log.mockRestore();
+  }
+});
 
 test("host contract v1: callers, refusals, surface answers and access events", async () => {
   const recorded: Record<string, unknown> = {};

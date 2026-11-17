@@ -676,6 +676,8 @@ const handler = mcp({ ...options, media: storage, apps: { admin: [
 ] } });
 ```
 
+When `upload_media` is linked to a card, policy-only calls include a `card` hint even when the request omits MCP Apps capabilities (including host callers). The hint describes hosts that render Apps and offers a direct-upload fallback if no card appears; it does not claim the card rendered. Upload targets still move into result `_meta` only when the request declares Apps support.
+
 The card is `ui://mantle-admin/upload` and renders `upload_media`. The person
 picks a file (and may type alt text for an image); the file input accepts the purpose's types, any file for `*/*`; the card reads the purposes with
 `upload_media`, calls it with the file's metadata, PUTs the file straight to the

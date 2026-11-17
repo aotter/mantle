@@ -142,7 +142,16 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
         ...(tool.outputSchema ? { outputSchema: schema(localizedSchema(tool.outputSchema, locale)) } : {}),
         ...(tool.annotations ? { annotations: tool.annotations } : {}),
       },
-      (raw: unknown) => invoke(serving, tool, call, raw as Record<string, unknown>, !!meta, rendersInApp),
+      (raw: unknown) =>
+        invoke(
+          serving,
+          tool,
+          call,
+          raw as Record<string, unknown>,
+          !!meta,
+          rendersInApp,
+          links?.renders.has(tool.name) ?? false,
+        ),
     );
   }
   // An empty catalogue still answers tools/list and refuses calls the same way.
@@ -209,6 +218,7 @@ async function invoke<Env, Database, Handlers>(
   raw: Record<string, unknown>,
   hasMeta: boolean,
   rendersInApp: boolean,
+  linkedApp: boolean,
 ) {
   const { options, pipeline, caller, request } = serving;
   // Not part of structured output: the version, and on failure the current input contract.
@@ -249,6 +259,7 @@ async function invoke<Env, Database, Handlers>(
       const getDb = () => (db ??= options.db(serving.env));
       const output = await callTool(tool, input, getDb, caller, options.handlers as Handlers, dryRun, {
         apps: rendersInApp,
+        linkedApp,
       });
       // withResultMeta: the data is the result, the meta reaches only the result `_meta`.
       if (!isRecord(output) || !(Symbol.for("net.aotter.mantle/result") in output)) return output;

@@ -22,7 +22,7 @@ export async function uploadMedia(
   library: MediaLibrary,
   policies: readonly MediaPurposePolicy[],
   input: Record<string, unknown>,
-  call: { readonly apps: boolean },
+  call: { readonly apps: boolean; readonly linkedApp?: boolean },
 ): Promise<unknown> {
   const { uploadId, sourceUrl, file, variants, purpose, filename, ...described } = input;
   const present = (keys: string[]) => keys.filter(key => input[key] !== undefined);
@@ -99,9 +99,9 @@ export async function uploadMedia(
     throw fail("MEDIA_PURPOSE_REJECTED", `purpose '${String(purpose)}' is not declared`);
   return {
     purposes: listed,
-    ...(call.apps
+    ...(call.linkedApp || call.apps
       ? {
-          card: "The upload card is open: the person picks the file there, and the card reports the committed asset id.",
+          card: "Hosts that render MCP Apps show an upload card: the person picks the file there, and the card reports the committed asset id. If no card appears, use sourceUrl with a public HTTPS file, or file with an attachment reference.",
         }
       : {}),
   };

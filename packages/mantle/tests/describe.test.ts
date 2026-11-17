@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeApp, diffApp, targetHash } from "../dist/domain/describe/index.js";
 import { compilePlan, d1Dialect, type RuntimePlan } from "../src/build/compiler.js";
+import { mediaDefinitions } from "../src/domain/generated-tools.js";
 
 async function fixture(): Promise<RuntimePlan> {
   const text = await readFile(new URL("apps/user-fields.yaml", import.meta.url), "utf8");
@@ -15,6 +16,17 @@ async function fixture(): Promise<RuntimePlan> {
 const target = (report: Awaited<ReturnType<typeof describeApp>>, id: string) =>
   report.targets.find(t => t._meta.id === id)!._meta;
 const copy = (plan: RuntimePlan) => JSON.parse(JSON.stringify(plan));
+
+test("describe retains built-in media tool metadata and real descriptions", async () => {
+  const report = await describeApp(await fixture());
+  for (const tool of mediaDefinitions()) {
+    const described = report.targets.find(t => t._meta.id === `admin:tool:${tool.name}`)!;
+    expect(described.description).toBe(tool.description);
+    expect(described.title).not.toBe(described._meta.id);
+    if (tool.meta) expect(described._meta).toMatchObject(tool.meta);
+  }
+  expect(report.targets.find(t => t.name === "upload_media")!._meta["openai/fileParams"]).toEqual(["file"]);
+});
 
 test("describe is deterministic, uses MCP names, reports access without SQL or rows", async () => {
   const plan = await fixture(),

@@ -676,9 +676,17 @@ test("upload_media prepares, commits and fetches; find, update and delete_media;
     expect(upload.inputSchema.properties.purpose.description).toContain("'cover' takes image/png up to 100 bytes");
     expect(upload._meta["openai/fileParams"]).toEqual(["file"]);
     // the policy, in place of get_media_upload_policy
-    expect((await call("upload_media", { purpose: "cover" })).structuredContent).toEqual({
+    expect((await call("upload_media", { purpose: "cover" })).structuredContent).toMatchObject({
       purposes: [{ name: "cover", required: ["image/png"], maxBytes: { "image/png": 100 } }],
     });
+    expect((await call("upload_media", { purpose: "cover" })).structuredContent.card).toContain("If no card appears");
+    expect(
+      (await call("upload_media", { purpose: "cover" }, { "io.modelcontextprotocol/clientCapabilities": {} }))
+        .structuredContent.card,
+    ).toContain("If no card appears");
+    expect(
+      (await rpc("tools/call", { name: "upload_media", arguments: { purpose: "cover" } }, bare)).structuredContent.card,
+    ).toBeUndefined();
     expect((await call("upload_media", {}, ui)).structuredContent.card).toContain("upload card");
     expect((await call("upload_media", {})).structuredContent.purposes).toHaveLength(2);
     expect(code(await call("upload_media", { purpose: "hero" }))).toBe("INPUT_VALIDATION_FAILED");
