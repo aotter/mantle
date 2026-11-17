@@ -105,7 +105,7 @@ export default defineAdmin({}, {
     // the email code: the app's step gets Better Auth's continuation URL, unchanged
     await page.getByRole("textbox").first().fill("person@example.test");
     await page.getByRole("button", { name: "Send code" }).click();
-    await page.getByRole("textbox").first().fill("123456");
+    await page.locator('input[autocomplete="one-time-code"]').fill("123456");
     await page.getByText("after-step").waitFor();
     expect(await page.evaluate(() => sessionStorage.getItem("after-sign-in"))).toBe("/admin/from-otp");
 
