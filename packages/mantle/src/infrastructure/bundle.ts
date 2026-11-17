@@ -447,6 +447,7 @@ export async function bundle(entry: string, outdir: string): Promise<Metafile> {
   assertCleanable("Bundle outdir", outdir, entry);
   rmSync(outdir, { recursive: true, force: true });
   const result = await build({
+    absWorkingDir: process.cwd(),
     entryPoints: [entry],
     outdir,
     bundle: true,
