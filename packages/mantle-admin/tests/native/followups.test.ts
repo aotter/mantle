@@ -220,7 +220,16 @@ test("WebMCP localizes declarations and View export validates before streaming",
     views: [{ name: "people", list: { columns: ["name"] } }],
     webmcp: {
       tools: [
-        { name: "people", description: { en: "People", "zh-TW": "人員" }, title: { en: "Admin", "zh-TW": "團隊" } },
+        {
+          name: "people",
+          description: { en: "People", "zh-TW": "人員" },
+          title: { en: "Admin", "zh-TW": "團隊" },
+          inputSchema: {
+            type: "object",
+            properties: { title: { type: "string", title: { en: "Name", "zh-TW": "名稱" }, enum: ["a"] } },
+          },
+          outputSchema: { type: "object", description: { en: "Row", "zh-TW": "列" } },
+        },
       ],
     },
   };
@@ -244,7 +253,13 @@ test("WebMCP localizes declarations and View export validates before streaming",
     { db: () => null, caller: () => admin, locale: "zh-TW" },
   );
   const ask = (path: string) => fetch(new Request("https://app.test/admin/api" + path), {});
-  expect((await (await ask("/webmcp"))!.json()).tools[0]).toMatchObject({ description: "人員", title: "團隊" });
+  // WebMCP hosts read the schemas as JSON Schema: labels resolved too, a property named `title` kept.
+  expect((await (await ask("/webmcp"))!.json()).tools[0]).toMatchObject({
+    description: "人員",
+    title: "團隊",
+    inputSchema: { type: "object", properties: { title: { type: "string", title: "名稱", enum: ["a"] } } },
+    outputSchema: { type: "object", description: "列" },
+  });
   const response = (await ask("/views/people/export"))!;
   expect(await response.text()).toBe("name\r\nAda\r\nGrace\r\n");
   expect(reads).toBe(2);

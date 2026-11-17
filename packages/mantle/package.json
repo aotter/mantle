@@ -50,6 +50,7 @@
     "./rest": "./dist/kernel/rest.js",
     "./mcp": "./dist/kernel/mcp.js",
     "./mcp/apps": "./dist/kernel/mcp-app-pages.js",
+    "./mcp/labels": "./dist/kernel/localized-schema.js",
     "./web": "./dist/kernel/web.js",
     "./internal/validation": "./dist/kernel/validation.js",
     "./site": "./dist/kernel/site.js",
