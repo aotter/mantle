@@ -123,13 +123,25 @@ const T = {
 type Locale = keyof typeof T;
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+// Colours and radii are copied from packages/mantle-ui/src/kit/styles/tokens.css (the Admin sign-in card's look).
 const page = (l: Locale, title: string, main: string) =>
   `<!doctype html><html lang="${T[l].lang}"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${title}</title>` +
-  `<style>:root{color-scheme:light dark;font:1rem/1.5 system-ui,sans-serif}body{margin:0;padding:2rem 1rem}main{max-width:32rem;margin:10vh auto}code{overflow-wrap:anywhere}button{font:inherit;padding:.5rem 1rem;cursor:pointer}</style></head><body><main>${main}</main></body></html>`;
+  "<style>:root{color-scheme:light dark;--bg:#f6f8fc;--fg:#172033;--card:#fff;--b:rgb(26 48 98/14%);--m:#596579;--p:#1a3062;--s:#eff2f8;--sf:#1a3062;--chip:#f3f5f9;--r:#4d6aac;font:.875rem/1.5 system-ui,sans-serif}" +
+  "@media(prefers-color-scheme:dark){:root{--bg:#171717;--fg:#f5f5f5;--card:#202020;--b:#404040;--m:#bdbdbd;--p:#345093;--s:#2b2b2b;--sf:#f5f5f5;--chip:#242424;--r:#7a8ec0}}" +
+  "body{margin:0;min-height:100svh;display:grid;place-items:center;padding:1.5rem 1rem;box-sizing:border-box;background:var(--bg);color:var(--fg)}" +
+  "main{width:100%;max-width:28rem;box-sizing:border-box;padding:1.5rem;background:var(--card);border:1px solid var(--b);border-radius:.875rem;box-shadow:0 12px 36px rgb(26 48 98/6%)}" +
+  "main>:first-child{margin-top:0}main>:last-child{margin-bottom:0}h1{font-size:1.25rem;line-height:1.4;font-weight:600;margin:.25rem 0 .5rem}h2{font-size:1rem;font-weight:600;margin:0}p{margin:.75rem 0}.m{color:var(--m)}" +
+  "code{font:.75rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--fg);background:var(--chip);border:1px solid var(--b);border-radius:.375rem;padding:.125rem .5rem;overflow-wrap:anywhere}" +
+  "ul{list-style:none;display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0 0;padding:0}" +
+  "button{font:inherit;font-weight:500;min-height:2.5rem;padding:0 1rem;color:var(--sf);background:var(--s);border:1px solid var(--b);border-radius:.625rem;cursor:pointer}" +
+  "button:hover{background-image:linear-gradient(rgb(128 128 128/14%) 0 0)}button:focus-visible{outline:2px solid var(--r);outline-offset:2px}[value=approve]{color:#fff;background-color:var(--p);border-color:var(--p)}" +
+  "main>form{display:flex;gap:.5rem;margin-top:1.5rem}main>form button{flex:1}@media(max-width:40rem){main>form{flex-direction:column}}" +
+  "section{display:grid;grid-template-columns:1fr auto;gap:.25rem 1rem;align-items:center;padding:1rem 0;border-top:1px solid var(--b)}section:last-child{padding-bottom:0}section>*{min-width:0;justify-self:start}section form{grid-area:1/2/3}section code{color:var(--m);background:none;border:0;padding:0}" +
+  `</style></head><body><main>${main}</main></body></html>`;
 
 function consentHtml(l: Locale, model: OAuthConsentRequest | null): string {
   const t = T[l];
-  if (!model) return page(l, t.title, `<p>${t.eyebrow}</p><h1>${t.invalid}</h1><p>${t.invalidBody}</p>`);
+  if (!model) return page(l, t.title, `<p class="m">${t.eyebrow}</p><h1>${t.invalid}</h1><p>${t.invalidBody}</p>`);
   const client = esc(model.clientName);
   // where the answer goes and what is asked, so a look-alike client name cannot hide either
   const host = URL.canParse(model.redirectUri)
@@ -138,8 +150,8 @@ function consentHtml(l: Locale, model: OAuthConsentRequest | null): string {
   return page(
     l,
     t.title,
-    `<p>${t.eyebrow}</p><h1>${t.heading(client)}</h1><p>${t.body(client)}</p>` +
-      `<p>${t.returnsTo} <code>${esc(host)}</code></p><p>${t.scopes}</p><ul>${model.scopes.map(sc => `<li><code>${esc(sc)}</code></li>`).join("")}</ul><form method="post" action="/oauth/consent">` +
+    `<p class="m">${t.eyebrow}</p><h1>${t.heading(client)}</h1><p>${t.body(client)}</p>` +
+      `<p class="m">${t.returnsTo} <code>${esc(host)}</code></p><p class="m">${t.scopes}</p><ul>${model.scopes.map(sc => `<li><code>${esc(sc)}</code></li>`).join("")}</ul><form method="post" action="/oauth/consent">` +
       `<input type="hidden" name="oauth_query" value="${esc(model.oauthQuery)}"/><button type="submit" name="decision" value="approve">${t.approve}</button> ` +
       `<button type="submit" name="decision" value="deny">${t.deny}</button></form>`,
   );
@@ -149,7 +161,7 @@ function connectedAppsHtml(l: Locale, consents: readonly OAuthConsentInfo[]): st
   const t = T[l];
   const apps =
     consents.length === 0
-      ? `<p>${t.empty}</p>`
+      ? `<p class="m">${t.empty}</p>`
       : consents
           .map(
             c =>
