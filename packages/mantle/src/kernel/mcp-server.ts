@@ -15,11 +15,11 @@ import {
   type McpAppResource,
 } from "./mcp-apps.js";
 import type { Call, Pipeline } from "./request-pipeline.js";
+import { localizedSchema, localizedText as text } from "./localized-schema.js";
 
 type Sdk = typeof import("@modelcontextprotocol/server");
 type McpServer = import("@modelcontextprotocol/server").McpServer;
 type Links = ReturnType<typeof linkSurface>["links"];
-type LocalizedText = string | Readonly<Record<string, string>>;
 type TextBlock = { type: "text"; text: string };
 
 /** What the handler decided before the SDK runs. */
@@ -56,11 +56,6 @@ const TOOL_META_KEY = "net.aotter.mantle/tool";
 const CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities";
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-const text = (value: LocalizedText | undefined, locale: string): string | undefined => {
-  if (typeof value === "string") return value;
-  if (!value) return;
-  return Object.hasOwn(value, locale) ? value[locale] : Object.hasOwn(value, "en") ? value.en : Object.values(value)[0];
-};
 function observe<T>(listener: ((event: T) => void | Promise<void>) | undefined, event: T): void {
   if (listener)
     try {
@@ -76,8 +71,9 @@ const paging = (schema: { properties?: object }) => ({
     cursor: { type: "string" },
   },
 });
-const listedInput = (tool: Pick<Tool<never>, "page" | "inputSchema">) =>
-  tool.page ? paging(tool.inputSchema as object) : tool.inputSchema;
+/** A tool's input schema as listed, its labels in `locale`. */
+const listedInput = (tool: Pick<Tool<never>, "page" | "inputSchema">, locale: string) =>
+  localizedSchema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema, locale);
 
 /** Answer the request with a stateless SDK server over the caller's tools. */
 export function serveTools<Env, Database, Handlers>(
@@ -142,8 +138,8 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
         ...(meta ? { _meta: meta } : {}),
         ...(tool.title ? { title: text(tool.title, locale) } : {}),
         description: text(tool.description, locale) ?? text(tool.title, locale) ?? tool.name,
-        inputSchema: schema(listedInput(tool)),
-        ...(tool.outputSchema ? { outputSchema: schema(tool.outputSchema) } : {}),
+        inputSchema: schema(listedInput(tool, locale)),
+        ...(tool.outputSchema ? { outputSchema: schema(localizedSchema(tool.outputSchema, locale)) } : {}),
         ...(tool.annotations ? { annotations: tool.annotations } : {}),
       },
       (raw: unknown) => invoke(serving, tool, call, raw as Record<string, unknown>, !!meta, rendersInApp),
@@ -219,7 +215,7 @@ async function invoke<Env, Database, Handlers>(
   const about = (contract: boolean): TextBlock[] => {
     const parts = [
       tool.version && `tool version ${tool.version}`,
-      contract && `input schema ${JSON.stringify(listedInput(tool))}`,
+      contract && `input schema ${JSON.stringify(listedInput(tool, options.locale ?? "en"))}`,
     ];
     const line = parts.filter(Boolean).join("; ");
     return line ? [{ type: "text", text: line }] : [];

@@ -22,6 +22,7 @@ import {
 } from "@aotter/mantle/rest";
 import { userOf } from "@aotter/mantle/auth";
 import { callToolLazy as callTool } from "@aotter/mantle/mcp";
+import { localizedSchema, localizedText, type LocalizedText } from "@aotter/mantle/mcp/labels";
 import { siteInfo, type MantleSite, type MediaStorageOption } from "@aotter/mantle/site";
 import { csv } from "./csv.js";
 export type Admin =
@@ -37,6 +38,8 @@ export interface Context<Env, Database> {
   input?: Record<string, unknown>;
   /** Request-bound application gate for related collection reads. */
   authorize?: (target: Target) => Promise<boolean>;
+  /** Admin's `locale` option (default `en`): the locale its WebMCP catalogue lists labels in. */
+  locale?: string;
 }
 export interface Route<Env, Database> {
   /** What application `authorize` decides on, from the request (`params`, `input`, `url`, `caller`); not `db` or `authorize`. */
@@ -192,14 +195,8 @@ export function admin<Env, Database, Handlers = never>(
     caller: Caller,
   ) => items.filter(item => routes.some(route => route.name === item.name && route.allows(caller)));
   const missing = () => new ContractError("NOT_FOUND", "No such Admin route.", "admin");
-  const localized = (value: unknown) =>
-    typeof value === "string"
-      ? value
-      : value && typeof value === "object"
-        ? ((value as Record<string, string>)[options.locale ?? "en"] ??
-          (value as Record<string, string>).en ??
-          Object.values(value)[0])
-        : undefined;
+  const locale = options.locale ?? "en";
+  const localized = (value: unknown) => localizedText(value as LocalizedText | undefined, locale);
   const webmcp = metadata.webmcp as { tools?: readonly Record<string, unknown>[] };
   const catalogue = {
     ...webmcp,
@@ -209,6 +206,9 @@ export function admin<Env, Database, Handlers = never>(
         ...display,
         ...(tool.title ? { title: localized(tool.title) } : {}),
         description: localized(tool.description) ?? localized(tool.title) ?? tool.name,
+        // WebMCP hosts read these as JSON Schema: labels in the server locale, as on MCP.
+        ...(tool.inputSchema ? { inputSchema: localizedSchema(tool.inputSchema, locale) } : {}),
+        ...(tool.outputSchema ? { outputSchema: localizedSchema(tool.outputSchema, locale) } : {}),
       };
     }),
   };
@@ -519,6 +519,7 @@ export function admin<Env, Database, Handlers = never>(
       caller: caller as Admin,
       params,
       input,
+      locale,
       ...(options.authorize ? { authorize: bound.authorized } : {}),
     };
     access.set(c, bound);

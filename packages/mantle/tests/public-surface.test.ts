@@ -18,6 +18,8 @@ const DEVELOPER = [
   "./rest",
   "./mcp",
   "./mcp/apps",
+  // Labels resolved as MCP lists them; Admin's WebMCP catalogue uses the same rule.
+  "./mcp/labels",
   "./web",
   "./site",
   "./media",

@@ -3,6 +3,7 @@ import type { PlanRestrict } from "../../build/spec/domain/model/RuntimePlan.js"
 import type { UserFieldSpec } from "../../build/spec/domain/model/UserFields.js";
 import { canonical, hashDefinition } from "./target-hash.js";
 import { targetDefinitions, type TargetDefinition } from "./targets.js";
+import { localizedSchema } from "../../kernel/localized-schema.js";
 export { targetHash } from "./target-hash.js";
 export { matchTarget, type TargetRequest } from "./match.js";
 
@@ -50,6 +51,8 @@ export interface AppDescription {
   targets: DescribeTarget[];
 }
 
+const listed = (schema: DescribeTarget["inputSchema"]) =>
+  localizedSchema(schema, "en") as DescribeTarget["inputSchema"];
 /** A report of sealed declarations; no SQL or row values leave this function. */
 export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
   const targets = await Promise.all(
@@ -64,7 +67,8 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
         name: d.name,
         title: d.title,
         description: d.description,
-        inputSchema: d.inputSchema,
+        // A host may list targets as MCP tools: labels in `en`, like `title`; the hash keeps the definition's maps.
+        inputSchema: listed(d.inputSchema),
         annotations: { ...d.annotations, readOnlyHint: d.readOnly },
         _meta: {
           surfaces: d.surfaces,
@@ -83,7 +87,7 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
             id: v.id,
             restrict: v.restrict,
             requires: requirements(v, d.surface),
-            inputSchema: v.inputSchema,
+            inputSchema: listed(v.inputSchema),
             readOnly: v.readOnly,
             trustedOnly: v.trustedOnly,
             opaque: v.opaque,

@@ -220,7 +220,16 @@ test("WebMCP localizes declarations and View export validates before streaming",
     views: [{ name: "people", list: { columns: ["name"] } }],
     webmcp: {
       tools: [
-        { name: "people", description: { en: "People", "zh-TW": "人員" }, title: { en: "Admin", "zh-TW": "團隊" } },
+        {
+          name: "people",
+          description: { en: "People", "zh-TW": "人員" },
+          title: { en: "Admin", "zh-TW": "團隊" },
+          inputSchema: {
+            type: "object",
+            properties: { title: { type: "string", title: { en: "Name", "zh-TW": "名稱" }, enum: ["a"] } },
+          },
+          outputSchema: { type: "object", description: { en: "Row", "zh-TW": "列" } },
+        },
       ],
     },
   };
@@ -244,7 +253,13 @@ test("WebMCP localizes declarations and View export validates before streaming",
     { db: () => null, caller: () => admin, locale: "zh-TW" },
   );
   const ask = (path: string) => fetch(new Request("https://app.test/admin/api" + path), {});
-  expect((await (await ask("/webmcp"))!.json()).tools[0]).toMatchObject({ description: "人員", title: "團隊" });
+  // WebMCP hosts read the schemas as JSON Schema: labels resolved too, a property named `title` kept.
+  expect((await (await ask("/webmcp"))!.json()).tools[0]).toMatchObject({
+    description: "人員",
+    title: "團隊",
+    inputSchema: { type: "object", properties: { title: { type: "string", title: "名稱", enum: ["a"] } } },
+    outputSchema: { type: "object", description: "列" },
+  });
   const response = (await ask("/views/people/export"))!;
   expect(await response.text()).toBe("name\r\nAda\r\nGrace\r\n");
   expect(reads).toBe(2);
@@ -290,7 +305,17 @@ test("handler-less WebMCP dispatch accepts omitted and undefined handlers", asyn
 test("a WebMCP refusal carries the deployed tool version and, unless it is an authorization refusal, the listed input schema", async () => {
   const { webmcpRoutes } = await import("../../src/server/webmcp.js"),
     { ContractError } = await import("@aotter/mantle/contracts");
-  const inputSchema = { type: "object", properties: { title: { type: "string", minLength: 1 } }, required: ["title"] };
+  // A property named `title` with a localized label: the refusal repeats it as `/webmcp` lists it, in Admin's locale.
+  const inputSchema = {
+    type: "object",
+    properties: { title: { type: "string", minLength: 1, title: { en: "Title", "zh-TW": "標題" } } },
+    required: ["title"],
+  };
+  const listedSchema = {
+    type: "object",
+    properties: { title: { type: "string", minLength: 1, title: "標題" } },
+    required: ["title"],
+  };
   let refusal = new ContractError("INPUT_VALIDATION_FAILED", "title is too short.", "title");
   const tools: import("@aotter/mantle/mcp").Tool<null>[] = [
     {
@@ -307,6 +332,7 @@ test("a WebMCP refusal carries the deployed tool version and, unless it is an au
   const ask = createAdmin({ collections: [], views: [], operations: [], webmcp: { tools: [] } }, [], [], {
     db: () => null,
     caller: () => admin,
+    locale: "zh-TW",
     routes: webmcpRoutes({ tools: [{ name: "add", version: "0a1b2c3d", inputSchema }] }, tools),
   });
   const call = async () => {
@@ -328,7 +354,7 @@ test("a WebMCP refusal carries the deployed tool version and, unless it is an au
         message: "title is too short.",
         path: "title",
         toolVersion: "0a1b2c3d",
-        inputSchema,
+        inputSchema: listedSchema,
       },
     },
   ]);
