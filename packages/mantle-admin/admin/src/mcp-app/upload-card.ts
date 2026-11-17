@@ -1,6 +1,6 @@
 /**
- * The upload card `mediaUploadCard` serves for `upload_media`: the person picks one file, the card calls `upload_media`
- * through the host, PUTs the file straight to storage with progress, calls `upload_media` again to commit, and tells the
+ * The upload card `mediaUploadCard` serves for `open_media_upload`: the person picks one file, the card calls `open_media_upload`
+ * through the host, PUTs the file straight to storage with progress, calls `open_media_upload` again to commit, and tells the
  * model the asset id. It uploads the original as the single variant a purpose takes (ADR-0017); a purpose with several
  * variant slots needs an agent that prepares them.
  * ponytail: English only; take the host context's locale when hosts ask for another.
@@ -12,7 +12,7 @@ import { outputOf, type ToolResult } from "../../../src/app/bridge.js";
 /** `@aotter/mantle/media`'s `UPLOAD_META`: the result `_meta` key with the upload targets. */
 const UPLOAD_META = "net.aotter.mantle/upload";
 /**
- * `mediaUploadCard`'s `tool`, `forward` and `inputTimeoutMs`, written into the page by the server (absent: `upload_media`,
+ * `mediaUploadCard`'s `tool`, `forward` and `inputTimeoutMs`, written into the page by the server (absent: `open_media_upload`,
  * nothing forwarded).
  */
 const config = JSON.parse(document.getElementById("mantle-upload-config")?.textContent ?? "{}") as {
@@ -20,7 +20,7 @@ const config = JSON.parse(document.getElementById("mantle-upload-config")?.textC
   forward?: string[];
   inputTimeoutMs?: number | false;
 };
-const TOOL = config.tool ?? "upload_media",
+const TOOL = config.tool ?? "open_media_upload",
   forward = config.forward ?? [];
 interface Purpose {
   readonly name: string;

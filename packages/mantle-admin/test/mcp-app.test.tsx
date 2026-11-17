@@ -518,7 +518,7 @@ describe("adminMcpApps", () => {
   const readMeta = async (apps: Parameters<typeof import("@aotter/mantle/mcp").mcp>[1]["apps"], uri: string) => {
     const { mcp } = await import("@aotter/mantle/mcp");
     const api = mcp(
-      ["pending", "upload_media"].map(name => ({
+      ["pending", "upload_media", "open_media_upload"].map(name => ({
         name,
         surface: "public" as const,
         path: name,

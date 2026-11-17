@@ -140,8 +140,12 @@ for (const target of ["bun-sqlite", "bun-postgres"] as const)
         const call = async (name: string, args: any = {}) =>
           (await rpc("tools/call", { name, arguments: args })).data.result;
         const tools = (await rpc("tools/list")).data.result.tools;
-        expect(tools.map((t: any) => t.name)).toEqual([...current, ...old]);
-        expect(tools.slice(4).every((t: any) => t.description.startsWith("Deprecated, removed in 0.3: "))).toBe(true);
+        expect(tools.map((t: any) => t.name)).toEqual([...current, ...old, "open_media_upload"]);
+        expect(
+          tools
+            .slice(current.length, current.length + old.length)
+            .every((t: any) => t.description.startsWith("Deprecated, removed in 0.3: ")),
+        ).toBe(true);
         for (const tool of tools) expect(tool.description).toMatch(/ \(tool version [0-9a-f]{8}\)$/);
         expect(calls).toBe(0);
         expect(queries).not.toHaveBeenCalled();
@@ -696,6 +700,22 @@ test("upload_media prepares, commits and fetches; find, update and delete_media;
       filename: "cat.png",
       variants: [{ mimeType: "image/png", byteSize: 8, role: "primary" }],
     };
+    const separateCard = mcp({
+      ...options,
+      apps: {
+        admin: {
+          resources: [
+            { uri: "ui://media/fallback", name: "fallback", html: "<p>card</p>", renders: ["open_media_upload"] },
+          ],
+        },
+      },
+    });
+    const directWithApps = await rpc("tools/call", { name: "upload_media", arguments: args, _meta: ui }, separateCard);
+    expect(directWithApps.structuredContent.targets).toHaveLength(1);
+    expect(directWithApps._meta?.["net.aotter.mantle/upload"]).toBeUndefined();
+    const manual = await rpc("tools/call", { name: "open_media_upload", arguments: args, _meta: ui }, separateCard);
+    expect(manual.structuredContent.targets).toBeUndefined();
+    expect(manual._meta["net.aotter.mantle/upload"].targets).toHaveLength(1);
     // an agent that PUTs itself reads the targets; an MCP App host gets them only in the result _meta
     // without a resource that renders upload_media, an Apps client is an agent like any other
     expect(

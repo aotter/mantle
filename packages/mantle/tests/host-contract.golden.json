@@ -4965,6 +4965,19 @@
       }
     },
     {
+      "name": "open_media_upload",
+      "_meta": {
+        "id": "admin:tool:open_media_upload",
+        "targetHash": "<hash:admin:tool:open_media_upload>",
+        "readOnly": false,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
       "name": "update_media",
       "_meta": {
         "id": "admin:tool:update_media",

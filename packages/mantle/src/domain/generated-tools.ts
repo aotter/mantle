@@ -83,13 +83,13 @@ export function mediaDefinitions(policies: readonly Purpose[] = []) {
   const paging = { limit: { type: "integer", minimum: 1, maximum: 500 }, cursor: string, search: string };
   const old = (text: string) => `Deprecated, removed in 0.3: ${text}`;
 
-  return [
+  const definitions = [
     define(
       "upload_media",
       "Upload one file (an image, a PDF or any type the purpose takes) to the media library in two calls; bytes never pass through MCP and file content is never accepted as base64. " +
         "1. Call with purpose, filename and variants (one per slot the purpose takes, exactly one primary; optimize an image locally first). The result has an uploadId and the upload targets, which expire in 15 minutes and serve this one upload. PUT each variant's bytes to its target url with its headers. " +
         "2. Call with { uploadId } to commit, and store the returned asset id in fields that reference media_assets.id, never an upload URL. An unknown or expired uploadId needs a new first call. " +
-        "Called with only a purpose, it returns that purpose's accepted types and byte caps; a host that shows MCP Apps opens an upload card where the person picks the file, and the card commits it and reports the asset id. " +
+        "Called with only a purpose, it returns that purpose's accepted types and byte caps. Use open_media_upload only as a manual upload-card fallback when direct file transfer is unavailable. " +
         "With purpose and sourceUrl (a public https file) or file (an attachment), the server fetches the file and commits it in one call; that takes a purpose with a single variant slot.",
       input({
         purpose,
@@ -192,4 +192,13 @@ export function mediaDefinitions(policies: readonly Purpose[] = []) {
       "delete",
     ),
   ] as const;
+  return [
+    ...definitions,
+    {
+      ...definitions[0],
+      name: "open_media_upload",
+      description:
+        "Fallback: open a manual upload card so the person can pick a file. Agents with a local file should use upload_media to get presigned PUT targets and upload bytes directly. The card uses this tool's upload_media-compatible arguments to prepare and commit its own uploads.",
+    },
+  ];
 }

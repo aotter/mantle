@@ -43,7 +43,7 @@ it.each([
     late?: boolean;
     anyFile?: boolean;
   }) => {
-    const TOOL = options.tool ?? "upload_media",
+    const TOOL = options.tool ?? "open_media_upload",
       extra = options.forward ? { folder: "docs" } : {},
       purpose = anyFile ? "notes" : "cover";
     const root = resolve(import.meta.dirname, "../../.."),
