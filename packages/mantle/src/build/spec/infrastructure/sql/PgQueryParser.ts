@@ -1,7 +1,6 @@
 /**
  * The only file in `packages/mantle/src` that imports `libpg-query`. CLI side only (ADR-0034 decision 3):
- * `libpg-query` declares a 128 MiB minimum WASM memory, which is a Cloudflare Worker's whole
- * isolate limit, so no Worker may load it. The import is dynamic so that even a bundle that
+ * The WASM parser stays outside Workers. The import is dynamic so that even a bundle that
  * re-exports the compiler does not instantiate the WASM until something compiles SQL.
  * `check:boundaries` fails when a file outside `spec` names the package, and the preset test bundles a
  * generated Worker and fails if the package is in it.
@@ -19,10 +18,10 @@ export interface ParsedSql {
 /** Parse PostgreSQL-syntax text. A parse failure is an `SQL_SYNTAX` refusal at the parser's cursor. */
 export async function parsePgSql(sql: string): Promise<ParsedSql> {
   const { loadModule, parse } = await import("libpg-query");
-  // A runtime that cannot load the parser (a Worker: 128 MiB minimum WASM memory, ADR-0034) is an error, not SQL_SYNTAX.
+  // A runtime that cannot load the parser is an error, not SQL_SYNTAX.
   await loadModule().catch(cause => {
     throw new Error(
-      "The SQL parser (libpg-query WASM, 128 MiB minimum memory) cannot load in this runtime; compile SQL manifests with Node.js or Bun.",
+      "The SQL parser (libpg-query WASM) cannot load in this runtime; compile SQL manifests with Node.js or Bun.",
       { cause },
     );
   });
