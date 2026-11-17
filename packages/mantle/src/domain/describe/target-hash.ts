@@ -22,6 +22,7 @@ export function hashDefinition(plan: RuntimePlan, d: TargetDefinition): Promise<
     userFields: plan.access?.userFields,
     readOnly: d.readOnly,
     opaque: d.opaque,
+    ...(d.nativeDatabase ? { nativeDatabase: true } : {}),
     trustedOnly: d.trustedOnly,
   });
 }

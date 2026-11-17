@@ -23,6 +23,7 @@ export interface DescribeTarget {
     scope: PlanRestrict;
     restrict: PlanRestrict;
     opaque: boolean;
+    nativeDatabase: boolean;
     unscopedReads: boolean;
     trustedOnly: boolean;
     variants: {
@@ -34,6 +35,7 @@ export interface DescribeTarget {
       readOnly: boolean;
       trustedOnly: boolean;
       opaque: boolean;
+      nativeDatabase: boolean;
       unscopedReads: boolean;
     }[];
     requires: Requirements;
@@ -81,6 +83,7 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
           scope,
           restrict: d.restrict,
           opaque: d.opaque,
+          nativeDatabase: !!d.nativeDatabase,
           unscopedReads: d.readSchemas.some(
             name => !plan.schemas[name]?.scope && !plan.schemas[name]?.userScopes?.length,
           ),
@@ -93,6 +96,7 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
             readOnly: v.readOnly,
             trustedOnly: v.trustedOnly,
             opaque: v.opaque,
+            nativeDatabase: !!v.nativeDatabase,
             unscopedReads: v.readSchemas.some(
               name => !plan.schemas[name]?.scope && !plan.schemas[name]?.userScopes?.length,
             ),
@@ -119,7 +123,7 @@ export interface AppChange {
   after?: unknown;
 }
 type Direction = AppChange["direction"];
-const securityFlags = ["readOnly", "trustedOnly", "opaque", "unscopedReads"] as const;
+const securityFlags = ["readOnly", "trustedOnly", "opaque", "unscopedReads", "nativeDatabase"] as const;
 const flagDirection = (field: (typeof securityFlags)[number], value: boolean): Direction =>
   (field === "readOnly" || field === "trustedOnly" ? !value : value) ? "widened" : "narrowed";
 // Exposure sets have the opposite direction.
@@ -159,6 +163,12 @@ function requiresDirection(x: Requirements, y: Requirements): Direction {
   if (canonical(x.all) !== canonical(y.all)) directions.push(inclusion(x.all.map(canonical), y.all.map(canonical)));
   return combine(directions);
 }
+/** SchemaVersion 1 reports saved before #2048 have no native database declaration. */
+const nativeDatabaseDefaults = (m: DescribeTarget["_meta"]): DescribeTarget["_meta"] => ({
+  ...m,
+  nativeDatabase: m.nativeDatabase ?? false,
+  variants: m.variants.map(v => ({ ...v, nativeDatabase: v.nativeDatabase ?? false })),
+});
 /** Report widening on any reachable surface or dispatcher variant. */
 export function diffApp(a: AppDescription, b: AppDescription): AppChange[] {
   if (a.schemaVersion !== 1 || b.schemaVersion !== 1) throw new TypeError("Unsupported describe schemaVersion.");
@@ -172,8 +182,8 @@ export function diffApp(a: AppDescription, b: AppDescription): AppChange[] {
       changes.push({ id, field: "target", direction: before ? "narrowed" : "widened" });
       continue;
     }
-    const x = before._meta,
-      y = after._meta,
+    const x = nativeDatabaseDefaults(before._meta),
+      y = nativeDatabaseDefaults(after._meta),
       start = changes.length;
     const record = (field: string, left: unknown, right: unknown, direction: Direction) => {
       if (canonical(left) !== canonical(right)) changes.push({ id, field, direction, before: left, after: right });

@@ -1,5 +1,5 @@
 import { fixtureCaller } from "./apps/fixtures.js";
-import { beforeAll, expect, test } from "bun:test";
+import { beforeAll, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import ts from "typescript";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -428,5 +428,104 @@ test("a caught batch rejection with undefined still rejects and rolls back its o
     expect(db.query("SELECT * FROM notes").all()).toEqual([]);
   } finally {
     db.close();
+  }
+});
+
+test("native database declaration validates, describes and warns only on undeclared use", async () => {
+  const { compilePlan, d1Dialect } = await import("../src/build/compiler.js");
+  const { describeApp, diffApp } = await import("../src/domain/describe/index.js");
+  const compile = async (text: string) =>
+    compilePlan({ sources: [{ sourceId: "native.yaml", text }] }, d1Dialect, "operational");
+  const declared = ref.replace("  handler:", "  db: native\n  handler:");
+  for (const text of [
+    ref.replace("  handler:", "  db: true\n  handler:"),
+    declared.replace("{ref: app.createNote}", "{sql: 'SELECT 1'}"),
+  ]) {
+    const result = await compile(text);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics.some(d => d.path.endsWith("/spec/db"))).toBe(true);
+  }
+  const trigger = `---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: call-note}
+spec:
+  source: {kind: http, method: POST, path: /api/note}
+  target: {procedure: app-note}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: admin-note}
+spec:
+  source: {kind: mcp, surface: admin}
+  target: {procedure: app-note}
+`;
+  const before = await compile(ref + trigger),
+    after = await compile(declared + trigger);
+  if (!before.ok || !after.ok) throw Error("compile failed");
+  const old = await describeApp(before.plan),
+    next = await describeApp(after.plan);
+  const legacy = JSON.parse(JSON.stringify(old));
+  for (const t of legacy.targets) {
+    delete t._meta.nativeDatabase;
+    for (const v of t._meta.variants) delete v.nativeDatabase;
+  }
+  expect(diffApp(legacy, old)).toEqual([]);
+  expect(old.targets.find(t => t._meta.id === "procedure:app-note")!._meta.nativeDatabase).toBe(false);
+  expect(next.targets.find(t => t._meta.id === "procedure:app-note")!._meta.nativeDatabase).toBe(true);
+  expect(diffApp(old, next)).toContainEqual(
+    expect.objectContaining({ id: "procedure:app-note", field: "nativeDatabase", direction: "widened" }),
+  );
+  for (const id of ["rest:POST /api/note", "admin:POST /operations/:name"]) {
+    const oldRoute = old.targets.find(t => t._meta.id === id)!._meta;
+    const newRoute = next.targets.find(t => t._meta.id === id)!._meta;
+    expect(newRoute.nativeDatabase).toBe(true);
+    expect(newRoute.variants.find(v => v.id === "procedure:app-note")!.nativeDatabase).toBe(true);
+    expect(newRoute.targetHash).not.toBe(oldRoute.targetHash);
+  }
+  const warning = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    for (const target of targets) {
+      for (const native of [false, true]) {
+        const app = await loadGenerated((await files(target, schema + (native ? declared : ref)))["generated.ts"]!);
+        const db = new Database(":memory:");
+        try {
+          const data = app.store(db, caller, {
+            handlers: {
+              "app-note": async (ctx: any, input: { title: string }) => {
+                if (input.title === "store") {
+                  expect(ctx.store).toBeDefined();
+                  return input;
+                }
+                if (input.title === "tx")
+                  return ctx.transaction(async (tx: any) => {
+                    expect(tx.db).toBeDefined();
+                    return input;
+                  });
+                expect(ctx.db).toBe(db);
+                return input;
+              },
+            },
+          });
+          warning.mockClear();
+          await data.procedures["app-note"]({ title: "store" });
+          expect(warning).not.toHaveBeenCalled();
+          await data.procedures["app-note"]({ title: "db" });
+          expect(warning).toHaveBeenCalledTimes(native ? 0 : 1);
+          if (!native) expect(warning.mock.calls[0]![0]).toContain("add spec.db: native");
+          // SQLite executes the real interactive callback, both new and already joined.
+          if (target === "bun-sqlite") {
+            warning.mockClear();
+            await data.procedures["app-note"]({ title: "tx" });
+            await data.transaction((tx: any) => tx.procedures["app-note"]({ title: "tx" }));
+            expect(warning).toHaveBeenCalledTimes(native ? 0 : 2);
+          }
+        } finally {
+          db.close();
+        }
+      }
+    }
+  } finally {
+    warning.mockRestore();
   }
 });

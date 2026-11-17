@@ -121,3 +121,19 @@ block, for every Schema repeats what the database and the generated types alread
 - Rows of a table with a `geo` field carry its two physical columns (`*`); the row type lists `<field>_lat`/`<field>_lng`.
 - `SELECT *` order and the rule that the last of two same-named columns wins are driver behavior; the Store scenarios
   pin them on every target.
+
+
+## Amendment #2048: Declared native database access (2026-11-17)
+
+Procedure `spec.db: native` is an optional closed-enum capability, valid only with `handler.ref`.
+The compiler retains it in the sealed Procedure. Describe reports `_meta.nativeDatabase` as a boolean on targets and
+route variants; routes OR their variants. Adding it widens access and changes the target hash. The marker describes
+that Procedure's own declaration, not calls hidden in application code: a handler may call a declared Procedure through
+`store.procedures`. Hosts must review that chain; the marker is not a sandbox or proof that a handler stays scoped.
+`opaque` remains independent and conservative for all ref handlers.
+
+Rollout first preserves the existing typed `ctx.db` and interactive callback database on all supported targets.
+Reading either without the declaration logs `NATIVE_DATABASE_UNDECLARED` with the one-line manifest fix, on any entry
+surface. Store-only use does not warn. D1 still has no interactive transactions. A subsequent 0.2.x removes undeclared
+native access from both context types and runtime values; that enforcement and its migration release note are separate
+from this additive phase. No release is implied by this amendment.
