@@ -77,10 +77,12 @@ test("host failures preserve caller-facing 4xx messages and omit internal messag
         );
         expect(response.status).toBe(status === 401 ? 403 : status);
         expect(response.headers.get("www-authenticate")).toBeNull();
-        expect((await response.json()).error).toEqual({
-          code: status === 401 ? "AUTH_DENIED" : "COMPANY_NOT_FOUND",
-          message: "Company was not found.",
-          target: "companyId",
+        expect(await response.json()).toEqual({
+          error: {
+            code: status === 401 ? "AUTH_DENIED" : "COMPANY_NOT_FOUND",
+            message: "Company was not found.",
+            target: "companyId",
+          },
         });
       }
       for (const error of [
@@ -89,7 +91,7 @@ test("host failures preserve caller-facing 4xx messages and omit internal messag
         new ContractError("UPSTREAM", "private driver details", "", { status: 503 }),
       ]) {
         const response = hostFailure(error, caller);
-        expect((await response.json()).error.message).toBeUndefined();
+        expect(await response.json()).not.toHaveProperty("error.message");
       }
     }
   } finally {
