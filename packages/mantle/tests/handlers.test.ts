@@ -465,6 +465,12 @@ spec:
   if (!before.ok || !after.ok) throw Error("compile failed");
   const old = await describeApp(before.plan),
     next = await describeApp(after.plan);
+  const legacy = JSON.parse(JSON.stringify(old));
+  for (const t of legacy.targets) {
+    delete t._meta.nativeDatabase;
+    for (const v of t._meta.variants) delete v.nativeDatabase;
+  }
+  expect(diffApp(legacy, old)).toEqual([]);
   expect(old.targets.find(t => t._meta.id === "procedure:app-note")!._meta.nativeDatabase).toBe(false);
   expect(next.targets.find(t => t._meta.id === "procedure:app-note")!._meta.nativeDatabase).toBe(true);
   expect(diffApp(old, next)).toContainEqual(
