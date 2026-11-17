@@ -27,6 +27,10 @@ The schemaVersion 1 report contains:
   `inputSchema`, `annotations` and `_meta`. View and Procedure names follow
   MCP naming. Route inputs are plain objects with a name selector for known
   dispatcher variants; their `variants` retain the selected input schemas.
+  Like `title` and `description`, localized `title` and `description`
+  keywords inside these input schemas are resolved to English (else the first
+  locale), so a host can list a target as an MCP tool unchanged; `targetHash`
+  still covers every locale.
 
 Each target’s `_meta` contains:
 

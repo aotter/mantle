@@ -7,6 +7,8 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/ajv";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { localizedSchema } from "../src/kernel/localized-schema.js";
+import { compilePlan, d1Dialect } from "../src/build/compiler.js";
+import { describeApp, targetHash } from "../src/domain/describe/index.js";
 
 const label = (en: string, zh: string) => `{en: "${en}", "zh-TW": "${zh}"}`;
 const source = `apiVersion: cms.mantle.aotter.net/v2
@@ -213,6 +215,40 @@ test("tools/list resolves localized schema labels to the server locale at every 
     db.close();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("describe lists target schemas with English labels; targetHash still hashes the declared maps", async () => {
+  const plan = async (text: string) => {
+    const result = await compilePlan({ sources: [{ sourceId: "companies.yaml", text }] }, d1Dialect, "operational");
+    if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+    return result.plan;
+  };
+  const declared = await plan(source),
+    report = await describeApp(declared);
+  const schemas = report.targets.flatMap(t => [t.inputSchema, ...t._meta.variants.map(v => v.inputSchema)]);
+  expect(schemas.length).toBeGreaterThan(2);
+  for (const schema of schemas) {
+    expect(nonStringLabels(schema)).toEqual([]);
+    expect([draft2020.validateSchema(schema), draft2020.errors]).toEqual([true, null]);
+  }
+  const procedure = report.targets.find(t => t._meta.id === "procedure:create-company")!,
+    input = procedure.inputSchema as Schema & { properties: Record<string, Schema> };
+  expect(input.title).toBe("Company");
+  expect(input.properties.name).toEqual({ type: "string", title: "Name", description: "Legal name" });
+  // A property named `title` is a schema, not a label.
+  expect(input.properties.title).toEqual({ type: "string", title: "Job title" });
+  expect(input.properties.address).toMatchObject({ description: "Where", properties: { city: { title: "City" } } });
+  expect(input.properties.tags).toMatchObject({ items: { title: "Tag", enum: ["a", "b"] } });
+  expect(report.targets.find(t => t._meta.id === "view:companies-by-status")!.inputSchema).toMatchObject({
+    properties: { status: { title: "Status", description: "Which status", enum: ["open", "closed"], default: "open" } },
+  });
+  // The hash is the definition's: the same as the opt-in runtime export, and it still sees a label in another locale.
+  for (const target of report.targets)
+    expect(target._meta.targetHash).toBe(await targetHash(declared, target._meta.id));
+  const relabelled = await describeApp(await plan(source.replace('"zh-TW": "名稱"', '"zh-TW": "公司名稱"')));
+  const again = relabelled.targets.find(t => t._meta.id === "procedure:create-company")!;
+  expect(again.inputSchema).toEqual(procedure.inputSchema);
+  expect(again._meta.targetHash).not.toBe(procedure._meta.targetHash);
 });
 
 test("localizedSchema rewrites only label keywords of schemas, at every subschema keyword", () => {
