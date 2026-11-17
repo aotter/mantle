@@ -429,7 +429,8 @@ Localized `title` and `description` keywords inside a tool's input and output
 schemas, at any depth, are listed resolved the same way, so MCP and WebMCP
 clients receive valid JSON Schema; Admin still reads the locale maps.
 `localizedSchema(schema, locale)` and `localizedText(value, locale)` from
-`@aotter/mantle/mcp/labels` apply the same rule to schemas an application publishes outside `mcp(...)`.
+`@aotter/mantle/mcp/labels` apply the same rule to schemas an application publishes outside `mcp(...)`,
+such as its own WebMCP catalogue; the subpath also exports the `LocalizedText` type.
 
 ### Admin media MCP tools
 

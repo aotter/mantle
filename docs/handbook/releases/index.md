@@ -34,6 +34,18 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ## 0.2.2 — in preparation
 
+### Upgrading to 0.2.2-alpha.6
+
+- **Localized labels inside tool schemas are listed as strings (#2046).** A `title` or `description` given as a locale
+  map inside a Procedure or View input (or a tool's output schema) reached MCP clients, WebMCP hosts and `describe`
+  targets as a map, which JSON Schema 2020-12 forbids, so a client that validates tool schemas dropped the tool. MCP
+  and the Admin WebMCP catalogue and its refusals now list the server locale's string; `describe` lists English, like
+  a target's own title. Admin still reads the maps, and `targetHash` does not change. For `describe` consumers: a
+  report saved before this change, diffed against one generated after it, shows `inputSchema` changed on every target
+  with localized labels (`schemaVersion` stays 1); afterwards, a label-only edit in a locale other than English shows
+  as `behavior` changed. `@aotter/mantle/mcp/labels` exports the rule (`localizedSchema`, `localizedText`) for
+  schemas an application publishes itself.
+
 ### Upgrading to 0.2.2-alpha.5
 
 Pin the selected packages to `0.2.2-alpha.5` and regenerate. One breaking change; everything else is additive or a fix.

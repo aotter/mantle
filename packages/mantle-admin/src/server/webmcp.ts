@@ -1,6 +1,7 @@
 /** Cookie-only Admin dispatch uses the same generated validation and invocation as MCP. */
 import { ContractError } from "@aotter/mantle/contracts";
 import { callToolLazy as callTool, type Tool } from "@aotter/mantle/mcp";
+import { localizedSchema } from "@aotter/mantle/mcp/labels";
 import { json, type Route } from "./index.js";
 export function webmcpRoutes<Env, Database, Handlers>(
   catalogue: {
@@ -53,7 +54,8 @@ export function webmcpRoutes<Env, Database, Handlers>(
             fields: {
               ...error.fields,
               ...(version ? { toolVersion: version } : {}),
-              ...(contract ? { inputSchema: listed!.inputSchema } : {}),
+              // Labels as `/webmcp` lists them.
+              ...(contract ? { inputSchema: localizedSchema(listed!.inputSchema, c.locale ?? "en") } : {}),
             },
           });
         }

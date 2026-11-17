@@ -78,7 +78,8 @@ const nonStringLabels = (schema: unknown, at = "#"): string[] => {
     return nonStringLabels(value, `${at}/${key}`);
   });
 };
-// The SDK bundles Ajv for draft 2020-12; its engine also checks a schema against the meta-schema.
+// The SDK bundles Ajv for draft 2020-12; its engine also checks a schema against the meta-schema. The SDK is pinned
+// exactly, so a rename of the private `ajv` getter fails here loudly rather than passing vacuously.
 const Ajv2020 = (Reflect.get(new AjvJsonSchemaValidator(), "ajv") as object).constructor as new (
   options: object,
 ) => {
@@ -208,6 +209,27 @@ test("tools/list resolves localized schema labels to the server locale at every 
         $defs: { row: { type: "object", description: "Ligne" } },
       });
     }
+    // A failed call repeats the input contract as listed: labels resolved, not maps.
+    const handle = mcp({ db: () => db, caller: () => ({ kind: "anonymous" }), locale: "zh-TW" });
+    const client = new Client({ name: "test", version: "1" });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
+        fetch: async (url, init) => (await handle(new Request(String(url), init), {}))!,
+      }),
+    );
+    const failed = await client.callTool({ name: "create_company", arguments: { name: "Acme" } });
+    await client.close();
+    expect(failed.isError).toBe(true);
+    const about = (failed.content as { text: string }[])
+      .map(block => block.text)
+      .find(text => text.includes("input schema "))!;
+    const contract = JSON.parse(about.slice(about.indexOf("input schema ") + "input schema ".length)) as Schema & {
+      properties: Record<string, Schema>;
+    };
+    expect(nonStringLabels(contract)).toEqual([]);
+    expect(contract.title).toBe("公司");
+    expect(contract.properties.name).toEqual({ type: "string", title: "名稱", description: "法定名稱" });
+    expect(contract.properties.title).toEqual({ type: "string", title: "職稱" });
     // Listing copies: the generated table still holds the maps Admin reads.
     const generated = tools.find((tool: { name: string }) => tool.name === "create_company");
     expect(generated.inputSchema.properties.name.title).toEqual({ en: "Name", "zh-TW": "名稱" });
@@ -269,6 +291,11 @@ test("localizedSchema rewrites only label keywords of schemas, at every subschem
         examples: [zh("e")],
       },
       empty: { title: {} },
+      legacy: {
+        dependencies: { foo: { properties: { bar: { title: zh("bar") } } }, baz: ["foo"] },
+        additionalItems: { title: zh("ai") },
+      },
+      notText: { title: { en: 5 }, description: { "zh-TW": null } },
     },
     patternProperties: { "^x-": { title: zh("pattern") } },
     additionalProperties: { description: zh("extra") },
@@ -301,6 +328,12 @@ test("localizedSchema rewrites only label keywords of schemas, at every subschem
   });
   expect(out.properties.data).toEqual(before.properties.data);
   expect(out.properties.empty).toEqual({});
+  // A label that resolves to no string is dropped, never emitted.
+  expect(out.properties.notText).toEqual({});
+  expect(out.properties.legacy).toEqual({
+    dependencies: { foo: { properties: { bar: { title: "bar-zh" } } }, baz: ["foo"] },
+    additionalItems: { title: "ai-zh" },
+  });
   expect(out.patternProperties["^x-"]).toEqual({ title: "pattern-zh" });
   expect(out.additionalProperties).toEqual({ description: "extra-zh" });
   expect(out.propertyNames).toEqual({ title: "names-zh" });

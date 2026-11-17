@@ -1,5 +1,6 @@
 /** Locale-map labels as an external client reads them: one string in the server locale. */
-type LocalizedText = string | Readonly<Record<string, string>>;
+/** A label: one string, or a map of locale to string. */
+export type LocalizedText = string | Readonly<Record<string, string>>;
 /** A label in `locale`: that locale's text, else `en`, else the first one given. */
 export function localizedText(value: LocalizedText | undefined, locale: string): string | undefined {
   if (typeof value === "string" || !value) return value;
@@ -8,9 +9,18 @@ export function localizedText(value: LocalizedText | undefined, locale: string):
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 /** Keywords whose value names subschemas, and keywords whose value is one subschema or a list of them. */
-const SCHEMA_MAPS = ["properties", "patternProperties", "dependentSchemas", "$defs", "definitions"];
+// Draft-07 `dependencies` maps to a schema or to a property list; only a schema is visited.
+const SCHEMA_MAPS = ["properties", "patternProperties", "dependentSchemas", "dependencies", "$defs", "definitions"];
 const SUBSCHEMAS = [
-  ...["items", "prefixItems", "additionalProperties", "unevaluatedProperties", "unevaluatedItems", "propertyNames"],
+  ...[
+    "items",
+    "prefixItems",
+    "additionalItems",
+    "additionalProperties",
+    "unevaluatedProperties",
+    "unevaluatedItems",
+    "propertyNames",
+  ],
   ...["contains", "allOf", "anyOf", "oneOf", "not", "if", "then", "else", "contentSchema"],
 ];
 /**
@@ -24,8 +34,9 @@ export function localizedSchema(schema: unknown, locale: string): unknown {
   for (const key of ["title", "description"]) {
     if (!isRecord(schema[key])) continue;
     const text = localizedText(schema[key] as LocalizedText, locale);
-    if (text === undefined) delete out[key];
-    else out[key] = text;
+    // Never a non-string: a map that names no string (`{}`, `{ en: 5 }`) drops the keyword.
+    if (typeof text === "string") out[key] = text;
+    else delete out[key];
   }
   for (const key of SCHEMA_MAPS) {
     const children = schema[key];
