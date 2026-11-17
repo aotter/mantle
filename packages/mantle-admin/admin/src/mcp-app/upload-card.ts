@@ -38,17 +38,19 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 document.body.innerHTML = `<form id="card" aria-busy="true" novalidate>
-<header><p class="eyebrow">Media library</p>
-<h1>Upload a file</h1>
-<p class="hint">Choose a file for your media library. Keep this card open until the upload finishes.</p></header>
+<header><span class="upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m-4 4 4-4 4 4M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></span>
+<div><p class="eyebrow">Media library</p><h1>Upload a file</h1></div></header>
+<p class="hint">Add the original file to your media library.</p>
 <label id="purpose-row" hidden>Purpose <select id="purpose"></select></label>
+<div class="file-panel">
 <label class="file-picker">File <input id="file" type="file" required aria-describedby="file-details policy"></label>
 <p id="file-details" class="file-details">No file selected</p>
-<p id="policy" class="hint"></p>
-<label id="alt-row" hidden>Alt text <input id="alt" type="text" maxlength="1000" placeholder="Describe the image"></label>
+<p id="policy" class="hint"></p></div>
+<label id="alt-row" hidden>Alt text <span class="hint">A short description for people who cannot see the image.</span><input id="alt" type="text" maxlength="1000" placeholder="Describe the image"></label>
 <button id="upload" type="button" disabled>Upload</button>
 <progress id="progress" aria-label="Upload progress" max="1" value="0" hidden></progress>
 <p id="status" role="status"></p>
+<p class="footnote">Keep this card open until the upload finishes.</p>
 </form>`;
 const form = $<HTMLFormElement>("card"),
   select = $<HTMLSelectElement>("purpose"),
@@ -108,6 +110,7 @@ function render() {
   $("file-details").textContent = picked
     ? `${picked.name} · ${sizeOf(picked.size)} · ${typeOf(picked)}`
     : "No file selected";
+  $("file-details").hidden = !picked;
   const token = picked && acceptedBy(accepts, typeOf(picked));
   $("policy").textContent = !purpose
     ? ""
@@ -117,7 +120,12 @@ function render() {
         ? `${typeOf(picked!)} · Up to ${sizeOf(purpose.maxBytes[token] ?? 0)}`
         : accepts.includes("*/*")
           ? `Any file type · Up to ${sizeOf(purpose.maxBytes["*/*"] ?? 0)}`
-          : accepts.map(type => `${type}: up to ${sizeOf(purpose.maxBytes[type] ?? 0)}`).join(" · ");
+          : accepts
+              .map(
+                type =>
+                  `${type === "image/*" ? "Any image" : type.startsWith("image/") ? type.slice(6).toUpperCase() : type} up to ${sizeOf(purpose.maxBytes[type] ?? 0)}`,
+              )
+              .join(" · ");
   file.disabled = select.disabled = alt.disabled = busy || done;
   button.disabled = busy || done || !picked || !host?.call || !purpose;
   button.textContent = done ? "Uploaded" : busy ? "Uploading…" : failed ? "Try again" : "Upload";
