@@ -21,3 +21,13 @@ Generated requires checks gate calls. Boundary input validators are generated se
 SQL `INSERT … VALUES`/upsert into a user-field scoped Schema follows the Store's insert rule ([field scope](schema.md#field-scope)); `INSERT … SELECT` into it is system-only, so a ref handler inserts those rows through `ctx.store`. `ctx.store` speaks storage names, not the manifest's: the handler's `input` uses authored names (`input.parentId`), while Store writes, filters and rows use the folded column (`insert({ parentid: input.parentId })`, `where: { parentid }`, `row.parentid`); generated Store types show the exact names ([typed queries](../guides/typed-queries.md)). SET cannot change a field-scope column, including ON CONFLICT DO UPDATE. Scoped unique conflict targets gain the owner/field prefix automatically.
 
 Triggers are the only way request data reaches a Procedure: REST and MCP validate the input against the Procedure's schema, then call it. App code may also call a generated Procedure directly (`import run from "../generated/procedures/<name>.js"`, `await run(db, caller, input)`) or through the Store (`ctx.store.procedures[name](input)` in a handler); `requires`, row policy and checks still apply, but input validation does not, so pass only data the app produced or has verified (a cron job, a callback after its signature check). A page that takes user input submits it to the Procedure's REST Trigger; see `node_modules/@aotter/mantle/docs/examples/purchasing/src/requests-page.ts`.
+
+
+Declare `spec.db: native` on a ref Procedure that reads `ctx.db` or the `db` in its interactive transaction callback.
+The native handle bypasses Store row policies. During the warning phase, existing handlers still receive it, but each
+undeclared access logs `NATIVE_DATABASE_UNDECLARED`; add the declaration and regenerate to silence it. Store-only
+handlers need no declaration. A later 0.2.x will remove undeclared native access from the types and runtime, including
+transaction callbacks. This phase does not enforce that removal.
+
+Describe exposes the per-Procedure declaration as `_meta.nativeDatabase`; route targets summarize their variants.
+This is a review signal, not a sandbox or a transitive guarantee: `store.procedures` can call a declared Procedure.

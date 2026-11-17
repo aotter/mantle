@@ -42,8 +42,13 @@ export function emitHandlers(
       "  const handlers = context?.handlers;",
       `  const handler = handlers && Object.hasOwn(handlers, ${q(name)}) ? handlers[${q(name)}] : undefined;`,
       `  if (!handler) throw new ContractError("HANDLER_NOT_REGISTERED", "Procedure handler is not registered.", ${q(path)});`,
+      ...(procedure.db === "native"
+        ? []
+        : [
+            `  const warnNativeDatabase = () => console.warn(${q(`NATIVE_DATABASE_UNDECLARED: Procedure '${name}' accessed ctx.db; add spec.db: native and regenerate. Native database access bypasses Store row policies. A later 0.2.x will remove undeclared access, including transaction callbacks.`)});`,
+          ]),
       // TODO #1470: REST/MCP use shared generated validators at the boundary; bare calls stay typed.
-      `  return handler({ caller, db, store: context.store${interactive ? ", transaction: handlerTransaction(context.store, db)" : ""} }, raw);`,
+      `  return handler({ caller, ${procedure.db === "native" ? "db" : "get db() { warnNativeDatabase(); return db; }"}, store: context.store${interactive ? `, transaction: handlerTransaction(context.store, db${procedure.db === "native" ? "" : ", warnNativeDatabase"})` : ""} }, raw);`,
       "}",
     );
     procedures.push(`[${q(name)}]: ${fn}`);

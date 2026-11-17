@@ -68,6 +68,7 @@ export interface PlanView extends SqlPlan {
 }
 
 export interface PlanProcedure {
+  readonly db?: "native";
   readonly restrict?: PlanRestrict;
   readonly trustedOnly?: true;
   readonly title?: LocalizedText;

@@ -29,6 +29,7 @@ export interface TargetDefinition {
   readSchemas: string[];
   readOnly: boolean;
   opaque: boolean;
+  nativeDatabase?: boolean;
   trustedOnly: boolean;
   behavior: unknown;
   variants: TargetDefinition[];
@@ -207,6 +208,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
         readSchemas: inspected.readSchemas,
         readOnly: !inspected.opaque && inspected.readOnly,
         opaque: inspected.opaque,
+        nativeDatabase: proc?.db === "native",
         trustedOnly: !!proc?.trustedOnly,
         variants: [],
         behavior: { declaration: p, dependencies: inspected.dependencies },
@@ -241,6 +243,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
           id === "admin:POST /operations/:name" ||
           id === "admin:POST /webmcp/:tool"),
       opaque: dependencies.some(d => d.opaque),
+      nativeDatabase: dependencies.some(d => d.nativeDatabase),
       trustedOnly: dependencies.some(d => d.trustedOnly),
       variants: dependencies,
       behavior: dependencies.map(d => ({

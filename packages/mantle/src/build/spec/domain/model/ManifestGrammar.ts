@@ -378,6 +378,8 @@ export interface ProcedureManifestSpec {
   /** Handler binding: `{ ref }` (consumer supplies a handler map) or
    *  `{ sql }` (write statements, compiled to the plan's IR; ADR-0034). */
   readonly handler: HandlerBinding;
+  /** Ref handler native database capability. Omit for Store-only code (ADR-0045 amendment #2048). */
+  readonly db?: "native";
   /** MCP tool annotations the author declares because Core cannot infer
    *  them for a `ref` handler (#972). They override the generated defaults
    *  (`procedureAnnotations`);

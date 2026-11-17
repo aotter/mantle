@@ -150,13 +150,20 @@ const transactionHandles = new WeakSet<object>();
  * joins the one its handle already runs in (a handler called through `tx.procedures`, or through a Store or generated
  * call given the transaction's handle), so the handler need not know.
  */
-export function handlerTransaction(store: object, db: unknown) {
+export function handlerTransaction(store: object, db: unknown, warnNativeDatabase?: () => void) {
   const open = (store as { transaction: (fn: (tx: unknown, db: unknown) => Promise<unknown>) => Promise<unknown> })
     .transaction;
+  const context = (store: unknown, db: unknown) => ({
+    store,
+    get db() {
+      warnNativeDatabase?.();
+      return db;
+    },
+  });
   return <R>(fn: (ctx: { store: any; db: any }) => Promise<R>): Promise<R> =>
     transactionHandles.has(db as object)
-      ? fn({ store, db })
-      : (open((tx, txDb) => fn({ store: tx, db: txDb })) as Promise<R>);
+      ? fn(context(store, db))
+      : (open((tx, txDb) => fn(context(tx, txDb))) as Promise<R>);
 }
 
 export function createStore<

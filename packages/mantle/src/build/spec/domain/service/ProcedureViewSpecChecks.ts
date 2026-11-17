@@ -114,7 +114,7 @@ export function validateProcedureSpec(m: ProcedureManifest, idx: number): Proced
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "description", "requires", "restrict", "input", "uiSchema", "output", "handler", "mcp", "target"],
+    ["title", "description", "requires", "restrict", "input", "uiSchema", "output", "handler", "db", "mcp", "target"],
     idx,
     "/spec",
   );
@@ -163,6 +163,9 @@ export function validateProcedureSpec(m: ProcedureManifest, idx: number): Proced
     throw new ManifestParseError("Procedure.spec.handler is required", idx, "/spec/handler");
   }
   validateHandlerBinding(handler, idx);
+  if (s["db"] !== undefined && (s["db"] !== "native" || !("ref" in handler))) {
+    throw new ManifestParseError('Procedure.spec.db must be "native" and requires a ref handler', idx, "/spec/db");
+  }
   if ("requires" in s && s["requires"] != null) {
     validateRequires(s["requires"], idx, "Procedure");
   }

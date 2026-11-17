@@ -705,6 +705,7 @@ export async function compileLinkedPlan(
         ...common,
         ...(p.spec.target ? { target: p.spec.target } : {}),
         handler: { ref: p.spec.handler.ref },
+        ...(p.spec.db ? { db: p.spec.db } : {}),
       };
       continue;
     }

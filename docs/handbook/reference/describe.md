@@ -54,6 +54,7 @@ Each target’s `_meta` contains:
 - `trustedOnly`, `opaque`, `unscopedReads`: trusted-only execution, ref-handler
   opacity and reads of Schemas without row scope. Opaque code conservatively
   includes every Schema available to its Store.
+- `nativeDatabase`: whether the Procedure declares `spec.db: native`; routes summarize their variants. During the warning phase, false does not mean native access is unavailable. Ref calls through `store.procedures` are not statically summarized.
 - `surfaces` and `triggers`: every declared exposure and each Trigger’s id
   and source. Views include `admin` for developer previews.
 - `requires`: conjunctive predicates in `all`.

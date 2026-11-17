@@ -23,6 +23,7 @@ export interface DescribeTarget {
     scope: PlanRestrict;
     restrict: PlanRestrict;
     opaque: boolean;
+    nativeDatabase: boolean;
     unscopedReads: boolean;
     trustedOnly: boolean;
     variants: {
@@ -34,6 +35,7 @@ export interface DescribeTarget {
       readOnly: boolean;
       trustedOnly: boolean;
       opaque: boolean;
+      nativeDatabase: boolean;
       unscopedReads: boolean;
     }[];
     requires: Requirements;
@@ -81,6 +83,7 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
           scope,
           restrict: d.restrict,
           opaque: d.opaque,
+          nativeDatabase: !!d.nativeDatabase,
           unscopedReads: d.readSchemas.some(
             name => !plan.schemas[name]?.scope && !plan.schemas[name]?.userScopes?.length,
           ),
@@ -93,6 +96,7 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
             readOnly: v.readOnly,
             trustedOnly: v.trustedOnly,
             opaque: v.opaque,
+            nativeDatabase: !!v.nativeDatabase,
             unscopedReads: v.readSchemas.some(
               name => !plan.schemas[name]?.scope && !plan.schemas[name]?.userScopes?.length,
             ),
@@ -119,7 +123,7 @@ export interface AppChange {
   after?: unknown;
 }
 type Direction = AppChange["direction"];
-const securityFlags = ["readOnly", "trustedOnly", "opaque", "unscopedReads"] as const;
+const securityFlags = ["readOnly", "trustedOnly", "opaque", "unscopedReads", "nativeDatabase"] as const;
 const flagDirection = (field: (typeof securityFlags)[number], value: boolean): Direction =>
   (field === "readOnly" || field === "trustedOnly" ? !value : value) ? "widened" : "narrowed";
 // Exposure sets have the opposite direction.
