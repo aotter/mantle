@@ -36,6 +36,9 @@ The schemaVersion 1 report contains:
 
 Each target’s `_meta` contains:
 
+- The tool's own metadata, including `openai/fileParams` for attachment inputs on `upload_media`.
+  Describe's reserved access fields below take precedence. Built-in media tools use their real tool titles and descriptions.
+
 - `id`: `view:<name>`, `procedure:<name>`, `rest:<METHOD> <path>` or
   `admin:<METHOD> <path template>`. Parameters use `:name`; Admin paths are
   relative to the API base. Publishing ids use `procedure:<schema>.<verb>`;

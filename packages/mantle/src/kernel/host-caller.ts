@@ -118,6 +118,9 @@ export function hostFailure(error: unknown, caller?: Caller, where?: string, cha
     {
       error: {
         code,
+        ...(error instanceof ContractError && result.status >= 400 && result.status < 500
+          ? { message: error.message }
+          : {}),
         ...(typeof result.error.field === "string" ? { field: result.error.field } : {}),
         ...(result.error.path ? { target: result.error.path } : {}),
       },

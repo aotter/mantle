@@ -285,7 +285,7 @@ export interface MediaUploadCardOptions<Env = never> extends AdminAppResourceOpt
   readonly uri?: string;
   // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
   /**
-   * The tool the card renders and calls, `upload_media` by default. Another tool takes `upload_media`'s arguments plus
+   * The tool the card renders and calls, `open_media_upload` by default. Another tool takes `upload_media`'s arguments plus
    * the `forward` ones.
    */
   readonly tool?: string;
@@ -304,13 +304,13 @@ export interface MediaUploadCardOptions<Env = never> extends AdminAppResourceOpt
   readonly domain?: string;
 }
 /**
- * The upload card, an MCP App that renders `upload_media` on `/mcp/admin`: the person picks a file, the card uploads it
+ * The upload card, an MCP App that renders `open_media_upload` on `/mcp/admin`: the person picks a file, the card uploads it
  * straight to storage and commits it. Register it beside `adminMcpApps(...)` when `mcp(...)` has `media`. The page loads
  * on `resources/read` only.
  */
 export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env>): NormalMcpApps {
   const uri = options.uri ?? "ui://mantle-admin/upload",
-    tool = options.tool ?? "upload_media",
+    tool = options.tool ?? "open_media_upload",
     forward = options.forward ?? [],
     inputTimeoutMs = options.inputTimeoutMs;
   if (
@@ -325,7 +325,7 @@ export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env
     );
   // `<` escaped: the config sits in a script element
   const config =
-    tool === "upload_media" && !forward.length
+    tool === "open_media_upload" && !forward.length
       ? ""
       : `<script type="application/json" id="mantle-upload-config">${JSON.stringify({ tool, forward, inputTimeoutMs }).replace(/</g, "\\u003c")}</script>`;
   if (!/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(uri))

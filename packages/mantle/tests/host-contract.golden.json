@@ -1001,6 +1001,7 @@
       "body": {
         "error": {
           "code": "TARGET_MISMATCH",
+          "message": "TARGET_MISMATCH",
           "target": "rest:GET /api/views/public-records"
         }
       }
@@ -1033,6 +1034,7 @@
       "body": {
         "error": {
           "code": "TARGET_HASH_MISMATCH",
+          "message": "TARGET_HASH_MISMATCH",
           "target": "rest:GET /api/views/public-records"
         }
       }
@@ -1065,6 +1067,7 @@
       "body": {
         "error": {
           "code": "STALE_CALLER",
+          "message": "Snapshot callers cannot write.",
           "target": "rest:POST /api/write"
         }
       }
@@ -1138,6 +1141,7 @@
       "body": {
         "error": {
           "code": "DRY_RUN_UNSUPPORTED",
+          "message": "DRY_RUN_UNSUPPORTED",
           "target": "rest:POST /api/touch"
         }
       }
@@ -1170,6 +1174,7 @@
       "body": {
         "error": {
           "code": "AUTH_DENIED",
+          "message": "Authorization predicate not satisfied.",
           "target": "procedures/write/requires/auth/all/0"
         }
       }
@@ -1202,6 +1207,7 @@
       "body": {
         "error": {
           "code": "INPUT_VALIDATION_FAILED",
+          "message": "Expected a JSON body.",
           "target": "rest"
         }
       }
@@ -1234,6 +1240,7 @@
       "body": {
         "error": {
           "code": "INPUT_VALIDATION_FAILED",
+          "message": "Expected string.",
           "target": "procedures/write/input/title"
         }
       }
@@ -1265,7 +1272,8 @@
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "HOST_CONTRACT"
+          "code": "HOST_CONTRACT",
+          "message": "Malformed host contract or tenant mismatch."
         }
       }
     },
@@ -1297,6 +1305,7 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
+          "message": "Admin callers require 'target'.",
           "field": "target"
         }
       }
@@ -1330,6 +1339,7 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
+          "message": "The target needs user field 'region'.",
           "field": "region"
         }
       }
@@ -1363,6 +1373,7 @@
       "body": {
         "error": {
           "code": "AUTH_DENIED",
+          "message": "Cross-origin session mutation rejected.",
           "target": "request:origin"
         }
       }
@@ -1394,7 +1405,8 @@
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "AUTH_DENIED"
+          "code": "AUTH_DENIED",
+          "message": "Sign in again."
         }
       }
     },
@@ -1543,6 +1555,7 @@
       "body": {
         "error": {
           "code": "TARGET_MISMATCH",
+          "message": "TARGET_MISMATCH",
           "target": "view:public-records"
         }
       }
@@ -1575,6 +1588,7 @@
       "body": {
         "error": {
           "code": "TARGET_HASH_MISMATCH",
+          "message": "TARGET_HASH_MISMATCH",
           "target": "view:public-records"
         }
       }
@@ -1607,6 +1621,7 @@
       "body": {
         "error": {
           "code": "STALE_CALLER",
+          "message": "Snapshot callers cannot write.",
           "target": "procedure:write"
         }
       }
@@ -1686,6 +1701,7 @@
       "body": {
         "error": {
           "code": "DRY_RUN_UNSUPPORTED",
+          "message": "DRY_RUN_UNSUPPORTED",
           "target": "procedure:touch"
         }
       }
@@ -1722,6 +1738,7 @@
           "diagnostics": [
             {
               "code": "AUTH_DENIED",
+              "message": "Authorization predicate not satisfied.",
               "target": "procedures/write/requires/auth/all/0"
             }
           ]
@@ -1756,6 +1773,7 @@
       "body": {
         "error": {
           "code": "AUTH_DENIED",
+          "message": "Admin role is required.",
           "target": "mcp/admin"
         }
       }
@@ -1792,6 +1810,7 @@
           "diagnostics": [
             {
               "code": "INPUT_VALIDATION_FAILED",
+              "message": "Expected string.",
               "target": "procedures/write/input/title"
             }
           ]
@@ -1860,6 +1879,7 @@
       "body": {
         "error": {
           "code": "AUTH_DENIED",
+          "message": "Host callers may only initialize or call a tool.",
           "target": "mcp"
         }
       }
@@ -1891,7 +1911,8 @@
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "HOST_CONTRACT"
+          "code": "HOST_CONTRACT",
+          "message": "Malformed host contract or tenant mismatch."
         }
       }
     },
@@ -1927,6 +1948,7 @@
             "diagnostics": [
               {
                 "code": "HOST_CONTRACT",
+                "message": "The target needs user field 'region'.",
                 "field": "region"
               }
             ]
@@ -1934,6 +1956,7 @@
           "diagnostics": [
             {
               "code": "HOST_CONTRACT",
+              "message": "The target needs user field 'region'.",
               "field": "region"
             }
           ]
@@ -1973,6 +1996,7 @@
           "diagnostics": [
             {
               "code": "AUTH_DENIED",
+              "message": "Cross-origin session mutation rejected.",
               "target": "request:origin"
             }
           ]
@@ -2011,6 +2035,7 @@
           "diagnostics": [
             {
               "code": "AUTH_DENIED",
+              "message": "Authorization predicate not satisfied.",
               "target": "procedures/write/requires/auth/all/0"
             }
           ]
@@ -2048,7 +2073,8 @@
           "structuredContent": null,
           "diagnostics": [
             {
-              "code": "AUTH_DENIED"
+              "code": "AUTH_DENIED",
+              "message": "Sign in again."
             }
           ]
         }
@@ -2201,6 +2227,7 @@
       "body": {
         "error": {
           "code": "TARGET_MISMATCH",
+          "message": "TARGET_MISMATCH",
           "target": "view:public-records"
         }
       }
@@ -2233,6 +2260,7 @@
       "body": {
         "error": {
           "code": "TARGET_HASH_MISMATCH",
+          "message": "TARGET_HASH_MISMATCH",
           "target": "view:public-records"
         }
       }
@@ -2305,7 +2333,8 @@
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "HOST_CONTRACT"
+          "code": "HOST_CONTRACT",
+          "message": "Malformed host contract or tenant mismatch."
         }
       }
     },
@@ -2337,6 +2366,7 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
+          "message": "The target needs user field 'region'.",
           "field": "region"
         }
       }
@@ -2739,6 +2769,7 @@
       "body": {
         "error": {
           "code": "STALE_CALLER",
+          "message": "Snapshot callers cannot write.",
           "target": "rest:POST /api/records/:id/rename"
         }
       }
@@ -2771,6 +2802,7 @@
       "body": {
         "error": {
           "code": "STALE_CALLER",
+          "message": "Snapshot callers cannot write.",
           "target": "rest:POST /api/touch"
         }
       }
@@ -2803,6 +2835,7 @@
       "body": {
         "error": {
           "code": "STALE_CALLER",
+          "message": "Snapshot callers cannot write.",
           "target": "procedure:touch"
         }
       }
@@ -2876,6 +2909,7 @@
       "body": {
         "error": {
           "code": "INPUT_VALIDATION_FAILED",
+          "message": "Host calls cannot batch MCP messages.",
           "target": "mcp"
         }
       }
@@ -2908,6 +2942,7 @@
       "body": {
         "error": {
           "code": "AUTH_DENIED",
+          "message": "Host callers may only initialize or call a tool.",
           "target": "mcp"
         }
       }
@@ -3313,7 +3348,8 @@
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "HOST_CONTRACT"
+          "code": "HOST_CONTRACT",
+          "message": "User field 'region' is outside its enum."
         }
       }
     },
@@ -3344,7 +3380,8 @@
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "HOST_CONTRACT"
+          "code": "HOST_CONTRACT",
+          "message": "User field 'region' is outside its enum."
         }
       }
     },
@@ -3375,7 +3412,8 @@
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "HOST_CONTRACT"
+          "code": "HOST_CONTRACT",
+          "message": "User field 'region' is outside its enum."
         }
       }
     },
@@ -3407,6 +3445,7 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
+          "message": "The target needs user field 'region'.",
           "field": "region"
         }
       }
@@ -3444,6 +3483,7 @@
             "diagnostics": [
               {
                 "code": "HOST_CONTRACT",
+                "message": "The target needs user field 'region'.",
                 "field": "region"
               }
             ]
@@ -3451,6 +3491,7 @@
           "diagnostics": [
             {
               "code": "HOST_CONTRACT",
+              "message": "The target needs user field 'region'.",
               "field": "region"
             }
           ]
@@ -3486,6 +3527,7 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
+          "message": "The target needs user field 'region'.",
           "field": "region"
         }
       }
@@ -3519,6 +3561,7 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
+          "message": "The target needs user field 'region'.",
           "field": "region"
         }
       }
@@ -3556,6 +3599,7 @@
             "diagnostics": [
               {
                 "code": "HOST_CONTRACT",
+                "message": "The target needs user field 'region'.",
                 "field": "region"
               }
             ]
@@ -3563,6 +3607,7 @@
           "diagnostics": [
             {
               "code": "HOST_CONTRACT",
+              "message": "The target needs user field 'region'.",
               "field": "region"
             }
           ]
@@ -3598,6 +3643,7 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
+          "message": "The target needs user field 'region'.",
           "field": "region"
         }
       }
@@ -3631,6 +3677,7 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
+          "message": "The target needs user field 'stores'.",
           "field": "stores"
         }
       }
@@ -3668,6 +3715,7 @@
             "diagnostics": [
               {
                 "code": "HOST_CONTRACT",
+                "message": "The target needs user field 'stores'.",
                 "field": "stores"
               }
             ]
@@ -3675,6 +3723,7 @@
           "diagnostics": [
             {
               "code": "HOST_CONTRACT",
+              "message": "The target needs user field 'stores'.",
               "field": "stores"
             }
           ]
@@ -3710,6 +3759,7 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
+          "message": "The target needs user field 'stores'.",
           "field": "stores"
         }
       }
@@ -3742,7 +3792,8 @@
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "HOST_CONTRACT"
+          "code": "HOST_CONTRACT",
+          "message": "User field 'region' must contain string values."
         }
       }
     },
@@ -3773,7 +3824,8 @@
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "HOST_CONTRACT"
+          "code": "HOST_CONTRACT",
+          "message": "User field 'region' must contain string values."
         }
       }
     },
@@ -3804,7 +3856,8 @@
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "HOST_CONTRACT"
+          "code": "HOST_CONTRACT",
+          "message": "User field 'region' must contain string values."
         }
       }
     },
@@ -3868,7 +3921,8 @@
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "AUTH_DENIED"
+          "code": "AUTH_DENIED",
+          "message": "This target restricts rows by 'region', which needs explicit values; { all: true } does not lift a restrict."
         }
       }
     },
@@ -3903,13 +3957,15 @@
           "structuredContent": {
             "diagnostics": [
               {
-                "code": "AUTH_DENIED"
+                "code": "AUTH_DENIED",
+                "message": "This target restricts rows by 'region', which needs explicit values; { all: true } does not lift a restrict."
               }
             ]
           },
           "diagnostics": [
             {
-              "code": "AUTH_DENIED"
+              "code": "AUTH_DENIED",
+              "message": "This target restricts rows by 'region', which needs explicit values; { all: true } does not lift a restrict."
             }
           ]
         }
@@ -4005,6 +4061,7 @@
       "body": {
         "error": {
           "code": "STALE_CALLER",
+          "message": "Snapshot callers cannot write.",
           "target": "rest:POST /api/poke"
         }
       }
@@ -4037,6 +4094,7 @@
       "body": {
         "error": {
           "code": "STALE_CALLER",
+          "message": "Snapshot callers cannot write.",
           "target": "procedure:poke"
         }
       }
@@ -4899,6 +4957,19 @@
         "id": "admin:tool:list_media_assets",
         "targetHash": "<hash:admin:tool:list_media_assets>",
         "readOnly": true,
+        "surfaces": [
+          "admin"
+        ],
+        "scope": {},
+        "restrict": {}
+      }
+    },
+    {
+      "name": "open_media_upload",
+      "_meta": {
+        "id": "admin:tool:open_media_upload",
+        "targetHash": "<hash:admin:tool:open_media_upload>",
+        "readOnly": false,
         "surfaces": [
           "admin"
         ],

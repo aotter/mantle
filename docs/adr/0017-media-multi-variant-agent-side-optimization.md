@@ -179,3 +179,14 @@ use case layer via the repository. The R2 adapter:
 - `packages/mantle-spec/src/domain/model/SiteConfig.ts` (MediaPurposePolicy)
 - `packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts`
 - MCP client / operator-side image processing tools
+
+
+## Amendment #2050: Direct transfer and the manual fallback (2026-11-17)
+
+Agents prepare uploads with `upload_media`, PUT bytes to its presigned targets outside MCP, then commit the upload id.
+The first-party upload card instead renders and calls `open_media_upload`, a built-in with the same input modes and
+media-library implementation. `mediaUploadCard` defaults to this fallback tool. A client advertising Apps support must
+not hide an agent's direct targets merely because the application registered the fallback card. App-only targets
+remain in result `_meta` for the fallback's card calls; signed private read URLs keep their existing privacy contract.
+The `tool` option still accepts an explicit `upload_media` for applications intentionally retaining the combined
+behavior. Apps capability describes rendering support, not who will transfer the bytes.

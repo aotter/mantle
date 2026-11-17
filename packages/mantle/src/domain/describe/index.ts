@@ -14,6 +14,7 @@ export interface DescribeTarget {
   inputSchema: import("../../build/compiler.js").JsonSchema;
   annotations: import("../../build/spec/domain/model/ManifestGrammar.js").ProcedureMcpAnnotations;
   _meta: {
+    [key: string]: unknown;
     surfaces: string[];
     triggers: TargetDefinition["triggers"];
     id: string;
@@ -71,6 +72,7 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
         inputSchema: listed(d.inputSchema),
         annotations: { ...d.annotations, readOnlyHint: d.readOnly },
         _meta: {
+          ...d.toolMeta,
           surfaces: d.surfaces,
           triggers: d.triggers,
           id: d.id,

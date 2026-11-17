@@ -1,6 +1,6 @@
 /**
- * The upload card `mediaUploadCard` serves for `upload_media`: the person picks one file, the card calls `upload_media`
- * through the host, PUTs the file straight to storage with progress, calls `upload_media` again to commit, and tells the
+ * The upload card `mediaUploadCard` serves for `open_media_upload`: the person picks one file, the card calls `open_media_upload`
+ * through the host, PUTs the file straight to storage with progress, calls `open_media_upload` again to commit, and tells the
  * model the asset id. It uploads the original as the single variant a purpose takes (ADR-0017); a purpose with several
  * variant slots needs an agent that prepares them.
  * ponytail: English only; take the host context's locale when hosts ask for another.
@@ -12,7 +12,7 @@ import { outputOf, type ToolResult } from "../../../src/app/bridge.js";
 /** `@aotter/mantle/media`'s `UPLOAD_META`: the result `_meta` key with the upload targets. */
 const UPLOAD_META = "net.aotter.mantle/upload";
 /**
- * `mediaUploadCard`'s `tool`, `forward` and `inputTimeoutMs`, written into the page by the server (absent: `upload_media`,
+ * `mediaUploadCard`'s `tool`, `forward` and `inputTimeoutMs`, written into the page by the server (absent: `open_media_upload`,
  * nothing forwarded).
  */
 const config = JSON.parse(document.getElementById("mantle-upload-config")?.textContent ?? "{}") as {
@@ -20,7 +20,7 @@ const config = JSON.parse(document.getElementById("mantle-upload-config")?.textC
   forward?: string[];
   inputTimeoutMs?: number | false;
 };
-const TOOL = config.tool ?? "upload_media",
+const TOOL = config.tool ?? "open_media_upload",
   forward = config.forward ?? [];
 interface Purpose {
   readonly name: string;
@@ -38,12 +38,16 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 document.body.innerHTML = `<form id="card" aria-busy="true" novalidate>
+<header><p class="eyebrow">Media library</p>
 <h1>Upload a file</h1>
+<p class="hint">Choose a file for your media library. Keep this card open until the upload finishes.</p></header>
 <label id="purpose-row" hidden>Purpose <select id="purpose"></select></label>
-<label>File <input id="file" type="file" required></label>
+<label class="file-picker">File <input id="file" type="file" required aria-describedby="file-details policy"></label>
+<p id="file-details" class="file-details">No file selected</p>
+<p id="policy" class="hint"></p>
 <label id="alt-row" hidden>Alt text <input id="alt" type="text" maxlength="1000" placeholder="Describe the image"></label>
 <button id="upload" type="button" disabled>Upload</button>
-<progress id="progress" max="1" value="0" hidden></progress>
+<progress id="progress" aria-label="Upload progress" max="1" value="0" hidden></progress>
 <p id="status" role="status"></p>
 </form>`;
 const form = $<HTMLFormElement>("card"),
@@ -64,6 +68,7 @@ let host: HostApi | undefined,
   purposes: readonly Purpose[] = [],
   asked: string | undefined,
   busy = false,
+  failed = false,
   done = false;
 const say = (text: string, alert = false) => {
   status.textContent = text;
@@ -82,11 +87,16 @@ const acceptedBy = (accepts: readonly string[], type: string) =>
   [type, type.replace(/\/.*/, "/*"), "*/*"].find(token => accepts.includes(token));
 /** A file the browser cannot type is sent as bytes. */
 const typeOf = (picked: File) => picked.type || "application/octet-stream";
+const sizeOf = (bytes: number) =>
+  bytes < 1024
+    ? `${bytes} bytes`
+    : `${(bytes / (bytes < 1048576 ? 1024 : 1048576)).toFixed(1)} ${bytes < 1048576 ? "KiB" : "MiB"}`;
 
 function render() {
-  const names = purposes.map(p => p.name);
+  const names = purposes.map(p => p.name),
+    selected = asked ?? select.value;
   select.replaceChildren(...names.map(name => new Option(name, name)));
-  if (asked && names.includes(asked)) select.value = asked;
+  if (names.includes(selected)) select.value = selected;
   $("purpose-row").hidden = !!asked || names.length < 2;
   const purpose = current();
   // `*/*` is no `accept` token: an empty one offers every file
@@ -94,8 +104,24 @@ function render() {
   file.accept = accepts.includes("*/*") ? "" : accepts.join(",");
   // alt text describes an image
   $("alt-row").hidden = !file.files?.[0]?.type.startsWith("image/");
-  button.disabled = busy || done || !host?.call || !purpose;
-  form.setAttribute("aria-busy", String(busy || !host));
+  const picked = file.files?.[0];
+  $("file-details").textContent = picked
+    ? `${picked.name} · ${sizeOf(picked.size)} · ${typeOf(picked)}`
+    : "No file selected";
+  const token = picked && acceptedBy(accepts, typeOf(picked));
+  $("policy").textContent = !purpose
+    ? ""
+    : purpose.required.length !== 1
+      ? "This purpose needs several variants. Ask the agent to prepare them."
+      : token
+        ? `${typeOf(picked!)} · Up to ${sizeOf(purpose.maxBytes[token] ?? 0)}`
+        : accepts.includes("*/*")
+          ? `Any file type · Up to ${sizeOf(purpose.maxBytes["*/*"] ?? 0)}`
+          : accepts.map(type => `${type}: up to ${sizeOf(purpose.maxBytes[type] ?? 0)}`).join(" · ");
+  file.disabled = select.disabled = alt.disabled = busy || done;
+  button.disabled = busy || done || !picked || !host?.call || !purpose;
+  button.textContent = done ? "Uploaded" : busy ? "Uploading…" : failed ? "Try again" : "Upload";
+  form.setAttribute("aria-busy", String(busy || !host || !purposes.length));
   if (!host) say("Connecting to the MCP host…");
   else if (asked && purposes.length && !purpose) say(`The purpose '${asked}' is not declared.`, true);
   else if (!host.call) say("This host does not let the card call tools.", true);
@@ -156,6 +182,7 @@ async function upload(picked: File, purpose: Purpose, call: NonNullable<HostApi[
   progress.value = 0;
   await put(targets[0]!, picked);
   say("Committing…");
+  button.textContent = "Saving…";
   const committed = await call(TOOL, { uploadId, purpose: purpose.name });
   const asset = outputOf(committed);
   if (committed.isError || !record(asset) || typeof asset.id !== "string")
@@ -181,6 +208,7 @@ button.addEventListener("click", () => {
           await host!.updateModelContext({ content: [{ type: "text", text }], structuredContent: { asset } });
       },
       (error: unknown) => {
+        failed = true;
         progress.hidden = true;
         say(error instanceof Error ? error.message : String(error), true);
       },
@@ -191,7 +219,11 @@ button.addEventListener("click", () => {
     });
 });
 select.addEventListener("change", render);
-file.addEventListener("change", render);
+file.addEventListener("change", () => {
+  failed = false;
+  say("");
+  render();
+});
 
 /** The policy, from the server: it is the authority on purposes, types and caps. Only the latest read applies. */
 let reads = 0;

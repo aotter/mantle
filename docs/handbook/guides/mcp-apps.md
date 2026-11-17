@@ -657,7 +657,7 @@ uses the official `AppBridge`; your app runs its generated version ([Run the com
 
 ## The upload card
 
-`upload_media` on `/mcp/admin` can open an upload card, an MCP App Admin ships
+`open_media_upload` on `/mcp/admin` opens the manual fallback upload card, an MCP App Admin ships
 prebuilt. Register it beside the Admin App, with the same `media` function you
 pass `mcp(...)`:
 
@@ -676,10 +676,12 @@ const handler = mcp({ ...options, media: storage, apps: { admin: [
 ] } });
 ```
 
-The card is `ui://mantle-admin/upload` and renders `upload_media`. The person
+When the fallback tool is linked to a card, policy-only calls include a `card` hint even when the request omits MCP Apps capabilities (including host callers). The hint describes hosts that render Apps and offers a direct-upload fallback if no card appears; it does not claim the card rendered. Upload targets still move into result `_meta` only when the request declares Apps support.
+
+The card is `ui://mantle-admin/upload` and renders `open_media_upload`. Keep `upload_media` unlinked: it is the agent's direct presigned-PUT entry, so its targets stay model-visible even when a client supports Apps. Explicit `mediaUploadCard({ tool: "upload_media", ... })` keeps the earlier combined behavior; use that only when you intentionally want this tool's targets to go to the App. The person
 picks a file (and may type alt text for an image); the file input accepts the purpose's types, any file for `*/*`; the card reads the purposes with
-`upload_media`, calls it with the file's metadata, PUTs the file straight to the
-target with progress, calls `upload_media` again with the `uploadId`, and sends
+`open_media_upload`, calls it with the file's metadata, PUTs the file straight to the
+target with progress, calls `open_media_upload` again with the `uploadId`, and sends
 `ui/message` with the asset id, and also `ui/update-model-context` unless the
 host accepted the message. The bytes never pass through MCP or the host. The card uploads the
 original file as the single variant a purpose takes
@@ -688,7 +690,7 @@ purpose with several variant slots needs an agent that prepares them, and the
 card says so. It needs the host's `serverTools`. It shows no View, so it declares
 no `tools` capability and lists none of the App's `view_*` tools.
 
-`tool` names the tool the card renders and calls (default `upload_media`; another tool takes `upload_media`'s
+`tool` names the tool the card renders and calls (default `open_media_upload`; another tool takes `upload_media`'s
 arguments) and `forward` lists the arguments of the rendering call's input that the card repeats on every call, for
 example `mediaUploadCard({ media, tool: "upload_to_folder", forward: ["folder"] })`. With `forward`, calls wait for the
 host's tool input at most `inputTimeoutMs` after connecting (5,000 ms by default; `false` waits until it arrives),

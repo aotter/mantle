@@ -151,6 +151,6 @@ test("a generated View tool marked as a host entry point keeps its App link, fir
     expect(ids((await viaGateway(targets[target].targetHash)).body.result)).toEqual(["a1", "a2"]);
     expect(await viaGateway("old")).toEqual({
       status: 412,
-      body: { error: { code: "TARGET_HASH_MISMATCH", target } },
+      body: { error: { code: "TARGET_HASH_MISMATCH", message: "TARGET_HASH_MISMATCH", target } },
     });
   }));

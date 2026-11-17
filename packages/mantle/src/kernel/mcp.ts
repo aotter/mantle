@@ -123,6 +123,8 @@ export { withResultMeta, type ResultWithMeta } from "./result-meta.js";
 export interface ToolCall {
   /** The request declared MCP Apps support, so an App renders the result and reads its `_meta`; a secret for the App belongs there, not in the data a model reads. */
   readonly apps: boolean;
+  /** The tool links an MCP App resource, independent of this request's declared support. */
+  readonly linkedApp?: boolean;
 }
 
 /** Request-bound tool tables keep native environment bindings outside the cached App catalogue. */

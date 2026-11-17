@@ -28,12 +28,14 @@ it.each([
   { forward: ["folder"], inputTimeoutMs: 300, silent: true },
   { forward: ["folder"], inputTimeoutMs: 300, late: true },
   { anyFile: true },
+  { choosePurpose: true },
 ])(
   "the upload card PUTs the picked file to storage through CORS and commits it (%o)",
   async ({
     silent,
     late,
     anyFile,
+    choosePurpose,
     ...options
   }: {
     tool?: string;
@@ -42,8 +44,10 @@ it.each([
     silent?: boolean;
     late?: boolean;
     anyFile?: boolean;
+    choosePurpose?: boolean;
   }) => {
-    const TOOL = options.tool ?? "upload_media",
+    anyFile ||= choosePurpose;
+    const TOOL = options.tool ?? "open_media_upload",
       extra = options.forward ? { folder: "docs" } : {},
       purpose = anyFile ? "notes" : "cover";
     const root = resolve(import.meta.dirname, "../../.."),
@@ -62,7 +66,7 @@ import {AppBridge,PostMessageTransport} from '@modelcontextprotocol/ext-apps/app
 const frame=document.createElement('iframe');frame.sandbox='allow-scripts';document.body.append(frame);
 window.host={calls:[],messages:[]};
 const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{}});
-bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : late ? "setTimeout(()=>void bridge.sendToolInput({arguments:{purpose:'cover',folder:'docs'}}),800);" : `void bridge.sendToolInput({arguments:{purpose:'${purpose}',folder:'docs'}});`}};
+bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : late ? "setTimeout(()=>void bridge.sendToolInput({arguments:{purpose:'cover',folder:'docs'}}),800);" : `void bridge.sendToolInput({arguments:{${choosePurpose ? "" : `purpose:'${purpose}',`}folder:'docs'}});`}};
 bridge.oncalltool=async params=>{window.host.calls.push(params);return (await fetch('/tool',{method:'POST',body:JSON.stringify(params)})).json();};
 bridge.onmessage=async params=>{window.host.messages.push(params);return {};};
 bridge.onsizechange=()=>{};
@@ -205,7 +209,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       page.on("pageerror", error => errors.push(error.message));
       await page.goto(origin);
       const app = page.frameLocator("iframe");
-      const upload = app.getByRole("button", { name: "Upload" });
+      const upload = app.locator("#upload");
       if (silent) {
         await expect.poll(() => app.locator("#status").textContent()).toBe(`unexpected call ${TOOL} undefined`);
         expect(await app.locator("#status").getAttribute("role")).toBe("alert");
@@ -214,7 +218,9 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         expect(errors).toEqual([]);
         return;
       }
-      await expect.poll(() => upload.isEnabled(), { timeout: 10_000 }).toBe(true);
+      await expect.poll(() => app.locator("form").getAttribute("aria-busy"), { timeout: 10_000 }).toBe("false");
+      expect(await upload.isDisabled()).toBe(true);
+      expect(await app.locator("#file-details").textContent()).toBe("No file selected");
       // the conversation shows through, and the first paint takes the host's scheme
       expect(await app.locator("html").evaluate(transparent)).toEqual([
         "rgba(0, 0, 0, 0)",
@@ -222,7 +228,8 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         "light dark",
       ]);
       // the purpose came in the tool input, so no picker shows; the input accepts its types, or any file
-      expect(await app.locator("#purpose-row").isHidden()).toBe(true);
+      expect(await app.locator("#purpose-row").isHidden()).toBe(!choosePurpose);
+      if (choosePurpose) await app.getByLabel("Purpose").selectOption("notes");
       expect(await app.getByLabel("File").getAttribute("accept")).toBe(anyFile ? "" : "image/png,image/jpeg");
       const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(56)]),
         pdf = Buffer.from("%PDF-1.7\n%%EOF\n");
@@ -230,6 +237,8 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         // alt text is for images: a PDF gets none
         await app.getByLabel("File").setInputFiles({ name: "report.pdf", mimeType: "application/pdf", buffer: pdf });
         expect(await app.locator("#alt-row").isHidden()).toBe(true);
+        expect(await app.locator("#file-details").textContent()).toContain("report.pdf");
+        expect(await app.getByLabel("Purpose").inputValue()).toBe("notes");
       } else {
         // a type the purpose does not take is refused before any call
         await app
@@ -245,6 +254,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       }
       await upload.click();
       await app.getByText(/^Uploaded\. Asset id /).waitFor();
+      await expect.poll(() => upload.textContent()).toBe("Uploaded");
       const id = (await app.locator("form").getAttribute("data-asset"))!;
       expect(objects.get(id)).toEqual(
         anyFile ? { type: "application/pdf", bytes: pdf } : { type: "image/png", bytes: png },

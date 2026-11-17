@@ -435,7 +435,7 @@ such as its own WebMCP catalogue; the subpath also exports the `LocalizedText` t
 ### Admin media MCP tools
 
 With generated site configuration, `mcp({ db, caller, media: env => storage })`
-loads the media module only on a configured admin MCP request and adds four
+loads the media module only on a configured admin MCP request and adds five
 tools to `/mcp/admin` only. `storage` is the same `MediaStorage` used by the
 Admin media library. Omitting `media` omits every media tool. Admins can invoke
 them; cookie writes retain the origin check. Generated boundary code checks each
@@ -443,7 +443,8 @@ input and advertises read-only/destructive/open-world hints.
 
 | Tool | Does |
 |---|---|
-| `upload_media` | Upload one file, in two calls (below). |
+| `upload_media` | Upload one file directly, in two calls (below). |
+| `open_media_upload` | Manual upload-card fallback; the same prepare/commit arguments as `upload_media`. |
 | `find_media` | Committed assets by `ids` (ids not found come back in `missing`), or newest first with `limit`, `cursor` and `search` (the exact id, or text in alt or caption; a search longer than 48 characters matches the id alone). Read-only. |
 | `update_media` | Set `alt` or `caption` of `id`; an omitted field is unchanged, an empty string clears it. |
 | `delete_media` | Delete `id`'s objects and record (`destructiveHint`, so hosts confirm). A partial failure is retried with the same id. |
@@ -453,8 +454,10 @@ input and advertises read-only/destructive/open-world hints.
 1. `{ purpose, filename, variants: [{ mimeType, byteSize, role }], alt?, caption? }`
    returns `{ uploadId, expiresAt, targets: [{ role, mimeType, method, url, headers }] }`.
    PUT each variant's bytes to its `url` with its `headers`. Targets expire in
-   15 minutes and serve this one upload. When the request declares MCP Apps
-   support and a resource such as the upload card renders `upload_media`,
+   15 minutes and serve this one upload. The default `mediaUploadCard()` renders
+   `open_media_upload`, leaving direct `upload_media` targets model-visible. If
+   an application explicitly links a resource to `upload_media` and the request declares MCP Apps
+   support,
    `targets` is left out of the result and sent only in the result
    `_meta["net.aotter.mantle/upload"]`, which hosts give the App and not the
    model; an agent without MCP Apps (a CLI agent such as Claude Code) reads them

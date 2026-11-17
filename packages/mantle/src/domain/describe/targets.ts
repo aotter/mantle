@@ -1,6 +1,6 @@
 import type { RuntimePlan } from "../../build/compiler.js";
 import type { PlanRestrict } from "../../build/spec/domain/model/RuntimePlan.js";
-import { mcpToolNameSegment, mcpTools } from "../../build/spec/domain/service/McpToolNaming.js";
+import { mcpToolNameSegment, mcpTools, toolTitle } from "../../build/spec/domain/service/McpToolNaming.js";
 import {
   resolveLocalizedText,
   type JsonSchema,
@@ -14,6 +14,7 @@ import { pathTemplate } from "../../kernel/route-pattern.js";
 export interface TargetDefinition {
   id: string;
   name: string;
+  toolMeta?: Record<string, unknown>;
   surface: string;
   surfaces: string[];
   triggers: { id: string; source: RuntimePlan["triggers"][string]["source"] }[];
@@ -296,6 +297,9 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
     const d = out.at(-1)!;
     Object.assign(d, {
       name: tool.name,
+      title: toolTitle(tool.name),
+      description: tool.description,
+      toolMeta: tool.meta,
       readOnly: tool.annotations.readOnlyHint,
       opaque: !tool.annotations.readOnlyHint,
       annotations: tool.annotations,

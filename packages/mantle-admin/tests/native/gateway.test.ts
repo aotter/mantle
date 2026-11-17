@@ -108,7 +108,9 @@ test("Admin gateway enforces layers, draft scope, contract errors, stale writes 
     expect(JSON.stringify(page)).not.toContain("other store");
     const member = await ask(mantleProps({ layer: "member", user: { ...mantleProps().user, role: "admin" } }));
     expect(member!.status).toBe(403);
-    expect(await member!.json()).toEqual({ error: { code: "AUTH_DENIED", target: "admin" } });
+    expect(await member!.json()).toEqual({
+      error: { code: "AUTH_DENIED", target: "admin", message: "Admin layer required." },
+    });
     for (const props of invalidProps()) {
       const response = await ask(props);
       expect(response!.status).toBe(412);
@@ -176,7 +178,7 @@ test("Admin gateway enforces layers, draft scope, contract errors, stale writes 
       const response = await ask(mantleProps(), path, method);
       const payload = await response!.json();
       expect(payload.error.code).toBe(code);
-      expect(payload.error).not.toHaveProperty("message");
+      expect(payload.error.message).toEqual(expect.any(String));
     }
     const members = await ask(mantleProps(), "/members");
     expect(members!.status).toBe(403);
