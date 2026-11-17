@@ -690,7 +690,7 @@ purpose with several variant slots needs an agent that prepares them, and the
 card says so. It needs the host's `serverTools`. It shows no View, so it declares
 no `tools` capability and lists none of the App's `view_*` tools.
 
-`tool` names the tool the card renders and calls (default `upload_media`; another tool takes `upload_media`'s
+`tool` names the tool the card renders and calls (default `open_media_upload`; another tool takes `upload_media`'s
 arguments) and `forward` lists the arguments of the rendering call's input that the card repeats on every call, for
 example `mediaUploadCard({ media, tool: "upload_to_folder", forward: ["folder"] })`. With `forward`, calls wait for the
 host's tool input at most `inputTimeoutMs` after connecting (5,000 ms by default; `false` waits until it arrives),

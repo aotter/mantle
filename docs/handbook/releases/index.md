@@ -36,6 +36,12 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ### Upgrading to 0.2.2-alpha.6
 
+- **Direct upload and the manual card are separate (#2050).** `upload_media` keeps presigned PUT targets visible to
+  agents. `mediaUploadCard()` now renders and calls the new `open_media_upload` fallback, with the same prepare/commit
+  arguments. Update hard-coded default card tool names; explicitly passing `tool: "upload_media"` retains the earlier
+  combined behavior, where Apps-capable requests move targets into UI-only metadata. Host-caller 4xx responses now
+  preserve their ContractError message, and `describe` includes media tool metadata and actual descriptions.
+
 - **Localized labels inside tool schemas are listed as strings (#2046).** A `title` or `description` given as a locale
   map inside a Procedure or View input (or a tool's output schema) reached MCP clients, WebMCP hosts and `describe`
   targets as a map, which JSON Schema 2020-12 forbids, so a client that validates tool schemas dropped the tool. MCP
