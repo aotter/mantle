@@ -154,6 +154,7 @@ export default{async fetch(request,env){const url=new URL(request.url),key=url.p
         "get_media_asset",
         "update_media_asset",
         "delete_media_asset",
+        "open_media_upload",
       ]);
       expect(
         (await rpc("tools/list", {}, "/mcp")).data.result.tools.map((tool: { name: string }) => tool.name),
