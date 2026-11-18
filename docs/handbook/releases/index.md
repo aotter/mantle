@@ -38,13 +38,23 @@ move, and never booting 0.2 against a 0.1.x database.
 
 Pin the selected packages to `0.2.2-alpha.6` and regenerate.
 
-- **Direct upload and the manual card are separate (#2050).** `upload_media` keeps presigned PUT targets visible to
-  agents. `mediaUploadCard()` now renders and calls the new `open_media_upload` fallback, with the same prepare/commit
-  arguments. Update hard-coded default card tool names; explicitly passing `tool: "upload_media"` retains the earlier
-  combined behavior, where Apps-capable requests move targets into UI-only metadata. Host-caller 4xx responses now
-  preserve their ContractError message, and `describe` includes media tool metadata and actual descriptions.
+- **Breaking: the manual upload card's default tool changes (#2051).** Before: `mediaUploadCard()` rendered and called
+  `upload_media`. After: it renders and calls `open_media_upload`, with the same prepare/commit arguments. Replace
+  hard-coded default card tool names with `open_media_upload`. Explicit `mediaUploadCard({ tool: "upload_media", ... })`
+  keeps the earlier combined behavior, where Apps-capable requests move PUT targets into UI-only metadata.
+- **Direct upload keeps its targets visible to agents (#2051).** `upload_media` is independent of the optional card.
+  Host-caller 4xx responses preserve their ContractError message, and `describe` includes media tool metadata and actual
+  descriptions. The optional card shows file limits, progress, error and completion states; its layout separates
+  file selection from Upload (#2053). It uses shared UI tokens, follows host or system themes and the Admin language
+  list, and preserves the selected file and progress across theme or locale changes (#2057, #2058). An uncertain save
+  retries commit with the same upload ID. A rejected staged file can be replaced. Real Claude card completion remains
+  unverified.
+- **Ref handlers declare native database access (#2049).** Set `spec.db: native` when using `ctx.db` or its transaction
+  callback's native handle. In this warning phase undeclared native access still works and logs `NATIVE_DATABASE_UNDECLARED`; `describe` exposes
+  `_meta.nativeDatabase`, but `false` does not prove a handler cannot access the native database. Store row policies do
+  not protect native SQL. See [Procedure](../reference/procedure.md).
 
-- **Localized labels inside tool schemas are listed as strings (#2046).** A `title` or `description` given as a locale
+- **Localized labels inside tool schemas are listed as strings (#2047).** A `title` or `description` given as a locale
   map inside a Procedure or View input (or a tool's output schema) reached MCP clients, WebMCP hosts and `describe`
   targets as a map, which JSON Schema 2020-12 forbids, so a client that validates tool schemas dropped the tool. MCP
   and the Admin WebMCP catalogue and its refusals now list the server locale's string; `describe` lists English, like
@@ -53,9 +63,9 @@ Pin the selected packages to `0.2.2-alpha.6` and regenerate.
   with localized labels (`schemaVersion` stays 1); afterwards, a label-only edit in a locale other than English shows
   as `behavior` changed. `@aotter/mantle/mcp/labels` exports the rule (`localizedSchema`, `localizedText`) for
   schemas an application publishes itself.
-- **The built-in OAuth consent and connected-apps pages match Mantle UI (#2044).** `GET /oauth/consent` and
-  `GET /oauth/consents` render as a centred card in light and dark, with a primary Connect button and the return host
-  and scopes as monospace chips. Still no script, the same CSP, forms and fields. Nothing to change.
+- **Built-in auth pages share Admin language and appearance controls (#2045, #2058).** Standalone OAuth consent and
+  connected-apps pages use the shared tokens and Admin language list, including right-to-left layouts. Preference
+  changes preserve the signed consent query, and the pages remain script-free. No application changes are required.
 
 ### Upgrading to 0.2.2-alpha.5
 

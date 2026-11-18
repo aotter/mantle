@@ -149,7 +149,11 @@ dist-tag DELETE only added failure and re-run state.
    its `@aotter/mantle*` pins at freshly packed tarballs, resolves every other
    pin from the public registry and fails on any high or critical
    `npm audit` advisory, dev dependencies included. The controller runs the
-   same gate before it tags. On failure, bump the
+   same gate before it tags. For `0.2.2-alpha.6` only, it permits
+   [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+   in `picomatch` and the derived npm findings. Snyk revoked its advisory,
+   and the scaffold's service requests cannot supply glob rules to the Admin
+   build. On failure, bump the
    `docs/examples/app-shell/package.json` pins (Wrangler together with a
    `@cloudflare/workers-types` that satisfies its peer range), align
    `docs/examples/reference-service` and the SDK's own Wrangler devDependency,
