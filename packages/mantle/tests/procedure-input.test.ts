@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import ts from "typescript";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { generateOrThrow, writeGenerated } from "./apps/link.js";
+import { generateOrThrow, loadGenerated, writeGenerated } from "./apps/link.js";
 
 const manifest = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -52,6 +52,35 @@ export async function check(db: Parameters<typeof addTask>[0], caller: Parameter
   return tags;
 }
 `;
+
+test("Procedure map validation counts own fields and reports the precise escaped input path", async () => {
+  const source = manifest.replace(
+    "      meta: {type: object, nullable: true}",
+    `      meta:
+        type: object
+        additionalProperties: {type: string}
+        minProperties: 1
+        maxProperties: 2
+        propertyNames: {pattern: "^[a-z]+$", maxLength: 12, not: {enum: [private]}}`,
+  );
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "tasks.yaml", text: source }]);
+  const { validate } = await loadGenerated(files["validation/procedures/add-task.ts"]!);
+  expect(validate({ title: "task", meta: { label: "ok" } })).toEqual({ title: "task", meta: { label: "ok" } });
+  for (const [meta, path, message] of [
+    [{}, "meta", "minProperties"],
+    [{ a: "1", b: "2", c: "3" }, "meta", "maxProperties"],
+    [{ "bad/~": "v" }, "meta/bad~1~0", "pattern"],
+    [{ private: "v" }, "meta/private", "forbidden"],
+  ] as const) {
+    try {
+      validate({ title: "task", meta });
+      throw new Error("Invalid map was accepted.");
+    } catch (error) {
+      expect(error).toMatchObject({ code: "INPUT_VALIDATION_FAILED", path: `procedures/add-task/input/${path}` });
+      expect((error as Error).message).toContain(message);
+    }
+  }
+});
 
 test("input(raw) passes to the bare Procedure with no cast, and a plain string is still refused, on all four targets", async () => {
   await mkdir(resolve(import.meta.dir, "apps/.generated"), { recursive: true });

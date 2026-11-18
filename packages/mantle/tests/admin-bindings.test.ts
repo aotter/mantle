@@ -2520,7 +2520,13 @@ kind: Procedure
 metadata: {name: app-test}
 spec:
   requires: {auth: {all: [ctx.admin]}}
-  input: {type: object, properties: {label: {type: string}}, required: [label], additionalProperties: false}
+  input:
+    type: object
+    properties:
+      label: {type: string}
+      metadata: {type: object, maxProperties: 1, propertyNames: {not: {enum: [private]}}}
+    required: [label]
+    additionalProperties: false
   output: {type: object, properties: {label: {type: string}}, required: [label]}
   handler: {ref: app.test}
 ---
@@ -2543,6 +2549,13 @@ spec: {source: {kind: mcp, surface: admin}, target: {procedure: app-test}}
     const operation = adminBindings({
       handlers: { "app-test": async (_ctx: unknown, input: { label: string }) => ({ label: input.label + "!" }) },
     }).operations.find((o: { name: string }) => o.name === "app-test");
+    expect(operation.validate({ label: "hi", metadata: { public: "yes" } })).toEqual({
+      label: "hi",
+      metadata: { public: "yes" },
+    });
+    expect(() => operation.validate({ label: "hi", metadata: { private: "no" } })).toThrow(
+      "Property name is forbidden.",
+    );
     expect(await operation.run(new Database(":memory:"), caller("A"), { label: "hi" })).toEqual({ label: "hi!" });
   } finally {
     await rm(dir, { recursive: true, force: true });

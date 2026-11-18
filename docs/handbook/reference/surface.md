@@ -69,8 +69,17 @@ error whose message names the rule:
   'undo' is true.", at the missing field. `if` must list its field in `required`:
   otherwise an absent field would satisfy it.
 
-Any other `anyOf`/`if`/`then`/`else`, `oneOf`, `uniqueItems`, object property-count
-bounds and other keywords and formats are refused at generation. The rules only
+Input objects also support `minProperties` and `maxProperties` as non-negative
+safe integers. `propertyNames` accepts a `pattern`, a `not: { enum: […] }` of
+strings, or both, with optional `maxLength` to bound the keys and the regex
+work. For example, `propertyNames: { pattern: "^[a-z]+$", maxLength: 32, not: { enum: [private] } }`
+checks each key, including keys handled by `additionalProperties`. Name errors
+identify the offending key and count errors identify the object.
+For a View's HTTP query, these rules check the input assembled from declared
+query fields. Paging parameters and other URL parameters are outside that input.
+
+Other shapes of `anyOf`/`if`/`then`/`else`, general `not`, `oneOf` and
+`uniqueItems` are refused at generation. The rules only
 validate: types, SQL binds and Admin forms keep the declared fields, and Admin
 shows the server's error at its field. `describe` keeps them as written; MCP and
 WebMCP tools advertise the schema without them and append each rule's sentence to

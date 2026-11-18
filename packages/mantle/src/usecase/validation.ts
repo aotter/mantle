@@ -113,6 +113,7 @@ export function acceptsEmpty(input: JsonSchema | undefined): boolean {
     rootRefChain(input)?.every(
       schema =>
         !schema.required?.length &&
+        !schema.minProperties &&
         schema.anyOf === undefined &&
         !(schema.else as JsonSchema | undefined)?.required?.length &&
         (schema.enum === undefined || schema.enum.some(option => equal({}, option))) &&
@@ -145,6 +146,18 @@ export function advertised(
       const found = rules(branch);
       if (typeof found !== "string")
         for (const rule of found) sentences.push(at ? `In '${at}': ${rule.message}` : rule.message);
+      const { minProperties, maxProperties, propertyNames } = branch as JsonSchema;
+      const object = at ? `Object at '${at}'` : "Input";
+      if (minProperties !== undefined) sentences.push(`${object} requires at least ${minProperties} properties.`);
+      if (maxProperties !== undefined) sentences.push(`${object} accepts at most ${maxProperties} properties.`);
+      if (propertyNames?.pattern !== undefined)
+        sentences.push(`${object} property names must match ${q(propertyNames.pattern)}.`);
+      if (propertyNames?.maxLength !== undefined)
+        sentences.push(`${object} property names accept at most ${propertyNames.maxLength} characters.`);
+      if (propertyNames?.not)
+        sentences.push(
+          `${object} excludes these property names: ${propertyNames.not.enum.map(key => q(key)).join(", ")}.`,
+        );
     }
     if (
       branches.length &&
@@ -265,7 +278,7 @@ export function emitValidation(
           equality = true;
           check(`!equal(value,${literal(schema.const)})`, "Value violates const.");
         }
-        for (const key of ["minLength", "maxLength", "minItems", "maxItems"] as const)
+        for (const key of ["minLength", "maxLength", "minItems", "maxItems", "minProperties", "maxProperties"] as const)
           if (schema[key] !== undefined && (!Number.isSafeInteger(schema[key]) || schema[key]! < 0))
             refuse(base, `${key} must be a non-negative safe integer.`);
         const maxBytes = schema["x-mantle-maxBytes"];
@@ -342,6 +355,21 @@ export function emitValidation(
               key =>
                 `if (!Object.hasOwn(object,${q(key)})) fail(path+${q("/" + pointer(key))},"Required field is missing.");`,
             );
+        const { minProperties, maxProperties, propertyNames } = schema;
+        if (minProperties !== undefined || maxProperties !== undefined || propertyNames) {
+          const checks = ["const keys = Object.keys(object);"];
+          if (minProperties !== undefined)
+            checks.push(`if (keys.length < ${minProperties}) fail(path,"Object violates minProperties.");`);
+          if (maxProperties !== undefined)
+            checks.push(`if (keys.length > ${maxProperties}) fail(path,"Object violates maxProperties.");`);
+          object.unshift(...checks);
+        }
+        if (propertyNames) {
+          const { not, ...keySchema } = propertyNames;
+          object.push(
+            `for (const key of keys) { const keyPath = path+"/"+key.replace(/~/g,"~0").replace(/\\//g,"~1"); ${not ? `if ((${q(not.enum)} as readonly string[]).includes(key)) fail(keyPath,"Property name is forbidden."); ` : ""}${Object.keys(keySchema).length ? `${emit(keySchema)}(key,keyPath${depth});` : ""} }`,
+          );
+        }
         if (loop(checks.map(([key]) => key)))
           object.push(
             `for (const [key,check] of [${checks.map(([key, fn]) => `[${q(key)},${fn}]`)}] as const) if (Object.hasOwn(object,key)) check(object[key],path+"/"+key${depth});`,

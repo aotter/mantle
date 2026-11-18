@@ -5,6 +5,7 @@ import {
   MANTLE_BIND_KEYWORD,
   RESERVED_ENTRY_COLUMNS,
   RESERVED_PROCEDURE_INPUT_NAMES,
+  type JsonSchema,
   type SchemaManifest,
 } from "../model/ManifestGrammar.js";
 import {
@@ -324,7 +325,6 @@ const UNSUPPORTED_JSON_SCHEMA_KEYWORDS = new Set([
   "prefixItems",
   "contains",
   "dependentSchemas",
-  "propertyNames",
   "unevaluatedProperties",
 ]);
 
@@ -471,6 +471,43 @@ export function validateJsonSchema(
       }
     }
     if (value["items"] !== undefined) visit(value["items"], `${pointer}/items`, depth + 1);
+    const names = value["propertyNames"];
+    if (names !== undefined) {
+      const at = `${pointer}/propertyNames`;
+      const keySchema = names as NonNullable<JsonSchema["propertyNames"]>;
+      if (
+        !keySchema ||
+        typeof keySchema !== "object" ||
+        Array.isArray(keySchema) ||
+        Object.keys(keySchema).some(key => !["pattern", "maxLength", "not"].includes(key)) ||
+        (keySchema.pattern === undefined && keySchema.not === undefined)
+      )
+        throw new ManifestParseError(
+          `${kind} '${name}' propertyNames requires pattern or not.enum, with optional maxLength`,
+          idx,
+          at,
+          "JSON_SCHEMA_UNSUPPORTED",
+        );
+      const { not, ...pattern } = keySchema;
+      if (
+        not !== undefined &&
+        (!not ||
+          typeof not !== "object" ||
+          Array.isArray(not) ||
+          Object.keys(not).join() !== "enum" ||
+          !Array.isArray(not.enum) ||
+          not.enum.length === 0 ||
+          not.enum.some(key => typeof key !== "string"))
+      )
+        throw new ManifestParseError(
+          `${kind} '${name}' propertyNames.not supports a non-empty string enum`,
+          idx,
+          `${at}/not`,
+          "JSON_SCHEMA_UNSUPPORTED",
+        );
+      if (not) visit(not, `${at}/not`, depth + 1);
+      visit(pattern, at, depth + 1);
+    }
     if (typeof value["additionalProperties"] === "object" && value["additionalProperties"] !== null) {
       visit(value["additionalProperties"], `${pointer}/additionalProperties`, depth + 1);
     } else if (value["additionalProperties"] !== undefined && typeof value["additionalProperties"] !== "boolean") {
