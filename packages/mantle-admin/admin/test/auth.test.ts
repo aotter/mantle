@@ -4,7 +4,7 @@ import { loadLanguage } from "../src/app/i18n";
 beforeAll(() => Promise.all([loadLanguage("zh-TW"), loadLanguage("ja")]));
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createElement } from "react";
+import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { prerender } from "react-dom/static";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -18,9 +18,14 @@ import {
   SignInButton,
   claimInFlight,
 } from "../src/features/auth/auth-views";
-import { SignInFlow, SIGN_IN_FLOW_INITIAL, signInFlowReducer } from "@aotter/mantle-ui/kit";
+import { SignInFlow, SIGN_IN_FLOW_INITIAL, signInFlowReducer, TooltipProvider } from "@aotter/mantle-ui/kit";
 import { signOut } from "../src/lib/auth";
 import { PreferencesProvider, markTheme, readInitialLanguage, resolveTheme } from "../src/app/preferences";
+
+// The standalone view fixtures use the same preferences and tooltip providers as AdminRoot.
+function AuthPreferences({ children, initialLanguage }: ComponentProps<typeof PreferencesProvider>) {
+  return createElement(PreferencesProvider, { initialLanguage }, createElement(TooltipProvider, null, children));
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -60,7 +65,7 @@ describe("sign-in", () => {
     }).catch(() => undefined);
     vi.stubGlobal("window", { location: { pathname: "/admin", search: "" } });
     const html = renderToStaticMarkup(createElement(QueryClientProvider, { client },
-      createElement(PreferencesProvider, { initialLanguage: "en" },
+      createElement(AuthPreferences, { initialLanguage: "en" },
         createElement(AdminRouterProvider, null, createElement(AdminApp))),
     ));
     expect(html).toContain("User: MrCorn");
@@ -74,7 +79,7 @@ describe("sign-in", () => {
       setItem: () => undefined,
     });
     const html = renderToStaticMarkup(
-      createElement(PreferencesProvider, { initialLanguage: readInitialLanguage() }, createElement(AccessDeniedView, { login: "MrCorn" })),
+      createElement(AuthPreferences, { initialLanguage: readInitialLanguage() }, createElement(AccessDeniedView, { login: "MrCorn" })),
     );
     expect(html).toContain("使用者：MrCorn");
     expect(html).not.toContain("GitHub:");
@@ -90,7 +95,7 @@ describe("sign-in", () => {
     const render = (pathname: string) => {
       vi.stubGlobal("window", { location: { pathname, search: "" } });
       return renderAll(createElement(QueryClientProvider, { client },
-        createElement(PreferencesProvider, { initialLanguage: readInitialLanguage() },
+        createElement(AuthPreferences, { initialLanguage: readInitialLanguage() },
           createElement(AdminRouterProvider, null, createElement(AdminApp))),
       ));
     };
@@ -108,7 +113,7 @@ describe("sign-in", () => {
     for (const pathname of ["/admin/oauth/consent", "/oauth/consent"]) {
       vi.stubGlobal("window", { location: { pathname, search } });
       const html = await renderAll(createElement(QueryClientProvider, { client },
-        createElement(PreferencesProvider, { initialLanguage: readInitialLanguage() }, createElement(AdminRouterProvider, null, createElement(AdminApp)))));
+        createElement(AuthPreferences, { initialLanguage: readInitialLanguage() }, createElement(AdminRouterProvider, null, createElement(AdminApp)))));
       expect(html, pathname).toContain("Cursor");
       expect(html, pathname).toContain('action="/oauth/consent"');
       expect(html, pathname).toContain("https://www.cursor.com");
