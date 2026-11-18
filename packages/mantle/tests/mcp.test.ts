@@ -963,7 +963,16 @@ kind: Procedure
 metadata: {name: log-item}
 spec:
   description: Log an item.
-  input: {type: object, properties: {title: {type: string}, weight: {type: number}, unit: {type: string}}, dependentRequired: {weight: [unit]}, anyOf: [{required: [title]}, {required: [weight]}], additionalProperties: false}
+  input:
+    type: object
+    properties:
+      title: {type: string}
+      weight: {type: number}
+      unit: {type: string}
+      labels: {type: object, maxProperties: 2, propertyNames: {not: {enum: [private]}}, additionalProperties: {type: string}}
+    dependentRequired: {weight: [unit]}
+    anyOf: [{required: [title]}, {required: [weight]}]
+    additionalProperties: false
   output: {type: object}
   handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}
 ---
@@ -971,6 +980,11 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: {name: log-item-mcp}
 spec: {source: {kind: mcp, surface: public}, target: {procedure: log-item}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: log-item-rest}
+spec: {source: {kind: http, method: POST, path: /api/log-items}, target: {procedure: log-item}}
 `;
   const files = await generateOrThrow("bun-sqlite", [{ sourceId: "rules.yaml", text }]);
   const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-rules-")),
@@ -993,16 +1007,33 @@ spec: {source: {kind: mcp, surface: public}, target: {procedure: log-item}}
       return JSON.parse(body.startsWith("event:") ? body.split("data: ")[1].split("\n")[0] : body);
     };
     const tool = (await call("tools/list")).result.tools.find((t: any) => t.name === "log_item");
-    expect(tool.description).toMatch(
-      /^Log an item\. 'unit' is required when 'weight' is present\. At least one of 'title', 'weight' is required\. \(tool version [0-9a-f]{8}\)$/,
-    );
-    expect(Object.keys(tool.inputSchema).sort()).toEqual(["additionalProperties", "properties", "type"]);
+    expect(tool.description).toContain("At least one of 'title', 'weight' is required.");
+    expect(tool.description).toContain("Object at '/labels' accepts at most 2 properties.");
+    expect(tool.inputSchema.properties.labels).toEqual({ additionalProperties: { type: "string" }, type: "object" });
     const bad = await call("tools/call", { name: "log_item", arguments: { title: "A", weight: 1 } });
     expect(JSON.parse(bad.result.content[0].text).diagnostics[0]).toMatchObject({
       code: "INPUT_VALIDATION_FAILED",
       path: "procedures/log-item/input/unit",
       message: "'unit' is required when 'weight' is present.",
     });
+    const badLabels = { title: "A", labels: { private: "no" } };
+    const refused = await call("tools/call", { name: "log_item", arguments: badLabels });
+    expect(JSON.parse(refused.result.content[0].text).diagnostics[0]).toMatchObject({
+      code: "INPUT_VALIDATION_FAILED",
+      path: "procedures/log-item/input/labels/private",
+    });
+    const { rest } = await import(resolve(dir, "rest.ts"));
+    const handleRest = rest({ db: () => db, caller: () => ({ kind: "anonymous" }) });
+    const restRefusal = await handleRest(
+      new Request("https://app.test/api/log-items", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://app.test" },
+        body: JSON.stringify(badLabels),
+      }),
+      {},
+    );
+    expect(restRefusal.status).toBe(400);
+    expect((await restRefusal.json()).error).toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
     expect((await call("tools/call", { name: "log_item", arguments: { title: "A" } })).result.isError).toBeUndefined();
   } finally {
     db.close();

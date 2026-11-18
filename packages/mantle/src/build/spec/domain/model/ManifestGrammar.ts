@@ -61,6 +61,13 @@ export type JsonSchema = {
   readonly readOnly?: boolean;
   readonly default?: unknown;
   readonly additionalProperties?: boolean | JsonSchema;
+  readonly minProperties?: number;
+  readonly maxProperties?: number;
+  readonly propertyNames?: {
+    readonly pattern?: string;
+    readonly maxLength?: number;
+    readonly not?: { readonly enum: readonly string[] };
+  };
   /** Standard JSON Schema keyword: help text for this property, shown
    *  under the admin-UI form field (`entry-edit-view.tsx`) and the
    *  row-operation dialog's bound-field label fallback
@@ -535,6 +542,15 @@ export const RESERVED_ENTRY_COLUMNS = ["id", "status", "version", "createdAt", "
  */
 export const EXPECTED_VERSION_PROPERTY = "expectedVersion" as const;
 /** Rules between an input object's fields: only View and Procedure input takes them, and AI tool catalogues advertise them as sentences. */
-export const INPUT_RULE_KEYWORDS = ["dependentRequired", "anyOf", "if", "then", "else"] as const;
+export const INPUT_RULE_KEYWORDS = [
+  "dependentRequired",
+  "anyOf",
+  "if",
+  "then",
+  "else",
+  "minProperties",
+  "maxProperties",
+  "propertyNames",
+] as const;
 
 export const RESERVED_PROCEDURE_INPUT_NAMES = [EXPECTED_VERSION_PROPERTY] as const;

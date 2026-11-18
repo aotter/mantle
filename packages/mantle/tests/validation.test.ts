@@ -96,7 +96,6 @@ test("unsupported validation declarations fail generation explicitly", () => {
     { type: "array", contains: { type: "string" } },
     { oneOf: [] },
     { uniqueItems: true },
-    { minProperties: 1 },
   ]) {
     expect(() => emitValidation(plan(input))).toThrow("Generated input validation does not support");
     const refused: string[] = [];
@@ -109,6 +108,7 @@ test("numeric validation keywords must be finite numbers, never generated source
   for (const input of [
     { type: "string", minLength: "0); throw Error('executed') //" },
     { type: "array", maxItems: -1 },
+    { type: "object", maxProperties: -1 },
     { type: "number", minimum: Infinity },
     { type: "number", multipleOf: 0 },
   ])
