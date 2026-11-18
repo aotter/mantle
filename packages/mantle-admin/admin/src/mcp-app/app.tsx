@@ -10,7 +10,7 @@ import {
 } from "react";
 import { createInteractionController, type InteractionController } from "@aotter/mantle-ui/controller";
 import { OperationPanel } from "@aotter/mantle-ui";
-import { Button, SchemaFields, applyFieldEdits } from "@aotter/mantle-ui/kit";
+import { Button, SchemaFields, Skeleton, applyFieldEdits } from "@aotter/mantle-ui/kit";
 import { useInteraction } from "@aotter/mantle-ui";
 import {
   nativeTimestamp,
@@ -40,7 +40,7 @@ import {
 import { web, type HostApi } from "./postmessage";
 import { cursorAfter, rowId, type ShownView } from "./app-tools";
 import { useLoadMore } from "../lib/use-load-more";
-import { Slot, useViewCellNames } from "../app/slots";
+import { HostLink, Slot, useViewCellNames } from "../app/slots";
 import type { CellProps } from "../app/slot-props";
 import type { HostRequestOutcome } from "../app/hooks";
 import { appLabels, type AppLabels } from "./locale";
@@ -87,16 +87,9 @@ export function appValue(
   }
   if (openLink && schema?.format === "uri" && typeof value === "string" && web(value)) {
     return (
-      <a
-        href={value}
-        className="underline"
-        onClick={event => {
-          event.preventDefault();
-          void openLink(value);
-        }}
-      >
+      <HostLink href={value} className="underline" openLink={openLink}>
         {value}
-      </a>
+      </HostLink>
     );
   }
   return renderDataValue(schema, value, language);
@@ -307,7 +300,16 @@ export function MantleApp(props: {
 
   if (!props.result)
     return (
-      <p className="text-muted-foreground p-4 text-sm">{props.cancelled ? labels.viewCancelled : labels.waiting}</p>
+      <div role="status" className="grid gap-2 p-4 text-sm text-muted-foreground">
+        {props.cancelled ? (
+          labels.viewCancelled
+        ) : (
+          <>
+            <span className="sr-only">{labels.waiting}</span>
+            <Skeleton aria-hidden className="h-8 w-full" />
+          </>
+        )}
+      </div>
     );
   // a Procedure's result has no rows: its page is shown for any result that is not a failure
   if (!rows && page !== undefined && !props.result.isError) return <div data-slot="app-page">{page}</div>;
@@ -361,10 +363,13 @@ export function MantleApp(props: {
   return (
     <CellEnv.Provider value={{ language, timeZone: props.timeZone, openLink }}>
       {notice}
-      {capabilities.downloadFile && tool ? (
+      {tool ? (
         <ExportRows
           labels={labels}
-          onExport={() => props.host.downloadFile(`${tool}.csv`, csvText(columns, rows), "text/csv")}
+          csv={() => csvText(columns, rows)}
+          onExport={
+            capabilities.downloadFile ? text => props.host.downloadFile(`${tool}.csv`, text, "text/csv") : undefined
+          }
         />
       ) : null}
       <ul ref={list} data-slot="app-rows" className="grid gap-2 p-3">
@@ -529,13 +534,15 @@ function MoreRows(props: {
   );
 }
 
-/** "Export CSV": the rows the App holds, with the columns shown, saved through the host; no server call. */
+/** Export the rows the App holds through the host or present a copyable CSV when it has no download capability. */
 function ExportRows(props: {
   readonly labels: AppLabels;
-  readonly onExport: () => Promise<HostRequestOutcome>;
+  readonly csv: () => string;
+  readonly onExport?: (csv: string) => Promise<HostRequestOutcome>;
 }): ReactNode {
   // `accepted` says no more than the host took the request, so it shows nothing; `unknown` is not reported as a failure
   const [state, setState] = useState<"idle" | "pending" | HostRequestOutcome>("idle");
+  const [copy, setCopy] = useState(false);
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
       <Button
@@ -543,9 +550,14 @@ function ExportRows(props: {
         variant="outline"
         size="sm"
         disabled={state === "pending"}
+        aria-expanded={props.onExport ? undefined : copy}
         onClick={() => {
+          if (!props.onExport) {
+            setCopy(open => !open);
+            return;
+          }
           setState("pending");
-          void props.onExport().then(setState);
+          void props.onExport(props.csv()).then(setState);
         }}
       >
         {props.labels.exportCsv}
@@ -556,6 +568,16 @@ function ExportRows(props: {
       >
         {state === "refused" ? props.labels.exportFailed : state === "unknown" ? props.labels.exportUnconfirmed : null}
       </span>
+      {copy && !props.onExport ? (
+        <textarea
+          aria-label={props.labels.exportCsv}
+          className="w-full rounded border bg-background p-2 font-mono text-xs"
+          readOnly
+          rows={3}
+          value={props.csv()}
+          onFocus={event => event.currentTarget.select()}
+        />
+      ) : null}
     </div>
   );
 }
