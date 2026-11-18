@@ -38,16 +38,17 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 document.body.innerHTML = `<form id="card" aria-busy="true" novalidate>
-<header><span class="upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m-4 4 4-4 4 4M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></span>
-<div><p class="eyebrow">Media library</p><h1>Upload a file</h1></div></header>
-<p class="hint">Add the original file to your media library.</p>
+<header><p class="eyebrow">Media library</p><h1>Upload a file</h1>
+<p class="hint">Add the original file to your media library.</p></header>
 <label id="purpose-row" hidden>Purpose <select id="purpose"></select></label>
 <div class="file-panel">
-<label class="file-picker">File <input id="file" type="file" required aria-describedby="file-details policy"></label>
+<label class="file-picker"><span class="file-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 17v-6m-3 3 3-3 3 3"/></svg></span>
+<span class="picker-title">Choose a file</span><span class="hint">Browse your device</span>
+<input id="file" type="file" required aria-label="File" aria-describedby="file-details policy"></label>
 <p id="file-details" class="file-details">No file selected</p>
 <p id="policy" class="hint"></p></div>
 <label id="alt-row" hidden>Alt text <span class="hint">A short description for people who cannot see the image.</span><input id="alt" type="text" maxlength="1000" placeholder="Describe the image"></label>
-<button id="upload" type="button" disabled>Upload</button>
+<div class="actions"><button id="upload" type="button" disabled>Upload</button></div>
 <progress id="progress" aria-label="Upload progress" max="1" value="0" hidden></progress>
 <p id="status" role="status"></p>
 <p class="footnote">Keep this card open until the upload finishes.</p>

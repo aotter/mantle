@@ -65,7 +65,8 @@ it.each([
 import {AppBridge,PostMessageTransport} from '@modelcontextprotocol/ext-apps/app-bridge';
 const frame=document.createElement('iframe');frame.sandbox='allow-scripts';document.body.append(frame);
 window.host={calls:[],messages:[]};
-const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{}});
+const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{theme:'light'}});
+window.host.bridge=bridge;
 bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : late ? "setTimeout(()=>void bridge.sendToolInput({arguments:{purpose:'cover',folder:'docs'}}),800);" : `void bridge.sendToolInput({arguments:{${choosePurpose ? "" : `purpose:'${purpose}',`}folder:'docs'}});`}};
 bridge.oncalltool=async params=>{window.host.calls.push(params);return (await fetch('/tool',{method:'POST',body:JSON.stringify(params)})).json();};
 bridge.onmessage=async params=>{window.host.messages.push(params);return {};};
@@ -227,6 +228,35 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         "rgba(0, 0, 0, 0)",
         "light dark",
       ]);
+      // The real host bridge changes the shared kit tokens, while neutral host styles leave the primary action branded.
+      for (const [theme, primary] of [
+        ["dark", "rgb(52, 80, 147)"],
+        ["light", "rgb(26, 48, 98)"],
+      ] as const) {
+        await page.evaluate(theme => (window as any).host.bridge.setHostContext({ theme }), theme);
+        await expect.poll(() => app.locator("html").getAttribute("data-theme")).toBe(theme);
+        expect(await upload.evaluate(button => getComputedStyle(button).backgroundColor)).toBe(primary);
+        expect(await upload.evaluate(button => getComputedStyle(button).color)).toBe("rgb(255, 255, 255)");
+      }
+      await page.evaluate(() =>
+        (window as any).host.bridge.setHostContext({
+          styles: {
+            variables: {
+              "--color-background-secondary": "rgb(230, 235, 240)",
+              "--color-text-primary": "rgb(20, 25, 30)",
+            },
+          },
+        }),
+      );
+      await expect
+        .poll(() => app.locator(".file-panel").evaluate(panel => getComputedStyle(panel).backgroundColor))
+        .toBe("rgb(230, 235, 240)");
+      expect(await upload.evaluate(button => getComputedStyle(button).backgroundColor)).toBe("rgb(26, 48, 98)");
+      // A single native file control covers the secondary picker surface; Upload remains a separate primary action.
+      expect(await app.locator('input[type="file"]').count()).toBe(1);
+      expect(await app.locator("button").count()).toBe(1);
+      await app.getByLabel("File", { exact: true }).focus();
+      expect(await app.locator(".file-picker").evaluate(picker => getComputedStyle(picker).outlineStyle)).toBe("solid");
       // the purpose came in the tool input, so no picker shows; the input accepts its types, or any file
       expect(await app.locator("#purpose-row").isHidden()).toBe(!choosePurpose);
       if (choosePurpose) await app.getByLabel("Purpose").selectOption("notes");
