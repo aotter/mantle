@@ -93,10 +93,10 @@ through Hyperdrive. These figures describe one small Neon compute and Worker pla
 
 Budget against the origin database's usable connection limit. Add the peak direct connections and the maximum
 origin connections from every pooler and Hyperdrive configuration. Reserve slots for migrations and administration.
-For example, a database with 108 usable slots and a 10-slot reserve has 98 slots for application traffic. A pooler
-allowed 40 and a Hyperdrive configuration allowed 30 leave 28 for direct clients and other pools.
-Hyperdrive's `origin_connection_limit` bounds its connections to PostgreSQL. The Worker's postgres.js `max` bounds
-the connections one client can create. See [Hyperdrive connection pooling](https://developers.cloudflare.com/hyperdrive/concepts/connection-pooling/).
+For example, a database with 108 usable slots and a 10-slot reserve has 98 slots for application traffic. Pool
+targets of 40 and 30 leave 28 slots on paper. Keep some of that capacity unused because Hyperdrive can temporarily
+exceed its configured origin pool limit. The Worker's postgres.js `max` limits how many connections one client
+can create. See [Hyperdrive connection pooling](https://developers.cloudflare.com/hyperdrive/concepts/connection-pooling/).
 
 ## How Mantle sends statements
 
