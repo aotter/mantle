@@ -1,13 +1,7 @@
 import { expect, test, vi } from "vitest";
+import { applyHostContext } from "@aotter/mantle-admin/mcp-app";
 import { APP_TOOLS } from "../admin/src/mcp-app/app-tools";
-import {
-  applyHostContext,
-  connectHost,
-  downloadName,
-  MESSAGE_LIMIT,
-  messageText,
-  type HostApi,
-} from "../admin/src/mcp-app/postmessage";
+import { connectHost, downloadName, MESSAGE_LIMIT, messageText, type HostApi } from "../admin/src/mcp-app/postmessage";
 
 // Adapter semantics only. The browser suite exercises these calls against the real
 // official App/AppBridge pair, not a second implementation of their wire protocol.
@@ -676,6 +670,7 @@ test("applyHostContext: dark as both .dark and data-theme, only spec style varia
   const doc = { documentElement: root } as unknown as Document;
   applyHostContext(
     {
+      locale: "zh-TW",
       theme: "dark",
       displayMode: "fullscreen",
       safeAreaInsets: { top: 10, right: 1, bottom: 20, left: 2 },
@@ -687,12 +682,14 @@ test("applyHostContext: dark as both .dark and data-theme, only spec style varia
           "--font-text-sm-size": "13px",
           "--font-weight-medium": "550",
           "--mantle-app-primary": "red",
+          "--mantle-safe-top": "99px",
           "--color-primary": "red",
         } as never,
       },
     },
     doc,
   );
+  expect(root).toMatchObject({ lang: "zh-TW" });
   expect(root.dataset).toEqual({ theme: "dark" });
   expect([...classes]).toEqual(["dark"]);
   expect(Object.fromEntries(properties)).toEqual({
@@ -700,6 +697,10 @@ test("applyHostContext: dark as both .dark and data-theme, only spec style varia
     "--border-radius-md": "4px",
     "--font-text-sm-size": "13px",
     "--font-weight-medium": "550",
+    "--mantle-safe-top": "10px",
+    "--mantle-safe-right": "1px",
+    "--mantle-safe-bottom": "20px",
+    "--mantle-safe-left": "2px",
   });
   // only a maximum height (the conversation): the host caps and clips the frame, so the App is not a scroll container and
   // its content sets the height (this asserted max-height and overflow: auto before #2003)
@@ -716,6 +717,10 @@ test("applyHostContext: dark as both .dark and data-theme, only spec style varia
   expect(style).toMatchObject({ maxHeight: "400px", height: "", overflow: "auto" });
   applyHostContext({ theme: "light" }, doc);
   expect([...classes]).toEqual([]);
+  expect(properties.get("--mantle-safe-top")).toBe("10px");
+  applyHostContext({ safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 } }, doc);
+  expect(properties.get("--mantle-safe-top")).toBe("0px");
+  expect(style.padding).toBe("0px 0px 0px 0px");
   // a fixed height (full screen, the side panel) bounds the root, which scrolls; it is also the measured size's bound
   applyHostContext({ containerDimensions: { height: 300 } }, doc);
   expect(style).toMatchObject({ height: "300px", maxHeight: "300px", overflow: "auto" });
