@@ -354,6 +354,7 @@ export function generate(input: GenerateInput): GenerateResult {
           `import * as DRIVER from "${driverModule(target)}";`,
           ...(names => (names.length ? [`import { ${names.join(", ")} } from "${base}internal/store";`] : []))([
             ...(stores ? ["createStore"] : []),
+            ...(hasHandlers ? ["handlerStore"] : []),
             ...(hasHandlers && target !== "cloudflare-d1" ? ["handlerTransaction"] : []),
           ]),
           `import { ${procedures.length ? "binds, bound" : "binds"} } from "${base}internal/binds";`,

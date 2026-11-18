@@ -15,7 +15,7 @@ import { tools } from "../generated/mcp.js";
 import { mcpAppCatalogues } from "../generated/admin-descriptors.js";
 import { handlers, recordOrders } from "./handlers.js";
 import { salesPage, searchPage, pageOptions } from "./pages.js";
-import type { Handlers } from "../generated/generated.js";
+import { store, type Handlers } from "../generated/generated.js";
 import { salesReportCatalogue } from "./mcp-report.js";
 
 let auth: ReturnType<typeof authLoader<ReturnType<typeof import("./auth.js").createAuth>>> | undefined;
@@ -79,7 +79,7 @@ export async function fetchService(request: Request, env: Env, context: Executio
       // Preserve the same post-commit effect for native Admin entry writers.
       if (response.ok && ["POST", "PATCH"].includes(request.method) && /^\/admin\/api\/entries(?:\/[^/]+)?$/.test(decodeURIComponent(url.pathname).replace(/\/$/, "")) && url.searchParams.get("collection")?.toLowerCase() === "orders") {
         const output = await response.clone().json() as { entry: { id: string; data: Record<string, unknown> } };
-        await recordOrders(env.DB, await caller(), [{ id: output.entry.id, ...output.entry.data }], request.method === "POST" ? "after_create" : "after_update");
+        await recordOrders(store(env.DB, await caller(), { handlers }), [{ id: output.entry.id, ...output.entry.data }], request.method === "POST" ? "after_create" : "after_update");
       }
       return respond(response);
     }
