@@ -301,6 +301,18 @@ it("loads the next page of a View through the host and appends its rows, and exp
     expect(await unconfirmed.count()).toBe(0);
     expect(await refused.count()).toBe(0);
     expect(await page.evaluate(() => (window as any).host.downloads)).toHaveLength(4);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?read-only`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    await page.evaluate(async () => {
+      await (window as any).host.bridge.sendToolResult({
+        content: [],
+        structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops" }] },
+        _meta: { "net.aotter.mantle/tool": "pending" },
+      });
+    });
+    await app.getByRole("button", { name: "匯出 CSV" }).click();
+    expect(await app.getByRole("textbox", { name: "匯出 CSV" }).inputValue()).toContain("Laptops");
+    expect(await page.evaluate(() => (window as any).host.downloads)).toEqual([]);
   } finally {
     await browser.close();
     await server.close();
@@ -853,7 +865,9 @@ it("renders an application's pages[].mcp page for its View's tool, not the rows,
         overflow: false,
       });
     }
-    await app.getByRole("link", { name: "Queue help" }).click();
+    const help = app.getByRole("link", { name: "Queue help" });
+    expect(await help.getAttribute("href")).toBeNull();
+    await help.press("Enter");
     await expect.poll(() => page.evaluate(() => (window as any).host.links)).toEqual(["https://example.test/help"]);
     const state = await page.evaluate(() => ({
       calls: (window as any).host.calls,

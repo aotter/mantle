@@ -131,7 +131,7 @@ describe("links", () => {
 
   it("is an anchor in the browser, and in a host opens http(s) through the host and shows any other target as text", () => {
     expect(renderToStaticMarkup(<AdminLink href="/admin/c/requests">Requests</AdminLink>)).toBe('<a href="/admin/c/requests">Requests</a>');
-    expect(inHost(<AdminLink href="https://example.com/a">Docs</AdminLink>)).toBe('<a href="https://example.com/a">Docs</a>');
+    expect(inHost(<AdminLink href="https://example.com/a">Docs</AdminLink>)).toBe('<a role="link" tabindex="0">Docs</a>');
     expect(inHost(<AdminLink href="/admin/c/requests">Requests</AdminLink>)).toBe("<span>Requests</span>");
   });
 

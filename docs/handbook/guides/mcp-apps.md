@@ -1066,6 +1066,9 @@ without that catalogue native row actions are absent. The generated test below
 supplies its own synthetic catalogue and checks rendering, not a real host's
 authorization flow or a completed action dialog.
 
+If you supply custom HTML to `adminMcpApps`, put the UTF-8 charset declaration
+first in `<head>`. Mantle inserts the catalogue after that declaration.
+
 The build check reads text; this test runs the App. `mantle generate --admin` writes
 `generated/admin-mcp-app.check.mjs`. After `npm run build`, run
 `node --test generated/admin-mcp-app.check.mjs` (the examples name it `npm test`;

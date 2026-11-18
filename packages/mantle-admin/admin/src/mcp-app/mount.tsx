@@ -1,7 +1,7 @@
 import { StrictMode, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Button } from "@aotter/mantle-ui/kit";
+import { Button, Skeleton } from "@aotter/mantle-ui/kit";
 import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps";
 import { connectHost, type HostApi } from "./postmessage";
 import { applyHostContext } from "../../../src/mcp-app.js";
@@ -158,9 +158,10 @@ function Root({ admin, listen }: { admin: AdminDefinition; listen: (handlers: Ho
     );
   if (!host || !adminHost || !transport)
     return (
-      <p role="status" className="p-4 text-sm">
-        Connecting to the MCP host…
-      </p>
+      <div role="status" className="p-4">
+        <span className="sr-only">Connecting to the MCP host…</span>
+        <Skeleton aria-hidden className="h-8 w-full" />
+      </div>
     );
   const hostTool = context?.toolInfo?.tool.name;
   // Explicit headers share the browser composition; omitted headers keep existing element-only MCP pages.
