@@ -10,7 +10,7 @@ import {
 } from "react";
 import { createInteractionController, type InteractionController } from "@aotter/mantle-ui/controller";
 import { OperationPanel } from "@aotter/mantle-ui";
-import { SchemaFields, applyFieldEdits } from "@aotter/mantle-ui/kit";
+import { Button, SchemaFields, applyFieldEdits } from "@aotter/mantle-ui/kit";
 import { useInteraction } from "@aotter/mantle-ui";
 import {
   nativeTimestamp,
@@ -375,15 +375,15 @@ export function MantleApp(props: {
             <li
               key={id ?? index}
               aria-current={focused && rowId(row) === focused.id ? "true" : undefined}
-              className="aria-[current=true]:ring-ring grid gap-2 rounded-md border p-3 text-sm aria-[current=true]:ring-2"
+              className="aria-[current=true]:ring-ring grid min-w-0 gap-3 rounded-lg border bg-card p-3 text-sm text-card-foreground aria-[current=true]:ring-2"
             >
-              <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-3 gap-y-1">
+              <dl className="grid grid-cols-[minmax(5rem,auto)_minmax(0,1fr)] gap-x-3 gap-y-1">
                 {columns.map(field => (
                   <div key={field} className="contents">
                     <dt className="text-muted-foreground">
                       {columnLabel(field, view.columns[field], language, labels)}
                     </dt>
-                    <dd className="break-words">
+                    <dd className="min-w-0 break-words">
                       <ViewCell
                         tool={tool}
                         column={field}
@@ -395,16 +395,17 @@ export function MantleApp(props: {
                 ))}
               </dl>
               {actions.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap justify-end gap-2 border-t pt-2">
                   {actions.map(action => {
                     const title = resolveLocalizedText(action.title, language) ?? action.capability;
                     return (
-                      <button
+                      <Button
                         key={action.capability}
                         type="button"
                         // Every row repeats the same buttons; name the row too.
                         aria-label={id ? `${title}: ${id}` : undefined}
-                        className="rounded-md border px-3 py-1 font-medium"
+                        variant="outline"
+                        size="sm"
                         onClick={() => {
                           // a form is no inline content: full screen, asked within this click; it opens either way
                           props.expand?.();
@@ -412,7 +413,7 @@ export function MantleApp(props: {
                         }}
                       >
                         {title}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
@@ -423,9 +424,9 @@ export function MantleApp(props: {
       </ul>
       {limit !== null ? (
         <div className="px-3 pb-3">
-          <button type="button" className="rounded-md border px-3 py-1 text-sm font-medium" onClick={props.expand}>
+          <Button type="button" variant="outline" size="sm" onClick={props.expand}>
             {labels.moreRows.replace("{count}", `${rows.length - limit}${cursor !== undefined ? "+" : ""}`)}
-          </button>
+          </Button>
         </div>
       ) : call ? (
         <MoreRows
@@ -511,9 +512,10 @@ function MoreRows(props: {
         </p>
       ) : null}
       {props.hasMore ? (
-        <button
+        <Button
           type="button"
-          className="rounded-md border px-3 py-1 text-sm font-medium"
+          variant="outline"
+          size="sm"
           disabled={props.more === "loading"}
           onClick={() => {
             start();
@@ -521,7 +523,7 @@ function MoreRows(props: {
           }}
         >
           {props.labels.loadMore}
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -536,9 +538,10 @@ function ExportRows(props: {
   const [state, setState] = useState<"idle" | "pending" | HostRequestOutcome>("idle");
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
-      <button
+      <Button
         type="button"
-        className="rounded-md border px-3 py-1 text-sm font-medium"
+        variant="outline"
+        size="sm"
         disabled={state === "pending"}
         onClick={() => {
           setState("pending");
@@ -546,7 +549,7 @@ function ExportRows(props: {
         }}
       >
         {props.labels.exportCsv}
-      </button>
+      </Button>
       <span
         role="status"
         className={state === "refused" ? "text-destructive text-sm" : "text-muted-foreground text-sm"}

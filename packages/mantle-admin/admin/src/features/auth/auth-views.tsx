@@ -1,7 +1,6 @@
 import * as React from "react";
 import type { OAuthConsentInfo, OAuthConsentRequest } from "../../../../src/types/auth.js";
 import { useQuery } from "@tanstack/react-query";
-import { AuthCard } from "@aotter/mantle-ui/kit";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
 import { SignInButton, SignInFlow } from "@aotter/mantle-ui/kit";
@@ -9,10 +8,9 @@ import { Skeleton } from "@aotter/mantle-ui/kit";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { authMethodsQueryOptions } from "../../lib/queries";
-import { ThemeToggle } from "../../layout/preference-controls";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
-import { GateError, GateLoading } from "./gate-views";
+import { AdminAuthCard, GateError, GateLoading } from "./gate-views";
 import { Slot } from "../../app/slots";
 import type { SignInMethod, SignInProps } from "../../app/slot-props";
 
@@ -69,7 +67,7 @@ export function SignInView(): React.ReactElement {
   const methods = useQuery<SignInMethod[]>(authMethodsQueryOptions());
 
   return (
-    <AuthCard action={<ThemeToggle />}>
+    <AdminAuthCard>
       <CardHeader>
         <CardDescription>{t(language, "auth.signIn.eyebrow")}</CardDescription>
         <CardTitle className="text-xl">
@@ -99,7 +97,7 @@ export function SignInView(): React.ReactElement {
           />
         )}
       </CardContent>
-    </AuthCard>
+    </AdminAuthCard>
   );
 }
 
@@ -157,7 +155,7 @@ export function OAuthConsentView(): React.ReactElement {
   if (consent.isError) return <GateError error={consent.error} />;
   if (!consent.data) {
     return (
-      <AuthCard action={<ThemeToggle />} wide>
+      <AdminAuthCard wide>
         <CardHeader>
           <CardDescription>{t(language, "oauth.consent.eyebrow")}</CardDescription>
           <CardTitle className="text-xl">
@@ -165,13 +163,13 @@ export function OAuthConsentView(): React.ReactElement {
           </CardTitle>
           <CardDescription>{t(language, "oauth.consent.invalidBody")}</CardDescription>
         </CardHeader>
-      </AuthCard>
+      </AdminAuthCard>
     );
   }
 
   const destination = new URL(consent.data.redirectUri);
   return (
-    <AuthCard action={<ThemeToggle />} wide>
+    <AdminAuthCard wide>
       <CardHeader>
         <CardDescription>{t(language, "oauth.consent.eyebrow")}</CardDescription>
         <CardTitle className="text-xl">
@@ -238,18 +236,18 @@ export function OAuthConsentView(): React.ReactElement {
           </SignInButton>
         </form>
       </CardContent>
-    </AuthCard>
+    </AdminAuthCard>
   );
 }
 
 /** Members can manage their own grants without access to admin Admin APIs. */
 export function ConnectedAppsPage(): React.ReactElement {
   return (
-    <AuthCard action={<ThemeToggle />} wide>
+    <AdminAuthCard wide>
       <CardContent className="pt-6">
         <ConnectedAppsView />
       </CardContent>
-    </AuthCard>
+    </AdminAuthCard>
   );
 }
 

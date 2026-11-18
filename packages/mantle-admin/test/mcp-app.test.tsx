@@ -216,7 +216,8 @@ describe("MantleApp", () => {
     expect(html).toContain("已送出");
     expect(html).toContain("審核請購");
     expect(render({ result: null, locale: "zh-Hans-CN" })).toContain("正在等待结果");
-    expect(render({ result: null, locale: "fr" })).toContain("Waiting for results");
+    expect(render({ result: null, locale: "fr" })).toContain("En attente des résultats");
+    expect(render({ result: null, locale: "und" })).toContain("Waiting for results");
   });
 
   it("shows a View the catalog does not describe as its rows, and a failed or cancelled View instead of waiting", () => {

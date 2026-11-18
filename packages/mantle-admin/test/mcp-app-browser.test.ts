@@ -167,6 +167,10 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
         .evaluate(node => getComputedStyle(node).backgroundColor),
     ).toBe("rgb(200, 210, 220)");
     expect(await app.locator("body").evaluate(node => getComputedStyle(node).color)).toBe("rgb(1, 2, 3)");
+    // The host can change language mid-form without resetting the draft.
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "ja" }));
+    await app.getByRole("button", { name: "実行", exact: true }).waitFor();
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "zh-TW" }));
     await app.getByRole("button", { name: "執行", exact: true }).click();
     await page.waitForFunction(() => (window as any).host.calls.length >= 2);
     const state = await page.evaluate(() => ({
@@ -212,8 +216,11 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     // a fixed height bounds the reported size too
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { height: 120 } }));
     await expect.poll(() => page.evaluate(() => (window as any).host.sizes.at(-1).height)).toBe(120);
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "ar" }));
+    await expect.poll(() => app.locator("html").getAttribute("dir")).toBe("rtl");
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "en", theme: "light" }));
     await expect.poll(() => app.locator("html").getAttribute("lang")).toBe("en");
+    await expect.poll(() => app.locator("html").getAttribute("dir")).toBe("ltr");
     await expect.poll(() => app.locator("html").getAttribute("data-theme")).toBe("light");
   } finally {
     await browser.close();

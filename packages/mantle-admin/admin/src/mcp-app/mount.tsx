@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Button } from "@aotter/mantle-ui/kit";
 import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps";
 import { applyHostContext, connectHost, type HostApi } from "./postmessage";
 import { readCatalog, type ToolResult } from "../../../src/app/bridge";
@@ -12,6 +13,7 @@ import { CustomPage } from "../app/custom-page";
 import type { AdminDefinition } from "../app/define-admin";
 import { MantleApp } from "./app";
 import { appLabels } from "./locale";
+import { ADMIN_LANGUAGES, normalizeLanguage } from "../app/languages";
 
 declare const __MANTLE_VERSION__: string;
 
@@ -103,7 +105,11 @@ function Root({ admin, listen }: { admin: AdminDefinition; listen: (handlers: Ho
   const fits =
     !scroll && (mode === undefined || mode === "inline") && !!context?.availableDisplayModes?.includes("fullscreen");
   useEffect(() => {
-    if (context) applyHostContext(context, document, { scroll: !fits });
+    if (context) {
+      applyHostContext(context, document, { scroll: !fits });
+      const language = normalizeLanguage(context.locale);
+      document.documentElement.dir = ADMIN_LANGUAGES.find(item => item.value === language)?.direction ?? "ltr";
+    }
   }, [context, fits]);
   // a host that sends no theme gets the system's: the same `.dark` class a host theme sets, so tokens and `dark:` follow it
   const hostTheme = context?.theme;
@@ -183,9 +189,9 @@ function Root({ admin, listen }: { admin: AdminDefinition; listen: (handlers: Ho
       <span role="status" className="text-muted-foreground text-xs">
         {refused ? labels.displayRefused : null}
       </span>
-      <button type="button" className="rounded-md border px-3 py-1 text-xs" onClick={() => request(next)}>
+      <Button type="button" variant="outline" size="sm" onClick={() => request(next)}>
         {next === "fullscreen" ? labels.fullscreen : labels.toConversation}
-      </button>
+      </Button>
     </div>
   ) : null;
   return (

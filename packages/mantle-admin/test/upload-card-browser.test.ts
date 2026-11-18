@@ -25,6 +25,8 @@ const transparent = (html: HTMLElement) => [
 it.each([
   {},
   { localeSwitch: true },
+  { commitRetry: true },
+  { rejectedCommit: true },
   { tool: "upload_to_folder", forward: ["folder"] },
   { forward: ["folder"], inputTimeoutMs: 300, silent: true },
   { forward: ["folder"], inputTimeoutMs: 300, late: true },
@@ -38,6 +40,8 @@ it.each([
     anyFile,
     choosePurpose,
     localeSwitch,
+    commitRetry,
+    rejectedCommit,
     ...options
   }: {
     tool?: string;
@@ -48,6 +52,8 @@ it.each([
     anyFile?: boolean;
     choosePurpose?: boolean;
     localeSwitch?: boolean;
+    commitRetry?: boolean;
+    rejectedCommit?: boolean;
   }) => {
     anyFile ||= choosePurpose;
     const TOOL = options.tool ?? "open_media_upload",
@@ -69,7 +75,7 @@ it.each([
 import {AppBridge,PostMessageTransport} from '@modelcontextprotocol/ext-apps/app-bridge';
 const frame=document.createElement('iframe');frame.sandbox='allow-scripts';document.body.append(frame);
 window.host={calls:[],messages:[]};
-const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{theme:'light',locale:${JSON.stringify(localeSwitch ? "zh-Hant-HK" : "en")}}});
+const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{${commitRetry ? "" : "theme:'light',"}locale:${JSON.stringify(localeSwitch ? "zh-Hant-HK" : "en")}}});
 window.host.bridge=bridge;
 bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : late ? "setTimeout(()=>void bridge.sendToolInput({arguments:{purpose:'cover',folder:'docs'}}),800);" : `void bridge.sendToolInput({arguments:{${choosePurpose ? "" : `purpose:'${purpose}',`}folder:'docs'}});`}};
 bridge.oncalltool=async params=>{window.host.calls.push(params);
@@ -141,6 +147,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
     const storageReleased = new Promise<void>(resolve => {
       releaseStorage = resolve;
     });
+    let commitRequests = 0;
     const server = createServer(async (request, response) => {
       const url = request.url ?? "/";
       if (url === "/release-storage") {
@@ -175,8 +182,32 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         try {
           if (name !== TOOL || folder !== (options.forward ? "docs" : undefined))
             throw new Error(`unexpected call ${name} ${folder}`);
+          if (rejectedCommit && args.uploadId) {
+            objects.delete(String(args.uploadId));
+            response.end(
+              JSON.stringify({
+                isError: true,
+                content: [],
+                structuredContent: {
+                  diagnostics: [{ code: "MEDIA_MIME_REJECTED", message: "The stored file has the wrong MIME type." }],
+                },
+              }),
+            );
+            return;
+          }
           const out = (await uploadMedia(library, policies, args, { apps: true })) as Record<string | symbol, unknown>;
           const [data, meta] = Symbol.for("net.aotter.mantle/result") in out ? [out.data, out._meta] : [out, undefined];
+          if (commitRetry && args.uploadId && ++commitRequests === 1) {
+            response.end(
+              JSON.stringify({
+                isError: true,
+                content: [],
+                structuredContent: { diagnostics: [{ code: "OUTCOME_UNKNOWN", message: "The asset may have saved." }] },
+              }),
+            );
+            return;
+          }
+
           response.end(
             JSON.stringify({
               content: [{ type: "text", text: JSON.stringify(data) }],
@@ -222,7 +253,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       headless: true,
     });
     try {
-      const page = await browser.newPage();
+      const page = await browser.newPage({ colorScheme: commitRetry ? "dark" : "light" });
       const errors: string[] = [];
       page.on("pageerror", error => errors.push(error.message));
       await page.goto(origin);
@@ -243,7 +274,12 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         expect(await app.locator(".footnote").textContent()).toContain("上傳完成前");
         expect(await app.locator("#policy").textContent()).toContain("位元組");
         await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "fr-FR" }));
-        await expect.poll(() => app.locator("h1").textContent()).toBe("Upload a file");
+        await expect.poll(() => app.locator("h1").textContent()).toBe("Téléverser un fichier");
+        expect(await app.locator(".footnote").textContent()).toContain("fin du téléversement");
+      }
+      if (commitRetry) {
+        expect(await app.locator("html").getAttribute("data-theme")).toBe("dark");
+        expect(await upload.evaluate(button => getComputedStyle(button).backgroundColor)).toBe("rgb(52, 80, 147)");
       }
       expect(await upload.isDisabled()).toBe(true);
       expect(await app.locator("#file-details").textContent()).toBe("No file selected");
@@ -280,25 +316,24 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       // A single native file control covers the secondary picker surface; Upload remains a separate primary action.
       expect(await app.locator('input[type="file"]').count()).toBe(1);
       expect(await app.locator("button").count()).toBe(1);
-      await app.getByLabel("File", { exact: true }).focus();
+      const filePicker = app.getByLabel(localeSwitch ? "Fichier" : "File", { exact: true });
+      await filePicker.focus();
       expect(await app.locator(".file-picker").evaluate(picker => getComputedStyle(picker).outlineStyle)).toBe("solid");
       // the purpose came in the tool input, so no picker shows; the input accepts its types, or any file
       expect(await app.locator("#purpose-row").isHidden()).toBe(!choosePurpose);
       if (choosePurpose) await app.getByLabel("Purpose").selectOption("notes");
-      expect(await app.getByLabel("File").getAttribute("accept")).toBe(anyFile ? "" : "image/png,image/jpeg");
+      expect(await filePicker.getAttribute("accept")).toBe(anyFile ? "" : "image/png,image/jpeg");
       const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(56)]),
         pdf = Buffer.from("%PDF-1.7\n%%EOF\n");
       if (anyFile) {
         // alt text is for images: a PDF gets none
-        await app.getByLabel("File").setInputFiles({ name: "report.pdf", mimeType: "application/pdf", buffer: pdf });
+        await filePicker.setInputFiles({ name: "report.pdf", mimeType: "application/pdf", buffer: pdf });
         expect(await app.locator("#alt-row").isHidden()).toBe(true);
         expect(await app.locator("#file-details").textContent()).toContain("report.pdf");
         expect(await app.getByLabel("Purpose").inputValue()).toBe("notes");
       } else {
         // a type the purpose does not take is refused before any call
-        await app
-          .getByLabel("File")
-          .setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
+        await filePicker.setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
         expect(await app.locator("#alt-row").isHidden()).toBe(true);
         await upload.click();
         await expect.poll(() => app.locator("#status").textContent()).toContain("takes image/png or image/jpeg");
@@ -339,6 +374,17 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         expect(await app.locator("#status").textContent()).toBe("正在儲存…");
         await page.evaluate(() => (window as any).host.releaseCommit());
       }
+      if (commitRetry) {
+        await expect.poll(() => app.locator("#status").textContent()).toBe("The asset may have saved.");
+        expect(await app.locator("#file").isDisabled()).toBe(true);
+        await upload.click();
+      }
+      if (rejectedCommit) {
+        await expect.poll(() => app.locator("#status").textContent()).toBe("The stored file has the wrong MIME type.");
+        await expect.poll(() => app.locator("#file").isEnabled()).toBe(true);
+        expect(await upload.textContent()).toBe("Try again");
+        return;
+      }
       await app.getByText(localeSwitch ? /^上傳完成。素材 ID：/ : /^Uploaded\. Asset id /).waitFor({ timeout: 10_000 });
       await expect.poll(() => upload.textContent()).toBe(localeSwitch ? "已上傳" : "Uploaded");
       const id = (await app.locator("form").getAttribute("data-asset"))!;
@@ -377,6 +423,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
               },
         },
         { name: TOOL, arguments: { uploadId: id, purpose, ...extra } },
+        ...(commitRetry ? [{ name: TOOL, arguments: { uploadId: id, purpose, ...extra } }] : []),
       ]);
       expect(messages).toEqual([
         {
@@ -393,7 +440,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       ]);
       if (localeSwitch) {
         await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "de-DE" }));
-        await expect.poll(() => app.locator("#status").textContent()).toBe(`Uploaded. Asset id ${id}.`);
+        await expect.poll(() => app.locator("#status").textContent()).toBe(`Hochgeladen. Medien-ID: ${id}.`);
         expect(await app.locator("#file-details").textContent()).toContain(filename);
       }
       // a finished upload offers no second upload of the same file

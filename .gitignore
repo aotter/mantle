@@ -39,3 +39,7 @@ coverage/
 packages/mantle/tests/apps/.generated/
 packages/mantle/results/
 packages/mantle/tests/.mcp-types-*/
+
+# Standalone auth presentation generated from Admin locales and mantle-ui tokens.
+/packages/mantle/src/auth/consent-presentation-generated.ts
+/packages/mantle-admin/admin/src/mcp-app/admin-labels.generated.ts

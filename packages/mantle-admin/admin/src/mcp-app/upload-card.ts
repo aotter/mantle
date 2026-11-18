@@ -6,8 +6,9 @@
  */
 import { applyHostContext, connectHost, type HostApi } from "./postmessage";
 import { uploadLabels, type UploadLabels } from "./locale";
+import { ADMIN_LANGUAGES, normalizeLanguage } from "../app/languages";
 import { forwardedInput } from "./forwarded-input";
-import { outputOf, type ToolResult } from "../../../src/app/bridge.js";
+import { diagnosticsOf, outputOf, type ToolResult } from "../../../src/app/bridge.js";
 
 /** `@aotter/mantle/media`'s `UPLOAD_META`: the result `_meta` key with the upload targets. */
 const UPLOAD_META = "net.aotter.mantle/upload";
@@ -75,6 +76,7 @@ class CardError extends Error {
     super(text());
   }
 }
+let pending: { uploadId: string; purpose: Purpose } | undefined;
 let statusText: () => string = () => "";
 let phase: "preparing" | "uploading" | "saving" = "preparing";
 let host: HostApi | undefined,
@@ -90,10 +92,7 @@ const say = (text: string | (() => string), alert = false) => {
 };
 /** The diagnostic message of a failed call, else `fallback`. */
 const failure = (result: ToolResult, fallback: keyof UploadLabels) => {
-  const out = outputOf(result),
-    diagnostic =
-      record(out) && Array.isArray(out.diagnostics) && record(out.diagnostics[0]) ? out.diagnostics[0] : undefined;
-  const message = diagnostic?.message;
+  const message = diagnosticsOf(result)[0]?.message;
   return new CardError(typeof message === "string" ? () => message : () => t(fallback));
 };
 const current = () => purposes.find(p => p.name === (asked ?? select.value));
@@ -119,7 +118,7 @@ function render() {
   select.replaceChildren(...names.map(name => new Option(name, name)));
   if (names.includes(selected)) select.value = selected;
   $("purpose-row").hidden = !!asked || names.length < 2;
-  const purpose = current();
+  const purpose = pending?.purpose ?? current();
   // `*/*` is no `accept` token: an empty one offers every file
   const accepts = purpose?.required.length === 1 ? purpose.required[0]!.split(",") : [];
   file.accept = accepts.includes("*/*") ? "" : accepts.join(",");
@@ -134,7 +133,7 @@ function render() {
     : purpose.required.length !== 1
       ? t("multiVariants")
       : token
-        ? `${typeOf(picked!)} · ${t("upTo", { size: sizeOf(purpose.maxBytes[token] ?? 0) })}`
+        ? t("upTo", { size: sizeOf(purpose.maxBytes[token] ?? 0) })
         : accepts.includes("*/*")
           ? `${t("anyFile")} · ${t("upTo", { size: sizeOf(purpose.maxBytes["*/*"] ?? 0) })}`
           : accepts
@@ -146,7 +145,7 @@ function render() {
                 }),
               )
               .join(" · ");
-  file.disabled = select.disabled = alt.disabled = busy || done;
+  file.disabled = select.disabled = alt.disabled = busy || done || pending !== undefined;
   button.disabled = busy || done || !picked || !host?.call || !purpose;
   button.textContent = done ? t("uploaded") : busy ? t(phase) : failed ? t("retry") : t("upload");
   form.setAttribute("aria-busy", String(busy || !host || !purposes.length));
@@ -219,26 +218,44 @@ async function upload(picked: File, purpose: Purpose, call: NonNullable<HostApi[
   progress.hidden = false;
   progress.value = 0;
   await put(targets[0]!, picked);
+  pending = { uploadId, purpose };
+  return commit(call, pending);
+}
+
+async function commit(call: NonNullable<HostApi["call"]>, upload: NonNullable<typeof pending>) {
   phase = "saving";
   say(() => t("committing"));
   render();
-  const committed = await call(TOOL, { uploadId, purpose: purpose.name });
+  const committed = await call(TOOL, { uploadId: upload.uploadId, purpose: upload.purpose.name });
   const asset = outputOf(committed);
-  if (committed.isError || !record(asset) || typeof asset.id !== "string") throw failure(committed, "commitFailed");
+  if (committed.isError) {
+    const code = diagnosticsOf(committed)[0]?.code;
+    // An unknown outcome can already have produced the asset. Ask the server again with the same ID.
+    if (
+      code === "MEDIA_UPLOAD_EXPIRED" ||
+      code === "MEDIA_OBJECT_NOT_FOUND" ||
+      code === "MEDIA_MIME_REJECTED" ||
+      code === "MEDIA_VARIANT_SIZE_EXCEEDED"
+    )
+      pending = undefined;
+    throw failure(committed, "commitFailed");
+  }
+  if (!record(asset) || typeof asset.id !== "string") throw failure(committed, "commitFailed");
+  pending = undefined;
   return asset as Record<string, unknown> & { id: string };
 }
 
 // a click, not a form submission: a sandbox without allow-forms never dispatches submit
 button.addEventListener("click", () => {
   const picked = file.files?.[0],
-    purpose = current(),
+    purpose = pending?.purpose ?? current(),
     call = host?.call && bind(host.call);
   if (!picked || !purpose || !call || busy || done) return;
   busy = true;
   phase = "preparing";
   say(() => t("preparing"));
   render();
-  void upload(picked, purpose, call)
+  void (pending ? commit(call, pending) : upload(picked, purpose, call))
     .then(
       async asset => {
         const text = t("completionMessage", { filename: picked.name, id: asset.id, purpose: purpose.name });
@@ -286,20 +303,31 @@ function readPurposes() {
   );
 }
 
+const preferredDark = window.matchMedia("(prefers-color-scheme: dark)");
+let hasHostTheme = false;
+function followSystemTheme() {
+  if (!hasHostTheme) applyHostContext({ theme: preferredDark.matches ? "dark" : "light" });
+}
+preferredDark.addEventListener("change", followSystemTheme);
+followSystemTheme();
+
 function context(value: Parameters<typeof applyHostContext>[0]) {
-  if (value.locale !== undefined) labels = uploadLabels(value.locale);
+  if (value.locale !== undefined) {
+    labels = uploadLabels(value.locale);
+    const language = normalizeLanguage(value.locale);
+    document.documentElement.dir = ADMIN_LANGUAGES.find(item => item.value === language)?.direction ?? "ltr";
+  }
+  if (value.theme !== undefined) hasHostTheme = true;
   applyHostContext(value);
   render();
 }
 
 connectHost(
   {
-    ready: (connected, context) => {
+    ready: (connected, initial) => {
       host = connected;
       forwarded.connected();
-      if (context.locale !== undefined) labels = uploadLabels(context.locale);
-      applyHostContext(context);
-      render();
+      context(initial);
       readPurposes();
     },
     input: args => {
