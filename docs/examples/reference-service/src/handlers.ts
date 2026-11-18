@@ -1,10 +1,9 @@
 import { ContractError, type Caller } from "@aotter/mantle/contracts";
-import { store, type Handlers } from "../generated/generated.js";
+import { store, type Handlers, type HandlerStore } from "../generated/generated.js";
 
 /** The old after hook was post-commit, best effort, and ran with the actual caller. */
-export async function recordOrders(db: Parameters<typeof store>[0], caller: Caller, rows: readonly Record<string, unknown>[], kind: "after_create" | "after_update") {
+export async function recordOrders(data: HandlerStore, rows: readonly Record<string, unknown>[], kind: "after_create" | "after_update") {
   try {
-    const data = store(db, caller, { handlers });
     await data.batch(rows.map(row => data.collection("activity").insert({
       kind, subject: String(row.id), detail: `${String(row.orderStatus ?? row.orderstatus)} x${String(row.qty)}`,
     })));
@@ -19,14 +18,13 @@ export const handlers: Handlers = {
     const row = await data.collection("items").update(id, { name }, { lock: expectedVersion });
     return { id: row.id, version: row.version, sku: row.sku, name: row.name, priceCents: row.pricecents, stock: row.stock };
   },
-  "place-order": async ({ db, caller, store: data }, input) => {
+  "place-order": async ({ store: data }, input) => {
     // The declared stock check refuses an oversell as a CONFLICT naming the check.
     const output = await data.procedures["place-order-write"](input);
-    await recordOrders(db, caller, output.results[0]!, "after_create");
+    await recordOrders(data, output.results[0]!, "after_create");
     return output;
   },
-  "cancel-order": async ({ db, caller }, { orderId, expectedVersion }) => {
-    const data = store(db, caller, { handlers });
+  "cancel-order": async ({ store: data }, { orderId, expectedVersion }) => {
     const orders = data.collection("orders"), items = data.collection("items");
     const order = await orders.first({ where: { id: orderId, orderstatus: "placed" } });
     const item = order ? await items.findById(order.itemid) : null;
@@ -35,7 +33,7 @@ export const handlers: Handlers = {
       orders.update(orderId, { orderstatus: "cancelled" }, { lock: expectedVersion }),
       items.update(item.id, { stock: item.stock + order.qty }, { lock: item.version }),
     ]);
-    await recordOrders(db, caller, [{ ...order, orderstatus: "cancelled" }], "after_update");
+    await recordOrders(data, [{ ...order, orderstatus: "cancelled" }], "after_update");
     return { id: orderId, orderStatus: "cancelled" };
   },
 };

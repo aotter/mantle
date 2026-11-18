@@ -145,22 +145,48 @@ interface Prepared {
 /** Handles of open Store transactions (the `db` their callbacks receive). */
 const transactionHandles = new WeakSet<object>();
 
+type HandlerStoreFields = { collection: unknown; batch: unknown; views: unknown; procedures: unknown };
+
+/** Expose only the handler Store methods. The full Store's transaction callback also supplies the driver handle. */
+export function handlerStore<S extends HandlerStoreFields>(store: S): Pick<S, keyof HandlerStoreFields> {
+  return { collection: store.collection, batch: store.batch, views: store.views, procedures: store.procedures };
+}
+
+type HandlerTransaction<Native extends boolean> = <R>(
+  fn: (ctx: { store: any } & (Native extends true ? { db: any } : unknown)) => Promise<R>,
+) => Promise<R>;
+
 /**
  * A ref handler's `ctx.transaction` on drivers with interactive transactions: it opens one on the handler's Store, or
  * joins the one its handle already runs in (a handler called through `tx.procedures`, or through a Store or generated
  * call given the transaction's handle), so the handler need not know.
  */
-export function handlerTransaction(store: object, db: unknown, warnNativeDatabase?: () => void) {
+export function handlerTransaction<Native extends boolean>(
+  store: object,
+  db: unknown,
+  native: Native,
+): HandlerTransaction<Native>;
+export function handlerTransaction(
+  store: object,
+  db: unknown,
+  warnNativeDatabase?: () => void,
+): HandlerTransaction<true>;
+export function handlerTransaction(store: object, db: unknown, native?: boolean | (() => void)) {
   const open = (store as { transaction: (fn: (tx: unknown, db: unknown) => Promise<unknown>) => Promise<unknown> })
     .transaction;
-  const context = (store: unknown, db: unknown) => ({
-    store,
-    get db() {
-      warnNativeDatabase?.();
-      return db;
-    },
-  });
-  return <R>(fn: (ctx: { store: any; db: any }) => Promise<R>): Promise<R> =>
+  const context = (store: unknown, db: unknown) => {
+    if (typeof native === "boolean")
+      return { store: handlerStore(store as HandlerStoreFields), ...(native ? { db } : {}) };
+    // Generated warning-phase code still passes its warning callback, or omits it for declared handlers.
+    return {
+      store,
+      get db() {
+        native?.();
+        return db;
+      },
+    };
+  };
+  return <R>(fn: (ctx: any) => Promise<R>): Promise<R> =>
     transactionHandles.has(db as object)
       ? fn(context(store, db))
       : (open((tx, txDb) => fn(context(tx, txDb))) as Promise<R>);

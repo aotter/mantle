@@ -21,18 +21,20 @@ export function emitHandlers(
   }
   declarations.push(
     'export type HandlerStore = Pick<ReturnType<typeof makeStore>, "collection" | "batch" | "views" | "procedures">;',
+    "type HandlerData<Native extends boolean> = { readonly store: HandlerStore } & (Native extends true ? { readonly db: Database } : unknown);",
     // D1 has no interactive transactions, so its handlers get no `transaction`: using one there fails typecheck.
-    `export interface HandlerContext { readonly caller: Caller; readonly db: Database; readonly store: HandlerStore;${interactive ? " readonly transaction: <R>(fn: (ctx: { readonly store: HandlerStore; readonly db: Database }) => Promise<R>) => Promise<R>;" : ""} }`,
+    `export type HandlerContext<Native extends boolean = false> = HandlerData<Native> & { readonly caller: Caller;${interactive ? " readonly transaction: <R>(fn: (ctx: HandlerData<Native>) => Promise<R>) => Promise<R>;" : ""} };`,
     "export interface Handlers {",
     ...refs.map(
-      ({ name, index }) =>
-        `  readonly [${q(name)}]: (ctx: HandlerContext, input: Procedure${index}Input) => Promise<Procedure${index}Output>;`,
+      ({ name, procedure, index }) =>
+        `  readonly [${q(name)}]: (ctx: HandlerContext${procedure.db === "native" ? "<true>" : ""}, input: Procedure${index}Input) => Promise<Procedure${index}Output>;`,
     ),
     "}",
   );
   for (const { name, procedure, index } of refs) {
     const path = `procedures/${name}`,
       fn = `procedure${index}`;
+    const native = procedure.db === "native";
     declarations.push(
       `export type Procedure${index}Input = ${typeOf(procedure.input ?? { type: "object", additionalProperties: false })};`,
       `export type Procedure${index}Output = ${typeOf(procedure.output)};`,
@@ -42,13 +44,8 @@ export function emitHandlers(
       "  const handlers = context?.handlers;",
       `  const handler = handlers && Object.hasOwn(handlers, ${q(name)}) ? handlers[${q(name)}] : undefined;`,
       `  if (!handler) throw new ContractError("HANDLER_NOT_REGISTERED", "Procedure handler is not registered.", ${q(path)});`,
-      ...(procedure.db === "native"
-        ? []
-        : [
-            `  const warnNativeDatabase = () => console.warn(${q(`NATIVE_DATABASE_UNDECLARED: Procedure '${name}' accessed ctx.db; add spec.db: native and regenerate. Native database access bypasses Store row policies. A later 0.2.x will remove undeclared access, including transaction callbacks.`)});`,
-          ]),
       // TODO #1470: REST/MCP use shared generated validators at the boundary; bare calls stay typed.
-      `  return handler({ caller, ${procedure.db === "native" ? "db" : "get db() { warnNativeDatabase(); return db; }"}, store: context.store${interactive ? `, transaction: handlerTransaction(context.store, db${procedure.db === "native" ? "" : ", warnNativeDatabase"})` : ""} }, raw);`,
+      `  return handler({ caller, store: handlerStore(context.store)${native ? ", db" : ""}${interactive ? `, transaction: handlerTransaction(context.store, db, ${native})` : ""} }, raw);`,
       "}",
     );
     procedures.push(`[${q(name)}]: ${fn}`);

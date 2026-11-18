@@ -132,8 +132,9 @@ that Procedure's own declaration, not calls hidden in application code: a handle
 `store.procedures`. Hosts must review that chain; the marker is not a sandbox or proof that a handler stays scoped.
 `opaque` remains independent and conservative for all ref handlers.
 
-Rollout first preserves the existing typed `ctx.db` and interactive callback database on all supported targets.
-Reading either without the declaration logs `NATIVE_DATABASE_UNDECLARED` with the one-line manifest fix, on any entry
-surface. Store-only use does not warn. D1 still has no interactive transactions. A subsequent 0.2.x removes undeclared
-native access from both context types and runtime values; that enforcement and its migration release note are separate
-from this additive phase. No release is implied by this amendment.
+The first rollout in alpha.6 preserved both handles and warned on undeclared reads. The enforcement phase removes
+undeclared native access from the generated context types and runtime values, including interactive transaction
+callbacks. Handler Stores expose only `collection`, `batch`, `views` and `procedures`; the application's top-level
+Store retains its native transaction API. A handler uses `ctx.transaction` to open or join a transaction on interactive
+targets. The caller and transaction binding stay intact. D1 has no interactive transaction. Applications that used
+an undeclared native handle add `spec.db: native` and regenerate.
