@@ -1,4 +1,5 @@
 /** The Admin App is an ordinary contributor to the SDK's public MCP Apps hook. */
+import { insertAppHead } from "../app-head.js";
 import { ContractError } from "@aotter/mantle/contracts";
 import { declaredMeta } from "../app/declared-meta.js";
 import type {
@@ -149,8 +150,7 @@ export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcp
       '<script type="application/json" id="mantle-catalog">' +
       JSON.stringify(visibleCatalogue(catalogue, render.tools)).replace(/</g, "\\u003c") +
       "</script>";
-    // right after the opening <head>: the module script that follows may hold the text "</head>" in a string
-    return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, start => start + script) : script + html;
+    return insertAppHead(html, script);
   };
   const previousUris = new Set<string>();
   const previous = (options.previous ?? []).map((snapshot, index): NormalMcpAppResource => {
@@ -348,7 +348,7 @@ export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env
           const { default: html } = await import("./upload-card.js");
           if (!html) throw new Error("mediaUploadCard: the card is built into dist by the package build.");
           return {
-            html: config ? html.replace("<head>", "<head>" + config) : html,
+            html: config ? insertAppHead(html, config) : html,
             csp: withFonts({ connectDomains: [origin] }, options.fontDomains)!,
           };
         },

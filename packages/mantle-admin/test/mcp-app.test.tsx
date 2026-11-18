@@ -281,13 +281,13 @@ describe("MantleApp", () => {
     ).toBe("failed");
   });
 
-  it("offers Export CSV only where the host offers downloads, for a known View's rows, never beside a page", () => {
+  it("offers Export CSV for a known View's rows, even without downloads, and never beside a custom page", () => {
     const downloads = host({ serverTools: {}, downloadFile: {} });
     expect(render({ host: downloads })).toContain(">Export CSV</button>");
     expect(render({ host: downloads, locale: "zh-TW" })).toContain(">匯出 CSV</button>");
     // a read-only host exports the rows it shows: the export calls no server tool
     expect(render({ host: host({ downloadFile: {} }) })).toContain(">Export CSV</button>");
-    expect(render()).not.toContain("Export CSV");
+    expect(render()).toContain(">Export CSV</button>");
     expect(render({ host: downloads, result: { ...viewResult, structuredContent: { rows: [] } } })).not.toContain(
       "Export CSV",
     );
@@ -348,7 +348,7 @@ describe("MantleApp", () => {
     const uri = { type: "string", format: "uri" } as const,
       openLink = vi.fn();
     expect(renderToStaticMarkup(<>{appValue(uri, "https://example.com/a", "en", undefined, openLink)}</>)).toBe(
-      '<a href="https://example.com/a" class="underline">https://example.com/a</a>',
+      '<a class="underline" role="link" tabindex="0">https://example.com/a</a>',
     );
     expect(renderToStaticMarkup(<>{appValue(uri, "javascript:alert(1)", "en", undefined, openLink)}</>)).toBe(
       "javascript:alert(1)",
@@ -470,9 +470,9 @@ describe("adminMcpApps", () => {
     }
   });
 
-  it("injects the catalogue right after the opening <head>, even when a script in it holds the text </head>", async () => {
+  it("keeps the charset first when injecting a catalogue before a script containing </head>", async () => {
     const html =
-      '<!doctype html><html><head><script type="module">const srcDoc = "<html><head></head></html>";</script></head><body></body></html>';
+      '<!doctype html><html><head><meta charset="utf-8"><script type="module">const srcDoc = "<html><head></head></html>";</script></head><body></body></html>';
     const source = adminMcpApps({ catalogue: catalog, html });
     const [resource] = (
       typeof source === "function" ? await source({ env: {}, request: new Request("https://app.test/mcp") }) : source
@@ -484,7 +484,9 @@ describe("adminMcpApps", () => {
         request: new Request("https://app.test/mcp"),
       })
     ).html;
-    expect(out).toMatch(/^<!doctype html><html><head><script type="application\/json" id="mantle-catalog">/);
+    expect(out).toMatch(
+      /^<!doctype html><html><head><meta charset="utf-8"><script type="application\/json" id="mantle-catalog">/,
+    );
     // the module script is whole
     expect(out).toContain('<script type="module">const srcDoc = "<html><head></head></html>";</script>');
   });

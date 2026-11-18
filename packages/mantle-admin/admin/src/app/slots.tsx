@@ -142,16 +142,43 @@ export function AdminLink({
         {children}
       </a>
     );
-  if (!isWeb(href)) return <span>{children}</span>;
+  if (!host.capabilities.openLinks || !isWeb(href)) return <span>{children}</span>;
+  return (
+    <HostLink href={href} onClick={onClick} openLink={host.openLink} {...rest}>
+      {children}
+    </HostLink>
+  );
+}
+
+/** MCP links route through the host, including keyboard activation. No browser URL is attached to the element. */
+export function HostLink({
+  href,
+  children,
+  openLink,
+  onClick,
+  onKeyDown,
+  ...rest
+}: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+  href: string;
+  openLink: AdminHost["openLink"];
+}): React.ReactElement {
   return (
     <a
-      href={href}
       {...rest}
+      role="link"
+      tabIndex={rest.tabIndex ?? 0}
+      onKeyDown={event => {
+        onKeyDown?.(event);
+        if (!event.defaultPrevented && event.key === "Enter") {
+          event.preventDefault();
+          event.currentTarget.click();
+        }
+      }}
       onClick={event => {
         onClick?.(event);
         if (!event.defaultPrevented) {
           event.preventDefault();
-          void host.openLink(href);
+          void openLink(href);
         }
       }}
     >

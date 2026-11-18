@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { insertAppHead } from "../app-head.js";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -229,7 +230,7 @@ async function buildMcpApp(entry: string | undefined, outDir: string, explicitEn
     '<meta name="' + name + "\" content='" + escape(JSON.stringify(value)) + "'>";
   // what the application customised, for the generated compatibility test (`@aotter/mantle-admin/testing`)
   const meta = (csp ? declare("mantle-mcp-csp", csp) : "") + (manifest ? declare("mantle-mcp-app", manifest) : "");
-  writeFileSync(resolve(outDir, "mcp-app.html"), meta ? html.replace(/<head>/i, head => head + meta) : html);
+  writeFileSync(resolve(outDir, "mcp-app.html"), meta ? insertAppHead(html, meta) : html);
   console.log(`Admin MCP App: ${(Buffer.byteLength(html) / 1024).toFixed(1)} kB (mcp-app.html).`);
 }
 
