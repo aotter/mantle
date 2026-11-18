@@ -158,11 +158,16 @@ session: {
 }
 ```
 
-A valid signed cache hit avoids Caller DB reads. Missing, tampered, expired or version-mismatched snapshots fall back to primary authority. The SDK accepts this opt-in only without secondaryStorage, with explicit maxAge from 1 to 60 seconds and refreshCache:false. KV gains no cache-authority guarantee; bearer grant checks remain live.
+A valid signed cache hit skips the session database lookup. Mantle still reads
+the current user row on each request to check the user's ban and role. Missing,
+tampered, expired or version-mismatched snapshots fall back to the primary
+session lookup. The SDK accepts this opt-in only without `secondaryStorage`,
+with an explicit `maxAge` from 1 to 60 seconds and `refreshCache: false`.
 
-Revocation, bans and role changes reach cached reads within `maxAge` (at most
-60 seconds). Sign-out clears both the session-token and cache cookies. Bearer
-tokens still use their live grant query on every request.
+Session revocation can take up to `maxAge` (at most 60 seconds) to reach cached
+reads. Bans and role changes apply on the next request. Sign-out clears both the
+session-token and cache cookies. Bearer tokens still check their grant on every
+request.
 
 Generated REST, MCP and web boundaries pass `{ readOnly }` as the third argument
 to the application's caller callback. Forward it to `resolveCaller`:
