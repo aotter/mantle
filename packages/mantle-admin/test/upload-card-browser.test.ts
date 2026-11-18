@@ -26,6 +26,7 @@ it.each([
   {},
   { localeSwitch: true },
   { commitRetry: true },
+  { rejectedCommit: true },
   { tool: "upload_to_folder", forward: ["folder"] },
   { forward: ["folder"], inputTimeoutMs: 300, silent: true },
   { forward: ["folder"], inputTimeoutMs: 300, late: true },
@@ -40,6 +41,7 @@ it.each([
     choosePurpose,
     localeSwitch,
     commitRetry,
+    rejectedCommit,
     ...options
   }: {
     tool?: string;
@@ -51,6 +53,7 @@ it.each([
     choosePurpose?: boolean;
     localeSwitch?: boolean;
     commitRetry?: boolean;
+    rejectedCommit?: boolean;
   }) => {
     anyFile ||= choosePurpose;
     const TOOL = options.tool ?? "open_media_upload",
@@ -179,6 +182,19 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         try {
           if (name !== TOOL || folder !== (options.forward ? "docs" : undefined))
             throw new Error(`unexpected call ${name} ${folder}`);
+          if (rejectedCommit && args.uploadId) {
+            objects.delete(String(args.uploadId));
+            response.end(
+              JSON.stringify({
+                isError: true,
+                content: [],
+                structuredContent: {
+                  diagnostics: [{ code: "MEDIA_MIME_REJECTED", message: "The stored file has the wrong MIME type." }],
+                },
+              }),
+            );
+            return;
+          }
           const out = (await uploadMedia(library, policies, args, { apps: true })) as Record<string | symbol, unknown>;
           const [data, meta] = Symbol.for("net.aotter.mantle/result") in out ? [out.data, out._meta] : [out, undefined];
           if (commitRetry && args.uploadId && ++commitRequests === 1) {
@@ -362,6 +378,12 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         await expect.poll(() => app.locator("#status").textContent()).toBe("The asset may have saved.");
         expect(await app.locator("#file").isDisabled()).toBe(true);
         await upload.click();
+      }
+      if (rejectedCommit) {
+        await expect.poll(() => app.locator("#status").textContent()).toBe("The stored file has the wrong MIME type.");
+        await expect.poll(() => app.locator("#file").isEnabled()).toBe(true);
+        expect(await upload.textContent()).toBe("Try again");
+        return;
       }
       await app.getByText(localeSwitch ? /^上傳完成。素材 ID：/ : /^Uploaded\. Asset id /).waitFor({ timeout: 10_000 });
       await expect.poll(() => upload.textContent()).toBe(localeSwitch ? "已上傳" : "Uploaded");

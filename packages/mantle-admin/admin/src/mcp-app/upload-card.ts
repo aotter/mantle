@@ -231,7 +231,13 @@ async function commit(call: NonNullable<HostApi["call"]>, upload: NonNullable<ty
   if (committed.isError) {
     const code = diagnosticsOf(committed)[0]?.code;
     // An unknown outcome can already have produced the asset. Ask the server again with the same ID.
-    if (code === "MEDIA_UPLOAD_EXPIRED" || code === "MEDIA_OBJECT_NOT_FOUND") pending = undefined;
+    if (
+      code === "MEDIA_UPLOAD_EXPIRED" ||
+      code === "MEDIA_OBJECT_NOT_FOUND" ||
+      code === "MEDIA_MIME_REJECTED" ||
+      code === "MEDIA_VARIANT_SIZE_EXCEEDED"
+    )
+      pending = undefined;
     throw failure(committed, "commitFailed");
   }
   if (!record(asset) || typeof asset.id !== "string") throw failure(committed, "commitFailed");
