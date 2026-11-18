@@ -10,9 +10,9 @@ Mantle is tested with and the reasons, quoting Cloudflare's documentation.
 > **Verification status:** Mantle's tests run in workerd under local Wrangler with a Hyperdrive binding whose
 > `localConnectionString` points at a test database. Cloudflare documents that this mode connects "directly to the
 > database without going through Hyperdrive" and that "Hyperdrive's connection pooling and query caching do not take
-> effect". Nothing on this page has been verified on a deployed Hyperdrive configuration. In particular, the hangs and
-> failures Cloudflare describes for unprepared queries below were not reproduced; the change was made on Cloudflare's
-> documentation and on the wire traces Mantle's tests record.
+> effect". The deployed measurements below come from [#2029](https://github.com/aotter/mantle/issues/2029) and
+> [#2030](https://github.com/aotter/mantle/issues/2030). The #2029 tests did not reproduce the hangs or failures
+> Cloudflare describes for unprepared queries.
 
 ## The client
 
@@ -83,6 +83,21 @@ export default {
 | `max` | `1` | Mantle runs a request's statements one after another, and a transaction holds its one connection. Cloudflare's example uses `max: 5` "due to Workers' limits on concurrent external connections"; raise it only if your own code runs queries concurrently. With `max: 1`, a query on the client awaited inside an open transaction of the same client waits for that transaction; Mantle refuses the outer handle inside a Store transaction for this reason. |
 | lifetime | per request | [Connection lifecycle](https://developers.cloudflare.com/hyperdrive/concepts/connection-lifecycle/): "Do not create database clients or connection pools in the global scope. Instead, create a new client inside each handler invocation". It also says you "do **not** need to call … `sql.end()`". |
 
+### Direct endpoints and connection budgets
+
+For Worker request traffic, use a provider's pooled PostgreSQL URL or Hyperdrive. A per-request client connecting
+directly to an unpooled endpoint opens its own database connection on its first query. In the
+[#2030 benchmark](https://github.com/aotter/mantle/issues/2030), one transaction per request at concurrency 100
+had median request latency of 1,096 ms over direct TCP, 130 ms through the provider's pooler, and about 65 ms
+through Hyperdrive. These figures describe one small Neon compute and Worker placement.
+
+Budget against the origin database's usable connection limit. Add the peak direct connections and the maximum
+origin connections from every pooler and Hyperdrive configuration. Reserve slots for migrations and administration.
+For example, a database with 108 usable slots and a 10-slot reserve has 98 slots for application traffic. A pooler
+allowed 40 and a Hyperdrive configuration allowed 30 leave 28 for direct clients and other pools.
+Hyperdrive's `origin_connection_limit` bounds its connections to PostgreSQL. The Worker's postgres.js `max` bounds
+the connections one client can create. See [Hyperdrive connection pooling](https://developers.cloudflare.com/hyperdrive/concepts/connection-pooling/).
+
 ## How Mantle sends statements
 
 Mantle's driver calls `unsafe(text, values, { prepare: true })` for every statement it runs: generated Views,
@@ -108,11 +123,12 @@ the same number of round trips as before and one that repeats a statement makes 
   names `prepare: false` as a reason queries are not cached. Mantle already requires a Hyperdrive configuration with
   caching disabled; one that left caching on was, in effect, uncached for Mantle's reads before, and is not now.
   Check the configuration (`wrangler hyperdrive get <id>`) before upgrading.
-- **Schema changes.** A prepared statement whose result columns change under it (a migration adds a column a
-  `RETURNING *` returns) fails inside a transaction with `0A000 cached plan must not change result type`; outside one,
-  postgres.js re-prepares and retries. The failure is a PostgreSQL error, so Mantle reports the write as failed and
-  rolled back, never as `OUTCOME_UNKNOWN`. With a client per request, only statements the same request already ran are
-  exposed. Bun.SQL has always prepared every statement this way.
+- **Schema changes.** A migration that changes a prepared statement's result columns can invalidate it. In
+  [#2029](https://github.com/aotter/mantle/issues/2029), reusing the statement inside a transaction on the same
+  postgres.js client after such a migration returned PostgreSQL `0A000` over a direct connection. Hyperdrive closed
+  the connection instead in all six runs. Both transactions rolled back in those tests. The caller can receive a
+  raw driver error, and a dropped connection at a write boundary can be classified as `OUTCOME_UNKNOWN`. Reconcile
+  before retrying. A new request-scoped client did not reproduce the stale plan after a schema change between requests.
 - **Bun.SQL** ignores the third argument and prepares every parameterised statement itself; nothing changes there.
 
 ## Better Auth on PostgreSQL
