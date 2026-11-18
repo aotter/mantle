@@ -177,6 +177,17 @@ export const SEAMS: readonly Seam[] = [
     check: "packages/mantle-admin/test/seams/upload-card.ts",
   },
   {
+    id: "mcp-app-host-context",
+    package: "@aotter/mantle-admin",
+    subpath: "./mcp-app",
+    exports: ["applyHostContext"],
+    entry: "applyHostContext(context, document)",
+    stacks: [],
+    decided: "#2072",
+    check: "packages/mantle-admin/test/seams/mcp-app-host-context.ts",
+    run: false, // executed with a document fixture in test/postmessage.test.ts
+  },
+  {
     id: "client-entries",
     package: "@aotter/mantle",
     entry: "mantle bundle <entry> <outdir>: client/<name>.ts|tsx beside the entry -> <assets>/assets/client/<name>.js",

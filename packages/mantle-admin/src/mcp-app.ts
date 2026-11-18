@@ -5,6 +5,8 @@ const HOST_STYLE_VARIABLE =
   /^--(color-(background|text|border|ring)-[a-z]+|font-(sans|mono|weight-[a-z]+|(text|heading)-[a-z0-9]+-(size|line-height))|border-radius-[a-z]+|border-width-regular|shadow-[a-z]+)$/;
 
 /**
+ * Application seam: applications depend on this.
+ *
  * The host's presentation fields on the document root. A fixed height (`fullscreen`: the side panel or full screen) bounds
  * the root, which scrolls inside it. In the conversation the host gives only `maxHeight`: it caps the frame and clips what
  * exceeds it, and on a touch screen a vertical pan scrolls the conversation, so the root is not a scroll container there and
