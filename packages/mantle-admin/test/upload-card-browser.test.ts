@@ -259,6 +259,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         expect(await app.locator("#policy").textContent()).toContain("位元組");
         await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "fr-FR" }));
         await expect.poll(() => app.locator("h1").textContent()).toBe("Téléverser un fichier");
+        expect(await app.locator(".footnote").textContent()).toContain("fin du téléversement");
       }
       if (commitRetry) {
         expect(await app.locator("html").getAttribute("data-theme")).toBe("dark");
@@ -299,7 +300,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       // A single native file control covers the secondary picker surface; Upload remains a separate primary action.
       expect(await app.locator('input[type="file"]').count()).toBe(1);
       expect(await app.locator("button").count()).toBe(1);
-      await app.getByLabel("File", { exact: true }).focus();
+      await app.getByLabel(localeSwitch ? "Fichier" : "File", { exact: true }).focus();
       expect(await app.locator(".file-picker").evaluate(picker => getComputedStyle(picker).outlineStyle)).toBe("solid");
       // the purpose came in the tool input, so no picker shows; the input accepts its types, or any file
       expect(await app.locator("#purpose-row").isHidden()).toBe(!choosePurpose);

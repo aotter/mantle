@@ -263,5 +263,14 @@ export function uploadLabels(locale: string | undefined): UploadLabels {
   const tag = (locale ?? "").toLowerCase();
   const language = tag === "zh" ? "zh-CN" : normalizeLanguage(locale);
   if (language === "en" || language === "zh-TW" || language === "zh-CN") return UPLOAD_LABELS[language];
-  return { ...UPLOAD_EN, ...uploadCopy[language] };
+  const copy = uploadCopy[language];
+  return {
+    ...UPLOAD_EN,
+    ...copy,
+    progress: copy.uploading,
+    uploadingFile: `${copy.uploading} {filename}`,
+    committing: copy.saving,
+    typeLimit: `{type} · ${copy.upTo}`,
+    completionMessage: `{filename} · ${copy.complete} · {purpose}`,
+  };
 }
