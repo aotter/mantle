@@ -73,6 +73,11 @@ router additions and optional module mounting remain application-owned.
 imports no application, opens no database and makes no network call, so a
 gateway can compute `props.mantle.target` and `targetHash` before forwarding.
 
+A gateway can keep a trimmed description. The matcher reads the target's
+`name`, `_meta.id`, `_meta.surfaces`, and `_meta.variants[0]?.id`, and preserves
+the caller's metadata type on return. Without surfaces a target has no MCP
+endpoint, and a REST target without variants has no implicit `HEAD` match.
+
 ```ts
 import { matchTarget, type AppDescription } from "@aotter/mantle/describe";
 import saved from "./describe.json";

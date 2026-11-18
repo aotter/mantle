@@ -1,32 +1,38 @@
 import { ADMIN_API_BASE, canonicalPath, routeOrder, routePath, routeSource } from "../../kernel/route-pattern.js";
 import { adminRoutes } from "./targets.js";
-import type { AppDescription, DescribeTarget } from "./index.js";
 
 /** A request as a gateway sees it: a REST or Admin method and URL pathname, or an MCP `tools/call` tool name and optional endpoint path. */
 export type TargetRequest =
   | { readonly surface: "rest" | "admin"; readonly method: string; readonly path: string }
   | { readonly surface: "mcp"; readonly tool: string; readonly path?: string };
-type Meta = DescribeTarget["_meta"];
-interface Table {
+interface MatchMeta {
+  readonly id: string;
+  readonly surfaces?: readonly string[];
+  readonly variants?: readonly { readonly id: string }[];
+}
+interface MatchDescription<Meta extends MatchMeta> {
+  readonly targets: readonly { readonly name?: string; readonly _meta: Meta }[];
+}
+interface Table<Meta extends MatchMeta> {
   rest: { method: string; pattern: RegExp; view: boolean; meta: Meta }[];
   admin: { method: string; pattern: RegExp; meta: Meta }[];
   tools: { name: string; endpoints: string[]; meta: Meta }[];
 }
 
-const tables = new WeakMap<object, Table>();
+const tables = new WeakMap<object, Table<MatchMeta>>();
 const route = /^(rest|admin):([A-Z]+) (\/.*)$/;
 // Fetch upper-cases these methods and keeps any other spelling; the routers compare the result exactly.
 const normalized = new Set(["DELETE", "GET", "HEAD", "OPTIONS", "POST", "PUT"]);
 
-function compile(describe: Pick<AppDescription, "targets">): Table {
-  const table: Table = { rest: [], admin: [], tools: [] };
+function compile<Meta extends MatchMeta>(describe: MatchDescription<Meta>): Table<Meta> {
+  const table: Table<Meta> = { rest: [], admin: [], tools: [] };
   for (const { name, _meta: meta } of describe.targets) {
     const [, surface, method, template] = route.exec(meta.id) ?? [];
     if (surface === "rest")
       table.rest.push({
         method: method!,
         pattern: new RegExp(routeSource(routePath(template!)).source),
-        view: meta.variants[0]?.id.startsWith("view:") === true,
+        view: meta.variants?.[0]?.id.startsWith("view:") === true,
         meta,
       });
     else if (surface === "admin")
@@ -35,7 +41,7 @@ function compile(describe: Pick<AppDescription, "targets">): Table {
         pattern: new RegExp(routeSource(routePath(template!), ADMIN_API_BASE).source),
         meta,
       });
-    else {
+    else if (name !== undefined && meta.surfaces) {
       // The generated MCP tools: Views on their own surface, Procedures on their `mcp` Trigger surfaces (publishing on admin), media tools on admin.
       const s = meta.surfaces,
         endpoints = meta.id.startsWith("admin:tool:")
@@ -65,8 +71,12 @@ function compile(describe: Pick<AppDescription, "targets">): Table {
  * or network. REST and Admin take the URL pathname (Admin's under `/admin/api`) and follow the routers' path, method and
  * precedence rules; MCP takes the `tools/call` name and, optionally, the `/mcp` or `/mcp/admin` path. Unserved is null.
  */
-export function matchTarget(describe: Pick<AppDescription, "targets">, request: TargetRequest): Meta | null {
-  let table = tables.get(describe);
+export function matchTarget<Meta extends MatchMeta>(
+  describe: MatchDescription<Meta>,
+  request: TargetRequest,
+): Meta | null {
+  // The table holds the original metadata objects from this description.
+  let table = tables.get(describe) as Table<Meta> | undefined;
   if (!table) tables.set(describe, (table = compile(describe)));
   if (request.surface === "mcp") {
     const path = request.path?.replace(/\/+$/, ""),

@@ -9,6 +9,16 @@ import { writeGenerated } from "./apps/link.js";
 import { mantleProps } from "./gateway-fixture.js";
 import { apps, describeOf, fill, literalsOf, overlaps, precedence, prober, variants } from "./match-target-fixture.js";
 
+test("matchTarget accepts trimmed historical descriptions and returns their own metadata", () => {
+  const rest = { id: "rest:GET /api/orders", requires: { guard: "legacy" }, targetHash: "saved-hash" } as const;
+  const describe = { targets: [{ _meta: rest }] } as const;
+  const found: typeof rest | null = matchTarget(describe, { surface: "rest", method: "GET", path: "/api/orders" });
+  expect(found).toBe(rest);
+  expect(matchTarget(describe, { surface: "rest", method: "HEAD", path: "/api/orders" })).toBeNull();
+  const trimmedTools = { targets: [{ name: "orders", _meta: { id: "view:orders" } }] } as const;
+  expect(matchTarget(trimmedTools, { surface: "mcp", tool: "orders", path: "/mcp/admin" })).toBeNull();
+});
+
 test("matchTarget resolves what the generated REST and MCP routers resolve, for every route of the example apps", async () => {
   const counts: Record<string, { rest: number; mcp: number }> = {},
     served: Record<string, Set<string>> = {};
