@@ -137,11 +137,14 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       { name: "gallery", required: ["image/webp", "image/jpeg"], maxBytes: { "image/webp": 1000, "image/jpeg": 1000 } },
       { name: "notes", required: ["*/*"], maxBytes: { "*/*": 1000 } },
     ];
-    let releaseStorage: (() => void) | undefined;
+    let releaseStorage!: () => void;
+    const storageReleased = new Promise<void>(resolve => {
+      releaseStorage = resolve;
+    });
     const server = createServer(async (request, response) => {
       const url = request.url ?? "/";
       if (url === "/release-storage") {
-        releaseStorage?.();
+        releaseStorage();
         response.end();
         return;
       }
@@ -160,10 +163,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
           type: String(request.headers["content-type"]),
           bytes: await body(request),
         });
-        if (localeSwitch)
-          await new Promise<void>(resolve => {
-            releaseStorage = resolve;
-          });
+        if (localeSwitch) await storageReleased;
         response.end();
         return;
       }
