@@ -3,9 +3,9 @@
  * through the host, PUTs the file straight to storage with progress, calls `open_media_upload` again to commit, and tells the
  * model the asset id. It uploads the original as the single variant a purpose takes (ADR-0017); a purpose with several
  * variant slots needs an agent that prepares them.
- * ponytail: English only; take the host context's locale when hosts ask for another.
  */
 import { applyHostContext, connectHost, type HostApi } from "./postmessage";
+import { uploadLabels, type UploadLabels } from "./locale";
 import { forwardedInput } from "./forwarded-input";
 import { outputOf, type ToolResult } from "../../../src/app/bridge.js";
 
@@ -38,19 +38,20 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 document.body.innerHTML = `<form id="card" aria-busy="true" novalidate>
-<header><span class="upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m-4 4 4-4 4 4M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></span>
-<div><p class="eyebrow">Media library</p><h1>Upload a file</h1></div></header>
-<p class="hint">Add the original file to your media library.</p>
-<label id="purpose-row" hidden>Purpose <select id="purpose"></select></label>
+<header><p class="eyebrow" data-upload-label="library"></p><h1 data-upload-label="title"></h1>
+<p class="hint" data-upload-label="intro"></p></header>
+<label id="purpose-row" hidden><span data-upload-label="purpose"></span> <select id="purpose"></select></label>
 <div class="file-panel">
-<label class="file-picker">File <input id="file" type="file" required aria-describedby="file-details policy"></label>
+<label class="file-picker"><span class="file-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 17v-6m-3 3 3-3 3 3"/></svg></span>
+<span class="picker-title" data-upload-label="choose"></span><span class="hint" data-upload-label="browse"></span>
+<input id="file" type="file" required aria-label="File" aria-describedby="file-details policy"></label>
 <p id="file-details" class="file-details">No file selected</p>
 <p id="policy" class="hint"></p></div>
-<label id="alt-row" hidden>Alt text <span class="hint">A short description for people who cannot see the image.</span><input id="alt" type="text" maxlength="1000" placeholder="Describe the image"></label>
-<button id="upload" type="button" disabled>Upload</button>
+<label id="alt-row" hidden><span data-upload-label="alt"></span> <span class="hint" data-upload-label="altHint"></span><input id="alt" type="text" maxlength="1000" placeholder="Describe the image"></label>
+<div class="actions"><button id="upload" type="button" disabled>Upload</button></div>
 <progress id="progress" aria-label="Upload progress" max="1" value="0" hidden></progress>
 <p id="status" role="status"></p>
-<p class="footnote">Keep this card open until the upload finishes.</p>
+<p class="footnote" data-upload-label="footnote"></p>
 </form>`;
 const form = $<HTMLFormElement>("card"),
   select = $<HTMLSelectElement>("purpose"),
@@ -66,22 +67,34 @@ const bind =
   (call: NonNullable<HostApi["call"]>): NonNullable<HostApi["call"]> =>
   async (name, args, signal) =>
     call(name, await forwarded.args(args), signal);
+let labels = uploadLabels(undefined);
+const t = (key: keyof UploadLabels, values: Record<string, string | number> = {}) =>
+  labels[key].replace(/\{(\w+)\}/g, (token, key: string) => String(values[key] ?? token));
+class CardError extends Error {
+  constructor(readonly text: () => string) {
+    super(text());
+  }
+}
+let statusText: () => string = () => "";
+let phase: "preparing" | "uploading" | "saving" = "preparing";
 let host: HostApi | undefined,
   purposes: readonly Purpose[] = [],
   asked: string | undefined,
   busy = false,
   failed = false,
   done = false;
-const say = (text: string, alert = false) => {
-  status.textContent = text;
+const say = (text: string | (() => string), alert = false) => {
+  statusText = typeof text === "string" ? () => text : text;
+  status.textContent = statusText();
   status.setAttribute("role", alert ? "alert" : "status");
 };
 /** The diagnostic message of a failed call, else `fallback`. */
-const failure = (result: ToolResult, fallback: string) => {
+const failure = (result: ToolResult, fallback: keyof UploadLabels) => {
   const out = outputOf(result),
     diagnostic =
       record(out) && Array.isArray(out.diagnostics) && record(out.diagnostics[0]) ? out.diagnostics[0] : undefined;
-  return typeof diagnostic?.message === "string" ? diagnostic.message : fallback;
+  const message = diagnostic?.message;
+  return new CardError(typeof message === "string" ? () => message : () => t(fallback));
 };
 const current = () => purposes.find(p => p.name === (asked ?? select.value));
 /** The token of `accepts` that takes `type`: the type itself, else its `type/*`, else `*\/*`. */
@@ -91,10 +104,16 @@ const acceptedBy = (accepts: readonly string[], type: string) =>
 const typeOf = (picked: File) => picked.type || "application/octet-stream";
 const sizeOf = (bytes: number) =>
   bytes < 1024
-    ? `${bytes} bytes`
+    ? t("bytes", { count: bytes })
     : `${(bytes / (bytes < 1048576 ? 1024 : 1048576)).toFixed(1)} ${bytes < 1048576 ? "KiB" : "MiB"}`;
 
 function render() {
+  for (const element of document.querySelectorAll<HTMLElement>("[data-upload-label]"))
+    element.textContent = t(element.dataset.uploadLabel as keyof UploadLabels);
+  file.setAttribute("aria-label", t("file"));
+  alt.placeholder = t("altPlaceholder");
+  progress.setAttribute("aria-label", t("progress"));
+  document.title = t("title");
   const names = purposes.map(p => p.name),
     selected = asked ?? select.value;
   select.replaceChildren(...names.map(name => new Option(name, name)));
@@ -107,32 +126,34 @@ function render() {
   // alt text describes an image
   $("alt-row").hidden = !file.files?.[0]?.type.startsWith("image/");
   const picked = file.files?.[0];
-  $("file-details").textContent = picked
-    ? `${picked.name} · ${sizeOf(picked.size)} · ${typeOf(picked)}`
-    : "No file selected";
+  $("file-details").textContent = picked ? `${picked.name} · ${sizeOf(picked.size)} · ${typeOf(picked)}` : t("noFile");
   $("file-details").hidden = !picked;
   const token = picked && acceptedBy(accepts, typeOf(picked));
   $("policy").textContent = !purpose
     ? ""
     : purpose.required.length !== 1
-      ? "This purpose needs several variants. Ask the agent to prepare them."
+      ? t("multiVariants")
       : token
-        ? `${typeOf(picked!)} · Up to ${sizeOf(purpose.maxBytes[token] ?? 0)}`
+        ? `${typeOf(picked!)} · ${t("upTo", { size: sizeOf(purpose.maxBytes[token] ?? 0) })}`
         : accepts.includes("*/*")
-          ? `Any file type · Up to ${sizeOf(purpose.maxBytes["*/*"] ?? 0)}`
+          ? `${t("anyFile")} · ${t("upTo", { size: sizeOf(purpose.maxBytes["*/*"] ?? 0) })}`
           : accepts
-              .map(
-                type =>
-                  `${type === "image/*" ? "Any image" : type.startsWith("image/") ? type.slice(6).toUpperCase() : type} up to ${sizeOf(purpose.maxBytes[type] ?? 0)}`,
+              .map(type =>
+                t("typeLimit", {
+                  type:
+                    type === "image/*" ? t("anyImage") : type.startsWith("image/") ? type.slice(6).toUpperCase() : type,
+                  size: sizeOf(purpose.maxBytes[type] ?? 0),
+                }),
               )
               .join(" · ");
   file.disabled = select.disabled = alt.disabled = busy || done;
   button.disabled = busy || done || !picked || !host?.call || !purpose;
-  button.textContent = done ? "Uploaded" : busy ? "Uploading…" : failed ? "Try again" : "Upload";
+  button.textContent = done ? t("uploaded") : busy ? t(phase) : failed ? t("retry") : t("upload");
   form.setAttribute("aria-busy", String(busy || !host || !purposes.length));
-  if (!host) say("Connecting to the MCP host…");
-  else if (asked && purposes.length && !purpose) say(`The purpose '${asked}' is not declared.`, true);
-  else if (!host.call) say("This host does not let the card call tools.", true);
+  if (!host) say(() => t("connecting"));
+  else if (asked && purposes.length && !purpose) say(() => t("unknownPurpose", { purpose: asked! }), true);
+  else if (!host.call) say(() => t("toolsUnavailable"), true);
+  status.textContent = statusText();
 }
 
 /** The upload is committed: report the asset and offer no second upload of it. */
@@ -142,7 +163,7 @@ function finish(id: string) {
   file.disabled = true;
   alt.disabled = true;
   form.dataset.asset = id;
-  say(`Uploaded. Asset id ${id}.`);
+  say(() => t("complete", { id }));
 }
 /** PUT with upload progress: `fetch` reports none. */
 const put = (target: Target, body: File) =>
@@ -154,23 +175,30 @@ const put = (target: Target, body: File) =>
       if (event.lengthComputable) progress.value = event.loaded / event.total;
     };
     xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Storage answered ${xhr.status}.`));
-    xhr.onerror = () =>
-      reject(new Error("Storage could not be reached. Its CORS rules must allow PUT from this host."));
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new CardError(() => t("storageFailed", { status: xhr.status })));
+    xhr.onerror = () => reject(new CardError(() => t("storageUnavailable")));
     xhr.send(body);
   });
 
 async function upload(picked: File, purpose: Purpose, call: NonNullable<HostApi["call"]>) {
   const accepts = purpose.required.length === 1 ? purpose.required[0]!.split(",") : [];
   if (!accepts.length)
-    throw new Error(
-      `'${purpose.name}' takes ${purpose.required.length} variants (${purpose.required.join("; ")}); ask the agent to prepare and upload them.`,
+    throw new CardError(() =>
+      t("variantsNeeded", {
+        purpose: purpose.name,
+        count: purpose.required.length,
+        types: purpose.required.join("; "),
+      }),
     );
   const type = typeOf(picked),
     token = acceptedBy(accepts, type);
-  if (!token) throw new Error(`'${purpose.name}' takes ${accepts.join(" or ")}, not ${type}.`);
+  if (!token)
+    throw new CardError(() => t("mimeRejected", { purpose: purpose.name, types: accepts.join(t("or")), type }));
   const cap = purpose.maxBytes[token] ?? 0;
-  if (picked.size > cap) throw new Error(`The file is ${picked.size} bytes; '${purpose.name}' takes at most ${cap}.`);
+  if (picked.size > cap)
+    throw new CardError(() => t("tooLarge", { size: picked.size, purpose: purpose.name, max: cap }));
   const text = type.startsWith("image/") ? alt.value.trim() : "";
   const created = await call(TOOL, {
     purpose: purpose.name,
@@ -178,23 +206,25 @@ async function upload(picked: File, purpose: Purpose, call: NonNullable<HostApi[
     variants: [{ mimeType: type, byteSize: picked.size, role: "primary" }],
     ...(text ? { alt: text } : {}),
   });
-  if (created.isError) throw new Error(failure(created, "The upload could not be prepared."));
+  if (created.isError) throw failure(created, "prepareFailed");
   const out = outputOf(created),
     meta = (created as { _meta?: Record<string, unknown> })._meta?.[UPLOAD_META];
   const targets = (record(meta) ? meta.targets : record(out) ? out.targets : undefined) as Target[] | undefined;
   const uploadId = record(out) ? out.uploadId : undefined;
   if (typeof uploadId !== "string" || !Array.isArray(targets) || targets.length !== 1)
-    throw new Error("The server answered without an upload target.");
-  say(`Uploading ${picked.name}…`);
+    throw new CardError(() => t("targetMissing"));
+  phase = "uploading";
+  say(() => t("uploadingFile", { filename: picked.name }));
+  render();
   progress.hidden = false;
   progress.value = 0;
   await put(targets[0]!, picked);
-  say("Committing…");
-  button.textContent = "Saving…";
+  phase = "saving";
+  say(() => t("committing"));
+  render();
   const committed = await call(TOOL, { uploadId, purpose: purpose.name });
   const asset = outputOf(committed);
-  if (committed.isError || !record(asset) || typeof asset.id !== "string")
-    throw new Error(failure(committed, "The upload could not be committed."));
+  if (committed.isError || !record(asset) || typeof asset.id !== "string") throw failure(committed, "commitFailed");
   return asset as Record<string, unknown> & { id: string };
 }
 
@@ -205,11 +235,13 @@ button.addEventListener("click", () => {
     call = host?.call && bind(host.call);
   if (!picked || !purpose || !call || busy || done) return;
   busy = true;
+  phase = "preparing";
+  say(() => t("preparing"));
   render();
   void upload(picked, purpose, call)
     .then(
       async asset => {
-        const text = `I uploaded ${picked.name} to the media library: asset id ${asset.id} (purpose ${purpose.name}).`;
+        const text = t("completionMessage", { filename: picked.name, id: asset.id, purpose: purpose.name });
         finish(asset.id);
         // a user message continues the conversation; unless the host accepted it, the model also learns it at its next turn
         if ((await host!.sendMessage(text)) !== "accepted")
@@ -218,7 +250,7 @@ button.addEventListener("click", () => {
       (error: unknown) => {
         failed = true;
         progress.hidden = true;
-        say(error instanceof Error ? error.message : String(error), true);
+        say(error instanceof CardError ? error.text : error instanceof Error ? error.message : String(error), true);
       },
     )
     .finally(() => {
@@ -245,13 +277,19 @@ function readPurposes() {
       if (!result.isError && record(out) && Array.isArray(out.purposes)) {
         purposes = out.purposes as Purpose[];
         say("");
-      } else say(failure(result, "The media purposes could not be read."), true);
+      } else say(failure(result, "policyFailed").text, true);
       render();
     },
     () => {
-      if (read === reads) say("The media purposes could not be read.", true);
+      if (read === reads) say(() => t("policyFailed"), true);
     },
   );
+}
+
+function context(value: Parameters<typeof applyHostContext>[0]) {
+  if (value.locale !== undefined) labels = uploadLabels(value.locale);
+  applyHostContext(value);
+  render();
 }
 
 connectHost(
@@ -259,6 +297,7 @@ connectHost(
     ready: (connected, context) => {
       host = connected;
       forwarded.connected();
+      if (context.locale !== undefined) labels = uploadLabels(context.locale);
       applyHostContext(context);
       render();
       readPurposes();
@@ -279,8 +318,8 @@ connectHost(
       }
     },
     cancelled: () => {},
-    context: applyHostContext,
-    error: error => say(error.message, true),
+    context,
+    error: error => say(() => `${t("connectionFailed")} ${error.message}`, true),
   },
   window,
   "1",

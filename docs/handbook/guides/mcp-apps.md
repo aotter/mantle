@@ -690,6 +690,10 @@ purpose with several variant slots needs an agent that prepares them, and the
 card says so. It needs the host's `serverTools`. It shows no View, so it declares
 no `tools` capability and lists none of the App's `view_*` tools.
 
+Card labels follow the host locale, as the Admin MCP App does: Traditional Chinese for `zh-Hant`, Taiwan, Hong Kong
+and Macau, Simplified Chinese for other `zh` tags, and English otherwise. Host locale changes update the card without
+clearing its selected file or upload progress. File names, purpose names, asset IDs and server diagnostics stay unchanged.
+
 `tool` names the tool the card renders and calls (default `open_media_upload`; another tool takes `upload_media`'s
 arguments) and `forward` lists the arguments of the rendering call's input that the card repeats on every call, for
 example `mediaUploadCard({ media, tool: "upload_to_folder", forward: ["folder"] })`. With `forward`, calls wait for the
