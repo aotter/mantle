@@ -3,7 +3,7 @@ import type { Caller } from "../kernel/contracts.js";
 import type { oauthConsents, OAuthConsentRequest, OAuthConsentInfo } from "./oauth.js";
 import type { AuthRoutesOptions } from "./routes.js";
 import { PRIVATE, json, readBody, redirect, text } from "./route-http.js";
-import { messages as T, systemDark, tokens } from "./consent-presentation.generated.js";
+import { messages as T, systemDark, tokens } from "./consent-presentation-generated.js";
 
 type AuthRoutesAuth = ReturnType<typeof oauthConsents>;
 
