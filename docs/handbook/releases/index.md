@@ -34,6 +34,27 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ## 0.2.2 — in preparation
 
+### Upgrading to 0.2.2-alpha.7
+
+Pin the Mantle packages to `0.2.2-alpha.7` and regenerate.
+
+- **Breaking: native database access in ref handlers and transaction callbacks is opt-in (#2070).**
+  Before, the SDK handed each ref handler and transaction callback the native database handle.
+  After, only a Procedure with `spec.db: native` receives it. Declare that capability where direct SQL is
+  necessary. Use `ctx.store` and the transaction's Store argument for row-scoped operations.
+- **Breaking: Better Auth peer alignment (#2071).** Move the alpha.6 Better Auth pins at `1.7.14`
+  to `1.7.16` together, including the OAuth provider. The local issuer now verifies
+  JWKS in process.
+- `matchTarget` accepts a minimal structural description and returns the supplied metadata type (#2069).
+  Admin exports the shared MCP App host-context helper and safe-area variables (#2073).
+- Cookie-cache hits retain the current-user lookup, and anonymous OAuth discovery retains the rate limiter (#2074).
+  The wiring graph marks Store-only Procedures separately (#2076). The Hyperdrive guide records the measured
+  connection costs and stale-plan outcomes (#2077).
+- `upload_media` lists the configured purposes on an unknown-purpose error (#2078).
+  Generated View and Procedure inputs support property counts and constrained names (#2079).
+  Admin MCP Apps preserve the charset, route links through the host, and provide copyable CSV when
+  downloads are unavailable (#2080). Host-specific checks are tracked in #1119.
+
 ### Upgrading to 0.2.2-alpha.6
 
 Pin the selected packages to `0.2.2-alpha.6` and regenerate.
