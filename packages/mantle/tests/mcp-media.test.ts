@@ -693,7 +693,11 @@ test("upload_media prepares, commits and fetches; find, update and delete_media;
     ).toBeUndefined();
     expect((await call("upload_media", {}, ui)).structuredContent.card).toContain("upload card");
     expect((await call("upload_media", {})).structuredContent.purposes).toHaveLength(2);
-    expect(code(await call("upload_media", { purpose: "hero" }))).toBe("INPUT_VALIDATION_FAILED");
+    const rejectedPurpose = await call("upload_media", { purpose: "hero" });
+    expect(code(rejectedPurpose)).toBe("INPUT_VALIDATION_FAILED");
+    expect(JSON.parse(rejectedPurpose.content[0].text).diagnostics[0].message).toBe(
+      "Choose one of these upload purposes: cover, gallery.",
+    );
     expect(code(await call("upload_media", { purpose: "cover", alt: "x" }))).toBe("INPUT_VALIDATION_FAILED");
     const args = {
       purpose: "cover",
