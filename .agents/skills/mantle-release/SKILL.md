@@ -88,8 +88,12 @@ gates remain unchanged.
    record the first request in a new isolate and a repeat in the same isolate,
    separating authority reads, business queries and refresh writes:
    - health or another fixed no-data route: 0 DB and 0 DDL;
+   - anonymous OAuth protected-resource discovery (`GET /.well-known/oauth-protected-resource/mcp`):
+     2 DB round trips cold and warm (one Better Auth rate-limit read and one write), 0 DDL;
    - `/api/auth/get-session`;
-   - cookie-authenticated REST read, with cookie cache off and on;
+   - cookie-authenticated REST read (`GET /api/views/my-orders`): 3 DB round trips cold and warm
+     with cookie cache off (joined session/user, current user, business), 2 cold and warm on a
+     valid signed cache hit (current user, business);
    - MCP `initialize`;
    - MCP `tools/list`;
    - one successful authenticated write.
