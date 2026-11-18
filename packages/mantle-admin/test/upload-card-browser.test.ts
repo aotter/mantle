@@ -300,25 +300,24 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       // A single native file control covers the secondary picker surface; Upload remains a separate primary action.
       expect(await app.locator('input[type="file"]').count()).toBe(1);
       expect(await app.locator("button").count()).toBe(1);
-      await app.getByLabel(localeSwitch ? "Fichier" : "File", { exact: true }).focus();
+      const filePicker = app.getByLabel(localeSwitch ? "Fichier" : "File", { exact: true });
+      await filePicker.focus();
       expect(await app.locator(".file-picker").evaluate(picker => getComputedStyle(picker).outlineStyle)).toBe("solid");
       // the purpose came in the tool input, so no picker shows; the input accepts its types, or any file
       expect(await app.locator("#purpose-row").isHidden()).toBe(!choosePurpose);
       if (choosePurpose) await app.getByLabel("Purpose").selectOption("notes");
-      expect(await app.getByLabel("File").getAttribute("accept")).toBe(anyFile ? "" : "image/png,image/jpeg");
+      expect(await filePicker.getAttribute("accept")).toBe(anyFile ? "" : "image/png,image/jpeg");
       const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(56)]),
         pdf = Buffer.from("%PDF-1.7\n%%EOF\n");
       if (anyFile) {
         // alt text is for images: a PDF gets none
-        await app.getByLabel("File").setInputFiles({ name: "report.pdf", mimeType: "application/pdf", buffer: pdf });
+        await filePicker.setInputFiles({ name: "report.pdf", mimeType: "application/pdf", buffer: pdf });
         expect(await app.locator("#alt-row").isHidden()).toBe(true);
         expect(await app.locator("#file-details").textContent()).toContain("report.pdf");
         expect(await app.getByLabel("Purpose").inputValue()).toBe("notes");
       } else {
         // a type the purpose does not take is refused before any call
-        await app
-          .getByLabel("File")
-          .setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
+        await filePicker.setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
         expect(await app.locator("#alt-row").isHidden()).toBe(true);
         await upload.click();
         await expect.poll(() => app.locator("#status").textContent()).toContain("takes image/png or image/jpeg");
