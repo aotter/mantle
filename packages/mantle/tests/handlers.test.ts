@@ -1,11 +1,14 @@
 import { fixtureCaller } from "./apps/fixtures.js";
-import { beforeAll, expect, spyOn, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
+import { SQL } from "bun";
 import { Database } from "bun:sqlite";
 import ts from "typescript";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import postgres from "postgres";
 import { generateOrThrow, loadGenerated, writeGenerated } from "./apps/link.js";
 import { user } from "./apps/fixtures.js";
+import { handlerTransaction } from "../src/kernel/store.js";
 
 const schema = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -37,6 +40,7 @@ spec:
   output: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}
   handler: {ref: app.createNote}
 `;
+const nativeRef = ref.replace("  handler:", "  db: native\n  handler:");
 beforeAll(() => mkdir(resolve(import.meta.dir, "apps/.generated"), { recursive: true }));
 const targets = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const;
 const caller = fixtureCaller({ ...user("writer"), role: "admin" as const, admin: true, scopes: ["notes:write"] });
@@ -70,8 +74,9 @@ for (const target of ["bun-sqlite"] as const)
       "app-note": async (ctx: any, input: { title: string }) => {
         called++;
         expect(ctx.caller).toBe(caller);
-        expect(ctx.db).toBe(db);
-        expect(ctx.store).toBe(data);
+        expect(ctx).not.toHaveProperty("db");
+        expect(ctx.store).not.toHaveProperty("transaction");
+        expect(ctx.store.collection).toBe(data.collection);
         expect(typeof ctx.store.collection).toBe("function");
         expect(typeof ctx.store.views["notes-list"]).toBe("function");
         expect(typeof ctx.store.procedures["app-note"]).toBe("function");
@@ -121,7 +126,7 @@ test("ref context Store applies the same caller's scope on a real SQLite handle"
 });
 
 test("transaction ref context is the tx Store and handle, and both write paths roll back", async () => {
-  const generated = await files("bun-sqlite");
+  const generated = await files("bun-sqlite", schema + nativeRef);
   const app = await loadGenerated(generated["generated.ts"]!);
   const db = new Database(":memory:");
   let txStore: any;
@@ -130,7 +135,8 @@ test("transaction ref context is the tx Store and handle, and both write paths r
     const data = app.store(db, caller, {
       handlers: {
         "app-note": async (ctx: any, input: { title: string }) => {
-          expect(ctx.store).toBe(txStore);
+          expect(ctx.store.collection).toBe(txStore.collection);
+          expect(ctx.store).not.toHaveProperty("transaction");
           expect(ctx.db).not.toBe(db);
           expect(ctx.caller).toBe(caller);
           await ctx.store.collection("notes").insert(input);
@@ -201,17 +207,46 @@ test("all four Store wiring points reject missing, extra and wrong handlers", as
     const roots: string[] = [];
     for (const target of targets) {
       const destination = resolve(dir, target);
-      await writeGenerated(destination, await files(target), false);
+      await writeGenerated(
+        destination,
+        await files(target, schema + ref + "---\n" + nativeRef.replace("name: app-note", "name: native-note")),
+        false,
+      );
       const consumer = resolve(destination, "consumer.ts");
       await writeFile(
         consumer,
         `import { type Handlers, procedures, store } from "./generated.js";
 import { input } from "./validation/procedures/app-note.js";
 const good: Handlers = { "app-note": async (ctx, input) => {
+  // @ts-expect-error undeclared handler has no raw handle
+  ctx.db;
+  // @ts-expect-error handler Store exposes no root transaction method
+  ctx.store.transaction;
+  ${
+    target === "cloudflare-d1"
+      ? ""
+      : `await ctx.transaction(async tx => {
+    // @ts-expect-error undeclared transaction callback has no raw handle
+    tx.db;
+    // @ts-expect-error callback Store exposes no root transaction method
+    tx.store.transaction;
+  });`
+  }
   await ctx.store.views["notes-list"]({});
   const [row] = await ctx.store.batch([ctx.store.collection("notes").insert(input)]);
   const title: string = row.title;
   return { title };
+}, "native-note": async (ctx, input) => {
+  const db: Parameters<typeof store>[0] = ctx.db;
+  ${
+    target === "cloudflare-d1"
+      ? ""
+      : `await ctx.transaction(async tx => {
+    const txDb: typeof db = tx.db;
+    return txDb;
+  });`
+  }
+  return input;
 } };
 async function check(db: Parameters<typeof store>[0], caller: Parameters<typeof store>[1]) {
   const title: string = (await store(db, caller, { handlers: good }).procedures["app-note"]({ title: "t" })).title;
@@ -229,11 +264,11 @@ async function check(db: Parameters<typeof store>[0], caller: Parameters<typeof 
   // @ts-expect-error excess variable implementation
   store(db, caller, { handlers: extra });
   // @ts-expect-error wrong input
-  store(db, caller, { handlers: { "app-note": async (ctx, input: { title: number }) => ({ title: "t" }) } });
+  store(db, caller, { handlers: { ...good, "app-note": async (ctx, input: { title: number }) => ({ title: "t" }) } });
   // @ts-expect-error wrong output
-  store(db, caller, { handlers: { "app-note": async () => ({ title: 1 }) } });
+  store(db, caller, { handlers: { ...good, "app-note": async () => ({ title: 1 }) } });
   // @ts-expect-error handler must return Promise
-  store(db, caller, { handlers: { "app-note": () => ({ title: "t" }) } });
+  store(db, caller, { handlers: { ...good, "app-note": () => ({ title: "t" }) } });
   // @ts-expect-error ref Procedures only in Store map
   procedures["app-note"];
   // @ts-expect-error title required
@@ -431,15 +466,14 @@ test("a caught batch rejection with undefined still rejects and rolls back its o
   }
 });
 
-test("native database declaration validates, describes and warns only on undeclared use", async () => {
+test("native database declaration validates and changes the access descriptor", async () => {
   const { compilePlan, d1Dialect } = await import("../src/build/compiler.js");
   const { describeApp, diffApp } = await import("../src/domain/describe/index.js");
   const compile = async (text: string) =>
     compilePlan({ sources: [{ sourceId: "native.yaml", text }] }, d1Dialect, "operational");
-  const declared = ref.replace("  handler:", "  db: native\n  handler:");
   for (const text of [
     ref.replace("  handler:", "  db: true\n  handler:"),
-    declared.replace("{ref: app.createNote}", "{sql: 'SELECT 1'}"),
+    nativeRef.replace("{ref: app.createNote}", "{sql: 'SELECT 1'}"),
   ]) {
     const result = await compile(text);
     expect(result.ok).toBe(false);
@@ -461,7 +495,7 @@ spec:
   target: {procedure: app-note}
 `;
   const before = await compile(ref + trigger),
-    after = await compile(declared + trigger);
+    after = await compile(nativeRef + trigger);
   if (!before.ok || !after.ok) throw Error("compile failed");
   const old = await describeApp(before.plan),
     next = await describeApp(after.plan);
@@ -483,49 +517,88 @@ spec:
     expect(newRoute.variants.find(v => v.id === "procedure:app-note")!.nativeDatabase).toBe(true);
     expect(newRoute.targetHash).not.toBe(oldRoute.targetHash);
   }
-  const warning = spyOn(console, "warn").mockImplementation(() => {});
-  try {
-    for (const target of targets) {
+});
+
+for (const target of targets) {
+  const pgUrl =
+    target === "bun-postgres"
+      ? process.env.MANTLE_NEXT_BUN_PG_URL
+      : target === "cloudflare-postgres"
+        ? process.env.MANTLE_NEXT_WORKER_PG_URL
+        : undefined;
+  test.skipIf(target.endsWith("postgres") && !pgUrl)(
+    `${target}: native handles are present only for declared ref handlers and callbacks`,
+    async () => {
       for (const native of [false, true]) {
-        const app = await loadGenerated((await files(target, schema + (native ? declared : ref)))["generated.ts"]!);
-        const db = new Database(":memory:");
+        const app = await loadGenerated((await files(target, schema + (native ? nativeRef : ref)))["generated.ts"]!);
+        const db =
+          target === "bun-postgres"
+            ? new SQL(pgUrl!)
+            : target === "cloudflare-postgres"
+              ? postgres(pgUrl!)
+              : new Database(":memory:");
         try {
-          const data = app.store(db, caller, {
+          const assertContext = (ctx: any) => {
+            expect("db" in ctx).toBe(native);
+            expect("transaction" in ctx.store).toBe(false);
+          };
+          const root = app.store(db, caller, {
             handlers: {
               "app-note": async (ctx: any, input: { title: string }) => {
-                if (input.title === "store") {
-                  expect(ctx.store).toBeDefined();
+                assertContext(ctx);
+                if (native) expect(ctx.db).toBeDefined();
+                if (target === "cloudflare-d1") {
+                  expect("transaction" in ctx).toBe(false);
                   return input;
                 }
-                if (input.title === "tx")
-                  return ctx.transaction(async (tx: any) => {
-                    expect(tx.db).toBeDefined();
-                    return input;
-                  });
-                expect(ctx.db).toBe(db);
-                return input;
+                return ctx.transaction(async (tx: any) => {
+                  assertContext(tx);
+                  if (native) expect(tx.db).toBeDefined();
+                  return input;
+                });
               },
             },
           });
-          warning.mockClear();
-          await data.procedures["app-note"]({ title: "store" });
-          expect(warning).not.toHaveBeenCalled();
-          await data.procedures["app-note"]({ title: "db" });
-          expect(warning).toHaveBeenCalledTimes(native ? 0 : 1);
-          if (!native) expect(warning.mock.calls[0]![0]).toContain("add spec.db: native");
-          // SQLite executes the real interactive callback, both new and already joined.
-          if (target === "bun-sqlite") {
-            warning.mockClear();
-            await data.procedures["app-note"]({ title: "tx" });
-            await data.transaction((tx: any) => tx.procedures["app-note"]({ title: "tx" }));
-            expect(warning).toHaveBeenCalledTimes(native ? 0 : 2);
-          }
+          const input = { title: "test" };
+          expect(await root.procedures["app-note"](input)).toEqual(input);
+          if (target !== "cloudflare-d1")
+            expect(await root.transaction((tx: any) => tx.procedures["app-note"](input))).toEqual(input);
         } finally {
-          db.close();
+          if (db instanceof Database) db.close();
+          else await db.end();
         }
       }
-    }
+    },
+  );
+}
+
+test("warning-phase generated code keeps its transaction callback contract", async () => {
+  const app = await loadGenerated((await files("bun-sqlite"))["generated.ts"]!);
+  const db = new Database(":memory:");
+  try {
+    const root = app.store(db, caller, { handlers: {} });
+    const verify = async (store: object, handle: unknown) => {
+      let warnings = 0;
+      await handlerTransaction(
+        store,
+        handle,
+        () => warnings++,
+      )(async ctx => {
+        expect(warnings).toBe(0);
+        expect(ctx.db).toBeDefined();
+        expect(warnings).toBe(1);
+        expect(typeof ctx.store.transaction).toBe("function");
+      });
+      await handlerTransaction(
+        store,
+        handle,
+      )(async ctx => {
+        expect(ctx.db).toBeDefined();
+      });
+    };
+    await verify(root, db);
+    await root.transaction(verify);
   } finally {
-    warning.mockRestore();
+    db.close();
   }
 });
