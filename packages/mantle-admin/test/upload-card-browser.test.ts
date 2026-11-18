@@ -24,6 +24,7 @@ const transparent = (html: HTMLElement) => [
 // `anyFile`: a purpose that takes any type gets a PDF, with no alt text.
 it.each([
   {},
+  { localeSwitch: true },
   { tool: "upload_to_folder", forward: ["folder"] },
   { forward: ["folder"], inputTimeoutMs: 300, silent: true },
   { forward: ["folder"], inputTimeoutMs: 300, late: true },
@@ -36,6 +37,7 @@ it.each([
     late,
     anyFile,
     choosePurpose,
+    localeSwitch,
     ...options
   }: {
     tool?: string;
@@ -45,11 +47,13 @@ it.each([
     late?: boolean;
     anyFile?: boolean;
     choosePurpose?: boolean;
+    localeSwitch?: boolean;
   }) => {
     anyFile ||= choosePurpose;
     const TOOL = options.tool ?? "open_media_upload",
       extra = options.forward ? { folder: "docs" } : {},
-      purpose = anyFile ? "notes" : "cover";
+      purpose = anyFile ? "notes" : "cover",
+      filename = localeSwitch ? "檔案 & {id}.png" : "c\u200Bat.png";
     const root = resolve(import.meta.dirname, "../../.."),
       pkg = resolve(import.meta.dirname, "..");
     const { build } = createRequire(resolve(root, "packages/mantle/package.json"))("esbuild");
@@ -65,10 +69,13 @@ it.each([
 import {AppBridge,PostMessageTransport} from '@modelcontextprotocol/ext-apps/app-bridge';
 const frame=document.createElement('iframe');frame.sandbox='allow-scripts';document.body.append(frame);
 window.host={calls:[],messages:[]};
-const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{theme:'light'}});
+const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{theme:'light',locale:${JSON.stringify(localeSwitch ? "zh-Hant-HK" : "en")}}});
 window.host.bridge=bridge;
 bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : late ? "setTimeout(()=>void bridge.sendToolInput({arguments:{purpose:'cover',folder:'docs'}}),800);" : `void bridge.sendToolInput({arguments:{${choosePurpose ? "" : `purpose:'${purpose}',`}folder:'docs'}});`}};
-bridge.oncalltool=async params=>{window.host.calls.push(params);return (await fetch('/tool',{method:'POST',body:JSON.stringify(params)})).json();};
+bridge.oncalltool=async params=>{window.host.calls.push(params);
+if(${!!localeSwitch}&&params.arguments?.variants)await new Promise(resolve=>window.host.releasePrepare=resolve);
+if(${!!localeSwitch}&&params.arguments?.uploadId)await new Promise(resolve=>window.host.releaseCommit=resolve);
+return (await fetch('/tool',{method:'POST',body:JSON.stringify(params)})).json();};
 bridge.onmessage=async params=>{window.host.messages.push(params);return {};};
 bridge.onsizechange=()=>{};
 await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentWindow));frame.src='/card';
@@ -130,8 +137,14 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       { name: "gallery", required: ["image/webp", "image/jpeg"], maxBytes: { "image/webp": 1000, "image/jpeg": 1000 } },
       { name: "notes", required: ["*/*"], maxBytes: { "*/*": 1000 } },
     ];
+    let releaseStorage: (() => void) | undefined;
     const server = createServer(async (request, response) => {
       const url = request.url ?? "/";
+      if (url === "/release-storage") {
+        releaseStorage?.();
+        response.end();
+        return;
+      }
       if (url.startsWith("/storage/")) {
         // the CORS a bucket needs: PUT from the host's sandbox origin, keyed on Origin (an opaque sandbox sends "null")
         response.setHeader("access-control-allow-origin", request.headers.origin ?? "*");
@@ -147,6 +160,10 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
           type: String(request.headers["content-type"]),
           bytes: await body(request),
         });
+        if (localeSwitch)
+          await new Promise<void>(resolve => {
+            releaseStorage = resolve;
+          });
         response.end();
         return;
       }
@@ -220,6 +237,14 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         return;
       }
       await expect.poll(() => app.locator("form").getAttribute("aria-busy"), { timeout: 10_000 }).toBe("false");
+      if (localeSwitch) {
+        expect(await app.locator("h1").textContent()).toBe("上傳檔案");
+        expect(await app.locator("#file").getAttribute("aria-label")).toBe("檔案");
+        expect(await app.locator(".footnote").textContent()).toContain("上傳完成前");
+        expect(await app.locator("#policy").textContent()).toContain("位元組");
+        await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "fr-FR" }));
+        await expect.poll(() => app.locator("h1").textContent()).toBe("Upload a file");
+      }
       expect(await upload.isDisabled()).toBe(true);
       expect(await app.locator("#file-details").textContent()).toBe("No file selected");
       // the conversation shows through, and the first paint takes the host's scheme
@@ -278,13 +303,44 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         await upload.click();
         await expect.poll(() => app.locator("#status").textContent()).toContain("takes image/png or image/jpeg");
         expect(await app.locator("#status").getAttribute("role")).toBe("alert");
-        // a raw file name: the zero-width space goes to the server as named, but not into the user message
-        await app.getByLabel("File").setInputFiles({ name: "c\u200Bat.png", mimeType: "image/png", buffer: png });
-        await app.getByLabel("Alt text").fill("A cat");
+        if (localeSwitch) {
+          await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "zh-Hans" }));
+          await expect.poll(() => app.locator("#status").textContent()).toContain("不接受 text/plain");
+          expect(await upload.textContent()).toBe("重试");
+        }
+        // Raw identity is preserved, including template-looking text; the bridge only normalizes invisible message text.
+        await app.locator("#file").setInputFiles({ name: filename, mimeType: "image/png", buffer: png });
+        await app.locator("#alt").fill("A cat");
+        if (localeSwitch) {
+          await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "zh-TW" }));
+          await expect.poll(() => app.locator("#file").getAttribute("aria-label")).toBe("檔案");
+          expect(await app.locator("#file-details").textContent()).toContain(filename);
+          expect(await app.locator("#alt").inputValue()).toBe("A cat");
+        }
       }
       await upload.click();
-      await app.getByText(/^Uploaded\. Asset id /).waitFor();
-      await expect.poll(() => upload.textContent()).toBe("Uploaded");
+      if (localeSwitch) {
+        await expect.poll(() => upload.textContent()).toBe("準備中…");
+        expect(await app.locator("#status").textContent()).toBe("準備中…");
+        await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "zh-CN" }));
+        await expect.poll(() => upload.textContent()).toBe("准备中…");
+        await page.evaluate(() => (window as any).host.bridge.setHostContext({ theme: "dark" }));
+        await expect.poll(() => app.locator("html").getAttribute("data-theme")).toBe("dark");
+        expect(await app.locator("#file").getAttribute("aria-label")).toBe("文件");
+        await page.evaluate(() => (window as any).host.releasePrepare());
+        await expect.poll(() => upload.textContent()).toBe("上传中…");
+        expect(await app.locator("#status").textContent()).toBe(`正在上传 ${filename}…`);
+        expect(await app.locator("#progress").getAttribute("aria-label")).toBe("上传进度");
+        await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "zh-TW" }));
+        await expect.poll(() => upload.textContent()).toBe("上傳中…");
+        expect(await app.locator("#file").evaluate((input: HTMLInputElement) => input.files?.[0]?.name)).toBe(filename);
+        await page.request.get(origin + "/release-storage");
+        await expect.poll(() => upload.textContent()).toBe("儲存中…");
+        expect(await app.locator("#status").textContent()).toBe("正在儲存…");
+        await page.evaluate(() => (window as any).host.releaseCommit());
+      }
+      await app.getByText(localeSwitch ? /^上傳完成。素材 ID：/ : /^Uploaded\. Asset id /).waitFor({ timeout: 10_000 });
+      await expect.poll(() => upload.textContent()).toBe(localeSwitch ? "已上傳" : "Uploaded");
       const id = (await app.locator("form").getAttribute("data-asset"))!;
       expect(objects.get(id)).toEqual(
         anyFile ? { type: "application/pdf", bytes: pdf } : { type: "image/png", bytes: png },
@@ -314,7 +370,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
               }
             : {
                 purpose,
-                filename: "c\u200Bat.png",
+                filename,
                 variants: [{ mimeType: "image/png", byteSize: 64, role: "primary" }],
                 alt: "A cat",
                 ...extra,
@@ -328,11 +384,18 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
           content: [
             {
               type: "text",
-              text: `I uploaded ${anyFile ? "report.pdf" : "cat.png"} to the media library: asset id ${id} (purpose ${purpose}).`,
+              text: localeSwitch
+                ? `我已將 ${filename} 上傳至媒體庫：素材 ID ${id}（用途 ${purpose}）。`
+                : `I uploaded ${anyFile ? "report.pdf" : "cat.png"} to the media library: asset id ${id} (purpose ${purpose}).`,
             },
           ],
         },
       ]);
+      if (localeSwitch) {
+        await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "de-DE" }));
+        await expect.poll(() => app.locator("#status").textContent()).toBe(`Uploaded. Asset id ${id}.`);
+        expect(await app.locator("#file-details").textContent()).toContain(filename);
+      }
       // a finished upload offers no second upload of the same file
       expect(await upload.isDisabled()).toBe(true);
       expect(errors).toEqual([]);
