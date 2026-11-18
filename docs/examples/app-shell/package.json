@@ -20,7 +20,7 @@
     "@better-auth/cimd": "1.7.14",
     "@better-auth/core": "1.7.14",
     "@better-auth/mcp": "1.7.14",
-    "@better-auth/oauth-provider": "1.7.14",
+    "@better-auth/oauth-provider": "1.7.16",
     "@better-auth/utils": "0.5.1",
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/server": "2.3.1",
