@@ -1,9 +1,10 @@
 /**
- * Request -> Caller with Better Auth's own API only: no cookie signing, expiry, refresh, revocation or token rule is
- * re-implemented here. Nothing in this module imports Better Auth statically, so a public route that never calls
+ * Request -> Caller with Better Auth's verification APIs: Better Auth owns signing, expiry, refresh and revocation.
+ * Nothing in this module imports Better Auth statically, so a public route that never calls
  * `resolveCaller` never loads it, and a request without credentials never loads it either.
  */
 import type { BetterAuthOptions } from "better-auth/types";
+import type { JwtOptions } from "better-auth/plugins/jwt";
 import { ContractError, type Caller } from "../kernel/contracts.js";
 import { userCaller } from "../kernel/user-caller.js";
 import type { UserFields } from "../kernel/user-fields.js";
@@ -31,6 +32,7 @@ export interface AuthInstance {
   readonly options: BetterAuthOptions;
   readonly $context: Promise<unknown>;
   readonly api: {
+    getJwks?(): ReturnType<typeof import("better-auth/oauth2").getJwks>;
     getSession(input: {
       headers: Headers;
       query?: { disableCookieCache?: boolean; disableRefresh?: boolean };
@@ -190,20 +192,58 @@ export async function resolveCaller(
     if (!options.audience) throw new ContractError("UNAUTHENTICATED", "This route does not accept access tokens.");
     const instance = await auth.get();
     checkFieldSources(instance, options.fields);
-    const { oauthProviderResourceClient } = await import("@better-auth/oauth-provider/resource-client");
-    const { createDpopReplayStore } = await import("better-auth/oauth2");
+    const {
+      createDpopReplayStore,
+      enforceDpopBinding,
+      parseAccessTokenAuthorization,
+      requestToResourceInput,
+      verifyJwsAccessToken,
+    } = await import("better-auth/oauth2");
     const context = (await instance.$context) as import("@better-auth/core").AuthContext;
-    // Issuance uses the normalized auth context URL, not the raw origin-only baseURL option.
-    const verifier = oauthProviderResourceClient({
-      options: { ...instance.options, baseURL: context.baseURL, basePath: "" },
-      $context: instance.$context,
-    }).getActions();
-    let claims: Awaited<ReturnType<typeof verifier.verifyAccessTokenRequest>>;
+    let claims: Awaited<ReturnType<typeof verifyJwsAccessToken>>;
     try {
-      claims = await verifier.verifyAccessTokenRequest(request, {
-        verifyOptions: { audience: options.audience as string | string[] },
-        dpop: { replayStore: createDpopReplayStore(context.internalAdapter) },
-      });
+      const audience = options.audience as string | string[];
+      const jwtPlugin = context.getPlugin("jwt");
+      const jwt = jwtPlugin?.options as JwtOptions | undefined;
+      const provider = context.getPlugin("oauth-provider")?.options as { disableJwtPlugin?: boolean } | undefined;
+      const getJwks = instance.api.getJwks;
+      const replayStore = createDpopReplayStore(context.internalAdapter);
+      if (jwtPlugin && !jwt?.jwks?.remoteUrl && !provider?.disableJwtPlugin && getJwks) {
+        // The resource client takes URL sources only. Use its JWT and DPoP primitives with the local key source.
+        const { authorizationHeader, dpopProofJwt, method, url } = requestToResourceInput(request);
+        const access = parseAccessTokenAuthorization(authorizationHeader);
+        if (!access?.token || access.scheme === "Unknown") throw new Error("Invalid access token authorization.");
+        claims = await verifyJwsAccessToken(access.token, {
+          jwksFetch: () => getJwks.call(instance.api),
+          jwksCacheKey: instance,
+          verifyOptions: { audience, issuer: jwt?.jwt?.issuer ?? context.baseURL },
+        });
+        // Keep the resource verifier's RFC 6749 scope-token checks before consuming a DPoP proof.
+        const scope = claims.scope;
+        if (
+          scope !== undefined &&
+          (typeof scope !== "string" || scope.split(" ").some(token => !/^[\x21\x23-\x5b\x5d-\x7e]+$/.test(token)))
+        )
+          throw new Error("Invalid access token scope.");
+        await enforceDpopBinding({
+          payload: claims,
+          authorization: access,
+          proofJwt: dpopProofJwt,
+          method,
+          url,
+          replayStore,
+        });
+      } else {
+        const { oauthProviderResourceClient } = await import("@better-auth/oauth-provider/resource-client");
+        const verifier = oauthProviderResourceClient({
+          options: { ...instance.options, baseURL: context.baseURL, basePath: "" },
+          $context: instance.$context,
+        }).getActions();
+        claims = await verifier.verifyAccessTokenRequest(request, {
+          verifyOptions: { audience },
+          dpop: { replayStore },
+        });
+      }
     } catch (cause) {
       throw new ContractError("UNAUTHENTICATED", "The access token is not valid for this resource.", "", { cause });
     }

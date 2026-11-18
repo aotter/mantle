@@ -2,7 +2,7 @@ import { fixtureCaller } from "./apps/fixtures.js";
 /**
  * resolveCaller / authLoader against a REAL Better Auth instance: emailOTP sign-in, admin plugin (role/banned), jwt and
  * oauthProvider, on the native d1Adapter over a bun:sqlite D1 shim. The auth handler is also served over a local HTTP
- * port, because Better Auth's resource client verifies access tokens against the instance's JWKS URL (baseURL + /jwks).
+ * port for the OAuth authorization flow and remote-JWKS fixtures.
  */
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -10,7 +10,7 @@ import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { authenticatedAs } from "../src/testing/index.js";
 import { fieldsOf, rolesOf } from "../src/kernel/caller-identity.js";
 import type { BetterAuthOptions } from "better-auth/types";
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { betterAuth } from "better-auth/minimal";
 import { admin as adminFunction, customSession, emailOTP, jwt, magicLink, phoneNumber } from "better-auth/plugins";
@@ -531,51 +531,41 @@ describe("resolveCaller: OAuth bearer", () => {
     expect(failure).toMatchObject({ code: "UNAUTHENTICATED" });
   });
 
-  test("app shell answers its own JWKS URL in process; Better Auth still verifies and caches by that URL (#1932)", async () => {
-    // the shell's own module, as smoke-kit.test.ts loads the shell's kit
-    const { withInProcessJwks } = await import(
-      new URL("../../../docs/examples/app-shell/src/jwks.ts", import.meta.url).href
-    );
+  test("local JWKS stay in process and refresh when the issuer rotates keys", async () => {
     const app = await makeApp(),
       { cookie, userId } = await app.signIn();
     const { accessToken } = await oauthAccessToken(app, cookie);
-    const url = `${app.baseURL}/jwks`,
-      outer = globalThis.fetch,
-      network: string[] = [];
-    let reads = 0;
-    const counting = ((input: Request | string | URL, init?: RequestInit) => {
-      network.push(input instanceof Request ? input.url : String(input));
-      return outer(input, init);
-    }) as typeof fetch;
-    globalThis.fetch = withInProcessJwks(counting, url, async () => {
-      reads++;
-      return app.auth.api.getJwks();
-    });
+    const keys = spyOn(app.auth.api, "getJwks");
+    const fetch = spyOn(globalThis, "fetch");
+    const resolve = (token: string) => resolveCaller(bearer(app, token), app.loader, { audience: AUDIENCE });
     try {
-      expect(await resolveCaller(bearer(app, accessToken), app.loader, { audience: AUDIENCE })).toMatchObject({
-        subject: userId,
-        credential: "oauth",
-      });
-      expect(await resolveCaller(bearer(app, accessToken), app.loader, { audience: AUDIENCE })).toMatchObject({
-        subject: userId,
-      });
-      // no request reached the issuer's /jwks over the network; one in-process read, then Better Auth's cache for that URL
-      expect(network.filter(seen => seen === url)).toEqual([]);
-      expect(reads).toBe(1);
-      // the keys still decide: a token whose signature does not verify is refused
-      const [header, payload] = accessToken.split(".");
+      expect(await resolve(accessToken)).toMatchObject({ subject: userId, credential: "oauth" });
+      expect(await resolve(accessToken)).toMatchObject({ subject: userId });
+      expect(keys).toHaveBeenCalledTimes(1);
+
+      app.sqlite.run("DELETE FROM jwks");
+      const { accessToken: rotated } = await oauthAccessToken(app, cookie);
+      expect(await resolve(rotated)).toMatchObject({ subject: userId });
+      expect(keys).toHaveBeenCalledTimes(2);
       expect(
-        await code(
-          resolveCaller(bearer(app, `${header}.${payload}.${b64url(new Uint8Array(64))}`), app.loader, {
-            audience: AUDIENCE,
-          }),
-        ),
-      ).toBe("UNAUTHENTICATED");
-      // anything else, including a write to that URL, goes to the real fetch
-      expect((await globalThis.fetch(url, { method: "POST" })).status).not.toBe(200);
-      expect(network).toEqual([url]);
+        fetch.mock.calls.some(([input]) => (input instanceof Request ? input.url : String(input)).endsWith("/jwks")),
+      ).toBe(false);
     } finally {
-      globalThis.fetch = outer;
+      fetch.mockRestore();
+      keys.mockRestore();
+    }
+  });
+
+  test("local JWKS verification preserves the resource verifier's scope grammar", async () => {
+    const app = await makeApp();
+    const { cookie } = await app.signIn();
+    const { accessToken } = await oauthAccessToken(app, cookie);
+    const claims = JSON.parse(Buffer.from(accessToken.split(".")[1]!, "base64url").toString());
+    for (const scope of [[], "", "mcp\tmcp"]) {
+      const { token } = await app.auth.api.signJWT({ body: { payload: { ...claims, scope } } });
+      await expect(resolveCaller(bearer(app, token), app.loader, { audience: AUDIENCE })).rejects.toMatchObject({
+        code: "UNAUTHENTICATED",
+      });
     }
   });
 
