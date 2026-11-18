@@ -66,6 +66,7 @@ async function makeApp(
     managedGrants?: boolean;
     /** Adds the test extension grants (tests/apps/managed-grant.ts). */
     extensionGrants?: boolean;
+    allowPublicClientPrelogin?: boolean;
   } = {},
 ) {
   const sqlite = new Database(":memory:");
@@ -168,6 +169,7 @@ async function makeApp(
         enforcePerClientResources: false,
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
+        allowPublicClientPrelogin: options.allowPublicClientPrelogin ?? false,
       }),
     ],
   };
@@ -1147,6 +1149,43 @@ describe("OAuth grant revocation and consent routes", () => {
       subject: userId,
     });
   });
+  test("changing consent language and theme preserves the signed authorization request", async () => {
+    const app = await makeApp({ allowPublicClientPrelogin: true });
+    const { cookie } = await app.signIn();
+    const registered = await app.post("/oauth2/register", {
+      client_name: "Example",
+      redirect_uris: [REDIRECT],
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+      scope: "mcp",
+    });
+    expect(registered.status).toBe(201);
+    const client = (await registered.json()) as { client_id: string };
+    const { location } = await authorize(app, cookie, client.client_id, "mcp");
+    const url = new URL(location, app.origin);
+    const signed = url.search.slice(1);
+    const routes = authRoutes(app.loader as never, { methods: [] });
+    const original = await routes(new Request(url.href, { headers: { cookie, "accept-language": "en" } }));
+    expect(original?.status).toBe(200);
+    url.search = `?mantle_ui=zh-CN.light&${signed}`;
+    const page = await routes(new Request(url.href, { headers: { cookie } }));
+    expect(page?.status).toBe(200);
+    const html = await page!.text();
+    expect(html).toContain('lang="zh-Hans-CN"');
+    expect(html).toContain("要连接 Example 吗？");
+    expect(html).toContain('data-theme="light"');
+    const field = /name="oauth_query" value="([^"]*)"/.exec(html)?.[1];
+    expect(field?.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))).toBe(signed);
+    const rtl = await routes(
+      new Request(new URL(location, app.origin).href, { headers: { cookie, "accept-language": "en;q=0.2, ar;q=0.9" } }),
+    );
+    expect(await rtl!.text()).toContain('lang="ar" dir="rtl" data-theme="system"');
+    url.search = `?mantle_ui=zh-CN.dark&${signed}`;
+    const dark = await routes(new Request(url.href, { headers: { cookie } }));
+    expect(await dark!.text()).toContain('data-theme="dark" class="dark"');
+  });
+
   test("methods never loads auth; session-only connected apps, localized HTML and origin-checked writes", async () => {
     const app = await makeApp();
     const routes = authRoutes(app.loader as never, { methods: [{ kind: "email-otp" }] });

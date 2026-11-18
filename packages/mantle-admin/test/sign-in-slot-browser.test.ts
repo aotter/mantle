@@ -104,7 +104,14 @@ export default defineAdmin({}, {
 
     // the email code: the app's step gets Better Auth's continuation URL, unchanged
     await page.getByRole("textbox").first().fill("person@example.test");
-    await page.getByRole("button", { name: "Send code" }).click();
+    await page.getByRole("button", { name: "Admin language" }).click();
+    await page.getByRole("menuitem", { name: "繁體中文" }).click();
+    await page.getByRole("heading", { name: "登入", exact: true }).waitFor();
+    expect(await page.getByRole("textbox").first().inputValue()).toBe("person@example.test");
+    const dark = (await page.locator("html").getAttribute("data-theme")) === "dark";
+    await page.getByRole("button", { name: dark ? "淺色" : "深色", exact: true }).click();
+    expect(await page.locator("html").getAttribute("data-theme")).toBe(dark ? "light" : "dark");
+    await page.getByRole("button", { name: "寄送驗證碼", exact: true }).click();
     await page.locator('input[autocomplete="one-time-code"]').fill("123456");
     await page.getByText("after-step").waitFor();
     expect(await page.evaluate(() => sessionStorage.getItem("after-sign-in"))).toBe("/admin/from-otp");

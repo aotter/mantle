@@ -4,7 +4,24 @@ import { AuthCard, Button, CardContent, CardDescription, CardHeader, CardTitle, 
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { signOut } from "../../lib/auth";
-import { ThemeToggle } from "../../layout/preference-controls";
+import { LanguagePreferenceDropdown, ThemeToggle } from "../../layout/preference-controls";
+
+export function AdminAuthCard({ children, wide }: React.PropsWithChildren<{ wide?: boolean }>) {
+  return (
+    <AuthCard
+      wide={wide}
+      className="[&>[data-slot=card-header]]:pe-24"
+      action={
+        <div className="flex items-center gap-1">
+          <LanguagePreferenceDropdown compact />
+          <ThemeToggle />
+        </div>
+      }
+    >
+      {children}
+    </AuthCard>
+  );
+}
 
 /**
  * While the session or `me` loads: a neutral page frame, not the sign-in card. A signed-in user who lands here from
@@ -29,21 +46,21 @@ export function GateError({ error }: { error: unknown }): React.ReactElement {
   const { language } = usePreferences();
   const message = error instanceof Error ? error.message : t(language, "common.unknownError");
   return (
-    <AuthCard action={<ThemeToggle />}>
+    <AdminAuthCard>
       <CardHeader className="text-center">
         <CardTitle className="text-xl">
           <h1>{t(language, "auth.error.title")}</h1>
         </CardTitle>
         <CardDescription role="alert">{message}</CardDescription>
       </CardHeader>
-    </AuthCard>
+    </AdminAuthCard>
   );
 }
 
 export function AccessDeniedView({ login }: { login: string | null }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <AuthCard action={<ThemeToggle />} wide>
+    <AdminAuthCard wide>
       <CardHeader className="text-center">
         <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <AlertTriangle className="size-5" aria-hidden />
@@ -68,6 +85,6 @@ export function AccessDeniedView({ login }: { login: string | null }): React.Rea
           {t(language, "common.signOut")}
         </Button>
       </CardContent>
-    </AuthCard>
+    </AdminAuthCard>
   );
 }
