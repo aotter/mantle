@@ -152,10 +152,9 @@ Pin the selected packages to `0.2.2-alpha.4` and regenerate. One breaking change
   `unsafe(text, values, { prepare: true })`; before, postgres.js sent every statement unnamed, which Hyperdrive's
   transaction pooling does not reliably support. A client created with `prepare: false` keeps them unnamed; Bun.SQL is
   unchanged. Before upgrading a `cloudflare-postgres` application, confirm its Hyperdrive configuration has query
-  caching disabled, as Mantle already requires. A migration that changes the result columns of an already prepared
-  statement makes it fail once inside a transaction with `0A000 cached plan must not change result type`, a definite
-  error: the write is rolled back, never `OUTCOME_UNKNOWN`. See [PostgreSQL through
-  Hyperdrive](../cloudflare/postgres-hyperdrive.md).
+  caching disabled, as Mantle already requires. A migration that changes a prepared statement's result columns can
+  invalidate it. The direct test returned PostgreSQL `0A000`, and the Hyperdrive test closed the connection
+  (#2029). See [PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md).
 - **Better Auth on `cloudflare-postgres`: no postgres.js client per isolate (#2020).** A client kept per isolate with
   `max: 1` fails every other request in workerd ("Cannot perform I/O on behalf of a different request"). Keep the
   Better Auth instance per isolate and give `postgresAdapter` and `postgresBootstrapAdmin` a handle that resolves the
