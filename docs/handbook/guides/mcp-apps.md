@@ -474,6 +474,26 @@ is not cut: under the cap it is reached through the full-screen toggle.
 `theme: "dark"` sets both `data-theme` and the `.dark` class. Only the spec's
 style variables are applied; [Theme](#theme) says how they meet your own.
 
+### Custom MCP App views
+
+Use the same presentation helper in a custom view built with the official MCP Apps
+`App` client. Apply the initial host context after connecting, then apply each
+context update.
+
+```ts
+import { applyHostContext } from "@aotter/mantle-admin/mcp-app";
+
+app.onhostcontextchanged = context => applyHostContext(context);
+await app.connect();
+applyHostContext(app.getHostContext() ?? {});
+```
+
+The helper sets the root language, theme, supported host styles, fonts, dimensions
+and safe-area padding. Fixed elements can use `--mantle-safe-top`,
+`--mantle-safe-right`, `--mantle-safe-bottom` and `--mantle-safe-left`, for example
+`bottom: var(--mantle-safe-bottom, 0px)`. Omitted top-level fields leave the current
+presentation in place. Pass zero insets to clear a previous safe area.
+
 ### Result size
 
 A View result carries its rows twice, as the JSON text block and as

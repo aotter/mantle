@@ -92,6 +92,10 @@
       "types": "./dist/server/mcp.d.ts",
       "import": "./dist/server/mcp.js"
     },
+    "./mcp-app": {
+      "types": "./dist/mcp-app.d.ts",
+      "import": "./dist/mcp-app.js"
+    },
     "./server/design": {
       "types": "./dist/server/design.d.ts",
       "import": "./dist/server/design.js"

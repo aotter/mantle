@@ -4,7 +4,8 @@
  * model the asset id. It uploads the original as the single variant a purpose takes (ADR-0017); a purpose with several
  * variant slots needs an agent that prepares them.
  */
-import { applyHostContext, connectHost, type HostApi } from "./postmessage";
+import { connectHost, type HostApi } from "./postmessage";
+import { applyHostContext } from "../../../src/mcp-app.js";
 import { uploadLabels, type UploadLabels } from "./locale";
 import { ADMIN_LANGUAGES, normalizeLanguage } from "../app/languages";
 import { forwardedInput } from "./forwarded-input";

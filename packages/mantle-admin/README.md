@@ -12,7 +12,7 @@ These exports moved from `@aotter/mantle-ui` without compatibility aliases:
 | Former UI subpath | New Admin subpath |
 | --- | --- |
 | `/admin-preview` | `@aotter/mantle-admin/admin-preview` |
-| `/mcp-app` | none: `@aotter/mantle-admin/mcp-app` (the prebuilt `mantleAppHtml`) is gone too; the application builds the App (see MCP App) |
+| `/mcp-app` | The application builds the App. The old `mantleAppHtml` export was removed. |
 
 The package ships no prebuilt SPA or MCP App: `admin/index.html`, `admin/preview.html`,
 `admin/mcp-app.html` and `admin/host-bridge.js` are not exports. The application builds them (see Static
@@ -123,6 +123,9 @@ database access or authentication capability. The ER and business-flow
 workspace remains part of the product.
 
 ## MCP App
+
+Custom MCP App views can import `applyHostContext` from `@aotter/mantle-admin/mcp-app`
+to use the same host presentation settings as Admin. See [Custom MCP App views](../../docs/handbook/guides/mcp-apps.md#custom-mcp-app-views).
 
 For compatible deployments, `adminMcpApps({ catalogue, previous })` retains
 application-owned `AdminMcpSnapshot` pages at their original URIs, with the current
