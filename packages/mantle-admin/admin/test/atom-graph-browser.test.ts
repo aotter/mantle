@@ -93,8 +93,8 @@ it("fits the whole system wiring graph on narrow and short canvases", async () =
     };
     await page.goto(`${origin}/admin/dev`);
     const storeOnly = page.locator('[data-id="Procedure:approve-request-write"]');
-    expect(await storeOnly.getByText("Store only", { exact: true }).isVisible()).toBe(true);
-    expect(await storeOnly.getByText("Admin", { exact: true }).count()).toBe(0);
+    await storeOnly.getByText("Store only", { exact: true }).waitFor();
+    expect(await storeOnly.getByText("Administrators", { exact: true }).count()).toBe(0);
     await storeOnly.click();
     await page.getByRole("button", { name: "Store only: Called through the Store. The manifest exposes no HTTP or MCP entry point." }).waitFor();
     snapshot = procedureSnapshot;
