@@ -189,10 +189,11 @@ const typeCheck = (types: readonly string[]) =>
 
 /** A Procedure's typed `input`: its bare input type (`name` exported from `from`) and its surfaces' `convert` table. */
 export type TypedInput = { readonly from: string; readonly name: string; readonly convert: string };
+type ValidationInput = { input?: JsonSchema; enumMessage?: (schema: JsonSchema) => string | undefined };
 export function emitValidation(
   plan: {
-    views: Readonly<Record<string, { input?: JsonSchema }>>;
-    procedures: Readonly<Record<string, { input?: JsonSchema }>>;
+    views: Readonly<Record<string, ValidationInput>>;
+    procedures: Readonly<Record<string, ValidationInput>>;
   },
   refuse: (path: string, message: string) => void = (path, message) => {
     throw Error(`${path}: ${message}`);
@@ -258,7 +259,10 @@ export function emitValidation(
         if (schema.enum) {
           if (!finite(schema.enum)) refuse(base, "Input enum numbers must be finite; JSON has no Infinity or NaN.");
           equality = true;
-          check(`!${literal(schema.enum)}.some(option=>equal(value,option))`, "Value is not in enum.");
+          check(
+            `!${literal(schema.enum)}.some(option=>equal(value,option))`,
+            operation.enumMessage?.(schema) ?? "Value is not in enum.",
+          );
         }
         if (schema.const !== undefined) {
           if (!finite(schema.const)) refuse(base, "Input const numbers must be finite; JSON has no Infinity or NaN.");

@@ -21,7 +21,23 @@ export function emitMcpMedia(
   definitions: readonly (ReturnType<typeof mediaDefinitions>[number] & { title: string; version: string })[],
   refuse: (path: string, message: string) => void,
 ): Record<string, string> {
-  const inputs = Object.fromEntries(definitions.map(tool => [tool.name, { input: tool.inputSchema as JsonSchema }]));
+  const inputs = Object.fromEntries(
+    definitions.map(tool => {
+      const input = tool.inputSchema as JsonSchema;
+      const purpose = input.properties?.purpose;
+      return [
+        tool.name,
+        {
+          input,
+          ...(tool.action === "upload" &&
+            purpose?.enum && {
+              enumMessage: (schema: JsonSchema) =>
+                schema === purpose ? `Choose one of these upload purposes: ${purpose.enum!.join(", ")}.` : undefined,
+            }),
+        },
+      ];
+    }),
+  );
   const checks = Object.fromEntries(
     Object.entries(emitValidation({ views: {}, procedures: inputs }, refuse)).map(([path, code]) => [
       path.replace("validation/procedures/", "validation/media/"),
