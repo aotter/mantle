@@ -227,6 +227,14 @@ export function developerConsole(plan: RuntimePlan) {
         output: null,
       })),
   ].sort((a, b) => `${a.path}\0${a.method}`.localeCompare(`${b.path}\0${b.method}`));
+  const adminProcedures = new Set(
+    callable.filter(entry => entry.kind === "procedure" && entry.surface === "admin").map(entry => entry.target),
+  );
+  const otherProcedures = new Set(
+    [...http, ...callable.filter(entry => entry.surface === "public")]
+      .filter(entry => entry.kind === "procedure")
+      .map(entry => entry.target),
+  );
 
   return {
     dataModel: {
@@ -276,7 +284,8 @@ export function developerConsole(plan: RuntimePlan) {
           name,
           title,
           description,
-          audience,
+          audience: adminProcedures.has(name) && !otherProcedures.has(name) ? ("admin" as const) : audience,
+          ...(!adminProcedures.has(name) && !otherProcedures.has(name) && { storeOnly: true as const }),
           handler,
           input,
         })),

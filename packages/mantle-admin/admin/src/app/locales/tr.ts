@@ -173,10 +173,13 @@ export default {
   "developer.graph.audience.admin": "Yöneticiler",
   "developer.graph.audience.system": "Sistem",
   "developer.graph.audience.apiClients": "API istemcileri",
+  "developer.graph.audience.storeOnly": "Yalnızca Store",
   "developer.graph.audienceDescription.public": "Oturum açmadan kullanılabilir.",
   "developer.graph.audienceDescription.members": "Oturum açmış herhangi bir üye. Site rolü gerekmez.",
   "developer.graph.audienceDescription.admin": "Oturum açmış bir yönetici.",
   "developer.graph.audienceDescription.system": "Yaşam döngüsü, kuyruk veya zamanlama olaylarından otomatik çalışır.",
+  "developer.graph.audienceDescription.storeOnly":
+    "Store üzerinden çağrılır. Manifest, HTTP veya MCP giriş noktası açmaz.",
   "developer.graph.audienceDescription.apiClients": "Kimliği doğrulanmış bir API istemcisi veya kapsam gerektirir.",
   "developer.graph.relation.translationParent": "çevirir",
   "developer.graph.relation.schemaReference": "başvurur",

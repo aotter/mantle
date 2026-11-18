@@ -172,11 +172,14 @@ export default {
   "developer.graph.audience.admin": "관리자",
   "developer.graph.audience.system": "시스템",
   "developer.graph.audience.apiClients": "API 클라이언트",
+  "developer.graph.audience.storeOnly": "Store 전용",
   "developer.graph.audienceDescription.public": "로그인하지 않고 사용할 수 있습니다.",
   "developer.graph.audienceDescription.members":
     "로그인한 모든 회원이 사용할 수 있습니다. 사이트 역할은 필요하지 않습니다.",
   "developer.graph.audienceDescription.admin": "로그인한 관리자입니다.",
   "developer.graph.audienceDescription.system": "수명 주기, 대기열 또는 예약 이벤트에서 자동으로 실행됩니다.",
+  "developer.graph.audienceDescription.storeOnly":
+    "Store를 통해 호출합니다. 매니페스트에 HTTP 또는 MCP 진입점이 없습니다.",
   "developer.graph.audienceDescription.apiClients": "인증된 API 클라이언트 또는 범위가 필요합니다.",
   "developer.graph.relation.translationParent": "번역",
   "developer.graph.relation.schemaReference": "참조",

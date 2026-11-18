@@ -174,11 +174,14 @@ export default {
   "developer.graph.audience.admin": "Administratorzy",
   "developer.graph.audience.system": "System",
   "developer.graph.audience.apiClients": "Klienci API",
+  "developer.graph.audience.storeOnly": "Tylko Store",
   "developer.graph.audienceDescription.public": "Dostępne bez logowania.",
   "developer.graph.audienceDescription.members": "Każdy zalogowany członek. Rola w witrynie nie jest wymagana.",
   "developer.graph.audienceDescription.admin": "Zalogowany administrator.",
   "developer.graph.audienceDescription.system":
     "Uruchamiane automatycznie przez zdarzenia cyklu życia, kolejki lub harmonogramu.",
+  "developer.graph.audienceDescription.storeOnly":
+    "Wywoływana przez Store. Manifest nie udostępnia punktu wejścia HTTP ani MCP.",
   "developer.graph.audienceDescription.apiClients": "Wymaga uwierzytelnionego klienta API lub odpowiedniego zakresu.",
   "developer.graph.relation.translationParent": "tłumaczy",
   "developer.graph.relation.schemaReference": "odwołuje się do",

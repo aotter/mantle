@@ -177,11 +177,14 @@ export default {
   "developer.graph.audience.admin": "Administratoren",
   "developer.graph.audience.system": "System",
   "developer.graph.audience.apiClients": "API-Clients",
+  "developer.graph.audience.storeOnly": "Nur Store",
   "developer.graph.audienceDescription.public": "Ohne Anmeldung verfügbar.",
   "developer.graph.audienceDescription.members": "Jedes angemeldete Mitglied. Keine Website-Rolle erforderlich.",
   "developer.graph.audienceDescription.admin": "Ein angemeldeter Administrator.",
   "developer.graph.audienceDescription.system":
     "Wird automatisch durch Lebenszyklus-, Warteschlangen- oder Zeitplanereignisse ausgeführt.",
+  "developer.graph.audienceDescription.storeOnly":
+    "Wird über den Store aufgerufen. Es gibt keinen HTTP- oder MCP-Einstiegspunkt.",
   "developer.graph.audienceDescription.apiClients":
     "Erfordert einen authentifizierten API-Client oder passenden Geltungsbereich.",
   "developer.graph.relation.translationParent": "übersetzt",

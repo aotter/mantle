@@ -172,10 +172,13 @@ export default {
   "developer.graph.audience.admin": "Administrator",
   "developer.graph.audience.system": "Sistem",
   "developer.graph.audience.apiClients": "Klien API",
+  "developer.graph.audience.storeOnly": "Hanya Store",
   "developer.graph.audienceDescription.public": "Tersedia tanpa masuk.",
   "developer.graph.audienceDescription.members": "Anggota mana pun yang sudah masuk. Peran situs tidak diperlukan.",
   "developer.graph.audienceDescription.admin": "Administrator yang masuk.",
   "developer.graph.audienceDescription.system": "Berjalan otomatis dari peristiwa siklus hidup, antrean, atau jadwal.",
+  "developer.graph.audienceDescription.storeOnly":
+    "Dipanggil melalui Store. Manifes tidak menyediakan titik masuk HTTP atau MCP.",
   "developer.graph.audienceDescription.apiClients": "Memerlukan klien API terautentikasi atau cakupan yang sesuai.",
   "developer.graph.relation.translationParent": "menerjemahkan",
   "developer.graph.relation.schemaReference": "merujuk ke",

@@ -175,12 +175,15 @@ export default {
   "developer.graph.audience.admin": "Administradores",
   "developer.graph.audience.system": "Sistema",
   "developer.graph.audience.apiClients": "Clientes de API",
+  "developer.graph.audience.storeOnly": "Solo Store",
   "developer.graph.audienceDescription.public": "Disponible sin iniciar sesión.",
   "developer.graph.audienceDescription.members":
     "Cualquier miembro con sesión iniciada. No se requiere un rol del sitio.",
   "developer.graph.audienceDescription.admin": "Un administrador con sesión iniciada.",
   "developer.graph.audienceDescription.system":
     "Se ejecuta automáticamente a partir de eventos de ciclo de vida, cola o programación.",
+  "developer.graph.audienceDescription.storeOnly":
+    "Se llama a través de Store. El manifiesto no expone un punto de entrada HTTP ni MCP.",
   "developer.graph.audienceDescription.apiClients": "Requiere un cliente de API autenticado o un ámbito adecuado.",
   "developer.graph.relation.translationParent": "traduce",
   "developer.graph.relation.schemaReference": "hace referencia a",

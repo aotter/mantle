@@ -176,11 +176,13 @@ export default {
   "developer.graph.audience.admin": "Администраторы",
   "developer.graph.audience.system": "Система",
   "developer.graph.audience.apiClients": "Клиенты API",
+  "developer.graph.audience.storeOnly": "Только Store",
   "developer.graph.audienceDescription.public": "Доступно без входа.",
   "developer.graph.audienceDescription.members": "Любой вошедший участник. Роль на сайте не требуется.",
   "developer.graph.audienceDescription.admin": "Администратор, вошедший в систему.",
   "developer.graph.audienceDescription.system":
     "Запускается автоматически событиями жизненного цикла, очереди или расписания.",
+  "developer.graph.audienceDescription.storeOnly": "Вызывается через Store. В манифесте нет точки входа HTTP или MCP.",
   "developer.graph.audienceDescription.apiClients": "Требуется аутентифицированный клиент API или область доступа.",
   "developer.graph.relation.translationParent": "переводит",
   "developer.graph.relation.schemaReference": "ссылается на",

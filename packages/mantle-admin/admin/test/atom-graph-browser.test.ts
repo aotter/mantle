@@ -87,6 +87,17 @@ it("fits the whole system wiring graph on narrow and short canvases", async () =
     snapshot = procedureSnapshot;
     const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
     page.setDefaultTimeout(15_000);
+    snapshot = {
+      ...procedureSnapshot,
+      graph: { ...procedureSnapshot.graph, atoms: procedureSnapshot.graph.atoms.map(atom => atom.kind === "Procedure" ? { ...atom, storeOnly: true } : atom) },
+    };
+    await page.goto(`${origin}/admin/dev`);
+    const storeOnly = page.locator('[data-id="Procedure:approve-request-write"]');
+    await storeOnly.getByText("Store only", { exact: true }).waitFor();
+    expect(await storeOnly.getByText("Administrators", { exact: true }).count()).toBe(0);
+    await storeOnly.click();
+    await page.getByRole("button", { name: "Store only: Called through the Store. The manifest exposes no HTTP or MCP entry point." }).waitFor();
+    snapshot = procedureSnapshot;
     const readable = () => page.evaluate(() => [...document.querySelectorAll(".react-flow")].filter((flow) => flow.checkVisibility()).map((flow) => {
       const pane = flow.getBoundingClientRect();
       const nodes = [...flow.querySelectorAll(".react-flow__node")].map((node) => node.getBoundingClientRect());

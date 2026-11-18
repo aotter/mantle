@@ -174,11 +174,14 @@ export default {
   "developer.graph.audience.admin": "Amministratori",
   "developer.graph.audience.system": "Sistema",
   "developer.graph.audience.apiClients": "Client API",
+  "developer.graph.audience.storeOnly": "Solo Store",
   "developer.graph.audienceDescription.public": "Disponibile senza accesso.",
   "developer.graph.audienceDescription.members": "Qualsiasi membro autenticato. Non è richiesto alcun ruolo del sito.",
   "developer.graph.audienceDescription.admin": "Un amministratore autenticato.",
   "developer.graph.audienceDescription.system":
     "Viene eseguito automaticamente da eventi del ciclo di vita, della coda o pianificati.",
+  "developer.graph.audienceDescription.storeOnly":
+    "Si chiama tramite Store. Il manifest non espone un punto di ingresso HTTP o MCP.",
   "developer.graph.audienceDescription.apiClients": "Richiede un client API autenticato o un ambito appropriato.",
   "developer.graph.relation.translationParent": "traduce",
   "developer.graph.relation.schemaReference": "fa riferimento a",

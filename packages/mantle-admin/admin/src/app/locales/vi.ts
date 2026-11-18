@@ -174,11 +174,14 @@ export default {
   "developer.graph.audience.admin": "Quản trị viên",
   "developer.graph.audience.system": "Hệ thống",
   "developer.graph.audience.apiClients": "Máy khách API",
+  "developer.graph.audience.storeOnly": "Chỉ qua Store",
   "developer.graph.audienceDescription.public": "Có thể dùng mà không cần đăng nhập.",
   "developer.graph.audienceDescription.members":
     "Bất kỳ thành viên đã đăng nhập nào. Không yêu cầu vai trò trên trang.",
   "developer.graph.audienceDescription.admin": "Quản trị viên đã đăng nhập.",
   "developer.graph.audienceDescription.system": "Tự động chạy từ sự kiện vòng đời, hàng đợi hoặc lịch biểu.",
+  "developer.graph.audienceDescription.storeOnly":
+    "Được gọi qua Store. Bản kê khai không có điểm truy cập HTTP hay MCP.",
   "developer.graph.audienceDescription.apiClients": "Yêu cầu máy khách API đã xác thực hoặc phạm vi phù hợp.",
   "developer.graph.relation.translationParent": "dịch",
   "developer.graph.relation.schemaReference": "tham chiếu",
