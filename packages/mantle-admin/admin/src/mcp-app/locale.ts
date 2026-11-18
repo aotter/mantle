@@ -3,6 +3,7 @@ import type { InteractionLabels } from "@aotter/mantle-ui";
 import { normalizeLanguage } from "../app/languages";
 import { adminLabels } from "./admin-labels.generated";
 import { viewLabels } from "./locale-view";
+import { uploadCopy } from "./locale-upload";
 
 /** Strings the App renders around the shared components. */
 export interface AppLabels {
@@ -261,5 +262,6 @@ const UPLOAD_LABELS: Readonly<Record<"en" | "zh-TW" | "zh-CN", UploadLabels>> = 
 export function uploadLabels(locale: string | undefined): UploadLabels {
   const tag = (locale ?? "").toLowerCase();
   const language = tag === "zh" ? "zh-CN" : normalizeLanguage(locale);
-  return language === "zh-TW" || language === "zh-CN" ? UPLOAD_LABELS[language] : UPLOAD_EN;
+  if (language === "en" || language === "zh-TW" || language === "zh-CN") return UPLOAD_LABELS[language];
+  return { ...UPLOAD_EN, ...uploadCopy[language] };
 }

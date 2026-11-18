@@ -25,6 +25,7 @@ const transparent = (html: HTMLElement) => [
 it.each([
   {},
   { localeSwitch: true },
+  { commitRetry: true },
   { tool: "upload_to_folder", forward: ["folder"] },
   { forward: ["folder"], inputTimeoutMs: 300, silent: true },
   { forward: ["folder"], inputTimeoutMs: 300, late: true },
@@ -38,6 +39,7 @@ it.each([
     anyFile,
     choosePurpose,
     localeSwitch,
+    commitRetry,
     ...options
   }: {
     tool?: string;
@@ -48,6 +50,7 @@ it.each([
     anyFile?: boolean;
     choosePurpose?: boolean;
     localeSwitch?: boolean;
+    commitRetry?: boolean;
   }) => {
     anyFile ||= choosePurpose;
     const TOOL = options.tool ?? "open_media_upload",
@@ -69,7 +72,7 @@ it.each([
 import {AppBridge,PostMessageTransport} from '@modelcontextprotocol/ext-apps/app-bridge';
 const frame=document.createElement('iframe');frame.sandbox='allow-scripts';document.body.append(frame);
 window.host={calls:[],messages:[]};
-const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{theme:'light',locale:${JSON.stringify(localeSwitch ? "zh-Hant-HK" : "en")}}});
+const bridge=new AppBridge(null,{name:'upload-test',version:'1'},{serverTools:{},message:{text:{}}},{hostContext:{${commitRetry ? "" : "theme:'light',"}locale:${JSON.stringify(localeSwitch ? "zh-Hant-HK" : "en")}}});
 window.host.bridge=bridge;
 bridge.oninitialized=()=>{window.host.appCapabilities=bridge.getAppCapabilities();${silent ? "" : late ? "setTimeout(()=>void bridge.sendToolInput({arguments:{purpose:'cover',folder:'docs'}}),800);" : `void bridge.sendToolInput({arguments:{${choosePurpose ? "" : `purpose:'${purpose}',`}folder:'docs'}});`}};
 bridge.oncalltool=async params=>{window.host.calls.push(params);
@@ -141,6 +144,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
     const storageReleased = new Promise<void>(resolve => {
       releaseStorage = resolve;
     });
+    let commitRequests = 0;
     const server = createServer(async (request, response) => {
       const url = request.url ?? "/";
       if (url === "/release-storage") {
@@ -177,6 +181,17 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
             throw new Error(`unexpected call ${name} ${folder}`);
           const out = (await uploadMedia(library, policies, args, { apps: true })) as Record<string | symbol, unknown>;
           const [data, meta] = Symbol.for("net.aotter.mantle/result") in out ? [out.data, out._meta] : [out, undefined];
+          if (commitRetry && args.uploadId && ++commitRequests === 1) {
+            response.end(
+              JSON.stringify({
+                isError: true,
+                content: [],
+                structuredContent: { diagnostics: [{ code: "OUTCOME_UNKNOWN", message: "The asset may have saved." }] },
+              }),
+            );
+            return;
+          }
+
           response.end(
             JSON.stringify({
               content: [{ type: "text", text: JSON.stringify(data) }],
@@ -222,7 +237,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       headless: true,
     });
     try {
-      const page = await browser.newPage();
+      const page = await browser.newPage({ colorScheme: commitRetry ? "dark" : "light" });
       const errors: string[] = [];
       page.on("pageerror", error => errors.push(error.message));
       await page.goto(origin);
@@ -243,7 +258,11 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         expect(await app.locator(".footnote").textContent()).toContain("上傳完成前");
         expect(await app.locator("#policy").textContent()).toContain("位元組");
         await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "fr-FR" }));
-        await expect.poll(() => app.locator("h1").textContent()).toBe("Upload a file");
+        await expect.poll(() => app.locator("h1").textContent()).toBe("Téléverser un fichier");
+      }
+      if (commitRetry) {
+        expect(await app.locator("html").getAttribute("data-theme")).toBe("dark");
+        expect(await upload.evaluate(button => getComputedStyle(button).backgroundColor)).toBe("rgb(52, 80, 147)");
       }
       expect(await upload.isDisabled()).toBe(true);
       expect(await app.locator("#file-details").textContent()).toBe("No file selected");
@@ -339,6 +358,11 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
         expect(await app.locator("#status").textContent()).toBe("正在儲存…");
         await page.evaluate(() => (window as any).host.releaseCommit());
       }
+      if (commitRetry) {
+        await expect.poll(() => app.locator("#status").textContent()).toBe("The asset may have saved.");
+        expect(await app.locator("#file").isDisabled()).toBe(true);
+        await upload.click();
+      }
       await app.getByText(localeSwitch ? /^上傳完成。素材 ID：/ : /^Uploaded\. Asset id /).waitFor({ timeout: 10_000 });
       await expect.poll(() => upload.textContent()).toBe(localeSwitch ? "已上傳" : "Uploaded");
       const id = (await app.locator("form").getAttribute("data-asset"))!;
@@ -377,6 +401,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
               },
         },
         { name: TOOL, arguments: { uploadId: id, purpose, ...extra } },
+        ...(commitRetry ? [{ name: TOOL, arguments: { uploadId: id, purpose, ...extra } }] : []),
       ]);
       expect(messages).toEqual([
         {
@@ -393,7 +418,7 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
       ]);
       if (localeSwitch) {
         await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "de-DE" }));
-        await expect.poll(() => app.locator("#status").textContent()).toBe(`Uploaded. Asset id ${id}.`);
+        await expect.poll(() => app.locator("#status").textContent()).toBe(`Hochgeladen. Medien-ID: ${id}.`);
         expect(await app.locator("#file-details").textContent()).toContain(filename);
       }
       // a finished upload offers no second upload of the same file
