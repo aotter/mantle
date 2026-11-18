@@ -176,11 +176,14 @@ export default {
   "developer.graph.audience.admin": "Beheerders",
   "developer.graph.audience.system": "Systeem",
   "developer.graph.audience.apiClients": "API-clients",
+  "developer.graph.audience.storeOnly": "Alleen Store",
   "developer.graph.audienceDescription.public": "Beschikbaar zonder inloggen.",
   "developer.graph.audienceDescription.members": "Elk ingelogd lid. Geen siterol vereist.",
   "developer.graph.audienceDescription.admin": "Een ingelogde beheerder.",
   "developer.graph.audienceDescription.system":
     "Wordt automatisch uitgevoerd door levenscyclus-, wachtrij- of planninggebeurtenissen.",
+  "developer.graph.audienceDescription.storeOnly":
+    "Wordt aangeroepen via de Store. Het manifest biedt geen HTTP- of MCP-ingang.",
   "developer.graph.audienceDescription.apiClients": "Vereist een geverifieerde API-client of passend bereik.",
   "developer.graph.relation.translationParent": "vertaalt",
   "developer.graph.relation.schemaReference": "verwijst naar",

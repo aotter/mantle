@@ -221,12 +221,15 @@ export default {
   "developer.graph.audience.admin": "管理者",
   "developer.graph.audience.system": "システム",
   "developer.graph.audience.apiClients": "API クライアント",
+  "developer.graph.audience.storeOnly": "Store 専用",
   "developer.graph.audienceDescription.public": "サインインせずに利用できます。",
   "developer.graph.audienceDescription.members":
     "サインイン済みのすべてのメンバーが対象です。サイト上の役割は不要です。",
   "developer.graph.audienceDescription.admin": "ログイン済みの管理者。",
   "developer.graph.audienceDescription.system":
     "ライフサイクル、キュー、またはスケジュールイベントから自動実行されます。",
+  "developer.graph.audienceDescription.storeOnly":
+    "Store 経由で呼び出します。マニフェストに HTTP や MCP の入口はありません。",
   "developer.graph.audienceDescription.apiClients": "認証済みの API クライアントまたはスコープが必要です。",
   "developer.graph.relation.translationParent": "翻訳",
   "developer.graph.relation.schemaReference": "参照",

@@ -175,10 +175,13 @@ export default {
   "developer.graph.audience.admin": "Адміністратори",
   "developer.graph.audience.system": "Система",
   "developer.graph.audience.apiClients": "Клієнти API",
+  "developer.graph.audience.storeOnly": "Лише Store",
   "developer.graph.audienceDescription.public": "Доступно без входу.",
   "developer.graph.audienceDescription.members": "Будь-який учасник, який увійшов. Роль на сайті не потрібна.",
   "developer.graph.audienceDescription.admin": "Адміністратор, який увійшов у систему.",
   "developer.graph.audienceDescription.system": "Запускається автоматично подіями життєвого циклу, черги або розкладу.",
+  "developer.graph.audienceDescription.storeOnly":
+    "Викликається через Store. У маніфесті немає точки входу HTTP або MCP.",
   "developer.graph.audienceDescription.apiClients":
     "Потрібен автентифікований клієнт API або відповідна область доступу.",
   "developer.graph.relation.translationParent": "перекладає",

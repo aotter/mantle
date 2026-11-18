@@ -447,6 +447,7 @@ export interface DeveloperAtom {
   title: LocalizedText | null;
   description?: LocalizedText | null;
   audience?: DeveloperAudience;
+  storeOnly?: true;
   transport?: DeveloperTransport;
   input?: JsonSchema;
   handler?: DeveloperProcedureHandler;

@@ -118,7 +118,8 @@ export function relationLabel(language: AdminLanguage, kind: DeveloperRelationKi
   return t(language, "developer.graph.relation.lifecycleSource");
 }
 
-export function audienceLabel(language: AdminLanguage, audience: DeveloperAudience): string {
+export function audienceLabel(language: AdminLanguage, audience: DeveloperAudience | "store-only"): string {
+  if (audience === "store-only") return t(language, "developer.graph.audience.storeOnly");
   if (audience === "public") return t(language, "developer.graph.audience.public");
   if (audience === "members") return t(language, "developer.graph.audience.members");
   if (audience === "admin") return t(language, "developer.graph.audience.admin");
@@ -133,7 +134,8 @@ export function atomKindLabel(language: AdminLanguage, kind: DeveloperAtom["kind
   return t(language, "developer.graph.kind.trigger");
 }
 
-function audienceDescription(language: AdminLanguage, audience: DeveloperAudience): string {
+function audienceDescription(language: AdminLanguage, audience: DeveloperAudience | "store-only"): string {
+  if (audience === "store-only") return t(language, "developer.graph.audienceDescription.storeOnly");
   if (audience === "public") return t(language, "developer.graph.audienceDescription.public");
   if (audience === "members") return t(language, "developer.graph.audienceDescription.members");
   if (audience === "admin") return t(language, "developer.graph.audienceDescription.admin");
@@ -147,7 +149,7 @@ function AudienceBadge({
   prominent = false,
 }: {
   language: AdminLanguage;
-  audience: DeveloperAudience;
+  audience: DeveloperAudience | "store-only";
   prominent?: boolean;
 }): React.ReactElement {
   const label = audienceLabel(language, audience);
@@ -587,6 +589,7 @@ type ColumnGraphNode = Node<{ label: string; count: number }, "column">;
 /** One compact card per atom: a kind accent and icon, one line of title, and the one badge that tells entries apart. */
 function AtomNode({ data, selected }: NodeProps<AtomGraphNode>): React.ReactElement {
   const { atom, title, language } = data;
+  const audience = atom.storeOnly ? "store-only" : atom.audience;
   const Icon = wiringKindIcon[atom.kind];
   const sides = (["l", "r"] as const).flatMap(side =>
     (["source", "target"] as const).map(type => (
@@ -617,9 +620,9 @@ function AtomNode({ data, selected }: NodeProps<AtomGraphNode>): React.ReactElem
           {atom.transport}
         </span>
       ) : null}
-      {atom.audience && atom.audience !== "public" ? (
+      {audience && audience !== "public" ? (
         <span className="shrink-0 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
-          {audienceLabel(language, atom.audience)}
+          {audienceLabel(language, audience)}
         </span>
       ) : null}
     </div>
@@ -736,7 +739,8 @@ function layoutColumns(graph: DeveloperConsoleSnapshot["graph"]): {
     (neighbours.get(sourceId) ?? neighbours.set(sourceId, []).get(sourceId)!).push(targetId);
     (neighbours.get(targetId) ?? neighbours.set(targetId, []).get(targetId)!).push(sourceId);
   });
-  const audience = (atom: DeveloperAtom): number => audiences.indexOf(atom.audience ?? "public");
+  const audience = (atom: DeveloperAtom): number =>
+    atom.storeOnly ? audiences.length : audiences.indexOf(atom.audience ?? "public");
   const positions = new Map<string, { x: number; y: number }>();
   const kindOf = new Map(graph.atoms.map(atom => [atom.id, atom.kind]));
   // `from` lists neighbour kinds in order of preference: the first kind with a placed neighbour decides the height.
@@ -869,6 +873,7 @@ function GraphHud({
 }): React.ReactElement {
   const { language } = usePreferences();
   const title = resolveLocalizedText(atom.title, language);
+  const audience = atom.storeOnly ? "store-only" : atom.audience;
   const description = resolveLocalizedText(atom.description ?? null, language);
   const outgoing = graph.relations.filter(({ sourceId }) => sourceId === atom.id);
   const incoming = graph.relations.filter(({ targetId }) => targetId === atom.id);
@@ -904,7 +909,7 @@ function GraphHud({
                   {atom.transport}
                 </span>
               ) : null}
-              {atom.audience ? <AudienceBadge language={language} audience={atom.audience} /> : null}
+              {audience ? <AudienceBadge language={language} audience={audience} /> : null}
             </div>
             <h2 className="mt-2 truncate text-sm font-semibold">{title || atom.name}</h2>
             {title && title !== atom.name ? (

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { compilePlan, type RuntimePlan } from "../src/build/compiler.js";
@@ -112,6 +112,26 @@ async function planOf(input = sources): Promise<RuntimePlan> {
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   return result.plan;
 }
+
+test("wiring graph distinguishes Store-only Procedures from real HTTP and MCP entries", async () => {
+  const sourceId = "club-events.yaml";
+  const text = await readFile(
+    new URL("../../../docs/examples/club-events/manifests/club-events.yaml", import.meta.url),
+    "utf8",
+  );
+  const { graph, interfaces, logic } = developerConsole(await planOf([{ sourceId, text }]));
+  const atom = (name: string) => graph.atoms.find(entry => entry.id === `Procedure:${name}`);
+  expect(atom("register-write")).toMatchObject({ storeOnly: true });
+  expect(logic.procedures.find(entry => entry.name === "register-write")?.authorization).toEqual(["ctx.user"]);
+  expect(atom("register")).toMatchObject({ audience: "members" });
+  expect(atom("register")).not.toHaveProperty("storeOnly");
+  expect(atom("create-event")).toMatchObject({ audience: "admin" });
+  expect(atom("create-event")).not.toHaveProperty("storeOnly");
+  expect(interfaces.http.some(entry => entry.target === "register")).toBe(true);
+  expect(interfaces.callable.some(entry => entry.target === "register" && entry.surface === "public")).toBe(true);
+  expect(interfaces.callable.some(entry => entry.target === "create-event" && entry.surface === "admin")).toBe(true);
+  expect([...interfaces.http, ...interfaces.callable].some(entry => entry.target === "register-write")).toBe(false);
+});
 async function metadata(plan: RuntimePlan) {
   const diagnostics: GenerateDiagnostic[] = [];
   const files = emitAdminDescriptors({ plan }, diagnostics);

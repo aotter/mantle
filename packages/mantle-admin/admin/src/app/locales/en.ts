@@ -440,10 +440,13 @@ export default {
   "developer.graph.audience.admin": "Administrators",
   "developer.graph.audience.system": "System",
   "developer.graph.audience.apiClients": "API clients",
+  "developer.graph.audience.storeOnly": "Store only",
   "developer.graph.audienceDescription.public": "Available without signing in.",
   "developer.graph.audienceDescription.members": "Any signed-in member. No site role is required.",
   "developer.graph.audienceDescription.admin": "A signed-in administrator.",
   "developer.graph.audienceDescription.system": "Runs automatically from lifecycle, queue, or schedule events.",
+  "developer.graph.audienceDescription.storeOnly":
+    "Called through the Store. The manifest exposes no HTTP or MCP entry point.",
   "developer.graph.audienceDescription.apiClients": "Requires an authenticated API client or scope.",
   "developer.graph.relation.translationParent": "translates",
   "developer.graph.relation.schemaReference": "references",
