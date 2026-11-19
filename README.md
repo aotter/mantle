@@ -15,6 +15,7 @@
 
 <p align="center">
   <a href="#get-started">Get started</a> &middot;
+  <a href="https://mantle.tools">Mantle Cloud</a> &middot;
   <a href="#see-what-you-build">Product tour</a> &middot;
   <a href="#four-atoms-connected-interfaces">How it works</a> &middot;
   <a href="docs/examples/README.md">Examples</a> &middot;
@@ -38,7 +39,16 @@ migrations.
 
 ## Get started
 
-### Build with an agent
+### Managed: Mantle Cloud
+
+Connect your own AI (any AI that supports MCP) to Mantle Cloud, and it builds,
+publishes and runs your app. Hosting, database, files and sign-in are handled for you.
+
+[Get started at mantle.tools →](https://mantle.tools)
+
+### Self-host
+
+#### Build with an agent
 
 Install the Mantle skill in your coding agent:
 
@@ -54,7 +64,7 @@ The skill guides planning, implementation, acceptance, and performance checks
 using `mantle help` from your app’s installed version.
 See [agent setup](docs/handbook/guides/agent-setup.md) for supported editors and plugins.
 
-### Start an application yourself
+#### Start an application yourself
 
 Use Node.js **22.22+** and pnpm **9+**, and pin the SDK version:
 
