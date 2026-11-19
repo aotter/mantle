@@ -41,8 +41,8 @@ migrations.
 
 ### Managed: Mantle Cloud
 
-Connect your own AI (any AI that supports MCP) to Mantle Cloud, and it builds,
-publishes and runs your app. Hosting, database, files and sign-in are handled for you.
+Connect your own MCP-compatible AI to Mantle Cloud to build and publish your
+app. Mantle Cloud runs it and handles hosting, database, files and sign-in.
 
 [Get started at mantle.tools →](https://mantle.tools)
 
