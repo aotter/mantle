@@ -209,8 +209,8 @@ without a query, fragment or `{name}` parameter, or `web()` throws a `TypeError`
 
 `/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head
 read the current page View. `llms.txt` links `<url>.md` for a page that declares
-`markdown` when the list row returns that column non-null, and the HTML URL otherwise
-(a list that does not select the column cannot show that the alternate exists); the sitemap
+`markdown`; a list View need not select that column (it is the page's body), and one that
+does and returns NULL for a row gets the HTML URL for it, since `<url>.md` answers 404 there; the sitemap
 lists the HTML URLs. Head tags name the Markdown alternate only for a row whose column is non-null. SQL alone controls visibility, including publication.
 GET/HEAD responses include content-derived SHA-256 ETags. Anonymous responses use
 `cacheControl` or `public, max-age=60`; authenticated responses use

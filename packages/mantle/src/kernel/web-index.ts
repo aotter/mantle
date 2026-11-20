@@ -71,8 +71,9 @@ export async function webIndex(
         if (visited++ >= cap) break pagesLoop;
         const url = validUrl(entry.path, row, entry.page.view);
         if (!url) continue;
-        // llms.txt links the Markdown alternate only when the list row shows the page has one: `<url>.md` is a 404 otherwise.
-        const markdown = entry.page.markdown && row[entry.page.markdown] != null ? ".md" : "";
+        // llms.txt links the Markdown alternate. A list need not read the column (it is the page's body); one that does
+        // and returns NULL shows the page has none, and `<url>.md` would be a 404.
+        const markdown = entry.page.markdown && row[entry.page.markdown] !== null ? ".md" : "";
         const line = sitemap
           ? item(url, entry.page.lastmod && row[entry.page.lastmod])
           : "- [" + label(row.title ?? url) + "](" + url + markdown + "): " + label(row.description ?? "") + "\n";

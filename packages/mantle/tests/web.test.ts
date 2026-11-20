@@ -113,8 +113,8 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     expect(text.match(/^- /gm)).toHaveLength(6);
     expect(text).not.toContain("post0");
     expect(text).toContain("Title \\[1\\]");
-    // The list View does not select `body`, so llms.txt cannot show that the alternate exists and links the page.
-    expect(text).toContain("(https://site.test/posts/a%26b%29)");
+    // The list View does not select `body`: llms.txt links the Markdown alternate of a page that declares one.
+    expect(text).toContain("(https://site.test/posts/a%26b%29.md)");
     const sitemap = await site.fetch(request("/sitemap.xml"));
     expect((await sitemap.text()).match(/<url>/g)).toHaveLength(6);
     const md = await site.fetch(request("/posts/a%26b).md"));
@@ -650,11 +650,11 @@ test("llms.txt links a page's Markdown alternate; the sitemap keeps the page URL
       (path, row) => "https://site.test" + path.replace("{slug}", String(row.slug)),
     );
   const links = [...(await index(false)).matchAll(/\]\((.*?)\)/g)].map(match => match[1]);
-  // Only a list row that carries the Markdown column non-null shows that `<url>.md` exists.
+  // A list row whose Markdown column is NULL has no alternate; a list that does not select the column links it.
   expect(links).toEqual([
     "https://site.test/md/a.md",
     "https://site.test/md/b",
-    "https://site.test/md/c",
+    "https://site.test/md/c.md",
     "https://site.test/html/a",
     "https://site.test/html/b",
     "https://site.test/html/c",
