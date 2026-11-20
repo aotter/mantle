@@ -196,7 +196,8 @@ Page and list Views must return the page parameters; list Views must accept empt
 `required`, no root `anyOf`, `enum` or `const`, no `else` rule, and a root `type`, when given, that includes `object`.
 These conditions also apply to each schema a root `$ref` chain reaches, and an unresolved or cyclic chain fails them.
 `web()` throws a `TypeError` for any other list View. Markdown
-must name a textual output column. HTML remains application-owned.
+must name a textual output column: a text field, or text the View composes with `||` or
+`COALESCE` from them (`title || E'\n\n' || coalesce(body, '')`; see [View outputs](view.md)). HTML remains application-owned.
 
 `/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head
 read the current page View. SQL alone controls visibility, including publication.

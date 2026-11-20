@@ -245,6 +245,20 @@ test("web indexes preserve an authored total LIMIT rather than treating it as a 
   }
 });
 
+const composedDoc = `---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: doc-by-slug}
+spec:
+  surface: public
+  input:
+    type: object
+    required: [slug]
+    additionalProperties: false
+    properties: {slug: {type: string, minLength: 2}}
+  sql: SELECT id, slug, title || E'\\n\\n' || coalesce(body, '') AS doc, lower(title) AS shout FROM posts WHERE slug = input.slug AND visible = true ORDER BY id
+`;
+
 test("public View and exact URL input names are typechecked on every target", async () => {
   await mkdir(join(import.meta.dir, "apps/.generated/"), { recursive: true });
   const dir = await mkdtemp(join(import.meta.dir, "apps/.generated/", "web-types-"));
@@ -254,7 +268,7 @@ test("public View and exact URL input names are typechecked on every target", as
       const destination = join(dir, target);
       await writeGenerated(
         destination,
-        await generateOrThrow(target, [{ sourceId: "blog.yaml", text: source }]),
+        await generateOrThrow(target, [{ sourceId: "blog.yaml", text: source + composedDoc }]),
         false,
       );
       const check = join(destination, "check.ts");
@@ -281,6 +295,10 @@ web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'post-by-slug'}}})
 web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'posts-matching'}}});
 // @ts-expect-error unknown markdown column
 web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',markdown:'unknown'}}});
+// text composed in SQL (#2091) is a Markdown column; another computed column is not text
+web({...base,pages:{'/docs/{slug}':{view:'doc-by-slug',list:'posts',markdown:'doc'}}});
+// @ts-expect-error a computed output that is not composed text is unknown
+web({...base,pages:{'/docs/{slug}':{view:'doc-by-slug',markdown:'shout'}}});
 // @ts-expect-error a generated entry supplies the manifest's user fields itself
 web({...base,fields:{},pages:{'/posts':{view:'posts'}}});
 // @ts-expect-error a generated entry supplies the manifest's user fields itself

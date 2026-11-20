@@ -180,3 +180,40 @@ spec:
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// #2091: text composed in SQL from text columns and string literals is text; anything else stays unknown
+const composed = [
+  view(
+    "composed",
+    "SELECT c.name || c.note AS joined, c.name || E'\\n\\n' || c.name AS doubled, c.name || ' x' AS tagged, coalesce(c.note, c.name) AS either, coalesce(c.note, '') AS filled, coalesce(c.note, c.note) AS maybe, c.id || '/' || c.name AS path FROM carts c ORDER BY c.id",
+  ),
+  view(
+    "unknowns",
+    "SELECT c.total || c.name AS mixed, c.created_at || c.name AS stamped, coalesce(c.total, c.hits) AS ints, coalesce(c.note, NULL) AS nul, coalesce(c.note, c.total) AS diverse, CAST(c.name AS text) AS cast_name, lower(c.name) || c.name AS lowered FROM carts c ORDER BY c.id",
+  ),
+  view(
+    "joined-text",
+    "SELECT c.name || l.sku AS outer_text, coalesce(l.sku, c.name) AS outer_filled FROM carts c LEFT JOIN lines l ON l.cartId = c.id ORDER BY c.id",
+  ),
+  view("nested-text", "SELECT s.label FROM (SELECT c.name || '!' AS label FROM carts c) s"),
+  view("lone-text", "SELECT count(*) AS n, c.name || '' AS label FROM carts c"),
+].join("");
+
+test("a View output composed from text with || or COALESCE is text on every target; mixed or unknown operands stay unknown", async () => {
+  for (const target of ["bun-sqlite", "cloudflare-d1", "bun-postgres", "cloudflare-postgres"] as const) {
+    const code = (await generateOrThrow(target, [{ sourceId: "carts.yaml", text: text + composed }]))["generated.ts"]!;
+    // Views are numbered in name order: composed, joined-text, lone-text, nested-text, unknowns
+    expect(rowOf(code, 0)).toBe(
+      `readonly "joined": string | null; readonly "doubled": string; readonly "tagged": string; readonly "either": string; readonly "filled": string; readonly "maybe": string | null; readonly "path": string;`,
+    );
+    expect(rowOf(code, 1)).toBe(`readonly "outer_text": string | null; readonly "outer_filled": string;`);
+    // without GROUP BY, an aggregate makes one row over no rows, and a column beside it is then NULL
+    expect(rowOf(code, 2)).toBe(`readonly "n": unknown; readonly "label": string | null;`);
+    expect(rowOf(code, 3)).toBe(`readonly "label": string;`);
+    expect(rowOf(code, 4)).toBe(
+      `readonly "mixed": unknown; readonly "stamped": unknown; readonly "ints": unknown; readonly "nul": unknown; readonly "diverse": unknown; readonly "cast_name": unknown; readonly "lowered": unknown;`,
+    );
+    // a computed output's wire row is its native row: no transport conversion is added
+    expect(code).toMatch(/export type View0WireRow = \{ readonly "joined": View0Row\["joined"\];/);
+  }
+});
