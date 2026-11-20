@@ -38,7 +38,8 @@ export const BARE_VIEW: AppCatalogView = { columns: {}, list: { columns: [] }, a
 /** The shape every MCP tool result shares, independent of an SDK. */
 export interface ToolResult {
   readonly content?: readonly { readonly type: string; readonly text?: string }[];
-  readonly structuredContent?: Readonly<Record<string, unknown>>;
+  /** Any JSON value (SEP-2106): an object, an array, a string, a number, a boolean or null. Read it with `outputOf`. */
+  readonly structuredContent?: unknown;
   readonly isError?: boolean;
   readonly _meta?: Readonly<Record<string, unknown>>;
 }

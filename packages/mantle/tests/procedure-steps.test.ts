@@ -9,6 +9,7 @@ import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { verifyOnLocalD1 } from "./apps/local-d1.js";
 import { verifyProcedureSteps } from "./procedure-steps-scenarios.js";
 import { fixtureCaller } from "./apps/fixtures.js";
+import { mcpInit } from "./mcp-wire.js";
 await mkdir(resolve(import.meta.dir, "apps/.generated"), { recursive: true });
 
 // #1874 (ADR-0034 decision 4): a Procedure written as `handler.steps`, one statement each; a set-op step with
@@ -282,19 +283,23 @@ test("a named step's row conflict reaches REST and MCP as fields.step beside kin
       expect(response.status).toBe(409);
       expect(await response.json()).toMatchObject({ error: { code: "CONFLICT", kind: "row", step } });
       const called = await tools(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            accept: "application/json, text/event-stream",
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: { name: "add_named", arguments: input },
-          }),
-        }),
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: "add_named", arguments: input },
+            },
+            {
+              headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+              },
+            },
+          ),
+        ),
         {},
       );
       const body = await called.text(),

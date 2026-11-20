@@ -8,6 +8,7 @@ import { generateFromSources } from "../src/infrastructure/generate.js";
 import { writeGenerated } from "./apps/link.js";
 import { mantleProps } from "./gateway-fixture.js";
 import { apps, describeOf, fill, literalsOf, overlaps, precedence, prober, variants } from "./match-target-fixture.js";
+import { mcpInit } from "./mcp-wire.js";
 
 test("matchTarget accepts trimmed historical descriptions and returns their own metadata", () => {
   const rest = { id: "rest:GET /api/orders", requires: { guard: "legacy" }, targetHash: "saved-hash" } as const;
@@ -89,11 +90,13 @@ test("matchTarget resolves what the generated REST and MCP routers resolve, for 
       if (!generated.files["mcp.ts"]) continue;
       const mcp = prober((await import(resolve(dir, "mcp.ts"))).mcp(options), events, props);
       const call = (path: string, tool: string) =>
-        new Request("https://app.test" + path, {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: {} } }),
-        });
+        new Request(
+          "https://app.test" + path,
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: {} } },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        );
       for (const tool of [...new Set(describe.targets.map(t => t.name)), "missing_tool", "view:posts", ""])
         for (const path of ["/mcp", "/mcp/admin", "/mcp/admin/", "/mcp/other"]) {
           const resolved = await mcp(call(path, tool));

@@ -80,8 +80,8 @@ for the deploy.
 3. Admin assets are served Worker-first ([Workers assets and secrets](service-entry.md#workers-assets-and-secrets)) and
    both [public-fetch flags](#public-fetch-routing) stay in every environment.
 4. After deploying, verify on the deployed host: admin sign-in gets role `admin`, a member is denied Admin, public and
-   protected reads, a persisted write, a stale OCC write refused, and MCP `initialize` and `tools/list` with a real OAuth
-   bearer.
+   protected reads, a persisted write, a stale OCC write refused, and MCP `server/discover` and `tools/list` (protocol
+   revision 2026-07-28) with a real OAuth bearer.
 5. Keep the previous build and the migration rollback until the release is verified.
 
 ## Public fetch routing
@@ -102,7 +102,7 @@ and with the public-fetch flag: generation refuses that config without rewriting
 it. Such applications must use public routing for their OAuth/CIMD transport.
 
 After deployment, complete a real OAuth sign-in and use the resulting bearer
-for MCP `initialize` and `tools/list`. Local development and cookie-only Admin
+for MCP `server/discover` and `tools/list`. Local development and cookie-only Admin
 checks do not verify production public-hostname routing.
 
 ## Install and change schemas

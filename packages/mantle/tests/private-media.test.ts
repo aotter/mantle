@@ -9,6 +9,7 @@ import { r2MediaStorage, type R2Bucket } from "../src/kernel/r2-media.js";
 import { wire } from "../src/kernel/contracts.js";
 import { mediaItem } from "../src/kernel/media.js";
 import type { MediaStorage } from "../src/kernel/site-types.js";
+import { mcpInit } from "./mcp-wire.js";
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: entries}
@@ -190,15 +191,19 @@ test("a private asset has no public URL on library, Admin or MCP reads, and sign
     });
     const rpc = async (method: string, params: any = {}) => {
       const response = await handle(
-        new Request("https://app.test/mcp/admin", {
-          method: "POST",
-          headers: {
-            origin: "https://app.test",
-            "content-type": "application/json",
-            accept: "application/json, text/event-stream",
-          },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        }),
+        new Request(
+          "https://app.test/mcp/admin",
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            {
+              headers: {
+                origin: "https://app.test",
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+              },
+            },
+          ),
+        ),
         {},
       );
       const text = await response.text();
@@ -332,20 +337,24 @@ test("an MCP tool returns a signed read URL only in the result _meta", async () 
     };
     const handle = mcp([tool] as any, { db: () => f.db, allowedOrigins: ["https://app.test"], caller: () => admin });
     const response = await handle(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: {
-          origin: "https://app.test",
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name: "read_document", arguments: {} },
-        }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "read_document", arguments: {} },
+          },
+          {
+            headers: {
+              origin: "https://app.test",
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+            },
+          },
+        ),
+      ),
       {},
     );
     const text = await response!.text(),

@@ -162,7 +162,8 @@ Node 22.22+ can read this pure static
 TypeScript descriptor directly; no generated request handlers are executed to derive expected names.
 A TypeScript smoke scenario can instead import `tools` from generated `mcp.ts`.
 Explicitly select the permitted subset if the app narrows authorization, and include any app-composed tools.
-The assertion initializes MCP, forwards supplied identity/session headers, reads all tools/list pages,
+The assertion speaks MCP protocol revision 2026-07-28 (the only one Mantle serves; `mcpRequest` in the kit builds one
+such request): it checks `server/discover`, forwards supplied identity/session headers, reads all tools/list pages,
 and compares exact names without calling business tools. JSON/SSE protocol failures, missing routes,
 unexpected/missing tools and repeated/excessive pagination fail; it never obtains credentials or mounts routes.
 

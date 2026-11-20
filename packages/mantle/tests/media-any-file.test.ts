@@ -11,6 +11,7 @@ import { d1Shim } from "./apps/d1-shim.js";
 import { r2MediaStorage, type R2Bucket } from "../src/kernel/r2-media.js";
 import type { Target } from "../src/domain/model.js";
 import type { MediaPurposePolicy } from "../src/kernel/site-types.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -372,20 +373,24 @@ test("upload_media takes a PDF directly and from sourceUrl, for a public and a p
     });
     const call = async (args: object) => {
       const response = await handle(
-        new Request("https://app.example.com/mcp/admin", {
-          method: "POST",
-          headers: {
-            origin: "https://app.example.com",
-            "content-type": "application/json",
-            accept: "application/json, text/event-stream",
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: { name: "upload_media", arguments: args },
-          }),
-        }),
+        new Request(
+          "https://app.example.com/mcp/admin",
+          mcpInit(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: "upload_media", arguments: args },
+            },
+            {
+              headers: {
+                origin: "https://app.example.com",
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+              },
+            },
+          ),
+        ),
         {},
       );
       const text = await response.text();

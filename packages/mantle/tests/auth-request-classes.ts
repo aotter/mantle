@@ -5,6 +5,7 @@ import { isAdmin } from "../src/kernel/contracts.js";
 import { rest } from "../src/kernel/rest.js";
 import { mcp, type Tool } from "../src/kernel/mcp.js";
 import { web } from "../src/kernel/web.js";
+import { APPS_CAPABILITIES, mcpInit } from "./mcp-wire.js";
 
 export async function verifyAuthRequestClasses(
   loader: AuthLoader | (() => AuthLoader),
@@ -79,26 +80,30 @@ export async function verifyAuthRequestClasses(
     },
     [["view", { query: () => ({ input: {} }), page }]],
   );
-  const request = (path: string, method = "GET", body?: unknown) =>
-    new Request(`http://localhost:3000${path}`, {
-      method,
-      headers: {
-        cookie,
-        origin: "http://localhost:3000",
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
+  const request = (path: string, method = "GET", body?: unknown) => {
+    const headers = {
+      cookie,
+      origin: "http://localhost:3000",
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    };
+    // An MCP message in the 2026-07-28 envelope; other bodies as they are.
+    return new Request(
+      `http://localhost:3000${path}`,
+      path.startsWith("/mcp") && body !== undefined
+        ? mcpInit(body, { headers })
+        : { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) },
+    );
+  };
   const message = (method: string, name?: string) => ({
     jsonrpc: "2.0",
     id: 1,
     method,
-    params: name
-      ? { name, arguments: {} }
-      : method === "initialize"
-        ? { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1" } }
-        : {},
+    // An MCP Apps host, so App resources are listed and read.
+    params: {
+      ...(name ? { name, arguments: {} } : {}),
+      _meta: { "io.modelcontextprotocol/clientCapabilities": APPS_CAPABILITIES },
+    },
   });
   const cases: [string, boolean, () => Promise<unknown>][] = [
     ["REST read", true, () => api(request("/view"), {})],
@@ -107,7 +112,7 @@ export async function verifyAuthRequestClasses(
     ["REST GET Procedure", false, () => api(request("/sensitive", "GET"), {})],
     ["MCP read tool", true, () => serve(request("/mcp", "POST", message("tools/call", "delete_named_view")), {})],
     ["MCP write tool", false, () => serve(request("/mcp", "POST", message("tools/call", "read_named_procedure")), {})],
-    ...["initialize", "tools/list", "resources/list", "resources/read"].map(
+    ...["server/discover", "tools/list", "resources/list", "resources/read"].map(
       method =>
         [`MCP ${method}`, true, () => serve(request("/mcp", "POST", message(method)), {})] as [
           string,
@@ -151,6 +156,8 @@ export async function verifyAuthRequestClasses(
     assert.ok(response instanceof Response, name);
     if (
       ![
+        // No App resource is served, so the resources methods are not offered (JSON-RPC -32601).
+        "MCP resources/list",
         "MCP resources/read",
         "MCP mixed batch",
         "MCP unknown tool",

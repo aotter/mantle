@@ -14,9 +14,29 @@ await rm(`evidence/${name}/extras.json`, { force: true });
 const checks = [];
 let buyer;
 async function rpc(method, params = {}) {
+  // MCP protocol revision 2026-07-28, the one Mantle serves: the `_meta` envelope and the headers that state it.
+  const name = method === "tools/call" ? params.name : method === "resources/read" ? params.uri : undefined;
   const r = await api.post(origin + "/mcp/admin", {
-    headers: { accept: "application/json, text/event-stream" },
-    data: { jsonrpc: "2.0", id: 1, method, params },
+    headers: {
+      accept: "application/json, text/event-stream",
+      "mcp-protocol-version": "2026-07-28",
+      "mcp-method": method,
+      ...(name === undefined ? {} : { "mcp-name": name }),
+    },
+    data: {
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      params: {
+        ...params,
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {
+            extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } },
+          },
+        },
+      },
+    },
   });
   assert.equal(r.status(), 200, await r.text());
   const text = await r.text(),

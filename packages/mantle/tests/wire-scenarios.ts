@@ -1,5 +1,6 @@
 /** One independent client-wire oracle, shared by native SQLite, PostgreSQL and local D1. */
 import assert from "node:assert/strict";
+import { mcpInit } from "./mcp-wire.js";
 export const integerCases = [
   ["safe", "9007199254740991", 9007199254740991],
   ["unsafe", "9007199254740993", "9007199254740993"],
@@ -95,11 +96,13 @@ export async function verifyWire(
 ): Promise<void> {
   const call = async (name: string, args: unknown) => {
     const response = (await fetch(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
     ))!;
     const body = await response.text();
     return { response, data: JSON.parse(body.startsWith("event:") ? body.split("data: ")[1]!.split("\n")[0]! : body) };

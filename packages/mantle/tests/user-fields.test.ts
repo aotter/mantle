@@ -14,6 +14,7 @@ import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { hostCaller } from "../src/kernel/host-caller.js";
 import { mantleProps } from "./gateway-fixture.js";
 import { compilePlan, compileProgram, d1Dialect, postgresDialect, rowPolicy } from "../src/build/compiler.js";
+import { mcpInit } from "./mcp-wire.js";
 await mkdir(resolve(import.meta.dir, "apps/.generated"), { recursive: true });
 const fields = {
   region: { type: "string" as const, multiple: true },
@@ -334,16 +335,18 @@ test("generated REST and MCP surfaces apply the field-scope insert rule, includi
       ))!;
     const tool = async (args: object) => {
       const response = (await tools(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: { name: "add", arguments: args },
-          }),
-        }),
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: "add", arguments: args },
+            },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
         {},
       ))!;
       const text = await response.text();

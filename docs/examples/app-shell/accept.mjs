@@ -78,20 +78,15 @@ function proxy(origin, cookie) {
 
 async function client(endpoint, tool, json) {
   if (!endpoint) throw new Error("usage: node accept.mjs mcp <endpoint> [tool [json-arguments]]");
-  const headers = { "content-type": "application/json", accept: "application/json, text/event-stream" };
+  const { mcpRequest } = await import("./smoke-kit.mjs");
   let id = 0;
   const rpc = async (method, params) => {
-    const response = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", ...(method.startsWith("notifications/") ? {} : { id: ++id }), method, params }) });
-    const session = response.headers.get("mcp-session-id");
-    if (session) headers["mcp-session-id"] = session;
+    const response = await fetch(endpoint, mcpRequest(method, params, { id: ++id }));
     const text = await response.text();
-    if (!response.ok && response.status !== 202) throw new Error(`MCP ${method}: HTTP ${response.status} ${text}`);
+    if (!response.ok) throw new Error(`MCP ${method}: HTTP ${response.status} ${text}`);
     const data = text.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5)).join("\n") || text;
     return data ? JSON.parse(data) : null;
   };
-  const init = await rpc("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "mantle-accept", version: "1" } });
-  headers["mcp-protocol-version"] = init.result?.protocolVersion ?? "2025-11-25";
-  await rpc("notifications/initialized");
   if (!tool) {
     const tools = [];
     let cursor;

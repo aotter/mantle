@@ -37,6 +37,7 @@ import {
   managedGrantTestExtension,
   managedTokenRequest,
 } from "./apps/managed-grant.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const AUDIENCE = "https://api.example.test/mcp";
 /** A second resource of the same authorization server, configured with managed grants. */
@@ -569,7 +570,7 @@ describe("resolveCaller: OAuth bearer", () => {
     }
   });
 
-  test("app-shell issued bearer initializes MCP and lists Admin tools", async () => {
+  test("app-shell issued bearer discovers MCP and lists Admin tools", async () => {
     const app = await makeApp(),
       { cookie, userId } = await app.signIn();
     app.sqlite.run("UPDATE user SET role = 'admin' WHERE id = ?", [userId]);
@@ -594,30 +595,26 @@ spec: {surface: admin, sql: 'SELECT 1 AS answer'}
       });
       const call = async (method: string, params = {}) => {
         const response = await handle(
-          new Request(`${app.origin}/mcp/admin`, {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${accessToken}`,
-              "content-type": "application/json",
-              accept: "application/json, text/event-stream",
-            },
-            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-          }),
+          new Request(
+            `${app.origin}/mcp/admin`,
+            mcpInit(
+              { jsonrpc: "2.0", id: 1, method, params },
+              {
+                headers: {
+                  authorization: `Bearer ${accessToken}`,
+                  "content-type": "application/json",
+                  accept: "application/json, text/event-stream",
+                },
+              },
+            ),
+          ),
           {},
         );
         expect(response.status).toBe(200);
         const text = await response.text();
         return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
       };
-      expect(
-        (
-          await call("initialize", {
-            protocolVersion: "2025-03-26",
-            capabilities: {},
-            clientInfo: { name: "oauth-regression", version: "1" },
-          })
-        ).result.protocolVersion,
-      ).toBe("2025-03-26");
+      expect((await call("server/discover")).result.supportedVersions).toEqual(["2026-07-28"]);
       expect((await call("tools/list")).result.tools.map((tool: { name: string }) => tool.name)).toEqual([
         "admin_check",
       ]);

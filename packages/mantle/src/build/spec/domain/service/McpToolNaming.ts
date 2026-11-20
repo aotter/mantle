@@ -49,6 +49,15 @@ const overwrites = (node: unknown): boolean =>
     (node as { onConflictClause?: { action?: string } }).onConflictClause?.action === "ONCONFLICT_UPDATE" ||
     Object.values(node).some(overwrites));
 
+/**
+ * The output schema a Procedure's tool advertises. A ref handler returns any JSON value, so its authored schema is advertised
+ * whatever root `type` it declares (SEP-2106: `structuredContent` is any JSON value). A root without `type` (`$ref`,
+ * `anyOf`), which the SDK would list with a `type` it adds, and a SQL handler's non-object schema are not.
+ */
+export function procedureOutputSchema(p: PlanProcedure): JsonSchema | undefined {
+  return p.output.type === "object" || ("ref" in p.handler && p.output.type !== undefined) ? p.output : undefined;
+}
+
 /** One MCP tool and the Procedure or View it comes from. */
 export interface McpTool {
   readonly name: string;
@@ -78,7 +87,8 @@ export function mcpTools(plan: RuntimePlan, surface: "public" | "admin", locale 
   for (const t of Object.values(plan.triggers)) {
     if (t.source.kind !== "mcp" || t.source.surface !== surface) continue;
     const p = plan.procedures[t.procedure]!;
-    const title = text(p.title);
+    const title = text(p.title),
+      outputSchema = procedureOutputSchema(p);
     add({
       name: mcpToolNameSegment(t.procedure),
       kind: "procedure",
@@ -86,8 +96,7 @@ export function mcpTools(plan: RuntimePlan, surface: "public" | "admin", locale 
       title: title ?? toolTitle(t.procedure),
       description: text(p.description) ?? title ?? t.procedure,
       inputSchema: p.input,
-      // structuredContent must be an object
-      ...(p.output.type === "object" ? { outputSchema: p.output } : {}),
+      ...(outputSchema ? { outputSchema } : {}),
       annotations: procedureAnnotations(p),
       requires: p.requires,
     });

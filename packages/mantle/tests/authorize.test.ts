@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { fixtureCaller } from "./apps/fixtures.js";
 import { ContractError, type Authorize, type Caller, type Target } from "../src/kernel/contracts.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const doc = (kind: string, name: string, spec: object) =>
   JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind, metadata: { name }, spec });
@@ -167,11 +168,13 @@ test("generated MCP authorizes calls and filters lists using requires and manife
       params: object = {},
     ) => {
       const response = await fetch(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        }),
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
         {},
       );
       const text = await response.text();

@@ -5,7 +5,6 @@ import { Database } from "bun:sqlite";
 import { resolve } from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
-import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import type {
   AudioContent,
   ContentBlock as SdkContentBlock,
@@ -15,6 +14,8 @@ import type {
   TextContent,
 } from "@modelcontextprotocol/server";
 import type { McpContentBlock, ToolCall } from "../src/kernel/mcp.js";
+import { mcpClient } from "./mcp-client.js";
+import { mcpInit } from "./mcp-wire.js";
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: items}
@@ -56,7 +57,7 @@ const user = fixtureCaller({
   credentialId: null,
   clientId: null,
 });
-test("official SDK initializes, lists only surface tools, calls shared validation/paging, refuses auth and cookie writes", async () => {
+test("official SDK discovers, lists only surface tools, calls shared validation/paging, refuses auth and cookie writes", async () => {
   const files = await generateOrThrow("bun-sqlite", [{ sourceId: "mcp.yaml", text: source }]);
   const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-")),
     db = new Database(":memory:");
@@ -75,29 +76,29 @@ test("official SDK initializes, lists only surface tools, calls shared validatio
     });
     const call = async (method: string, params: any = {}, path = "/mcp", headers: Record<string, string> = {}) => {
       const response = await handle(
-        new Request("https://app.test" + path, {
-          method: "POST",
-          headers: {
-            cookie: "fixture=1",
-            "content-type": "application/json",
-            accept: "application/json, text/event-stream",
-            ...headers,
-          },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        }),
+        new Request(
+          "https://app.test" + path,
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            {
+              headers: {
+                cookie: "fixture=1",
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                ...headers,
+              },
+            },
+          ),
+        ),
         {},
       );
       const text = await response.text();
       const data = JSON.parse(text.startsWith("event:") ? text.split("data: ")[1].split("\n")[0] : text);
       return { response, data, readOnly: classifications.at(-1) };
     };
-    const initialized = await call("initialize", {
-      protocolVersion: "2025-03-26",
-      capabilities: {},
-      clientInfo: { name: "test", version: "1" },
-    });
-    expect(initialized.response.status).toBe(200);
-    expect(initialized.readOnly).toBe(true);
+    const discovered = await call("server/discover");
+    expect(discovered.response.status).toBe(200);
+    expect(discovered.readOnly).toBe(true);
     const listed = (await call("tools/list")).data.result.tools;
     expect(listed.map((t: any) => t.name)).toEqual(["items", "add_item"]);
     expect(listed[0].inputSchema.additionalProperties).toBe(false);
@@ -184,15 +185,7 @@ spec: {source: {kind: mcp, surface: public}, target: {procedure: scoped-add}}
       credential: "api-key",
       scopes: ["mcp", "items:write"],
     });
-    const send = (handle: any, body: unknown) =>
-      handle(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify(body),
-        }),
-        {},
-      );
+    const send = (handle: any, body: unknown) => handle(new Request("https://app.test/mcp", mcpInit(body)), {});
     const json = async (response: Response) => {
       const text = await response.text();
       return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
@@ -208,8 +201,8 @@ spec: {source: {kind: mcp, surface: public}, target: {procedure: scoped-add}}
         expect(response.status).toBe(403);
         expect((await json(response)).error.code).toBe("AUTH_DENIED");
       }
-      // Every call of a batch is refused before any runs.
-      expect((await send(handle, [add("scoped_add"), add("add_item")])).status).toBe(403);
+      // 2026-07-28 has no batches: one is refused before any call runs.
+      expect((await send(handle, [add("scoped_add"), add("add_item")])).status).toBe(400);
       expect((await json(await send(handle, add("scoped_add")))).result.isError).toBeUndefined();
     }
     expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({ n: 3 });
@@ -243,29 +236,33 @@ test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 bef
     });
     const call = (handle: any, url: string, headers: Record<string, string> = {}, era?: string) =>
       handle(
-        new Request(url, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            accept: "application/json, text/event-stream",
-            ...(era ? { "mcp-protocol-version": era, "mcp-method": "tools/list" } : {}),
-            ...headers,
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/list",
-            params: era
-              ? {
-                  _meta: {
-                    "io.modelcontextprotocol/protocolVersion": era,
-                    "io.modelcontextprotocol/clientCapabilities": {},
-                    "io.modelcontextprotocol/clientInfo": { name: "test", version: "1" },
-                  },
-                }
-              : {},
-          }),
-        }),
+        new Request(
+          url,
+          mcpInit(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/list",
+              params: era
+                ? {
+                    _meta: {
+                      "io.modelcontextprotocol/protocolVersion": era,
+                      "io.modelcontextprotocol/clientCapabilities": {},
+                      "io.modelcontextprotocol/clientInfo": { name: "test", version: "1" },
+                    },
+                  }
+                : {},
+            },
+            {
+              headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                ...(era ? { "mcp-protocol-version": era, "mcp-method": "tools/list" } : {}),
+                ...headers,
+              },
+            },
+          ),
+        ),
         {},
       );
     for (const who of [{ kind: "anonymous" }, user])
@@ -300,11 +297,13 @@ test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 bef
     expect((await call(open, "http://127.0.0.1:8787/mcp", { origin: "null" })).status).toBe(403);
     expect(refusals()).toHaveLength(14);
     // The refused POST body is read (bounded) before the 403, so the connection stays usable under wrangler dev.
-    const unread = new Request("https://app.test/mcp", {
-      method: "POST",
-      headers: { "content-type": "application/json", origin: "https://evil.test" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
-    });
+    const unread = new Request(
+      "https://app.test/mcp",
+      mcpInit(
+        { jsonrpc: "2.0", id: 1, method: "tools/list" },
+        { headers: { "content-type": "application/json", origin: "https://evil.test" } },
+      ),
+    );
     expect((await open(unread, {}, {})).status).toBe(403);
     expect(unread.bodyUsed).toBe(true);
     // No Origin is a server-side client: any Host passes, as behind wrangler routes or dev.host (Host rewritten, peer still loopback).
@@ -499,16 +498,18 @@ test("MCP converts validated JSON/boolean input to native SQLite binds", async (
     db.exec(files["schema.sql"]!);
     const { mcp } = await import(resolve(dir, "mcp.ts"));
     const response = await mcp({ db: () => db, caller: () => user })(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name: "add_item", arguments: { title: "JSON", flag: true, payload: { nested: [1, 2] } } },
-        }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "add_item", arguments: { title: "JSON", flag: true, payload: { nested: [1, 2] } } },
+          },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       {},
     );
     expect(response.status).toBe(200);
@@ -553,11 +554,13 @@ test("generated publishing transitions are validated admin tools; public Views u
     const handle = mcp({ db: () => db, caller: () => caller });
     const call = async (method: string, params: any = {}, path = "/mcp/") => {
       const response = await handle(
-        new Request("https://app.test" + path, {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        }),
+        new Request(
+          "https://app.test" + path,
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
         {},
       );
       const text = await response.text();
@@ -638,16 +641,18 @@ test("ref MCP Procedures require typed caller-owned handlers and enforce require
     });
     const call = async () => {
       const response = await handle(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: { name: "add_item", arguments: { title: "Ref" } },
-          }),
-        }),
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: "add_item", arguments: { title: "Ref" } },
+            },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
         {},
       );
       const text = await response.text();
@@ -679,15 +684,19 @@ test("unknown tool and caller failures log the surface and original error, redac
     await writeGenerated(dir, files);
     const { mcp } = await import(resolve(dir, "mcp.ts"));
     const request = () =>
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-          authorization: "Bearer " + token,
-        },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "items", arguments: {} } }),
-      });
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "items", arguments: {} } },
+          {
+            headers: {
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+              authorization: "Bearer " + token,
+            },
+          },
+        ),
+      );
     const response = await mcp({
       db: () => ({
         query() {
@@ -788,23 +797,30 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
     });
     const call = async (method: string, params: any = {}, path = "/mcp", headers: any = {}) => {
       const response = await handle(
-        new Request("https://app.test" + path, {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        }),
+        new Request(
+          "https://app.test" + path,
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            {
+              headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                ...headers,
+              },
+            },
+          ),
+        ),
         {},
       );
       const body = await response.text();
       return { response, data: JSON.parse(body.startsWith("event:") ? body.split("data: ")[1].split("\n")[0] : body) };
     };
-    const init = await call("initialize", {
-      protocolVersion: "2025-03-26",
-      capabilities: {},
-      clientInfo: { name: "test", version: "1" },
+    const discovered = await call("server/discover");
+    expect(discovered.data.result.instructions).toBe("Use these tools.");
+    expect(discovered.data.result._meta["io.modelcontextprotocol/serverInfo"]).toMatchObject({
+      name: "example",
+      version: "7",
     });
-    expect(init.data.result.instructions).toBe("Use these tools.");
-    expect(init.data.result.serverInfo).toMatchObject({ name: "example", version: "7" });
     const listed = (await call("tools/list")).data.result.tools;
     expect(listed[0]).toMatchObject({
       title: "項目",
@@ -834,7 +850,7 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
       'resource_metadata="https://proxy.test/resource"',
     );
     caller = { kind: "anonymous" };
-    expect((await call("initialize", {}, "/mcp/admin")).response.headers.get("www-authenticate")).toContain(
+    expect((await call("server/discover", {}, "/mcp/admin")).response.headers.get("www-authenticate")).toContain(
       'resource_metadata="https://proxy.test/resource"',
     );
     caller = fixtureCaller({ ...user, credential: "session" });
@@ -858,20 +874,24 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
       },
     });
     await lenient(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-          origin: "https://evil.test",
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name: "add_item", arguments: { title: "CSRF" } },
-        }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "add_item", arguments: { title: "CSRF" } },
+          },
+          {
+            headers: {
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+              origin: "https://evil.test",
+            },
+          },
+        ),
+      ),
       {},
     );
     expect(admitted.filter(event => event.kind === "request-refused")).toEqual([
@@ -884,11 +904,13 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
     expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({ n: 1 });
     for (const locale of [undefined, "constructor", "toString", "fr"]) {
       const response = await mcp({ db: () => db, caller: () => caller, locale })(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
-        }),
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method: "tools/list" },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
         {},
       );
       const body = await response.text(),
@@ -902,7 +924,7 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
   }
 });
 
-test("MCP preflights all batch calls before any work and reports expired caller challenges", async () => {
+test("MCP challenges a closed call before any work, refuses a batch, and reports expired caller challenges", async () => {
   const { mcp } = await import("../src/kernel/mcp.js");
   const { ContractError } = await import("../src/kernel/contracts.js");
   let runs = 0;
@@ -932,27 +954,21 @@ test("MCP preflights all batch calls before any work and reports expired caller 
       },
     },
   ];
-  const request = (body: any) =>
-    new Request("https://app.test/mcp", {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify(body),
-    });
+  const request = (body: any) => new Request("https://app.test/mcp", mcpInit(body));
   const handle = mcp(tools, { db: () => ({}), caller: () => ({ kind: "anonymous" }) });
-  const response = await handle(
-    request(
-      ["open", "closed"].map((name, id) => ({
-        jsonrpc: "2.0",
-        id,
-        method: "tools/call",
-        params: { name, arguments: {} },
-      })),
-    ),
-    {},
-  );
+  const message = (name: string, id = 1) => ({
+    jsonrpc: "2.0",
+    id,
+    method: "tools/call",
+    params: { name, arguments: {} },
+  });
+  const response = await handle(request(message("closed")), {});
   expect(response!.status).toBe(401);
-  expect(runs).toBe(0);
   expect(response!.headers.get("www-authenticate")).toContain('scope="mcp write"');
+  // 2026-07-28 has no batches: the SDK refuses one, so no call of it runs.
+  const batch = await handle(request([message("open", 0), message("closed", 1)]), {});
+  expect(batch!.status).toBe(400);
+  expect(runs).toBe(0);
   const expired = await mcp(tools, {
     db: () => ({}),
     caller: () => {
@@ -1006,11 +1022,13 @@ spec: {source: {kind: http, method: POST, path: /api/log-items}, target: {proced
     const handle = mcp({ db: () => db, caller: () => ({ kind: "anonymous" }) });
     const call = async (method: string, params: any = {}) => {
       const response = await handle(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        }),
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
         {},
       );
       const body = await response.text();
@@ -1051,7 +1069,7 @@ spec: {source: {kind: http, method: POST, path: /api/log-items}, target: {proced
   }
 });
 
-test("An anonymous closed surface challenges from initialize; an open tool or a signed-in caller does not", async () => {
+test("An anonymous closed surface challenges from server/discover; an open tool or a signed-in caller does not", async () => {
   const { mcp } = await import("../src/kernel/mcp.js");
   const { user } = await import("./apps/fixtures.js");
   const tool = (name: string, closed?: boolean) => ({
@@ -1065,26 +1083,27 @@ test("An anonymous closed surface challenges from initialize; an open tool or a 
   });
   const post = (handle: any, method: string, params: any = {}) =>
     handle(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method, params },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       {},
     );
-  const init = { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } };
   const allClosed = (caller: any) =>
     mcp([tool("a", true), tool("b", true)], { db: () => ({}), caller: () => caller, authorize: () => true });
-  const challenged = await post(allClosed({ kind: "anonymous" }), "initialize", init);
+  const challenged = await post(allClosed({ kind: "anonymous" }), "server/discover");
   expect(challenged!.status).toBe(401);
   expect(challenged!.headers.get("www-authenticate")).toMatch(/^Bearer .*scope="mcp"/);
-  expect((await post(allClosed(user("person")), "initialize", init))!.status).toBe(200);
+  expect((await post(allClosed(user("person")), "server/discover"))!.status).toBe(200);
   const mixed = mcp([tool("open"), tool("closed", true)], {
     db: () => ({}),
     caller: () => ({ kind: "anonymous" }),
     authorize: () => true,
   });
-  expect((await post(mixed, "initialize", init))!.status).toBe(200);
+  expect((await post(mixed, "server/discover"))!.status).toBe(200);
   const listed = await post(mixed, "tools/list");
   expect(listed!.status).toBe(200);
   expect(((await listed!.text()).match(/"name":"(\w+)"/g) ?? []).join()).toBe('"name":"open"');
@@ -1130,11 +1149,13 @@ test("Tool.meta lists visibility, App template and file params; withResultMeta k
   };
   const call = async (method: string, params: any = {}, api: any = handle) => {
     const response = await api(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method, params },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       {},
     );
     const body = await response.text();
@@ -1160,16 +1181,21 @@ test("Tool.meta lists visibility, App template and file params; withResultMeta k
   expect(signed.content).toEqual([{ type: "text", text: '{"id":"u1"}' }]);
   expect(signed.structuredContent).toEqual({ id: "u1" });
   expect(signed._meta).toEqual({
+    "io.modelcontextprotocol/serverInfo": expect.objectContaining({ name: "aotter.mantle" }),
     uploadUrl: secret,
     requiredHeaders: { "content-type": "image/png" },
     "net.aotter.mantle/tool": "sign",
   });
   expect(JSON.stringify({ ...signed, _meta: undefined })).not.toContain("SECRET");
   const failed = (await call("tools/call", { name: "fail", arguments: {} })).result;
-  expect(Object.keys(failed).sort()).toEqual(["content", "isError", "structuredContent"]);
+  expect(Object.keys(failed).sort()).toEqual(["_meta", "content", "isError", "resultType", "structuredContent"]);
+  // The SDK's own 2026-07-28 result keys; nothing of the tool's meta.
+  expect(Object.keys(failed._meta)).toEqual(["io.modelcontextprotocol/serverInfo"]);
   expect(failed.structuredContent.diagnostics[0].code).toBe("INTERNAL_ERROR");
   expect((await call("tools/call", { name: "plain", arguments: {} })).result).toEqual({
+    _meta: { "io.modelcontextprotocol/serverInfo": expect.objectContaining({ name: "aotter.mantle" }) },
     content: [{ type: "text", text: '{"ok":true}' }],
+    resultType: "complete",
     structuredContent: { ok: true },
   });
   const direct: any = await callTool(tools[4] as any, {}, {}, { kind: "anonymous" }, undefined as never);
@@ -1233,48 +1259,39 @@ test("withResult sends native content blocks after Core's blocks; a block the SD
   const quiet = console.error;
   console.error = () => {};
   try {
-    for (const mode of ["legacy", { pin: "2026-07-28" }] as const) {
-      const client = new Client({ name: "test", version: "1" }, { versionNegotiation: { mode } });
-      await client.connect(
-        new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
-          fetch: async (url, init) => (await handle(new Request(String(url), init), {}))!,
-        }),
-      );
-      await client.listTools(); // the official client then checks structuredContent against the outputSchema
-      const pic = await client.callTool({ name: "pic", arguments: {} });
-      expect(pic.isError).toBeUndefined();
-      expect(pic.content as unknown[]).toEqual([
-        { type: "text", text: '{"id":"p1"}' },
-        { type: "text", text: "tool version v1" },
-        ...blocks,
-      ]);
-      expect(pic.structuredContent).toEqual({ id: "p1" });
-      expect(pic._meta).toMatchObject({ "example/result": 1, "net.aotter.mantle/tool": "pic" });
-      // A tool that returns blocks alone still answers valid JSON text first.
-      const only = await client.callTool({ name: "only", arguments: {} });
-      expect(only.content as unknown[]).toEqual([{ type: "text", text: "null" }, blocks[0]]);
-      for (const name of ["bad", "unknown", "notlist", "boom"]) {
-        const failed = await client.callTool({ name, arguments: {} });
-        expect(failed.isError).toBe(true);
-        // Core's envelope only: the diagnostic and the input contract.
-        expect((failed.content as { type: string }[]).map(c => c.type)).toEqual(["text", "text"]);
-        expect((failed.structuredContent as any).diagnostics[0].code).toBe("INTERNAL_ERROR");
-      }
-      await client.close();
+    const client = await mcpClient(handle);
+    await client.listTools(); // the official client then checks structuredContent against the outputSchema
+    const pic = await client.callTool({ name: "pic", arguments: {} });
+    expect(pic.isError).toBeUndefined();
+    expect(pic.content as unknown[]).toEqual([
+      { type: "text", text: '{"id":"p1"}' },
+      { type: "text", text: "tool version v1" },
+      ...blocks,
+    ]);
+    expect(pic.structuredContent).toEqual({ id: "p1" });
+    expect(pic._meta).toMatchObject({ "example/result": 1, "net.aotter.mantle/tool": "pic" });
+    // A tool that returns blocks alone still answers valid JSON text first.
+    const only = await client.callTool({ name: "only", arguments: {} });
+    expect(only.content as unknown[]).toEqual([{ type: "text", text: "null" }, blocks[0]]);
+    for (const name of ["bad", "unknown", "notlist", "boom"]) {
+      const failed = await client.callTool({ name, arguments: {} });
+      expect(failed.isError).toBe(true);
+      // Core's envelope only: the diagnostic and the input contract.
+      expect((failed.content as { type: string }[]).map(c => c.type)).toEqual(["text", "text"]);
+      expect((failed.structuredContent as any).diagnostics[0].code).toBe("INTERNAL_ERROR");
     }
+    await client.close();
   } finally {
     console.error = quiet;
   }
-  expect(completions.map(e => [e.tool, e.outcome, e.code])).toEqual(
-    [1, 2].flatMap(() => [
-      ["pic", "succeeded", undefined],
-      ["only", "succeeded", undefined],
-      ["bad", "failed", "INTERNAL_ERROR"],
-      ["unknown", "failed", "INTERNAL_ERROR"],
-      ["notlist", "failed", "INTERNAL_ERROR"],
-      ["boom", "failed", "INTERNAL_ERROR"],
-    ]),
-  );
+  expect(completions.map(e => [e.tool, e.outcome, e.code])).toEqual([
+    ["pic", "succeeded", undefined],
+    ["only", "succeeded", undefined],
+    ["bad", "failed", "INTERNAL_ERROR"],
+    ["unknown", "failed", "INTERNAL_ERROR"],
+    ["notlist", "failed", "INTERNAL_ERROR"],
+    ["boom", "failed", "INTERNAL_ERROR"],
+  ]);
   // callTool returns what the tool returned.
   const direct: any = await callTool(tools[0] as any, {}, {}, { kind: "anonymous" }, undefined as never);
   expect(direct.data).toEqual({ id: "p1" });
@@ -1309,11 +1326,13 @@ test("a hosted withResult call: a dry run carries no app blocks, a refused block
   );
   const call = async (name: string, dryRun: boolean) => {
     const response = await handle(
-      new Request("https://app.test/mcp/admin", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } }),
-      }),
+      new Request(
+        "https://app.test/mcp/admin",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       {},
       { props: { mantle: await pinned(mantleProps({ dryRun }), targets, `admin:tool:${name}`) } },
     );
@@ -1337,7 +1356,7 @@ test("a hosted withResult call: a dry run carries no app blocks, a refused block
   ]);
 });
 
-test("tools and App resources list their icons and annotations; initialize lists serverInfo and no resource list changes", async () => {
+test("tools and App resources list their icons and annotations; server/discover lists serverInfo and no resource list changes", async () => {
   const { mcp } = await import("../src/kernel/mcp.js");
   const icon = { src: "https://app.test/icon.png", mimeType: "image/png", sizes: ["48x48"], theme: "light" as const };
   const tools = [
@@ -1367,26 +1386,33 @@ test("tools and App resources list their icons and annotations; initialize lists
   const ui = { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } };
   const rpc = async (api: typeof without, method: string, params: object = {}) => {
     const response = await api(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method, params },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       {},
     );
     const body = await response!.text();
     return JSON.parse(body.startsWith("event:") ? body.split("data: ")[1]!.split("\n")[0]! : body).result;
   };
-  const init = { protocolVersion: "2025-06-18", capabilities: ui, clientInfo: { name: "t", version: "1" } };
-  const initialized = await rpc(withApps, "initialize", init);
-  expect(initialized.serverInfo).toMatchObject({ name: "aotter.mantle", ...serverInfo });
-  expect(initialized.capabilities).toMatchObject({
+  const declares = (capabilities: object) => ({
+    _meta: { "io.modelcontextprotocol/clientCapabilities": capabilities },
+  });
+  const discovered = await rpc(withApps, "server/discover", declares(ui));
+  expect(discovered._meta["io.modelcontextprotocol/serverInfo"]).toMatchObject({
+    name: "aotter.mantle",
+    ...serverInfo,
+  });
+  expect(discovered.capabilities).toMatchObject({
     tools: { listChanged: false },
     resources: { listChanged: false },
   });
   // No resource is registered, so no resources capability is advertised.
-  expect((await rpc(without, "initialize", init)).capabilities.resources).toBeUndefined();
-  expect((await rpc(withApps, "initialize", { ...init, capabilities: {} })).capabilities.resources).toBeUndefined();
+  expect((await rpc(without, "server/discover", declares(ui))).capabilities.resources).toBeUndefined();
+  expect((await rpc(withApps, "server/discover", declares({}))).capabilities.resources).toBeUndefined();
   const meta = { _meta: { "io.modelcontextprotocol/clientCapabilities": ui } };
   const [listed] = (await rpc(withApps, "tools/list", meta)).tools;
   expect(listed).toMatchObject({ icons: [icon], annotations: { title: "Picture", readOnlyHint: true } });
@@ -1408,11 +1434,13 @@ test("tools/list pages with toolsPageSize and an opaque cursor bound to the cata
   const options = { db: () => ({}), caller: () => ({ kind: "anonymous" }) as const };
   const call = async (api: any, params: any = {}) => {
     const response = await api(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/list", params },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       {},
     );
     const body = await response.text();
@@ -1443,7 +1471,7 @@ test("tools/list pages with toolsPageSize and an opaque cursor bound to the cata
     );
 });
 
-test("a ref handler's withResult reaches an official client on both protocol eras; Store and REST callers get the data", async () => {
+test("a ref handler's withResult reaches the official client; Store and REST callers get the data", async () => {
   const text = source.replace(
     "  output: {type: object}\n  handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",
     "  output: {type: object, required: [title], additionalProperties: false, properties: {title: {type: string}}}\n  handler: {ref: app.addItem}",
@@ -1487,29 +1515,21 @@ spec: {source: {kind: http, method: POST, path: /api/items}, target: {procedure:
     );
     expect(await posted.json()).toEqual({ title: "Rest" });
     const handle = mcp({ db: () => db, caller: () => caller, handlers });
-    for (const mode of ["legacy", { pin: "2026-07-28" }] as const) {
-      const client = new Client({ name: "test", version: "1" }, { versionNegotiation: { mode } });
-      await client.connect(
-        new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
-          fetch: async (url, init) => (await handle(new Request(String(url), init), {}))!,
-        }),
-      );
-      // The client checks structuredContent against the listed outputSchema (no additional properties): the data, not the wrapper.
-      const listed = (await client.listTools()).tools.find(tool => tool.name === "add_item")!;
-      expect(listed.outputSchema).toMatchObject({ additionalProperties: false, required: ["title"] });
-      const result = await client.callTool({ name: "add_item", arguments: { title: "Mcp" } });
-      expect(result.isError).toBeUndefined();
-      expect(result.structuredContent).toEqual({ title: "Mcp" });
-      expect(result.content as unknown[]).toEqual([
-        { type: "text", text: '{"title":"Mcp"}' },
-        { type: "text", text: expect.stringMatching(/^tool version /) },
-        block,
-      ]);
-      expect(result._meta).toMatchObject({ "example/card": "Mcp", "net.aotter.mantle/tool": "add_item" });
-      await client.close();
-    }
+    const client = await mcpClient(handle);
+    // The client checks structuredContent against the listed outputSchema (no additional properties): the data, not the wrapper.
+    const listed = (await client.listTools()).tools.find(tool => tool.name === "add_item")!;
+    expect(listed.outputSchema).toMatchObject({ additionalProperties: false, required: ["title"] });
+    const result = await client.callTool({ name: "add_item", arguments: { title: "Mcp" } });
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toEqual({ title: "Mcp" });
+    expect(result.content as unknown[]).toEqual([
+      { type: "text", text: '{"title":"Mcp"}' },
+      { type: "text", text: expect.stringMatching(/^tool version /) },
+      block,
+    ]);
+    expect(result._meta).toMatchObject({ "example/card": "Mcp", "net.aotter.mantle/tool": "add_item" });
+    await client.close();
     expect(db.query("SELECT title FROM items ORDER BY title").all()).toEqual([
-      { title: "Mcp" },
       { title: "Mcp" },
       { title: "Rest" },
       { title: "Store" },
@@ -1529,6 +1549,7 @@ test("ToolCall.signal aborts only while the call runs; a cancel is observed, not
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), 5_000)),
     ]);
   const aborted: string[] = [];
+  let cancelled: unknown, observedBeforeResume: boolean | undefined;
   let started = () => {},
     abortSeen = () => {},
     completed: (event: unknown) => void = () => {};
@@ -1559,6 +1580,8 @@ test("ToolCall.signal aborts only while the call runs; a cancel is observed, not
         call.signal!.addEventListener("abort", resolve);
         started();
       });
+      // Workers runs nothing after this `await` once the client is gone: the observation came in the abort event.
+      observedBeforeResume = cancelled !== undefined;
       call.signal!.throwIfAborted();
       return {};
     }),
@@ -1568,63 +1591,53 @@ test("ToolCall.signal aborts only while the call runs; a cancel is observed, not
     db: () => ({}),
     caller: () => ({ kind: "anonymous" }),
     onObservation: event => {
-      if (event.kind === "invocation" && event.phase === "completion" && event.tool === "wait") completed(event);
+      if (event.kind === "invocation" && event.phase === "completion" && event.tool === "wait") {
+        cancelled = event;
+        completed(event);
+      }
     },
   });
   const logged = spyOn(console, "error");
   try {
-    for (const mode of ["legacy", { pin: "2026-07-28" }] as const) {
-      const client = new Client({ name: "test", version: "1" }, { versionNegotiation: { mode } });
-      await client.connect(
-        new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
-          fetch: async (url, init) => (await handle(new Request(String(url), init), {}))!,
-        }),
-      );
-      // Progress: notifications on the call's SSE stream, before its result.
-      const progress: unknown[] = [];
-      const done = await client.callTool({ name: "seam_steps", arguments: {} }, { onprogress: p => progress.push(p) });
-      expect(done.structuredContent).toEqual({ steps: 2 });
-      expect(progress).toEqual([
-        { progress: 1, total: 2, message: "step 1" },
-        { progress: 2, total: 2, message: "step 2" },
-      ]);
-      // Without a progressToken the tool is offered no progress.
-      expect((await client.callTool({ name: "offered", arguments: {} })).structuredContent).toEqual({
-        progress: "undefined",
-        signal: true,
-      });
-      // A call that finished normally, with and without progress.
-      expect(
-        (await client.callTool({ name: "done", arguments: {} }, { onprogress: () => {} })).isError,
-      ).toBeUndefined();
-      expect((await client.callTool({ name: "done", arguments: {} })).isError).toBeUndefined();
-      // A 2026-07-28 client cancels by closing the request, which aborts the signal. A 2025-era client sends
-      // notifications/cancelled as another request, which a stateless server cannot relate to the call, so the
-      // signal aborts only when that client closes its connection.
-      const cancel = new AbortController();
-      const running = new Promise<void>(resolve => (started = resolve)),
-        abort = new Promise<void>(resolve => (abortSeen = resolve)),
-        completion = new Promise<unknown>(resolve => (completed = resolve));
-      const call = client.callTool({ name: "wait", arguments: {} }, { signal: cancel.signal }).catch(String);
-      await within(running, "the tool to start");
-      cancel.abort("stop");
-      expect(await call).toContain("stop");
-      if (mode === "legacy") {
-        await new Promise(resolve => setTimeout(resolve, 20));
-        expect(aborted).toEqual([]);
-      }
-      await client.close();
-      await within(abort, "the tool's signal to abort");
-      // A cancel is no failure of the tool: observed with its own code, never logged as an unhandled failure.
-      expect(await within(completion, "the completion observation")).toMatchObject({
-        outcome: "failed",
-        code: "REQUEST_CANCELLED",
-      });
-      // Negative: neither finished call's signal aborted with the teardown.
-      await new Promise(resolve => setTimeout(resolve, 20));
-      expect([mode, aborted]).toEqual([mode, ["wait"]]);
-      aborted.length = 0;
-    }
+    const client = await mcpClient(handle);
+    // Progress: notifications on the call's SSE stream, before its result.
+    const progress: unknown[] = [];
+    const done = await client.callTool({ name: "seam_steps", arguments: {} }, { onprogress: p => progress.push(p) });
+    expect(done.structuredContent).toEqual({ steps: 2 });
+    expect(progress).toEqual([
+      { progress: 1, total: 2, message: "step 1" },
+      { progress: 2, total: 2, message: "step 2" },
+    ]);
+    // Without a progressToken the tool is offered no progress.
+    expect((await client.callTool({ name: "offered", arguments: {} })).structuredContent).toEqual({
+      progress: "undefined",
+      signal: true,
+    });
+    // A call that finished normally, with and without progress.
+    expect((await client.callTool({ name: "done", arguments: {} }, { onprogress: () => {} })).isError).toBeUndefined();
+    expect((await client.callTool({ name: "done", arguments: {} })).isError).toBeUndefined();
+    // A client cancels by closing the request, which aborts the signal.
+    const cancel = new AbortController();
+    const running = new Promise<void>(resolve => (started = resolve)),
+      abort = new Promise<void>(resolve => (abortSeen = resolve)),
+      completion = new Promise<unknown>(resolve => (completed = resolve));
+    const call = client.callTool({ name: "wait", arguments: {} }, { signal: cancel.signal }).catch(String);
+    await within(running, "the tool to start");
+    cancel.abort("stop");
+    expect(await call).toContain("stop");
+    await within(abort, "the tool's signal to abort");
+    // A cancel is no failure of the tool: observed with its own code, never logged as an unhandled failure, and
+    // observed in the abort event itself, before the tool's code resumes.
+    expect(await within(completion, "the completion observation")).toMatchObject({
+      outcome: "failed",
+      code: "REQUEST_CANCELLED",
+    });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(observedBeforeResume).toBe(true);
+    await client.close();
+    // Negative: neither finished call's signal aborted with the teardown.
+    expect(aborted).toEqual(["wait"]);
+    aborted.length = 0;
     expect(logged.mock.calls.filter(args => String(args[0]).includes("unhandled failure"))).toEqual([]);
   } finally {
     logged.mockRestore();
@@ -1679,12 +1692,16 @@ test("gateway: a call cancelled mid-run keeps its own access event", async () =>
       running = new Promise<void>(resolve => (started = resolve)),
       event = new Promise<void>(resolve => (recorded = resolve));
     const response = handle(
-      new Request("https://app.test/mcp/admin", {
-        method: "POST",
-        signal: cancel.signal,
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } }),
-      }),
+      new Request(
+        "https://app.test/mcp/admin",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } },
+          {
+            signal: cancel.signal,
+            headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+          },
+        ),
+      ),
       {},
       { props: { mantle: await pinned(mantleProps({}), targets, `admin:tool:${name}`) } },
     );

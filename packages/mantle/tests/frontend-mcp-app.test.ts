@@ -7,6 +7,7 @@ import { sdkFixtureCaller } from "./apps/fixtures.js";
 import type { Caller } from "../src/kernel/contracts.js";
 import type { HostProps } from "../src/kernel/host-caller.js";
 import type { Tool } from "../src/kernel/mcp.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const uri = "ui://my-tasks/build-1";
 const apps = {
@@ -56,11 +57,13 @@ async function post(
   mantle?: HostProps,
 ) {
   const response = (await handle(
-    new Request("https://frontend.test" + path, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...body }),
-    }),
+    new Request(
+      "https://frontend.test" + path,
+      mcpInit(
+        { jsonrpc: "2.0", id: 1, ...body },
+        { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+      ),
+    ),
     {},
     mantle && { props: { mantle } },
   ))!;

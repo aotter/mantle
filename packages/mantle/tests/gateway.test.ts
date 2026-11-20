@@ -10,6 +10,14 @@ import { binds } from "../src/kernel/binds.js";
 import { isAdmin, type Caller } from "../src/kernel/contracts.js";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { gatewaySource, mantleProps, invalidProps, pinned } from "./gateway-fixture.js";
+import { mcpInit } from "./mcp-wire.js";
+const parsed = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
 
 const fields = {
   region: { type: "string" as const, multiple: true, enum: ["TW", "JP"] },
@@ -119,11 +127,21 @@ test("generated REST and MCP enforce gateway contracts, scope, freshness and loc
     const api = rest(options),
       tools = mcp(options);
     const request = (path: string, method = "GET", body?: string, headers = {}) =>
-      new Request("https://app.test" + path, {
-        method,
-        body,
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
-      });
+      new Request(
+        "https://app.test" + path,
+        // An MCP message in the 2026-07-28 envelope; anything else as it is.
+        path.startsWith("/mcp") && body !== undefined
+          ? mcpInit(parsed(body), { headers })
+          : {
+              method,
+              body,
+              headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                ...headers,
+              },
+            },
+      );
     const restCall = async (props: unknown, path = "/api/views/public-records", raw?: string, headers = {}) =>
       api(
         request(path, raw === undefined ? "GET" : "POST", raw, headers),
@@ -245,17 +263,15 @@ test("generated REST and MCP enforce gateway contracts, scope, freshness and loc
     const rpc = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "write", arguments: input } };
     const beforeTransport = acquired;
     for (const [headers, status] of [
-      [{ accept: "" }, 406],
-      [{ accept: "text/html" }, 406],
       [{ "content-type": "text/plain" }, 415],
       [{ "mcp-protocol-version": "unsupported" }, 400],
+      [{ "mcp-method": "tools/list" }, 400],
     ] as const) {
       for (const [path, body] of [
         ["/mcp/admin", rpc],
         ["/mcp", { ...rpc, params: { name: "touch", arguments: {} } }],
       ] as const) {
         const transportRequest = request(path, "POST", JSON.stringify(body), headers);
-        if ("accept" in headers && headers.accept === "") transportRequest.headers.delete("accept");
         expect(
           (
             await tools(
@@ -695,13 +711,8 @@ test("forwarded pinning, dry runs and access decisions share one boundary", asyn
     expect((await noGateway(new Request("https://app.test/api/views/public-records"), {})).status).toBe(200);
     expect(events.length).toBe(beforeLocal);
     const rpc = async (method: string, params?: unknown, props = mantleProps()) => {
-      const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
       return tools(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          body,
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        }),
+        new Request("https://app.test/mcp", mcpInit({ jsonrpc: "2.0", id: 1, method, params })),
         {},
         {
           props: {
@@ -770,16 +781,18 @@ test("MCP media writes refuse dry runs before acquiring a database or running to
     expect(targets[id]).toMatchObject({ readOnly: false, opaque: true });
     const props = await pinned(mantleProps({ dryRun: true }), targets, id);
     const response = await api(
-      new Request("https://app.test/mcp/admin", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name: tool.name, arguments: {} },
-        }),
-      }),
+      new Request(
+        "https://app.test/mcp/admin",
+        mcpInit(
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: tool.name, arguments: {} },
+          },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       {},
       { props: { mantle: props } },
     );
