@@ -1,6 +1,5 @@
 /** /llms.txt and /sitemap.xml bodies; loaded only when an index is requested, so page Workers do not pay for it at startup. */
-const escape = (v: unknown) =>
-  String(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+import { escape } from "./web-escape.js";
 const label = (v: unknown) =>
   String(v)
     .replace(/[\r\n]/g, " ")

@@ -117,3 +117,4 @@ These retain their issue-based filenames and original decision status.
 | [#2015 Application SQL in a Store transaction](adr-lite-2015-application-sql-in-transactions.md) | Accepted: the Store transaction declares its handle; no public driver module |
 | [Application seams](adr-lite-application-seams.md) | Accepted: required entry points are registered and guarded by consumer checks on the four stacks |
 | [#2018 PostgreSQL on Workers through Hyperdrive](adr-lite-2018-postgres-on-workers.md) | Proposed: Mantle prepares its own postgres.js statements; Better Auth per isolate over a request-scoped client |
+| [#2092 Head formatter for application-owned pages](adr-lite-2092-head-formatter.md) | Accepted: a pure `pageHead` on `@aotter/mantle/web`; no content-model options in `web()` |

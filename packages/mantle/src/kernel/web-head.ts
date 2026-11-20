@@ -1,6 +1,5 @@
 /** HTML head formatting loads only when the application asks for head tags. */
-const escape = (v: unknown) =>
-  String(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+import { escape } from "./web-escape.js";
 export function headTags(
   canonical: string,
   row: Record<string, unknown>,

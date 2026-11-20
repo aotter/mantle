@@ -685,3 +685,70 @@ test("sitemap lastmod is a W3C datetime or absent; static paths share the scan c
   );
   expect(capped.match(/<url>/g)).toHaveLength(50000);
 });
+
+test("pageHead formats an application-owned page's head and escapes every value", async () => {
+  const { pageHead } = await import("../src/kernel/web.js");
+  const hostile = `<b>&"'</script>`;
+  const url = 'https://site.test/zh-TW/a"b';
+  const jsonLd = { "@context": "https://schema.org", "@type": "Article", name: hostile, nested: ["</script><!--"] };
+  const html = pageHead({
+    title: hostile,
+    description: hostile,
+    url,
+    image: "https://site.test/i.png",
+    siteName: "Site",
+    locale: "zh-TW",
+    type: "article",
+    alternates: { "zh-TW": url, en: "https://site.test/en/a" },
+    xDefault: url,
+    markdown: url + ".md",
+    jsonLd,
+  });
+  const text = "&lt;b&gt;&amp;&quot;&#39;&lt;/script&gt;",
+    href = "https://site.test/zh-TW/a&quot;b";
+  expect(html).toBe(
+    `<title>${text}</title><meta name="description" content="${text}">` +
+      `<link rel="canonical" href="${href}"><link rel="alternate" type="text/markdown" href="${href}.md">` +
+      `<link rel="alternate" hreflang="zh-TW" href="${href}"><link rel="alternate" hreflang="en" href="https://site.test/en/a">` +
+      `<link rel="alternate" hreflang="x-default" href="${href}">` +
+      `<meta property="og:type" content="article"><meta property="og:url" content="${href}">` +
+      `<meta property="og:title" content="${text}"><meta property="og:description" content="${text}">` +
+      `<meta property="og:site_name" content="Site"><meta property="og:locale" content="zh_TW">` +
+      `<meta property="og:locale:alternate" content="en"><meta property="og:image" content="https://site.test/i.png">` +
+      `<meta name="twitter:card" content="summary_large_image">` +
+      `<script type="application/ld+json">${JSON.stringify(jsonLd).replaceAll("<", "\\u003c")}</script>`,
+  );
+  // The script element ends only where Core ends it, and its body parses back to the application's object.
+  expect(html.match(/<\/script>/g)).toHaveLength(1);
+  expect(html).not.toContain("<!--");
+  expect(JSON.parse(/<script type="application\/ld\+json">(.*)<\/script>/s.exec(html)![1]!)).toEqual(jsonLd);
+  // Absent, null and empty values emit no tag; the card falls back to `summary`.
+  expect(pageHead({ title: "", description: null, url: "https://site.test/", image: "", markdown: "" })).toBe(
+    '<link rel="canonical" href="https://site.test/"><meta property="og:type" content="website">' +
+      '<meta property="og:url" content="https://site.test/"><meta name="twitter:card" content="summary">',
+  );
+  // The registered application seam's consumer module runs.
+  const { head } = await import("./seams/page-head.js");
+  expect(head).toContain('<link rel="alternate" hreflang="x-default" href="https://seam.example/a">');
+});
+
+test("a Worker importing only pageHead bundles no web() serving code, and web() no pageHead", async () => {
+  const { build } = await import("esbuild");
+  const bundle = async (contents: string) =>
+    (
+      await build({
+        stdin: { contents, resolveDir: import.meta.dir, loader: "ts" },
+        bundle: true,
+        write: false,
+        platform: "neutral",
+        format: "esm",
+        target: "es2022",
+      })
+    ).outputFiles[0]!.text;
+  const formatter = await bundle('export { pageHead } from "../src/kernel/web.ts";');
+  expect(formatter).toContain("twitter:card");
+  for (const serving of ["llms.txt", "sitemap", "SHA-256", "geo.position"]) expect(formatter).not.toContain(serving);
+  const site = await bundle('export { web } from "../src/kernel/web.ts";');
+  expect(site).toContain("llms.txt");
+  expect(site).not.toContain("twitter:card");
+});

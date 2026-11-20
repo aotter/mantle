@@ -237,6 +237,31 @@ use `cache-control: no-store`. A matching HTML page takes precedence over a `.md
 alternate, including slugs ending in `.md`; a Markdown alternate may read the
 exact HTML candidate first and therefore performs at most two View queries.
 
+### Head tags for application-owned pages
+
+`@aotter/mantle/web` also exports `pageHead(options): string`, a pure formatter for pages the
+application renders itself. It reads no
+database: the application passes values it already has, and Core escapes them and owns the format.
+
+```ts
+import { pageHead } from '@aotter/mantle/web';
+const head = pageHead({ title: post.title, description: post.summary, url: canonical,
+  image: post.cover_url, siteName: 'Blog', locale: 'zh-TW', type: 'article',
+  alternates: { 'zh-TW': canonical, en: englishUrl }, xDefault: canonical,
+  markdown: canonical + '.md', jsonLd: { '@context': 'https://schema.org', '@type': 'Article', name: post.title } });
+```
+
+It returns, in order: `<title>`, `<meta name="description">`, the canonical link, the Markdown
+alternate, one `hreflang` alternate per `alternates` entry plus `x-default`, Open Graph (`og:type`,
+default `website`; `og:url`, `og:title`, `og:description`, `og:site_name`, `og:locale` in underscore
+form, `og:locale:alternate` for each other alternate, `og:image`), `twitter:card`
+(`summary_large_image` with an image, else `summary`) and one `application/ld+json` script. A null,
+undefined or empty value emits no tag. Every attribute value is HTML-escaped; `jsonLd` is serialized
+with `JSON.stringify` and `<` written as `\u003c`, so stored text cannot close the script element,
+and the script body parses back to the given value. `og:title` is `title`. Which translations exist,
+the schema.org type and the JSON-LD properties are the application's. Importing only `pageHead` does
+not bundle `web()`'s serving code.
+
 ## Mounting MCP
 
 Mount the generated `mcp({ db: env => env.DB, caller })` handler in the app's

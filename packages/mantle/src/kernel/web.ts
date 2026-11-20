@@ -3,6 +3,7 @@ import type { Authorize, Caller, Gateway, GatewayOptions, RequestContext } from 
 import type { CallerResolver } from "./request-pipeline.js";
 import type { UserFields } from "./user-fields.js";
 import type { Conversions } from "./surface.js";
+export { pageHead, type PageHeadOptions } from "./web-html.js";
 
 /** An app's public Views: row type and input keys per View, and the Views a list may name (input that accepts no fields). */
 export interface App {
