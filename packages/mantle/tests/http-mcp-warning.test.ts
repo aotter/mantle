@@ -77,7 +77,9 @@ test("CLI warns on stderr, succeeds, and never implies an MCP surface", async ()
       target: "bun-sqlite",
       sources: { sources: [{ sourceId: source, text: http.join("\n---\n") }] },
     });
-    expect(result.ok && result.files["mcp.ts"]).toBeUndefined();
+    // mcp.ts is always emitted; its tools table stays empty.
+    expect(result.ok && result.files["mcp.ts"]).toContain("export const tools");
+    expect(result.ok && result.files["mcp.ts"]).not.toContain("target: {");
     await writeFile(
       source,
       [...http, trigger("submit-mcp", "submit", { kind: "mcp", surface: "public" })].join("\n---\n"),

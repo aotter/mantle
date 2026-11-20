@@ -26,12 +26,8 @@ export function emitMcp(
   refuse: (path: string, message: string) => void,
   policies?: ReturnType<typeof mediaPolicies>,
 ): Record<string, string> {
+  // Always emitted, an empty `tools` table included: an app shell imports this module statically.
   const media = !!policies;
-  if (
-    !Object.values(plan.views).some(view => view.surface !== "internal") &&
-    !Object.values(plan.triggers).some(trigger => trigger.source.kind === "mcp")
-  )
-    return {};
   const reads: { name: string; surface: string }[] = [];
   const imports: string[] = plan.access ? ['import { userBinds } from "@aotter/mantle/internal/user-fields";'] : [],
     tools: { fields: string[]; schema: string }[] = [];

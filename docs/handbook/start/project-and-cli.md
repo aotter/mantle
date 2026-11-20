@@ -68,7 +68,7 @@ To see that form while `wrangler dev` runs, run `pnpm build` (or `mantle bundle`
 The bundle also prints notes, never errors, for SQL in the app's own code against Better Auth's tables (read users
 through `userOf(caller)` or `readIdentity(auth)` instead) and for Better Auth roles beyond `admin` and `user`.
 
-`generated.ts` exports typed queries and Store. Direct `views/<encoded-name>.ts` and `procedures/<encoded-name>.ts` entries export an operation and its types. Proved pageable Views also have `paged/views/*`; boundary checks live in `validation/*`. `admin-descriptors.ts`, `rest.ts` and `web.ts` are always emitted. Manifest exposure selects `mcp.ts`; `admin-bindings.ts`, `admin-client.ts` (browser-side types and hooks for `admin.tsx`) and `admin/*` require `--admin`. Auth and site are explicit options.
+`generated.ts` exports typed queries and Store. Direct `views/<encoded-name>.ts` and `procedures/<encoded-name>.ts` entries export an operation and its types. Proved pageable Views also have `paged/views/*`; boundary checks live in `validation/*`. `admin-descriptors.ts`, `rest.ts`, `mcp.ts` and `web.ts` are always emitted; manifest exposure fills `mcp.ts`'s `tools` table; `admin-bindings.ts`, `admin-client.ts` (browser-side types and hooks for `admin.tsx`) and `admin/*` require `--admin`. Auth and site are explicit options.
 
 Apply `schema.sql` only to an empty database. Later changes require [explicit migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations); generation and runtime do not inspect the database. Ref declarations print the `Handlers` keys to implement.
 

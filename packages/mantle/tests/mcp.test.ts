@@ -521,20 +521,30 @@ test("MCP converts validated JSON/boolean input to native SQLite binds", async (
   }
 });
 
-test("MCP emission is selected by Views/Triggers, not internal queries or publishing alone", async () => {
+test("mcp.ts is always emitted: no MCP-visible operation leaves its tools table empty; publishing adds admin tools", async () => {
   const bare = source.split("---\napiVersion: cms.mantle.aotter.net/v2\nkind: View")[0]!;
-  for (const text of [bare, bare.replace("lifecycle: operational", "lifecycle: publishing")]) {
-    const files = await generateOrThrow("bun-sqlite", [{ sourceId: "bare.yaml", text }]);
-    expect(files["mcp.ts"]).toBeUndefined();
-    expect(Object.values(files).join("\n")).not.toContain("@modelcontextprotocol");
-  }
   const internal = source
     .split("---\napiVersion: cms.mantle.aotter.net/v2\nkind: Procedure")[0]!
     .replaceAll("surface: public", "surface: internal")
     .replaceAll("surface: admin", "surface: internal");
-  expect(
-    (await generateOrThrow("bun-sqlite", [{ sourceId: "internal.yaml", text: internal }]))["mcp.ts"],
-  ).toBeUndefined();
+  const tools = async (text: string) => {
+    const files = await generateOrThrow("bun-sqlite", [{ sourceId: "bare.yaml", text }]);
+    expect(Object.values(files).join("\n")).not.toContain("@modelcontextprotocol");
+    const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-empty-"));
+    try {
+      await writeGenerated(dir, files);
+      return (await import(resolve(dir, "mcp.ts"))).tools.map((tool: { name: string }) => tool.name);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+  expect(await tools(bare)).toEqual([]);
+  expect(await tools(internal)).toEqual([]);
+  expect(await tools(bare.replace("lifecycle: operational", "lifecycle: publishing"))).toEqual([
+    "publish_items",
+    "unpublish_items",
+    "archive_items",
+  ]);
 });
 
 test("generated publishing transitions are validated admin tools; public Views use SQL visibility", async () => {
