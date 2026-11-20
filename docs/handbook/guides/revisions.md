@@ -113,8 +113,20 @@ the direction. An editor's checklist is "switch a revision in, then publish": Ad
 
 ## Views
 
-The join also requires `r.post = p.id`, so a post never shows another post's revision even if its reference was
-written by other code. A lookup by a unique field ends its `ORDER BY` with the Schema's `id`, which generation needs to
+The two joins differ on purpose. The single-row `post-page` View joins `ON r.id = p.current_revision AND r.post = p.id`,
+so a post never shows another post's revision even if its reference was written by other code; that costs nothing for
+one row. The list View `published-posts` (and any View that feeds the sitemap or `llms.txt`) joins
+`ON r.id = p.current_revision AND r.sealed = true`. On PostgreSQL at volume the planner multiplies the selectivities of
+two join conditions, abandons the list index and picks a hash join with a full scan and a sort. The reporter measured
+100,000 parent rows and 200,000 revisions: 74 ms for the first page of 24 with both conditions, 0.4 ms with the join on
+`r.id` alone. The two-column form is what makes the planner leave the index for lists.
+
+The `sealed` guard has a narrower reach than `r.post = p.id`. It guarantees that an unsealed draft is never public, even
+through a wrong pointer. It does not stop a pointer to another post's sealed revision. That is guaranteed by
+`switch-revision` being the only writer of `current_revision`: it checks that the revision belongs to the post and seals
+what it selects. List Views rely on that; single-row reads keep the two-column check.
+
+A lookup by a unique field ends its `ORDER BY` with the Schema's `id`, which generation needs to
 prove it returns one row. `published_at` is the first publication; `switched_at` (the post's `updated_at`, which the
 switch moves) and `edited_at` give the page's last-modified date.
 
@@ -145,7 +157,7 @@ spec:
   surface: public
   sql: |
     SELECT p.id, p.slug, r.title, r.summary
-    FROM posts p JOIN post_revisions r ON r.id = p.current_revision AND r.post = p.id
+    FROM posts p JOIN post_revisions r ON r.id = p.current_revision AND r.sealed = true
     ORDER BY p.id
 ---
 apiVersion: cms.mantle.aotter.net/v2
@@ -563,6 +575,12 @@ export async function postRoutes(request: Request, db: Handle, origin: string, c
 
 Call it from `src/routes.ts`: `return postRoutes(request, env.DB, env.PUBLIC_ORIGIN, context.caller)`. The app shell's
 `/sign-in` page can replace the 404 for signed-out editors if you prefer a redirect.
+
+This route needs `caller()` to see the editor, so it works for applications with their own sign-in. Under
+[gateway mode](../reference/authorization.md#gateway-mode), a host that forwards staff identity only to Admin and API
+targets leaves a site page's caller anonymous, and the route answers 404 to admins too. There, preview from a custom
+Admin page instead: read `revision-preview` and render the public template, for example in a sandboxed `srcdoc` iframe
+with the CSS inlined.
 
 SEO notes:
 
