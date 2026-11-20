@@ -1,0 +1,10 @@
+/* The app's one stylesheet: the kit's compiled classes and tokens (every class the kit components use is in it), plus
+   the layout rules it has no class for. */
+@import "@aotter/mantle-ui/kit.css";
+
+.app { max-width: 48rem; margin-inline: auto; padding: 1.5rem 1rem; display: grid; gap: 1rem; }
+.app nav { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.app form, .app dl { display: grid; gap: 0.75rem; }
+.field { display: grid; gap: 0.25rem; }
+.app select { height: 2rem; border: 1px solid var(--input); border-radius: var(--radius); background: transparent; padding-inline: 0.5rem; }
+.app dl { grid-template-columns: max-content 1fr; }

@@ -74,7 +74,8 @@ One site often spans all three. In a shop the catalogue and product pages are in
 
 The app lives under one prefix such as `/app/*`. Its entry is a file in `src/client/`, which `mantle bundle` builds to
 `/assets/client/<name>.js` ([outputs](../start/project-and-cli.md#outputs)); it reads Views and writes through REST
-Triggers. The purchasing example's `/app` shows one (`docs/examples/purchasing`, `src/client/`).
+Triggers. The purchasing example's employee area is such an app (`docs/examples/purchasing`: `src/client/app.tsx`, its
+shell `public/app/index.html` and the `/app` route in `src/routes.ts`).
 
 - Indexable content is never only in the app: everything a search or answer engine should find has its own
   server-rendered URL, and the app adds what a signed-in visitor does with it. The public pages link into the app.

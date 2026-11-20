@@ -79,6 +79,36 @@ spec:
     SELECT id, title, amount, department, requestStatus AS "requestStatus", version
     FROM requests ORDER BY created_at DESC, id DESC
 ---
+# One of the employee's own requests, by id: the detail page of the app under /app (src/client/app.tsx), so a deep
+# link opens any request, not only one on the list's first page.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: my-request }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  restrict: { requests: "author_id = auth.uid()" }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id]
+    properties:
+      id: { type: string, maxLength: 100 }
+  sql: |
+    SELECT id, title, amount, department, requestStatus AS "requestStatus", supplierOrderId AS "supplierOrderId", version
+    FROM requests WHERE id = input.id ORDER BY id
+---
+# Each department and what its budget has left, for any signed-in employee: the app's new-request form shows it
+# beside the department, so an employee sees before submitting whether the request fits.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: department-budgets }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  sql: |
+    SELECT department, remaining FROM budgets ORDER BY department
+---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: pending-requests }
