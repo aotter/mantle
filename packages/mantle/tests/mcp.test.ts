@@ -1330,6 +1330,63 @@ test("a hosted withResult call: a dry run carries no app blocks, a refused block
   ]);
 });
 
+test("tools and App resources list their icons and annotations; initialize lists serverInfo and no resource list changes", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const icon = { src: "https://app.test/icon.png", mimeType: "image/png", sizes: ["48x48"], theme: "light" as const };
+  const tools = [
+    {
+      name: "pic",
+      surface: "public",
+      description: "pic",
+      inputSchema: { type: "object" },
+      validate: (raw: any) => raw,
+      run: async () => ({}),
+      icons: [icon],
+      annotations: { title: "Picture", readOnlyHint: true },
+    },
+  ];
+  const resource = {
+    uri: "ui://app/pic",
+    name: "pic-app",
+    html: "<!doctype html>",
+    renders: ["pic"],
+    icons: [icon],
+    annotations: { audience: ["user" as const], priority: 1 },
+  };
+  const serverInfo = { title: "App", description: "An app.", websiteUrl: "https://app.test", icons: [icon] };
+  const options = { db: () => ({}), caller: () => ({ kind: "anonymous" }) as const, serverInfo };
+  const withApps = mcp(tools, { ...options, apps: { public: { resources: [resource] } } }),
+    without = mcp(tools, options);
+  const ui = { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } };
+  const rpc = async (api: typeof without, method: string, params: object = {}) => {
+    const response = await api(
+      new Request("https://app.test/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      }),
+      {},
+    );
+    const body = await response!.text();
+    return JSON.parse(body.startsWith("event:") ? body.split("data: ")[1]!.split("\n")[0]! : body).result;
+  };
+  const init = { protocolVersion: "2025-06-18", capabilities: ui, clientInfo: { name: "t", version: "1" } };
+  const initialized = await rpc(withApps, "initialize", init);
+  expect(initialized.serverInfo).toMatchObject({ name: "aotter.mantle", ...serverInfo });
+  expect(initialized.capabilities).toMatchObject({
+    tools: { listChanged: false },
+    resources: { listChanged: false },
+  });
+  // No resource is registered, so no resources capability is advertised.
+  expect((await rpc(without, "initialize", init)).capabilities.resources).toBeUndefined();
+  expect((await rpc(withApps, "initialize", { ...init, capabilities: {} })).capabilities.resources).toBeUndefined();
+  const meta = { _meta: { "io.modelcontextprotocol/clientCapabilities": ui } };
+  const [listed] = (await rpc(withApps, "tools/list", meta)).tools;
+  expect(listed).toMatchObject({ icons: [icon], annotations: { title: "Picture", readOnlyHint: true } });
+  const [app] = (await rpc(withApps, "resources/list", meta)).resources;
+  expect(app).toMatchObject({ uri: "ui://app/pic", icons: [icon], annotations: { audience: ["user"], priority: 1 } });
+});
+
 test("tools/list pages with toolsPageSize and an opaque cursor bound to the catalogue; the default is one page", async () => {
   const { mcp } = await import("../src/kernel/mcp.js");
   const table = (names: string[]) =>

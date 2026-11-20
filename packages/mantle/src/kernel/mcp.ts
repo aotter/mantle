@@ -19,6 +19,14 @@ export type {
   NormalMcpAppResource,
 } from "./mcp-apps.js";
 
+/** An MCP icon, as `serverInfo`, a tool and an App resource list it. */
+export interface McpIcon {
+  readonly src: string;
+  readonly mimeType?: string;
+  readonly sizes?: readonly string[];
+  readonly theme?: "light" | "dark";
+}
+
 /** Options of a generated `mcp(...)`; it adds required `handlers` when the app declares ref Procedures. */
 export interface Options<Env, Database> extends GatewayOptions {
   apps?: Readonly<Partial<Record<"public" | "admin", McpAppsSource | readonly McpAppsSource[]>>>;
@@ -39,7 +47,9 @@ export interface Options<Env, Database> extends GatewayOptions {
     name?: string;
     title?: string;
     version?: string;
-    icons?: { src: string; mimeType?: string; sizes?: string[]; theme?: "light" | "dark" }[];
+    description?: string;
+    websiteUrl?: string;
+    icons?: readonly McpIcon[];
   };
   requiredScopes?: readonly string[];
   /** Additional scopes requested by an unauthenticated OAuth challenge (for example offline_access), not an API scope floor. */
@@ -89,7 +99,9 @@ export interface Tool<Database, Handlers = never> {
   readonly title?: LocalizedText;
   readonly description: LocalizedText;
   readonly outputSchema?: unknown;
+  readonly icons?: readonly McpIcon[];
   readonly annotations?: {
+    readonly title?: string;
     readonly readOnlyHint?: boolean;
     readonly destructiveHint?: boolean;
     readonly openWorldHint?: boolean;

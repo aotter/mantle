@@ -21,6 +21,8 @@ type Sdk = typeof import("@modelcontextprotocol/server");
 type McpServer = import("@modelcontextprotocol/server").McpServer;
 type Links = ReturnType<typeof linkSurface>["links"];
 type TextBlock = { type: "text"; text: string };
+type Icon = import("@modelcontextprotocol/server").Icon;
+type Annotations = import("@modelcontextprotocol/server").Annotations;
 
 /** What the handler decided before the SDK runs. */
 export interface Serving<Env, Database, Handlers> {
@@ -90,7 +92,11 @@ export function serveTools<Env, Database, Handlers>(
 
 function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Database, Handlers>): McpServer {
   const { options, pipeline, message, links, version } = serving;
-  const serverInfo = { name: "aotter.mantle", ...options.serverInfo, version: options.serverInfo?.version ?? version };
+  const serverInfo = {
+    name: "aotter.mantle",
+    ...options.serverInfo,
+    version: options.serverInfo?.version ?? version,
+  } as import("@modelcontextprotocol/server").Implementation;
   // Tools capability after construction: given to the constructor, the SDK installs its tools/call handler before the wrap below.
   const server = new sdk.McpServer(serverInfo, {
     maxToolInputElements: MCP_INPUT_ELEMENTS,
@@ -108,6 +114,8 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
 
   const support = clientUiSupport(message),
     appsEnabled = support !== "unsupported";
+  // A stateless server never sends list changes; the SDK would advertise them for resources once one registers.
+  if (appsEnabled && links?.resources.length) server.server.registerCapabilities({ resources: { listChanged: false } });
   const names = new Set(serving.tools.map(({ tool }) => tool.name));
   const linkedMeta = links
     ? registerApps(server, links, appsEnabled, names, { env: serving.env, request: serving.request })
@@ -141,6 +149,7 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
         inputSchema: schema(listedInput(tool, locale)),
         ...(tool.outputSchema ? { outputSchema: schema(localizedSchema(tool.outputSchema, locale)) } : {}),
         ...(tool.annotations ? { annotations: tool.annotations } : {}),
+        ...(tool.icons ? { icons: tool.icons as Icon[] } : {}),
       },
       (raw: unknown) =>
         invoke(
@@ -409,6 +418,8 @@ function registerApps(
         mimeType: RESOURCE_MIME_TYPE,
         title: resource.title,
         description: resource.description,
+        ...(resource.icons ? { icons: resource.icons as Icon[] } : {}),
+        ...(resource.annotations ? { annotations: resource.annotations as Annotations } : {}),
         ...(meta ? { _meta: meta } : {}),
       };
       server.registerResource(resource.name, resource.uri, listing, async () => {

@@ -1,4 +1,5 @@
 import { ContractError } from "./contracts.js";
+import type { McpIcon } from "./mcp.js";
 /** MCP Apps (ADR-0029 D7): UI resources served beside the tools that render in them. */
 export const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 
@@ -32,6 +33,13 @@ export interface McpAppResource {
   readonly name: string;
   readonly title?: string;
   readonly description?: string;
+  /** Listed on `resources/list` as given. */
+  readonly icons?: readonly McpIcon[];
+  readonly annotations?: {
+    readonly audience?: readonly ("user" | "assistant")[];
+    readonly priority?: number;
+    readonly lastModified?: string;
+  };
   readonly html: string | ((render: McpAppRender) => string | McpAppPage | Promise<string | McpAppPage>);
   readonly csp?: McpAppCsp;
   readonly permissions?: {
