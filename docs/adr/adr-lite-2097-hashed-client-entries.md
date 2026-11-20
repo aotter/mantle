@@ -29,21 +29,33 @@ Measured 2026-11-20 on Workers Free (method and raw numbers in #2097):
    `<assets>/assets/client/h/<name>-<hash>.js`, and `<name>-<hash>.css` when the entry imports CSS. The hash is the
    first 16 hex digits of the SHA-256 of the file's bytes, so identical content keeps its name across builds. The
    browser files never name each other (an island loader gets its island's URL from the HTML), so no hashing order
-   applies. The stable files are written as before.
+   applies. The stable files are written as before. A build writes its files over the previous build's directory and
+   only then removes what it did not write, so a name both builds have is never missing while `wrangler dev` rebuilds.
+   An entry named like an `Object.prototype` member (`constructor`, `__proto__`) is refused, so a map lookup is only
+   ever an entry or `undefined`.
 2. **The map, imported by the Worker.** `@aotter/mantle/client-assets` exports
    `clientAssets: Readonly<Partial<Record<string, ClientAsset>>>`, `ClientAsset = { js: string; css?: string }`. Its
    module in the package is an empty map; when `mantle bundle` bundles the Worker it replaces the import with this
    build's map. It is typed before any build, so `tsc` runs before `mantle bundle`, and a Worker that does not import it
-   bundles nothing of it. Outside a Worker build (a `bun-*` server run as TypeScript, a test) the map is empty, which is
-   why the type makes every entry optional: code falls back to the stable name.
-3. **One year, immutable.** The build's `_headers` gets
-   `/assets/client/h/*` with `! Cache-Control` and `Cache-Control: public, max-age=31536000, immutable`, through the
+   bundles nothing of it. Outside a Worker build (a `bun-*` server run as TypeScript, a browser file, a test) the map is
+   empty, which is why the type makes every entry optional: code falls back to the stable name. The map is the
+   server's: `mantle bundle` prints a note when it survives tree shaking into a browser file.
+3. **One day, immutable.** The build's `_headers` gets
+   `/assets/client/h/*` with `! Cache-Control` and `Cache-Control: public, max-age=86400, immutable`, through the
    same file as Admin's rule: written when absent; rewritten when it holds only rules `mantle bundle` writes; appended to
-   a copy of `public/_headers`; printed, not written, for a file the build did not copy. `! Cache-Control` drops a
-   broader rule's value, which `_headers` would otherwise join to this one. A rule the application wrote for the path is
-   kept.
+   a copy of `public/_headers`; printed, not written, for a file the build did not copy; removed when it holds only
+   such rules and a later build has none. `! Cache-Control` drops a broader rule's value, which `_headers` would
+   otherwise join to this one. A rule the application wrote for the path is kept. One day, the value and reasoning of
+   Admin's chunks (#2088): the edge sends the rule on its `404` too, and a browser keeps that `404` for the rule's
+   `max-age`. A request can get a `404` for a **current** name while a deploy propagates (it reaches a location still
+   on the previous version) or while `wrangler dev` rebuilds, and an old name is served again after a rollback. A day
+   bounds each of these; the measured benefit, no request on a repeat view, is kept within the day.
 4. **Opt-in use.** Applications choose per page whether to link the hashed names. The recipes example does; the
    purchasing example's static `public/app/index.html` cannot read the map and keeps the stable names.
+5. **Workers only.** A `bun-*` server runs as TypeScript, so nothing gives it the map, and `bunAdminAssets` serves
+   `/assets/client/` with revalidation. Its build writes no hashed copies and no rule; its pages link the stable names.
+   Serving the copies on Bun would need a second way to deliver the map to a TypeScript server, which is left until an
+   application asks for it.
 
 ## Not done, and why
 
@@ -53,16 +65,15 @@ Measured 2026-11-20 on Workers Free (method and raw numbers in #2097):
   Worker's path (`run_worker_first`) for the same remaining case.
 
 That case is a tab opened before a deploy that lazily imports afterwards. The SDK adds no mechanism; the recipes
-example's island loader reloads the page once when an island's `import()` fails, and the handbook describes it.
+example's island loader, when an island's `import()` fails, asks for the file again (`HEAD`, `no-store`) and reloads
+the page once per URL only on a `404`, never offline or on another failure; the handbook describes it.
 
 ## Known limits
 
 - An open tab that lazily imports after a deploy fails that import (handled by the application, above).
-- That failed request's `404` is stored by the browser for a year under a name no current HTML references. If the
-  name is served again later (a rollback to that build, or two versions served at once during a gradual deployment
-  without a version key), that browser keeps the `404` until its cache is cleared. Admin's chunks use one day for this
-  reason (#2088); the browser entries take a year because the measured gain is on every repeat view and the case needs
-  a lazy import across a deploy followed by a rollback.
+- That failed request's `404`, or one a request got for a current name during a deploy's propagation, is stored by
+  the browser for up to a day. A first view after a day revalidates nothing but requests each file again.
+- `bun-*` targets get no hashed copies (Decision 5).
 
 ## Acceptance
 
@@ -70,7 +81,9 @@ example's island loader reloads the page once when an island's `import()` fails,
   with it; the map reaches a bundled Worker through the registered consumer module (`client-assets` in
   `tests/application-seams.ts`) and is empty without entries and in the package's own module; a Worker that does not
   import it holds none of it; the `_headers` rule is written, appended to a copied `public/_headers`, kept when the app
-  has one, and only printed for the app's own file. `tests/bundle-admin.test.ts`: Admin's rule and this one share one
+  has one, only printed for the app's own file, and removed with the build's own file when a later build has no rules;
+  an unchanged copy is not rewritten and a stale one is removed only after writing; a `bun-*` build writes no `h/`; the
+  map's keys are in code-unit order; prototype member names are refused; a browser file holding the map is noted. `tests/bundle-admin.test.ts`: Admin's rule and this one share one
   file.
 - The recipes example's `smoke.mjs` checks in workerd that its HTML links hashed files that answer `200` with the
-  immutable header and that the stable names still answer.
+  one-day immutable header and that the stable names still answer.

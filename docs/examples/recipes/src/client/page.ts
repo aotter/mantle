@@ -13,24 +13,27 @@ for (const element of document.querySelectorAll<HTMLElement>("[data-island-src]"
   element.addEventListener("click", () => (clicked.add(element), load(element)), { once: true });
 }
 
-// Set before the one reload below and cleared once an island loads, so a page whose island keeps failing is not reloaded again.
-const RELOADED = "island-reloaded";
-
 function load(element: HTMLElement) {
   if (loaded.has(element)) return;
   loaded.add(element);
   observer.unobserve(element);
+  // Only this site's own built files: an element naming anything else is ignored.
+  const src = new URL(element.dataset.islandSrc!, location.origin);
+  if (src.origin !== location.origin || !src.pathname.startsWith("/assets/client/")) return;
   // A computed URL: `mantle bundle` inlines a literal `import()` (one file per entry), which would bring React here.
-  void import(/* @vite-ignore */ element.dataset.islandSrc!).then(
-    (island: { mount(element: HTMLElement, clicked: boolean): void }) => {
-      island.mount(element, clicked.has(element));
-      try { sessionStorage.removeItem(RELOADED); } catch {}
-    },
-    // A page opened before a deploy names the previous build's file, which is gone: reload once to get the new page.
-    () => {
+  void import(/* @vite-ignore */ src.href).then(
+    (island: { mount(element: HTMLElement, clicked: boolean): void }) => island.mount(element, clicked.has(element)),
+    // A page opened before a deploy names the previous build's file, which is gone: reload once to get the new page. Only
+    // when the file is confirmed missing (404); offline, a blocked request or an error in the island's code is not fixed
+    // by a reload. The guard is per URL, so another island loading or failing never allows a second reload for this one.
+    async () => {
+      if (!navigator.onLine) return;
+      const response = await fetch(src, { method: "HEAD", cache: "no-store" }).catch(() => undefined);
+      if (response?.status !== 404) return;
+      const key = `island-reloaded ${src.pathname}`;
       try {
-        if (sessionStorage.getItem(RELOADED)) return;
-        sessionStorage.setItem(RELOADED, "1");
+        if (sessionStorage.getItem(key)) return;
+        sessionStorage.setItem(key, "1");
       } catch { return; } // no storage, no guard: no reload
       location.reload();
     },

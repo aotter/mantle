@@ -174,15 +174,17 @@ export async function bundleApp(
   apart();
   const clientEntries = clientEntryFiles(source);
   const client = join(assets, CLIENT_DIR);
-  cleanClient(outdir, assets, source);
+  const ownsClient = cleanClient(outdir, assets, source, clientEntries.length > 0);
   // before copyPublic, which would otherwise copy the app's file into the directory the build then empties
   if (clientEntries.length && existsSync(join("public", CLIENT_DIR)))
     throw new Error(
       `public/${CLIENT_DIR} is reserved for the browser entries in ${relative(process.cwd(), join(dirname(source), "client"))}; move those files elsewhere under public/.`,
     );
   const copied = copyPublic(outdir, assets);
-  const hashed = await bundleClient(clientEntries, client, outdir);
-  if (dirs.some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"))) {
+  // A `bun-*` server runs as TypeScript: nothing gives it the map, so its build writes no hashed copies (Workers only).
+  const bun = dirs.some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"));
+  const hashed = await bundleClient(clientEntries, client, outdir, ownsClient, !bun);
+  if (bun) {
     // Packages are external here, so only the app's own imports of the Admin server are seen; one reached through another package is not.
     if (
       Object.values(own.inputs).some(input =>
@@ -222,7 +224,8 @@ const HASHED = "/assets/client/h/";
 
 /**
  * The browser entries: `.ts` and `.tsx` files directly in `client/` beside the Worker entry (subdirectories hold their
- * helpers). Dotfiles, declaration files and `*.test.*` / `*.spec.*` files are not entries.
+ * helpers). Dotfiles, declaration files and `*.test.*` / `*.spec.*` files are not entries. A name every object already
+ * has (`constructor`, `__proto__`, `toString`) is refused, so `clientAssets[name]` is only ever an entry or undefined.
  */
 function clientEntryFiles(source: string): string[] {
   const dir = join(dirname(source), "client");
@@ -240,7 +243,12 @@ function clientEntryFiles(source: string): string[] {
   // compared without case: `B.ts` and `b.ts` are one file on a case-insensitive filesystem
   const seen = new Map<string, string>();
   for (const file of files) {
-    const key = file.replace(/\.tsx?$/, "").toLowerCase(),
+    const name = file.replace(/\.tsx?$/, "");
+    if (name in Object.prototype)
+      throw new Error(
+        `${relative(process.cwd(), join(dir, file))}: every JavaScript object has "${name}", so it cannot name a browser entry in @aotter/mantle/client-assets; rename the file.`,
+      );
+    const key = name.toLowerCase(),
       other = seen.get(key);
     if (other)
       throw new Error(
@@ -252,34 +260,44 @@ function clientEntryFiles(source: string): string[] {
 }
 
 /**
- * Removes the directory the previous build wrote, so a deleted entry is not served again. The record
- * `<outdir>/.mantle-client` is trusted only when it names exactly this build's `<assets>/assets/client`; an unreadable
- * record or any other path is ignored and never deleted.
+ * Whether `<assets>/assets/client` is the directory the previous build wrote. With entries, `bundleClient` overwrites it
+ * and then removes what it did not write; with none left, it is removed here, so a deleted entry is not served again.
+ * The record `<outdir>/.mantle-client` is trusted only when it names exactly this build's `<assets>/assets/client`; an
+ * unreadable record or any other path is ignored and never deleted.
  */
-function cleanClient(outdir: string, assets: string, source: string): void {
+function cleanClient(outdir: string, assets: string, source: string, entries: boolean): boolean {
   const record = join(outdir, ".mantle-client");
-  if (!existsSync(record)) return;
+  if (!existsSync(record)) return false;
   let dir: unknown;
   try {
     ({ dir } = JSON.parse(readFileSync(record, "utf8")) as { dir?: unknown });
   } catch {}
   rmSync(record, { force: true });
   const own = join(assets, CLIENT_DIR);
-  if (typeof dir !== "string" || physical(dir) !== physical(own)) return;
+  if (typeof dir !== "string" || physical(dir) !== physical(own) || !within(own, dir)) return false;
   assertCleanable("The browser entry output directory", own, source);
-  if (within(own, dir)) rmSync(own, { recursive: true, force: true });
+  if (!entries) rmSync(own, { recursive: true, force: true });
+  return entries;
 }
 
 /**
  * Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
  * `mantle bundle` builds each browser entry (`client/<name>.ts|tsx` beside the Worker entry) into `<assets>/assets/client/<name>.js`:
  * one minified ES2022 browser file per entry, `react` resolved from the application, no source map, stable name.
- * Also a content-hashed copy of each file under `<assets>/assets/client/h/`; returns their paths by entry name, the map
- * `@aotter/mantle/client-assets` gives the Worker.
+ * With `hash` (a Worker), also a content-hashed copy of each file under `<assets>/assets/client/h/`; returns their
+ * paths by entry name, the map `@aotter/mantle/client-assets` gives the Worker. `owned`: `out` is the previous build's.
+ * It is overwritten in place and only then are the files this build did not write removed, so a name both builds have
+ * never disappears while a build runs (a request then, under `wrangler dev`, would get a 404 the browser caches).
  */
-async function bundleClient(entries: string[], out: string, outdir: string): Promise<Record<string, ClientAsset>> {
+async function bundleClient(
+  entries: string[],
+  out: string,
+  outdir: string,
+  owned: boolean,
+  hash: boolean,
+): Promise<Record<string, ClientAsset>> {
   if (!entries.length) return {};
-  if (existsSync(out))
+  if (!owned && existsSync(out))
     throw new Error(
       `${relative(process.cwd(), out)} exists and was not written by mantle bundle; it is reserved for the browser entries.`,
     );
@@ -301,20 +319,55 @@ async function bundleClient(entries: string[], out: string, outdir: string): Pro
     absWorkingDir: process.cwd(),
     metafile: true,
   });
-  // The hash is of the file alone: the browser files never name each other, so the order does not matter.
-  mkdirSync(join(out, "h"));
+  const written = new Set(Object.keys(metafile.outputs).map(file => resolve(file)));
+  // The hash is of the file alone: the browser files never name each other, so the order does not matter. A name is
+  // its content, so a copy already there with the same bytes is left as it is.
   const copy = (file: string) => {
     const bytes = readFileSync(file),
       extension = extname(file);
     const name = `${basename(file, extension)}-${createHash("sha256").update(bytes).digest("hex").slice(0, 16)}${extension}`;
-    writeFileSync(join(out, "h", name), bytes);
+    const target = join(out, "h", name);
+    if (!existsSync(target) || !readFileSync(target).equals(bytes)) writeFileSync(target, bytes);
+    written.add(resolve(target));
     return HASHED + name;
   };
   const hashed: Record<string, ClientAsset> = {};
-  for (const [file, output] of Object.entries(metafile.outputs).sort(([a], [b]) => a.localeCompare(b)))
-    if (output.entryPoint)
-      hashed[basename(file, ".js")] = { js: copy(file), ...(output.cssBundle ? { css: copy(output.cssBundle) } : {}) };
+  if (hash) {
+    mkdirSync(join(out, "h"), { recursive: true });
+    // code-unit order, the same on every machine (localeCompare follows the build machine's locale)
+    for (const [file, output] of Object.entries(metafile.outputs).sort(([a], [b]) => (a < b ? -1 : 1)))
+      if (output.entryPoint)
+        hashed[basename(file, ".js")] = {
+          js: copy(file),
+          ...(output.cssBundle ? { css: copy(output.cssBundle) } : {}),
+        };
+  }
+  // after writing: what an earlier build wrote and this one did not (a deleted entry, a previous hashed copy)
+  for (const entry of readdirSync(out, { recursive: true, withFileTypes: true }) as import("node:fs").Dirent[])
+    if (!entry.isDirectory() && !written.has(resolve(entry.parentPath, entry.name)))
+      rmSync(join(entry.parentPath, entry.name));
+  if (!hash) rmSync(join(out, "h"), { recursive: true, force: true });
+  warnClientAssets(metafile);
   return hashed;
+}
+
+/**
+ * `@aotter/mantle/client-assets` is the Worker's: in a browser file it is the package's empty map. Warns when a browser
+ * file still holds it after tree shaking; an import that reaches it only through a module whose use of it is removed
+ * (a page component imported for its types or another export) holds nothing of it.
+ */
+function warnClientAssets(metafile: Metafile): void {
+  for (const [file, output] of Object.entries(metafile.outputs))
+    if (
+      Object.entries(output.inputs).some(
+        ([input, { bytesInOutput }]) =>
+          bytesInOutput > 0 &&
+          /(?:^|\/)mantle\/(?:dist|src)\/kernel\/client-assets\.[jt]s$/.test(input.replaceAll("\\", "/")),
+      )
+    )
+      console.warn(
+        `note: ${relative(process.cwd(), file)} uses @aotter/mantle/client-assets, which is empty in a browser file: mantle bundle gives the map only to the Worker. Write the hashed URL into the HTML the Worker renders instead.`,
+      );
 }
 
 /**
@@ -355,20 +408,24 @@ function copyPublic(outdir: string, assets: string): string[] {
  * does not revalidate the chunks while they are fresh. */
 const adminRule =
   "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable\n";
-/** The browser entries' hashed copies: a year (ADR-lite #2097). `! Cache-Control` drops a broader rule's value, which
- * `_headers` would otherwise join to this one. */
-const hashedRule = `${HASHED}*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n`;
+/** The browser entries' hashed copies: one day, as Admin's chunks and for the same reason (ADR-lite #2097): the edge
+ * sends the rule on its 404 too, which a request during a deploy's propagation or a rebuild can get for a current name.
+ * `! Cache-Control` drops a broader rule's value, which `_headers` would otherwise join to this one. */
+const hashedRule = `${HASHED}*\n  ! Cache-Control\n  Cache-Control: public, max-age=86400, immutable\n`;
 /** What only `mantle bundle` writes, including the one-year Admin rule an earlier build wrote (#2088). */
 const ownRules = [adminRule, adminRule.replace("86400", "31536000"), hashedRule].map(rule => rule.trim());
 
 /** `<assets>/_headers` with this build's rules. A file made only of rules `mantle bundle` writes is its own and is
  * rewritten (nothing removes it between builds). A `_headers` copied from `public/` this build gets the missing rules
  * appended to the copy (the next build copies it afresh); `public/_headers` itself, or one another step wrote, is only
- * told them. A rule whose path the file already names is the application's and is kept as it is. */
+ * told them. A rule whose path the file already names is the application's and is kept as it is. With no rules, a file
+ * of its own outside `public/` is removed (an earlier build's rules no longer apply). */
 function assetHeaders(assets: string, copied: boolean, rules: string[]): void {
-  if (!rules.length) return;
   const file = join(assets, "_headers");
-  if (!existsSync(file)) return writeFileSync(file, rules.join("\n"));
+  if (!existsSync(file)) {
+    if (rules.length) writeFileSync(file, rules.join("\n"));
+    return;
+  }
   const text = readFileSync(file, "utf8");
   if (
     !copied &&
@@ -377,9 +434,13 @@ function assetHeaders(assets: string, copied: boolean, rules: string[]): void {
       .split(/\n\s*\n/)
       .every(block => ownRules.includes(block.trim()))
   ) {
-    if (text !== rules.join("\n")) writeFileSync(file, rules.join("\n"));
+    // never public/_headers itself (`--assets public`), which may hold a rule the application copied from the note below
+    if (!rules.length) {
+      if (!within(resolve("public"), assets) && !within(assets, resolve("public"))) rmSync(file);
+    } else if (text !== rules.join("\n")) writeFileSync(file, rules.join("\n"));
     return;
   }
+  if (!rules.length) return;
   const missing = rules.filter(rule => !text.includes(rule.slice(0, rule.indexOf("\n"))));
   if (!missing.length) return;
   const paths = missing.map(rule => rule.slice(0, rule.indexOf("\n"))).join(" and ");

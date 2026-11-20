@@ -22,8 +22,8 @@ const text = {
 const lines = (value: string | null) => (value ?? "").split("\n").map(line => line.trim()).filter(Boolean);
 const recipePath = (locale: Locale, slug: string | null) => `/${locale}/recipes/${slug}`;
 const link = "text-primary underline-offset-4 hover:underline";
-// The content-hashed copies of src/client/<name>.ts(x) this Worker version was built with: cached for a year, so a repeat
-// view makes no request for them. The stable name is the fallback where `mantle bundle` gave no map (a test).
+// The content-hashed copies of src/client/<name>.ts(x) this Worker version was built with: cached for a day, so a repeat
+// view within it makes no request for them. The stable name is the fallback where `mantle bundle` gave no map (a test).
 const asset = (name: string) => clientAssets[name] ?? { js: `/assets/client/${name}.js`, css: `/assets/client/${name}.css` };
 
 function Document({ locale, title, head, children }: { locale: Locale; title: string; head: ReactNode; children: ReactNode }) {

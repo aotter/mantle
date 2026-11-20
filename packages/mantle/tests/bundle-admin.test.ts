@@ -559,7 +559,7 @@ test("mantle bundle builds client entries beside Admin, and for a bun-* target t
     // one file of the build's own rules: Admin's, then the hashed browser entries'
     expect(await readFile(join(dist, "client/_headers"), "utf8")).toBe(
       "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable\n\n" +
-        "/assets/client/h/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n",
+        "/assets/client/h/*\n  ! Cache-Control\n  Cache-Control: public, max-age=86400, immutable\n",
     );
     expect(existsSync(join(dist, "client/assets/client/spa.js"))).toBe(true);
     // without the entry, the build's own file is rewritten with Admin's rule alone
@@ -584,6 +584,7 @@ test("mantle bundle builds client entries beside Admin, and for a bun-* target t
     await bundleApp(join(dir, "src/server.ts"), dist);
     expect(existsSync(join(dist, "worker"))).toBe(false);
     expect(existsSync(join(dist, "client/assets/client/spa.js"))).toBe(true);
+    expect(existsSync(join(dist, "client/assets/client/h"))).toBe(false);
   } finally {
     process.chdir(cwd);
     await rm(dir, { recursive: true, force: true });

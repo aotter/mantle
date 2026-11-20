@@ -34,7 +34,7 @@ Search for `AGENT:` for what an app must keep or still provide: list paging, Mar
 | `src/routes.ts` | Routing, reads, `Cache-Control`, and `web()` (`.md`, `llms.txt`, `sitemap.xml`, head tags); imports no React |
 | `src/html.tsx` | `renderToString` of the pages; reached only through `import()` from `src/routes.ts` |
 | `src/pages.tsx` | The pages as React components with plain elements and class names, and the save button's markup |
-| `src/client/page.ts` | The one script of every page: a few hundred bytes, no React; loads an island's code late from the URL in its markup, and reloads the page once if that code is gone after a deploy |
+| `src/client/page.ts` | The one script of every page: a few hundred bytes, no React; loads an island's code late from the same-origin `/assets/client/` URL in its markup, and reloads the page once if that file answers `404` after a deploy |
 | `src/client/page.css` | The one stylesheet: the kit's `kit.css` plus two layout rules |
 | `src/client/save.tsx` | The save button's island: React, hydrated in the browser |
 | `src/client/css.d.ts` | Lets TypeScript accept the stylesheet import |
@@ -55,7 +55,7 @@ Search for `AGENT:` for what an app must keep or still provide: list paging, Mar
 | Another method on a page | 405 | `no-store` |
 | `/api/...` (the save button); an error | REST; the shell's `surfaceFailure` | `private, no-store` |
 | `/sign-in` | Member sign-in (the shell's `src/sign-in.ts`) | `no-store` |
-| `/assets/client/h/<name>-<hash>.js` and `.css` (what the pages link) | The edge, without the Worker | `public, max-age=31536000, immutable` (the build's `_headers`) |
+| `/assets/client/h/<name>-<hash>.js` and `.css` (what the pages link) | The edge, without the Worker | `public, max-age=86400, immutable` (the build's `_headers`) |
 | `/assets/client/<name>.js` and `.css` (the same files under their stable names) | The edge, without the Worker | `public, max-age=0, must-revalidate` (the platform's default) |
 
 Pages read as the anonymous caller, so a signed-in visitor gets the same bytes and a shared cache may keep them; the
@@ -63,8 +63,8 @@ member's saves are only read by the button, through `/api`.
 
 **Content-hashed files.** The pages link the content-hashed copies `mantle bundle` writes beside each browser file,
 named from `clientAssets` (`@aotter/mantle/client-assets`) in `src/pages.tsx`: the stylesheet and the loader in the
-head, and the island's URL in its markup. They are cached for a year, so a repeat view requests none of them; a stable
-name would be revalidated on every view ([caching](../../handbook/guides/caching.md#content-hashed-browser-files)).
+head, and the island's URL in its markup. They are cached for a day, so a repeat view within it requests none of them;
+a stable name would be revalidated on every view ([caching](../../handbook/guides/caching.md#content-hashed-browser-files)).
 The map holds the files of the build the Worker was bundled from, so a deployed page names only files that version has.
 
 **React loads when a page route matches.** `src/routes.ts` reaches `src/html.tsx` (and with it `react-dom/server` and
@@ -81,13 +81,16 @@ viewport, or on the first click, it imports the URL in `data-island-src`, which 
 click goes to `/sign-in` and back. A click that arrives before the code is replayed. Without JavaScript the visitor reads
 the full recipe; only the button does nothing. `mantle bundle` builds each `src/client/*.ts(x)` into one self-contained
 file, so the loader imports the island by a computed URL: a literal `import()` would be inlined, bringing React into it.
-The URL comes from the page, so the loader needs no map of hashed names.
+The URL comes from the page, so the loader needs no map of hashed names; it imports only a same-origin URL under
+`/assets/client/` and ignores an element naming anything else.
 
 **After a deploy.** A page opened before a deploy names the previous build's island, which the new version does not
-have (`404`). When the island's `import()` fails, the loader reloads the page once, which brings the new version's
-HTML and names; a `sessionStorage` flag, set before that reload and cleared when an island loads, stops a second reload
-if the island still fails (or when storage is unavailable, no reload happens). A click that started the load is not
-replayed after the reload. The SDK adds nothing for this case: the previous build's files are not kept.
+have (`404`). When the island's `import()` fails, the loader asks for the file again (`HEAD`, `no-store`) and, only if
+it answers `404`, reloads the page once, which brings the new version's HTML and names. It never reloads while the
+browser is offline, when that request fails, or when the file is there (an error in the island's own code). A
+`sessionStorage` key per island URL, set before that reload, stops a second reload for the same URL, whatever other
+islands do (when storage is unavailable, no reload happens). A click that started the load is not replayed after the
+reload. The SDK adds nothing for this case: the previous build's files are not kept.
 
 **One stylesheet.** `src/client/page.ts` imports `src/client/page.css` (the kit's compiled `kit.css` plus two layout
 rules), which `mantle bundle` writes to `/assets/client/page.css` and its hashed copy; every page links the copy. Only the classes in that file
@@ -153,7 +156,7 @@ The smoke does not cover upload: local `wrangler dev` has an R2 binding but no S
 - The HTML loads one stylesheet holding every class it uses and one module script under 1 KB without React; it never
   loads the island's bundle, whose URL is only in the island's markup; the built Worker's startup graph holds no React.
 - The stylesheet, loader and island the HTML names are content-hashed copies that answer `200` with
-  `public, max-age=31536000, immutable` under `wrangler dev`, which applies the build's `_headers`; the stable names
+  `public, max-age=86400, immutable` under `wrangler dev`, which applies the build's `_headers`; the stable names
   answer the same bytes with the platform's revalidating default; an unknown hashed name is a `404`.
 - Saving is REST-only, idempotent, refuses a draft or unknown recipe (404) and a malformed slug (400), is private to each
   member (another member's list is empty and their unsave changes nothing), and unpublishing a recipe hides it from the

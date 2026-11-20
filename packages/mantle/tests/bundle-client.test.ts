@@ -1,9 +1,10 @@
 import { expect, spyOn, test } from "bun:test";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { bundleApp } from "../src/infrastructure/bundle.js";
+import { INPUTS_FILE, inputsFingerprint } from "../src/infrastructure/inputs.js";
 
 /** An app with a Worker that serves no Admin and a stand-in `react` that provides the automatic JSX runtime. */
 async function app() {
@@ -69,6 +70,7 @@ test("mantle bundle removes a deleted entry's output, and everything when the la
     await rm(join(dir, "src/client/b.ts"));
     await bundleApp(entry, join(dir, "dist"));
     expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["a.js", "h"]);
+    expect(readdirSync(join(client, "assets/client/h"))).toEqual([expect.stringMatching(/^a-[0-9a-f]{16}\.js$/)]);
     await rm(join(dir, "src/client/a.ts"));
     await bundleApp(entry, join(dir, "dist"));
     expect(existsSync(join(client, "assets/client"))).toBe(false);
@@ -178,7 +180,7 @@ test("mantle bundle writes the CSS an entry imports beside its JavaScript, and r
   });
 });
 
-const hashedRule = "/assets/client/h/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n";
+const hashedRule = "/assets/client/h/*\n  ! Cache-Control\n  Cache-Control: public, max-age=86400, immutable\n";
 /** A Worker answering with the required-seam consumer module's paths (`client-assets` in application-seams.ts). */
 async function seamWorker(dir: string) {
   await copyFile(resolve(import.meta.dir, "seams/client-assets.ts"), join(dir, "src/seam.ts"));
@@ -273,5 +275,134 @@ test("the hashed rule is appended to a _headers copied from public/, and an appl
       warn.mockRestore();
     }
     expect(await readFile(join(dir, "public/_headers"), "utf8")).toBe(own);
+  });
+});
+
+test("a rebuild never removes a file both builds have, and removes the previous build's copies only after writing", async () => {
+  const { dir, entry, client } = await app();
+  await inDir(dir, async () => {
+    await writeFile(join(dir, "src/client/page.ts"), "console.log('page');\n");
+    await writeFile(join(dir, "src/client/save.ts"), "console.log('save');\n");
+    await bundleApp(entry, join(dir, "dist"));
+    const h = join(client, "assets/client/h");
+    const [page, save] = readdirSync(h).sort();
+    const before = statSync(join(h, page!));
+    await writeFile(join(dir, "src/client/save.ts"), "console.log('saved');\n");
+    await bundleApp(entry, join(dir, "dist"));
+    // the unchanged copy is the same file, never deleted or rewritten; the changed one has a new name, the old one is gone
+    const after = statSync(join(h, page!));
+    expect([after.ino, after.mtimeMs]).toEqual([before.ino, before.mtimeMs]);
+    const now = readdirSync(h).sort();
+    expect(now).toHaveLength(2);
+    expect(now).toContain(page!);
+    expect(now).not.toContain(save!);
+    // a copy whose bytes do not match its name (a build that stopped while writing it) is written again
+    await writeFile(join(h, page!), "truncated");
+    await bundleApp(entry, join(dir, "dist"));
+    expect(await readFile(join(h, page!), "utf8")).toBe(await readFile(join(client, "assets/client/page.js"), "utf8"));
+  });
+});
+
+test("the build's own _headers is removed when a later build has no rules; a copied or an application's file is not", async () => {
+  const { dir, entry, client } = await app();
+  await inDir(dir, async () => {
+    await writeFile(join(dir, "src/client/spa.ts"), "console.log(1);\n");
+    await bundleApp(entry, join(dir, "dist"));
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(hashedRule);
+    await rm(join(dir, "src/client/spa.ts"));
+    await bundleApp(entry, join(dir, "dist"));
+    expect(existsSync(join(client, "_headers"))).toBe(false);
+    // a file with a rule of the application's own stays
+    const own = "/assets/*\n  Cache-Control: public, max-age=600\n";
+    await mkdir(client, { recursive: true });
+    await writeFile(join(client, "_headers"), `${own}\n${hashedRule}`);
+    await bundleApp(entry, join(dir, "dist"));
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(`${own}\n${hashedRule}`);
+    // public/ as the assets directory: its _headers is a source file, never removed
+    await mkdir(join(dir, "public"), { recursive: true });
+    await writeFile(join(dir, "public/_headers"), hashedRule);
+    await bundleApp(entry, join(dir, "dist"), join(dir, "public"));
+    expect(await readFile(join(dir, "public/_headers"), "utf8")).toBe(hashedRule);
+  });
+});
+
+test("a bun-* build writes the browser entries under their stable names only: no hashed copies, no rule", async () => {
+  const { dir, client } = await app();
+  await inDir(dir, async () => {
+    const entry = join(dir, "src/server.ts"),
+      generated = join(dir, "generated"),
+      manifest = join(dir, "app.yaml");
+    await mkdir(generated);
+    await writeFile(manifest, "kind: Schema\n");
+    await writeFile(join(generated, "generated.ts"), "export const store = 1;\n");
+    await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "bun-sqlite"));
+    await writeFile(entry, 'import { store } from "../generated/generated.js";\nconsole.log(store);\n');
+    await writeFile(join(dir, "src/client/page.ts"), "console.log('page');\n");
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await bundleApp(entry, join(dir, "dist"));
+      expect(readdirSync(join(client, "assets/client"))).toEqual(["page.js"]);
+      // a directory an earlier Worker build left behind loses its copies too
+      await mkdir(join(client, "assets/client/h"));
+      await writeFile(join(client, "assets/client/h/page-0000000000000000.js"), "old");
+      await bundleApp(entry, join(dir, "dist"));
+      expect(readdirSync(join(client, "assets/client"))).toEqual(["page.js"]);
+      expect(existsSync(join(client, "_headers"))).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+test("the map's keys are in code-unit order, and an entry named like an Object.prototype member is refused", async () => {
+  const { dir, entry } = await app();
+  await inDir(dir, async () => {
+    await writeFile(
+      join(dir, "src/worker.ts"),
+      "import { clientAssets } from '@aotter/mantle/client-assets';\nexport default { fetch: () => new Response(Object.keys(clientAssets).join()) };\n",
+    );
+    for (const name of ["b", "C", "a", "Z", "é"])
+      await writeFile(join(dir, `src/client/${name}-x.ts`), `console.log('${name}');\n`);
+    await bundleApp(entry, join(dir, "dist"));
+    // localeCompare would give a-x,b-x,C-x,é-x,Z-x
+    expect(await served(dir)).toBe("C-x,Z-x,a-x,b-x,é-x");
+    for (const name of ["constructor", "__proto__", "toString"]) {
+      await writeFile(join(dir, `src/client/${name}.ts`), "console.log(1);\n");
+      await expect(bundleApp(entry, join(dir, "dist"))).rejects.toThrow(`every JavaScript object has "${name}"`);
+      await rm(join(dir, `src/client/${name}.ts`));
+    }
+  });
+});
+
+test("a browser file that keeps @aotter/mantle/client-assets after tree shaking is noted; one that drops it is not", async () => {
+  const { dir, entry } = await app();
+  await inDir(dir, async () => {
+    // the package's module as installed: the browser build resolves it like any import
+    await mkdir(join(dir, "node_modules/@aotter/mantle/dist/kernel"), { recursive: true });
+    await writeFile(
+      join(dir, "node_modules/@aotter/mantle/package.json"),
+      JSON.stringify({ name: "@aotter/mantle", exports: { "./client-assets": "./dist/kernel/client-assets.js" } }),
+    );
+    await copyFile(
+      resolve(import.meta.dir, "../dist/kernel/client-assets.js"),
+      join(dir, "node_modules/@aotter/mantle/dist/kernel/client-assets.js"),
+    );
+    await writeFile(
+      join(dir, "src/pages.ts"),
+      "import { clientAssets } from '@aotter/mantle/client-assets';\nexport const href = () => clientAssets.page?.js;\nexport const label = 'label';\n",
+    );
+    await writeFile(join(dir, "src/client/page.ts"), "import { label } from '../pages.js';\nconsole.log(label);\n");
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await bundleApp(entry, join(dir, "dist"));
+      expect(warn.mock.calls.flat().join("\n")).not.toContain("client-assets");
+      await writeFile(join(dir, "src/client/page.ts"), "import { href } from '../pages.js';\nconsole.log(href());\n");
+      await bundleApp(entry, join(dir, "dist"));
+      expect(warn.mock.calls.flat().join("\n")).toContain(
+        "uses @aotter/mantle/client-assets, which is empty in a browser file",
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

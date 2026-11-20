@@ -178,7 +178,7 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   step("signed-in visitors get the anonymous page; HEAD, 404, 405 and the sign-in page state their Cache-Control");
 
   // One stylesheet, and one small module script; the save button's React bundle is fetched later by that script. All
-  // three are the content-hashed copies this build wrote (@aotter/mantle/client-assets), cached for a year.
+  // three are the content-hashed copies this build wrote (@aotter/mantle/client-assets), cached for a day.
   const hashed = name => new RegExp(`^/assets/client/h/${name}-[0-9a-f]{16}\\.(?:js|css)$`);
   const scripts = elements(html, "script").filter(e => e.src);
   assert.equal(scripts.length, 1, "one script");
@@ -191,7 +191,7 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   assert.match(islandSrc ?? "", hashed("save"), "the island's hashed URL is written into its markup");
   assert.ok(!html.includes("modulepreload") && !scripts.some(e => e.src === islandSrc), "the island's bundle is not loaded by the HTML");
   assert.ok(has(html, "button", { type: "button" }, "儲存這道食譜"), "the button is server-rendered");
-  const IMMUTABLE = "public, max-age=31536000, immutable";
+  const IMMUTABLE = "public, max-age=86400, immutable";
   const asset = async (path, cacheControl) => {
     const response = await fetch(`${origin}${path}`);
     assert.equal(response.status, 200, path);
@@ -209,7 +209,8 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   assert.equal((await asset("/assets/client/page.js", REVALIDATE)).text, loaderCode);
   assert.equal((await asset("/assets/client/save.js", REVALIDATE)).text, island.text);
   assert.equal((await asset("/assets/client/page.css", REVALIDATE)).text, css);
-  // A name this build does not have is the edge's 404 (an open tab after a deploy; the loader then reloads once).
+  // A name this build does not have is the edge's 404 (an open tab after a deploy; the loader then reloads once), with the
+  // same rule, which is why the rule is one day.
   assert.equal((await fetch(`${origin}/assets/client/h/save-0000000000000000.js`)).status, 404);
   step("pages link the content-hashed loader, stylesheet and island, served immutable; the stable names still answer");
   // A class `hover:bg-primary/80` is the selector `.hover\:bg-primary\/80`, not followed by more of a name.
@@ -235,6 +236,71 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   const chunks = readdirSync("dist/worker/chunks").map(name => resolve("dist/worker/chunks", name));
   assert.ok(chunks.some(file => !graph.has(file) && react(file)), "a lazily imported chunk holds React");
   step("pages link one stylesheet with every class they use and one small module loader; React is not in the Worker's startup graph");
+
+  // The island loader in Chrome. It runs when MANTLE_TEST_CHROMIUM names a Chrome; the repository's Full checks set it.
+  if (!process.env.MANTLE_TEST_CHROMIUM) step("skipped the island loader run in Chrome: set MANTLE_TEST_CHROMIUM to a Chrome or Chromium binary");
+  else {
+    const { chromium } = await import("playwright-core");
+    const browser = await chromium.launch({ headless: true, executablePath: process.env.MANTLE_TEST_CHROMIUM });
+    const SAVE = "**/assets/client/h/save-*.js";
+    // One visit in a fresh tab tall enough that the island loads at once; counts the page's loads (1 + reloads).
+    // `island`: before the loader reads the page, add a second island with this `src` (`add`) or rewrite the save island's.
+    const visit = async ({ route, island } = {}) => {
+      const context = await browser.newContext({ viewport: { width: 800, height: 4000 } });
+      const page = await context.newPage();
+      let loads = 0;
+      const requests = [];
+      page.on("framenavigated", frame => frame === page.mainFrame() && loads++);
+      page.on("request", request => requests.push(`${request.method()} ${request.url()}`));
+      if (route) await page.route(SAVE, request => route(request, context));
+      // runs in the page, so it closes over nothing: its value is the argument
+      if (island) await page.addInitScript(({ src, add }) => document.addEventListener("readystatechange", () => {
+        if (document.readyState !== "interactive") return;
+        if (!add) return void (document.querySelector("[data-island-src]").dataset.islandSrc = src);
+        const element = Object.assign(document.createElement("div"), { textContent: "island" });
+        element.dataset.islandSrc = src;
+        document.body.append(element);
+      }), island);
+      await page.goto(`${origin}/zh-TW/recipes/scallion-pancake`);
+      await page.waitForTimeout(2000);
+      const [keys, srcs] = await page.evaluate(() => [Object.keys(sessionStorage), [...document.querySelectorAll("[data-island-src]")].map(e => e.dataset.islandSrc)]);
+      await context.close();
+      return { loads, keys, srcs, requests, island: requests.filter(r => r.startsWith(`GET ${origin}${islandSrc}`)).length };
+    };
+    try {
+      const fine = await visit();
+      assert.equal(fine.loads, 1);
+      assert.equal(fine.island, 1, "the island loads from its hashed URL");
+      assert.ok(fine.requests.some(r => r.includes("/api/views/my_saved_recipes")), "the island hydrated and asked for the saves");
+      // gone (404): one reload, then the same URL never reloads again; the guard names the URL
+      const gone = await visit({ route: request => request.fulfill({ status: 404, body: "gone" }) });
+      assert.equal(gone.loads, 2, "a 404 island reloads the page once");
+      assert.deepEqual(gone.keys, [`island-reloaded ${islandSrc}`]);
+      // another island loading does not clear the guard of one that is gone: one reload, not a loop
+      const goneSrc = "/assets/client/h/gone-0000000000000000.js";
+      const two = await visit({ island: { src: goneSrc, add: true } });
+      assert.deepEqual(two.srcs, [islandSrc, goneSrc]);
+      assert.equal(two.loads, 2, "two islands, one gone: one reload");
+      assert.equal(two.island, 2, "the save island loaded on both loads");
+      assert.deepEqual(two.keys, [`island-reloaded ${goneSrc}`]);
+      // not a missing file: no reload
+      for (const [what, route] of [
+        ["a blocked request", request => request.abort("blockedbyclient")],
+        ["an error in the island's code", request => request.fulfill({ status: 200, contentType: "text/javascript", body: "throw new Error('island')" })],
+        ["offline", async (request, context) => (await context.setOffline(true), request.abort("internetdisconnected"))],
+      ]) assert.equal((await visit({ route })).loads, 1, `${what}: no reload`);
+      // an island URL on another origin or outside /assets/client/ is never imported
+      for (const src of ["https://example.invalid/assets/client/x.js", "/api/views/my_saved_recipes", "/assets/../api/x.js"]) {
+        const other = await visit({ island: { src } });
+        assert.deepEqual(other.srcs, [src]);
+        assert.equal(other.loads, 1, src);
+        assert.ok(!other.requests.some(r => r.includes("example.invalid") || r.includes("/api/")), `${src}: requested`);
+      }
+    } finally {
+      await browser.close();
+    }
+    step("in Chrome: the island hydrates from its hashed URL; a 404 reloads once per URL, also beside a working island; offline, a blocked request, a failing island or a foreign URL never reload");
+  }
 
   // The save button reads the member's saves and writes only through the REST Triggers; each member sees and changes
   // only their own saves.

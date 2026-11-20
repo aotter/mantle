@@ -16,15 +16,16 @@ rules an app follows, and what [Workers Cache](https://developers.cloudflare.com
 - **Admin's content-hashed chunks** (`/admin/assets/*`): `public, max-age=86400, immutable` from the `_headers` rule
   `mantle bundle` writes. A day, not a year, because the edge sends the same rule on its 404 for a missing chunk
   ([why](../cloudflare/service-entry.md#workers-assets-and-secrets)).
-- **The browser entries' content-hashed copies** (`/assets/client/h/*`): `public, max-age=31536000, immutable`, also
-  from `_headers`. Their stable names (`/assets/client/<name>.js`) keep the default above. See
-  [below](#content-hashed-browser-files).
+- **The browser entries' content-hashed copies** (`/assets/client/h/*`): `public, max-age=86400, immutable`, also
+  from `_headers`, a day for the same reason. Their stable names (`/assets/client/<name>.js`) keep the default above.
+  See [below](#content-hashed-browser-files).
 
 ## Content-hashed browser files
 
 `mantle bundle` writes each browser entry twice: under its stable name and as a content-hashed copy
 ([outputs](../start/project-and-cli.md#outputs)). The stable name is revalidated on every page view; the copy is not
-requested again at all. HTML the Worker renders links the copy from the map the Worker imports:
+requested again within a day. HTML the Worker renders links the copy from the map the Worker imports (Workers only: a
+`bun-*` build writes no copies, and in a browser file the map is empty):
 
 ```ts
 import { clientAssets } from "@aotter/mantle/client-assets";
@@ -49,13 +50,16 @@ A deploy is safe for new pages: a Worker version includes its assets, so the HTM
 deploy starts Workers Cache cold. The previous build's copies are not kept, and a missing copy is the edge's `404`.
 That leaves one case: **a tab opened before a deploy that loads a file afterwards** (a late-loaded island) asks for a
 name the new version no longer has, and its `import()` fails. With stable names the same tab would silently run the
-new build's code against the old page instead. Mantle adds no mechanism for it; reload the page once when such an
-import fails, guarded against a loop, as the recipes example's loader does
+new build's code against the old page instead. Mantle adds no mechanism for it; when such an import fails and the
+file answers `404`, reload the page once per file, as the recipes example's loader does
 ([public pages](public-pages.md#the-recommended-shape)).
 
-The edge sends the `_headers` rule on that `404` too, so the browser keeps the `404` for a year under a name no current
-HTML references. It matters only if that name is served again: after a rollback to that build, or while two versions
-serve at once in a gradual deployment without a version key. Such a browser gets the `404` until its cache is cleared.
+The edge sends the `_headers` rule on that `404` too, and the browser keeps it. That is why the rule is one day, not a
+year: a request can also get a `404` for a **current** name, while a deploy propagates (a location still on the
+previous version) or while `wrangler dev` rebuilds, and the name is served again after a rollback or while two versions
+serve at once in a gradual deployment without a version key. One day bounds each of these to a day; a repeat view
+within the day still makes no request. `mantle bundle` writes this build's copies before removing the previous ones,
+so a name both builds have never disappears during a rebuild.
 
 ## Workers Cache
 

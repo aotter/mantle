@@ -153,8 +153,10 @@ time; `public/admin` is refused, and `public/assets/client` when the app has bro
 (`client/<name>.ts|tsx` beside the Worker entry) are built into `<assets>/assets/client/<name>.js`, answered by
 the edge at `/assets/client/<name>.js`, with content-hashed copies under `/assets/client/h/`
 ([reference](../start/project-and-cli.md#outputs)). For those copies the build's `_headers` also gets
-`/assets/client/h/*` with `public, max-age=31536000, immutable`, written, appended or printed exactly as Admin's rule;
-a `_headers` that holds only rules `mantle bundle` writes is the build's own and is rewritten with this build's rules. `/assets/*` is excluded by default, so
+`/assets/client/h/*` with `public, max-age=86400, immutable` (one day, for the same reason as Admin's rule below),
+written, appended or printed exactly as Admin's rule; a `_headers` that holds only rules `mantle bundle` writes is the
+build's own and is rewritten with this build's rules, or removed when the build has none. A `bun-*` build writes no
+hashed copies. `/assets/*` is excluded by default, so
 `public/assets/*` is answered by the edge; other public files reach the Worker first,
 which can serve them with `env.ASSETS.fetch(request)` as the app shell does. Cloudflare
 sends `Cache-Control: public, max-age=0, must-revalidate` and an ETag by default; set
