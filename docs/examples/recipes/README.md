@@ -88,6 +88,12 @@ indexes walk it row by row, and `llms.txt` still links each row's `.md` because 
 D1 and PostgreSQL. The ingredient and step lines stay plain lines: making them a Markdown list (`replace`) or adding the
 cooking time (a number) would make the column untyped, and `web()` takes only a text column.
 
+**PostgreSQL.** The same manifests and `src/` run on `cloudflare-postgres` with one postgres.js client per request
+([PostgreSQL through Hyperdrive](../../handbook/cloudflare/postgres-hyperdrive.md)), passed as `env.DB`.
+`src/routes.ts` therefore builds `web()` per request (about 5 µs): kept for the isolate, it would hold the first
+request's client, and the next request would fail. The shell is D1; the repository's example check
+(`pnpm with-pg pnpm check:examples`) converts it to a Hyperdrive binding and runs this example's `smoke.mjs` there too.
+
 ## Combine with
 
 - Need members to see or edit only their own rows? Add club-events' `restrict: { recipes: "author_id = auth.uid()" }` on a View.
