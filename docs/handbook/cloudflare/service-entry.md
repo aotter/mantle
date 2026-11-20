@@ -156,7 +156,11 @@ the edge at `/assets/client/<name>.js` ([reference](../start/project-and-cli.md#
 which can serve them with `env.ASSETS.fetch(request)` as the app shell does. Cloudflare
 sends `Cache-Control: public, max-age=0, must-revalidate` and an ETag by default; set
 `immutable` in `public/_headers` only for content-hashed files. `_headers` does not
-apply to responses the Worker builds. A path the Worker must answer stays out of the
+apply to responses the Worker builds. It does apply to the edge's own `404` for a missing
+file under an excluded path, which never reaches the Worker: a chunk name that is not in
+the deployed build (`/admin/assets/<old>.js`) answers `404` with `nosniff` and the
+one-year `immutable` cache, so a browser may keep that `404` if a rollback or another
+version brings the name back. A path the Worker must answer stays out of the
 exclusion.
 
 After a deploy the previous version's assets are gone, so an open Admin tab that loads
