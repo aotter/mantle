@@ -171,7 +171,7 @@ link, the Markdown alternate, geo tags and, for a single-language site, one
 `hreflang`. After the upgrade, the
 application's own pages write the rest: see
 [public pages](../guides/public-pages.md) and the recipes example
-(`docs/examples/recipes/src/pages.ts`). Check each page for the tags it lost
+(`docs/examples/recipes/src/pages.tsx`). Check each page for the tags it lost
 before cutting traffic over.
 
 ### 2. `mantle.config.json`

@@ -7,7 +7,7 @@ take the pattern into your own manifests and `src/`. Do not copy an example dire
 | Example | Shows |
 |---|---|
 | [App shell](./app-shell/README.md) | Better Auth (email OTP, `admin` + `user`), one Worker fetch, Admin, MCP, REST, local acceptance kit. No business manifests. |
-| [Recipes](./recipes/README.md) | Publishing (draft → publish), translations, visitor pages with SEO, JSON-LD, `llms.txt`, Markdown and hreflang alternates, R2 media, and a React single-page app under `/app` ("my saved recipes") beside the server-rendered pages. |
+| [Recipes](./recipes/README.md) | Publishing (draft → publish), translations, visitor pages with SEO, JSON-LD, `llms.txt`, Markdown and hreflang alternates, R2 media; pages rendered by React on the server, with `.md`, `llms.txt` and the sitemap from `web()`, and a save button hydrated in the browser and loaded late. |
 | [Club events](./club-events/README.md) | Members who see and change only their own rows, no duplicates, capacity that never oversells, a handler that checks before writing, a member MCP tool, members-only sign-up. |
 | [Posts and revisions](../handbook/guides/revisions.md) | A focused recipe for live editing without downtime: editable revisions, frozen preview, atomic selection, immutable history and rollback. |
 | [Frontend MCP App](./frontend-mcp-app/README.md) | An application-owned interactive MCP App with its own frontend entry and authorized tools. |
@@ -32,8 +32,8 @@ take the pattern into your own manifests and `src/`. Do not copy an example dire
 | A third-party API that answers later (webhooks, callbacks) | purchasing's `src/routes.ts`: verify the raw request, then call a Procedure |
 | Edit published content without downtime, preview the exact revision and roll back | [Posts and revisions](../handbook/guides/revisions.md): a stable publishing parent, operational revisions, a same-row seal and atomic pointer switch |
 | An interactive frontend inside an MCP host | [Frontend MCP App](./frontend-mcp-app/README.md): an app-owned renderer and authorized tools |
-| Public, multilingual, search- and AI-friendly pages | recipes' `src/routes.ts` |
-| Public pages plus a signed-in React app (a dashboard, planner or favourites) | recipes' `/app`: `src/routes.ts` (`appShell`), `src/client/spa.tsx`, `public/app/index.html`, `manifests/saved-recipes.yaml` |
+| Public, multilingual, search- and AI-friendly pages | recipes' `src/routes.ts`, `src/pages.tsx`, `src/html.tsx` |
+| One interactive part on a public page (save, favourite, add to cart) | recipes' save button: `src/client/page.ts` (late loader), `src/client/save.tsx` (island), `manifests/saved-recipes.yaml` |
 | Invite-only or members-only sign-up | club-events' `members` allowlist + `src/signup.ts` |
 | Notifications and reminders | purchasing's `EmailSender` call and `src/schedule.ts` |
 

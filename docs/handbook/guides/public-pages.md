@@ -9,7 +9,7 @@ here instead of repeating it.
   public Views. It renders no HTML; the pages stay application-owned. Its contract and limits are in [surface contracts](../reference/surface.md#optional-web-output);
   the smallest example is `node_modules/@aotter/mantle/docs/examples/generated-web`.
 - **App-owned pages** in `src/routes.ts`, when the page needs its own layout, JSON-LD or languages. The reference
-  implementation is `node_modules/@aotter/mantle/docs/examples/recipes` (`src/pages.ts`, `src/routes.ts`; `smoke.mjs` checks every item below).
+  implementation is `node_modules/@aotter/mantle/docs/examples/recipes` (`src/routes.ts`, `src/pages.tsx`, `src/html.tsx`; `smoke.mjs` checks every item below).
 
 ## Public pages plus a React app
 
@@ -20,8 +20,8 @@ what a signed-in visitor does with it. The app's shell carries `<meta name="robo
 sends `X-Robots-Tag: noindex`), is left out of `sitemap.xml` and `llms.txt`, is not disallowed in `robots.txt` (a blocked
 page's `noindex` is never read), and sends anonymous visitors to `/sign-in` and back; the public pages link into it. The
 app reads Views and writes only through the REST Triggers. Put its entry in `src/client/` (`spa.tsx`): `mantle bundle`
-builds it to `/assets/client/spa.js`, which the shell loads ([outputs](../start/project-and-cli.md#outputs)). The reference is the recipes example's `/app`
-(`src/routes.ts` `appShell`, `src/client/spa.tsx`, `public/app/index.html`; `smoke.mjs` checks the split).
+builds it to `/assets/client/spa.js`, which the shell loads ([outputs](../start/project-and-cli.md#outputs)). No shipped example has such an app;
+the recipes example shows the smaller case, one interactive part on a public page (its save button, `src/client/`).
 
 ## URLs
 
