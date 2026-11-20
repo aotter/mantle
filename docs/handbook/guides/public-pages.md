@@ -5,7 +5,7 @@ here instead of repeating it.
 
 ## Two ways to serve them
 
-- **Generated `web()`**: `llms.txt`, sitemap, Markdown alternates and head tags (canonical, one hreflang) straight from
+- **Generated `web()`**: `llms.txt`, sitemap, Markdown alternates and head tags (canonical, Markdown alternate) straight from
   public Views. It renders no HTML; the pages stay application-owned. Its contract and limits are in [surface contracts](../reference/surface.md#optional-web-output);
   the smallest example is `node_modules/@aotter/mantle/docs/examples/generated-web`.
 - **App-owned pages** in `src/routes.ts`, when the page needs its own layout, JSON-LD or languages. The reference

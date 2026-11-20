@@ -20,7 +20,7 @@ must not drift: one missed attribute or one unescaped `</script>` in stored text
 ## Decision
 
 1. **A pure formatter.** `pageHead(options: PageHeadOptions): string` returns the head tags for one page from values the
-   application already has: `title`, `description`, canonical `url`, `image`, `siteName`, `locale`, `type`
+   application already has: `title`, `ogTitle`, `description`, canonical `url`, `image`, `siteName`, `locale`, `type`
    (`website` | `article`), `alternates` (locale → URL), `xDefault`, `markdown` (the alternate's URL) and `jsonLd` (an
    object or array the application built). Core owns escaping and the format; it reads no database and no row.
 2. **Omit what is absent.** A null, undefined or empty value emits no tag. `og:type` defaults to `website`; the Twitter
@@ -47,7 +47,7 @@ values, which is also what the public-pages checklist asks: structured data stat
   unchanged.
 - Per-language hreflang stays the application's: it knows which translations of an item are published. `web()`'s own
   head emits an hreflang only for a single configured locale (#2087).
-- `og:title` equals `title`. A page whose `<title>` adds the site name and whose `og:title` must not, keeps its own tags.
+- `og:title` is `ogTitle`, or `title` when omitted, so a page whose `<title>` adds the site name can keep a plain Open Graph title.
 - The recipes example and the revisions guide keep their hand-written heads for now; migrating them is a follow-up.
 
 ## Alternatives

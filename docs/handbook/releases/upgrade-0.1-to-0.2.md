@@ -167,8 +167,10 @@ command; it never installs anything.
 description, Open Graph tags, a Twitter card, JSON-LD and per-translation
 `hreflang` links (plus `x-default`), including for home and list pages. The
 generated 0.2 `web()` renders no HTML, and its `head()` emits only the canonical
-link, the Markdown alternate, one `hreflang` and geo tags. After the upgrade, the
-application's own pages write the rest: see
+link, the Markdown alternate, geo tags and, for a single-language site, one
+`hreflang`. After the upgrade, the
+application's own pages write the rest, with `pageHead` from
+`@aotter/mantle/web` for the escaping and format: see
 [public pages](../guides/public-pages.md) and the recipes example
 (`docs/examples/recipes/src/pages.ts`). Check each page for the tags it lost
 before cutting traffic over.

@@ -723,6 +723,11 @@ test("pageHead formats an application-owned page's head and escapes every value"
   expect(html).not.toContain("<!--");
   expect(JSON.parse(/<script type="application\/ld\+json">(.*)<\/script>/s.exec(html)![1]!)).toEqual(jsonLd);
   // Absent, null and empty values emit no tag; the card falls back to `summary`.
+  expect(
+    pageHead({ title: "Scallion pancakes | Recipes", ogTitle: "Scallion pancakes", url: "https://site.test/a" }),
+  ).toContain(
+    '<title>Scallion pancakes | Recipes</title><link rel="canonical" href="https://site.test/a"><meta property="og:type" content="website"><meta property="og:url" content="https://site.test/a"><meta property="og:title" content="Scallion pancakes">',
+  );
   expect(pageHead({ title: "", description: null, url: "https://site.test/", image: "", markdown: "" })).toBe(
     '<link rel="canonical" href="https://site.test/"><meta property="og:type" content="website">' +
       '<meta property="og:url" content="https://site.test/"><meta name="twitter:card" content="summary">',

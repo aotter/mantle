@@ -258,7 +258,8 @@ form, `og:locale:alternate` for each other alternate, `og:image`), `twitter:card
 (`summary_large_image` with an image, else `summary`) and one `application/ld+json` script. A null,
 undefined or empty value emits no tag. Every attribute value is HTML-escaped; `jsonLd` is serialized
 with `JSON.stringify` and `<` written as `\u003c`, so stored text cannot close the script element,
-and the script body parses back to the given value. `og:title` is `title`. Which translations exist,
+and the script body parses back to the given value. `og:title` is `ogTitle`, or `title` when it is omitted (pass it when `<title>` carries the
+site name and the Open Graph title should not). Which translations exist,
 the schema.org type and the JSON-LD properties are the application's. Importing only `pageHead` does
 not bundle `web()`'s serving code.
 

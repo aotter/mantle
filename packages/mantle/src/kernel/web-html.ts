@@ -7,6 +7,8 @@ import { escape } from "./web-escape.js";
 /** What an application-owned page puts in its head: values it already has. Absent, null or empty values emit no tag. */
 export interface PageHeadOptions {
   title: string;
+  /** `og:title` when it differs from `<title>`, such as a title without the site name; `title` when omitted. */
+  ogTitle?: string | null;
   description?: string | null;
   /** The canonical URL, on the application's configured origin. */
   url: string;
@@ -53,7 +55,7 @@ export function pageHead(options: PageHeadOptions): string {
     link('rel="alternate" hreflang="x-default"', options.xDefault),
     og("type", options.type ?? "website"),
     og("url", url),
-    og("title", title),
+    og("title", options.ogTitle || title),
     og("description", description),
     og("site_name", options.siteName),
     og("locale", locale && ogLocale(locale)),
