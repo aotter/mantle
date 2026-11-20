@@ -2,21 +2,24 @@ import { ContractError, type Caller } from "@aotter/mantle/contracts";
 import { store } from "../generated/generated.js";
 import confirmOrder from "../generated/procedures/confirm-order.js";
 import { handlers } from "./handlers.js";
-import { requestsPage } from "./requests-page.js";
-import { signInPage } from "./sign-in.js";
+import { signInPage, signInRedirect } from "./sign-in.js";
 
 const MAX_BODY = 64 * 1024, MAX_SKEW_SECONDS = 300;
+// The employees' app: everything under /app. The pages it has (src/client/app.tsx routes the same three in the browser):
+// /app (my requests), /app/new (the form), /app/requests/{id} (one request). AGENT: add a page here and in the app together.
+const APP = /^\/app(?:\/.*)?$/, APP_PAGES = /^\/app(?:\/|\/new|\/requests\/[\w-]+)?$/;
+const NO_STORE = { "cache-control": "no-store" };
 
 /**
  * App-owned routes, tried before Admin, MCP and REST. Return undefined to fall through.
- * GET /sign-in: member sign-in (src/sign-in.ts). GET /requests: the employee's page (src/requests-page.ts).
+ * GET /sign-in: member sign-in (src/sign-in.ts). GET /app/...: the employees' single-page app (appShell below).
  * POST /callbacks/supplier: the supplier confirms an order. The signature is checked over the RAW body before parsing.
  * AGENT: match the real supplier's signature scheme (header names, what is signed, encoding).
  */
 export async function appRoutes(request: Request, env: Env, context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
   const path = new URL(request.url).pathname;
   if (path === "/sign-in" && request.method === "GET") return signInPage();
-  if (path === "/requests" && request.method === "GET") return requestsPage(request, env, await context.caller());
+  if (APP.test(path)) return appShell(request, env, path, context.caller);
   if (path !== "/callbacks/supplier") return undefined;
   if (request.method !== "POST") return new Response(null, { status: 405, headers: { allow: "POST" } });
   if (Number(request.headers.get("content-length") ?? MAX_BODY + 1) > MAX_BODY) return new Response(null, { status: 413 });
@@ -40,6 +43,29 @@ export async function appRoutes(request: Request, env: Env, context: { caller: (
     return new Response(null, { status: 409 }); // unknown request, another order id, or not approved/ordered
   }
   return new Response(null, { status: 204 });
+}
+
+/**
+ * The document of every page under /app: public/app/index.html from ASSETS, the same bytes for everyone. It holds no
+ * workflow data and no authority; the app reads and writes through /api, where the server checks the session cookie on
+ * every call. Anonymous visitors go to /sign-in and come back. `noindex` is in the document and in X-Robots-Tag; robots.txt
+ * must not disallow /app, or a crawler never reads it.
+ * Cache-Control is no-store although the bytes are the same for everyone: the answer depends on the caller (the shell
+ * or a redirect to sign in) and a shared cache keys on the URL, not the cookie, so a stored copy would send one caller
+ * the other's answer. Not caching costs one asset read per full page load; moving inside the app fetches no document.
+ * A path under /app that the app does not have gets the same document with status 404: the app shows its not-found
+ * page, and the URL is a real 404, not a soft one.
+ */
+async function appShell(request: Request, env: Env, path: string, caller: () => Promise<Caller>) {
+  if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET, HEAD", ...NO_STORE } });
+  if ((await caller()).kind === "anonymous") return signInRedirect(request);
+  // ASSETS serves public/ files by their path; the Worker runs first for /app/*, so this route is the only way to it.
+  const shell = await env.ASSETS.fetch(new Request(new URL("/app/index.html", request.url)));
+  if (!shell.ok) throw new Error(`public/app/index.html: ASSETS answered ${shell.status}`);
+  return new Response(request.method === "HEAD" ? null : shell.body, {
+    status: APP_PAGES.test(path) ? 200 : 404,
+    headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", ...NO_STORE },
+  });
 }
 
 /** HMAC-SHA256 over `${timestamp}.${raw body}`, hex encoded; crypto.subtle.verify compares in constant time. */

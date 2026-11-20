@@ -78,7 +78,9 @@ on one version.
 
 `src/service.ts` and `src/index.ts` rarely change. The default shell mounts REST and MCP together. If the app deliberately
 chooses asymmetric exposure, delete the blocks marked `MCP / OAuth (deliberate exception)` in `auth.ts` and `service.ts`;
-HTTP-only Procedures will keep generating with a warning. The SDK reads the local issuer's keys in process
+HTTP-only Procedures will keep generating with a warning. `fetchService` gives a response that states no
+`Cache-Control` `private, no-store`, so a cache in front of the Worker never keeps it by default; the smoke kit fails a
+response without one ([caching](../../handbook/guides/caching.md)). The SDK reads the local issuer's keys in process
 ([Verifying access tokens on Workers](../../handbook/cloudflare/authentication.md#verifying-access-tokens-on-workers)).
 
 Search for `AGENT:` to find what an app must fill in.

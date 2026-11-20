@@ -267,10 +267,15 @@ maintainer check with a dedicated database, never CI.
   minor and major dependency updates require human review. Do not squash.
 - Before merge, update the branch with its base and pass the required checks on
   that combined state.
+- Before planning or proposing work on an issue, check `develop` for a merged PR for it
+  (`git log origin/develop --grep "issue-<N>"`, the issue's linked PRs): an open issue is not proof the work is undone.
 - Start non-trivial work from an issue. Use the templates and labels described
   in [`docs/labels.md`](docs/labels.md).
 - A PR body states outcome, scope/non-goals, commands actually run, omitted
-  checks, and related issues/ADRs. Use `Closes #N` only when complete. A
+  checks, and related issues/ADRs. `Closes #N`, one keyword per issue, only when the PR
+  completes the issue: it closes on merge into `develop` and gets `pending-release`
+  until a release ships it. Use `Refs #N` when it does not; split an issue with
+  several independent items rather than half-closing it. A
   breaking change also fills its Migration section ([Breaking changes](#breaking-changes)).
 - Architecture, grammar, persistence, trust-boundary, auth, MCP, and public
   transport changes need an existing accepted decision or an ADR-lite/ADR as

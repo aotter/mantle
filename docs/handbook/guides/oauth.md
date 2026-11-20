@@ -54,9 +54,12 @@ not load auth. `basePath` must match Better Auth if changed. Better Auth owns al
 `/api/auth/*` endpoints and RFC 8414/9728 well-known discovery routes. Mount those
 well-known paths at the origin, before a catch-all or proxy; retain the external
 issuer/resource URL and trusted forwarding rules. The SDK handler receives them
-unchanged. A POST registration whose redirect URIs are all HTTP localhost,
-127.0.0.1 or [::1] becomes `application_type: "native"` when omitted; explicit
-types and mixed/external callbacks stay under the SDK's validation.
+unchanged. With `authHardening`, their GET/HEAD requests (for the default `/mcp`
+resource and `/api/auth` base) skip Better Auth's database rate limiter and make no
+database round trip; the documents and headers are Better Auth's own. A POST
+registration whose redirect URIs are all HTTP localhost, 127.0.0.1 or [::1]
+becomes `application_type: "native"` when omitted; explicit types and
+mixed/external callbacks stay under the SDK's validation.
 
 With the optional Admin UI selected, use `consentPage:
 "/admin/oauth/consent"`, as in `docs/examples/app-shell/src/auth.ts`, and keep

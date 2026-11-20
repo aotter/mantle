@@ -173,10 +173,17 @@ test("keyed OTP hash, trusted ingress, profile guard and setup fail closed", asy
   expect(() =>
     authHardening({ ipAddressHeaders: ["trusted"], baseURL: "https://x.test", errorURL: "https://evil.test" }),
   ).toThrow("same-origin");
-  expect(authHardening({ ipAddressHeaders: ["trusted"], baseURL: "https://x.test" }).rateLimit).toEqual({
-    enabled: true,
-    storage: "database",
-  });
+  const { customRules, ...rateLimit } = authHardening({ ipAddressHeaders: ["trusted"], baseURL: "https://x.test" })
+    .rateLimit!;
+  expect(rateLimit).toEqual({ enabled: true, storage: "database" });
+  // Only discovery metadata reads skip the limiter (auth-discovery.test.ts covers the routes).
+  expect(Object.keys(customRules!).sort()).toEqual([
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-authorization-server/api/auth",
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/mcp",
+    "/.well-known/openid-configuration",
+  ]);
   expect(guardGithubLogin({ githubLogin: "admin" }, { path: "/update-user" })).toEqual({ data: { githubLogin: null } });
   expect(
     guardGithubLogin({ githubLogin: "trusted" }, { path: "/callback/:id", params: { id: "github" } }),

@@ -209,8 +209,8 @@ without a query, fragment or `{name}` parameter, or `web()` throws a `TypeError`
 
 `/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head
 read the current page View. `llms.txt` links `<url>.md` for a page that declares
-`markdown` when the list row returns that column non-null, and the HTML URL otherwise
-(a list that does not select the column cannot show that the alternate exists); the sitemap
+`markdown`; a list View need not select that column (it is the page's body), and one that
+does and returns NULL for a row gets the HTML URL for it, since `<url>.md` answers 404 there; the sitemap
 lists the HTML URLs. Head tags name the Markdown alternate only for a row whose column is non-null. SQL alone controls visibility, including publication.
 GET/HEAD responses include content-derived SHA-256 ETags. Anonymous responses use
 `cacheControl` or `public, max-age=60`; authenticated responses use
@@ -237,32 +237,6 @@ application's responsibility. A NULL Markdown field answers 404. Errors and miss
 use `cache-control: no-store`. A matching HTML page takes precedence over a `.md`
 alternate, including slugs ending in `.md`; a Markdown alternate may read the
 exact HTML candidate first and therefore performs at most two View queries.
-
-### Head tags for application-owned pages
-
-`@aotter/mantle/web` also exports `pageHead(options): string`, a pure formatter for pages the
-application renders itself. It reads no
-database: the application passes values it already has, and Core escapes them and owns the format.
-
-```ts
-import { pageHead } from '@aotter/mantle/web';
-const head = pageHead({ title: post.title, description: post.summary, url: canonical,
-  image: post.cover_url, siteName: 'Blog', locale: 'zh-TW', type: 'article',
-  alternates: { 'zh-TW': canonical, en: englishUrl }, xDefault: canonical,
-  markdown: canonical + '.md', jsonLd: { '@context': 'https://schema.org', '@type': 'Article', name: post.title } });
-```
-
-It returns, in order: `<title>`, `<meta name="description">`, the canonical link, the Markdown
-alternate, one `hreflang` alternate per `alternates` entry plus `x-default`, Open Graph (`og:type`,
-default `website`; `og:url`, `og:title`, `og:description`, `og:site_name`, `og:locale` in underscore
-form, `og:locale:alternate` for each other alternate, `og:image`), `twitter:card`
-(`summary_large_image` with an image, else `summary`) and one `application/ld+json` script. A null,
-undefined or empty value emits no tag. Every attribute value is HTML-escaped; `jsonLd` is serialized
-with `JSON.stringify` and `<` written as `\u003c`, so stored text cannot close the script element,
-and the script body parses back to the given value. `og:title` is `ogTitle`, or `title` when it is omitted (pass it when `<title>` carries the
-site name and the Open Graph title should not). Which translations exist,
-the schema.org type and the JSON-LD properties are the application's. Importing only `pageHead` does
-not bundle `web()`'s serving code.
 
 ## Mounting MCP
 

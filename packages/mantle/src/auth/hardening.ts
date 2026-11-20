@@ -25,6 +25,24 @@ export async function hashEmailOtp(secret: string, otp: string): Promise<string>
     .replaceAll("/", "_")
     .replace(/=+$/, "");
 }
+/**
+ * RFC 9728/8414 discovery for the default resource `/mcp` and auth base `/api/auth`: fixed public metadata that Better
+ * Auth's plugins answer before any endpoint, so GET/HEAD skip the limiter's database read and write. Keys are Better
+ * Auth's exact limiter paths (auth base removed); other methods and trailing-slash spellings keep their limit.
+ */
+const metadataRead = (request: Request, rule: { window: number; max: number }) =>
+  (request.method === "GET" || request.method === "HEAD") && !new URL(request.url).pathname.endsWith("/")
+    ? (false as const)
+    : rule;
+const DISCOVERY = Object.fromEntries(
+  [
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/mcp",
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-authorization-server/api/auth",
+    "/.well-known/openid-configuration",
+  ].map(path => [path, metadataRead]),
+);
 /** Never default to a client-controlled X-Forwarded-For. The host must overwrite the configured headers. */
 export function authHardening({
   ipAddressHeaders,
@@ -43,7 +61,7 @@ export function authHardening({
   return {
     advanced: { ipAddress: { ipAddressHeaders: headers }, backgroundTasks: { handler: retainAuthTask } },
     // Shared across isolates; Better Auth's defaults and plugin rules (e.g. 3/min per OTP path) set the limits.
-    rateLimit: { enabled: true, storage: "database" },
+    rateLimit: { enabled: true, storage: "database", customRules: DISCOVERY },
     onAPIError: { errorURL: `${target.pathname}${target.search}` },
   };
 }

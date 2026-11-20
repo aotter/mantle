@@ -49,7 +49,14 @@ export function authRoutes(
           bounded.method === "POST" && pathname === `${base}/oauth2/register`
             ? await loopbackClientsAreNative(bounded)
             : bounded;
-        return await normalizeAuthResponseCookies(await normalizeEmailOtpResponse(await auth.handler(registration)));
+        const response = await normalizeAuthResponseCookies(
+          await normalizeEmailOtpResponse(await auth.handler(registration)),
+        );
+        if (response.headers.has("cache-control")) return response;
+        // Better Auth states no Cache-Control on most answers (list-sessions, a sign-in redirect): a shared cache would keep them.
+        const copy = new Response(response.body, response);
+        copy.headers.set("cache-control", PRIVATE["cache-control"]);
+        return copy;
       } catch (error) {
         return surfaceFailure(error, undefined, `auth ${route}`);
       }

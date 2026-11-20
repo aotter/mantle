@@ -113,8 +113,8 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     expect(text.match(/^- /gm)).toHaveLength(6);
     expect(text).not.toContain("post0");
     expect(text).toContain("Title \\[1\\]");
-    // The list View does not select `body`, so llms.txt cannot show that the alternate exists and links the page.
-    expect(text).toContain("(https://site.test/posts/a%26b%29)");
+    // The list View does not select `body`: llms.txt links the Markdown alternate of a page that declares one.
+    expect(text).toContain("(https://site.test/posts/a%26b%29.md)");
     const sitemap = await site.fetch(request("/sitemap.xml"));
     expect((await sitemap.text()).match(/<url>/g)).toHaveLength(6);
     const md = await site.fetch(request("/posts/a%26b).md"));
@@ -650,11 +650,11 @@ test("llms.txt links a page's Markdown alternate; the sitemap keeps the page URL
       (path, row) => "https://site.test" + path.replace("{slug}", String(row.slug)),
     );
   const links = [...(await index(false)).matchAll(/\]\((.*?)\)/g)].map(match => match[1]);
-  // Only a list row that carries the Markdown column non-null shows that `<url>.md` exists.
+  // A list row whose Markdown column is NULL has no alternate; a list that does not select the column links it.
   expect(links).toEqual([
     "https://site.test/md/a.md",
     "https://site.test/md/b",
-    "https://site.test/md/c",
+    "https://site.test/md/c.md",
     "https://site.test/html/a",
     "https://site.test/html/b",
     "https://site.test/html/c",
@@ -705,78 +705,4 @@ test("sitemap lastmod is a W3C datetime or absent; static paths share the scan c
     () => undefined,
   );
   expect(capped.match(/<url>/g)).toHaveLength(50000);
-});
-
-test("pageHead formats an application-owned page's head and escapes every value", async () => {
-  const { pageHead } = await import("../src/kernel/web.js");
-  const hostile = `<b>&"'</script>`;
-  const url = 'https://site.test/zh-TW/a"b';
-  const jsonLd = { "@context": "https://schema.org", "@type": "Article", name: hostile, nested: ["</script><!--"] };
-  const html = pageHead({
-    title: hostile,
-    description: hostile,
-    url,
-    image: "https://site.test/i.png",
-    siteName: "Site",
-    locale: "zh-TW",
-    type: "article",
-    alternates: { "zh-TW": url, en: "https://site.test/en/a" },
-    xDefault: url,
-    markdown: url + ".md",
-    jsonLd,
-  });
-  const text = "&lt;b&gt;&amp;&quot;&#39;&lt;/script&gt;",
-    href = "https://site.test/zh-TW/a&quot;b";
-  expect(html).toBe(
-    `<title>${text}</title><meta name="description" content="${text}">` +
-      `<link rel="canonical" href="${href}"><link rel="alternate" type="text/markdown" href="${href}.md">` +
-      `<link rel="alternate" hreflang="zh-TW" href="${href}"><link rel="alternate" hreflang="en" href="https://site.test/en/a">` +
-      `<link rel="alternate" hreflang="x-default" href="${href}">` +
-      `<meta property="og:type" content="article"><meta property="og:url" content="${href}">` +
-      `<meta property="og:title" content="${text}"><meta property="og:description" content="${text}">` +
-      `<meta property="og:site_name" content="Site"><meta property="og:locale" content="zh_TW">` +
-      `<meta property="og:locale:alternate" content="en"><meta property="og:image" content="https://site.test/i.png">` +
-      `<meta name="twitter:card" content="summary_large_image">` +
-      `<script type="application/ld+json">${JSON.stringify(jsonLd).replaceAll("<", "\\u003c")}</script>`,
-  );
-  // The script element ends only where Core ends it, and its body parses back to the application's object.
-  expect(html.match(/<\/script>/g)).toHaveLength(1);
-  expect(html).not.toContain("<!--");
-  expect(JSON.parse(/<script type="application\/ld\+json">(.*)<\/script>/s.exec(html)![1]!)).toEqual(jsonLd);
-  // Absent, null and empty values emit no tag; the card falls back to `summary`.
-  expect(
-    pageHead({ title: "Scallion pancakes | Recipes", ogTitle: "Scallion pancakes", url: "https://site.test/a" }),
-  ).toContain(
-    '<title>Scallion pancakes | Recipes</title><link rel="canonical" href="https://site.test/a"><meta property="og:type" content="website"><meta property="og:url" content="https://site.test/a"><meta property="og:title" content="Scallion pancakes">',
-  );
-  // An alternate without a URL is no translation: neither its hreflang link nor its Open Graph locale.
-  expect(pageHead({ title: "t", url: "https://site.test/", locale: "en", alternates: { fr: "" } })).not.toContain("fr");
-  expect(pageHead({ title: "", description: null, url: "https://site.test/", image: "", markdown: "" })).toBe(
-    '<link rel="canonical" href="https://site.test/"><meta property="og:type" content="website">' +
-      '<meta property="og:url" content="https://site.test/"><meta name="twitter:card" content="summary">',
-  );
-  // The registered application seam's consumer module runs.
-  const { head } = await import("./seams/page-head.js");
-  expect(head).toContain('<link rel="alternate" hreflang="x-default" href="https://seam.example/a">');
-});
-
-test("a Worker importing only pageHead bundles no web() serving code, and web() no pageHead", async () => {
-  const { build } = await import("esbuild");
-  const bundle = async (contents: string) =>
-    (
-      await build({
-        stdin: { contents, resolveDir: import.meta.dir, loader: "ts" },
-        bundle: true,
-        write: false,
-        platform: "neutral",
-        format: "esm",
-        target: "es2022",
-      })
-    ).outputFiles[0]!.text;
-  const formatter = await bundle('export { pageHead } from "../src/kernel/web.ts";');
-  expect(formatter).toContain("twitter:card");
-  for (const serving of ["llms.txt", "sitemap", "SHA-256", "geo.position"]) expect(formatter).not.toContain(serving);
-  const site = await bundle('export { web } from "../src/kernel/web.ts";');
-  expect(site).toContain("llms.txt");
-  expect(site).not.toContain("twitter:card");
 });

@@ -817,3 +817,31 @@ jobs:
           else
             gh release create "$TAG" --generate-notes --title "$TAG" --prerelease
           fi
+
+  # After the release exists. Nothing needs this job, and continue-on-error keeps a failure here (reported as a
+  # warning by the script, which never exits non-zero) from turning the run red. It reads and comments on
+  # issues only, with no registry or release credentials.
+  issues:
+    needs: [prepare, release]
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Mark shipped issues as released
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.core_sha }}
+          RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.tag }}
+        run: node scripts/issue-status.mjs released

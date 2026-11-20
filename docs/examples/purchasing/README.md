@@ -51,15 +51,60 @@ that have been waiting too long.
 - Employees see only their own requests through `my-requests` (`restrict: { requests: "author_id = auth.uid()" }`).
 - **Sidebar for the approver's day**: `src/admin.tsx` declares an Approvals group (`defineAdmin` `nav.groups`) above Admin's built-in
   groups; `pending-requests` and `requests` move into it with `uiSchema.nav: { group, order }`.
-- **A page only signed-in employees reach**: `src/requests-page.ts` serves `GET /requests`. An anonymous visitor gets a
-  303 to the shell's `/sign-in?return=/requests` (`src/sign-in.ts`, email code, then back). Signed in, the table reads
-  `my-requests` as the visitor's own caller. The form keeps `action="/api/requests" method="post"`; a small script sends
-  its fields as JSON to that REST Trigger, so the manifest's validation, `requires` and origin check apply and app code
-  never hands request data to a Procedure. Unstyled on purpose. `src/signup.ts` lets only `@EMPLOYEE_DOMAIN` emails
-  create an account (`vars` in `wrangler.jsonc`).
+- **The employees' app**: a React single-page app under `/app` (below). `src/signup.ts` lets only `@EMPLOYEE_DOMAIN`
+  emails create an account (`vars` in `wrangler.jsonc`).
 
 Search for `AGENT:` to find what a real app must still provide: an email sender, the supplier's real API and signature
 scheme.
+
+## The employees' app under `/app`
+
+An area that is all live state and needs no search engine (a cart, a checkout, a dashboard, this request form) can be a
+single-page app under its own path prefix; content pages stay server-rendered (the recipes example). This is a choice
+shown here, not a requirement.
+
+| File | Purpose |
+|---|---|
+| `src/client/app.tsx` | The app: React with kit components (`@aotter/mantle-ui/kit`), its three pages and their REST calls |
+| `src/client/app.css` | Its one stylesheet: the kit's `kit.css` plus a few layout rules; `mantle bundle` writes `/assets/client/app.css` |
+| `src/client/css.d.ts` | Lets TypeScript accept the stylesheet import |
+| `public/app/index.html` | The shell document: `noindex`, a root element, the stylesheet and one module script, `/assets/client/app.js` |
+| `src/routes.ts` (`appShell`) | Answers every path under `/app` with that document |
+| `manifests/purchasing.yaml` | The Views `my-requests`, `my-request` and `department-budgets`; the REST Triggers `POST /api/requests` and `POST /api/requests/{id}/amount` |
+
+| Page | Shows | Calls |
+|---|---|---|
+| `/app` | My requests and their status, read again every 10 s while the tab is visible | `GET /api/views/my-requests` |
+| `/app/new` | The form: each department with what its budget has left; errors beside their fields | `GET /api/views/department-budgets`, `POST /api/requests` |
+| `/app/requests/{id}` | One request; while it is `submitted`, a change of its amount | `GET /api/views/my-request?id=`, `POST /api/requests/{id}/amount` |
+
+The rules, and why:
+
+- **No authority in the browser.** The app reads Views and writes only through the REST Triggers; the session cookie
+  goes with every call and the server checks it, the input and `requires` each time. A 401 (the session ended) sends
+  the employee to `/sign-in` and back.
+- **Not indexed, not hidden.** The shell has `<meta name="robots" content="noindex">` and the response
+  `X-Robots-Tag: noindex`. It is in no sitemap or `llms.txt`, and `robots.txt` does not disallow it: a crawler that may
+  not fetch a page never reads its `noindex`.
+- **Signed in first.** An anonymous visitor gets a 303 to `/sign-in?return=<path>` (`signInRedirect`); the sign-in page
+  goes back only to a path on this origin. What a signed-out crawler can fetch is that sign-in page, and the shell
+  itself holds no workflow data either.
+- **`Cache-Control: no-store` on the shell.** Its bytes are the same for everyone, but the answer for an `/app` URL
+  depends on the caller (the shell, or a redirect to sign in), and a cache in front of the Worker keys on the URL, not
+  the cookie ([caching](../../handbook/guides/caching.md)): a stored redirect would bounce a signed-in employee, a
+  stored shell would skip the sign-in. It costs one asset read per full page load; moving inside the app loads no
+  document. The REST answers are `private, no-store`.
+- **Real 404s.** Only `/app`, `/app/`, `/app/new` and `/app/requests/{id}` answer 200. Another path under `/app` gets
+  the same document with status 404, and the app shows its own not-found page; a path outside `/app` is the Worker's
+  plain 404. There is no single-page fallback that turns unknown URLs into soft 404s. (An unknown request id is a 200
+  shell whose page says not found: telling would need a read before the shell.)
+- **One bundle.** `mantle bundle` builds `src/client/app.tsx` into one self-contained browser file; the Worker serves
+  only the shell, so the app adds nothing to the Worker's startup graph. The kit's components need its optional peers
+  (`radix-ui`, `class-variance-authority`, `clsx`, `tailwind-merge`, ...); `@aotter/mantle-admin` depends on them, so an
+  app with Admin has them. Without Admin, install them (the kit's README).
+
+`department-budgets` shows every employee what each department has left; the earlier server-rendered page read only
+the department names. Drop the View and the column from the form if the amounts are for admins only.
 
 ## Combine with
 
@@ -106,3 +151,11 @@ webhook secret through `smoke(scenario, { vars })`. It then checks the following
    while the request is still `approved`; a replay is 204; a wrong order id or a `submitted` request is 409.
 10. The daily cron places the failed order (`ordered`) and emails every admin about requests pending more than 3
     days, and only about those.
+11. `/app`: an anonymous visit is a 303 to `/sign-in?return=<path>`; signed in, every app page is the same shell
+    (200, `noindex` in the document and the header, `no-store`, one module script, no inline script, no workflow
+    data); unknown paths under `/app` are 404 with the shell, paths outside it the Worker's 404; `/robots.txt`,
+    `/sitemap.xml` and `/llms.txt` do not name `/app`.
+12. The app's REST calls end to end: an employee reads the budgets, submits, sees the request `submitted`, an admin
+    approves, and the employee sees it `ordered` and the budget's new remainder; another employee cannot read it.
+13. In Chrome, when `MANTLE_TEST_CHROMIUM` names a Chrome or Chromium binary (skipped otherwise): a signed-out visit to `/app/new` ends on sign-in; signed in, the form shows an error beside its field,
+    submits through the UI, and the list shows the new request; an unknown path shows the app's not-found page.

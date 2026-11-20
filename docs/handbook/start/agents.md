@@ -58,14 +58,11 @@ scope.
    - Business rules (status transitions, approval thresholds, stock, guards, several rows that commit together)
      belong in SQL Procedures, not in handler code around separate writes: `mantle help sql-patterns`, and
      `mantle help sql` for the SQL each dialect accepts.
-   - Visitor pages (anything anonymous and indexable) follow `mantle help public-pages`: server-rendered HTML,
-     canonical and Open Graph tags, JSON-LD and an answer block on detail pages, Markdown alternates, `/sitemap.xml`,
-     `/robots.txt` and `/llms.txt`. A brief that names a site, shop or catalogue for visitors includes all of them.
-   - Public pages plus an interactive area (saved items, a dashboard, a planner): keep the public pages server-rendered
-     and put the React app under one prefix such as `/app/*`, as the recipes example does (`mantle help examples`:
-     `src/routes.ts`, `src/client/spa.tsx`, `manifests/saved-recipes.yaml`). Indexable content is never only in the
-     SPA; its shell is `noindex` and absent from the sitemap and `llms.txt`, it sends anonymous visitors to sign in, and
-     it reads Views and writes through REST Triggers (`mantle help public-pages`, "Public pages plus a React app").
+   - Visitor pages (anything anonymous and indexable) follow `mantle help public-pages`: its one requirement (the
+     content is in the HTML the server returns), the recommended shape with its reasons (the recipes example), and the
+     checklist. A brief that names a site, shop or catalogue for visitors includes every item of that checklist.
+   - An interactive part on a public page (save, add to cart) or an interactive area (a cart, a dashboard, a planner):
+     the same page's "When to choose something else" says which shape fits and what an app beside the pages must keep.
 4. `pnpm generate`, implement every handler it lists, `pnpm check`, then `pnpm smoke`. Write app code in the
    order of [Write the least code](#write-the-least-code).
 5. **Show the user the wiring.** As soon as the manifests generate, run `pnpm accept --open`: it starts the app,

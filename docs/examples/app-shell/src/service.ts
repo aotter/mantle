@@ -26,6 +26,15 @@ let serveMcpHandler: ReturnType<typeof serveMcp<Env, Handle, Handlers>> | undefi
 const serveRest = rest(options);
 
 export async function fetchService(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
+  const response = await serve(request, env, context);
+  // A shared cache in front of the Worker (Workers Cache) stores a response that does not opt out: default to private.
+  if (response.status === 101 || response.headers.has("cache-control")) return response;
+  const copy = new Response(response.body, response); // a copy: some responses have immutable headers
+  copy.headers.set("cache-control", "private, no-store");
+  return copy;
+}
+
+async function serve(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
   auth ??= authLoader(() => import("./auth.js").then(m => m.createAuth(env)));
   const headers = new Headers();
   let authority: Promise<Caller> | undefined;

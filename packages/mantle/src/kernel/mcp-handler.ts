@@ -58,7 +58,7 @@ export function handler<Env, Database, Handlers>(
     throw new TypeError("mcp: toolsPageSize must be a positive integer.");
   const requiredScopes = options.requiredScopes ?? ["mcp"];
 
-  return draining(async (request, env, ctx) => {
+  const serve = draining(async (request: Request, env: Env, ctx?: RequestContext) => {
     const pipeline = await openPipeline(ctx, options);
     try {
       const url = new URL(request.url),
@@ -205,6 +205,12 @@ export function handler<Env, Database, Handlers>(
       return pipeline.failure(error, "mcp");
     }
   });
+  return async (request, env, ctx) => {
+    const response = await serve(request, env, ctx);
+    // The SDK's own refusals (400, 405, 406, a foreign Origin) state no Cache-Control: a shared cache would keep them.
+    if (response && !response.headers.has("cache-control")) response.headers.set("cache-control", "private, no-store");
+    return response;
+  };
 }
 
 /** `request-refused` for observers of the endpoint. */

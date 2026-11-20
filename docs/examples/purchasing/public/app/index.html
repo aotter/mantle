@@ -5,11 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- A signed-in app, not a public page: keep it out of search results (the Worker also sends X-Robots-Tag). -->
 <meta name="robots" content="noindex">
-<title>My saved recipes</title>
+<title>Purchase requests</title>
+<link rel="stylesheet" href="/assets/client/app.css">
 </head>
 <body>
 <div id="root"></div>
-<noscript>This page needs JavaScript. The recipes themselves are on the <a href="/">public site</a>.</noscript>
-<script type="module" src="/assets/client/spa.js"></script>
+<noscript>This app needs JavaScript.</noscript>
+<!-- The whole app: src/client/app.tsx, built by `mantle bundle`. -->
+<script type="module" src="/assets/client/app.js"></script>
 </body>
 </html>
