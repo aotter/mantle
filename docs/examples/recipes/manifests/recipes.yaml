@@ -53,15 +53,26 @@ spec:
       ingredients: {widget: textarea}
       steps: {widget: textarea}
 ---
-# Visitor list for the default locale. Public Views return published rows only.
+# The default locale's recipes: one page's row (`slug`), or every row without `slug` (list page, sitemap.xml, llms.txt).
+# Public Views return published rows only. `markdown` is the whole recipe for the `.md` alternate: text composed with
+# `||` from text fields stays typed text on every target (a number or a function call would not, so it has no time).
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: {name: published_recipes}
 spec:
   surface: public
-  sql: SELECT id, slug, title, summary FROM recipes ORDER BY id
+  input:
+    type: object
+    additionalProperties: false
+    properties: {slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}}
+  sql: |
+    SELECT slug, title, summary AS description, ingredients, steps, total_minutes, servings, cover_url, published_at, updated_at,
+      '# ' || title || E'\n\n' || summary || E'\n\n## 材料\n\n' || ingredients || E'\n\n## 步驟\n\n' || steps || E'\n' AS markdown
+    FROM recipes WHERE input.slug IS NULL OR slug = input.slug ORDER BY id
 ---
-# Visitor list for one translated locale; a translation is hidden while its parent is unpublished.
+# Every other locale, with the parent's total_minutes, servings and cover_url. A translation is hidden while its parent
+# is unpublished (Core adds that to every read). Filter by `locale`, `slug`, both or neither.
+# AGENT: the Markdown headings are English; give each locale its own View or headings when you add one.
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: {name: published_translations}
@@ -69,7 +80,13 @@ spec:
   surface: public
   input:
     type: object
-    required: [locale]
     additionalProperties: false
-    properties: {locale: {type: string, minLength: 2, maxLength: 35}}
-  sql: SELECT id, slug, title, summary FROM recipe_translations WHERE locale = input.locale ORDER BY id
+    properties:
+      locale: {type: string, minLength: 2, maxLength: 35}
+      slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}
+  sql: |
+    SELECT t.locale, t.slug, t.title, t.summary AS description, t.ingredients, t.steps, r.total_minutes, r.servings,
+      r.cover_url, t.published_at, t.updated_at,
+      '# ' || t.title || E'\n\n' || t.summary || E'\n\n## Ingredients\n\n' || t.ingredients || E'\n\n## Steps\n\n' || t.steps || E'\n' AS markdown
+    FROM recipe_translations t JOIN recipes r ON r.slug = t.slug
+    WHERE (input.locale IS NULL OR t.locale = input.locale) AND (input.slug IS NULL OR t.slug = input.slug) ORDER BY t.id

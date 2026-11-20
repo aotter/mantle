@@ -1,95 +1,83 @@
 import type { Caller } from "@aotter/mantle/contracts";
-import { store } from "../generated/generated.js";
-import { translationLocales } from "../generated/translations.js";
 import recipePage from "../generated/paged/views/published_recipes.js";
 import translationPage from "../generated/paged/views/published_translations.js";
-import { handlers } from "./handlers.js";
-import { signInPage, signInRedirect } from "./sign-in.js";
-import { DEFAULT_LOCALE, LOCALES, type Locale, type Recipe, listHtml, llmsTxt, recipeHtml, recipeMarkdown, robotsTxt, sitemapXml } from "./pages.js";
+import { web } from "../generated/web.js";
+import { signInPage } from "./sign-in.js";
+import { DEFAULT_LOCALE, LOCALES, type Locale, siteDefaults } from "./site-config.js";
 
-// Visitor pages always read as anonymous, even for a signed-in admin, so drafts never reach public HTML.
+// Visitor pages always read as anonymous, even for a signed-in admin: drafts never reach them, and every visitor gets
+// the same bytes, so a shared cache may keep them. AGENT: keep both; nothing per-visitor goes into these pages.
 const visitor: Caller = { kind: "anonymous" };
-// The app under /app: /app, /app/ and any deeper path without a dot (a deep link). A path with a dot is a missing file.
-const app = /^\/app(?:\/[^.]*)?$/;
-const page = /^\/(zh-TW|en)\/(?:recipes\/([a-z0-9-]+?)(\.md)?)?$/;
+// AGENT: every response states its cache policy. Public pages: briefly cached, served stale while revalidating or when
+// the origin fails. Redirects, 404s, errors and anything that depends on the caller: no-store.
+const PUBLIC = "public, max-age=60, stale-while-revalidate=600, stale-if-error=86400";
+const NO_STORE = { "cache-control": "no-store" };
+const page = /^\/(zh-TW|en)\/(?:recipes\/([a-z0-9-]+))?$/;
+
+/** `.md` alternates, /llms.txt, /sitemap.xml and the head tags of each recipe page, from the public Views. */
+const site = (env: Env) => web({
+  db: env.DB, caller: visitor, origin: env.PUBLIC_ORIGIN, title: siteDefaults.title, description: siteDefaults.description,
+  locales: LOCALES, sitemap: LOCALES.map(locale => `/${locale}/`), cacheControl: PUBLIC,
+  pages: {
+    "/zh-TW/recipes/{slug}": { view: "published_recipes", list: "published_recipes", markdown: "markdown", lastmod: "updated_at" },
+    "/{locale}/recipes/{slug}": { view: "published_translations", list: "published_translations", markdown: "markdown", lastmod: "updated_at" },
+  },
+});
 
 /**
  * Visitor pages, tried before Admin, MCP and REST. Only these paths are matched; everything else falls through.
- *   /                          -> redirect to /zh-TW/
- *   /{locale}/                 list (HTML)
- *   /{locale}/recipes/{slug}   detail (HTML: SEO meta, hreflang, JSON-LD Recipe, short answer)
- *   /{locale}/recipes/{slug}.md  Markdown alternate
- *   /llms.txt                  published recipes for AI agents
- *   /sitemap.xml, /robots.txt  every published URL in every locale; robots keeps crawlers out of /admin/
- *   /sign-in                   member sign-in (the shell's src/sign-in.ts), where /app sends anonymous visitors
- *   /app, /app/...             "my saved recipes" single-page app (src/client): members only, noindex, never in sitemap or llms.txt
+ *   /                            -> redirect to /zh-TW/
+ *   /{locale}/                   list (HTML)
+ *   /{locale}/recipes/{slug}     detail (HTML: SEO meta, hreflang, JSON-LD Recipe, short answer, save button)
+ *   /{locale}/recipes/{slug}.md  Markdown alternate (web())
+ *   /llms.txt, /sitemap.xml      every published recipe in every locale (web())
+ *   /robots.txt                  keeps crawlers out of /admin/
+ *   /sign-in                     member sign-in (the shell's src/sign-in.ts), where the save button sends anonymous visitors
  */
-export async function appRoutes(request: Request, env: Env, context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
+export async function appRoutes(request: Request, env: Env, _context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
   const url = new URL(request.url), match = page.exec(url.pathname);
-  if (app.test(url.pathname)) return appShell(request, env, context.caller);
-  // The shell file is public/app/index.html: without this the static fallback would serve it to anyone, past the sign-in check.
-  if (url.pathname === "/app/index.html") return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
-  // The shell's member sign-in page: the app's anonymous visitors land here from /app (src/sign-in.ts).
   if (url.pathname === "/sign-in" && request.method === "GET") return signInPage();
-  if (!["/", "/llms.txt", "/sitemap.xml", "/robots.txt"].includes(url.pathname) && !match) return undefined;
-  if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET, HEAD" } });
+  const generated = await site(env).fetch(request, env);
+  if (generated) return generated;
+  if (!["/", "/robots.txt"].includes(url.pathname) && !match) return undefined;
+  if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET, HEAD", ...NO_STORE } });
   // Absolute links use the configured origin, not the request Host.
   const origin = env.PUBLIC_ORIGIN;
-  if (url.pathname === "/") return Response.redirect(`${origin}/${DEFAULT_LOCALE}/`, 302);
+  if (url.pathname === "/") return new Response(null, { status: 302, headers: { location: `${origin}/${DEFAULT_LOCALE}/`, ...NO_STORE } });
+  if (url.pathname === "/robots.txt") return send(request, `User-agent: *\nDisallow: /admin/\nSitemap: ${origin}/sitemap.xml\n`, "text/plain; charset=utf-8");
 
-  if (url.pathname === "/robots.txt") return send(request, robotsTxt(origin), "text/plain; charset=utf-8");
-  if (url.pathname === "/llms.txt" || url.pathname === "/sitemap.xml") {
-    const lists = await Promise.all(LOCALES.map(async locale => [locale, await list(env, locale)] as const));
-    return url.pathname === "/llms.txt"
-      ? send(request, llmsTxt(origin, lists), "text/plain; charset=utf-8")
-      : send(request, sitemapXml(origin, lists), "application/xml; charset=utf-8");
+  const locale = match![1] as Locale, slug = match![2];
+  // React loads here, beside the read, on the first page request of an isolate (src/html.tsx).
+  if (!slug) {
+    const [{ listHtml }, rows] = await Promise.all([import("./html.js"), list(env, locale)]);
+    return send(request, listHtml({ origin, locale, rows }), "text/html; charset=utf-8");
   }
-
-  const locale = match![1] as Locale, slug = match![2], markdown = !!match![3];
-  if (!slug) return send(request, listHtml(origin, locale, await list(env, locale)), "text/html; charset=utf-8");
-  const found = await read(env, slug, locale);
-  if (!found) return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
-  return markdown
-    ? send(request, recipeMarkdown(found.recipe), "text/markdown; charset=utf-8", { link: `<${origin}/${locale}/recipes/${slug}>; rel="canonical"` })
-    : send(request, recipeHtml(origin, locale, found.recipe, found.locales), "text/html; charset=utf-8");
+  const [{ recipeHtml }, found] = await Promise.all([import("./html.js"), read(env, locale, slug)]);
+  if (!found) return new Response("Not found", { status: 404, headers: NO_STORE });
+  // The row this page read: web() builds its tags from it without a second query.
+  const tags = await site(env).head(request, env, undefined, { row: found.recipe });
+  return send(request, recipeHtml({ origin, locale, ...found }, tags), "text/html; charset=utf-8");
 }
 
 /** First page of published recipes in one locale. AGENT: page with `nextCursor` once a locale has more than 100 recipes. */
 async function list(env: Env, locale: Locale) {
   const result = locale === DEFAULT_LOCALE
-    ? await recipePage(env.DB, visitor, {}, { limit: 100 })
-    : await translationPage(env.DB, visitor, { locale }, { limit: 100 });
-  return result.rows.map(row => ({ slug: String(row.slug), title: String(row.title), summary: String(row.summary) }));
+    ? await recipePage(env.DB, visitor, { slug: null }, { limit: 100 })
+    : await translationPage(env.DB, visitor, { locale, slug: null }, { limit: 100 });
+  return result.rows;
 }
 
-/** One published recipe in `locale` plus the locales it is published in (for hreflang). */
-async function read(env: Env, slug: string, locale: Locale): Promise<{ recipe: Recipe; locales: Locale[] } | undefined> {
-  const recipes = store(env.DB, visitor, { handlers });
-  const parent = await recipes.collection("recipes").first({ where: { slug } });
-  if (!parent) return undefined;
-  const translated = (await translationLocales(env.DB, visitor, "recipes", [parent]))[parent.id] ?? [];
-  const locales = LOCALES.filter(l => l === DEFAULT_LOCALE || translated.includes(l));
-  if (!locales.includes(locale)) return undefined;
-  // A translation read merges the parent's fields (total_minutes, servings, cover_url, ...); the child's own fields win.
-  const row = locale === DEFAULT_LOCALE ? parent : await recipes.collection("recipe_translations").first({ where: { slug, locale } });
-  if (!row) return undefined;
-  return { recipe: { ...row, slug, locale } as Recipe, locales };
+/** One published recipe in `locale` plus the locales it is published in (for hreflang): two reads at once. */
+async function read(env: Env, locale: Locale, slug: string) {
+  const [parent, translations] = await Promise.all([
+    recipePage(env.DB, visitor, { slug }, { limit: 1 }),
+    translationPage(env.DB, visitor, { locale: null, slug }, { limit: 100 }),
+  ]);
+  const recipe = locale === DEFAULT_LOCALE ? parent.rows[0] : translations.rows.find(row => row.locale === locale);
+  if (!recipe) return undefined;
+  return { recipe, locales: LOCALES.filter(l => l === DEFAULT_LOCALE || translations.rows.some(row => row.locale === l)) };
 }
 
-function send(request: Request, body: string, type: string, headers: Record<string, string> = {}) {
-  // AGENT: choose a cache policy (and purge on publish) once pages sit behind a CDN.
-  return new Response(request.method === "HEAD" ? null : body, { headers: { "content-type": type, "cache-control": "no-store", ...headers } });
-}
-
-/**
- * The SPA shell for every deep link under /app. Anonymous visitors go to /sign-in and come back; everyone else gets
- * public/app/index.html from ASSETS (built with the app), which carries `noindex`. The header repeats it for clients
- * that read headers, not markup. Data and writes go through /api: the shell holds no data and no authority.
- */
-async function appShell(request: Request, env: Env, caller: () => Promise<Caller>) {
-  if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET, HEAD" } });
-  if ((await caller()).kind === "anonymous") return signInRedirect(request);
-  const shell = await env.ASSETS.fetch(new Request(new URL("/app/index.html", request.url)));
-  if (!shell.ok) return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
-  return new Response(request.method === "HEAD" ? null : shell.body, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
+function send(request: Request, body: string, type: string) {
+  return new Response(request.method === "HEAD" ? null : body, { headers: { "content-type": type, "cache-control": PUBLIC } });
 }
