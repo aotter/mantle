@@ -164,6 +164,17 @@ value Runtime accepts. Ineligible outputs advertise none. Views advertise none.
   SDK helper. The SDK's own
   `scopeChallenge` covers scopes only; identity stays outside it.
 
+> **Amendment (#2084, #2096, 2026-11-20): native content blocks.** The JSON text
+> block stays `content[0]`, followed by Core's tool version line and page notice;
+> a tool's `withResult(data, { content, _meta })` appends standard MCP content
+> blocks after them, which the installed SDK checks before the call is recorded
+> (a refused block fails the call as `INTERNAL_ERROR`). `structuredContent`,
+> `isError` and the error envelope stay Core's. Applications pass standard MCP
+> values through in their native shapes without a per-feature Core change; Core
+> keeps the decisions (authorization, validation, the data-to-`structuredContent`
+> mapping, the error envelope, the per-caller tool list) and never hands an
+> application the `McpServer`.
+
 ### 5. Identity stays outside the SDK
 
 The SDK never verifies tokens. Adapters verify the caller with `mantle-auth`

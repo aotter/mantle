@@ -305,8 +305,11 @@ stale cursor is answered with JSON-RPC error `-32602`, and the client lists
 again from the first page. Without the option, one page lists every tool and
 carries no `nextCursor`.
 
-A hand-built tool's `meta` and a `run` returning `withResultMeta(data, meta)`
-add listed and result `_meta`; see [MCP Apps](../guides/mcp-apps.md#tool-metadata-and-result-_meta).
+A hand-built tool's `meta` and a `run` returning `withResult(data, { content, _meta })`
+or `withResultMeta(data, meta)` add listed `_meta`, result content blocks and
+result `_meta`; see [MCP Apps](../guides/mcp-apps.md#tool-metadata-and-result-_meta).
+A hand-built tool may also set `icons` (`McpIcon[]`) and `annotations.title`;
+generated tools set neither.
 
 The app resolves bearer tokens with `resolveCaller(request, auth, { audience:
 new URL('/mcp', request.url).href })` (both surfaces use `<origin>/mcp`). The app
@@ -352,6 +355,12 @@ as an explicit option.
 resourceMetadata?, allowedOrigins?, onObservation? })` keeps the SDK behind its first
 request. Locale defaults to `en`; localized titles/descriptions fall back to
 English, then their first entry. Tools carry the [tool hints](procedure.md#mcp-tool-hints). `instructions` is returned by initialize.
+`serverInfo` takes `name`, `title`, `version`, `description`, `websiteUrl` and
+`icons`, returned by initialize as given; `name` defaults to `aotter.mantle` and
+`version` to the catalogue version. Initialize advertises
+`tools: { listChanged: false }`, and `resources: { listChanged: false }` when the
+endpoint registers App resources for the request: a stateless server sends no
+list-change notifications.
 The scope floor defaults to `["mcp"]` for every credential except cookie sessions;
 `requiredScopes: []` disables that floor. An anonymous closed surface challenges
 from initialize, and every call in a batch is checked before any call runs.
@@ -393,6 +402,14 @@ session Origin rule. The callback receives no request headers, bodies or tokens;
 delivery failures never change the business response and promises are not
 awaited. The application owns callback delivery.
 
+**Tool results:** a successful `tools/call` result's `content` is, in order, the
+JSON text of the data (always `content[0]`), the `tool version` line, the page
+notice of an oversized View page, then the blocks a `withResult` return adds.
+`structuredContent` is the data when it is a plain object. Core owns the first
+three, `structuredContent`, `isError` and the error envelope; the application's
+blocks are checked by the installed SDK, and one it refuses fails the call as
+`INTERNAL_ERROR`. A failure, a thrown error and a dry run carry Core's blocks only.
+
 **Procedure output:** SQL Procedures retain the native `{ results }`
 contract rather than 0.2's authored output projection/validation; MCP advertises
 that object envelope, not the incompatible authored schema. Ref Procedures expose
@@ -402,6 +419,41 @@ revalidate native database rows. Business failures carry diagnostics in text;
 with an output schema they omit `structuredContent` to avoid validating an error
 against a success schema. Without one they also expose diagnostic structured
 content. MCP adds no prompts or non-UI resources.
+
+### Standard MCP fields and who sets them
+
+The official SDK does all wire handling (ADR-0029). "App" is the application;
+"not exposed" fields cannot be set through Mantle.
+
+| Field | Who sets it |
+|---|---|
+| `CallToolResult.content` | Core's blocks first (data JSON, version line, page notice); App appends any block the installed SDK accepts (`image`, `audio`, `resource_link`, `resource`, `text`, each with its own `annotations` and `_meta`) with `withResult` |
+| `CallToolResult.structuredContent` | Core: the data, when it is a plain object, so a declared `outputSchema` holds |
+| non-object `structuredContent` (SEP-2106) | Not exposed: Core sends `structuredContent` only for an object |
+| `CallToolResult.isError` | Core: the diagnostic envelope of a refusal or failure |
+| `CallToolResult._meta` | App: `withResult`/`withResultMeta`; Core sets `net.aotter.mantle/tool`, which wins |
+| `Tool.name`, `title`, `description` | App: `Tool` fields, or the manifest for generated tools; Core appends a generated tool's version |
+| `Tool.inputSchema` | App: `Tool.inputSchema`; Core adds a View's `limit` and `cursor` and localizes labels |
+| `Tool.outputSchema` | App: `Tool.outputSchema` (localized as listed) |
+| `Tool.annotations` | App: `Tool.annotations`, including `title` |
+| `Tool.icons` | App: `Tool.icons` on a hand-built tool |
+| `Tool._meta` | App: `Tool.meta`, merged with what App links produce |
+| `Tool.execution` | Not exposed: SDK 2.3.1 has no task runtime |
+| Resource `title`, `description`, `icons`, `annotations` | App: `McpAppResource` fields |
+| Resource `mimeType`, text body | Core: `text/html;profile=mcp-app`, the HTML as text; no blob |
+| Resource `size` | Not exposed: the HTML is produced on read |
+| Resource list `_meta` | Core: `ui` from `csp`, `permissions`, `domain`, `prefersBorder` |
+| Resource read `_meta` | App: `McpAppResource.meta`, merged under the typed fields |
+| Resource templates, non-UI resources | Not exposed yet |
+| `resources/subscribe`, `listChanged` | Core: `listChanged: false`; no subscriptions on a stateless server |
+| `instructions` | App: `instructions` option |
+| `serverInfo` | App: `serverInfo` (`name`, `title`, `version`, `description`, `websiteUrl`, `icons`) |
+| Server capabilities | Core: decided by what the endpoint serves |
+| Prompts, completions | Not exposed yet; completions need prompts or templates |
+| Progress, cancellation | Not exposed yet: `ToolCall` carries no progress or abort signal |
+| Logging, sampling, roots | Not exposed: deprecated in the 2026-07-28 revision (SEP-2577) |
+| Elicitation | Not exposed: a stateless 2025-era server cannot send a server-to-client request, and `ToolCall` does not offer the 2026-07-28 `input_required` round trip |
+| Tasks | Not exposed: SDK 2.3.1 has no task runtime |
 
 ### Tool versions
 

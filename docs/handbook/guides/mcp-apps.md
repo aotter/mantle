@@ -128,10 +128,42 @@ the result `_meta` for an App and return it in the data for a client that has
 none (`upload_media` does this with its targets). `callTool` and `callToolLazy`
 take it as an optional last argument (default `{ apps: false }`).
 
-`callTool` and `callToolLazy` return the wrapper itself, `{ data, _meta }`.
+`withResult(data, { content, _meta })` does the same and also sends standard MCP
+content blocks: image, audio, `resource_link`, an embedded resource, or text
+with `annotations` (for example `audience: ["user"]`). They follow Core's own
+blocks (the JSON text of `data`, the tool version line, the page notice), so
+`content[0]` stays the JSON text, and `structuredContent` and a declared
+`outputSchema` are unchanged. `withResultMeta(data, meta)` is
+`withResult(data, { _meta: meta })`. A model sees an image only as an image
+block, never as base64 inside the JSON:
+
+```ts
+import { withResult, type Tool } from '@aotter/mantle/mcp';
+
+declare function renderChart(caller: unknown): Promise<{ id: string; png: string }>;
+
+const chart: Tool<unknown> = {
+  name: 'chart', surface: 'public', description: 'Draw the chart.', readOnly: true,
+  inputSchema: { type: 'object', additionalProperties: false }, validate: raw => raw as Record<string, unknown>,
+  run: async (_db, caller) => {
+    const { id, png } = await renderChart(caller);
+    return withResult({ id }, { content: [{ type: 'image', data: png, mimeType: 'image/png' }] });
+  },
+};
+```
+
+Blocks are typed loosely (`McpContentBlock`); the SDK's own types, such as
+`import type { ImageContent } from "@modelcontextprotocol/server"`, are
+assignable to it. The installed SDK checks each block before the call is
+recorded: a block it refuses (bad base64, an unknown type) fails the call with
+an `INTERNAL_ERROR` diagnostic and a failed outcome, after `run` has already
+finished. A dry run and a thrown error carry no application blocks.
+
+`callTool` and `callToolLazy` return the wrapper itself, `{ data, content?, _meta? }`.
 A caller that forwards a result to a model, such as an application's own agent,
-must forward only `data` and drop `_meta`, or the signed URL leaks through that
-path. A thrown error still produces the standard diagnostics result.
+must forward only `data` (and `content`) and drop `_meta`, or the signed URL
+leaks through that path. Admin's WebMCP route does this. A thrown error still
+produces the standard diagnostics result.
 
 ### Open an App from a host's entry point
 
@@ -530,7 +562,10 @@ its place invites a retry, and on Claude a stored result is kept in the
 sandbox rather than lost. Keep them small instead: give a View that can grow an
 order, so it pages; keep large values (document text, base64 images, logs) out
 of rows, and read one through a View or tool of its own; have a Procedure
-return what it changed, not a collection.
+return what it changed, not a collection. An image in a row is only a string to
+a model; to show it, a tool returns it as an image block with `withResult`.
+Those blocks count towards a host's result-size limit too, and Core neither
+measures nor cuts them: the page budget counts `data` only.
 
 ### Fonts, border and display mode
 
