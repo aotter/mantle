@@ -4,14 +4,13 @@
   skills under [`skills/`](skills/) and materialize a project outside this SDK
   checkout.
 - To change or review this SDK, read [`CONTRIBUTING.md`](CONTRIBUTING.md) and
-  the relevant accepted ADRs before editing.
+  the relevant accepted ADRs before editing; an open issue may already be merged into `develop`: check first.
 - For implementation, apply [Ponytail](.agents/skills/ponytail/SKILL.md): native
   primitives first; deletion before new wrappers; least logic, not fewest lines. For
   complexity review use [Ponytail Review](.agents/skills/ponytail-review/SKILL.md), alongside correctness review.
 - To version, publish, or tag a release, additionally read the
   canonical [release skill](.agents/skills/mantle-release/SKILL.md). Do not
   release unless the user explicitly asks.
-- Before planning or proposing work on an issue, check `develop` for a merged PR for it (`git log origin/develop --grep "issue-<N>"`, the issue's linked PRs); an open issue is not proof the work is undone.
 
 Repository safety gates:
 
