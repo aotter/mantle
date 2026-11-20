@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { mcp } from "@aotter/mantle/mcp";
 import { sdkFixtureCaller as fixtureCaller } from "../../../mantle/tests/apps/fixtures.js";
 import { adminMcpApps } from "../../src/server/mcp.js";
+import { mcpInit } from "../../test/mcp-wire.js";
 import { generateAdmin, writeAdminFixture } from "./generated-fixture.js";
 
 const schema = `apiVersion: cms.mantle.aotter.net/v2
@@ -37,11 +38,6 @@ const admin = fixtureCaller({
   credentialId: null,
   clientId: null,
 });
-const ui = {
-  "io.modelcontextprotocol/clientCapabilities": {
-    extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } },
-  },
-};
 type Env = { ASSETS: { fetch(request: Request): Promise<Response> } };
 const env: Env = { ASSETS: { fetch: async () => new Response("<head></head><p>admin</p>") } };
 
@@ -49,7 +45,7 @@ for (const [name, text] of [
   ["only a Schema", schema],
   ["only an internal View", internal],
 ] as const)
-  test(`${name}: every target emits mcp.ts with an empty tools table, and it serves initialize, tools/list and resources/list`, async () => {
+  test(`${name}: every target emits mcp.ts with an empty tools table, and it serves server/discover, tools/list and resources/list`, async () => {
     for (const target of ["bun-sqlite", "cloudflare-d1", "bun-postgres", "cloudflare-postgres"] as const) {
       const files = await generateAdmin(target, text);
       expect(files["mcp.ts"]).toContain("export const tools");
@@ -72,25 +68,14 @@ for (const [name, text] of [
       ];
       for (const api of handlers)
         for (const path of ["/mcp", "/mcp/admin"]) {
-          const rpc = async (method: string, params: object = {}) => {
-            const response = await api(
-              new Request(`https://app.test${path}`, {
-                method: "POST",
-                headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-                body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: ui } }),
-              }),
-              env,
-            );
+          const rpc = async (method: string, params: Record<string, unknown> = {}) => {
+            const response = await api(new Request(`https://app.test${path}`, mcpInit(method, params)), env);
             const body = await response!.text();
             expect(response!.status).toBe(200);
             return JSON.parse(body.startsWith("event:") ? body.split("data: ")[1]!.split("\n")[0]! : body);
           };
-          const initialized = await rpc("initialize", {
-            protocolVersion: "2025-11-25",
-            capabilities: {},
-            clientInfo: { name: "test", version: "1" },
-          });
-          expect(initialized.result.capabilities.tools).toBeDefined();
+          const discovered = await rpc("server/discover");
+          expect(discovered.result.capabilities.tools).toBeDefined();
           expect((await rpc("tools/list")).result.tools).toEqual([]);
           if (path === "/mcp/admin" && api === handlers[0])
             expect((await rpc("resources/list")).result.resources).toBeArray();
