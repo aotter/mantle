@@ -470,6 +470,8 @@ export async function bundle(entry: string, outdir: string): Promise<Metafile> {
     conditions: ["workerd", "worker", "browser"],
     mainFields: ["module", "main"],
     external: ["cloudflare:*", "node:*"],
+    // workerd leaves process.env.NODE_ENV undefined, so packages such as react-dom would otherwise ship their development build
+    define: { "process.env.NODE_ENV": '"production"' },
     minify: true,
     metafile: true,
     chunkNames: "chunks/[name]-[hash]",
