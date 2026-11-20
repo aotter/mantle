@@ -133,6 +133,7 @@ export interface Tool<Database, Handlers = never> {
 export {
   withResult,
   withResultMeta,
+  resultData,
   type ResultWith,
   type ResultWithMeta,
   type McpContentBlock,
@@ -145,9 +146,11 @@ export interface ToolCall {
   /** The tool links an MCP App resource, independent of this request's declared support. */
   readonly linkedApp?: boolean;
   /**
-   * Aborts when the `tools/call` request ends before its result: the client closed the request (how a 2026-07-28
-   * client cancels) or the connection dropped. A 2025-era `notifications/cancelled` arrives as another request, which
-   * a stateless server cannot relate to this one. Set on every MCP call; `callTool` passes the one it is given.
+   * Aborts while the tool runs if the `tools/call` request ends before its result: the client closed the request (how a
+   * 2026-07-28 client cancels) or the connection dropped; never after the call finished. It follows the incoming
+   * `Request.signal`, so it aborts only where that one does: Bun.serve does; on Workers it needs compatibility date
+   * 2026-11-17 or later, or the `enable_request_signal` flag. A 2025-era `notifications/cancelled` arrives as another
+   * request, which a stateless server cannot relate to this one. Set on every MCP call; `callTool` passes the one it is given.
    */
   readonly signal?: AbortSignal;
   /**

@@ -273,6 +273,8 @@ async function check(db: Parameters<typeof store>[0], caller: Parameters<typeof 
   const fromWrapped: string = (await store(db, caller, { handlers: wrapped }).procedures["app-note"]({ title: "t" })).title;
   // @ts-expect-error wrong output inside the wrapper
   store(db, caller, { handlers: { ...good, "app-note": async () => withResult({ title: 1 }, {}) } });
+  // @ts-expect-error only withResult makes a wrapper: a plain { data } is neither the output nor one
+  store(db, caller, { handlers: { ...good, "app-note": async () => ({ data: { title: "t" } }) } });
   // @ts-expect-error handler must return Promise
   store(db, caller, { handlers: { ...good, "app-note": () => ({ title: "t" }) } });
   // @ts-expect-error ref Procedures only in Store map

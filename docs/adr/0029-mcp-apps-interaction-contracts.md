@@ -175,6 +175,40 @@ value Runtime accepts. Ineligible outputs advertise none. Views advertise none.
 > mapping, the error envelope, the per-caller tool list) and never hands an
 > application the `McpServer`.
 
+> **Amendment (#2100, 2026-11-20): ref handler results, progress and
+> cancellation.**
+>
+> - A ref Procedure handler may return `withResult(output, { content, _meta })`;
+>   its generated type is `Promise<Output | ResultWith<Output>>`, and
+>   `ResultWith` carries a type-only brand that only `withResult` and
+>   `withResultMeta` produce, so a plain `{ data }` object is not a wrapper.
+>   The Procedure's generated MCP tool sends the blocks and `_meta`; Store
+>   (`store(...).procedures`, `ctx.store.procedures`), REST and Admin callers get
+>   `Output`. `callTool` returns what a tool returned, the wrapper included, for
+>   hand-written and generated tools alike; `resultData` from
+>   `@aotter/mantle/mcp` unwraps it.
+> - `ToolCall.progress(progress, total?, message?)` exists when the request
+>   carries a `progressToken` and sends `notifications/progress` on the call's
+>   stream. `ToolCall.signal` is Core's own signal: it follows the SDK request
+>   signal only while the tool runs, because the SDK also aborts its signal when
+>   it tears the per-request server down after the result. It aborts only where
+>   the runtime aborts the incoming `Request.signal` on a client disconnect
+>   (Bun.serve; Workers from compatibility date 2026-11-17 or with
+>   `enable_request_signal`). A 2025-era `notifications/cancelled` arrives as its
+>   own request, which a stateless server cannot relate to the call. A call that
+>   throws a non-`ContractError` after its signal aborted is recorded as
+>   `REQUEST_CANCELLED` (status 499: observation `outcome: "failed"`, access event
+>   `outcome: "error"`), not logged as an unhandled failure; the closed outcome
+>   unions are unchanged. A started call records its own access event even when
+>   the client goes away first. Ref handlers get neither: their handler is shared
+>   with Store and REST callers.
+> - Not adopted: non-object `structuredContent` (SEP-2106). The 2026-07-28
+>   revision allows any JSON value, but SDK 2.3.1 sends it as is only on
+>   2026-07-28 requests and wraps it as `{ result }` (and a non-object
+>   `outputSchema` likewise) on 2025-era requests (its 2025-era codec's
+>   `projectCallToolResult` and `wrapOutputSchemaForLegacy`), so one tool would answer two
+>   shapes. Core keeps sending `structuredContent` only for an object.
+
 ### 5. Identity stays outside the SDK
 
 The SDK never verifies tokens. Adapters verify the caller with `mantle-auth`

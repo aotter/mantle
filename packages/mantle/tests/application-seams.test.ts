@@ -287,10 +287,14 @@ for (const stack of STACKS) {
           expect(withBlocks._meta).toMatchObject({ "example/result": { b: 2 } });
         });
         await exercising(["ref-handler-result"], async () => {
-          const { added, copied, serveMcp, serveRest } = await module("ref-result.ts");
+          const { added, called: callDirect, copied, serveMcp, serveRest } = await module("ref-result.ts");
           // Store callers, including a handler through ctx.store.procedures, get the data alone
           expect(await added(db, bearer, "Store")).toEqual({ title: "Store" });
           expect(await copied(db, bearer, "Nested")).toEqual({ title: "Nested (copy)" });
+          // callTool returns the wrapper, as for a hand-written tool; resultData unwraps it
+          const direct = await callDirect(db, bearer, "Call");
+          expect(direct.result).toMatchObject({ data: { title: "Call" }, content: [{ type: "image" }] });
+          expect(direct.data).toEqual({ title: "Call" });
           const posted = await serveRest(db, bearer)(
             new Request("https://seam.example/api/note-cards", {
               method: "POST",
@@ -311,9 +315,9 @@ for (const stack of STACKS) {
           expect(called.content.at(-1)).toEqual({ type: "image", data: "AA==", mimeType: "image/png" });
           expect(called._meta).toMatchObject({ "example/card": { title: "Mcp" } });
           const rows = await sql(
-            "SELECT title FROM notes WHERE title IN ('Store', 'Nested', 'Rest', 'Mcp') ORDER BY title",
+            "SELECT title FROM notes WHERE title IN ('Store', 'Nested', 'Call', 'Rest', 'Mcp') ORDER BY title",
           );
-          expect(rows.map(row => row.title)).toEqual(["Mcp", "Nested", "Rest", "Store"]);
+          expect(rows.map(row => row.title)).toEqual(["Call", "Mcp", "Nested", "Rest", "Store"]);
         });
         await exercising(["app-resource-meta"], async () => {
           const serve = (await module("resource-meta.ts")).serve(db, bearer);

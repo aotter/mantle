@@ -1520,69 +1520,181 @@ spec: {source: {kind: http, method: POST, path: /api/items}, target: {procedure:
   }
 });
 
-test("ToolCall.signal aborts when the request ends; progress reaches a client that sent a progressToken", async () => {
+test("ToolCall.signal aborts only while the call runs; a cancel is observed, not logged; progress reaches a client that sent a progressToken", async () => {
   const { mcp } = await import("../src/kernel/mcp.js");
   const { steps } = await import("./seams/tool-call.js");
-  const aborted: unknown[] = [];
-  let started: () => void = () => {};
+  const within = <T>(promise: Promise<T>, what: string) =>
+    Promise.race([
+      promise,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), 5_000)),
+    ]);
+  const aborted: string[] = [];
+  let started = () => {},
+    abortSeen = () => {},
+    completed: (event: unknown) => void = () => {};
   const tool = (name: string, run: (call: ToolCall) => Promise<unknown>) => ({
     name,
     surface: "public",
     description: name,
     inputSchema: { type: "object" },
     validate: (raw: any) => raw,
-    run: (_db: unknown, _caller: unknown, _input: unknown, _handlers: unknown, call: ToolCall) => run(call),
+    run: (_db: unknown, _caller: unknown, _input: unknown, _handlers: unknown, call: ToolCall) => {
+      call.signal!.addEventListener("abort", () => {
+        aborted.push(name);
+        abortSeen();
+      });
+      return run(call);
+    },
   });
   const tools = [
     steps,
-    tool(
-      "wait",
-      call =>
-        new Promise(done => {
-          call.signal!.addEventListener("abort", () => {
-            aborted.push(call.signal!.reason);
-            done({});
-          });
-          started();
-        }),
-    ),
+    // Returns normally: its signal never aborts, also when the SDK tears the request down after the result.
+    tool("done", async call => {
+      await call.progress?.(1, 1);
+      return { done: true };
+    }),
+    // The documented pattern: wait, then throw the abort reason.
+    tool("wait", async call => {
+      await new Promise(resolve => {
+        call.signal!.addEventListener("abort", resolve);
+        started();
+      });
+      call.signal!.throwIfAborted();
+      return {};
+    }),
     tool("offered", async call => ({ progress: typeof call.progress, signal: call.signal instanceof AbortSignal })),
   ];
-  const handle = mcp(tools as never, { db: () => ({}), caller: () => ({ kind: "anonymous" }) });
-  for (const mode of ["legacy", { pin: "2026-07-28" }] as const) {
-    const client = new Client({ name: "test", version: "1" }, { versionNegotiation: { mode } });
-    await client.connect(
-      new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
-        fetch: async (url, init) => (await handle(new Request(String(url), init), {}))!,
-      }),
-    );
-    // Progress: notifications on the call's SSE stream, before its result.
-    const progress: unknown[] = [];
-    const done = await client.callTool({ name: "seam_steps", arguments: {} }, { onprogress: p => progress.push(p) });
-    expect(done.structuredContent).toEqual({ steps: 2 });
-    expect(progress).toEqual([
-      { progress: 1, total: 2, message: "step 1" },
-      { progress: 2, total: 2, message: "step 2" },
-    ]);
-    // Without a progressToken the tool is offered no progress.
-    expect((await client.callTool({ name: "offered", arguments: {} })).structuredContent).toEqual({
-      progress: "undefined",
-      signal: true,
+  const handle = mcp(tools as never, {
+    db: () => ({}),
+    caller: () => ({ kind: "anonymous" }),
+    onObservation: event => {
+      if (event.kind === "invocation" && event.phase === "completion" && event.tool === "wait") completed(event);
+    },
+  });
+  const logged = spyOn(console, "error");
+  try {
+    for (const mode of ["legacy", { pin: "2026-07-28" }] as const) {
+      const client = new Client({ name: "test", version: "1" }, { versionNegotiation: { mode } });
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
+          fetch: async (url, init) => (await handle(new Request(String(url), init), {}))!,
+        }),
+      );
+      // Progress: notifications on the call's SSE stream, before its result.
+      const progress: unknown[] = [];
+      const done = await client.callTool({ name: "seam_steps", arguments: {} }, { onprogress: p => progress.push(p) });
+      expect(done.structuredContent).toEqual({ steps: 2 });
+      expect(progress).toEqual([
+        { progress: 1, total: 2, message: "step 1" },
+        { progress: 2, total: 2, message: "step 2" },
+      ]);
+      // Without a progressToken the tool is offered no progress.
+      expect((await client.callTool({ name: "offered", arguments: {} })).structuredContent).toEqual({
+        progress: "undefined",
+        signal: true,
+      });
+      // A call that finished normally, with and without progress.
+      expect(
+        (await client.callTool({ name: "done", arguments: {} }, { onprogress: () => {} })).isError,
+      ).toBeUndefined();
+      expect((await client.callTool({ name: "done", arguments: {} })).isError).toBeUndefined();
+      // A 2026-07-28 client cancels by closing the request, which aborts the signal. A 2025-era client sends
+      // notifications/cancelled as another request, which a stateless server cannot relate to the call, so the
+      // signal aborts only when that client closes its connection.
+      const cancel = new AbortController();
+      const running = new Promise<void>(resolve => (started = resolve)),
+        abort = new Promise<void>(resolve => (abortSeen = resolve)),
+        completion = new Promise<unknown>(resolve => (completed = resolve));
+      const call = client.callTool({ name: "wait", arguments: {} }, { signal: cancel.signal }).catch(String);
+      await within(running, "the tool to start");
+      cancel.abort("stop");
+      expect(await call).toContain("stop");
+      if (mode === "legacy") {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(aborted).toEqual([]);
+      }
+      await client.close();
+      await within(abort, "the tool's signal to abort");
+      // A cancel is no failure of the tool: observed with its own code, never logged as an unhandled failure.
+      expect(await within(completion, "the completion observation")).toMatchObject({
+        outcome: "failed",
+        code: "REQUEST_CANCELLED",
+      });
+      // Negative: neither finished call's signal aborted with the teardown.
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect([mode, aborted]).toEqual([mode, ["wait"]]);
+      aborted.length = 0;
+    }
+    expect(logged.mock.calls.filter(args => String(args[0]).includes("unhandled failure"))).toEqual([]);
+  } finally {
+    logged.mockRestore();
+  }
+});
+
+test("gateway: a call cancelled mid-run keeps its own access event", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const { mantleProps, pinned } = await import("./gateway-fixture.js");
+  let started = () => {};
+  const untilAborted = (call: ToolCall) =>
+    new Promise(resolve => {
+      call.signal!.addEventListener("abort", resolve);
+      started();
     });
-    // A 2026-07-28 client cancels by closing the request, which aborts the signal. A 2025-era client sends
-    // notifications/cancelled as another request, which a stateless server cannot relate to the call, so the
-    // signal aborts only when that client closes its connection.
-    const cancel = new AbortController();
-    const running = new Promise<void>(resolve => (started = resolve));
-    const call = client.callTool({ name: "wait", arguments: {} }, { signal: cancel.signal }).catch(String);
+  const tool = (name: string, run: (call: ToolCall) => Promise<unknown>) => ({
+    name,
+    surface: "admin",
+    description: name,
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run: (_db: unknown, _caller: unknown, _input: unknown, _handlers: unknown, call: ToolCall) => run(call),
+  });
+  const tools = [
+    // Finishes its work although the client went away.
+    tool("finish", async call => {
+      await untilAborted(call);
+      return { ok: true };
+    }),
+    tool("stop", async call => {
+      await untilAborted(call);
+      call.signal!.throwIfAborted();
+      return {};
+    }),
+  ];
+  const targets = Object.fromEntries(
+    tools.map(({ name }) => [`admin:tool:${name}`, { targetHash: `${name}-hash`, opaque: false }]),
+  );
+  const events: { target: string; outcome: string; reason?: string }[] = [];
+  let recorded = () => {};
+  const handle = mcp(tools as never, {
+    db: () => ({}),
+    gateway: { tenant: "example" },
+    accessTargets: async () => targets,
+    onAccess: event => {
+      events.push(event);
+      recorded();
+    },
+  });
+  for (const name of ["finish", "stop"]) {
+    const cancel = new AbortController(),
+      running = new Promise<void>(resolve => (started = resolve)),
+      event = new Promise<void>(resolve => (recorded = resolve));
+    const response = handle(
+      new Request("https://app.test/mcp/admin", {
+        method: "POST",
+        signal: cancel.signal,
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } }),
+      }),
+      {},
+      { props: { mantle: await pinned(mantleProps({}), targets, `admin:tool:${name}`) } },
+    );
     await running;
     cancel.abort("stop");
-    expect(await call).toContain("stop");
-    await new Promise(resolve => setTimeout(resolve, 20));
-    expect([mode, aborted.length]).toEqual([mode, mode === "legacy" ? 0 : 1]);
-    await client.close();
-    await new Promise(resolve => setTimeout(resolve, 20));
-    expect([mode, aborted.length]).toEqual([mode, 1]);
-    aborted.length = 0;
+    await response.then(answer => answer?.text()).catch(() => {});
+    await event;
   }
+  expect(events.map(e => [e.target, e.outcome, e.reason])).toEqual([
+    ["admin:tool:finish", "allow", undefined],
+    ["admin:tool:stop", "error", "REQUEST_CANCELLED"],
+  ]);
 });

@@ -430,7 +430,7 @@ The official SDK does all wire handling (ADR-0029). "App" is the application;
 | Server capabilities | Core: decided by what the endpoint serves |
 | Prompts, completions | Not exposed yet; completions need prompts or templates |
 | Progress | App: `ToolCall.progress(progress, total?, message?)`, present when the request carries a `progressToken`; sent on the call's SSE stream on both eras |
-| Cancellation | Core: `ToolCall.signal` aborts when the request ends early (a 2026-07-28 client's cancel, a dropped connection); a 2025-era `notifications/cancelled` cannot reach a stateless server's call. Hand-written tools only: a ref handler gets neither |
+| Cancellation | Core: `ToolCall.signal` aborts while the tool runs if the request ends early (a 2026-07-28 client's cancel, a dropped connection), where the runtime aborts `Request.signal`: Bun.serve, and Workers from compatibility date 2026-11-17 or with `enable_request_signal`; a 2025-era `notifications/cancelled` cannot reach a stateless server's call. Observed as `code: "REQUEST_CANCELLED"`. Hand-written tools only: a ref handler gets neither |
 | Logging, sampling, roots | Not exposed: deprecated in the 2026-07-28 revision (SEP-2577) |
 | Elicitation | Not exposed: a stateless 2025-era server cannot send a server-to-client request, and `ToolCall` does not offer the 2026-07-28 `input_required` round trip |
 | Tasks | Not exposed: SDK 2.3.1 has no task runtime |
@@ -492,6 +492,8 @@ A generated route or tool carries `convert`, a table of `[field, type]`; the sur
 before calling the generated function: a missing or null field becomes `null`, a `json` field is stringified and a
 `bool` field becomes 0/1 on SQLite and D1. `convertInput(input, convert)` from `@aotter/mantle/contracts` is that
 function. `callTool(tool, input, db, caller, handlers)` from `@aotter/mantle/mcp` validates, converts and runs one tool.
+It returns what the tool returned, a `withResult` wrapper included (a generated ref Procedure tool returns what its
+handler returned); `resultData(value)` returns a wrapper's `data` and any other value as it is.
 
 Bare Views, Store rows, native SQL Procedure `{ results }` and application-owned
 ref outputs retain their native contracts, except that a Store row's `version` is a
