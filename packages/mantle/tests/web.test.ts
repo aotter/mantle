@@ -113,7 +113,7 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     expect(text.match(/^- /gm)).toHaveLength(6);
     expect(text).not.toContain("post0");
     expect(text).toContain("Title \\[1\\]");
-    expect(text).toContain("(https://site.test/posts/a%26b%29)");
+    expect(text).toContain("(https://site.test/posts/a%26b%29.md)");
     const sitemap = await site.fetch(request("/sitemap.xml"));
     expect((await sitemap.text()).match(/<url>/g)).toHaveLength(6);
     const md = await site.fetch(request("/posts/a%26b).md"));
@@ -571,4 +571,32 @@ test("a Worker importing a View does not bundle optional web", async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("llms.txt links a page's Markdown alternate; the sitemap keeps the page URL", async () => {
+  const { webIndex } = await import("../src/kernel/web-index.js");
+  const rows = [{ slug: "a", body: "# a" }, { slug: "b", body: null }, { slug: "c" }];
+  const pages = [
+    { path: "/md/{slug}", page: { view: "one", list: "all", markdown: "body" } },
+    { path: "/html/{slug}", page: { view: "one", list: "all" } },
+  ];
+  const index = (sitemap: boolean) =>
+    webIndex(
+      sitemap,
+      { title: "T", description: "D" },
+      pages,
+      async () => ({ rows }),
+      (path, row) => "https://site.test" + path.replace("{slug}", String(row.slug)),
+    );
+  const links = [...(await index(false)).matchAll(/\]\((.*?)\)/g)].map(match => match[1]);
+  // A list row whose Markdown column is NULL has no alternate; a list without the column cannot tell.
+  expect(links).toEqual([
+    "https://site.test/md/a.md",
+    "https://site.test/md/b",
+    "https://site.test/md/c.md",
+    "https://site.test/html/a",
+    "https://site.test/html/b",
+    "https://site.test/html/c",
+  ]);
+  expect(await index(true)).not.toContain(".md");
 });

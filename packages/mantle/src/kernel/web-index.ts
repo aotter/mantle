@@ -10,7 +10,10 @@ const size = (s: string) => new TextEncoder().encode(s).length;
 export async function webIndex(
   sitemap: boolean,
   options: { readonly title: string; readonly description: string },
-  pages: readonly { readonly path: string; readonly page: { readonly view: string; readonly list?: string } }[],
+  pages: readonly {
+    readonly path: string;
+    readonly page: { readonly view: string; readonly list?: string; readonly markdown?: string };
+  }[],
   list: (view: string, cursor?: string) => Promise<{ rows: Record<string, unknown>[]; nextCursor?: string }>,
   validUrl: (path: string, row: Record<string, unknown>, view: string) => string | undefined,
 ): Promise<string> {
@@ -36,9 +39,11 @@ export async function webIndex(
         if (visited++ >= cap) break pagesLoop;
         const url = validUrl(entry.path, row, entry.page.view);
         if (!url) continue;
+        // llms.txt links the Markdown alternate, unless the list row shows this page has none.
+        const markdown = entry.page.markdown && row[entry.page.markdown] !== null ? ".md" : "";
         const line = sitemap
           ? "<url><loc>" + escape(url) + "</loc></url>"
-          : "- [" + label(row.title ?? url) + "](" + url + "): " + label(row.description ?? "") + "\n";
+          : "- [" + label(row.title ?? url) + "](" + url + markdown + "): " + label(row.description ?? "") + "\n";
         const length = size(line);
         if (bytes + length > limit) break pagesLoop;
         bytes += length;

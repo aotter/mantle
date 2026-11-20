@@ -200,7 +200,9 @@ must name a textual output column: a text field, or text the View composes with 
 `COALESCE` from them (`title || E'\n\n' || coalesce(body, '')`; see [View outputs](view.md)). HTML remains application-owned.
 
 `/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head
-read the current page View. SQL alone controls visibility, including publication.
+read the current page View. `llms.txt` links `<url>.md` for a page that declares
+`markdown` (the HTML URL when the list row returns that column as NULL); the sitemap
+lists the HTML URLs. SQL alone controls visibility, including publication.
 GET/HEAD responses include content-derived SHA-256 ETags. Anonymous responses use
 `cacheControl` or `public, max-age=60`; authenticated responses use
 `private, no-store`. `If-None-Match` returns 304 only after current content is read.

@@ -2198,7 +2198,7 @@
       "status": 200,
       "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
-      "body": "# Records\n\n> Records\n\n## Pages\n\n- [changed](https://app.test/records): \n\n"
+      "body": "# Records\n\n> Records\n\n## Pages\n\n- [changed](https://app.test/records.md): \n\n"
     },
     "events": [
       {
