@@ -12,6 +12,7 @@ import { condition } from "./where.js";
 
 import { decodeCursor, encodeCursor } from "./paging.js";
 export { decodeCursor, encodeCursor };
+export { resultData } from "./result-meta.js";
 export { expand, renderTerm, SCOPE, TTL, type Fact, type Lock, type ParentPolicy, type Rules, type Term };
 import {
   expand,

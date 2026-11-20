@@ -21,7 +21,7 @@ import {
   type RouteAccess,
 } from "@aotter/mantle/rest";
 import { userOf } from "@aotter/mantle/auth";
-import { callToolLazy as callTool } from "@aotter/mantle/mcp";
+import { callToolLazy as callTool, resultData } from "@aotter/mantle/mcp";
 import { localizedSchema, localizedText, type LocalizedText } from "@aotter/mantle/mcp/labels";
 import { siteInfo, type MantleSite, type MediaStorageOption } from "@aotter/mantle/site";
 import { csv } from "./csv.js";
@@ -482,8 +482,7 @@ export function admin<Env, Database, Handlers = never>(
           options.handlers as Handlers,
         );
         // A handler's `withResult` wrapper is for MCP: an operation answers its data; the blocks and `_meta` stay out.
-        const wrapped = output && typeof output === "object" && Symbol.for("net.aotter.mantle/result") in output;
-        return { ok: true, output: wrapped ? (output as { data: unknown }).data : output };
+        return { ok: true, output: resultData(output) };
       },
     },
     ...(metadata.developerConsole === undefined

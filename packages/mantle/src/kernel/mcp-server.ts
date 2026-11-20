@@ -5,7 +5,7 @@
  */
 import { ContractError, type Caller } from "./contracts.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
-import type { Tool, Options } from "./mcp.js";
+import type { Tool, Options, ToolCall } from "./mcp.js";
 import { mcpAppPageLoader } from "./mcp-app-pages.js";
 import {
   RESOURCE_MIME_TYPE,
@@ -23,6 +23,7 @@ type Links = ReturnType<typeof linkSurface>["links"];
 type TextBlock = { type: "text"; text: string };
 type Icon = import("@modelcontextprotocol/server").Icon;
 type Annotations = import("@modelcontextprotocol/server").Annotations;
+type RequestContext = import("@modelcontextprotocol/server").ServerContext;
 
 /** What the handler decided before the SDK runs. */
 export interface Serving<Env, Database, Handlers> {
@@ -103,14 +104,18 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
     ...(options.instructions ? { instructions: options.instructions } : {}),
   });
   server.server.registerCapabilities({ tools: { listChanged: false } });
-  // A request the transport refuses never reaches a tool: the access event says so. A finished call keeps its own outcome.
+  // A request the transport refuses never reaches a tool: the access event says so. A call that started records its own
+  // outcome, also when the client goes away before it ends.
   const handshake = isRecord(message) && message.method === "initialize";
-  server.server.onclose = () =>
-    pipeline.finish(
-      handshake
-        ? undefined
-        : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", { status: 400 }),
-    );
+  let calling = false;
+  server.server.onclose = () => {
+    if (!calling)
+      pipeline.finish(
+        handshake
+          ? undefined
+          : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", { status: 400 }),
+      );
+  };
 
   const support = clientUiSupport(message),
     appsEnabled = support !== "unsupported";
@@ -151,8 +156,9 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
         ...(tool.annotations ? { annotations: tool.annotations } : {}),
         ...(tool.icons ? { icons: tool.icons as Icon[] } : {}),
       },
-      (raw: unknown) =>
-        invoke(
+      (raw: unknown, context: RequestContext) => {
+        calling = true;
+        return invoke(
           serving,
           tool,
           call,
@@ -161,7 +167,9 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
           rendersInApp,
           links?.renders.has(tool.name) ?? false,
           sdk.isCallToolResult,
-        ),
+          context,
+        );
+      },
     );
   }
   // An empty catalogue still answers tools/list and refuses calls the same way.
@@ -230,8 +238,31 @@ async function invoke<Env, Database, Handlers>(
   rendersInApp: boolean,
   linkedApp: boolean,
   isResult: Sdk["isCallToolResult"],
+  { mcpReq }: RequestContext,
 ) {
   const { options, pipeline, caller, request } = serving;
+  // Progress only for a request that carries a token; the SDK sends it on this request's stream. One the client can no
+  // longer receive is dropped, never failing the call.
+  const token = mcpReq._meta?.progressToken;
+  // The SDK also aborts its own signal when it tears the request down after sending the result: the tool's follows it
+  // only while this call runs, so a call that finished never sees an abort.
+  const cancel = new AbortController(),
+    follow = () => cancel.abort(mcpReq.signal.reason);
+  if (mcpReq.signal.aborted) follow();
+  else mcpReq.signal.addEventListener("abort", follow);
+  const toolCall: ToolCall = {
+    apps: rendersInApp,
+    linkedApp,
+    signal: cancel.signal,
+    ...(token === undefined
+      ? {}
+      : {
+          progress: (progress, total, message) =>
+            mcpReq
+              .notify({ method: "notifications/progress", params: { progressToken: token, progress, total, message } })
+              .catch(() => {}),
+        }),
+  };
   // Not part of structured output: the version, and on failure the current input contract.
   const about = (contract: boolean): TextBlock[] => {
     const parts = [
@@ -270,10 +301,7 @@ async function invoke<Env, Database, Handlers>(
     const run = async (input: Record<string, unknown>) => {
       const dryRun = pipeline.dryRun ? () => pipeline.dryRunResult() : undefined;
       const getDb = () => (db ??= options.db(serving.env));
-      const output = await callTool(tool, input, getDb, caller, options.handlers as Handlers, dryRun, {
-        apps: rendersInApp,
-        linkedApp,
-      });
+      const output = await callTool(tool, input, getDb, caller, options.handlers as Handlers, dryRun, toolCall);
       // A re-run for a smaller page replaces the first run's blocks and meta, also when it returns no wrapper.
       resultMeta = blocks = undefined;
       // withResult: the data is the result; its blocks follow Core's, its meta reaches only the result `_meta`.
@@ -312,7 +340,15 @@ async function invoke<Env, Database, Handlers>(
         ? { structuredContent: data as Record<string, unknown> }
         : {}),
     };
-  } catch (error) {
+  } catch (thrown) {
+    // A client that went away is not the tool's failure: its own code, which is not logged as an unhandled failure.
+    const error =
+      cancel.signal.aborted && !(thrown instanceof ContractError)
+        ? new ContractError("REQUEST_CANCELLED", "The client cancelled the request.", "mcp", {
+            status: 499,
+            cause: thrown,
+          })
+        : thrown;
     pipeline.finish(error);
     const diagnostic = await pipeline.diagnostic(error, `mcp ${tool.name}`);
     code = diagnostic.code;
@@ -333,6 +369,7 @@ async function invoke<Env, Database, Handlers>(
       ...(tool.outputSchema ? {} : { structuredContent: payload }),
     };
   } finally {
+    mcpReq.signal.removeEventListener("abort", follow);
     if (observed) {
       const durationMs = Math.max(0, performance.now() - started);
       const completion = {

@@ -28,7 +28,7 @@ for (const target of ["bun-sqlite"] as const)
         // Instrument only this fixture's import, without global mocks that could poison another suite.
         await writeFile(
           counter,
-          `import {createStore as native} from ${JSON.stringify(resolve(import.meta.dir, "../src/kernel/store.ts"))};export {handlerStore,handlerTransaction} from ${JSON.stringify(resolve(import.meta.dir, "../src/kernel/store.ts"))};export let calls=0;export function createStore(...args:any[]){calls++;return (native as any)(...args);}`,
+          `import {createStore as native} from ${JSON.stringify(resolve(import.meta.dir, "../src/kernel/store.ts"))};export {handlerStore,handlerTransaction,resultData} from ${JSON.stringify(resolve(import.meta.dir, "../src/kernel/store.ts"))};export let calls=0;export function createStore(...args:any[]){calls++;return (native as any)(...args);}`,
         );
         const files = await generateOrThrow(target, [...(await loadFixtureSources()), ...(handlers ? [ref] : [])]);
         const app = await loadGenerated(

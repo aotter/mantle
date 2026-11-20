@@ -128,6 +128,54 @@ the result `_meta` for an App and return it in the data for a client that has
 none (`upload_media` does this with its targets). `callTool` and `callToolLazy`
 take it as an optional last argument (default `{ apps: false }`).
 
+The same argument carries `signal` and, when the client asked for progress with
+a `progressToken`, `progress(progress, total?, message?)`. Progress
+notifications go out on the call's SSE stream before its result, on 2025-era and
+2026-07-28 requests alike. `signal` aborts while the tool runs if the request
+ends before its result: a 2026-07-28 client cancels by closing the request, and
+a dropped connection does the same. It never aborts after the call finished. A
+2025-era client's `notifications/cancelled` arrives as a separate request that a
+stateless server cannot relate to the call, so for that client the signal aborts
+only when its connection closes. Only hand-written tools receive them; a
+generated Procedure tool's handler is shared with Store and REST callers and
+gets neither.
+
+The signal follows the incoming `Request.signal`, so it aborts only where the
+runtime aborts that one on a client disconnect:
+
+| Stack | Client disconnect aborts `signal` |
+|---|---|
+| `bun-sqlite`, `bun-postgres` (`Bun.serve`) | Yes |
+| `cloudflare-d1`, `cloudflare-postgres` (Workers) | With `compatibility_date` 2026-11-17 or later, or the `enable_request_signal` compatibility flag; not with `disable_request_signal` |
+
+On Workers with an earlier date, add `enable_request_signal` to the Worker's
+`compatibility_flags` (`mantle generate` does not add it). Local `wrangler dev`
+and `workerd serve` (workerd 1.20261102) did not abort `Request.signal` on a
+client disconnect with or without the flag, so test cancellation on Bun or on a
+deployed Worker. A cancelled call's completion observation is `outcome: "failed"`
+with `code: "REQUEST_CANCELLED"`, and in gateway mode its access event is
+`outcome: "error"` with that reason; it is not logged as an unhandled failure. A
+`ContractError` the tool throws keeps its own code.
+
+```ts
+import type { Tool } from '@aotter/mantle/mcp';
+
+declare function importBatch(index: number, signal?: AbortSignal): Promise<void>;
+
+const importAll: Tool<unknown> = {
+  name: 'import_all', surface: 'admin', description: 'Import every batch.', closed: true,
+  inputSchema: { type: 'object', additionalProperties: false }, validate: raw => raw as Record<string, unknown>,
+  run: async (_db, _caller, _input, _handlers, call) => {
+    for (let batch = 1; batch <= 10; batch++) {
+      call.signal?.throwIfAborted();
+      await importBatch(batch, call.signal);
+      await call.progress?.(batch, 10, `batch ${batch} of 10`);
+    }
+    return { batches: 10 };
+  },
+};
+```
+
 `withResult(data, { content, _meta })` does the same and also sends standard MCP
 content blocks: image, audio, `resource_link`, an embedded resource, or text
 with `annotations` (for example `audience: ["user"]`). They follow Core's own
@@ -159,15 +207,49 @@ recorded: a block it refuses (bad base64, an unknown type) fails the call with
 an `INTERNAL_ERROR` diagnostic and a failed outcome, after `run` has already
 finished. A dry run and a thrown error carry no application blocks.
 
-`callTool` and `callToolLazy` return the wrapper itself, `{ data, content?, _meta? }`.
+`callTool` and `callToolLazy` return what the tool's `run` or `page` returned,
+the wrapper included, `{ data, content?, _meta? }`; for a generated ref
+Procedure tool that is what its handler returned. `resultData(value)` from
+`@aotter/mantle/mcp` returns a wrapper's `data` and any other value as it is.
 A caller that forwards a result to a model, such as an application's own agent,
 must forward only `data` (and `content`) and drop `_meta`, or the signed URL
-leaks through that path. Admin's WebMCP route does this. The wrapper is for a
-hand-written `Tool`'s `run` or `page`. A ref Procedure handler's declared output type does not
-admit it, and `store(...).procedures[name]` hands a caller whatever the handler returned; to add
-blocks to a generated tool, replace its `run` in the exported `tools` table. Should a handler
-return the wrapper anyway, its REST route and its Admin operation answer `data` alone. A thrown error still
+leaks through that path. Admin's WebMCP route does this. A thrown error still
 produces the standard diagnostics result.
+
+```ts
+import { callTool, resultData, type Tool } from '@aotter/mantle/mcp';
+
+declare const tool: Tool<unknown>;
+declare const db: unknown;
+declare const caller: import('@aotter/mantle/contracts').Caller;
+
+const data = resultData(await callTool(tool, {}, db, caller, undefined as never));
+```
+
+Only `withResult` and `withResultMeta` make a wrapper: a plain object with a
+`data` field is the tool's data, and the types refuse it as a ref handler's
+return unless it matches the declared output.
+
+A ref Procedure handler may return the wrapper too: its generated type is
+`Promise<Output | ResultWith<Output>>`. The Procedure's generated MCP tool sends
+the blocks and `_meta`; `store(...).procedures[name]`, `ctx.store.procedures`,
+its REST route and its Admin operation return `Output` alone, so other code
+calling the Procedure never sees the wrapper. `structuredContent` and the
+advertised output schema describe `Output`:
+
+```ts
+import { withResult } from '@aotter/mantle/mcp';
+import type { Handlers } from './generated/generated.js';
+
+declare function renderChart(id: string): Promise<string>;
+
+export const handlers = {
+  'chart-report': async (ctx, input) => {
+    const report = { id: input.id };
+    return withResult(report, { content: [{ type: 'image', data: await renderChart(input.id), mimeType: 'image/png' }] });
+  },
+} satisfies Partial<Handlers>;
+```
 
 ### Open an App from a host's entry point
 

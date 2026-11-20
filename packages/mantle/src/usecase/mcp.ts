@@ -161,7 +161,8 @@ export function emitMcp(
       ...(kind === "views"
         ? [`path: ${q(`views/${name}`)}`, `page: ${boundaryPage(`run${index}`, wire)}`]
         : [
-            `run: ${ref ? `(db, caller, input, handlers) => store(db, caller, { handlers }).procedures[${q(name)}](input)` : `async (db, caller, input) => (await import("./procedures/${file}.js")).default(db, caller, input)`}`,
+            // A ref handler's `withResult` wrapper reaches the tool result; Store and REST callers get its data.
+            `run: ${ref ? `(db, caller, input, handlers) => handlerResults[${q(name)}](db, caller, input, { handlers, store: store(db, caller, { handlers }) })` : `async (db, caller, input) => (await import("./procedures/${file}.js")).default(db, caller, input)`}`,
           ]),
     ];
     tools.push({ fields: [...fields, `version: ${q(listed.version)}`], schema });
@@ -209,7 +210,7 @@ export function emitMcp(
       databaseImport(target),
       ...(media ? ['import type { MediaStorageOption } from "@aotter/mantle/site";'] : []),
       'import type { Handlers } from "./generated.js";',
-      ...(hasRef ? ['import { store } from "./generated.js";'] : []),
+      ...(hasRef ? ['import { handlerResults, store } from "./generated.js";'] : []),
       ...imports,
       ...[...shared].map(([schema, name]) => `const ${name} = ${schema};`),
     ].join("\n")}

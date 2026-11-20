@@ -350,11 +350,12 @@ export function generate(input: GenerateInput): GenerateResult {
           user.code,
           dbType,
           `import { ${contracts.join(", ")} } from "${base}contracts";`,
+          ...(hasHandlers ? [`import type { ResultWith } from "${base}mcp";`] : []),
           ...(values.size || stores ? [`import * as DIALECT from "${dialect}";`] : []),
           `import * as DRIVER from "${driverModule(target)}";`,
           ...(names => (names.length ? [`import { ${names.join(", ")} } from "${base}internal/store";`] : []))([
             ...(stores ? ["createStore"] : []),
-            ...(hasHandlers ? ["handlerStore"] : []),
+            ...(hasHandlers ? ["handlerStore", "resultData"] : []),
             ...(hasHandlers && target !== "cloudflare-d1" ? ["handlerTransaction"] : []),
           ]),
           `import { ${procedures.length ? "binds, bound" : "binds"} } from "${base}internal/binds";`,

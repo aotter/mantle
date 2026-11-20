@@ -34,6 +34,8 @@ export interface Seam {
 
 const ALL = STACKS;
 const SEAM = "docs/adr/adr-lite-application-seams.md";
+/** ADR-0029; its #2100 amendment covers ref handler results, `ToolCall.signal` and `ToolCall.progress`. */
+const ADR_0029 = "docs/adr/0029-mcp-apps-interaction-contracts.md";
 
 export const SEAMS: readonly Seam[] = [
   {
@@ -103,6 +105,28 @@ export const SEAMS: readonly Seam[] = [
     stacks: ALL,
     decided: SEAM,
     check: "packages/mantle/tests/seams/tool-meta.ts",
+  },
+  {
+    id: "ref-handler-result",
+    package: "@aotter/mantle",
+    subpath: "./mcp",
+    exports: ["withResult", "resultData", "callTool"],
+    entry:
+      "generated Handlers[name]: (ctx, input) => Promise<Output | ResultWith<Output>>; store(...).procedures[name] returns Output; callTool returns the wrapper, resultData(value) its data",
+    stacks: ALL,
+    decided: ADR_0029,
+    check: "packages/mantle/tests/seams/ref-result.ts",
+  },
+  {
+    id: "tool-call-signal-progress",
+    package: "@aotter/mantle",
+    subpath: "./mcp",
+    exports: ["mcp"],
+    entry: "Tool.run(db, caller, input, handlers, call): call.signal, call.progress(progress, total?, message?)",
+    stacks: [],
+    decided: ADR_0029,
+    check: "packages/mantle/tests/seams/tool-call.ts",
+    run: false, // executed in tests/mcp.test.ts
   },
   {
     id: "app-resource-meta",
