@@ -11,6 +11,7 @@
 - To version, publish, or tag a release, additionally read the
   canonical [release skill](.agents/skills/mantle-release/SKILL.md). Do not
   release unless the user explicitly asks.
+- Before planning or proposing work on an issue, check `develop` for a merged PR for it (`git log origin/develop --grep "issue-<N>"`, the issue's linked PRs); an open issue is not proof the work is undone.
 
 Repository safety gates:
 

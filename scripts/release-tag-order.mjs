@@ -88,7 +88,8 @@ if (process.argv[2] === "--self-test") {
   );
   assert.match(workflow, /tagged recovery will not pack a replacement from the controller tip/);
   assert.doesNotMatch(workflow, /git checkout "\$CORE_SHA"/);
-  assert.doesNotMatch(workflow, /continue-on-error:/);
+  // Only the trailing `issues` job (issue bookkeeping after the release exists, needed by nothing) may be non-fatal.
+  assert.equal(workflow.match(/continue-on-error:/g)?.length, 1);
 
   const gate = workflow.indexOf("Verify public-registry Core in the reference Worker");
   const npmPromote = workflow.indexOf("- name: Promote npmjs channel tags");
@@ -122,14 +123,21 @@ if (process.argv[2] === "--self-test") {
     .split(/\n(?=  [a-z-]+:\n)/)
     .slice(1);
   const jobNames = jobs.map(job => job.match(/^  ([a-z-]+):/)[1]);
-  assert.deepEqual(jobNames, ["prepare", "publish", "mirror", "consumer", "promote", "release"]);
+  assert.deepEqual(jobNames, ["prepare", "publish", "mirror", "consumer", "promote", "release", "issues"]);
   const needs = jobs.map(job =>
     job
       .match(/^    needs: \[(.+)\]$/m)?.[1]
       .split(", ")
       .at(-1),
   );
-  assert.deepEqual(needs, [undefined, "prepare", "publish", "mirror", "consumer", "promote"], "jobs form one chain");
+  assert.deepEqual(
+    needs,
+    [undefined, "prepare", "publish", "mirror", "consumer", "promote", "release"],
+    "jobs form one chain",
+  );
+  assert.match(jobs[6], /^    continue-on-error: true$/m);
+  assert.doesNotMatch(jobs.slice(0, 6).join("\n"), /continue-on-error:/);
+  assert.doesNotMatch(jobs[6], /id-token: write|packages: write|contents: write|npm |NODE_AUTH_TOKEN/);
   const oidcJobs = jobs.filter(job => /^      id-token: write/m.test(job));
   assert.deepEqual(
     oidcJobs.map(job => job.match(/^  ([a-z-]+):/)[1]),

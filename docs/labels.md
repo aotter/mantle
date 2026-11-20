@@ -17,6 +17,7 @@ Labels keep issues and PRs sortable for humans and cold-start AI agents. Apply t
 | `wontfix` | Valid but intentionally not planned. | Maintainer. | Usually never; close with reason. |
 | `epic` | Tracks a multi-issue initiative. | Maintainer. | The epic closes. |
 | `spike` | Exploratory work, not guaranteed to land. | Triager or maintainer. | The work becomes a concrete proposal or implementation issue. |
+| `pending-release` | Issue closed by a PR merged into `develop`; not in a release yet. | `issue-status` workflow, on merge. | The release workflow's `issues` job removes it and comments `Released in <version>.`. |
 | `dependencies` | Dependency update; its own section in generated release notes. | Dependabot (`.github/dependabot.yml`). | Usually never. |
 
 ## Area
@@ -69,4 +70,5 @@ gh label create "needs-adr" --description "Requires an ADR or ADR-lite decision 
 gh label create "needs-grammar-revise" --description "Requires manifest grammar review before implementation" --color "d93f0b"
 gh label create "needs-discussion" --description "Not converged enough for implementation" --color "fbca04"
 gh label create "spike" --description "Exploratory work, not guaranteed to land" --color "bfdadc"
+gh label create "pending-release" --description "Merged into develop; not in a release yet" --color "ededed"
 ```

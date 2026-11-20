@@ -43,6 +43,9 @@ None.
 
 ## Related
 
+<!-- `Closes #N` when this PR completes the issue: it closes on merge into `develop`. `Refs #N` when it does not. One keyword per issue. -->
+
+Closes #
 Refs #
 
 ## Contributor checklist

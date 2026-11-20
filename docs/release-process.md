@@ -352,21 +352,22 @@ generated site.
 
 ### Close the shipped issues
 
-A `Closes #N` in a PR closes its issue only when the PR merges into the default
-branch, `main`, and feature PRs merge into `develop`. After the GitHub release
-succeeds, close what it shipped. List the PRs merged into `develop` since the
-previous release tag, collect the issues their bodies close (`Closes #N`,
-`Fixes #N`), and for each one still open:
+GitHub closes an issue from `Closes #N` only when the PR merges into the default
+branch, `main`; feature PRs merge into `develop`. Two automations cover that gap:
 
-```sh
-gh pr list --base develop --state merged --search "merged:><previous tag date>" \
-  --limit 500 --json number,title,body
-gh issue close <issue> --reason completed \
-  --comment "Fixed by #<PR>, released in <version>."
-```
+- `.github/workflows/issue-status.yml`: when a PR merges into `develop`, each
+  issue it closes (`Closes`, `Fixes` or `Resolves #N`, one keyword per issue;
+  not `Refs`) gets the `pending-release` label and the comment "Merged into
+  develop by #PR; it ships in the next release.", and is closed as completed.
+- The `issues` job of `release.yml`, after the GitHub release exists: every
+  closed issue labelled `pending-release` gets `Released in <version>.` and
+  loses the label. It cannot fail the release (`continue-on-error`); a failure
+  shows as a warning in its log, and a rerun of the same release repeats it.
 
-Take the date from `gh release view v<previous version> --json publishedAt`.
-Skip an issue whose PR is only part of its fix.
+Open means not done, `pending-release` means merged but unreleased, a "Released
+in" comment means shipped. The manual check that remains: issues whose PR used
+`Refs` but were in fact completed, to close by hand; and a reverted PR, whose
+issue must be reopened by hand (remove `pending-release` too).
 
 ## Recovery
 

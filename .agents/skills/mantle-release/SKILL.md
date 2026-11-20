@@ -124,10 +124,10 @@ without v. Watch all gates, not only publication:
    candidate, and consumers must not install it. The GitHub prerelease or
    release succeeds.
 
-After the release is published, close the issues it shipped: list the issues
-referenced by PRs merged into `develop` since the previous release that are
-still open, and close each as completed with a one-line comment naming the PR
-and the released version (docs/release-process.md, "Close the shipped issues").
+After the release is published, the `issues` job comments `Released in
+<version>.` on the closed `pending-release` issues and removes the label. Check
+its log, and the manual cases in docs/release-process.md, "Close the shipped
+issues" (completed issues whose PR used `Refs`; reverted PRs).
 
 For stable acceptance, give an agent only the version-matched consumer
 instructions and confirm a directly authored application reaches a running

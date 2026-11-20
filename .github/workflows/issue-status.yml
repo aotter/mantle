@@ -1,0 +1,44 @@
+# Close the issues a PR completes when it merges into `develop`.
+#
+# GitHub closes an issue from `Closes #N` only when the PR merges into the default branch (`main`), but feature PRs
+# merge into `develop` and alphas ship from it. So this closes the issue at merge and labels it `pending-release`;
+# the release workflow's `issues` job comments "Released in <version>." and removes the label.
+#
+# pull_request_target runs with a write token. It therefore checks out only the base branch (its default for this
+# event), never the PR head, and runs only scripts/issue-status.mjs from it. The PR body is read from the event
+# payload file by that script, never interpolated into a shell command.
+name: issue-status
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [develop]
+
+permissions: {}
+
+concurrency:
+  group: issue-status-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  close:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Close issues this PR completes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/issue-status.mjs merged
