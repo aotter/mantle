@@ -30,7 +30,7 @@ export interface Visit {
 export interface Site<E> extends WebHandler<E> {
   visit(request: Request, pipeline: Pipeline, caller: Caller): Visit;
   render(request: Request, open: () => Promise<Visit>): Promise<Response | undefined>;
-  renderHead(request: Request, open: () => Promise<Visit>): Promise<string>;
+  renderHead(request: Request, open: () => Promise<Visit>, row?: Record<string, unknown>): Promise<string>;
 }
 
 export function serve<Database, E>(
@@ -151,11 +151,12 @@ export function serve<Database, E>(
       return hostFailure(error, caller);
     }
   };
-  const renderHead = async (request: Request, openVisit: () => Promise<Visit>): Promise<string> => {
+  /** Head tags from the page's row: the one the application passes, or the page View's for the visit's caller. */
+  const renderHead = async (request: Request, openVisit: () => Promise<Visit>, given?: Record<string, unknown>) => {
     try {
       const entry = match(new URL(request.url).pathname);
       if (!entry) return "";
-      const found = await row(entry, await openVisit());
+      const found = given ?? (await row(entry, await openVisit()));
       if (!found) return "";
       const canonical = validUrl(entry.path, found, entry.page.view);
       if (!canonical) return "";
@@ -170,6 +171,6 @@ export function serve<Database, E>(
     render,
     renderHead,
     fetch: (request, env, ctx) => render(request, open(request, env as E, ctx)),
-    head: (request, env, ctx) => renderHead(request, open(request, env as E, ctx)),
+    head: (request, env, ctx, page) => renderHead(request, open(request, env as E, ctx), page?.row),
   };
 }

@@ -173,7 +173,7 @@ filter. The app retains ownership of authentication and its other routes.
 ## Optional web output
 
 `web.ts` exports `web({ db, caller, origin, title, description, locales?, pages,
-cacheControl? })`. `db` is the application-owned native handle, including callable
+sitemap?, cacheControl? })`. `db` is the application-owned native handle, including callable
 PostgreSQL handles. `caller` is a verified Caller or the app's
 `(request, env, { readOnly }) => Caller | Promise<Caller>` resolver, evaluated once per request.
 Generated REST/MCP/web callbacks classify reads; forward the third argument to
@@ -185,10 +185,12 @@ The module dispatches public Views only; it never invokes Procedures or needs ha
 import { web } from './generated/web.js';
 const site = web({ db, caller, origin: 'https://example.com', title: 'Blog',
   description: 'Articles', locales: ['en'],
-  pages: { '/posts/{slug}': { view: 'post-by-slug', list: 'posts', markdown: 'body' } }
+  sitemap: ['/', '/posts'],
+  pages: { '/posts/{slug}': { view: 'post-by-slug', list: 'posts', markdown: 'body', lastmod: 'updated_at' } }
 });
 const response = await site.fetch(request, env); // Response | undefined
 const tags = await site.head(request, env); // HTML string, empty for unknown/missing pages
+const same = await site.head(request, env, ctx, { row }); // the row the app already read: no View query
 ```
 
 Page parameter names must exactly match the View's declared input properties.
@@ -197,7 +199,13 @@ Page and list Views must return the page parameters; list Views must accept empt
 These conditions also apply to each schema a root `$ref` chain reaches, and an unresolved or cyclic chain fails them.
 `web()` throws a `TypeError` for any other list View. Markdown
 must name a textual output column: a text field, or text the View composes with `||` or
-`COALESCE` from them (`title || E'\n\n' || coalesce(body, '')`; see [View outputs](view.md)). HTML remains application-owned.
+`COALESCE` from them (`title || E'\n\n' || coalesce(body, '')`; see [View outputs](view.md)).
+`lastmod` names a text or timestamp column of the
+page's list View (every target returns timestamps as UTC ISO text); the sitemap
+emits it as `<lastmod>` when it is a W3C datetime and omits the element otherwise.
+`sitemap` lists static paths (home, list pages) that the sitemap names before the
+pages' rows, resolved against `origin`; like page templates, each must be absolute
+without a query or fragment, or `web()` throws a `TypeError`. HTML remains application-owned.
 
 `/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head
 read the current page View. `llms.txt` links `<url>.md` for a page that declares
@@ -212,7 +220,7 @@ several, the page is one translation and its per-language hreflang alternates ar
 the application's. Importing another generated entry does not import web output.
 
 Web indexes scan at most 50,000 rows for one sitemap and 5,000 for `llms.txt`,
-across all configured lists. Skipped `.`/`..` path segments consume the scan
+across all configured lists; `sitemap` paths count towards the sitemap's scan and byte limits. Skipped `.`/`..` path segments consume the scan
 budget too. Output stops before exceeding 50 MiB of UTF-8 sitemap XML (including
 its closing tag) or 1 MiB of `llms.txt`; a sitemap index can be added separately.
 Each request also stops after 100 sitemap queries or 10 `llms.txt` queries,
@@ -221,7 +229,10 @@ output sooner. A sitemap index remains separate future work.
 
 `head` normalizes URLs from the queried row's page parameters, matching sitemap
 URLs; malformed paths, failed validation and unavailable rows return an empty
-string. A NULL Markdown field answers 404. Errors and missing Markdown responses
+string. Given `{ row }` (typed as a row of one of the pages' Views), `head` builds
+the tags from that row and runs no query, caller resolution, `authorize` or gateway
+decision: the application read the row with its own caller, so its visibility is the
+application's responsibility. A NULL Markdown field answers 404. Errors and missing Markdown responses
 use `cache-control: no-store`. A matching HTML page takes precedence over a `.md`
 alternate, including slugs ending in `.md`; a Markdown alternate may read the
 exact HTML candidate first and therefore performs at most two View queries.

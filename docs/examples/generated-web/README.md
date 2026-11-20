@@ -48,7 +48,8 @@ for the index) and a canonical. REST and web fall through to the HTML renderer.
 Acceptance:
 
 - Walk every `/api/views/posts` cursor: its rows must match the `llms.txt` detail
-  links and sitemap detail URLs below the documented index caps.
+  links and sitemap detail URLs below the documented index caps. The sitemap also
+  lists `/`, from the `sitemap` option.
 - Each HTML page includes `rel="canonical"` and a `type="text/markdown"`
   alternate whose GET returns its current source. The index canonical is `/`.
 - `/posts/draft` and `/posts/draft.md` return 404; the draft is absent from REST,
@@ -58,8 +59,9 @@ Acceptance:
 
 Ordinary HTML detail performs two native reads: one Store read for the body, then one
 public View read in `site.head()`. The index likewise performs two reads (list
-and home head). The current head API accepts no preloaded row; there is no
-request cache or extra authentication lookup in this public example. IDs ending
+and home head). `site.head(request, env, ctx, { row })` would skip
+that View read; this example keeps it. There is no request cache or extra
+authentication lookup in this public example. IDs ending
 in `.md` need one additional exact-page probe before HTML rendering (three reads
 total). Markdown may perform two View reads when checking an exact `.md` page
 before its alternate.

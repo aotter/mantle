@@ -7,12 +7,28 @@ const label = (v: unknown) =>
     .replace(/[\\[\]]/g, "\\$&");
 const size = (s: string) => new TextEncoder().encode(s).length;
 
+/** A W3C datetime (a date, or a date and time with a zone) that names a real instant. */
+const datetime = (v: unknown) =>
+  typeof v === "string" &&
+  /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2}))?$/.test(v) &&
+  !Number.isNaN(Date.parse(v));
+
 export async function webIndex(
   sitemap: boolean,
-  options: { readonly title: string; readonly description: string },
+  options: {
+    readonly origin: string;
+    readonly title: string;
+    readonly description: string;
+    readonly sitemap?: readonly string[];
+  },
   pages: readonly {
     readonly path: string;
-    readonly page: { readonly view: string; readonly list?: string; readonly markdown?: string };
+    readonly page: {
+      readonly view: string;
+      readonly list?: string;
+      readonly markdown?: string;
+      readonly lastmod?: string;
+    };
   }[],
   list: (view: string, cursor?: string) => Promise<{ rows: Record<string, unknown>[]; nextCursor?: string }>,
   validUrl: (path: string, row: Record<string, unknown>, view: string) => string | undefined,
@@ -28,6 +44,21 @@ export async function webIndex(
     requests = 0,
     bytes = size(start + end);
   if (bytes > limit) throw new TypeError("Web index header exceeds its byte limit.");
+  /** Adds a line unless it would exceed the byte limit. */
+  const push = (line: string) => {
+    const length = size(line);
+    if (bytes + length > limit) return false;
+    bytes += length;
+    links.push(line);
+    return true;
+  };
+  const item = (url: string, lastmod?: unknown) =>
+    "<url><loc>" + escape(url) + "</loc>" + (datetime(lastmod) ? "<lastmod>" + lastmod + "</lastmod>" : "") + "</url>";
+  // Static paths come first and count against the same scan and byte limits as rows.
+  const origin = new URL(options.origin).origin;
+  if (sitemap)
+    for (const path of options.sitemap ?? [])
+      if (visited++ >= cap || !push(item(origin + path))) return start + links.join("") + end;
   pagesLoop: for (const entry of pages) {
     if (!entry.page.list) continue;
     let cursor: string | undefined;
@@ -42,12 +73,9 @@ export async function webIndex(
         // llms.txt links the Markdown alternate, unless the list row shows this page has none.
         const markdown = entry.page.markdown && row[entry.page.markdown] !== null ? ".md" : "";
         const line = sitemap
-          ? "<url><loc>" + escape(url) + "</loc></url>"
+          ? item(url, entry.page.lastmod && row[entry.page.lastmod])
           : "- [" + label(row.title ?? url) + "](" + url + markdown + "): " + label(row.description ?? "") + "\n";
-        const length = size(line);
-        if (bytes + length > limit) break pagesLoop;
-        bytes += length;
-        links.push(line);
+        if (!push(line)) break pagesLoop;
       }
       if (visited >= cap) break pagesLoop;
       cursor = page.nextCursor;

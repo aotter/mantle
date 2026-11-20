@@ -27,7 +27,7 @@ kind: View
 metadata: {name: posts}
 spec:
   surface: public
-  sql: SELECT id, slug, title FROM posts WHERE visible = true ORDER BY id
+  sql: SELECT id, slug, title, updated_at FROM posts WHERE visible = true ORDER BY id
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -200,6 +200,47 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     });
     // One locale's hreflang on every translation would mislabel them, so several locales emit none.
     expect(await multilingual.head(request("/posts/a%26b)"))).not.toContain("hreflang");
+    // Given the row the application already read, head reads no View: post0 is hidden from the View.
+    const hidden = { id: "0", slug: "post0", body: "# body 0" };
+    expect(await site.head(request("/posts/post0"), undefined, undefined, { row: hidden })).toContain(
+      'rel="canonical" href="https://site.test/posts/post0"',
+    );
+    const refusing = web({
+      db,
+      caller: { kind: "anonymous" },
+      authorize: () => false,
+      origin: "https://site.test",
+      title: "x",
+      description: "y",
+      pages: { "/posts/{slug}": { view: "post-by-slug", markdown: "body" } },
+    });
+    await expect(refusing.head(request("/posts/a%26b)"))).rejects.toThrow();
+    expect(await refusing.head(request("/posts/post0"), undefined, undefined, { row: hidden })).toContain(
+      'href="https://site.test/posts/post0.md"',
+    );
+    db.query("UPDATE posts SET updated_at = 1767225600000000 WHERE id = '2'").run();
+    const dated = web({
+      db,
+      caller: { kind: "anonymous" },
+      origin: "https://site.test",
+      title: "x",
+      description: "y",
+      sitemap: ["/", "/posts"],
+      pages: { "/posts/{slug}": { view: "post-by-slug", list: "posts", lastmod: "updated_at" } },
+    });
+    const datedXml = await (await dated.fetch(request("/sitemap.xml"))).text();
+    expect(datedXml).toContain(
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://site.test/</loc></url><url><loc>https://site.test/posts</loc></url><url>',
+    );
+    expect(datedXml).toContain(
+      "<url><loc>https://site.test/posts/post2</loc><lastmod>2026-01-01T00:00:00.000000Z</lastmod></url>",
+    );
+    expect(datedXml.match(/<url>/g)).toHaveLength(2 + 8);
+    expect(await (await dated.fetch(request("/llms.txt"))).text()).not.toContain("https://site.test/posts)");
+    for (const path of ["posts", "/posts?x", "/posts#x"])
+      expect(() =>
+        web({ db, origin: "https://site.test", title: "x", description: "y", sitemap: [path], pages: {} }),
+      ).toThrow("Page templates and sitemap paths must be absolute paths without queries or fragments.");
   } finally {
     db.close();
     await rm(dir, { recursive: true, force: true });
@@ -299,6 +340,14 @@ web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',markdown:'unknown'}}});
 web({...base,pages:{'/docs/{slug}':{view:'doc-by-slug',list:'posts',markdown:'doc'}}});
 // @ts-expect-error a computed output that is not composed text is unknown
 web({...base,pages:{'/docs/{slug}':{view:'doc-by-slug',markdown:'shout'}}});
+const dated=web({...base,sitemap:['/'],pages:{'/posts/{slug}':{view:'post-by-slug',list:'posts',lastmod:'updated_at'}}});
+// @ts-expect-error lastmod names a column of the list View
+web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'posts',lastmod:'body'}}});
+// @ts-expect-error lastmod needs a list
+web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',lastmod:'updated_at'}}});
+dated.head(new Request('https://site.test/posts/a'),undefined,undefined,{row:{id:'a',slug:'a',body:null}});
+// @ts-expect-error the row is a row of a page's View
+dated.head(new Request('https://site.test/posts/a'),undefined,undefined,{row:{slug:1}});
 // @ts-expect-error a generated entry supplies the manifest's user fields itself
 web({...base,fields:{},pages:{'/posts':{view:'posts'}}});
 // @ts-expect-error a generated entry supplies the manifest's user fields itself
@@ -514,11 +563,14 @@ test.skipIf(!process.env.MANTLE_NEXT_BUN_PG_URL)(
         origin: "https://site.test",
         title: "PG",
         description: "x",
-        pages: { "/posts/{slug}": { view: "post-by-slug", list: "posts", markdown: "body" } },
+        pages: { "/posts/{slug}": { view: "post-by-slug", list: "posts", markdown: "body", lastmod: "updated_at" } },
       });
       const sitemap = await site.fetch(new Request("https://site.test/sitemap.xml"));
       expect(sitemap.status).toBe(200);
-      expect((await sitemap.text()).match(/<url>/g)).toHaveLength(1005);
+      const xml = await sitemap.text();
+      expect(xml.match(/<url>/g)).toHaveLength(1005);
+      // PostgreSQL timestamps reach the list row as the generated SQL's UTC text.
+      expect(xml.match(/<lastmod>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z<\/lastmod>/g)).toHaveLength(1005);
       expect(queries).toBe(3);
       queries = 0;
       expect((await (await site.fetch(new Request("https://site.test/llms.txt"))).text()).match(/^- /gm)).toHaveLength(
@@ -583,7 +635,7 @@ test("llms.txt links a page's Markdown alternate; the sitemap keeps the page URL
   const index = (sitemap: boolean) =>
     webIndex(
       sitemap,
-      { title: "T", description: "D" },
+      { origin: "https://site.test", title: "T", description: "D" },
       pages,
       async () => ({ rows }),
       (path, row) => "https://site.test" + path.replace("{slug}", String(row.slug)),
@@ -599,4 +651,37 @@ test("llms.txt links a page's Markdown alternate; the sitemap keeps the page URL
     "https://site.test/html/c",
   ]);
   expect(await index(true)).not.toContain(".md");
+});
+
+test("sitemap lastmod is a W3C datetime or absent; static paths share the scan cap", async () => {
+  const { webIndex } = await import("../src/kernel/web-index.js");
+  const at = ["2026-01-01", "2026-01-01T08:00:00.123456+08:00", "2026-13-45", "yesterday", null, 1767225600, "1"];
+  const rows = at.map((value, i) => ({ slug: "p" + i, at: value }));
+  const xml = await webIndex(
+    true,
+    { origin: "https://site.test", title: "T", description: "D", sitemap: ["/", "/list"] },
+    [{ path: "/p/{slug}", page: { view: "one", list: "all", lastmod: "at" } }],
+    async () => ({ rows }),
+    (path, row) => "https://site.test" + path.replace("{slug}", String(row.slug)),
+  );
+  expect([...xml.matchAll(/<lastmod>(.*?)<\/lastmod>/g)].map(match => match[1])).toEqual([
+    "2026-01-01",
+    "2026-01-01T08:00:00.123456+08:00",
+  ]);
+  expect(xml.match(/<url>/g)).toHaveLength(2 + at.length);
+  const capped = await webIndex(
+    true,
+    {
+      origin: "https://site.test",
+      title: "T",
+      description: "D",
+      sitemap: Array.from({ length: 50001 }, (_, i) => "/" + i),
+    },
+    [{ path: "/p/{slug}", page: { view: "one", list: "all" } }],
+    async () => {
+      throw new Error("a full sitemap reads no list");
+    },
+    () => undefined,
+  );
+  expect(capped.match(/<url>/g)).toHaveLength(50000);
 });

@@ -12,7 +12,7 @@ const segment = (text: string) => encodeURIComponent(text).replace(/[()]/g, c =>
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
-      const site = web({ db: env.DB, caller, origin: env.PUBLIC_ORIGIN, title: 'Posts', description: 'A small public website',
+      const site = web({ db: env.DB, caller, origin: env.PUBLIC_ORIGIN, title: 'Posts', description: 'A small public website', sitemap: ['/'],
         pages: { '/': { view: 'home', markdown: 'body' }, '/posts/{id}': { view: 'post', list: 'posts', markdown: 'body' } } });
       const api = await rest<Env>({ db: env => env.DB, caller: async () => caller })(request, env);
       if (api) return api;

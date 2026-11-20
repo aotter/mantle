@@ -67,6 +67,8 @@ export function selectedWeb<Database, E>(
   return {
     fetch: (request: Request, env?: E, ctx?: RequestContext) =>
       run("fetch", request, env, ctx) as Promise<Response | undefined>,
-    head: (request: Request, env?: E, ctx?: RequestContext) => run("head", request, env, ctx) as Promise<string>,
+    // A row the application read itself needs no caller or View decision: the read was the application's.
+    head: (request: Request, env?: E, ctx?: RequestContext, page?: { row: Record<string, unknown> }) =>
+      page ? site.head(request, env, ctx, page) : (run("head", request, env, ctx) as Promise<string>),
   };
 }

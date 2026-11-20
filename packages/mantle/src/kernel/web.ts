@@ -17,19 +17,35 @@ type TextColumns<A extends App, V extends keyof A["Rows"]> = {
   [K in keyof A["Rows"][V]]: A["Rows"][V][K] extends string | null ? K : never;
 }[keyof A["Rows"][V]] &
   string;
-/** A page: the View that reads one row, an optional list View enumerating its URLs, and an optional Markdown text field. */
+/**
+ * A page: the View that reads one row, an optional list View enumerating its URLs, an optional Markdown text field, and
+ * an optional text or timestamp column of the list for the sitemap's `<lastmod>`.
+ */
 export type Page<A extends App> = {
-  [V in keyof A["Rows"] & string]: { view: V; list?: A["List"]; markdown?: TextColumns<A, V> };
+  [V in keyof A["Rows"] & string]: {
+    view: V;
+    list?: A["List"];
+    markdown?: TextColumns<A, V>;
+    lastmod?: { [L in A["List"]]: TextColumns<A, L & keyof A["Rows"]> }[A["List"]];
+  };
 }[keyof A["Rows"] & string];
 type ListKeys<A extends App, T> = T extends { list: infer L extends string } ? keyof At<A["Rows"], L> : string;
-/** `{name}` parameters must equal the View input, and be columns of the list and of the View. */
+/** `lastmod` names a text column of the page's own list. */
+type Lastmod<A extends App, T> = T extends { lastmod: infer M }
+  ? T extends { list: infer L extends keyof A["Rows"] }
+    ? M extends TextColumns<A, L>
+      ? T
+      : never
+    : never
+  : T;
+/** `{name}` parameters must equal the View input, and be columns of the list and of the View; `lastmod` is the list's. */
 export type Pages<A extends App, P extends Record<string, Page<A>>> = {
   [K in keyof P]: K extends string
     ? [Params<K>] extends [At<A["Inputs"], P[K]["view"]>]
       ? [At<A["Inputs"], P[K]["view"]>] extends [Params<K>]
         ? [Params<K>] extends [ListKeys<A, P[K]>]
           ? [Params<K>] extends [keyof At<A["Rows"], P[K]["view"]>]
-            ? P[K]
+            ? Lastmod<A, P[K]>
             : never
           : never
         : never
@@ -41,6 +57,8 @@ export type Options<A extends App, Database, P extends Record<string, Page<A>>, 
   WebOptions<Database, E>,
   "pages" | "fields"
 > & { pages: P & Pages<A, P> };
+/** The row `head()` accepts for the pages `P`: a row of one of their Views. */
+export type PageRow<A extends App, P extends Record<string, Page<A>>> = A["Rows"][P[keyof P]["view"]];
 /** One page of a View's rows. */
 export type ViewPage = { rows: Record<string, unknown>[]; nextCursor?: string };
 /** One public View: its query-string reader, paged boundary, bind conversions and boolean input keys. */
@@ -61,12 +79,13 @@ export interface View<Database> {
   readonly booleans?: readonly string[];
 }
 
-export interface WebHandler<E> {
+export interface WebHandler<E, R = Record<string, unknown>> {
   fetch(request: Request, env?: E, ctx?: RequestContext): Promise<Response | undefined>;
-  head(request: Request, env?: E, ctx?: RequestContext): Promise<string>;
+  /** Head tags of the page at `request`; given the `row` the application already read, it reads no View. */
+  head(request: Request, env?: E, ctx?: RequestContext, page?: { row: R }): Promise<string>;
 }
 /** A page as an application declares it. */
-export type PageSpec = { view: string; list?: string; markdown?: string };
+export type PageSpec = { view: string; list?: string; markdown?: string; lastmod?: string };
 /** A declared page with its compiled URL template. */
 export type PageEntry = { path: string; page: PageSpec; keys: string[]; pattern: RegExp };
 export type WebOptions<Database, E> = {
@@ -77,6 +96,8 @@ export type WebOptions<Database, E> = {
   description: string;
   locales?: readonly string[];
   pages: Record<string, PageSpec>;
+  /** Static paths (home, list pages) the sitemap lists before the pages' rows. */
+  sitemap?: readonly string[];
   cacheControl?: string;
   /** Host platform contract, versioned by `v`; stable within a version. */
   gateway?: Gateway;
@@ -98,10 +119,11 @@ export function web<Database, E>(
   const origin = new URL(options.origin);
   const bare = !origin.username && !origin.password && origin.pathname === "/" && !origin.search && !origin.hash;
   if (!/^https?:$/.test(origin.protocol) || !bare) throw new TypeError("origin must be an HTTP(S) origin.");
+  for (const path of [...Object.keys(options.pages), ...(options.sitemap ?? [])])
+    if (!path.startsWith("/") || /[?#]/.test(path))
+      throw new TypeError("Page templates and sitemap paths must be absolute paths without queries or fragments.");
   const pages: PageEntry[] = Object.entries(options.pages)
     .map(([path, page]) => {
-      if (!path.startsWith("/") || /[?#]/.test(path))
-        throw new TypeError("Page templates must be absolute paths without queries or fragments.");
       const keys: string[] = [];
       const pattern = path
         .split(/(\{[^{}]+\})/)
@@ -117,7 +139,8 @@ export function web<Database, E>(
     const load = async () => (selected ??= (await import("./web-gateway.js")).selectedWeb(options, views, pages));
     return {
       fetch: async (request: Request, env?: E, ctx?: RequestContext) => (await load()).fetch(request, env, ctx),
-      head: async (request: Request, env?: E, ctx?: RequestContext) => (await load()).head(request, env, ctx),
+      head: async (request: Request, env?: E, ctx?: RequestContext, page?: { row: Record<string, unknown> }) =>
+        (await load()).head(request, env, ctx, page),
     };
   }
   let served: WebHandler<E> | undefined;
@@ -129,7 +152,7 @@ export function web<Database, E>(
       if (path !== "/llms.txt" && path !== "/sitemap.xml" && !path.endsWith(".md")) return;
       return (served ?? (await serve())).fetch(request, env, execution);
     },
-    head: async (request: Request, env?: E, execution?: RequestContext) =>
-      (served ?? (await serve())).head(request, env, execution),
+    head: async (request: Request, env?: E, execution?: RequestContext, page?: { row: Record<string, unknown> }) =>
+      (served ?? (await serve())).head(request, env, execution, page),
   };
 }
