@@ -163,6 +163,16 @@ Remove every old package and install `@aotter/mantle` at the exact target
 version. `mantle generate` names any other package it needs, with the install
 command; it never installs anything.
 
+`-web` becomes the `/web` subpath, but not its HTML head output. 0.1 composed a
+description, Open Graph tags, a Twitter card, JSON-LD and per-translation
+`hreflang` links (plus `x-default`), including for home and list pages. The
+generated 0.2 `web()` renders no HTML, and its `head()` emits only the canonical
+link, the Markdown alternate, one `hreflang` and geo tags. After the upgrade, the
+application's own pages write the rest: see
+[public pages](../guides/public-pages.md) and the recipes example
+(`docs/examples/recipes/src/pages.ts`). Check each page for the tags it lost
+before cutting traffic over.
+
 ### 2. `mantle.config.json`
 
 0.1.4 had none; 0.1.5-alpha.1 wrote a `version: 1` one. Write version 2:

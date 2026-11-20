@@ -5,8 +5,8 @@ here instead of repeating it.
 
 ## Two ways to serve them
 
-- **Generated `web()`**: list and detail pages straight from public Views, with `llms.txt`, sitemap, Markdown
-  alternates and canonical tags. Its contract and limits are in [surface contracts](../reference/surface.md#optional-web-output);
+- **Generated `web()`**: `llms.txt`, sitemap, Markdown alternates and head tags (canonical, one hreflang) straight from
+  public Views. It renders no HTML; the pages stay application-owned. Its contract and limits are in [surface contracts](../reference/surface.md#optional-web-output);
   the smallest example is `node_modules/@aotter/mantle/docs/examples/generated-web`.
 - **App-owned pages** in `src/routes.ts`, when the page needs its own layout, JSON-LD or languages. The reference
   implementation is `node_modules/@aotter/mantle/docs/examples/recipes` (`src/pages.ts`, `src/routes.ts`; `smoke.mjs` checks every item below).
