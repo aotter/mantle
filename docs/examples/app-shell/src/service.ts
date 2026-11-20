@@ -35,7 +35,7 @@ export async function fetchService(request: Request, env: Env, context: Executio
 }
 
 async function serve(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
-  auth ??=authLoader(() => import("./auth.js").then(m => m.createAuth(env)));
+  auth ??= authLoader(() => import("./auth.js").then(m => m.createAuth(env)));
   const headers = new Headers();
   let authority: Promise<Caller> | undefined;
   // One Caller per request, resolved on first use; every surface below shares it.
