@@ -46,7 +46,7 @@ export function webmcpRoutes<Env, Database, Handlers>(
             : undefined;
           return {
             output: wrapper ? wrapper.data : output,
-            ...(wrapper?.content ? { content: wrapper.content } : {}),
+            ...(Array.isArray(wrapper?.content) ? { content: wrapper.content } : {}),
             ...(version ? { version } : {}),
           };
         } catch (error) {

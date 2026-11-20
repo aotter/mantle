@@ -1216,6 +1216,8 @@ test("withResult sends native content blocks after Core's blocks; a block the SD
       withResult({ ok: true }, { content: [{ type: "image", data: "not base64!", mimeType: "image/png" }] }),
     ),
     tool("unknown", async () => withResult({ ok: true }, { content: [{ type: "hologram", uri: "x" }] })),
+    tool("notlist", async () => withResult({ ok: true }, { content: { type: "text", text: "x" } as never })),
+    tool("only", async () => withResult(undefined, { content: [blocks[0]!] })),
     tool("boom", async () => {
       throw new Error("boom");
     }),
@@ -1248,7 +1250,10 @@ test("withResult sends native content blocks after Core's blocks; a block the SD
       ]);
       expect(pic.structuredContent).toEqual({ id: "p1" });
       expect(pic._meta).toMatchObject({ "example/result": 1, "net.aotter.mantle/tool": "pic" });
-      for (const name of ["bad", "unknown", "boom"]) {
+      // A tool that returns blocks alone still answers valid JSON text first.
+      const only = await client.callTool({ name: "only", arguments: {} });
+      expect(only.content as unknown[]).toEqual([{ type: "text", text: "null" }, blocks[0]]);
+      for (const name of ["bad", "unknown", "notlist", "boom"]) {
         const failed = await client.callTool({ name, arguments: {} });
         expect(failed.isError).toBe(true);
         // Core's envelope only: the diagnostic and the input contract.
@@ -1263,8 +1268,10 @@ test("withResult sends native content blocks after Core's blocks; a block the SD
   expect(completions.map(e => [e.tool, e.outcome, e.code])).toEqual(
     [1, 2].flatMap(() => [
       ["pic", "succeeded", undefined],
+      ["only", "succeeded", undefined],
       ["bad", "failed", "INTERNAL_ERROR"],
       ["unknown", "failed", "INTERNAL_ERROR"],
+      ["notlist", "failed", "INTERNAL_ERROR"],
       ["boom", "failed", "INTERNAL_ERROR"],
     ]),
   );

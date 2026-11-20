@@ -98,7 +98,8 @@ export const SEAMS: readonly Seam[] = [
     package: "@aotter/mantle",
     subpath: "./mcp",
     exports: ["mcp", "withResult", "withResultMeta"],
-    entry: "Tool.meta, withResult(data, { content, _meta }), withResultMeta(data, meta)",
+    entry:
+      "Tool.meta, Tool.icons, Tool.annotations.title, serverInfo.description and websiteUrl, withResult(data, { content, _meta }), withResultMeta(data, meta)",
     stacks: ALL,
     decided: SEAM,
     check: "packages/mantle/tests/seams/tool-meta.ts",
@@ -108,7 +109,7 @@ export const SEAMS: readonly Seam[] = [
     package: "@aotter/mantle",
     subpath: "./mcp",
     exports: ["mcp"],
-    entry: "McpAppResource.meta",
+    entry: "McpAppResource.meta, McpAppResource.icons, McpAppResource.annotations",
     stacks: ALL,
     decided: "#1995",
     check: "packages/mantle/tests/seams/resource-meta.ts",

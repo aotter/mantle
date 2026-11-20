@@ -274,6 +274,8 @@ async function invoke<Env, Database, Handlers>(
         apps: rendersInApp,
         linkedApp,
       });
+      // A re-run for a smaller page replaces the first run's blocks and meta, also when it returns no wrapper.
+      resultMeta = blocks = undefined;
       // withResult: the data is the result; its blocks follow Core's, its meta reaches only the result `_meta`.
       if (!isRecord(output) || !(Symbol.for("net.aotter.mantle/result") in output)) return output;
       resultMeta = output._meta as typeof resultMeta;
@@ -282,10 +284,18 @@ async function invoke<Env, Database, Handlers>(
     };
     const data = await fitPage(tool, raw, await run(raw), run);
     // Checked before the call is recorded: the SDK would otherwise answer a protocol error after a recorded success.
-    if (blocks && !isResult({ content: blocks }))
-      throw new Error(`MCP tool ${tool.name} returned a content block the SDK refuses.`);
+    if (blocks && !isResult({ content: blocks })) {
+      const list: readonly unknown[] = Array.isArray(blocks) ? blocks : [],
+        bad = list.findIndex(block => !isResult({ content: [block] }));
+      const where =
+        bad < 0
+          ? "content that is not a list of blocks"
+          : `content[${bad}] (type ${JSON.stringify((list[bad] as { type?: unknown } | null)?.type)})`;
+      throw new Error(`MCP tool ${tool.name} returned ${where}, which the SDK refuses.`);
+    }
     pipeline.finish();
-    const body = JSON.stringify(data),
+    // A tool that returns nothing (blocks alone, say) still answers valid JSON text.
+    const body = JSON.stringify(data) ?? "null",
       oversized = tool.page && body.length > MCP_PAGE_BUDGET;
     const notice =
       `This page is larger than the ${MCP_PAGE_BUDGET}-character page size budget (a single row over it, ` +

@@ -3,7 +3,8 @@ import { realpath, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
 /** Native file response, or null for missing or invalid paths. Every file gets `nosniff`; Admin's content-hashed
- * chunks under `/assets/` are cached for a year, as the edge `_headers` does on Workers. Other files keep no cache
+ * chunks under `/assets/` are cached for a year: a missing file is `null` here, so no 404 carries that header (the edge
+ * `_headers` rule on Workers is one day because the edge sends it on its own 404 too, #2088). Other files keep no cache
  * header (`adminShell` marks the shell `no-store`). `/assets/client/` is the application's own browser entries, whose
  * names are stable, so a reader rooted at the assets directory revalidates them instead of caching them. */
 export function bunAdminAssets(root: string): (path: string) => Promise<Response | null> {

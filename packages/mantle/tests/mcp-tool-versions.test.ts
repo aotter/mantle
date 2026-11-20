@@ -568,6 +568,27 @@ test("a size cut measures a withResult page's data only, and the re-run's blocks
     expect(result._meta).toMatchObject({ "example/run": 2 });
     await client.close();
   }
+  // A re-run that returns no wrapper leaves nothing of the discarded first run behind.
+  const plain = {
+    ...wide,
+    name: "plain_rerun",
+    path: "plain_rerun",
+    page: async (_db: null, _caller: unknown, _input: unknown, paging: { limit?: number }) => {
+      const page = { rows: rows.slice(0, paging.limit ?? 200), nextCursor: "n" };
+      return paging.limit
+        ? page
+        : withResult(page, { content: [{ type: "text", text: "of 200 rows" }], _meta: { "example/rows": 200 } });
+    },
+  };
+  const client = await connect(
+    serveMcp([plain as never], { db: () => null, caller: () => ({ kind: "anonymous" }) }),
+    eras[0]!,
+  );
+  const cut = await client.callTool({ name: "plain_rerun", arguments: {} });
+  expect((cut.structuredContent as { rows: unknown[] }).rows.length).toBeLessThan(200);
+  expect(JSON.stringify(cut.content)).not.toContain("of 200 rows");
+  expect(cut._meta ?? {}).not.toHaveProperty("example/rows");
+  await client.close();
 });
 
 test("a size cut through the kernel's keyset page() resumes at the first row not returned; a wide View without an order stays one whole page", async () => {

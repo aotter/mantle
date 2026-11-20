@@ -339,6 +339,8 @@ function adminHeaders(assets: string, copied: boolean): void {
   const file = join(assets, "_headers");
   if (!existsSync(file)) return writeFileSync(file, adminRule);
   const text = readFileSync(file, "utf8");
+  // An earlier build's own file, which nothing removes, carries the one-year rule this build replaces (#2088).
+  if (text === adminRule.replace("86400", "31536000")) return writeFileSync(file, adminRule);
   if (text.includes("/admin/assets/*")) return;
   if (!copied)
     return console.warn(`note: ${relative(process.cwd(), file)} has no /admin/assets/* rule; add:\n${adminRule}`);

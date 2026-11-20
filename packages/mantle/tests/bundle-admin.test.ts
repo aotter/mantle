@@ -70,6 +70,11 @@ test("mantle bundle: the Worker into <outdir>/worker, Admin into <assets>/admin;
       "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable",
     );
     expect(await readFile(join(dist, "client/admin/index.html"), "utf8")).toBe("undefined"); // the built-in entry
+    // An earlier build's own _headers, which no build removes, is replaced: it carried the one-year rule.
+    const day = await readFile(join(dist, "client/_headers"), "utf8");
+    await writeFile(join(dist, "client/_headers"), day.replace("86400", "31536000"));
+    await bundleApp(entry, dist);
+    expect(await readFile(join(dist, "client/_headers"), "utf8")).toBe(day);
     await bundleApp(entry, dist);
     expect(await builds()).toHaveLength(1);
     // an app file changes nothing in the built-in entry
