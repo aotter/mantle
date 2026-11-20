@@ -144,6 +144,8 @@ test("REST, MCP, web and auth state Cache-Control on success and error paths", a
   for (const [name, response, expected] of cases) {
     const answer = await response;
     seen.push([name, answer?.headers.get("cache-control") ?? null]);
+    // SDK 2.4.0 states the one method an MCP endpoint takes on each of its 405s.
+    if (name.startsWith("mcp") && name.endsWith("(405)")) expect(answer?.headers.get("allow")).toBe("POST");
     void answer?.body?.cancel();
   }
   expect(seen).toEqual(cases.map(([name, , expected]) => [name, expected]));

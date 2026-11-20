@@ -417,7 +417,7 @@ The official SDK does all wire handling (ADR-0029). "App" is the application;
 | `Tool.annotations` | App: `Tool.annotations`, including `title` |
 | `Tool.icons` | App: `Tool.icons` on a hand-built tool |
 | `Tool._meta` | App: `Tool.meta`, merged with what App links produce |
-| `Tool.execution` | Not exposed: SDK 2.3.1 has no task runtime |
+| `Tool.execution` | Not exposed: SDK 2.4.0 has no task runtime |
 | Resource `title`, `description`, `icons`, `annotations` | App: `McpAppResource` fields |
 | Resource `mimeType`, text body | Core: `text/html;profile=mcp-app`, the HTML as text; no blob |
 | Resource `size` | Not exposed: the HTML is produced on read |
@@ -433,7 +433,7 @@ The official SDK does all wire handling (ADR-0029). "App" is the application;
 | Cancellation | Core: `ToolCall.signal` aborts while the tool runs if the request ends early (a 2026-07-28 client's cancel, a dropped connection), where the runtime aborts `Request.signal`: Bun.serve, and Workers from compatibility date 2026-11-17 or with `enable_request_signal`; a 2025-era `notifications/cancelled` cannot reach a stateless server's call. Observed as `code: "REQUEST_CANCELLED"`. Hand-written tools only: a ref handler gets neither |
 | Logging, sampling, roots | Not exposed: deprecated in the 2026-07-28 revision (SEP-2577) |
 | Elicitation | Not exposed: a stateless 2025-era server cannot send a server-to-client request, and `ToolCall` does not offer the 2026-07-28 `input_required` round trip |
-| Tasks | Not exposed: SDK 2.3.1 has no task runtime |
+| Tasks | Not exposed: SDK 2.4.0 has no task runtime |
 
 ### Tool versions
 
