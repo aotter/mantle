@@ -151,7 +151,10 @@ step wrote) is not edited: the build prints the rule to add. `mantle bundle` als
 working directory's `public/` into the assets directory (removing what it copied last
 time; `public/admin` is refused, and `public/assets/client` when the app has browser entries). The application's browser entries
 (`client/<name>.ts|tsx` beside the Worker entry) are built into `<assets>/assets/client/<name>.js`, answered by
-the edge at `/assets/client/<name>.js` ([reference](../start/project-and-cli.md#outputs)). `/assets/*` is excluded by default, so
+the edge at `/assets/client/<name>.js`, with content-hashed copies under `/assets/client/h/`
+([reference](../start/project-and-cli.md#outputs)). For those copies the build's `_headers` also gets
+`/assets/client/h/*` with `public, max-age=31536000, immutable`, written, appended or printed exactly as Admin's rule;
+a `_headers` that holds only rules `mantle bundle` writes is the build's own and is rewritten with this build's rules. `/assets/*` is excluded by default, so
 `public/assets/*` is answered by the edge; other public files reach the Worker first,
 which can serve them with `env.ASSETS.fetch(request)` as the app shell does. Cloudflare
 sends `Cache-Control: public, max-age=0, must-revalidate` and an ETag by default; set

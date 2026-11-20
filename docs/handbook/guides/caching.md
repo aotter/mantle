@@ -16,6 +16,46 @@ rules an app follows, and what [Workers Cache](https://developers.cloudflare.com
 - **Admin's content-hashed chunks** (`/admin/assets/*`): `public, max-age=86400, immutable` from the `_headers` rule
   `mantle bundle` writes. A day, not a year, because the edge sends the same rule on its 404 for a missing chunk
   ([why](../cloudflare/service-entry.md#workers-assets-and-secrets)).
+- **The browser entries' content-hashed copies** (`/assets/client/h/*`): `public, max-age=31536000, immutable`, also
+  from `_headers`. Their stable names (`/assets/client/<name>.js`) keep the default above. See
+  [below](#content-hashed-browser-files).
+
+## Content-hashed browser files
+
+`mantle bundle` writes each browser entry twice: under its stable name and as a content-hashed copy
+([outputs](../start/project-and-cli.md#outputs)). The stable name is revalidated on every page view; the copy is not
+requested again at all. HTML the Worker renders links the copy from the map the Worker imports:
+
+```ts
+import { clientAssets } from "@aotter/mantle/client-assets";
+
+// The stable name where the map is empty (outside a Worker build: a Bun server, a test).
+const page = clientAssets.page ?? { js: "/assets/client/page.js", css: "/assets/client/page.css" };
+const head = `<link rel="stylesheet" href="${page.css}"><script type="module" src="${page.js}"></script>`;
+```
+
+Measured 2026-11-20 on Workers Free (method: [#2097](https://github.com/aotter/mantle/issues/2097)):
+
+- A stable name's `304` costs about one network round trip to the edge (about 50 ms in the test) and is never a cache
+  hit. A hashed copy served `immutable` makes no request on a repeat view, also on reload.
+- Behind a dispatcher Worker with Placement in another region, every asset request, a `304` included, paid the
+  placement round trip (about 300 ms per `304`): a repeat view of a page with two browser files loaded in 874 ms with
+  stable names and 430 ms with hashed ones.
+
+So link the hashed copies from server-rendered HTML; the gain grows with the number of files and the distance to the
+assets. A static HTML file cannot read the map and keeps the stable names.
+
+A deploy is safe for new pages: a Worker version includes its assets, so the HTML it renders names files it has, and a
+deploy starts Workers Cache cold. The previous build's copies are not kept, and a missing copy is the edge's `404`.
+That leaves one case: **a tab opened before a deploy that loads a file afterwards** (a late-loaded island) asks for a
+name the new version no longer has, and its `import()` fails. With stable names the same tab would silently run the
+new build's code against the old page instead. Mantle adds no mechanism for it; reload the page once when such an
+import fails, guarded against a loop, as the recipes example's loader does
+([public pages](public-pages.md#the-recommended-shape)).
+
+The edge sends the `_headers` rule on that `404` too, so the browser keeps the `404` for a year under a name no current
+HTML references. It matters only if that name is served again: after a rollback to that build, or while two versions
+serve at once in a gradual deployment without a version key. Such a browser gets the `404` until its cache is cleared.
 
 ## Workers Cache
 
