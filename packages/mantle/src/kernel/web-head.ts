@@ -9,7 +9,8 @@ export function headTags(
 ): string {
   let tags = '<link rel="canonical" href="' + escape(canonical) + '">';
   if (markdown) tags += '<link rel="alternate" type="text/markdown" href="' + escape(canonical + ".md") + '">';
-  if (locales?.[0])
+  // With several locales the page is one translation; its per-language hreflang is the application's.
+  if (locales?.length === 1)
     tags += '<link rel="alternate" hreflang="' + escape(locales[0]) + '" href="' + escape(canonical) + '">';
   for (const key of Object.keys(row))
     if (key.endsWith("_lat") && typeof row[key] === "number" && typeof row[key.slice(0, -4) + "_lng"] === "number") {

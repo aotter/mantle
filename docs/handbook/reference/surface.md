@@ -205,9 +205,9 @@ GET/HEAD responses include content-derived SHA-256 ETags. Anonymous responses us
 `cacheControl` or `public, max-age=60`; authenticated responses use
 `private, no-store`. `If-None-Match` returns 304 only after current content is read.
 Canonical URLs use the configured origin, independently of the request host.
-The current implementation adds hreflang only for `locales[0]`; translation-aware
-indexes and head tags are a follow-up below. Importing another generated entry
-does not import web output.
+Head tags add an hreflang alternate only when exactly one locale is configured; with
+several, the page is one translation and its per-language hreflang alternates are
+the application's. Importing another generated entry does not import web output.
 
 Web indexes scan at most 50,000 rows for one sitemap and 5,000 for `llms.txt`,
 across all configured lists. Skipped `.`/`..` path segments consume the scan

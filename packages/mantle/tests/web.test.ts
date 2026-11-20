@@ -198,8 +198,8 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
       locales: ["en", "zh"],
       pages: { "/posts/{slug}": { view: "post-by-slug", markdown: "body" } },
     });
-    expect(await multilingual.head(request("/posts/a%26b)"))).toContain('hreflang="en"');
-    expect(await multilingual.head(request("/posts/a%26b)"))).not.toContain('hreflang="zh"');
+    // One locale's hreflang on every translation would mislabel them, so several locales emit none.
+    expect(await multilingual.head(request("/posts/a%26b)"))).not.toContain("hreflang");
   } finally {
     db.close();
     await rm(dir, { recursive: true, force: true });
