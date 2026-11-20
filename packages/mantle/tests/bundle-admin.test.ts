@@ -67,7 +67,7 @@ test("mantle bundle: the Worker into <outdir>/worker, Admin into <assets>/admin;
     expect(readdirSync(join(dist, "client")).sort()).toEqual(["_headers", "admin"]);
     // Admin chunks are answered by the edge: their headers live in _headers.
     expect(await readFile(join(dist, "client/_headers"), "utf8")).toContain(
-      "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=31536000, immutable",
+      "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable",
     );
     expect(await readFile(join(dist, "client/admin/index.html"), "utf8")).toBe("undefined"); // the built-in entry
     await bundleApp(entry, dist);
@@ -487,7 +487,7 @@ test("mantle bundle: public/ is copied into the assets directory; files it copie
     expect(await readFile(join(client, "frontend.js"), "utf8")).toBe("another build step's file");
     // a public _headers without the Admin rule: the rule is appended to the copy, once per build, never to public/
     const rule =
-      "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=31536000, immutable\n";
+      "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable\n";
     await writeFile(join(dir, "public/_headers"), "/assets/*\n  X-Content-Type-Options: nosniff");
     const log = spyOn(console, "log").mockImplementation(() => {});
     try {

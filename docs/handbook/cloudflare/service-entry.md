@@ -142,8 +142,8 @@ JSONC comments and unrelated settings survive regeneration:
 ```
 
 The Worker serves HTML shells and APIs; static files are answered by the edge without
-running it. `mantle bundle` writes `<assets>/_headers` with `nosniff` and a one-year
-`immutable` cache for Admin's content-hashed `/admin/assets/*`. When `public/_headers`
+running it. `mantle bundle` writes `<assets>/_headers` with `nosniff` and a one-day
+`immutable` cache (`public, max-age=86400, immutable`) for Admin's content-hashed `/admin/assets/*`. When `public/_headers`
 has no `/admin/assets/*` rule, the build appends it to the copy in the assets directory
 and prints one line; `public/_headers` itself is not edited, and a rule the app writes
 is kept as it is. A `_headers` the build did not copy (`--assets public`, or one another
@@ -155,12 +155,17 @@ the edge at `/assets/client/<name>.js` ([reference](../start/project-and-cli.md#
 `public/assets/*` is answered by the edge; other public files reach the Worker first,
 which can serve them with `env.ASSETS.fetch(request)` as the app shell does. Cloudflare
 sends `Cache-Control: public, max-age=0, must-revalidate` and an ETag by default; set
-`immutable` in `public/_headers` only for content-hashed files. `_headers` does not
+`immutable` in `public/_headers` only for content-hashed files, with a `max-age` of a day
+rather than a year. `_headers` does not
 apply to responses the Worker builds. It does apply to the edge's own `404` for a missing
 file under an excluded path, which never reaches the Worker: a chunk name that is not in
-the deployed build (`/admin/assets/<old>.js`) answers `404` with `nosniff` and the
-one-year `immutable` cache, so a browser may keep that `404` if a rollback or another
-version brings the name back. A path the Worker must answer stays out of the
+the deployed build (`/admin/assets/<old>.js`) answers `404` with the same `nosniff` and
+`Cache-Control`. A browser stores that `404` and serves it without asking again until
+`max-age` passes, on navigation and on reload, even after the name exists (a rollback, or
+two versions served at once); if it is the entry chunk, Admin does not start and no script
+can recover. So the rule is one day: a present chunk costs one revalidation (`304`) a day,
+and a stored `404` heals within a day. An application whose own `/admin/assets/*` rule says
+a year keeps it; shorten it. A path the Worker must answer stays out of the
 exclusion.
 
 After a deploy the previous version's assets are gone, so an open Admin tab that loads
