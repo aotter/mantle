@@ -69,7 +69,7 @@ spec:
   surface: public
   sql: |
     SELECT p.id, p.slug, r.title, r.summary
-    FROM posts p JOIN post_revisions r ON r.id = p.current_revision AND r.post = p.id
+    FROM posts p JOIN post_revisions r ON r.id = p.current_revision AND r.sealed = true
     ORDER BY p.id
 ---
 apiVersion: cms.mantle.aotter.net/v2
