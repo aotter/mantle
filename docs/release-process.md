@@ -350,6 +350,24 @@ release-gate issue owns those acceptance requirements. An agent acceptance run
 uses only the version-matched authoring instructions, not an SDK checkout or
 generated site.
 
+### Close the shipped issues
+
+A `Closes #N` in a PR closes its issue only when the PR merges into the default
+branch, `main`, and feature PRs merge into `develop`. After the GitHub release
+succeeds, close what it shipped. List the PRs merged into `develop` since the
+previous release tag, collect the issues their bodies close (`Closes #N`,
+`Fixes #N`), and for each one still open:
+
+```sh
+gh pr list --base develop --state merged --search "merged:><previous tag date>" \
+  --limit 500 --json number,title,body
+gh issue close <issue> --reason completed \
+  --comment "Fixed by #<PR>, released in <version>."
+```
+
+Take the date from `gh release view v<previous version> --json publishedAt`.
+Skip an issue whose PR is only part of its fix.
+
 ## Recovery
 
 Rerun the same controller commit/version for a transient or verified partial

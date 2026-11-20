@@ -40,3 +40,14 @@ test("dark tokens and the compiled dark: variant answer to .dark and :root[data-
     expect(out).toContain(':root[data-theme="dark"] *');
   }
 });
+
+test("the shipped theme.css is only the @theme mapping and references defined tokens", () => {
+  const theme = read("../dist/kit/theme.css")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .trim();
+  expect(theme).toMatch(/^@theme inline \{[^{}]*\}$/);
+  const defined = new Set(names(read("../dist/kit/tokens.css")));
+  const used = [...theme.matchAll(/var\((--[\w-]+)\)/g)].map(m => m[1]!);
+  expect(used.length).toBeGreaterThan(0);
+  expect(used.filter(name => !defined.has(name))).toEqual([]);
+});

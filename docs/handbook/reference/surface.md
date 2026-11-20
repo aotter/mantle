@@ -173,7 +173,7 @@ filter. The app retains ownership of authentication and its other routes.
 ## Optional web output
 
 `web.ts` exports `web({ db, caller, origin, title, description, locales?, pages,
-cacheControl? })`. `db` is the application-owned native handle, including callable
+sitemap?, cacheControl? })`. `db` is the application-owned native handle, including callable
 PostgreSQL handles. `caller` is a verified Caller or the app's
 `(request, env, { readOnly }) => Caller | Promise<Caller>` resolver, evaluated once per request.
 Generated REST/MCP/web callbacks classify reads; forward the third argument to
@@ -185,10 +185,12 @@ The module dispatches public Views only; it never invokes Procedures or needs ha
 import { web } from './generated/web.js';
 const site = web({ db, caller, origin: 'https://example.com', title: 'Blog',
   description: 'Articles', locales: ['en'],
-  pages: { '/posts/{slug}': { view: 'post-by-slug', list: 'posts', markdown: 'body' } }
+  sitemap: ['/', '/posts'],
+  pages: { '/posts/{slug}': { view: 'post-by-slug', list: 'posts', markdown: 'body', lastmod: 'updated_at' } }
 });
 const response = await site.fetch(request, env); // Response | undefined
 const tags = await site.head(request, env); // HTML string, empty for unknown/missing pages
+const same = await site.head(request, env, ctx, { row }); // the row the app already read: no View query
 ```
 
 Page parameter names must exactly match the View's declared input properties.
@@ -196,20 +198,30 @@ Page and list Views must return the page parameters; list Views must accept empt
 `required`, no root `anyOf`, `enum` or `const`, no `else` rule, and a root `type`, when given, that includes `object`.
 These conditions also apply to each schema a root `$ref` chain reaches, and an unresolved or cyclic chain fails them.
 `web()` throws a `TypeError` for any other list View. Markdown
-must name a textual output column. HTML remains application-owned.
+must name a textual output column: a text field, or text the View composes with `||` or
+`COALESCE` from them (`title || E'\n\n' || coalesce(body, '')`; see [View outputs](view.md)).
+`lastmod` names a text or timestamp column of the
+page's list View (every target returns timestamps as UTC ISO text); the sitemap
+emits it as `<lastmod>` when it is a W3C datetime and omits the element otherwise.
+`sitemap` lists static paths (home, list pages) that the sitemap names before the
+pages' rows, resolved against `origin`; like page templates, each must be absolute
+without a query, fragment or `{name}` parameter, or `web()` throws a `TypeError`. HTML remains application-owned.
 
 `/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head
-read the current page View. SQL alone controls visibility, including publication.
+read the current page View. `llms.txt` links `<url>.md` for a page that declares
+`markdown` when the list row returns that column non-null, and the HTML URL otherwise
+(a list that does not select the column cannot show that the alternate exists); the sitemap
+lists the HTML URLs. Head tags name the Markdown alternate only for a row whose column is non-null. SQL alone controls visibility, including publication.
 GET/HEAD responses include content-derived SHA-256 ETags. Anonymous responses use
 `cacheControl` or `public, max-age=60`; authenticated responses use
 `private, no-store`. `If-None-Match` returns 304 only after current content is read.
 Canonical URLs use the configured origin, independently of the request host.
-The current implementation adds hreflang only for `locales[0]`; translation-aware
-indexes and head tags are a follow-up below. Importing another generated entry
-does not import web output.
+Head tags add an hreflang alternate only when exactly one locale is configured; with
+several, the page is one translation and its per-language hreflang alternates are
+the application's. Importing another generated entry does not import web output.
 
 Web indexes scan at most 50,000 rows for one sitemap and 5,000 for `llms.txt`,
-across all configured lists. Skipped `.`/`..` path segments consume the scan
+across all configured lists; `sitemap` paths count towards the sitemap's scan and byte limits. Skipped `.`/`..` path segments consume the scan
 budget too. Output stops before exceeding 50 MiB of UTF-8 sitemap XML (including
 its closing tag) or 1 MiB of `llms.txt`; a sitemap index can be added separately.
 Each request also stops after 100 sitemap queries or 10 `llms.txt` queries,
@@ -218,10 +230,39 @@ output sooner. A sitemap index remains separate future work.
 
 `head` normalizes URLs from the queried row's page parameters, matching sitemap
 URLs; malformed paths, failed validation and unavailable rows return an empty
-string. A NULL Markdown field answers 404. Errors and missing Markdown responses
+string. Given `{ row }` (typed as a row of one of the pages' Views), `head` builds
+the tags from that row and runs no query, caller resolution, `authorize` or gateway
+decision: the application read the row with its own caller, so its visibility is the
+application's responsibility. A NULL Markdown field answers 404. Errors and missing Markdown responses
 use `cache-control: no-store`. A matching HTML page takes precedence over a `.md`
 alternate, including slugs ending in `.md`; a Markdown alternate may read the
 exact HTML candidate first and therefore performs at most two View queries.
+
+### Head tags for application-owned pages
+
+`@aotter/mantle/web` also exports `pageHead(options): string`, a pure formatter for pages the
+application renders itself. It reads no
+database: the application passes values it already has, and Core escapes them and owns the format.
+
+```ts
+import { pageHead } from '@aotter/mantle/web';
+const head = pageHead({ title: post.title, description: post.summary, url: canonical,
+  image: post.cover_url, siteName: 'Blog', locale: 'zh-TW', type: 'article',
+  alternates: { 'zh-TW': canonical, en: englishUrl }, xDefault: canonical,
+  markdown: canonical + '.md', jsonLd: { '@context': 'https://schema.org', '@type': 'Article', name: post.title } });
+```
+
+It returns, in order: `<title>`, `<meta name="description">`, the canonical link, the Markdown
+alternate, one `hreflang` alternate per `alternates` entry plus `x-default`, Open Graph (`og:type`,
+default `website`; `og:url`, `og:title`, `og:description`, `og:site_name`, `og:locale` in underscore
+form, `og:locale:alternate` for each other alternate, `og:image`), `twitter:card`
+(`summary_large_image` with an image, else `summary`) and one `application/ld+json` script. A null,
+undefined or empty value emits no tag. Every attribute value is HTML-escaped; `jsonLd` is serialized
+with `JSON.stringify` and `<` written as `\u003c`, so stored text cannot close the script element,
+and the script body parses back to the given value. `og:title` is `ogTitle`, or `title` when it is omitted (pass it when `<title>` carries the
+site name and the Open Graph title should not). Which translations exist,
+the schema.org type and the JSON-LD properties are the application's. Importing only `pageHead` does
+not bundle `web()`'s serving code.
 
 ## Mounting MCP
 

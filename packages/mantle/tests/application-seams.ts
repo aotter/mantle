@@ -196,4 +196,15 @@ export const SEAMS: readonly Seam[] = [
     check: "packages/mantle/tests/seams/client-entry.ts",
     run: false, // built and read back in tests/bundle-client.test.ts
   },
+  {
+    id: "page-head",
+    package: "@aotter/mantle",
+    subpath: "./web",
+    exports: ["pageHead"],
+    entry: "pageHead(options: PageHeadOptions): string",
+    stacks: [],
+    decided: "docs/adr/adr-lite-2092-head-formatter.md",
+    check: "packages/mantle/tests/seams/page-head.ts",
+    run: false, // executed in tests/web.test.ts
+  },
 ];

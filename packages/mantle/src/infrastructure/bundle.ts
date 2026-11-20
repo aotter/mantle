@@ -178,7 +178,7 @@ export async function bundleApp(
     throw new Error(
       `public/${CLIENT_DIR} is reserved for the browser entries in ${relative(process.cwd(), join(dirname(source), "client"))}; move those files elsewhere under public/.`,
     );
-  copyPublic(outdir, assets);
+  const copied = copyPublic(outdir, assets);
   await bundleClient(clientEntries, client, outdir);
   if (dirs.some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"))) {
     // Packages are external here, so only the app's own imports of the Admin server are seen; one reached through another package is not.
@@ -209,7 +209,7 @@ export async function bundleApp(
     )
   ) {
     await bundleAdmin(source, outdir, join(assets, "admin"));
-    adminHeaders(assets);
+    adminHeaders(assets, copied.includes("_headers"));
   }
 }
 
@@ -302,9 +302,9 @@ async function bundleClient(entries: string[], out: string, outdir: string): Pro
  * list lives in `<outdir>/.mantle-public`, outside the uploaded assets), so a deleted file is not served again; files
  * that another build step wrote into the assets directory are left alone. `public/admin` is refused: Admin owns it.
  * When the assets directory is `public/` itself (`--assets public`) or overlaps it, nothing is copied: the files are
- * already where Wrangler uploads them.
+ * already where Wrangler uploads them. Returns the paths it copied.
  */
-function copyPublic(outdir: string, assets: string): void {
+function copyPublic(outdir: string, assets: string): string[] {
   const record = join(outdir, ".mantle-public"),
     source = resolve("public"),
     target = resolve(assets);
@@ -313,8 +313,10 @@ function copyPublic(outdir: string, assets: string): void {
     // only from the directory they were copied to: a changed --assets never touches the new directory's own files
     if (previous.assets === target) for (const path of previous.files) rmSync(join(assets, path), { force: true });
   }
-  if (!existsSync(source) || within(source, target) || within(target, source))
-    return void rmSync(record, { force: true });
+  if (!existsSync(source) || within(source, target) || within(target, source)) {
+    rmSync(record, { force: true });
+    return [];
+  }
   if (existsSync(join(source, "admin")))
     throw new Error("public/admin is reserved for Admin's build; move those files elsewhere under public/.");
   const files = (readdirSync(source, { recursive: true, withFileTypes: true }) as import("node:fs").Dirent[])
@@ -323,17 +325,24 @@ function copyPublic(outdir: string, assets: string): void {
   cpSync(source, assets, { recursive: true });
   mkdirSync(outdir, { recursive: true });
   writeFileSync(record, JSON.stringify({ assets: target, files }));
+  return files;
 }
 
 /** Admin's chunks are content-hashed and answered by the edge (`run_worker_first` excludes `/admin/assets/*`), so the
- * headers `adminShell` would add live in `_headers`. An app's own `_headers` is never edited: it is told the rule. */
+ * headers `adminShell` would add live in `_headers`. A `_headers` copied from `public/` this build gets the rule appended
+ * to the copy (the next build copies it afresh); `public/_headers` itself, or one another step wrote, is only told the rule. */
 const adminRule =
   "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=31536000, immutable\n";
-function adminHeaders(assets: string): void {
+function adminHeaders(assets: string, copied: boolean): void {
   const file = join(assets, "_headers");
   if (!existsSync(file)) return writeFileSync(file, adminRule);
-  if (!readFileSync(file, "utf8").includes("/admin/assets/*"))
-    console.warn(`note: ${relative(process.cwd(), file)} has no /admin/assets/* rule; add:\n${adminRule}`);
+  const text = readFileSync(file, "utf8");
+  if (text.includes("/admin/assets/*")) return;
+  if (!copied)
+    return console.warn(`note: ${relative(process.cwd(), file)} has no /admin/assets/* rule; add:\n${adminRule}`);
+  rmSync(file); // a copied symlink would write through to public/
+  writeFileSync(file, `${text.trimEnd()}\n\n${adminRule}`);
+  console.log(`Appended the /admin/assets/* rule to ${relative(process.cwd(), file)}; public/_headers is unchanged.`);
 }
 
 /**

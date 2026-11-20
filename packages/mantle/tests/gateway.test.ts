@@ -378,6 +378,20 @@ test("generated REST and MCP enforce gateway contracts, scope, freshness and loc
     );
     expect(dryWeb.status).toBe(200);
     expect((await dryWeb.json()).dryRun).toBe(true);
+    // A sitemap of static paths alone reads no View and is still an observed answer.
+    const seen: any[] = [];
+    const staticSite = web({
+      ...webOptions,
+      sitemap: ["/"],
+      pages: { "/records": { view: "public-records" } },
+      onAccess: (event: any) => void seen.push(event),
+    });
+    const memberCtx = {
+      props: { mantle: await pinned(mantleProps({ layer: "member" }), targets, "view:public-records") },
+    };
+    const staticMap = await staticSite.fetch(request("/sitemap.xml"), {}, memberCtx);
+    expect(await staticMap.text()).toContain("<loc>https://app.test/</loc>");
+    expect(seen).toMatchObject([{ target: "web", outcome: "allow", dryRun: false }]);
     expect(resolves).toBe(0);
     // Workers pass `ctx.props` as `{}` on ordinary requests: only `props.mantle` is the host contract.
     for (const props of [{}, { other: 1 }])

@@ -143,8 +143,11 @@ JSONC comments and unrelated settings survive regeneration:
 
 The Worker serves HTML shells and APIs; static files are answered by the edge without
 running it. `mantle bundle` writes `<assets>/_headers` with `nosniff` and a one-year
-`immutable` cache for Admin's content-hashed `/admin/assets/*` (an existing `_headers`
-is not edited: the build prints the rule to add). `mantle bundle` also copies the
+`immutable` cache for Admin's content-hashed `/admin/assets/*`. When `public/_headers`
+has no `/admin/assets/*` rule, the build appends it to the copy in the assets directory
+and prints one line; `public/_headers` itself is not edited, and a rule the app writes
+is kept as it is. A `_headers` the build did not copy (`--assets public`, or one another
+step wrote) is not edited: the build prints the rule to add. `mantle bundle` also copies the
 working directory's `public/` into the assets directory (removing what it copied last
 time; `public/admin` is refused, and `public/assets/client` when the app has browser entries). The application's browser entries
 (`client/<name>.ts|tsx` beside the Worker entry) are built into `<assets>/assets/client/<name>.js`, answered by
@@ -153,7 +156,11 @@ the edge at `/assets/client/<name>.js` ([reference](../start/project-and-cli.md#
 which can serve them with `env.ASSETS.fetch(request)` as the app shell does. Cloudflare
 sends `Cache-Control: public, max-age=0, must-revalidate` and an ETag by default; set
 `immutable` in `public/_headers` only for content-hashed files. `_headers` does not
-apply to responses the Worker builds. A path the Worker must answer stays out of the
+apply to responses the Worker builds. It does apply to the edge's own `404` for a missing
+file under an excluded path, which never reaches the Worker: a chunk name that is not in
+the deployed build (`/admin/assets/<old>.js`) answers `404` with `nosniff` and the
+one-year `immutable` cache, so a browser may keep that `404` if a rollback or another
+version brings the name back. A path the Worker must answer stays out of the
 exclusion.
 
 After a deploy the previous version's assets are gone, so an open Admin tab that loads

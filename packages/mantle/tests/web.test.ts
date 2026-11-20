@@ -27,7 +27,7 @@ kind: View
 metadata: {name: posts}
 spec:
   surface: public
-  sql: SELECT id, slug, title FROM posts WHERE visible = true ORDER BY id
+  sql: SELECT id, slug, title, updated_at FROM posts WHERE visible = true ORDER BY id
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -113,6 +113,7 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     expect(text.match(/^- /gm)).toHaveLength(6);
     expect(text).not.toContain("post0");
     expect(text).toContain("Title \\[1\\]");
+    // The list View does not select `body`, so llms.txt cannot show that the alternate exists and links the page.
     expect(text).toContain("(https://site.test/posts/a%26b%29)");
     const sitemap = await site.fetch(request("/sitemap.xml"));
     expect((await sitemap.text()).match(/<url>/g)).toHaveLength(6);
@@ -198,8 +199,57 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
       locales: ["en", "zh"],
       pages: { "/posts/{slug}": { view: "post-by-slug", markdown: "body" } },
     });
-    expect(await multilingual.head(request("/posts/a%26b)"))).toContain('hreflang="en"');
-    expect(await multilingual.head(request("/posts/a%26b)"))).not.toContain('hreflang="zh"');
+    // One locale's hreflang on every translation would mislabel them, so several locales emit none.
+    expect(await multilingual.head(request("/posts/a%26b)"))).not.toContain("hreflang");
+    // Given the row the application already read, head reads no View: post0 is hidden from the View.
+    const hidden = { id: "0", slug: "post0", body: "# body 0" };
+    expect(await site.head(request("/posts/post0"), undefined, undefined, { row: hidden })).toContain(
+      'rel="canonical" href="https://site.test/posts/post0"',
+    );
+    const refusing = web({
+      db,
+      caller: { kind: "anonymous" },
+      authorize: () => false,
+      origin: "https://site.test",
+      title: "x",
+      description: "y",
+      pages: { "/posts/{slug}": { view: "post-by-slug", markdown: "body" } },
+    });
+    await expect(refusing.head(request("/posts/a%26b)"))).rejects.toThrow();
+    expect(await refusing.head(request("/posts/post0"), undefined, undefined, { row: hidden })).toContain(
+      'href="https://site.test/posts/post0.md"',
+    );
+    // `page` without a row (the application's read found none) is no tags, not a read or a refusal of its own.
+    const none = { row: undefined } as unknown as { row: Record<string, unknown> };
+    expect(await refusing.head(request("/posts/a%26b)"), undefined, undefined, none)).toBe("");
+    expect(await site.head(request("/posts/a%26b)"), undefined, undefined, none)).toBe("");
+    // A row without Markdown has no alternate to name: `<url>.md` answers 404.
+    expect(
+      await site.head(request("/posts/post0"), undefined, undefined, { row: { ...hidden, body: null } }),
+    ).not.toContain("text/markdown");
+    db.query("UPDATE posts SET updated_at = 1767225600000000 WHERE id = '2'").run();
+    const dated = web({
+      db,
+      caller: { kind: "anonymous" },
+      origin: "https://site.test",
+      title: "x",
+      description: "y",
+      sitemap: ["/", "/posts"],
+      pages: { "/posts/{slug}": { view: "post-by-slug", list: "posts", lastmod: "updated_at" } },
+    });
+    const datedXml = await (await dated.fetch(request("/sitemap.xml"))).text();
+    expect(datedXml).toContain(
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://site.test/</loc></url><url><loc>https://site.test/posts</loc></url><url>',
+    );
+    expect(datedXml).toContain(
+      "<url><loc>https://site.test/posts/post2</loc><lastmod>2026-01-01T00:00:00.000000Z</lastmod></url>",
+    );
+    expect(datedXml.match(/<url>/g)).toHaveLength(2 + 8);
+    expect(await (await dated.fetch(request("/llms.txt"))).text()).not.toContain("https://site.test/posts)");
+    for (const path of ["posts", "/posts?x", "/posts#x", "/posts/{slug}"])
+      expect(() =>
+        web({ db, origin: "https://site.test", title: "x", description: "y", sitemap: [path], pages: {} }),
+      ).toThrow("Page templates and sitemap paths must be absolute paths without queries or fragments.");
   } finally {
     db.close();
     await rm(dir, { recursive: true, force: true });
@@ -245,6 +295,20 @@ test("web indexes preserve an authored total LIMIT rather than treating it as a 
   }
 });
 
+const composedDoc = `---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: doc-by-slug}
+spec:
+  surface: public
+  input:
+    type: object
+    required: [slug]
+    additionalProperties: false
+    properties: {slug: {type: string, minLength: 2}}
+  sql: SELECT id, slug, title || E'\\n\\n' || coalesce(body, '') AS doc, lower(title) AS shout FROM posts WHERE slug = input.slug AND visible = true ORDER BY id
+`;
+
 test("public View and exact URL input names are typechecked on every target", async () => {
   await mkdir(join(import.meta.dir, "apps/.generated/"), { recursive: true });
   const dir = await mkdtemp(join(import.meta.dir, "apps/.generated/", "web-types-"));
@@ -254,7 +318,7 @@ test("public View and exact URL input names are typechecked on every target", as
       const destination = join(dir, target);
       await writeGenerated(
         destination,
-        await generateOrThrow(target, [{ sourceId: "blog.yaml", text: source }]),
+        await generateOrThrow(target, [{ sourceId: "blog.yaml", text: source + composedDoc }]),
         false,
       );
       const check = join(destination, "check.ts");
@@ -281,6 +345,18 @@ web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'post-by-slug'}}})
 web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'posts-matching'}}});
 // @ts-expect-error unknown markdown column
 web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',markdown:'unknown'}}});
+// text composed in SQL (#2091) is a Markdown column; another computed column is not text
+web({...base,pages:{'/docs/{slug}':{view:'doc-by-slug',list:'posts',markdown:'doc'}}});
+// @ts-expect-error a computed output that is not composed text is unknown
+web({...base,pages:{'/docs/{slug}':{view:'doc-by-slug',markdown:'shout'}}});
+const dated=web({...base,sitemap:['/'],pages:{'/posts/{slug}':{view:'post-by-slug',list:'posts',lastmod:'updated_at'}}});
+// @ts-expect-error lastmod names a column of the list View
+web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',list:'posts',lastmod:'body'}}});
+// @ts-expect-error lastmod needs a list
+web({...base,pages:{'/posts/{slug}':{view:'post-by-slug',lastmod:'updated_at'}}});
+dated.head(new Request('https://site.test/posts/a'),undefined,undefined,{row:{id:'a',slug:'a',body:null}});
+// @ts-expect-error the row is a row of a page's View
+dated.head(new Request('https://site.test/posts/a'),undefined,undefined,{row:{slug:1}});
 // @ts-expect-error a generated entry supplies the manifest's user fields itself
 web({...base,fields:{},pages:{'/posts':{view:'posts'}}});
 // @ts-expect-error a generated entry supplies the manifest's user fields itself
@@ -496,11 +572,14 @@ test.skipIf(!process.env.MANTLE_NEXT_BUN_PG_URL)(
         origin: "https://site.test",
         title: "PG",
         description: "x",
-        pages: { "/posts/{slug}": { view: "post-by-slug", list: "posts", markdown: "body" } },
+        pages: { "/posts/{slug}": { view: "post-by-slug", list: "posts", markdown: "body", lastmod: "updated_at" } },
       });
       const sitemap = await site.fetch(new Request("https://site.test/sitemap.xml"));
       expect(sitemap.status).toBe(200);
-      expect((await sitemap.text()).match(/<url>/g)).toHaveLength(1005);
+      const xml = await sitemap.text();
+      expect(xml.match(/<url>/g)).toHaveLength(1005);
+      // PostgreSQL timestamps reach the list row as the generated SQL's UTC text.
+      expect(xml.match(/<lastmod>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z<\/lastmod>/g)).toHaveLength(1005);
       expect(queries).toBe(3);
       queries = 0;
       expect((await (await site.fetch(new Request("https://site.test/llms.txt"))).text()).match(/^- /gm)).toHaveLength(
@@ -553,4 +632,151 @@ test("a Worker importing a View does not bundle optional web", async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("llms.txt links a page's Markdown alternate; the sitemap keeps the page URL", async () => {
+  const { webIndex } = await import("../src/kernel/web-index.js");
+  const rows = [{ slug: "a", body: "# a" }, { slug: "b", body: null }, { slug: "c" }];
+  const pages = [
+    { path: "/md/{slug}", page: { view: "one", list: "all", markdown: "body" } },
+    { path: "/html/{slug}", page: { view: "one", list: "all" } },
+  ];
+  const index = (sitemap: boolean) =>
+    webIndex(
+      sitemap,
+      { origin: "https://site.test", title: "T", description: "D" },
+      pages,
+      async () => ({ rows }),
+      (path, row) => "https://site.test" + path.replace("{slug}", String(row.slug)),
+    );
+  const links = [...(await index(false)).matchAll(/\]\((.*?)\)/g)].map(match => match[1]);
+  // Only a list row that carries the Markdown column non-null shows that `<url>.md` exists.
+  expect(links).toEqual([
+    "https://site.test/md/a.md",
+    "https://site.test/md/b",
+    "https://site.test/md/c",
+    "https://site.test/html/a",
+    "https://site.test/html/b",
+    "https://site.test/html/c",
+  ]);
+  expect(await index(true)).not.toContain(".md");
+});
+
+test("sitemap lastmod is a W3C datetime or absent; static paths share the scan cap", async () => {
+  const { webIndex } = await import("../src/kernel/web-index.js");
+  const at = [
+    "2026-01-01",
+    "2026-01-01T08:00:00.123456+08:00",
+    "2026-13-45",
+    "2026-02-30",
+    "2026-02-30T00:00:00Z",
+    "yesterday",
+    null,
+    1767225600,
+    "1",
+  ];
+  const rows = at.map((value, i) => ({ slug: "p" + i, at: value }));
+  const xml = await webIndex(
+    true,
+    { origin: "https://site.test", title: "T", description: "D", sitemap: ["/", "/café x"] },
+    [{ path: "/p/{slug}", page: { view: "one", list: "all", lastmod: "at" } }],
+    async () => ({ rows }),
+    (path, row) => "https://site.test" + path.replace("{slug}", String(row.slug)),
+  );
+  expect([...xml.matchAll(/<lastmod>(.*?)<\/lastmod>/g)].map(match => match[1])).toEqual([
+    "2026-01-01",
+    "2026-01-01T08:00:00.123456+08:00",
+  ]);
+  expect(xml.match(/<url>/g)).toHaveLength(2 + at.length);
+  // A static path is written as a URL, like the rows' own.
+  expect(xml).toContain("<loc>https://site.test/caf%C3%A9%20x</loc>");
+  const capped = await webIndex(
+    true,
+    {
+      origin: "https://site.test",
+      title: "T",
+      description: "D",
+      sitemap: Array.from({ length: 50001 }, (_, i) => "/" + i),
+    },
+    [{ path: "/p/{slug}", page: { view: "one", list: "all" } }],
+    async () => {
+      throw new Error("a full sitemap reads no list");
+    },
+    () => undefined,
+  );
+  expect(capped.match(/<url>/g)).toHaveLength(50000);
+});
+
+test("pageHead formats an application-owned page's head and escapes every value", async () => {
+  const { pageHead } = await import("../src/kernel/web.js");
+  const hostile = `<b>&"'</script>`;
+  const url = 'https://site.test/zh-TW/a"b';
+  const jsonLd = { "@context": "https://schema.org", "@type": "Article", name: hostile, nested: ["</script><!--"] };
+  const html = pageHead({
+    title: hostile,
+    description: hostile,
+    url,
+    image: "https://site.test/i.png",
+    siteName: "Site",
+    locale: "zh-TW",
+    type: "article",
+    alternates: { "zh-TW": url, en: "https://site.test/en/a" },
+    xDefault: url,
+    markdown: url + ".md",
+    jsonLd,
+  });
+  const text = "&lt;b&gt;&amp;&quot;&#39;&lt;/script&gt;",
+    href = "https://site.test/zh-TW/a&quot;b";
+  expect(html).toBe(
+    `<title>${text}</title><meta name="description" content="${text}">` +
+      `<link rel="canonical" href="${href}"><link rel="alternate" type="text/markdown" href="${href}.md">` +
+      `<link rel="alternate" hreflang="zh-TW" href="${href}"><link rel="alternate" hreflang="en" href="https://site.test/en/a">` +
+      `<link rel="alternate" hreflang="x-default" href="${href}">` +
+      `<meta property="og:type" content="article"><meta property="og:url" content="${href}">` +
+      `<meta property="og:title" content="${text}"><meta property="og:description" content="${text}">` +
+      `<meta property="og:site_name" content="Site"><meta property="og:locale" content="zh_TW">` +
+      `<meta property="og:locale:alternate" content="en"><meta property="og:image" content="https://site.test/i.png">` +
+      `<meta name="twitter:card" content="summary_large_image">` +
+      `<script type="application/ld+json">${JSON.stringify(jsonLd).replaceAll("<", "\\u003c")}</script>`,
+  );
+  // The script element ends only where Core ends it, and its body parses back to the application's object.
+  expect(html.match(/<\/script>/g)).toHaveLength(1);
+  expect(html).not.toContain("<!--");
+  expect(JSON.parse(/<script type="application\/ld\+json">(.*)<\/script>/s.exec(html)![1]!)).toEqual(jsonLd);
+  // Absent, null and empty values emit no tag; the card falls back to `summary`.
+  expect(
+    pageHead({ title: "Scallion pancakes | Recipes", ogTitle: "Scallion pancakes", url: "https://site.test/a" }),
+  ).toContain(
+    '<title>Scallion pancakes | Recipes</title><link rel="canonical" href="https://site.test/a"><meta property="og:type" content="website"><meta property="og:url" content="https://site.test/a"><meta property="og:title" content="Scallion pancakes">',
+  );
+  // An alternate without a URL is no translation: neither its hreflang link nor its Open Graph locale.
+  expect(pageHead({ title: "t", url: "https://site.test/", locale: "en", alternates: { fr: "" } })).not.toContain("fr");
+  expect(pageHead({ title: "", description: null, url: "https://site.test/", image: "", markdown: "" })).toBe(
+    '<link rel="canonical" href="https://site.test/"><meta property="og:type" content="website">' +
+      '<meta property="og:url" content="https://site.test/"><meta name="twitter:card" content="summary">',
+  );
+  // The registered application seam's consumer module runs.
+  const { head } = await import("./seams/page-head.js");
+  expect(head).toContain('<link rel="alternate" hreflang="x-default" href="https://seam.example/a">');
+});
+
+test("a Worker importing only pageHead bundles no web() serving code, and web() no pageHead", async () => {
+  const { build } = await import("esbuild");
+  const bundle = async (contents: string) =>
+    (
+      await build({
+        stdin: { contents, resolveDir: import.meta.dir, loader: "ts" },
+        bundle: true,
+        write: false,
+        platform: "neutral",
+        format: "esm",
+        target: "es2022",
+      })
+    ).outputFiles[0]!.text;
+  const formatter = await bundle('export { pageHead } from "../src/kernel/web.ts";');
+  expect(formatter).toContain("twitter:card");
+  for (const serving of ["llms.txt", "sitemap", "SHA-256", "geo.position"]) expect(formatter).not.toContain(serving);
+  const site = await bundle('export { web } from "../src/kernel/web.ts";');
+  expect(site).toContain("llms.txt");
+  expect(site).not.toContain("twitter:card");
 });

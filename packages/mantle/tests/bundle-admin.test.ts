@@ -95,10 +95,16 @@ test("mantle bundle: the Worker into <outdir>/worker, Admin into <assets>/admin;
     await bundleApp(entry, dist);
     expect(await builds()).toHaveLength(5);
 
-    // An app's own _headers is never edited.
+    // An app's own _headers is never edited: as the assets directory itself, it is only told the rule.
     await mkdir(join(dir, "public"), { recursive: true });
     await writeFile(join(dir, "public/_headers"), "/assets/*\n  Cache-Control: no-cache\n");
-    await bundleApp(entry, dist, join(dir, "public"));
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await bundleApp(entry, dist, join(dir, "public"));
+      expect(warn.mock.calls.flat().join("\n")).toContain("has no /admin/assets/* rule; add:");
+    } finally {
+      warn.mockRestore();
+    }
     expect(existsSync(join(dir, "public/admin/index.html"))).toBe(true);
     expect(await readFile(join(dir, "public/_headers"), "utf8")).toBe("/assets/*\n  Cache-Control: no-cache\n");
     await expect(bundleApp(entry, dist, dist)).rejects.toThrow("must not overlap the Worker directory");
@@ -479,17 +485,34 @@ test("mantle bundle: public/ is copied into the assets directory; files it copie
     expect(existsSync(join(client, "robots.txt"))).toBe(false);
     expect(existsSync(join(client, "assets/logo.svg"))).toBe(true);
     expect(await readFile(join(client, "frontend.js"), "utf8")).toBe("another build step's file");
-    // a public _headers is the app's: the Admin rule is not merged into it, only reported
-    await writeFile(join(dir, "public/_headers"), "/assets/*\n  X-Content-Type-Options: nosniff\n");
-    await rm(join(client, "_headers"));
-    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    // a public _headers without the Admin rule: the rule is appended to the copy, once per build, never to public/
+    const rule =
+      "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=31536000, immutable\n";
+    await writeFile(join(dir, "public/_headers"), "/assets/*\n  X-Content-Type-Options: nosniff");
+    const log = spyOn(console, "log").mockImplementation(() => {});
     try {
       await bundleApp(entry, dist);
-      expect(warn.mock.calls.flat().join("\n")).toContain("/admin/assets/*");
+      expect(log.mock.calls.flat().join("\n")).toContain("Appended the /admin/assets/* rule");
     } finally {
-      warn.mockRestore();
+      log.mockRestore();
     }
-    expect(await readFile(join(client, "_headers"), "utf8")).toBe("/assets/*\n  X-Content-Type-Options: nosniff\n");
+    const appended = `/assets/*\n  X-Content-Type-Options: nosniff\n\n${rule}`;
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(appended);
+    await bundleApp(entry, dist);
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(appended);
+    expect(await readFile(join(dir, "public/_headers"), "utf8")).toBe("/assets/*\n  X-Content-Type-Options: nosniff");
+    // a symlinked public _headers is replaced in the copy, not written through
+    await rename(join(dir, "public/_headers"), join(dir, "headers.txt"));
+    await symlink(join(dir, "headers.txt"), join(dir, "public/_headers"));
+    await bundleApp(entry, dist);
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(appended);
+    expect(await readFile(join(dir, "headers.txt"), "utf8")).toBe("/assets/*\n  X-Content-Type-Options: nosniff");
+    await rm(join(dir, "public/_headers"));
+    // one with its own /admin/assets/* rule is the app's choice: copied as it is
+    const own = "/admin/assets/*\n  Cache-Control: no-cache\n";
+    await writeFile(join(dir, "public/_headers"), own);
+    await bundleApp(entry, dist);
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(own);
     // a symlink copied last time is removed like a file
     await symlink(join(dir, "public/assets/logo.svg"), join(dir, "public/assets/alias.svg"));
     await bundleApp(entry, dist);

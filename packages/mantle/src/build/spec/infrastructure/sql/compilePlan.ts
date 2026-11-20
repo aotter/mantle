@@ -241,7 +241,8 @@ const aggregates = (v: unknown): boolean => {
  * The View outputs that are a Schema table's column read unchanged, each with its storage type and whether the table declares it NOT NULL
  * (`NATIVE_NOT_NULL` and `notNullColumns`, the rule the initial DDL prints). The read must be a bare column of the select's only source or
  * of a named one, on the inner side of every join, in a select that cannot aggregate over no rows; a FROM subquery (an inlined View
- * included) passes such a column through. A CTE, set operation, expression or ambiguous name is not here, so its type stays nullable.
+ * included) passes such a column through. Text composed from such columns and string literals with `||` or COALESCE is also here,
+ * as `text`. A CTE, set operation, other expression or ambiguous name is not here, so its type stays nullable.
  */
 export function tableOutputs(
   view: SqlPlan,
@@ -284,7 +285,7 @@ export function tableOutputs(
       const outs = (inner?.targetList ?? []).filter(
         (t: SqlNode) => (t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval) === name,
       );
-      found = outs.length === 1 ? bare(inner, outs[0].ResTarget.val) : undefined;
+      found = outs.length === 1 ? typed(inner, outs[0].ResTarget.val) : undefined;
     }
     return found && { type: found.type, notNull: found.notNull && !nullable };
   };
@@ -301,10 +302,23 @@ export function tableOutputs(
       }
     );
   };
+  // #2091: `||` (text only when both sides are: it also joins arrays and jsonb) and COALESCE over text columns and string
+  // literals are text. `||` is NULL when either side is; COALESCE is NULL only when every argument is. Anything else stays untyped.
+  const typed = (sel: SqlNode, val: SqlNode | undefined): { type: string; notNull: boolean } | undefined => {
+    const op =
+      val?.A_Expr?.kind === "AEXPR_OP" && val.A_Expr.name?.at(-1)?.String?.sval === "||" ? val.A_Expr : undefined;
+    const args: SqlNode[] | undefined = op?.lexpr ? [op.lexpr, op.rexpr] : val?.CoalesceExpr?.args;
+    if (!args) return bare(sel, val);
+    const got = args.map(a =>
+      a.A_Const && !a.A_Const.isnull && "sval" in a.A_Const ? { type: "text", notNull: true } : typed(sel, a),
+    );
+    if (!got.every(g => g?.type === "text")) return undefined;
+    return { type: "text", notNull: op ? got.every(g => g!.notNull) : got.some(g => g!.notNull) };
+  };
   const sel = view.stmts[0]?.SelectStmt;
   for (const { ResTarget: r } of sel?.targetList ?? []) {
     const name: string | undefined = r.name ?? r.val?.ColumnRef?.fields?.at(-1)?.String?.sval;
-    const got = name ? bare(sel, r.val) : undefined;
+    const got = name ? typed(sel, r.val) : undefined;
     if (got) out[name!] = got;
   }
   return out;

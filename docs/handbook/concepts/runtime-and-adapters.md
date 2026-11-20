@@ -17,7 +17,7 @@ Destructive changes and type changes need explicit data migration. Mantle drops 
 
 ## Drivers and dialects
 
-The driver layer is open: handles are structural contracts, not a registration API. PostgreSQL needs `unsafe(text, values, options?)` and `begin(options, fn)` from `@aotter/mantle/contracts`; SQLite uses D1's prepare/bind/all/batch shape or bun:sqlite's query/transaction shape. Bun.SQL and postgres.js fit directly. See [adapting a driver](../guides/postgres-adapters.md).
+The driver layer is open: handles are structural contracts, not a registration API. PostgreSQL needs `unsafe(text, values, options?)` and `begin(options, fn)` from `@aotter/mantle/contracts`; SQLite uses D1's prepare/bind/all/batch shape or bun:sqlite's query/transaction shape. Bun.SQL and postgres.js fit directly. See [adapting a driver](../guides/postgres-adapters.md), including [PGlite](../guides/postgres-adapters.md#pglite) for in-process PostgreSQL in tests and previews.
 
 Users may supply anything that executes the emitted SQL, including WASM SQLite persisted to IndexedDB, at their own risk. Mantle promises behavior only on supported drivers: bun:sqlite, D1, Bun.SQL and postgres.js. A structural match alone does not prove transaction, result or error semantics.
 

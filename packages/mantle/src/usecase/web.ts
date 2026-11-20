@@ -29,7 +29,7 @@ export function emitWeb(plan: RuntimePlan, lowered: PlanLowered, target: Target)
           `import { query as input${i} } from "./validation/views/${encodeURIComponent(n)}.js";`,
           `import type { Row as Row${i} } from "./views/${encodeURIComponent(n)}.js";`,
         ]),
-        'import { web as site, type Options, type Page } from "@aotter/mantle/web";',
+        'import { web as site, type Options, type Page, type PageRow, type WebHandler } from "@aotter/mantle/web";',
         databaseImport(target),
         `type App = { Rows: {${views.map(([n], i) => `${q(n)}:Row${i}`).join(";")}}; Inputs: {${views
           .map(
@@ -46,7 +46,7 @@ export function emitWeb(plan: RuntimePlan, lowered: PlanLowered, target: Target)
             .map(([n]) => q(n))
             .join(" | ") || "never"
         } };`,
-        "export function web<const P extends Record<string, Page<App>>, E = unknown>(options: Options<App, Database, P, E>) {",
+        "export function web<const P extends Record<string, Page<App>>, E = unknown>(options: Options<App, Database, P, E>): WebHandler<E, PageRow<App, P>> {",
         `  return site<Database, E>(${plan.access ? `{...options, fields: ${q(plan.access.userFields)}, accessTargets: () => import("./access-targets.js").then(m => m.targets)}` : '{...options, accessTargets: () => import("./access-targets.js").then(m => m.targets)}'}, [${table.join(", ")}]);`,
         "}",
       ].join("\n") + "\n",

@@ -71,7 +71,8 @@ test("documented web Worker serves SQL-visible HTML, REST, indexes and alternate
     const llms = await (await get("/llms.txt")).text(),
       sitemap = await (await get("/sitemap.xml")).text();
     expect(llms.match(/^- /gm)).toHaveLength(ids.length);
-    expect(sitemap.match(/<url>/g)).toHaveLength(ids.length);
+    expect(sitemap.match(/<url>/g)).toHaveLength(ids.length + 1);
+    expect(sitemap).toContain("<url><loc>https://public.test/</loc></url>");
     for (const id of ids) {
       expect(llms).toContain("https://public.test/posts/" + id);
       expect(sitemap).toContain("<loc>https://public.test/posts/" + id + "</loc>");
