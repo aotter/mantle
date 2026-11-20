@@ -17,9 +17,12 @@ const PUBLIC = "public, max-age=60, stale-while-revalidate=600, stale-if-error=8
 const NO_STORE = { "cache-control": "no-store" };
 const page = /^\/(zh-TW|en)\/(?:recipes\/([a-z0-9-]+))?$/;
 
-/** `.md` alternates, /llms.txt, /sitemap.xml and the head tags of each recipe page, from the public Views. */
-let generatedWeb: ReturnType<typeof web> | undefined; // built once per isolate
-const site = (env: Env) => generatedWeb ??= web({
+/**
+ * `.md` alternates, /llms.txt, /sitemap.xml and the head tags of each recipe page, from the public Views.
+ * AGENT: build it per request, never per isolate: it keeps `env.DB`, which on cloudflare-postgres can be the request's
+ * own client, and a later request cannot use that. Building it costs about 5 µs.
+ */
+const site = (env: Env) => web({
   db: env.DB, caller: visitor, origin: env.PUBLIC_ORIGIN, title: siteDefaults.title, description: siteDefaults.description,
   locales: LOCALES, sitemap: LOCALES.map(locale => `/${locale}/`), cacheControl: PUBLIC,
   pages: {
@@ -42,7 +45,8 @@ const site = (env: Env) => generatedWeb ??= web({
 export async function appRoutes(request: Request, env: Env, _context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
   const url = new URL(request.url), match = page.exec(url.pathname);
   if (url.pathname === "/sign-in" && request.method === "GET") return signInPage();
-  const generated = await site(env).fetch(request, env);
+  const generatedWeb = site(env);
+  const generated = await generatedWeb.fetch(request, env);
   if (generated) return generated;
   if (!["/", "/robots.txt"].includes(url.pathname) && !match) return undefined;
   if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET, HEAD", ...NO_STORE } });
@@ -60,7 +64,7 @@ export async function appRoutes(request: Request, env: Env, _context: { caller: 
   const [{ recipeHtml }, found] = await Promise.all([import("./html.js"), read(env, locale, slug)]);
   if (!found) return new Response("Not found", { status: 404, headers: NO_STORE });
   // The row this page read: web() builds its tags from it without a second query.
-  const tags = await site(env).head(request, env, undefined, { row: found.recipe });
+  const tags = await generatedWeb.head(request, env, undefined, { row: found.recipe });
   return send(request, recipeHtml({ origin, locale, ...found }, tags), "text/html; charset=utf-8");
 }
 

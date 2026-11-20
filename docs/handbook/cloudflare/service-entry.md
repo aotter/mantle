@@ -95,8 +95,8 @@ export default {
 
 Keep the MCP and REST entries together for the normal symmetric path. For a deliberate
 asymmetric exception, remove the omitted surface's imports and array entry. `mcp.ts`
-exists only when the manifest has an MCP surface and requires the documented optional
-MCP peer. An application that deliberately does not mount MCP need not import generated
+is always generated (its `tools` table is empty when the manifest exposes nothing to MCP) and serving it requires the
+documented optional MCP peer. An application that deliberately does not mount MCP need not import generated
 `mcp.ts`; outside the entry import graph, it contributes nothing to the bundle.
 Pass the same handlers to each selected surface that exposes ref Procedures.
 Bind site/media/identity capabilities through the selected Admin/MCP

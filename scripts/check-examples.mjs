@@ -9,6 +9,11 @@ import { join, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const examples = join(root, "docs/examples");
 const EXAMPLES = ["recipes", "club-events", "purchasing"];
+// Also checked on cloudflare-postgres when MANTLE_NEXT_WORKER_PG_URL names a disposable database (pnpm with-pg sets it),
+// with the postgres.js version Core tests with.
+const POSTGRES = ["recipes"];
+const postgresVersion = JSON.parse(readFileSync(join(root, "packages/mantle/package.json"), "utf8")).devDependencies
+  .postgres;
 // Examples with their own package.json. The others (and generated-web) are copied onto app-shell.
 const PACKAGED = ["app-shell", "reference-service"];
 const MANAGERS = ["npm", "pnpm@10.28.0"];
@@ -55,6 +60,31 @@ if (!fresh) {
     ].join(" && ");
     console.log(`check-examples: ${example}`);
     consumer("app-shell", ["sh", "-c", initApp(source, steps)]);
+    if (!POSTGRES.includes(example)) continue;
+    if (!process.env.MANTLE_NEXT_WORKER_PG_URL) {
+      console.log(
+        `check-examples: ${example} on cloudflare-postgres SKIPPED (no PostgreSQL; run: pnpm with-pg pnpm check:examples)`,
+      );
+      continue;
+    }
+    // The same app on cloudflare-postgres under local Wrangler (scripts/postgres-app-shell.mjs): a client per request.
+    const generate = `pnpm exec mantle generate cloudflare-postgres generated manifests/*.yaml --auth src/auth.ts --entry src/index.ts --admin`;
+    const postgres = [
+      `node '${join(root, "scripts/postgres-app-shell.mjs")}'`,
+      generate,
+      `${generate} --check`,
+      "pnpm types",
+      "pnpm exec tsc --noEmit",
+      "pnpm build",
+      "pnpm test",
+      ...(existsSync(join(source, "smoke.mjs")) ? ["pnpm smoke"] : []),
+    ].join(" && ");
+    console.log(`check-examples: ${example} on cloudflare-postgres`);
+    consumer("app-shell", [
+      "sh",
+      "-c",
+      `pnpm add --ignore-workspace-root-check postgres@${postgresVersion} && ${initApp(source, postgres)}`,
+    ]);
   }
 }
 if (!selected.length) {

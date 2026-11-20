@@ -17,7 +17,13 @@ const SURFACES: readonly Surface[] = [
     what: "REST routes",
     topic: "service-entry",
   },
-  { module: "mcp.ts", selected: files => "mcp.ts" in files, what: "MCP tools", topic: "service-entry" },
+  // mcp.ts is always generated; it serves something only when its `tools` table has an entry.
+  {
+    module: "mcp.ts",
+    selected: files => files["mcp.ts"]?.includes("target: {") ?? false,
+    what: "MCP tools",
+    topic: "service-entry",
+  },
   {
     module: "admin-bindings.ts",
     selected: files => "admin-bindings.ts" in files,
