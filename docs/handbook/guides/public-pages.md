@@ -20,8 +20,10 @@ what a signed-in visitor does with it. The app's shell carries `<meta name="robo
 sends `X-Robots-Tag: noindex`), is left out of `sitemap.xml` and `llms.txt`, is not disallowed in `robots.txt` (a blocked
 page's `noindex` is never read), and sends anonymous visitors to `/sign-in` and back; the public pages link into it. The
 app reads Views and writes only through the REST Triggers. Put its entry in `src/client/` (`spa.tsx`): `mantle bundle`
-builds it to `/assets/client/spa.js`, which the shell loads ([outputs](../start/project-and-cli.md#outputs)). No shipped example has such an app;
-the recipes example shows the smaller case, one interactive part on a public page (its save button, `src/client/`).
+builds it to `/assets/client/spa.js`, which the shell loads ([outputs](../start/project-and-cli.md#outputs)). The
+purchasing example's employee area is such an app (`src/client/app.tsx`, its shell `public/app/index.html` and the
+`/app` route in `src/routes.ts`); the recipes example shows the smaller case, one interactive part on a public page (its
+save button, `src/client/`).
 
 ## URLs
 
