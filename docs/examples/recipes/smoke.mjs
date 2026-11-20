@@ -118,6 +118,12 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   cached(llms, PUBLIC, "llms.txt");
   assert.ok(llms.body.includes(`- [蔥油餅](${origin}/zh-TW/recipes/scallion-pancake.md)`));
   assert.ok(llms.body.includes(`- [Scallion Pancake](${origin}/en/recipes/scallion-pancake.md)`));
+  // List Views carry no body: sitemap.xml and llms.txt walk them row by row. llms.txt still links each `.md`.
+  for (const path of ["/api/views/published_recipes", "/api/views/published_translations?locale=en", "/api/views/translation_index"]) {
+    const rows = (await call("GET", path)).body.rows;
+    assert.equal(rows.length, 1, path);
+    for (const key of ["markdown", "steps", "ingredients"]) assert.ok(!(key in rows[0]), `${path} returns ${key}`);
+  }
   for (const [locale, title, summary] of [["zh-TW", recipe.title, recipe.summary], ["en", english.title, english.summary]]) {
     const list = await call("GET", `/${locale}/`);
     cached(list, PUBLIC, `/${locale}/`);
@@ -159,8 +165,9 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
     assert.equal(missing.status, 404, path);
     cached(missing, "no-store", path);
   }
-  // /assets/* is served by the edge without the Worker (run_worker_first excludes it), so its 404 is the platform's.
-  assert.equal((await call("GET", "/assets/client/missing.js")).status, 404);
+  // /assets/* is served by the edge without the Worker (run_worker_first excludes it), so its 404 is the platform's;
+  // plain fetch, as the kit's `call` asserts the Worker's own Cache-Control.
+  assert.equal((await fetch(`${origin}/assets/client/missing.js`)).status, 404);
   const post = await call("POST", "/zh-TW/recipes/scallion-pancake", { cookie: member });
   assert.equal(post.status, 405);
   cached(post, "no-store", "405");
@@ -176,13 +183,13 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   assert.ok(!html.includes("save.js") && !html.includes("modulepreload"), "the island's bundle is not referenced by the HTML");
   assert.deepEqual(elements(html, "link").filter(e => e.rel === "stylesheet").map(e => e.href), ["/assets/client/page.css"]);
   assert.ok(has(html, "div", { "data-island": "save" }) && has(html, "button", { type: "button" }, "儲存這道食譜"), "the button is server-rendered");
-  const loader = await call("GET", "/assets/client/page.js");
+  const loader = await fetch(`${origin}/assets/client/page.js`), loaderCode = await loader.text();
   assert.equal(loader.status, 200);
-  assert.ok(loader.body.length < 1024 && !/react/i.test(loader.body), "the loader is small and has no React");
+  assert.ok(loaderCode.length < 1024 && !/react/i.test(loaderCode), "the loader is small and has no React");
   const island = await fetch(`${origin}/assets/client/save.js`);
   assert.equal(island.status, 200);
   assert.match(island.headers.get("content-type"), /javascript/);
-  const css = (await call("GET", "/assets/client/page.css")).body;
+  const css = await (await fetch(`${origin}/assets/client/page.css`)).text();
   // A class `hover:bg-primary/80` is the selector `.hover\:bg-primary\/80`, not followed by more of a name.
   const defined = name => {
     const selector = "." + name.replace(/[^\w-]/g, "\\$&");

@@ -1,6 +1,9 @@
 import type { Caller } from "@aotter/mantle/contracts";
-import recipePage from "../generated/paged/views/published_recipes.js";
-import translationPage from "../generated/paged/views/published_translations.js";
+import recipesList from "../generated/paged/views/published_recipes.js";
+import translationsList from "../generated/paged/views/published_translations.js";
+import recipeView from "../generated/views/recipe.js";
+import localesView from "../generated/views/recipe_locales.js";
+import translationView from "../generated/views/recipe_translation.js";
 import { web } from "../generated/web.js";
 import { signInPage } from "./sign-in.js";
 import { DEFAULT_LOCALE, LOCALES, type Locale, siteDefaults } from "./site-config.js";
@@ -19,8 +22,9 @@ const site = (env: Env) => web({
   db: env.DB, caller: visitor, origin: env.PUBLIC_ORIGIN, title: siteDefaults.title, description: siteDefaults.description,
   locales: LOCALES, sitemap: LOCALES.map(locale => `/${locale}/`), cacheControl: PUBLIC,
   pages: {
-    "/zh-TW/recipes/{slug}": { view: "published_recipes", list: "published_recipes", markdown: "markdown", lastmod: "updated_at" },
-    "/{locale}/recipes/{slug}": { view: "published_translations", list: "published_translations", markdown: "markdown", lastmod: "updated_at" },
+    // `view` reads one page's row by its key, with the body; `list` enumerates the URLs, without it.
+    "/zh-TW/recipes/{slug}": { view: "recipe", list: "published_recipes", markdown: "markdown", lastmod: "updated_at" },
+    "/{locale}/recipes/{slug}": { view: "recipe_translation", list: "translation_index", markdown: "markdown", lastmod: "updated_at" },
   },
 });
 
@@ -37,7 +41,8 @@ const site = (env: Env) => web({
 export async function appRoutes(request: Request, env: Env, _context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
   const url = new URL(request.url), match = page.exec(url.pathname);
   if (url.pathname === "/sign-in" && request.method === "GET") return signInPage();
-  const generated = await site(env).fetch(request, env);
+  const generatedWeb = site(env);
+  const generated = await generatedWeb.fetch(request, env);
   if (generated) return generated;
   if (!["/", "/robots.txt"].includes(url.pathname) && !match) return undefined;
   if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET, HEAD", ...NO_STORE } });
@@ -55,27 +60,27 @@ export async function appRoutes(request: Request, env: Env, _context: { caller: 
   const [{ recipeHtml }, found] = await Promise.all([import("./html.js"), read(env, locale, slug)]);
   if (!found) return new Response("Not found", { status: 404, headers: NO_STORE });
   // The row this page read: web() builds its tags from it without a second query.
-  const tags = await site(env).head(request, env, undefined, { row: found.recipe });
+  const tags = await generatedWeb.head(request, env, undefined, { row: found.recipe });
   return send(request, recipeHtml({ origin, locale, ...found }, tags), "text/html; charset=utf-8");
 }
 
-/** First page of published recipes in one locale. AGENT: page with `nextCursor` once a locale has more than 100 recipes. */
+/** First page of a locale's list, without the body. AGENT: page with `nextCursor` once a locale has more than 100 recipes. */
 async function list(env: Env, locale: Locale) {
   const result = locale === DEFAULT_LOCALE
-    ? await recipePage(env.DB, visitor, { slug: null }, { limit: 100 })
-    : await translationPage(env.DB, visitor, { locale, slug: null }, { limit: 100 });
+    ? await recipesList(env.DB, visitor, {}, { limit: 100 })
+    : await translationsList(env.DB, visitor, { locale }, { limit: 100 });
   return result.rows;
 }
 
-/** One published recipe in `locale` plus the locales it is published in (for hreflang): two reads at once. */
+/** One published recipe in `locale`, by its key, and the locales it is translated into (hreflang): two reads at once. */
 async function read(env: Env, locale: Locale, slug: string) {
-  const [parent, translations] = await Promise.all([
-    recipePage(env.DB, visitor, { slug }, { limit: 1 }),
-    translationPage(env.DB, visitor, { locale: null, slug }, { limit: 100 }),
+  const [rows, translated] = await Promise.all([
+    locale === DEFAULT_LOCALE ? recipeView(env.DB, visitor, { slug }) : translationView(env.DB, visitor, { locale, slug }),
+    localesView(env.DB, visitor, { slug }),
   ]);
-  const recipe = locale === DEFAULT_LOCALE ? parent.rows[0] : translations.rows.find(row => row.locale === locale);
+  const recipe = rows[0];
   if (!recipe) return undefined;
-  return { recipe, locales: LOCALES.filter(l => l === DEFAULT_LOCALE || translations.rows.some(row => row.locale === l)) };
+  return { recipe, locales: LOCALES.filter(l => l === DEFAULT_LOCALE || translated.some(row => row.locale === l)) };
 }
 
 function send(request: Request, body: string, type: string) {

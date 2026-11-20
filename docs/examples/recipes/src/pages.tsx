@@ -5,12 +5,12 @@
  * names, and they double a new isolate's first render. The browser island (src/client/save.tsx) may use them.
  */
 import type { ReactNode } from "react";
-import type { Row } from "../generated/views/published_recipes.js";
+import type { Row as Listed } from "../generated/views/published_translations.js";
+import type { Row } from "../generated/views/recipe.js";
 import { DEFAULT_LOCALE, LOCALES, type Locale } from "./site-config.js";
 
-/** A row of `published_recipes`; a `published_translations` row has the same columns plus `locale`. */
+/** A row of the page View `recipe`; a `recipe_translation` row has the same columns plus `locale`. */
 export type Recipe = Row;
-type Listed = Pick<Row, "slug" | "title" | "description">;
 
 // AGENT: move UI strings to your translation workflow when you add locales.
 const text = {

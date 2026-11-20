@@ -12,7 +12,7 @@ Markdown, `llms.txt` and the sitemap from the generated `web()`.
   Admin's publish action runs the generated `recipes.publish` Procedure. Public Views and anonymous Store reads see
   published rows only.
 - Translations: `recipe_translations` is `localized` and `translates: { parent: recipes, on: slug }`. A translation
-  publishes only while its parent is published; the View `published_translations` joins the parent's `total_minutes`,
+  publishes only while its parent is published; the page View `recipe_translation` joins the parent's `total_minutes`,
   `servings` and `cover_url`.
 - Visitor pages, always read as an anonymous caller, with every item of
   [public pages](../../handbook/guides/public-pages.md): head tags, Open Graph, JSON-LD `Recipe`, the short answer
@@ -29,7 +29,7 @@ Search for `AGENT:` for what an app must keep or still provide: list paging, Mar
 
 | File | Purpose |
 |---|---|
-| `manifests/recipes.yaml` | Schemas `recipes` and `recipe_translations`; Views `published_recipes` and `published_translations`, each one page's row by `slug` or the whole list without it, with the whole recipe as `markdown` |
+| `manifests/recipes.yaml` | Schemas `recipes` and `recipe_translations`; page Views `recipe` and `recipe_translation` (one row by its key, with the whole recipe as `markdown`); `recipe_locales` (hreflang); list Views `published_recipes`, `published_translations` and `translation_index` (no body) |
 | `manifests/saved-recipes.yaml` | The member's saved recipes: Schema, View, Procedures and REST Triggers the save button uses |
 | `src/routes.ts` | Routing, reads, `Cache-Control`, and `web()` (`.md`, `llms.txt`, `sitemap.xml`, head tags); imports no React |
 | `src/html.tsx` | `renderToString` of the pages; reached only through `import()` from `src/routes.ts` |
@@ -48,7 +48,7 @@ Search for `AGENT:` for what an app must keep or still provide: list paging, Mar
 | Path | Answer | `Cache-Control` |
 |---|---|---|
 | `/{locale}/`, `/{locale}/recipes/{slug}` (GET, HEAD) | HTML rendered by React on the server | `public, max-age=60, stale-while-revalidate=600, stale-if-error=86400` |
-| `/{locale}/recipes/{slug}.md`, `/llms.txt`, `/sitemap.xml` | The generated `web()` from the two Views | the same (`cacheControl`) |
+| `/{locale}/recipes/{slug}.md`, `/llms.txt`, `/sitemap.xml` | The generated `web()`: page Views for `.md`, list Views for the indexes | the same (`cacheControl`) |
 | `/robots.txt` | `Disallow: /admin/` and the sitemap | the same |
 | `/` | 302 to `/zh-TW/` | `no-store` |
 | A draft, an unknown recipe or path; a missing `.md` | 404 | `no-store` |
@@ -79,7 +79,12 @@ file, so the loader imports the island by a computed URL: a literal `import()` w
 rules), which `mantle bundle` writes to `/assets/client/page.css`; every page links it. Only the classes in that file
 exist: `smoke.mjs` checks that every class the pages use is in it. No Tailwind build step.
 
-**Markdown.** Each View composes the whole recipe as `markdown` with `||` from text fields, which stays typed text on
+**Page Views and list Views.** A page View reads one row by its key (`slug` on `recipes`' unique index; `slug, locale`
+on `recipe_translations`') and returns everything the page and its `.md` need. A list View returns only what a list
+item, the sitemap and `llms.txt` need (`slug`, `locale`, `title`, `description`, `updated_at`), never the body: those
+indexes walk it row by row, and `llms.txt` still links each row's `.md` because the page declares `markdown`.
+
+**Markdown.** Each page View composes the whole recipe as `markdown` with `||` from text fields, which stays typed text on
 D1 and PostgreSQL. The ingredient and step lines stay plain lines: making them a Markdown list (`replace`) or adding the
 cooking time (a number) would make the column untyped, and `web()` takes only a text column.
 
@@ -122,7 +127,7 @@ The smoke does not cover upload: local `wrangler dev` has an R2 binding but no S
 - Each locale's detail page has title, description, canonical, hreflang (`zh-TW`, `en`, `x-default`) and a switcher link.
 - JSON-LD parses as a `Recipe` with the recipe name; the en page inherits `totalTime` from its parent; the short answer is present.
 - `.md` returns `text/markdown` with title, summary, ingredients and steps; `llms.txt`, the sitemap (with `lastmod`)
-  and both locale lists show the published recipe; `/` redirects to `/zh-TW/`.
+  and both locale lists show the published recipe; the list Views' rows carry no body; `/` redirects to `/zh-TW/`.
 - Every response it reads states the `Cache-Control` in the table above; a member's and an admin's page, `.md` and
   `llms.txt` equal the anonymous ones, with no cookie set.
 - The HTML loads one stylesheet holding every class it uses and one module script under 1 KB without React; it never

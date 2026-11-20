@@ -72,7 +72,7 @@ When the brief names a site, shop, catalogue or blog for visitors, these are par
 listing them:
 
 - Every item on this page, for every public page type the site has.
-- Accessible, responsive pages with the app's own styling; the examples are unstyled on purpose.
+- Accessible, responsive pages with the app's own styling; the examples are unstyled on purpose, except the recipes example's one stylesheet (the kit's `kit.css`).
 - Content managed in Admin (draft, publish, edit, unpublish) shows on the site without a rebuild. Images go through
   Admin's media library (`mantle help media-r2`); store committed asset IDs and never use an ID as an image URL.
 - Members' pages, if any, send anonymous visitors to `/sign-in` (`signInRedirect` in the app shell's `src/sign-in.ts`).
