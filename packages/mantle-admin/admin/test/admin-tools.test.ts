@@ -31,6 +31,11 @@ describe("Admin tool transport and routing", () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ output: { title: "x" }, version: "0a1b2c3d" })));
     expect((await callAdminTool("retitle", {})).result.content).toEqual([{ type: "text", text: '{"title":"x"}' }, { type: "text", text: "tool version 0a1b2c3d" }]);
   });
+  it("appends the tool's own content blocks after the JSON text and the version", async () => {
+    const image = { type: "image", data: "AA==", mimeType: "image/png" };
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ output: { id: "a" }, version: "0a1b2c3d", content: [image] })));
+    expect((await callAdminTool("pic", {})).result).toEqual({ content: [{ type: "text", text: '{"id":"a"}' }, { type: "text", text: "tool version 0a1b2c3d" }, image], structuredContent: { id: "a" } });
+  });
   it("answers a refusal with the deployed tool version and current input schema, as MCP does", async () => {
     const diagnostic = { code: "INPUT_VALIDATION_FAILED", message: "title is too short.", path: "title", toolVersion: "0a1b2c3d", inputSchema: { type: "object", required: ["title"] } };
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: diagnostic }, { status: 400 })));

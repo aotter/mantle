@@ -330,13 +330,17 @@ function copyPublic(outdir: string, assets: string): string[] {
 
 /** Admin's chunks are content-hashed and answered by the edge (`run_worker_first` excludes `/admin/assets/*`), so the
  * headers `adminShell` would add live in `_headers`. A `_headers` copied from `public/` this build gets the rule appended
- * to the copy (the next build copies it afresh); `public/_headers` itself, or one another step wrote, is only told the rule. */
+ * to the copy (the next build copies it afresh); `public/_headers` itself, or one another step wrote, is only told the rule.
+ * One day, not a year: the edge sends the rule on its own 404 for a missing chunk too, and a browser keeps that 404 for as
+ * long as the rule says (#2088). `immutable` stays so a reload does not revalidate the chunks while they are fresh. */
 const adminRule =
-  "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=31536000, immutable\n";
+  "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable\n";
 function adminHeaders(assets: string, copied: boolean): void {
   const file = join(assets, "_headers");
   if (!existsSync(file)) return writeFileSync(file, adminRule);
   const text = readFileSync(file, "utf8");
+  // An earlier build's own file, which nothing removes, carries the one-year rule this build replaces (#2088).
+  if (text === adminRule.replace("86400", "31536000")) return writeFileSync(file, adminRule);
   if (text.includes("/admin/assets/*")) return;
   if (!copied)
     return console.warn(`note: ${relative(process.cwd(), file)} has no /admin/assets/* rule; add:\n${adminRule}`);

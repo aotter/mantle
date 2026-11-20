@@ -278,6 +278,10 @@ for (const stack of STACKS) {
           const called = await rpc(serve, "tools/call", { name: "seam_tool", arguments: {} });
           expect(called.structuredContent).toEqual({ ok: true });
           expect(called._meta).toMatchObject({ "example/result": { b: 2 } });
+          const withBlocks = await rpc(serve, "tools/call", { name: "seam_blocks", arguments: {} });
+          expect(withBlocks.structuredContent).toEqual({ ok: true });
+          expect(withBlocks.content.at(-1)).toEqual({ type: "image", data: "AA==", mimeType: "image/png" });
+          expect(withBlocks._meta).toMatchObject({ "example/result": { b: 2 } });
         });
         await exercising(["app-resource-meta"], async () => {
           const serve = (await module("resource-meta.ts")).serve(db, bearer);

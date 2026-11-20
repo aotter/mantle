@@ -5,6 +5,16 @@ import { Database } from "bun:sqlite";
 import { resolve } from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import type {
+  AudioContent,
+  ContentBlock as SdkContentBlock,
+  EmbeddedResource,
+  ImageContent,
+  ResourceLink,
+  TextContent,
+} from "@modelcontextprotocol/server";
+import type { McpContentBlock } from "../src/kernel/mcp.js";
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: items}
@@ -1166,6 +1176,222 @@ test("Tool.meta lists visibility, App template and file params; withResultMeta k
   expect(direct.data).toEqual({ id: "u1" });
   expect(direct._meta.uploadUrl).toBe(secret);
   expect(JSON.stringify(direct.data)).not.toContain("SECRET");
+});
+
+// The SDK's own block types are application inputs of withResult without a cast.
+const sdkBlocks: readonly McpContentBlock[] = [] as (
+  | SdkContentBlock
+  | TextContent
+  | ImageContent
+  | AudioContent
+  | ResourceLink
+  | EmbeddedResource
+)[];
+
+test("withResult sends native content blocks after Core's blocks; a block the SDK refuses fails the call", async () => {
+  const { mcp, withResult, callTool } = await import("../src/kernel/mcp.js");
+  const blocks: McpContentBlock[] = [
+    { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+    { type: "audio", data: "aGVsbG8=", mimeType: "audio/wav" },
+    { type: "resource_link", uri: "https://files.test/a.pdf", name: "a.pdf", mimeType: "application/pdf" },
+    { type: "resource", resource: { uri: "https://files.test/b.txt", mimeType: "text/plain", text: "b" } },
+    { type: "text", text: "for the user", annotations: { audience: ["user"], priority: 0.5 }, _meta: { "x/y": 1 } },
+    ...sdkBlocks,
+  ];
+  const tool = (name: string, run: () => Promise<unknown>, extra: object = {}) => ({
+    name,
+    surface: "public",
+    description: name,
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run,
+    ...extra,
+  });
+  const tools = [
+    tool("pic", async () => withResult({ id: "p1" }, { content: blocks, _meta: { "example/result": 1 } }), {
+      version: "v1",
+      outputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    }),
+    tool("bad", async () =>
+      withResult({ ok: true }, { content: [{ type: "image", data: "not base64!", mimeType: "image/png" }] }),
+    ),
+    tool("unknown", async () => withResult({ ok: true }, { content: [{ type: "hologram", uri: "x" }] })),
+    tool("notlist", async () => withResult({ ok: true }, { content: { type: "text", text: "x" } as never })),
+    tool("only", async () => withResult(undefined, { content: [blocks[0]!] })),
+    tool("boom", async () => {
+      throw new Error("boom");
+    }),
+  ];
+  const completions: any[] = [];
+  const handle = mcp(tools, {
+    db: () => ({}),
+    caller: () => ({ kind: "anonymous" }),
+    onObservation: event => {
+      if (event.kind === "invocation" && event.phase === "completion") completions.push(event);
+    },
+  });
+  const quiet = console.error;
+  console.error = () => {};
+  try {
+    for (const mode of ["legacy", { pin: "2026-07-28" }] as const) {
+      const client = new Client({ name: "test", version: "1" }, { versionNegotiation: { mode } });
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
+          fetch: async (url, init) => (await handle(new Request(String(url), init), {}))!,
+        }),
+      );
+      await client.listTools(); // the official client then checks structuredContent against the outputSchema
+      const pic = await client.callTool({ name: "pic", arguments: {} });
+      expect(pic.isError).toBeUndefined();
+      expect(pic.content as unknown[]).toEqual([
+        { type: "text", text: '{"id":"p1"}' },
+        { type: "text", text: "tool version v1" },
+        ...blocks,
+      ]);
+      expect(pic.structuredContent).toEqual({ id: "p1" });
+      expect(pic._meta).toMatchObject({ "example/result": 1, "net.aotter.mantle/tool": "pic" });
+      // A tool that returns blocks alone still answers valid JSON text first.
+      const only = await client.callTool({ name: "only", arguments: {} });
+      expect(only.content as unknown[]).toEqual([{ type: "text", text: "null" }, blocks[0]]);
+      for (const name of ["bad", "unknown", "notlist", "boom"]) {
+        const failed = await client.callTool({ name, arguments: {} });
+        expect(failed.isError).toBe(true);
+        // Core's envelope only: the diagnostic and the input contract.
+        expect((failed.content as { type: string }[]).map(c => c.type)).toEqual(["text", "text"]);
+        expect((failed.structuredContent as any).diagnostics[0].code).toBe("INTERNAL_ERROR");
+      }
+      await client.close();
+    }
+  } finally {
+    console.error = quiet;
+  }
+  expect(completions.map(e => [e.tool, e.outcome, e.code])).toEqual(
+    [1, 2].flatMap(() => [
+      ["pic", "succeeded", undefined],
+      ["only", "succeeded", undefined],
+      ["bad", "failed", "INTERNAL_ERROR"],
+      ["unknown", "failed", "INTERNAL_ERROR"],
+      ["notlist", "failed", "INTERNAL_ERROR"],
+      ["boom", "failed", "INTERNAL_ERROR"],
+    ]),
+  );
+  // callTool returns what the tool returned.
+  const direct: any = await callTool(tools[0] as any, {}, {}, { kind: "anonymous" }, undefined as never);
+  expect(direct.data).toEqual({ id: "p1" });
+  expect(direct.content).toBe(blocks);
+});
+
+test("a hosted withResult call: a dry run carries no app blocks, a refused block is a failed access event", async () => {
+  const { mcp, withResult } = await import("../src/kernel/mcp.js");
+  const { mantleProps, pinned } = await import("./gateway-fixture.js");
+  let ran = 0;
+  const tool = (name: string, content: McpContentBlock[]) => ({
+    name,
+    surface: "admin",
+    description: name,
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run: async () => (ran++, withResult({ ok: true }, { content })),
+  });
+  const targets = {
+    "admin:tool:pic": { targetHash: "pic-hash", opaque: false },
+    "admin:tool:bad": { targetHash: "bad-hash", opaque: false },
+  };
+  const events: any[] = [];
+  const handle = mcp(
+    [tool("pic", [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }]), tool("bad", [{ type: "image" }])],
+    {
+      db: () => ({}),
+      gateway: { tenant: "example" },
+      accessTargets: async () => targets,
+      onAccess: e => void events.push(e),
+    },
+  );
+  const call = async (name: string, dryRun: boolean) => {
+    const response = await handle(
+      new Request("https://app.test/mcp/admin", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } }),
+      }),
+      {},
+      { props: { mantle: await pinned(mantleProps({ dryRun }), targets, `admin:tool:${name}`) } },
+    );
+    const text = await response!.text();
+    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result;
+  };
+  const dry = await call("pic", true);
+  expect(ran).toBe(0);
+  expect(dry.content).toHaveLength(1);
+  expect(dry.structuredContent).toMatchObject({ dryRun: true });
+  expect((await call("pic", false)).content.map((c: any) => c.type)).toEqual(["text", "image"]);
+  const quiet = console.error;
+  console.error = () => {};
+  const bad = await call("bad", false).finally(() => (console.error = quiet));
+  expect(bad.isError).toBe(true);
+  expect(bad.structuredContent.diagnostics[0].code).toBe("INTERNAL_ERROR");
+  expect(events.map(e => [e.target, e.outcome, e.reason])).toEqual([
+    ["admin:tool:pic", "allow", undefined],
+    ["admin:tool:pic", "allow", undefined],
+    ["admin:tool:bad", "error", "INTERNAL_ERROR"],
+  ]);
+});
+
+test("tools and App resources list their icons and annotations; initialize lists serverInfo and no resource list changes", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const icon = { src: "https://app.test/icon.png", mimeType: "image/png", sizes: ["48x48"], theme: "light" as const };
+  const tools = [
+    {
+      name: "pic",
+      surface: "public",
+      description: "pic",
+      inputSchema: { type: "object" },
+      validate: (raw: any) => raw,
+      run: async () => ({}),
+      icons: [icon],
+      annotations: { title: "Picture", readOnlyHint: true },
+    },
+  ];
+  const resource = {
+    uri: "ui://app/pic",
+    name: "pic-app",
+    html: "<!doctype html>",
+    renders: ["pic"],
+    icons: [icon],
+    annotations: { audience: ["user" as const], priority: 1 },
+  };
+  const serverInfo = { title: "App", description: "An app.", websiteUrl: "https://app.test", icons: [icon] };
+  const options = { db: () => ({}), caller: () => ({ kind: "anonymous" }) as const, serverInfo };
+  const withApps = mcp(tools, { ...options, apps: { public: { resources: [resource] } } }),
+    without = mcp(tools, options);
+  const ui = { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } };
+  const rpc = async (api: typeof without, method: string, params: object = {}) => {
+    const response = await api(
+      new Request("https://app.test/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      }),
+      {},
+    );
+    const body = await response!.text();
+    return JSON.parse(body.startsWith("event:") ? body.split("data: ")[1]!.split("\n")[0]! : body).result;
+  };
+  const init = { protocolVersion: "2025-06-18", capabilities: ui, clientInfo: { name: "t", version: "1" } };
+  const initialized = await rpc(withApps, "initialize", init);
+  expect(initialized.serverInfo).toMatchObject({ name: "aotter.mantle", ...serverInfo });
+  expect(initialized.capabilities).toMatchObject({
+    tools: { listChanged: false },
+    resources: { listChanged: false },
+  });
+  // No resource is registered, so no resources capability is advertised.
+  expect((await rpc(without, "initialize", init)).capabilities.resources).toBeUndefined();
+  expect((await rpc(withApps, "initialize", { ...init, capabilities: {} })).capabilities.resources).toBeUndefined();
+  const meta = { _meta: { "io.modelcontextprotocol/clientCapabilities": ui } };
+  const [listed] = (await rpc(withApps, "tools/list", meta)).tools;
+  expect(listed).toMatchObject({ icons: [icon], annotations: { title: "Picture", readOnlyHint: true } });
+  const [app] = (await rpc(withApps, "resources/list", meta)).resources;
+  expect(app).toMatchObject({ uri: "ui://app/pic", icons: [icon], annotations: { audience: ["user"], priority: 1 } });
 });
 
 test("tools/list pages with toolsPageSize and an opaque cursor bound to the catalogue; the default is one page", async () => {

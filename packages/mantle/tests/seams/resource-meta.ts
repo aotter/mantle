@@ -17,6 +17,8 @@ export const serve = (db: Parameters<typeof store>[0], caller: Caller) =>
             renders: ["add_note"],
             html: "<!doctype html>",
             meta: { "example/resource": { c: 3 } },
+            icons: [{ src: "https://app.test/icon.png" }],
+            annotations: { audience: ["user"], priority: 0.5 },
           },
         ],
       },

@@ -21,6 +21,8 @@ type Sdk = typeof import("@modelcontextprotocol/server");
 type McpServer = import("@modelcontextprotocol/server").McpServer;
 type Links = ReturnType<typeof linkSurface>["links"];
 type TextBlock = { type: "text"; text: string };
+type Icon = import("@modelcontextprotocol/server").Icon;
+type Annotations = import("@modelcontextprotocol/server").Annotations;
 
 /** What the handler decided before the SDK runs. */
 export interface Serving<Env, Database, Handlers> {
@@ -90,7 +92,11 @@ export function serveTools<Env, Database, Handlers>(
 
 function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Database, Handlers>): McpServer {
   const { options, pipeline, message, links, version } = serving;
-  const serverInfo = { name: "aotter.mantle", ...options.serverInfo, version: options.serverInfo?.version ?? version };
+  const serverInfo = {
+    name: "aotter.mantle",
+    ...options.serverInfo,
+    version: options.serverInfo?.version ?? version,
+  } as import("@modelcontextprotocol/server").Implementation;
   // Tools capability after construction: given to the constructor, the SDK installs its tools/call handler before the wrap below.
   const server = new sdk.McpServer(serverInfo, {
     maxToolInputElements: MCP_INPUT_ELEMENTS,
@@ -108,6 +114,8 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
 
   const support = clientUiSupport(message),
     appsEnabled = support !== "unsupported";
+  // A stateless server never sends list changes; the SDK would advertise them for resources once one registers.
+  if (appsEnabled && links?.resources.length) server.server.registerCapabilities({ resources: { listChanged: false } });
   const names = new Set(serving.tools.map(({ tool }) => tool.name));
   const linkedMeta = links
     ? registerApps(server, links, appsEnabled, names, { env: serving.env, request: serving.request })
@@ -141,6 +149,7 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
         inputSchema: schema(listedInput(tool, locale)),
         ...(tool.outputSchema ? { outputSchema: schema(localizedSchema(tool.outputSchema, locale)) } : {}),
         ...(tool.annotations ? { annotations: tool.annotations } : {}),
+        ...(tool.icons ? { icons: tool.icons as Icon[] } : {}),
       },
       (raw: unknown) =>
         invoke(
@@ -151,6 +160,7 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
           !!meta,
           rendersInApp,
           links?.renders.has(tool.name) ?? false,
+          sdk.isCallToolResult,
         ),
     );
   }
@@ -219,6 +229,7 @@ async function invoke<Env, Database, Handlers>(
   hasMeta: boolean,
   rendersInApp: boolean,
   linkedApp: boolean,
+  isResult: Sdk["isCallToolResult"],
 ) {
   const { options, pipeline, caller, request } = serving;
   // Not part of structured output: the version, and on failure the current input contract.
@@ -253,7 +264,9 @@ async function invoke<Env, Database, Handlers>(
     // Application `authorize` already decided every call of the request. The generated guard runs here, before any
     // input is validated or a database handle acquired.
     pipeline.check(call);
-    let db: Database | undefined, resultMeta: Readonly<Record<string, unknown>> | undefined;
+    let db: Database | undefined,
+      resultMeta: Readonly<Record<string, unknown>> | undefined,
+      blocks: readonly unknown[] | undefined;
     const run = async (input: Record<string, unknown>) => {
       const dryRun = pipeline.dryRun ? () => pipeline.dryRunResult() : undefined;
       const getDb = () => (db ??= options.db(serving.env));
@@ -261,14 +274,28 @@ async function invoke<Env, Database, Handlers>(
         apps: rendersInApp,
         linkedApp,
       });
-      // withResultMeta: the data is the result, the meta reaches only the result `_meta`.
+      // A re-run for a smaller page replaces the first run's blocks and meta, also when it returns no wrapper.
+      resultMeta = blocks = undefined;
+      // withResult: the data is the result; its blocks follow Core's, its meta reaches only the result `_meta`.
       if (!isRecord(output) || !(Symbol.for("net.aotter.mantle/result") in output)) return output;
       resultMeta = output._meta as typeof resultMeta;
+      blocks = output.content as typeof blocks;
       return output.data;
     };
     const data = await fitPage(tool, raw, await run(raw), run);
+    // Checked before the call is recorded: the SDK would otherwise answer a protocol error after a recorded success.
+    if (blocks && !isResult({ content: blocks })) {
+      const list: readonly unknown[] = Array.isArray(blocks) ? blocks : [],
+        bad = list.findIndex(block => !isResult({ content: [block] }));
+      const where =
+        bad < 0
+          ? "content that is not a list of blocks"
+          : `content[${bad}] (type ${JSON.stringify((list[bad] as { type?: unknown } | null)?.type)})`;
+      throw new Error(`MCP tool ${tool.name} returned ${where}, which the SDK refuses.`);
+    }
     pipeline.finish();
-    const body = JSON.stringify(data),
+    // A tool that returns nothing (blocks alone, say) still answers valid JSON text.
+    const body = JSON.stringify(data) ?? "null",
       oversized = tool.page && body.length > MCP_PAGE_BUDGET;
     const notice =
       `This page is larger than the ${MCP_PAGE_BUDGET}-character page size budget (a single row over it, ` +
@@ -279,6 +306,7 @@ async function invoke<Env, Database, Handlers>(
         { type: "text" as const, text: body },
         ...about(false),
         ...(oversized ? [{ type: "text" as const, text: notice }] : []),
+        ...((blocks ?? []) as import("@modelcontextprotocol/server").ContentBlock[]),
       ],
       ...(data && typeof data === "object" && !Array.isArray(data)
         ? { structuredContent: data as Record<string, unknown> }
@@ -400,6 +428,8 @@ function registerApps(
         mimeType: RESOURCE_MIME_TYPE,
         title: resource.title,
         description: resource.description,
+        ...(resource.icons ? { icons: resource.icons as Icon[] } : {}),
+        ...(resource.annotations ? { annotations: resource.annotations as Annotations } : {}),
         ...(meta ? { _meta: meta } : {}),
       };
       server.registerResource(resource.name, resource.uri, listing, async () => {

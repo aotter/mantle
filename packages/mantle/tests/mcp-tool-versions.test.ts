@@ -533,6 +533,64 @@ test("an MCP View page is cut by serialized size: every page fits the budget, pa
   }
 });
 
+test("a size cut measures a withResult page's data only, and the re-run's blocks and meta are the ones sent", async () => {
+  const { withResult } = await import("../src/kernel/mcp.js");
+  const rows = Array.from({ length: 200 }, (_, id) => ({ id, body: "x".repeat(400) }));
+  let runs = 0;
+  const wide = {
+    name: "wide_rows",
+    surface: "public",
+    description: "rows",
+    inputSchema: { type: "object", additionalProperties: false },
+    validate: (raw: unknown) => raw as Record<string, unknown>,
+    path: "wide_rows",
+    page: async (_db: null, _caller: unknown, _input: unknown, paging: { limit?: number }) => {
+      const run = ++runs,
+        picked = rows.slice(0, paging.limit ?? 200);
+      // A block far over the budget is not measured: only the rows decide the cut.
+      const big = { type: "text", text: "z".repeat(100_000) };
+      return withResult(
+        { rows: picked, nextCursor: String(picked.length) },
+        { content: [{ type: "text", text: `run ${run}` }, big], _meta: { "example/run": run } },
+      );
+    },
+  };
+  const handle = serveMcp([wide as never], { db: () => null, caller: () => ({ kind: "anonymous" }) });
+  for (const mode of eras) {
+    runs = 0;
+    const client = await connect(handle, mode);
+    const result = await client.callTool({ name: "wide_rows", arguments: {} });
+    const content = result.content as { text: string }[];
+    expect(runs).toBe(2);
+    expect(content[0]!.text.length).toBeLessThanOrEqual(60_000);
+    expect((result.structuredContent as { rows: unknown[] }).rows.length).toBeLessThan(200);
+    expect(content.slice(1).map(c => c.text.slice(0, 5))).toEqual(["run 2", "zzzzz"]);
+    expect(result._meta).toMatchObject({ "example/run": 2 });
+    await client.close();
+  }
+  // A re-run that returns no wrapper leaves nothing of the discarded first run behind.
+  const plain = {
+    ...wide,
+    name: "plain_rerun",
+    path: "plain_rerun",
+    page: async (_db: null, _caller: unknown, _input: unknown, paging: { limit?: number }) => {
+      const page = { rows: rows.slice(0, paging.limit ?? 200), nextCursor: "n" };
+      return paging.limit
+        ? page
+        : withResult(page, { content: [{ type: "text", text: "of 200 rows" }], _meta: { "example/rows": 200 } });
+    },
+  };
+  const client = await connect(
+    serveMcp([plain as never], { db: () => null, caller: () => ({ kind: "anonymous" }) }),
+    eras[0]!,
+  );
+  const cut = await client.callTool({ name: "plain_rerun", arguments: {} });
+  expect((cut.structuredContent as { rows: unknown[] }).rows.length).toBeLessThan(200);
+  expect(JSON.stringify(cut.content)).not.toContain("of 200 rows");
+  expect(cut._meta ?? {}).not.toHaveProperty("example/rows");
+  await client.close();
+});
+
 test("a size cut through the kernel's keyset page() resumes at the first row not returned; a wide View without an order stays one whole page", async () => {
   const { page } = await import("../src/kernel/paging.js");
   const all = Array.from({ length: 300 }, (_, i) => ({ id: i + 1, body: "x".repeat(i % 7 === 0 ? 3_000 : 400) }));
