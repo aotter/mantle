@@ -1,6 +1,6 @@
 /** Cookie-only Admin dispatch uses the same generated validation and invocation as MCP. */
 import { ContractError } from "@aotter/mantle/contracts";
-import { callToolLazy as callTool, type Tool } from "@aotter/mantle/mcp";
+import { callToolLazy as callTool, type ResultWith, type Tool } from "@aotter/mantle/mcp";
 import { localizedSchema } from "@aotter/mantle/mcp/labels";
 import { json, type Route } from "./index.js";
 export function webmcpRoutes<Env, Database, Handlers>(
@@ -39,8 +39,14 @@ export function webmcpRoutes<Env, Database, Handlers>(
         // The deployed definition's version, so a page registered before a deploy can tell; a refusal other than
         // authorization also names the input schema the tool is listed with now.
         try {
+          const output = await callTool(tool, await json(c), () => c.db, c.caller, args[0] as Handlers);
+          // A `withResult` wrapper: the data is the output and its blocks follow; its `_meta` is for an MCP App only.
+          const wrapper = (output as Record<symbol, unknown> | null)?.[Symbol.for("net.aotter.mantle/result")]
+            ? (output as ResultWith<unknown>)
+            : undefined;
           return {
-            output: await callTool(tool, await json(c), () => c.db, c.caller, args[0] as Handlers),
+            output: wrapper ? wrapper.data : output,
+            ...(wrapper?.content ? { content: wrapper.content } : {}),
             ...(version ? { version } : {}),
           };
         } catch (error) {

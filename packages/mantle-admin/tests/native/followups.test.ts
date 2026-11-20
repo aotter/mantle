@@ -302,6 +302,41 @@ test("handler-less WebMCP dispatch accepts omitted and undefined handlers", asyn
   }
 });
 
+test("WebMCP sends a withResult tool's data as the output and its blocks, never its _meta", async () => {
+  const { webmcpRoutes } = await import("../../src/server/webmcp.js"),
+    { withResult, withResultMeta } = await import("@aotter/mantle/mcp");
+  const image = { type: "image", data: "AA==", mimeType: "image/png" };
+  const tool = (name: string, run: () => Promise<unknown>): import("@aotter/mantle/mcp").Tool<null> => ({
+    name,
+    surface: "admin",
+    description: name,
+    inputSchema: {},
+    validate: raw => raw as Record<string, unknown>,
+    run,
+  });
+  const ask = createAdmin({ collections: [], views: [], operations: [], webmcp: { tools: [] } }, [], [], {
+    db: () => null,
+    caller: () => admin,
+    routes: webmcpRoutes({ tools: [{ name: "blocks" }, { name: "meta" }, { name: "empty" }] }, [
+      tool("blocks", async () => withResult({ id: "a" }, { content: [image], _meta: { secret: "s" } })),
+      tool("meta", async () => withResultMeta({ id: "b" }, { secret: "s" })),
+      tool("empty", async () => null),
+    ]),
+  });
+  const call = async (name: string) =>
+    (await ask(
+      new Request(`https://example.test/admin/api/webmcp/${name}`, {
+        method: "POST",
+        headers: { origin: "https://example.test", "content-type": "application/json" },
+        body: "{}",
+      }),
+      {},
+    ))!.json();
+  expect(await call("blocks")).toEqual({ output: { id: "a" }, content: [image] });
+  expect(await call("meta")).toEqual({ output: { id: "b" } });
+  expect(await call("empty")).toEqual({ output: null });
+});
+
 test("a WebMCP refusal carries the deployed tool version and, unless it is an authorization refusal, the listed input schema", async () => {
   const { webmcpRoutes } = await import("../../src/server/webmcp.js"),
     { ContractError } = await import("@aotter/mantle/contracts");

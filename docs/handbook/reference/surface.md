@@ -433,7 +433,9 @@ per-caller filtering, so `/mcp` and `/mcp/admin` each report their own catalogue
 version, and it changes when a generated tool's definition changes or a tool is
 added or removed, however the tools are wired.
 
-`POST /admin/api/webmcp/{tool}` returns `{ output, version }`. A refusal's
+`POST /admin/api/webmcp/{tool}` returns `{ output, version }`, and `content`
+when the tool returned `withResult` blocks; `output` is the wrapper's `data`
+and its `_meta` is never sent. A refusal's
 diagnostic adds `toolVersion`, and `inputSchema` unless it is an authorization
 refusal; internal errors and refusals before the call carry neither. Admin's
 WebMCP results repeat these as the same text block MCP adds. The navigation

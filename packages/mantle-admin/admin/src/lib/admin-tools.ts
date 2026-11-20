@@ -70,10 +70,11 @@ export function resultPath(catalog: AdminToolCatalog, name: string, output: unkn
     path + (route.entry && typeof row.status === "string" ? `?status=${encodeURIComponent(row.status)}` : ""),
   );
 }
-/** What a tool call answers a WebMCP host: the output as structured content when it is an object, and as JSON text. */
+/** What a tool call answers a WebMCP host: the output as structured content when it is an object, and as JSON text,
+ *  then the tool's own MCP content blocks. */
 export interface AdminToolResult {
   isError?: true;
-  content: { type: "text"; text: string }[];
+  content: ({ type: "text"; text: string } | ({ type: string } & Record<string, unknown>))[];
   structuredContent?: Record<string, unknown>;
 }
 
@@ -108,9 +109,13 @@ export async function callAdminTool(
   input: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<{ result: AdminToolResult; output: unknown }> {
-  let output: unknown, version: string | undefined;
+  let output: unknown, version: string | undefined, blocks: AdminToolResult["content"] | undefined;
   try {
-    ({ output, version } = await api.post<{ output: unknown; version?: string }>(
+    ({
+      output,
+      version,
+      content: blocks,
+    } = await api.post<{ output: unknown; version?: string; content?: AdminToolResult["content"] }>(
       `/webmcp/${encodeURIComponent(name)}`,
       input,
       { signal },
@@ -124,6 +129,7 @@ export async function callAdminTool(
     content: [
       { type: "text", text: JSON.stringify(output) },
       ...(version ? [{ type: "text" as const, text: `tool version ${version}` }] : []),
+      ...(blocks ?? []),
     ],
     ...(output && typeof output === "object" && !Array.isArray(output)
       ? { structuredContent: output as Record<string, unknown> }
