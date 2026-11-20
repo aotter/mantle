@@ -378,7 +378,8 @@ awaited. The application owns callback delivery.
 
 **Tool results:** a successful `tools/call` result's `content` is, in order, the
 JSON text of the data (always `content[0]`), the `tool version` line, the page
-notice of an oversized View page, then the blocks a `withResult` return adds.
+notice of an oversized View page, then the blocks a `withResult` return adds
+(from a hand-written tool's `run` or `page`, or from a ref Procedure's handler).
 `structuredContent` is the data when it is a plain object. Core owns the first
 three, `structuredContent`, `isError` and the error envelope; the application's
 blocks are checked by the installed SDK, and one it refuses fails the call as
@@ -388,7 +389,11 @@ blocks are checked by the installed SDK, and one it refuses fails the call as
 contract rather than 0.2's authored output projection/validation; MCP advertises
 that object envelope, not the incompatible authored schema. Ref Procedures expose
 the application's typed return value and advertise their authored object output
-schema. The application owns ref output validation. MCP does not decode or
+schema. A handler may return `withResult(output, { content, _meta })`: its
+generated MCP tool sends the blocks and `_meta`, while Store callers
+(`store(...).procedures`, `ctx.store.procedures`), REST and Admin operations get
+`output` alone, and `structuredContent` and the advertised output schema describe
+`output`, never the wrapper. The application owns ref output validation. MCP does not decode or
 revalidate native database rows. Business failures carry diagnostics in text;
 with an output schema they omit `structuredContent` to avoid validating an error
 against a success schema. Without one they also expose diagnostic structured
@@ -401,9 +406,9 @@ The official SDK does all wire handling (ADR-0029). "App" is the application;
 
 | Field | Who sets it |
 |---|---|
-| `CallToolResult.content` | Core's blocks first (data JSON, version line, page notice); App appends any block the installed SDK accepts (`image`, `audio`, `resource_link`, `resource`, `text`, each with its own `annotations` and `_meta`) with `withResult` |
+| `CallToolResult.content` | Core's blocks first (data JSON, version line, page notice); App appends any block the installed SDK accepts (`image`, `audio`, `resource_link`, `resource`, `text`, each with its own `annotations` and `_meta`) with `withResult`, from a hand-written tool or a ref Procedure handler |
 | `CallToolResult.structuredContent` | Core: the data, when it is a plain object, so a declared `outputSchema` holds |
-| non-object `structuredContent` (SEP-2106) | Not exposed: Core sends `structuredContent` only for an object |
+| non-object `structuredContent` (SEP-2106) | Not exposed: Core sends `structuredContent` only for an object. The 2026-07-28 revision allows any JSON value; SDK 2.3.1 sends it as is there, but on 2025-era requests wraps it as `{ result }` (and a non-object `outputSchema` likewise), so one tool would answer two shapes |
 | `CallToolResult.isError` | Core: the diagnostic envelope of a refusal or failure |
 | `CallToolResult._meta` | App: `withResult`/`withResultMeta`; Core sets `net.aotter.mantle/tool`, which wins |
 | `Tool.name`, `title`, `description` | App: `Tool` fields, or the manifest for generated tools; Core appends a generated tool's version |
@@ -424,7 +429,8 @@ The official SDK does all wire handling (ADR-0029). "App" is the application;
 | `serverInfo` | App: `serverInfo` (`name`, `title`, `version`, `description`, `websiteUrl`, `icons`) |
 | Server capabilities | Core: decided by what the endpoint serves |
 | Prompts, completions | Not exposed yet; completions need prompts or templates |
-| Progress, cancellation | Not exposed yet: `ToolCall` carries no progress or abort signal |
+| Progress | App: `ToolCall.progress(progress, total?, message?)`, present when the request carries a `progressToken`; sent on the call's SSE stream on both eras |
+| Cancellation | Core: `ToolCall.signal` aborts when the request ends early (a 2026-07-28 client's cancel, a dropped connection); a 2025-era `notifications/cancelled` cannot reach a stateless server's call. Hand-written tools only: a ref handler gets neither |
 | Logging, sampling, roots | Not exposed: deprecated in the 2026-07-28 revision (SEP-2577) |
 | Elicitation | Not exposed: a stateless 2025-era server cannot send a server-to-client request, and `ToolCall` does not offer the 2026-07-28 `input_required` round trip |
 | Tasks | Not exposed: SDK 2.3.1 has no task runtime |
