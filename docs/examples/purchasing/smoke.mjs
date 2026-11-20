@@ -1,5 +1,6 @@
 // Purchase requests end to end: submit, guarded transitions, admin-only approve/reject (Admin + admin MCP),
-// optimistic concurrency, one-transaction approval with a budget check, supplier order + signed callback, emails, cron.
+// optimistic concurrency, one-transaction approval with a budget check, supplier order + signed callback, emails, cron,
+// and the employees' single-page app under /app: its shell document, its REST calls, and one short run in Chrome.
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { createServer } from "node:http";
@@ -59,16 +60,55 @@ try {
     assert.deepEqual((await call("GET", "/api/views/my-requests", { cookie: bob })).body.rows.map(r => r.title).sort(), ["Desk", "Projector"]);
     step("employees submit requests (unknown department creates nothing) and see only their own");
 
-    // fetch follows the 303, so an anonymous visitor ends on the sign-in page.
-    assert.match((await call("GET", "/requests")).body, /<h1>Sign in<\/h1>/);
-    assert.match((await call("GET", "/sign-in?return=%2Frequests")).body, /sign-in\/email-otp/);
-    const page = (await call("GET", "/requests", { cookie: bob })).body;
-    assert.match(page, /Projector/); assert.doesNotMatch(page, /Laptop/); assert.match(page, /<option>Design<\/option>/);
-    // Writes go through the REST Trigger the page's form names, never through the page itself.
-    assert.match(page, /<form action="\/api\/requests" method="post"/);
-    assert.equal((await call("POST", "/requests", { cookie: bob })).status, 404);
-    assert.equal((await call("POST", "/api/requests", { cookie: bob, body: { title: "Pens", amount: 0, department: "Design" } })).status, 400);
-    step("the /requests page sends anonymous visitors to /sign-in, lists only the employee's own requests and submits to the REST Trigger");
+    // The employees' app under /app: one static shell document for every page, the same bytes for everyone.
+    const deep = `/app/requests/${laptop}?tab=1`;
+    const away = await fetch(`${origin}${deep}`, { redirect: "manual" });
+    assert.equal(away.status, 303);
+    assert.equal(away.headers.get("location"), `/sign-in?return=${encodeURIComponent(deep)}`);
+    assert.equal(away.headers.get("cache-control"), "no-store");
+    // fetch follows the 303: what a signed-out crawler can fetch is the sign-in page, with no workflow data.
+    const anonymous = await call("GET", "/app");
+    assert.match(anonymous.body, /<h1>Sign in<\/h1>/);
+    for (const title of ["Laptop", "Monitors", "Engineering"]) assert.ok(!anonymous.body.includes(title), title);
+    // The sign-in page goes back only to a path on this origin.
+    assert.ok(anonymous.body.includes("new URL(back, location.origin).origin === location.origin"));
+    const shell = await call("GET", "/app", { cookie: alice });
+    for (const path of ["/app", "/app/", "/app/new", `/app/requests/${laptop}`]) {
+      const response = await call("GET", path, { cookie: path === "/app/new" ? bob : alice });
+      assert.equal(response.status, 200, path);
+      assert.match(response.headers.get("content-type"), /^text\/html/);
+      assert.equal(response.headers.get("x-robots-tag"), "noindex", path);
+      assert.equal(response.headers.get("cache-control"), "no-store", path);
+      assert.equal(response.body, shell.body, `${path}: the same document for every page and every employee`);
+    }
+    assert.ok(shell.body.includes(`<meta name="robots" content="noindex">`) && shell.body.includes(`<div id="root"></div>`));
+    for (const title of ["Laptop", "Monitors", "Projector", "Engineering"]) assert.ok(!shell.body.includes(title), `the shell holds no workflow data (${title})`);
+    const scripts = [...shell.body.matchAll(/<script\b([^>]*)>/g)].map(([, attributes]) => attributes.trim());
+    assert.deepEqual(scripts, [`type="module" src="/assets/client/app.js"`], "one module script and no inline script");
+    assert.ok(shell.body.includes(`<link rel="stylesheet" href="/assets/client/app.css">`));
+    // Paths under /app the app does not have: the same document (the app shows its not-found page) with a real 404.
+    for (const path of ["/app/nope", "/app/index.html", "/app/requests/a/b", "/app/new/"]) {
+      const missing = await call("GET", path, { cookie: alice });
+      assert.equal(missing.status, 404, path);
+      assert.equal(missing.body, shell.body, path);
+      assert.equal(missing.headers.get("cache-control"), "no-store", path);
+    }
+    // Outside the prefix there is no single-page fallback: unknown URLs, including the old page, are the Worker's 404.
+    for (const path of ["/nope", "/application", "/app.js", "/requests", "/apps/x"]) {
+      const missing = await call("GET", path, { cookie: alice });
+      assert.equal(missing.status, 404, path);
+      assert.equal(missing.body, "Not found", path);
+      assert.equal(missing.headers.get("cache-control"), "no-store", path);
+    }
+    assert.equal((await call("POST", "/app", { cookie: alice })).status, 405);
+    // Never listed for crawlers, and never disallowed: a disallowed page's noindex is never read.
+    for (const path of ["/robots.txt", "/sitemap.xml", "/llms.txt"]) assert.ok(!String((await call("GET", path)).body).includes("/app"), path);
+    // /assets/* is served by the edge without the Worker: plain fetch, as the kit's `call` asserts the Worker's own Cache-Control.
+    const bundle = await fetch(`${origin}/assets/client/app.js`), stylesheet = await fetch(`${origin}/assets/client/app.css`);
+    assert.equal(bundle.status, 200);
+    assert.match(bundle.headers.get("content-type"), /javascript/);
+    assert.match(await stylesheet.text(), /--radius/, "app.css carries the kit's kit.css");
+    step("/app: anonymous visitors go to /sign-in and back; employees get one noindex, no-store shell with no data; unknown paths are 404 inside and outside /app");
 
     assert.equal((await operation(admin, "open-budget", { department: "Marketing", remaining: 500 })).status, 200);
     assert.equal((await operation(admin, "open-budget", { department: "Design", remaining: 1 })).status, 409);
@@ -192,6 +232,63 @@ try {
     assert.equal((await query(`SELECT budgetid FROM ledger WHERE requestid = '${pens.id}'`))[0].budgetid, engineeringBudget);
     assert.equal((await query("SELECT COUNT(*) AS n FROM ledger l JOIN requests r ON r.id = l.requestid WHERE l.budgetid <> r.budgetid"))[0].n, 0);
     step("requests and ledger rows reference the same stable budget, with at most one ledger row per request");
+
+    // The app's calls, end to end: it reads the Views and writes only through the REST Triggers.
+    const dana = await signIn("dana@example.test");
+    const budgets = (await call("GET", "/api/views/department-budgets", { cookie: dana })).body.rows;
+    assert.deepEqual(budgets.find(b => b.department === "Marketing"), { department: "Marketing", remaining: 500 });
+    assert.equal((await call("GET", "/api/views/department-budgets")).status, 401);
+    const invalid = await call("POST", "/api/requests", { cookie: dana, body: { title: "Banner", amount: 0, department: "Marketing" } });
+    assert.equal(invalid.status, 400);
+    assert.match(invalid.body.error.path, /amount/, "the app shows a refused field beside it");
+    const banner = await submit(dana, "Banner", 300, "Marketing");
+    const danaRows = async () => (await call("GET", "/api/views/my-requests", { cookie: dana })).body.rows;
+    assert.deepEqual((await danaRows()).map(r => [r.title, r.requestStatus]), [["Banner", "submitted"]]);
+    const detail = async cookie => call("GET", `/api/views/my-request?id=${banner}`, { cookie });
+    const shown = (await detail(dana)).body.rows[0];
+    assert.equal(shown.requestStatus, "submitted");
+    assert.deepEqual((await detail(alice)).body.rows, [], "another employee cannot read it");
+    assert.equal((await detail()).status, 401);
+    for (const path of ["/api/views/my-requests", `/api/views/my-request?id=${banner}`, "/api/views/department-budgets"])
+      assert.equal((await call("GET", path, { cookie: dana })).headers.get("cache-control"), "private, no-store", path);
+    assert.equal((await operation(admin, "approve-request", { id: banner, expectedVersion: shown.version })).status, 200);
+    assert.deepEqual((await danaRows()).map(r => [r.title, r.requestStatus]), [["Banner", "ordered"]]);
+    assert.deepEqual([(await detail(dana)).body.rows[0].requestStatus, (await detail(dana)).body.rows[0].supplierOrderId], ["ordered", "SUP-3"]);
+    assert.equal((await call("GET", "/api/views/department-budgets", { cookie: dana })).body.rows.find(b => b.department === "Marketing").remaining, 200);
+    step("the app's REST calls: an employee submits, sees it submitted, an admin approves, the employee sees it ordered and the budget's new remainder");
+
+    // One short run of the UI in Chrome (the same browser the Admin MCP App test uses): Dana's session, the form's inline
+    // errors, a submit through the UI, and the new request in the list.
+    const { chromium } = await import("playwright-core");
+    const browser = await chromium.launch({ headless: true, ...(process.env.MANTLE_TEST_CHROMIUM ? { executablePath: process.env.MANTLE_TEST_CHROMIUM } : {}) });
+    try {
+      const signedOut = await browser.newPage();
+      await signedOut.goto(`${origin}/app/new`);
+      assert.equal(new URL(signedOut.url()).pathname + new URL(signedOut.url()).search, "/sign-in?return=%2Fapp%2Fnew");
+      const context = await browser.newContext();
+      await context.addCookies(dana.split("; ").map(pair => ({ name: pair.slice(0, pair.indexOf("=")), value: pair.slice(pair.indexOf("=") + 1), url: origin })));
+      const page = await context.newPage();
+      const failures = [];
+      page.on("pageerror", error => failures.push(error.message));
+      await page.goto(`${origin}/app/new`);
+      await page.getByRole("button", { name: "Submit" }).click();
+      await page.getByText("Say what you need.").waitFor();
+      await page.getByLabel("What").fill("Easel");
+      await page.getByLabel("Department").selectOption("Marketing");
+      await page.getByLabel("Amount").fill("80");
+      await page.getByRole("button", { name: "Submit" }).click();
+      await page.waitForURL(/\/app\/requests\/[\w-]+$/);
+      await page.getByRole("heading", { name: "Easel" }).waitFor();
+      await page.getByRole("link", { name: "My requests" }).click();
+      await page.getByRole("link", { name: "Easel" }).waitFor();
+      assert.deepEqual(failures, []);
+      await page.goto(`${origin}/app/nope`);
+      await page.getByRole("heading", { name: "Not found" }).waitFor();
+    } finally {
+      await browser.close();
+    }
+    assert.deepEqual((await danaRows()).map(r => [r.title, r.requestStatus]), [["Easel", "approved"], ["Banner", "ordered"]]);
+    step("in Chrome: /app sends a signed-out visitor to sign in; signed in, the form shows its errors inline, submits, and the list shows the new request");
   }, { vars: { EMPLOYEE_DOMAIN: "example.test", SUPPLIER_API_URL: `http://127.0.0.1:${supplier.address().port}/orders`, SUPPLIER_WEBHOOK_SECRET: SECRET } });
 } finally {
   supplier.close();
