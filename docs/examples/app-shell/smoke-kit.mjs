@@ -72,6 +72,8 @@ export async function smoke(scenario, options) {
   const app = await startApp(options);
   try {
     await scenario(app);
+    // src/service.ts gives every response without Cache-Control `private, no-store`: a shared cache never keeps it by default.
+    assert.deepEqual(app.unstated, [], "responses without Cache-Control");
     console.log("smoke passed");
   } catch (error) {
     console.error(app.logs().slice(-4000));
@@ -99,10 +101,12 @@ export async function startApp({ vars = {}, port = 18000 + Math.floor(Math.rando
   // Better Auth limits OTP requests to 3 per minute per IP: each signed-in user gets its own client IP.
   const ips = new Map();
   const ipOf = email => ips.get(email) ?? (ips.set(email, `203.0.113.${ips.size + 1}`), ips.get(email));
+  const unstated = []; // responses the Worker sent without Cache-Control
   /** method, path, { cookie, body, ip, headers } -> { status, body, headers } */
   const call = async (method, path, { cookie, body, ip, headers = {} } = {}) => {
     const response = await fetch(`${origin}${path}`, { method, headers: { "content-type": "application/json", origin, ...(cookie ? { cookie } : {}), ...(ip ? { "cf-connecting-ip": ip } : {}), ...headers },
       ...(body === undefined ? {} : { body: typeof body === "string" ? body : JSON.stringify(body) }) });
+    if (!response.headers.has("cache-control")) unstated.push(`${method} ${path} ${response.status}`);
     const text = await response.text();
     let parsed; try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
     return { status: response.status, body: parsed, headers: response.headers };
@@ -111,6 +115,7 @@ export async function startApp({ vars = {}, port = 18000 + Math.floor(Math.rando
   const mcp = async (path, cookie, name, args) => {
     const response = await fetch(`${origin}${path}`, { method: "POST", headers: { "content-type": "application/json", origin, accept: "application/json, text/event-stream", ...(cookie ? { cookie } : {}) },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: name ? "tools/call" : "tools/list", params: name ? { name, arguments: args } : {} }) });
+    if (!response.headers.has("cache-control")) unstated.push(`POST ${path} ${response.status}`);
     const text = await response.text(), data = text.split("\n").find(line => line.startsWith("data:"));
     return { status: response.status, body: data ? JSON.parse(data.slice(5)) : text ? JSON.parse(text) : null };
   };
@@ -164,5 +169,5 @@ export async function startApp({ vars = {}, port = 18000 + Math.floor(Math.rando
     await stop();
     throw error;
   }
-  return { origin, owner, call, mcp, signIn, sql, cron, waitForLog, step, logs: () => logs, stop };
+  return { origin, owner, call, mcp, signIn, sql, cron, waitForLog, step, logs: () => logs, unstated, stop };
 }

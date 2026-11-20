@@ -148,6 +148,8 @@ try {
     const tampered = await call("POST", "/callbacks/supplier", { body: JSON.stringify({ reference: laptop, orderId: "SUP-1" }),
       headers: { "x-supplier-timestamp": String(Math.floor(Date.now() / 1000)), "x-supplier-signature": "0".repeat(64) } });
     assert.equal(tampered.status, 401);
+    // src/routes.ts answers a bare Response; the shell's src/service.ts states Cache-Control for it.
+    assert.equal(tampered.headers.get("cache-control"), "private, no-store");
     assert.equal((await row(laptop)).status, "ordered");
     assert.equal((await signed({ reference: laptop, orderId: "SUP-9" })).status, 409);
     assert.equal((await signed({ reference: laptop, orderId: "SUP-1" })).status, 204);
