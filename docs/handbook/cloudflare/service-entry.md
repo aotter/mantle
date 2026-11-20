@@ -95,8 +95,8 @@ export default {
 
 Keep the MCP and REST entries together for the normal symmetric path. For a deliberate
 asymmetric exception, remove the omitted surface's imports and array entry. `mcp.ts`
-exists only when the manifest has an MCP surface and requires the documented optional
-MCP peer. An application that deliberately does not mount MCP need not import generated
+is always generated (its `tools` table is empty when the manifest exposes nothing to MCP) and serving it requires the
+documented optional MCP peer. An application that deliberately does not mount MCP need not import generated
 `mcp.ts`; outside the entry import graph, it contributes nothing to the bundle.
 Pass the same handlers to each selected surface that exposes ref Procedures.
 Bind site/media/identity capabilities through the selected Admin/MCP
@@ -151,7 +151,12 @@ step wrote) is not edited: the build prints the rule to add. `mantle bundle` als
 working directory's `public/` into the assets directory (removing what it copied last
 time; `public/admin` is refused, and `public/assets/client` when the app has browser entries). The application's browser entries
 (`client/<name>.ts|tsx` beside the Worker entry) are built into `<assets>/assets/client/<name>.js`, answered by
-the edge at `/assets/client/<name>.js` ([reference](../start/project-and-cli.md#outputs)). `/assets/*` is excluded by default, so
+the edge at `/assets/client/<name>.js`, with content-hashed copies under `/assets/client/h/`
+([reference](../start/project-and-cli.md#outputs)). For those copies the build's `_headers` also gets
+`/assets/client/h/*` with `public, max-age=86400, immutable` (one day, for the same reason as Admin's rule below),
+written, appended or printed exactly as Admin's rule; a `_headers` that holds only rules `mantle bundle` writes is the
+build's own and is rewritten with this build's rules, or removed when the build has none. A `bun-*` build writes no
+hashed copies. `/assets/*` is excluded by default, so
 `public/assets/*` is answered by the edge; other public files reach the Worker first,
 which can serve them with `env.ASSETS.fetch(request)` as the app shell does. Cloudflare
 sends `Cache-Control: public, max-age=0, must-revalidate` and an ETag by default; set

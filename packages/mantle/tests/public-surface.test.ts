@@ -35,6 +35,8 @@ const DEVELOPER = [
   "./auth/hardening",
   "./auth/admin",
   "./bun/assets",
+  // The content-hashed browser entries of the build `mantle bundle` bundles the Worker from.
+  "./client-assets",
   // The SQLite `Handle` contracts an application names for its database; generated code imports the same modules.
   "./driver/d1",
   "./driver/bun-sqlite",

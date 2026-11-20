@@ -291,15 +291,14 @@ must also mount Better Auth's `/.well-known/oauth-protected-resource/mcp`
 metadata route. Auth challenges point to that route. Presented bearer credentials
 need the `mcp` scope; cookie sessions use the same-origin mutation checks.
 
-Generation emits `mcp.ts` only for a non-internal View or MCP Trigger. Omitting
+Generation always emits `mcp.ts`; its `tools` table holds each non-internal View, each MCP Trigger's Procedure and the
+publishing transitions, and is empty without them, so an entry that imports it builds either way. Omitting
 MCP remains a deliberate asymmetric choice; an HTTP-only Procedure still generates
 successfully with the warning described in [Trigger](trigger.md). These
 surfaces typecheck without the optional `@modelcontextprotocol/server` peer;
 install the exact version declared in the installed SDK's `peerDependencies`.
 The peer loads by dynamic import on the first matching `/mcp` request; if
-missing, that request fails at runtime. Publishing alone does not select MCP;
-on a selected
-surface its generated `publish_<schema>`, `unpublish_<schema>` and
+missing, that request fails at runtime. A publishing Schema's generated `publish_<schema>`, `unpublish_<schema>` and
 `archive_<schema>` tools use the same snake-case naming rule, are admin-only
 and take `{ id, expectedVersion }` through the shared generated validation.
 

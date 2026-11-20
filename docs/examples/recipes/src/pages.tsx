@@ -4,6 +4,7 @@
  * layout rules). AGENT: keep kit components (@aotter/mantle-ui/kit) out of these server pages: they only produce class
  * names, and they double a new isolate's first render. The browser island (src/client/save.tsx) may use them.
  */
+import { clientAssets } from "@aotter/mantle/client-assets";
 import type { ReactNode } from "react";
 import type { Row as Listed } from "../generated/views/published_translations.js";
 import type { Row } from "../generated/views/recipe.js";
@@ -21,6 +22,9 @@ const text = {
 const lines = (value: string | null) => (value ?? "").split("\n").map(line => line.trim()).filter(Boolean);
 const recipePath = (locale: Locale, slug: string | null) => `/${locale}/recipes/${slug}`;
 const link = "text-primary underline-offset-4 hover:underline";
+// The content-hashed copies of src/client/<name>.ts(x) this Worker version was built with: cached for a day, so a repeat
+// view within it makes no request for them. The stable name is the fallback where `mantle bundle` gave no map (a test).
+const asset = (name: string) => clientAssets[name] ?? { js: `/assets/client/${name}.js`, css: `/assets/client/${name}.css` };
 
 function Document({ locale, title, head, children }: { locale: Locale; title: string; head: ReactNode; children: ReactNode }) {
   return (
@@ -29,13 +33,13 @@ function Document({ locale, title, head, children }: { locale: Locale; title: st
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{title}</title>
-        <link rel="stylesheet" href="/assets/client/page.css" />
+        <link rel="stylesheet" href={asset("page").css} />
         {head}
       </head>
       <body>
         <main className="page">{children}</main>
         {/* The island loader: a few hundred bytes without React; a module script never blocks rendering. */}
-        <script type="module" src="/assets/client/page.js" />
+        <script type="module" src={asset("page").js} />
       </body>
     </html>
   );
@@ -124,9 +128,10 @@ export function RecipePage({ origin, locale, recipe: r, locales }: { origin: str
         <h2 className="mt-4 text-lg font-semibold">{t.steps}</h2>
         <ol className="steps mt-2 space-y-1 pl-5">{lines(r.steps).map((step, i) => <li key={i}>{step}</li>)}</ol>
       </article>
-      {/* An island: this static button is complete markup; src/client/page.js loads src/client/save.tsx when it nears
-          the viewport or is first used, and that hydrates it. Without JavaScript the recipe above is the whole page. */}
-      <div data-island="save" data-props={JSON.stringify({ slug: r.slug, label: { save: t.save, saved: t.saved } })} className="mt-4">
+      {/* An island: this static button is complete markup; src/client/page.ts loads src/client/save.tsx from
+          data-island-src when it nears the viewport or is first used, and that hydrates it. Without JavaScript the recipe
+          above is the whole page. */}
+      <div data-island-src={asset("save").js} data-props={JSON.stringify({ slug: r.slug, label: { save: t.save, saved: t.saved } })} className="mt-4">
         <SaveButton label={t.save} />
       </div>
     </Document>

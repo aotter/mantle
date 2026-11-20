@@ -68,7 +68,7 @@ shown here, not a requirement.
 | `src/client/app.tsx` | The app: React with kit components (`@aotter/mantle-ui/kit`), its three pages and their REST calls |
 | `src/client/app.css` | Its one stylesheet: the kit's `kit.css` plus a few layout rules; `mantle bundle` writes `/assets/client/app.css` |
 | `src/client/css.d.ts` | Lets TypeScript accept the stylesheet import |
-| `public/app/index.html` | The shell document: `noindex`, a root element, the stylesheet and one module script, `/assets/client/app.js` |
+| `public/app/index.html` | The shell document: `noindex`, a root element, the stylesheet and one module script, `/assets/client/app.js`. A static file cannot read the map of content-hashed names (`@aotter/mantle/client-assets`), so it links the stable names, which the browser revalidates on each load |
 | `src/routes.ts` (`appShell`) | Answers every path under `/app` with that document |
 | `manifests/purchasing.yaml` | The Views `my-requests`, `my-request` and `department-budgets`; the REST Triggers `POST /api/requests` and `POST /api/requests/{id}/amount` |
 

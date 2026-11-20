@@ -82,7 +82,7 @@ test("generation warns for each selected surface the entry never imports, static
     process.chdir(dir);
     const files = {
       "rest.ts": 'serve([{ method: "GET", pattern: new RegExp("^/api/x$") }])',
-      "mcp.ts": "",
+      "mcp.ts": 'export const tools = [{ target: {"kind":"view"} }]',
       "admin-bindings.ts": "",
     };
     for (const [name, text] of Object.entries(files))
@@ -94,6 +94,7 @@ test("generation warns for each selected surface the entry never imports, static
     expect(warnings[0]).toContain("mantle help native-admin");
     expect(await unmountedWarnings("missing.ts", ".", files)).toEqual([]);
     expect(await unmountedWarnings("entry.ts", ".", { "rest.ts": "no routes" })).toEqual([]);
+    expect(await unmountedWarnings("entry.ts", ".", { "mcp.ts": "export const tools = [\n\n];" })).toEqual([]);
   } finally {
     process.chdir(cwd);
     await rm(dir, { recursive: true, force: true });
@@ -107,8 +108,10 @@ test("real generated output selects the surfaces the mount check looks for", asy
   try {
     process.chdir(dir);
     await writeFile(join(dir, "entry.ts"), "export default {};\n");
-    // Pins the REST marker to the generator: a reformat of rest.ts that hides its routes fails here.
-    expect((await unmountedWarnings("entry.ts", "generated", files)).join("\n")).toContain("REST routes");
+    // Pins the REST and MCP markers to the generator: a reformat that hides its routes or tools fails here.
+    const warnings = (await unmountedWarnings("entry.ts", "generated", files)).join("\n");
+    expect(warnings).toContain("REST routes");
+    expect(warnings).toContain("MCP tools");
   } finally {
     process.chdir(cwd);
     await rm(dir, { recursive: true, force: true });
