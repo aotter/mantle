@@ -151,6 +151,7 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
           !!meta,
           rendersInApp,
           links?.renders.has(tool.name) ?? false,
+          sdk.isCallToolResult,
         ),
     );
   }
@@ -219,6 +220,7 @@ async function invoke<Env, Database, Handlers>(
   hasMeta: boolean,
   rendersInApp: boolean,
   linkedApp: boolean,
+  isResult: Sdk["isCallToolResult"],
 ) {
   const { options, pipeline, caller, request } = serving;
   // Not part of structured output: the version, and on failure the current input contract.
@@ -253,7 +255,9 @@ async function invoke<Env, Database, Handlers>(
     // Application `authorize` already decided every call of the request. The generated guard runs here, before any
     // input is validated or a database handle acquired.
     pipeline.check(call);
-    let db: Database | undefined, resultMeta: Readonly<Record<string, unknown>> | undefined;
+    let db: Database | undefined,
+      resultMeta: Readonly<Record<string, unknown>> | undefined,
+      blocks: readonly unknown[] | undefined;
     const run = async (input: Record<string, unknown>) => {
       const dryRun = pipeline.dryRun ? () => pipeline.dryRunResult() : undefined;
       const getDb = () => (db ??= options.db(serving.env));
@@ -261,12 +265,16 @@ async function invoke<Env, Database, Handlers>(
         apps: rendersInApp,
         linkedApp,
       });
-      // withResultMeta: the data is the result, the meta reaches only the result `_meta`.
+      // withResult: the data is the result; its blocks follow Core's, its meta reaches only the result `_meta`.
       if (!isRecord(output) || !(Symbol.for("net.aotter.mantle/result") in output)) return output;
       resultMeta = output._meta as typeof resultMeta;
+      blocks = output.content as typeof blocks;
       return output.data;
     };
     const data = await fitPage(tool, raw, await run(raw), run);
+    // Checked before the call is recorded: the SDK would otherwise answer a protocol error after a recorded success.
+    if (blocks && !isResult({ content: blocks }))
+      throw new Error(`MCP tool ${tool.name} returned a content block the SDK refuses.`);
     pipeline.finish();
     const body = JSON.stringify(data),
       oversized = tool.page && body.length > MCP_PAGE_BUDGET;
@@ -279,6 +287,7 @@ async function invoke<Env, Database, Handlers>(
         { type: "text" as const, text: body },
         ...about(false),
         ...(oversized ? [{ type: "text" as const, text: notice }] : []),
+        ...((blocks ?? []) as import("@modelcontextprotocol/server").ContentBlock[]),
       ],
       ...(data && typeof data === "object" && !Array.isArray(data)
         ? { structuredContent: data as Record<string, unknown> }

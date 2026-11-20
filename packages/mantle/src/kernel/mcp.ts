@@ -118,7 +118,13 @@ export interface Tool<Database, Handlers = never> {
 }
 
 // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
-export { withResultMeta, type ResultWithMeta } from "./result-meta.js";
+export {
+  withResult,
+  withResultMeta,
+  type ResultWith,
+  type ResultWithMeta,
+  type McpContentBlock,
+} from "./result-meta.js";
 /** What a `tools/call` tells a tool beside its input. */
 export interface ToolCall {
   /** The request declared MCP Apps support, so an App renders the result and reads its `_meta`; a secret for the App belongs there, not in the data a model reads. */

@@ -1,5 +1,5 @@
 /** Required application seam `tool-meta` (packages/mantle/tests/application-seams.ts). Public imports only, no casts. */
-import { mcp, withResultMeta, type Tool } from "@aotter/mantle/mcp";
+import { mcp, withResult, withResultMeta, type McpContentBlock, type Tool } from "@aotter/mantle/mcp";
 import type { Caller } from "@aotter/mantle/contracts";
 import type { store } from "./generated/generated.js";
 
@@ -16,4 +16,11 @@ export const tool: Tool<Db> = {
   run: async () => withResultMeta({ ok: true }, { "example/result": { b: 2 } }),
 };
 
-export const serve = (db: Db, caller: Caller) => mcp([tool], { db: () => db, caller: () => caller });
+const block: McpContentBlock = { type: "image", data: "AA==", mimeType: "image/png" };
+export const blocks: Tool<Db> = {
+  ...tool,
+  name: "seam_blocks",
+  run: async () => withResult({ ok: true }, { content: [block], _meta: { "example/result": { b: 2 } } }),
+};
+
+export const serve = (db: Db, caller: Caller) => mcp([tool, blocks], { db: () => db, caller: () => caller });
