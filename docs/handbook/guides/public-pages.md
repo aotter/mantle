@@ -10,8 +10,6 @@ here instead of repeating it.
   the smallest example is `node_modules/@aotter/mantle/docs/examples/generated-web`.
 - **App-owned pages** in `src/routes.ts`, when the page needs its own layout, JSON-LD or languages. The reference
   implementation is `node_modules/@aotter/mantle/docs/examples/recipes` (`src/pages.ts`, `src/routes.ts`; `smoke.mjs` checks every item below).
-  `pageHead` from `@aotter/mantle/web` writes the head below (escaped tags, Open Graph, hreflang with `x-default`,
-  JSON-LD) from values the page already has; see [surface contracts](../reference/surface.md#head-tags-for-application-owned-pages).
 
 ## Public pages plus a React app
 
