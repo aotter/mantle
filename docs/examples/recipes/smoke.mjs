@@ -244,7 +244,8 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
     const browser = await chromium.launch({ headless: true, executablePath: process.env.MANTLE_TEST_CHROMIUM });
     const SAVE = "**/assets/client/h/save-*.js";
     // One visit in a fresh tab tall enough that the island loads at once; counts the page's loads (1 + reloads).
-    // `island`: before the loader reads the page, add a second island with this `src` (`add`) or rewrite the save island's.
+    // `island`: before the loader reads the page, add a second island with this `src` (`add`; before the save island with
+    // `first`) or rewrite the save island's.
     const visit = async ({ route, island } = {}) => {
       const context = await browser.newContext({ viewport: { width: 800, height: 4000 } });
       const page = await context.newPage();
@@ -254,12 +255,12 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
       page.on("request", request => requests.push(`${request.method()} ${request.url()}`));
       if (route) await page.route(SAVE, request => route(request, context));
       // runs in the page, so it closes over nothing: its value is the argument
-      if (island) await page.addInitScript(({ src, add }) => document.addEventListener("readystatechange", () => {
+      if (island) await page.addInitScript(({ src, add, first }) => document.addEventListener("readystatechange", () => {
         if (document.readyState !== "interactive") return;
         if (!add) return void (document.querySelector("[data-island-src]").dataset.islandSrc = src);
         const element = Object.assign(document.createElement("div"), { textContent: "island" });
         element.dataset.islandSrc = src;
-        document.body.append(element);
+        document.body[first ? "prepend" : "append"](element);
       }), island);
       await page.goto(`${origin}/zh-TW/recipes/scallion-pancake`);
       await page.waitForTimeout(2000);
@@ -283,6 +284,11 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
       assert.equal(two.loads, 2, "two islands, one gone: one reload");
       assert.equal(two.island, 2, "the save island loaded on both loads");
       assert.deepEqual(two.keys, [`island-reloaded ${goneSrc}`]);
+      // a malformed URL is ignored, and the island observed after it, in the same batch, still loads
+      const malformed = await visit({ island: { src: "http://[", add: true, first: true } });
+      assert.deepEqual(malformed.srcs, ["http://[", islandSrc]);
+      assert.equal(malformed.loads, 1);
+      assert.equal(malformed.island, 1, "a malformed island URL before a working island: the working one still loads");
       // not a missing file: no reload
       for (const [what, route] of [
         ["a blocked request", request => request.abort("blockedbyclient")],
@@ -299,7 +305,7 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
     } finally {
       await browser.close();
     }
-    step("in Chrome: the island hydrates from its hashed URL; a 404 reloads once per URL, also beside a working island; offline, a blocked request, a failing island or a foreign URL never reload");
+    step("in Chrome: the island hydrates from its hashed URL; a 404 reloads once per URL, also beside a working island; offline, a blocked request, a failing island or a foreign URL never reload; a malformed URL does not stop the next island");
   }
 
   // The save button reads the member's saves and writes only through the REST Triggers; each member sees and changes

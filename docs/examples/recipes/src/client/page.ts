@@ -17,8 +17,10 @@ function load(element: HTMLElement) {
   if (loaded.has(element)) return;
   loaded.add(element);
   observer.unobserve(element);
-  // Only this site's own built files: an element naming anything else is ignored.
-  const src = new URL(element.dataset.islandSrc!, location.origin);
+  // Only this site's own built files: an element naming anything else, or no URL at all, is ignored. A throw here would
+  // stop the observer's loop and leave the other islands in its batch unloaded.
+  let src: URL;
+  try { src = new URL(element.dataset.islandSrc!, location.origin); } catch { return; }
   if (src.origin !== location.origin || !src.pathname.startsWith("/assets/client/")) return;
   // A computed URL: `mantle bundle` inlines a literal `import()` (one file per entry), which would bring React here.
   void import(/* @vite-ignore */ src.href).then(

@@ -30,7 +30,8 @@ Measured 2026-11-20 on Workers Free (method and raw numbers in #2097):
    first 16 hex digits of the SHA-256 of the file's bytes, so identical content keeps its name across builds. The
    browser files never name each other (an island loader gets its island's URL from the HTML), so no hashing order
    applies. The stable files are written as before. A build writes its files over the previous build's directory and
-   only then removes what it did not write, so a name both builds have is never missing while `wrangler dev` rebuilds.
+   removes what it did not write only once the Worker naming the new files is built, so a name both builds have is
+   never missing while `wrangler dev` rebuilds, and the running Worker's names stay until its successor exists.
    An entry named like an `Object.prototype` member (`constructor`, `__proto__`) is refused, so a map lookup is only
    ever an entry or `undefined`.
 2. **The map, imported by the Worker.** `@aotter/mantle/client-assets` exports

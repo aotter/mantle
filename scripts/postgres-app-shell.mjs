@@ -13,7 +13,11 @@ const edit = (file, ...pairs) => {
   let text = readFileSync(file, "utf8");
   for (let at = 0; at < pairs.length; at += 2) {
     const [from, to] = [pairs[at], pairs[at + 1]];
-    const count = typeof from === "string" ? text.split(from).length - 1 : (text.match(from)?.length ?? 0);
+    // a non-global regex's match() is one match plus its groups: count every match, then replace the one
+    const count =
+      typeof from === "string"
+        ? text.split(from).length - 1
+        : [...text.matchAll(new RegExp(from.source, from.flags.replace("g", "") + "g"))].length;
     if (count !== 1) throw new Error(`postgres-app-shell: ${file} has ${count} matches for ${from}, expected 1`);
     text = text.replace(from, to);
   }
@@ -85,16 +89,18 @@ export async function createDatabase(files) {
   const url = new URL(process.env.MANTLE_NEXT_WORKER_PG_URL);
   url.pathname = \`/\${name}\`;
   const db = postgres(url.toString(), { max: 1, onnotice: () => {} });
-  for (const file of files) await db.unsafe(readFileSync(file, "utf8"));
-  return {
-    url: url.toString(),
-    sql: command => db.unsafe(command),
-    drop: async () => {
-      await db.end();
-      await admin.unsafe(\`DROP DATABASE IF EXISTS \${name} WITH (FORCE)\`);
-      await admin.end();
-    },
+  const drop = async () => {
+    await db.end();
+    await admin.unsafe(\`DROP DATABASE IF EXISTS \${name} WITH (FORCE)\`);
+    await admin.end();
   };
+  try {
+    for (const file of files) await db.unsafe(readFileSync(file, "utf8"));
+  } catch (error) {
+    await drop();
+    throw error;
+  }
+  return { url: url.toString(), sql: command => db.unsafe(command), drop };
 }
 `,
 );

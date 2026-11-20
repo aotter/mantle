@@ -1,9 +1,9 @@
 import { expect, spyOn, test } from "bun:test";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, renameSync, statSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { bundleApp } from "../src/infrastructure/bundle.js";
+import { bundleApp, writtenAs } from "../src/infrastructure/bundle.js";
 import { INPUTS_FILE, inputsFingerprint } from "../src/infrastructure/inputs.js";
 
 /** An app with a Worker that serves no Admin and a stand-in `react` that provides the automatic JSX runtime. */
@@ -404,5 +404,63 @@ test("a browser file that keeps @aotter/mantle/client-assets after tree shaking 
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+test("a build that fails before writing the browser entries leaves the directory owned: the next build succeeds", async () => {
+  const { dir, entry, client } = await app();
+  await inDir(dir, async () => {
+    await writeFile(join(dir, "src/client/page.ts"), "console.log('page');\n");
+    await bundleApp(entry, join(dir, "dist"));
+    await mkdir(join(dir, "public/assets/client"), { recursive: true });
+    await writeFile(join(dir, "public/assets/client/x.txt"), "x");
+    await expect(bundleApp(entry, join(dir, "dist"))).rejects.toThrow("public/assets/client is reserved");
+    await rm(join(dir, "public"), { recursive: true });
+    await bundleApp(entry, join(dir, "dist"));
+    expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["h", "page.js"]);
+  });
+});
+
+test("the previous build's hashed copies are removed only after the Worker naming the new ones is built", async () => {
+  const { dir, entry, client } = await app();
+  await inDir(dir, async () => {
+    const h = join(client, "assets/client/h"),
+      worker = await readFile(entry, "utf8");
+    await writeFile(join(dir, "src/client/page.ts"), "console.log('page');\n");
+    await bundleApp(entry, join(dir, "dist"));
+    const [previous] = readdirSync(h);
+    await writeFile(join(dir, "src/client/page.ts"), "console.log('changed');\n");
+    // fails only in the Worker build: the first pass, with packages external, reads the entry fine
+    await writeFile(entry, `import "not-installed";\n${worker}`);
+    await expect(bundleApp(entry, join(dir, "dist"))).rejects.toThrow("not-installed");
+    // the new copy is written; the one the previous Worker names is still there
+    const during = readdirSync(h);
+    expect(during).toHaveLength(2);
+    expect(during).toContain(previous!);
+    await writeFile(entry, worker);
+    await bundleApp(entry, join(dir, "dist"));
+    expect(readdirSync(h)).toEqual(during.filter(name => name !== previous));
+  });
+});
+
+test("an entry renamed by case only: the sweep keeps (and respells) the file just written on a case-insensitive disk", async () => {
+  // a simulated case-insensitive listing: the file just written is listed under its old spelling
+  const written = new Set(["/a/page.js", "/a/h/page-0123456789abcdef.js"]);
+  const one = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  expect(writtenAs("/a/Page.js", written, one)).toBe("/a/page.js");
+  expect(writtenAs("/a/h/Page-0123456789abcdef.js", written, one)).toBe("/a/h/page-0123456789abcdef.js");
+  expect(writtenAs("/a/page.js", written, one)).toBe("/a/page.js");
+  expect(writtenAs("/a/other.js", written, one)).toBeUndefined();
+  // on a case-sensitive disk the old spelling is another file, and stale
+  expect(writtenAs("/a/Page.js", written, () => false)).toBeUndefined();
+  // the build on this (case-sensitive) disk removes the old spelling's files
+  const { dir, entry, client } = await app();
+  await inDir(dir, async () => {
+    await writeFile(join(dir, "src/client/Page.ts"), "console.log('page');\n");
+    await bundleApp(entry, join(dir, "dist"));
+    renameSync(join(dir, "src/client/Page.ts"), join(dir, "src/client/page.ts"));
+    await bundleApp(entry, join(dir, "dist"));
+    expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["h", "page.js"]);
+    expect(readdirSync(join(client, "assets/client/h"))).toEqual([expect.stringMatching(/^page-[0-9a-f]{16}\.js$/)]);
   });
 });

@@ -1,5 +1,16 @@
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -183,8 +194,9 @@ export async function bundleApp(
   const copied = copyPublic(outdir, assets);
   // A `bun-*` server runs as TypeScript: nothing gives it the map, so its build writes no hashed copies (Workers only).
   const bun = dirs.some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"));
-  const hashed = await bundleClient(clientEntries, client, outdir, ownsClient, !bun);
+  const { hashed, sweep } = await bundleClient(clientEntries, client, outdir, ownsClient, !bun);
   if (bun) {
+    sweep();
     // Packages are external here, so only the app's own imports of the Admin server are seen; one reached through another package is not.
     if (
       Object.values(own.inputs).some(input =>
@@ -207,6 +219,8 @@ export async function bundleApp(
     refuse(error);
     return;
   }
+  // only now: until this Worker exists, the running one (wrangler dev) renders HTML naming the previous hashed copies
+  sweep();
   const admin = Object.keys(metafile.inputs).some(input =>
     /(?:^|\/)mantle-admin\/(?:dist|src)\/server\/index\.[jt]s$/.test(input.replaceAll("\\", "/")),
   );
@@ -261,7 +275,8 @@ function clientEntryFiles(source: string): string[] {
 
 /**
  * Whether `<assets>/assets/client` is the directory the previous build wrote. With entries, `bundleClient` overwrites it
- * and then removes what it did not write; with none left, it is removed here, so a deleted entry is not served again.
+ * and its `sweep` removes what it did not write; with none left, it is removed here with its record, so a deleted entry
+ * is not served again.
  * The record `<outdir>/.mantle-client` is trusted only when it names exactly this build's `<assets>/assets/client`; an
  * unreadable record or any other path is ignored and never deleted.
  */
@@ -272,13 +287,40 @@ function cleanClient(outdir: string, assets: string, source: string, entries: bo
   try {
     ({ dir } = JSON.parse(readFileSync(record, "utf8")) as { dir?: unknown });
   } catch {}
-  rmSync(record, { force: true });
   const own = join(assets, CLIENT_DIR);
-  if (typeof dir !== "string" || physical(dir) !== physical(own) || !within(own, dir)) return false;
+  if (typeof dir !== "string" || physical(dir) !== physical(own) || !within(own, dir)) {
+    rmSync(record, { force: true });
+    return false;
+  }
   assertCleanable("The browser entry output directory", own, source);
-  if (!entries) rmSync(own, { recursive: true, force: true });
-  return entries;
+  // While the directory stays, so does its record: a build that fails before `bundleClient` leaves it owned.
+  if (entries) return true;
+  rmSync(own, { recursive: true, force: true });
+  rmSync(record, { force: true });
+  return false;
 }
+
+/**
+ * The path among `written` that the listed `file` is, or undefined when this build did not write it. On a
+ * case-insensitive disk an entry renamed by case only (`Page.ts` to `page.ts`) is written over the old file, whose
+ * listing keeps the old spelling: a name equal to a written one without case is that file when `same` says so (one
+ * inode), and is renamed to the written spelling; on a case-sensitive disk it is another file, and stale.
+ */
+export function writtenAs(
+  file: string,
+  written: ReadonlySet<string>,
+  same: (a: string, b: string) => boolean,
+): string | undefined {
+  if (written.has(file)) return file;
+  const lower = file.toLowerCase();
+  return [...written].find(path => path.toLowerCase() === lower && same(path, file));
+}
+
+const sameFile = (a: string, b: string) => {
+  const x = statSync(a),
+    y = statSync(b);
+  return x.ino === y.ino && x.dev === y.dev;
+};
 
 /**
  * Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
@@ -286,8 +328,10 @@ function cleanClient(outdir: string, assets: string, source: string, entries: bo
  * one minified ES2022 browser file per entry, `react` resolved from the application, no source map, stable name.
  * With `hash` (a Worker), also a content-hashed copy of each file under `<assets>/assets/client/h/`; returns their
  * paths by entry name, the map `@aotter/mantle/client-assets` gives the Worker. `owned`: `out` is the previous build's.
- * It is overwritten in place and only then are the files this build did not write removed, so a name both builds have
- * never disappears while a build runs (a request then, under `wrangler dev`, would get a 404 the browser caches).
+ * It is overwritten in place; the files this build did not write are removed by the returned `sweep`, which the caller
+ * runs once the Worker naming the new copies is built. So a name both builds have never disappears while a build runs,
+ * and one the running Worker names (under `wrangler dev`) not before its successor exists: a request for it would get a
+ * 404 the browser caches.
  */
 async function bundleClient(
   entries: string[],
@@ -295,8 +339,8 @@ async function bundleClient(
   outdir: string,
   owned: boolean,
   hash: boolean,
-): Promise<Record<string, ClientAsset>> {
-  if (!entries.length) return {};
+): Promise<{ hashed: Record<string, ClientAsset>; sweep: () => void }> {
+  if (!entries.length) return { hashed: {}, sweep: () => {} };
   if (!owned && existsSync(out))
     throw new Error(
       `${relative(process.cwd(), out)} exists and was not written by mantle bundle; it is reserved for the browser entries.`,
@@ -342,13 +386,19 @@ async function bundleClient(
           ...(output.cssBundle ? { css: copy(output.cssBundle) } : {}),
         };
   }
-  // after writing: what an earlier build wrote and this one did not (a deleted entry, a previous hashed copy)
-  for (const entry of readdirSync(out, { recursive: true, withFileTypes: true }) as import("node:fs").Dirent[])
-    if (!entry.isDirectory() && !written.has(resolve(entry.parentPath, entry.name)))
-      rmSync(join(entry.parentPath, entry.name));
-  if (!hash) rmSync(join(out, "h"), { recursive: true, force: true });
   warnClientAssets(metafile);
-  return hashed;
+  // what an earlier build wrote and this one did not (a deleted entry, a previous hashed copy)
+  const sweep = () => {
+    for (const entry of readdirSync(out, { recursive: true, withFileTypes: true }) as import("node:fs").Dirent[]) {
+      if (entry.isDirectory()) continue;
+      const file = resolve(entry.parentPath, entry.name),
+        as = writtenAs(file, written, sameFile);
+      if (!as) rmSync(file);
+      else if (as !== file) renameSync(file, as);
+    }
+    if (!hash) rmSync(join(out, "h"), { recursive: true, force: true });
+  };
+  return { hashed, sweep };
 }
 
 /**
