@@ -177,19 +177,41 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   cached(signInPage, "no-store", "/sign-in");
   step("signed-in visitors get the anonymous page; HEAD, 404, 405 and the sign-in page state their Cache-Control");
 
-  // One stylesheet, and one small module script; the save button's React bundle is fetched later by that script.
+  // One stylesheet, and one small module script; the save button's React bundle is fetched later by that script. All
+  // three are the content-hashed copies this build wrote (@aotter/mantle/client-assets), cached for a year.
+  const hashed = name => new RegExp(`^/assets/client/h/${name}-[0-9a-f]{16}\\.(?:js|css)$`);
   const scripts = elements(html, "script").filter(e => e.src);
-  assert.deepEqual(scripts.map(e => [e.type, e.src]), [["module", "/assets/client/page.js"]], "the only script is the module loader");
-  assert.ok(!html.includes("save.js") && !html.includes("modulepreload"), "the island's bundle is not referenced by the HTML");
-  assert.deepEqual(elements(html, "link").filter(e => e.rel === "stylesheet").map(e => e.href), ["/assets/client/page.css"]);
-  assert.ok(has(html, "div", { "data-island": "save" }) && has(html, "button", { type: "button" }, "儲存這道食譜"), "the button is server-rendered");
-  const loader = await fetch(`${origin}/assets/client/page.js`), loaderCode = await loader.text();
-  assert.equal(loader.status, 200);
+  assert.equal(scripts.length, 1, "one script");
+  assert.equal(scripts[0].type, "module");
+  assert.match(scripts[0].src, hashed("page"), "the only script is the module loader's hashed copy");
+  const stylesheets = elements(html, "link").filter(e => e.rel === "stylesheet");
+  assert.equal(stylesheets.length, 1, "one stylesheet");
+  assert.match(stylesheets[0].href, hashed("page"));
+  const islandSrc = elements(html, "div").find(e => e["data-island-src"])?.["data-island-src"];
+  assert.match(islandSrc ?? "", hashed("save"), "the island's hashed URL is written into its markup");
+  assert.ok(!html.includes("modulepreload") && !scripts.some(e => e.src === islandSrc), "the island's bundle is not loaded by the HTML");
+  assert.ok(has(html, "button", { type: "button" }, "儲存這道食譜"), "the button is server-rendered");
+  const IMMUTABLE = "public, max-age=31536000, immutable";
+  const asset = async (path, cacheControl) => {
+    const response = await fetch(`${origin}${path}`);
+    assert.equal(response.status, 200, path);
+    // `wrangler dev` applies the build's _headers rule as the edge does; a stable name keeps the platform default
+    assert.equal(response.headers.get("cache-control"), cacheControl, `${path}: Cache-Control`);
+    return { type: response.headers.get("content-type"), text: await response.text() };
+  };
+  const loader = await asset(scripts[0].src, IMMUTABLE), loaderCode = loader.text;
   assert.ok(loaderCode.length < 1024 && !/react/i.test(loaderCode), "the loader is small and has no React");
-  const island = await fetch(`${origin}/assets/client/save.js`);
-  assert.equal(island.status, 200);
-  assert.match(island.headers.get("content-type"), /javascript/);
-  const css = await (await fetch(`${origin}/assets/client/page.css`)).text();
+  const island = await asset(islandSrc, IMMUTABLE);
+  assert.match(island.type, /javascript/);
+  const css = (await asset(stylesheets[0].href, IMMUTABLE)).text;
+  // The stable names still answer, with the same bytes, revalidated on each use.
+  const REVALIDATE = "public, max-age=0, must-revalidate";
+  assert.equal((await asset("/assets/client/page.js", REVALIDATE)).text, loaderCode);
+  assert.equal((await asset("/assets/client/save.js", REVALIDATE)).text, island.text);
+  assert.equal((await asset("/assets/client/page.css", REVALIDATE)).text, css);
+  // A name this build does not have is the edge's 404 (an open tab after a deploy; the loader then reloads once).
+  assert.equal((await fetch(`${origin}/assets/client/h/save-0000000000000000.js`)).status, 404);
+  step("pages link the content-hashed loader, stylesheet and island, served immutable; the stable names still answer");
   // A class `hover:bg-primary/80` is the selector `.hover\:bg-primary\/80`, not followed by more of a name.
   const defined = name => {
     const selector = "." + name.replace(/[^\w-]/g, "\\$&");
