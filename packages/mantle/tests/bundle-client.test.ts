@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { existsSync, readdirSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -43,7 +43,7 @@ test("mantle bundle builds client/<name>.ts and .tsx into <assets>/assets/client
     // the required-seam consumer module is itself a client entry (application-seams.ts, `client-entries`)
     await copyFile(resolve(import.meta.dir, "seams/client-entry.ts"), join(dir, "src/client/tiny.ts"));
     await bundleApp(entry, join(dir, "dist"));
-    expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["spa.js", "tiny.js"]);
+    expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["h", "spa.js", "tiny.js"]);
     const spa = await readFile(join(client, "assets/client/spa.js"), "utf8");
     expect(spa).toContain("helper-text");
     expect(spa).toContain("production");
@@ -68,7 +68,7 @@ test("mantle bundle removes a deleted entry's output, and everything when the la
     await bundleApp(entry, join(dir, "dist"));
     await rm(join(dir, "src/client/b.ts"));
     await bundleApp(entry, join(dir, "dist"));
-    expect(readdirSync(join(client, "assets/client"))).toEqual(["a.js"]);
+    expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["a.js", "h"]);
     await rm(join(dir, "src/client/a.ts"));
     await bundleApp(entry, join(dir, "dist"));
     expect(existsSync(join(client, "assets/client"))).toBe(false);
@@ -158,7 +158,7 @@ test("mantle bundle skips dotfiles, declaration, test and spec files, and compar
     for (const name of ["spa.tsx", ".hidden.ts", "spa.test.tsx", "spa.spec.ts", "types.d.ts", "notes.md", "retest.ts"])
       await writeFile(join(dir, "src/client", name), "console.log(1);\n");
     await bundleApp(entry, join(dir, "dist"));
-    expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["retest.js", "spa.js"]);
+    expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["h", "retest.js", "spa.js"]);
     await writeFile(join(dir, "src/client/Spa.ts"), "console.log(2);\n");
     await expect(bundleApp(entry, join(dir, "dist"))).rejects.toThrow("compared without case");
   });
@@ -170,10 +170,108 @@ test("mantle bundle writes the CSS an entry imports beside its JavaScript, and r
     await writeFile(join(dir, "src/client/spa.css"), "body{color:red}\n");
     await writeFile(join(dir, "src/client/spa.ts"), "import './spa.css';\nconsole.log(1);\n");
     await bundleApp(entry, join(dir, "dist"));
-    expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["spa.css", "spa.js"]);
+    expect(readdirSync(join(client, "assets/client")).sort()).toEqual(["h", "spa.css", "spa.js"]);
     expect(await readFile(join(client, "assets/client/spa.css"), "utf8")).toContain("color");
     await writeFile(join(dir, "src/client/logo.png"), "x");
     await writeFile(join(dir, "src/client/spa.ts"), "import logo from './logo.png';\nconsole.log(logo);\n");
     await expect(bundleApp(entry, join(dir, "dist"))).rejects.toThrow();
+  });
+});
+
+const hashedRule = "/assets/client/h/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n";
+/** A Worker answering with the required-seam consumer module's paths (`client-assets` in application-seams.ts). */
+async function seamWorker(dir: string) {
+  await copyFile(resolve(import.meta.dir, "seams/client-assets.ts"), join(dir, "src/seam.ts"));
+  await writeFile(
+    join(dir, "src/worker.ts"),
+    "import { script, stylesheet } from './seam.js';\nexport default { fetch: () => new Response(`${script} ${stylesheet}`) };\n",
+  );
+}
+/** The built Worker's answer, from a copy under a new name (a module is evaluated once per path). */
+let builds = 0;
+async function served(dir: string): Promise<string> {
+  const copy = join(dir, `dist/run-${++builds}.js`);
+  await copyFile(join(dir, "dist/worker/worker.js"), copy);
+  const { default: worker } = await import(copy);
+  return (await worker.fetch()).text();
+}
+
+test("mantle bundle writes a content-hashed copy of each entry and its CSS, and gives the Worker their names", async () => {
+  const { dir, entry, client } = await app();
+  await inDir(dir, async () => {
+    await seamWorker(dir);
+    await writeFile(join(dir, "src/client/page.css"), "body{color:red}\n");
+    await writeFile(join(dir, "src/client/page.ts"), "import './page.css';\nconsole.log('page');\n");
+    await writeFile(join(dir, "src/client/save.tsx"), "export const view = <b>save</b>;\n");
+    await bundleApp(entry, join(dir, "dist"));
+    const out = join(client, "assets/client");
+    // the stable names are unchanged; the copies sit in h/ with the same bytes
+    expect(readdirSync(out).sort()).toEqual(["h", "page.css", "page.js", "save.js"]);
+    const hashed = readdirSync(join(out, "h")).sort();
+    expect(hashed).toHaveLength(3);
+    for (const name of hashed) {
+      expect(name).toMatch(/^(page|save)-[0-9a-f]{16}\.(js|css)$/);
+      expect(await readFile(join(out, "h", name), "utf8")).toBe(
+        await readFile(join(out, name.replace(/-[0-9a-f]{16}/, "")), "utf8"),
+      );
+    }
+    const [pageCss, pageJs] = hashed.filter(name => name.startsWith("page-"));
+    expect(await served(dir)).toBe(`/assets/client/h/${pageJs} /assets/client/h/${pageCss}`);
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(hashedRule);
+    // the same content keeps its name; changed content gets a new one, and the previous copy is not kept
+    await bundleApp(entry, join(dir, "dist"));
+    expect(readdirSync(join(out, "h")).sort()).toEqual(hashed);
+    await writeFile(join(dir, "src/client/page.css"), "body{color:blue}\n");
+    await bundleApp(entry, join(dir, "dist"));
+    const changed = readdirSync(join(out, "h")).sort();
+    const css = changed.find(name => name.endsWith(".css")) ?? "";
+    expect(changed).toEqual([css, ...hashed.filter(name => name.endsWith(".js"))].sort());
+    expect(css).not.toBe(pageCss);
+    expect(await served(dir)).toBe(`/assets/client/h/${pageJs} /assets/client/h/${css}`);
+    // a Worker that does not import the map bundles nothing of it
+    await writeFile(join(dir, "src/worker.ts"), "export default { fetch: () => new Response('ok') };\n");
+    await bundleApp(entry, join(dir, "dist"));
+    expect(await readFile(join(dir, "dist/worker/worker.js"), "utf8")).not.toContain("/assets/client/h/");
+  });
+});
+
+test("without client entries the map is empty, the Worker falls back to the stable names, and no _headers is written", async () => {
+  const { dir, entry, client } = await app();
+  await inDir(dir, async () => {
+    await seamWorker(dir);
+    await bundleApp(entry, join(dir, "dist"));
+    expect(await served(dir)).toBe("/assets/client/page.js /assets/client/page.css");
+    expect(existsSync(client)).toBe(false);
+    // the package's own module is the same empty map wherever mantle bundle does not replace it (a Bun server, a test)
+    const { clientAssets } = await import("../src/kernel/client-assets.js");
+    expect(clientAssets).toEqual({});
+  });
+});
+
+test("the hashed rule is appended to a _headers copied from public/, and an application's own file is only told it", async () => {
+  const { dir, entry, client } = await app();
+  await inDir(dir, async () => {
+    await writeFile(join(dir, "src/client/spa.ts"), "console.log(1);\n");
+    await mkdir(join(dir, "public"), { recursive: true });
+    const own = "/assets/*\n  Cache-Control: public, max-age=600\n";
+    await writeFile(join(dir, "public/_headers"), own);
+    await bundleApp(entry, join(dir, "dist"));
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(`${own}\n${hashedRule}`);
+    expect(await readFile(join(dir, "public/_headers"), "utf8")).toBe(own);
+    // a rule of its own for the path is the application's choice
+    const chosen = `${own}\n/assets/client/h/*\n  Cache-Control: public, max-age=86400\n`;
+    await writeFile(join(dir, "public/_headers"), chosen);
+    await bundleApp(entry, join(dir, "dist"));
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(chosen);
+    // public/ as the assets directory: its _headers is the application's, never edited
+    await writeFile(join(dir, "public/_headers"), own);
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await bundleApp(entry, join(dir, "dist"), join(dir, "public"));
+      expect(warn.mock.calls.flat().join("\n")).toContain(`has no /assets/client/h/* rule; add:\n${hashedRule}`);
+    } finally {
+      warn.mockRestore();
+    }
+    expect(await readFile(join(dir, "public/_headers"), "utf8")).toBe(own);
   });
 });

@@ -197,4 +197,16 @@ export const SEAMS: readonly Seam[] = [
     check: "packages/mantle/tests/seams/client-entry.ts",
     run: false, // built and read back in tests/bundle-client.test.ts
   },
+  {
+    id: "client-assets",
+    package: "@aotter/mantle",
+    subpath: "./client-assets",
+    exports: ["clientAssets"],
+    entry:
+      "clientAssets[<name>] = { js, css? }: mantle bundle's content-hashed copies <assets>/assets/client/h/<name>-<hash>.js|css and their _headers rule",
+    stacks: [],
+    decided: "docs/adr/adr-lite-2097-hashed-client-entries.md",
+    check: "packages/mantle/tests/seams/client-assets.ts",
+    run: false, // bundled into a Worker and run in tests/bundle-client.test.ts
+  },
 ];

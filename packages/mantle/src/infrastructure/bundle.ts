@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build, version as esbuildVersion, type Metafile } from "esbuild";
+import type { ClientAsset } from "../kernel/client-assets.js";
 import { INPUTS_FILE, authTableSql, extraRoles, generatedTarget, staleInputs } from "./inputs.js";
 
 /** Only static imports run at startup; dynamic imports remain separate uploaded modules. */
@@ -179,7 +181,7 @@ export async function bundleApp(
       `public/${CLIENT_DIR} is reserved for the browser entries in ${relative(process.cwd(), join(dirname(source), "client"))}; move those files elsewhere under public/.`,
     );
   const copied = copyPublic(outdir, assets);
-  await bundleClient(clientEntries, client, outdir);
+  const hashed = await bundleClient(clientEntries, client, outdir);
   if (dirs.some(dir => generatedTarget(join(dir, "generated.ts"))?.startsWith("bun-"))) {
     // Packages are external here, so only the app's own imports of the Admin server are seen; one reached through another package is not.
     if (
@@ -198,23 +200,25 @@ export async function bundleApp(
   let metafile: Metafile;
   // The full build also sees generated output reached through a package, which the check above does not.
   try {
-    metafile = await bundle(entry, worker);
+    metafile = await bundle(entry, worker, hashed);
   } catch (error) {
     refuse(error);
     return;
   }
-  if (
-    Object.keys(metafile.inputs).some(input =>
-      /(?:^|\/)mantle-admin\/(?:dist|src)\/server\/index\.[jt]s$/.test(input.replaceAll("\\", "/")),
-    )
-  ) {
-    await bundleAdmin(source, outdir, join(assets, "admin"));
-    adminHeaders(assets, copied.includes("_headers"));
-  }
+  const admin = Object.keys(metafile.inputs).some(input =>
+    /(?:^|\/)mantle-admin\/(?:dist|src)\/server\/index\.[jt]s$/.test(input.replaceAll("\\", "/")),
+  );
+  if (admin) await bundleAdmin(source, outdir, join(assets, "admin"));
+  assetHeaders(assets, copied.includes("_headers"), [
+    ...(admin ? [adminRule] : []),
+    ...(Object.keys(hashed).length ? [hashedRule] : []),
+  ]);
 }
 
 /** Where the application's browser entries are written, under the assets directory (served at `/assets/client/<name>.js`). */
 const CLIENT_DIR = join("assets", "client");
+/** Their content-hashed copies, in a directory of their own because `_headers` matches by path. */
+const HASHED = "/assets/client/h/";
 
 /**
  * The browser entries: `.ts` and `.tsx` files directly in `client/` beside the Worker entry (subdirectories hold their
@@ -270,9 +274,11 @@ function cleanClient(outdir: string, assets: string, source: string): void {
  * Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
  * `mantle bundle` builds each browser entry (`client/<name>.ts|tsx` beside the Worker entry) into `<assets>/assets/client/<name>.js`:
  * one minified ES2022 browser file per entry, `react` resolved from the application, no source map, stable name.
+ * Also a content-hashed copy of each file under `<assets>/assets/client/h/`; returns their paths by entry name, the map
+ * `@aotter/mantle/client-assets` gives the Worker.
  */
-async function bundleClient(entries: string[], out: string, outdir: string): Promise<void> {
-  if (!entries.length) return;
+async function bundleClient(entries: string[], out: string, outdir: string): Promise<Record<string, ClientAsset>> {
+  if (!entries.length) return {};
   if (existsSync(out))
     throw new Error(
       `${relative(process.cwd(), out)} exists and was not written by mantle bundle; it is reserved for the browser entries.`,
@@ -281,7 +287,7 @@ async function bundleClient(entries: string[], out: string, outdir: string): Pro
   // recorded first: a build that fails halfway is cleaned by the next one
   mkdirSync(outdir, { recursive: true });
   writeFileSync(join(outdir, ".mantle-client"), JSON.stringify({ dir: resolve(out) }));
-  await build({
+  const { metafile } = await build({
     entryPoints: entries,
     outdir: out,
     bundle: true,
@@ -293,7 +299,22 @@ async function bundleClient(entries: string[], out: string, outdir: string): Pro
     define: { "process.env.NODE_ENV": '"production"' },
     logLevel: "warning",
     absWorkingDir: process.cwd(),
+    metafile: true,
   });
+  // The hash is of the file alone: the browser files never name each other, so the order does not matter.
+  mkdirSync(join(out, "h"));
+  const copy = (file: string) => {
+    const bytes = readFileSync(file),
+      extension = extname(file);
+    const name = `${basename(file, extension)}-${createHash("sha256").update(bytes).digest("hex").slice(0, 16)}${extension}`;
+    writeFileSync(join(out, "h", name), bytes);
+    return HASHED + name;
+  };
+  const hashed: Record<string, ClientAsset> = {};
+  for (const [file, output] of Object.entries(metafile.outputs).sort(([a], [b]) => a.localeCompare(b)))
+    if (output.entryPoint)
+      hashed[basename(file, ".js")] = { js: copy(file), ...(output.cssBundle ? { css: copy(output.cssBundle) } : {}) };
+  return hashed;
 }
 
 /**
@@ -329,24 +350,44 @@ function copyPublic(outdir: string, assets: string): string[] {
 }
 
 /** Admin's chunks are content-hashed and answered by the edge (`run_worker_first` excludes `/admin/assets/*`), so the
- * headers `adminShell` would add live in `_headers`. A `_headers` copied from `public/` this build gets the rule appended
- * to the copy (the next build copies it afresh); `public/_headers` itself, or one another step wrote, is only told the rule.
- * One day, not a year: the edge sends the rule on its own 404 for a missing chunk too, and a browser keeps that 404 for as
- * long as the rule says (#2088). `immutable` stays so a reload does not revalidate the chunks while they are fresh. */
+ * headers `adminShell` would add live in `_headers`. One day, not a year: the edge sends the rule on its own 404 for a
+ * missing chunk too, and a browser keeps that 404 for as long as the rule says (#2088). `immutable` stays so a reload
+ * does not revalidate the chunks while they are fresh. */
 const adminRule =
   "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable\n";
-function adminHeaders(assets: string, copied: boolean): void {
+/** The browser entries' hashed copies: a year (ADR-lite #2097). `! Cache-Control` drops a broader rule's value, which
+ * `_headers` would otherwise join to this one. */
+const hashedRule = `${HASHED}*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n`;
+/** What only `mantle bundle` writes, including the one-year Admin rule an earlier build wrote (#2088). */
+const ownRules = [adminRule, adminRule.replace("86400", "31536000"), hashedRule].map(rule => rule.trim());
+
+/** `<assets>/_headers` with this build's rules. A file made only of rules `mantle bundle` writes is its own and is
+ * rewritten (nothing removes it between builds). A `_headers` copied from `public/` this build gets the missing rules
+ * appended to the copy (the next build copies it afresh); `public/_headers` itself, or one another step wrote, is only
+ * told them. A rule whose path the file already names is the application's and is kept as it is. */
+function assetHeaders(assets: string, copied: boolean, rules: string[]): void {
+  if (!rules.length) return;
   const file = join(assets, "_headers");
-  if (!existsSync(file)) return writeFileSync(file, adminRule);
+  if (!existsSync(file)) return writeFileSync(file, rules.join("\n"));
   const text = readFileSync(file, "utf8");
-  // An earlier build's own file, which nothing removes, carries the one-year rule this build replaces (#2088).
-  if (text === adminRule.replace("86400", "31536000")) return writeFileSync(file, adminRule);
-  if (text.includes("/admin/assets/*")) return;
+  if (
+    !copied &&
+    text
+      .trim()
+      .split(/\n\s*\n/)
+      .every(block => ownRules.includes(block.trim()))
+  ) {
+    if (text !== rules.join("\n")) writeFileSync(file, rules.join("\n"));
+    return;
+  }
+  const missing = rules.filter(rule => !text.includes(rule.slice(0, rule.indexOf("\n"))));
+  if (!missing.length) return;
+  const paths = missing.map(rule => rule.slice(0, rule.indexOf("\n"))).join(" and ");
   if (!copied)
-    return console.warn(`note: ${relative(process.cwd(), file)} has no /admin/assets/* rule; add:\n${adminRule}`);
+    return console.warn(`note: ${relative(process.cwd(), file)} has no ${paths} rule; add:\n${missing.join("\n")}`);
   rmSync(file); // a copied symlink would write through to public/
-  writeFileSync(file, `${text.trimEnd()}\n\n${adminRule}`);
-  console.log(`Appended the /admin/assets/* rule to ${relative(process.cwd(), file)}; public/_headers is unchanged.`);
+  writeFileSync(file, `${text.trimEnd()}\n\n${missing.join("\n")}`);
+  console.log(`Appended the ${paths} rule to ${relative(process.cwd(), file)}; public/_headers is unchanged.`);
 }
 
 /**
@@ -455,7 +496,12 @@ function generatedDirs(metafile: Metafile): string[] {
   return dirs;
 }
 
-export async function bundle(entry: string, outdir: string): Promise<Metafile> {
+/** `clientAssets`: what `@aotter/mantle/client-assets` exports in this Worker (`bundleClient`'s map). */
+export async function bundle(
+  entry: string,
+  outdir: string,
+  clientAssets: Record<string, ClientAsset> = {},
+): Promise<Metafile> {
   entry = realpathSync(entry);
   assertCleanable("Bundle outdir", outdir, entry);
   rmSync(outdir, { recursive: true, force: true });
@@ -476,6 +522,20 @@ export async function bundle(entry: string, outdir: string): Promise<Metafile> {
     metafile: true,
     chunkNames: "chunks/[name]-[hash]",
     plugins: [
+      {
+        // An application that does not import it bundles nothing of it.
+        name: "client-assets",
+        setup(builder) {
+          builder.onResolve({ filter: /^@aotter\/mantle\/client-assets$/ }, () => ({
+            path: "client-assets",
+            namespace: "mantle-client-assets",
+          }));
+          builder.onLoad({ filter: /.*/, namespace: "mantle-client-assets" }, () => ({
+            contents: `export const clientAssets = ${JSON.stringify(clientAssets)};`,
+            loader: "js",
+          }));
+        },
+      },
       {
         name: "optional-peers",
         setup(builder) {

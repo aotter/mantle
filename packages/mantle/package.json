@@ -64,6 +64,7 @@
     "./auth/hardening": "./dist/auth/hardening.js",
     "./auth/admin": "./dist/auth/admin.js",
     "./bun/assets": "./dist/bun/assets.js",
+    "./client-assets": "./dist/kernel/client-assets.js",
     "./internal/surface": "./dist/kernel/surface.js",
     "./generate/auth": "./dist/infrastructure/generateAuth.js",
     "./package.json": "./package.json",

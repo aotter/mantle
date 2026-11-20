@@ -14,5 +14,6 @@
   "mcp-app-inspect",
   "upload-card-tool",
   "mcp-app-host-context",
-  "client-entries"
+  "client-entries",
+  "client-assets"
 ]

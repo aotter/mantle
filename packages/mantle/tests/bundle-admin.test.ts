@@ -556,8 +556,19 @@ test("mantle bundle builds client entries beside Admin, and for a bun-* target t
     const dist = join(dir, "dist");
     await bundleApp(entry, dist);
     expect(readdirSync(join(dist, "client")).sort()).toEqual(["_headers", "admin", "assets"]);
-    expect(await readFile(join(dist, "client/_headers"), "utf8")).not.toContain("assets/client");
+    // one file of the build's own rules: Admin's, then the hashed browser entries'
+    expect(await readFile(join(dist, "client/_headers"), "utf8")).toBe(
+      "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable\n\n" +
+        "/assets/client/h/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n",
+    );
     expect(existsSync(join(dist, "client/assets/client/spa.js"))).toBe(true);
+    // without the entry, the build's own file is rewritten with Admin's rule alone
+    await rm(join(dir, "src/client/spa.ts"));
+    await bundleApp(entry, dist);
+    expect(await readFile(join(dist, "client/_headers"), "utf8")).toBe(
+      "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable\n",
+    );
+    await writeFile(join(dir, "src/client/spa.ts"), "console.log('spa');\n");
     expect(existsSync(join(dist, "client/admin/index.html"))).toBe(true);
     const generated = join(dir, "generated"),
       manifest = join(dir, "app.yaml");
