@@ -298,3 +298,28 @@ test("ordinary REST GET startup excludes the request-only JSON reader", async ()
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("REST answers the data of a handler's withResult wrapper, without its blocks or _meta", async () => {
+  const { withResult } = await import("../src/kernel/mcp.js");
+  const routes: Route<object>[] = [
+    {
+      method: "POST",
+      pattern: /^\/api\/note\/?$/,
+      keys: [],
+      validate: raw => raw as Record<string, unknown>,
+      run: async () =>
+        withResult({ id: "a" }, { content: [{ type: "text", text: "for a model" }], _meta: { secret: "s" } }),
+    },
+  ];
+  const { rest } = await import("../src/kernel/rest.js");
+  const fetch = rest(routes, { caller: () => caller, db: () => ({}) });
+  const response = await fetch(
+    new Request("https://app.test/api/note", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://app.test" },
+      body: "{}",
+    }),
+    {},
+  );
+  expect(await response!.json()).toEqual({ id: "a" });
+});

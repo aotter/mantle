@@ -162,7 +162,9 @@ finished. A dry run and a thrown error carry no application blocks.
 `callTool` and `callToolLazy` return the wrapper itself, `{ data, content?, _meta? }`.
 A caller that forwards a result to a model, such as an application's own agent,
 must forward only `data` (and `content`) and drop `_meta`, or the signed URL
-leaks through that path. Admin's WebMCP route does this. A thrown error still
+leaks through that path. Admin's WebMCP route does this. A ref Procedure handler
+may return the wrapper too: its REST route and its Admin operation answer `data`
+alone, since blocks and `_meta` belong to an MCP result. A thrown error still
 produces the standard diagnostics result.
 
 ### Open an App from a host's entry point

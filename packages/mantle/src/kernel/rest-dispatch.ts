@@ -43,6 +43,9 @@ export async function dispatch<Database, Handlers, Env>(
     if (pipeline.dryRun) return pipeline.dryRunResponse();
     data = await route.run!(getDb(), caller, input as never, options.handlers as Handlers);
   }
+  // A handler's `withResult` wrapper is for MCP: REST answers its data; the blocks and `_meta` stay out.
+  if (data && typeof data === "object" && Symbol.for("net.aotter.mantle/result") in data)
+    data = (data as { data: unknown }).data;
   const headers = { "cache-control": "private, no-store" };
   return request.method === "HEAD" ? new Response(null, { headers }) : Response.json(data, { headers });
 }

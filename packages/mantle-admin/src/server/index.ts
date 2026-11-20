@@ -474,16 +474,16 @@ export function admin<Env, Database, Handlers = never>(
         if (operation && options.authorize) deny(c.caller, operation.allows(c.caller), "procedures/" + operation.name);
         if (!operation) throw missing();
         if (options.authorize) await checkTarget(c, { kind: "procedure", name: operation.name });
-        return {
-          ok: true,
-          output: await callTool(
-            { ...operation, surface: "admin", description: "", inputSchema: {} },
-            await json(c),
-            () => c.db,
-            c.caller,
-            options.handlers as Handlers,
-          ),
-        };
+        const output = await callTool(
+          { ...operation, surface: "admin", description: "", inputSchema: {} },
+          await json(c),
+          () => c.db,
+          c.caller,
+          options.handlers as Handlers,
+        );
+        // A handler's `withResult` wrapper is for MCP: an operation answers its data; the blocks and `_meta` stay out.
+        const wrapped = output && typeof output === "object" && Symbol.for("net.aotter.mantle/result") in output;
+        return { ok: true, output: wrapped ? (output as { data: unknown }).data : output };
       },
     },
     ...(metadata.developerConsole === undefined
