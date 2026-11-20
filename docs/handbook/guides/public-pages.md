@@ -42,6 +42,15 @@ What the recipes example does, each with its reason. Numbers were measured 2026-
   plain markup (the save button). One module script of a few hundred bytes (`src/client/page.ts`) loads that part's
   code (`src/client/save.tsx`) when it nears the viewport or is first used, and hydrates it. The page works without
   JavaScript except for that part, and React stays off the first load. Kit components belong in this browser part.
+- **The page links content-hashed files.** The stylesheet, the loader and the island are the hashed copies
+  `mantle bundle` writes (`/assets/client/h/<name>-<hash>.js`), named from `clientAssets`
+  (`@aotter/mantle/client-assets`) when the server renders the page: the `<link>` and `<script>` in the head, and each
+  island's URL in its markup (`data-island-src`), so the loader needs no map and computes no name. They are cached for
+  a year, so a repeat view requests none of them; a stable name costs a revalidation per file per view, about 50 ms
+  each in the measurement, and about 300 ms behind a dispatcher Worker placed in another region
+  ([numbers](caching.md#content-hashed-browser-files)). After a deploy, a page opened earlier asks for the previous
+  build's island, which is gone: when that `import()` fails the loader reloads the page once, and a `sessionStorage`
+  flag, cleared when an island loads, keeps it from reloading again.
 - **`.md` alternates, `llms.txt`, `sitemap.xml` and the canonical and Markdown head tags come from the generated
   `web()`** ([contract](../reference/surface.md#optional-web-output)): it walks each list View's cursor chain, keeps
   drafts out by SQL, sends an ETag, and answers a signed-in caller `private, no-store`. The page writes its own
@@ -184,6 +193,8 @@ Request each page with plain `fetch`, which runs no JavaScript, as the recipes e
 8. Stored text with `<`, `&` and `</script>` renders escaped in HTML and inside JSON-LD.
 9. With React on the server: the built Worker's static graph holds no React, and the page loads only the small module
    script, never the interactive part's bundle.
+10. The stylesheet and scripts the page links are the content-hashed copies, and each answers `200` with
+    `Cache-Control: public, max-age=31536000, immutable`.
 
 Report a check you could not run (for example a production origin you do not have) as UNVERIFIED with the reason.
 Then run [independent acceptance](agent-workflow-acceptance.md) with a visitor evaluator in a browser on the

@@ -16,5 +16,6 @@
   "mcp-app-host-context",
   "client-entries",
   "ref-handler-result",
-  "tool-call-signal-progress"
+  "tool-call-signal-progress",
+  "client-assets"
 ]
