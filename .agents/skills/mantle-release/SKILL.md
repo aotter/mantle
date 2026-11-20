@@ -124,6 +124,11 @@ without v. Watch all gates, not only publication:
    candidate, and consumers must not install it. The GitHub prerelease or
    release succeeds.
 
+After the release is published, close the issues it shipped: list the issues
+referenced by PRs merged into `develop` since the previous release that are
+still open, and close each as completed with a one-line comment naming the PR
+and the released version (docs/release-process.md, "Close the shipped issues").
+
 For stable acceptance, give an agent only the version-matched consumer
 instructions and confirm a directly authored application reaches a running
 Worker. No SDK checkout or scaffold command is required.
