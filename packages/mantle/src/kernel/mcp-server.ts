@@ -5,7 +5,7 @@
  */
 import { ContractError, type Caller } from "./contracts.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
-import type { Tool, Options } from "./mcp.js";
+import type { Tool, Options, ToolCall } from "./mcp.js";
 import { mcpAppPageLoader } from "./mcp-app-pages.js";
 import {
   RESOURCE_MIME_TYPE,
@@ -23,6 +23,7 @@ type Links = ReturnType<typeof linkSurface>["links"];
 type TextBlock = { type: "text"; text: string };
 type Icon = import("@modelcontextprotocol/server").Icon;
 type Annotations = import("@modelcontextprotocol/server").Annotations;
+type RequestContext = import("@modelcontextprotocol/server").ServerContext;
 
 /** What the handler decided before the SDK runs. */
 export interface Serving<Env, Database, Handlers> {
@@ -151,7 +152,7 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
         ...(tool.annotations ? { annotations: tool.annotations } : {}),
         ...(tool.icons ? { icons: tool.icons as Icon[] } : {}),
       },
-      (raw: unknown) =>
+      (raw: unknown, context: RequestContext) =>
         invoke(
           serving,
           tool,
@@ -161,6 +162,7 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
           rendersInApp,
           links?.renders.has(tool.name) ?? false,
           sdk.isCallToolResult,
+          context,
         ),
     );
   }
@@ -230,8 +232,25 @@ async function invoke<Env, Database, Handlers>(
   rendersInApp: boolean,
   linkedApp: boolean,
   isResult: Sdk["isCallToolResult"],
+  { mcpReq }: RequestContext,
 ) {
   const { options, pipeline, caller, request } = serving;
+  // Progress only for a request that carries a token; the SDK sends it on this request's stream. One the client can no
+  // longer receive is dropped, never failing the call.
+  const token = mcpReq._meta?.progressToken;
+  const toolCall: ToolCall = {
+    apps: rendersInApp,
+    linkedApp,
+    signal: mcpReq.signal,
+    ...(token === undefined
+      ? {}
+      : {
+          progress: (progress, total, message) =>
+            mcpReq
+              .notify({ method: "notifications/progress", params: { progressToken: token, progress, total, message } })
+              .catch(() => {}),
+        }),
+  };
   // Not part of structured output: the version, and on failure the current input contract.
   const about = (contract: boolean): TextBlock[] => {
     const parts = [
@@ -270,10 +289,7 @@ async function invoke<Env, Database, Handlers>(
     const run = async (input: Record<string, unknown>) => {
       const dryRun = pipeline.dryRun ? () => pipeline.dryRunResult() : undefined;
       const getDb = () => (db ??= options.db(serving.env));
-      const output = await callTool(tool, input, getDb, caller, options.handlers as Handlers, dryRun, {
-        apps: rendersInApp,
-        linkedApp,
-      });
+      const output = await callTool(tool, input, getDb, caller, options.handlers as Handlers, dryRun, toolCall);
       // A re-run for a smaller page replaces the first run's blocks and meta, also when it returns no wrapper.
       resultMeta = blocks = undefined;
       // withResult: the data is the result; its blocks follow Core's, its meta reaches only the result `_meta`.

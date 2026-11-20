@@ -217,6 +217,7 @@ test("all four Store wiring points reject missing, extra and wrong handlers", as
         consumer,
         `import { type Handlers, procedures, store } from "./generated.js";
 import { input } from "./validation/procedures/app-note.js";
+import { withResult } from "@aotter/mantle/mcp";
 const good: Handlers = { "app-note": async (ctx, input) => {
   // @ts-expect-error undeclared handler has no raw handle
   ctx.db;
@@ -267,6 +268,11 @@ async function check(db: Parameters<typeof store>[0], caller: Parameters<typeof 
   store(db, caller, { handlers: { ...good, "app-note": async (ctx, input: { title: number }) => ({ title: "t" }) } });
   // @ts-expect-error wrong output
   store(db, caller, { handlers: { ...good, "app-note": async () => ({ title: 1 }) } });
+  // a handler may return its output in a withResult wrapper; the Store still returns the output alone
+  const wrapped = { ...good, "app-note": async () => withResult({ title: "t" }, { content: [{ type: "text", text: "card" }] }) };
+  const fromWrapped: string = (await store(db, caller, { handlers: wrapped }).procedures["app-note"]({ title: "t" })).title;
+  // @ts-expect-error wrong output inside the wrapper
+  store(db, caller, { handlers: { ...good, "app-note": async () => withResult({ title: 1 }, {}) } });
   // @ts-expect-error handler must return Promise
   store(db, caller, { handlers: { ...good, "app-note": () => ({ title: "t" }) } });
   // @ts-expect-error ref Procedures only in Store map

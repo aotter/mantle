@@ -137,12 +137,24 @@ export {
   type ResultWithMeta,
   type McpContentBlock,
 } from "./result-meta.js";
+// Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
 /** What a `tools/call` tells a tool beside its input. */
 export interface ToolCall {
   /** The request declared MCP Apps support, so an App renders the result and reads its `_meta`; a secret for the App belongs there, not in the data a model reads. */
   readonly apps: boolean;
   /** The tool links an MCP App resource, independent of this request's declared support. */
   readonly linkedApp?: boolean;
+  /**
+   * Aborts when the `tools/call` request ends before its result: the client closed the request (how a 2026-07-28
+   * client cancels) or the connection dropped. A 2025-era `notifications/cancelled` arrives as another request, which
+   * a stateless server cannot relate to this one. Set on every MCP call; `callTool` passes the one it is given.
+   */
+  readonly signal?: AbortSignal;
+  /**
+   * Sends `notifications/progress` on this request's stream; present only when the client asked with a `progressToken`.
+   * `progress` should increase on each call; a notification the client can no longer receive is dropped.
+   */
+  readonly progress?: (progress: number, total?: number, message?: string) => Promise<void>;
 }
 
 /** Request-bound tool tables keep native environment bindings outside the cached App catalogue. */

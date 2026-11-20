@@ -14,7 +14,7 @@ import type {
   ResourceLink,
   TextContent,
 } from "@modelcontextprotocol/server";
-import type { McpContentBlock } from "../src/kernel/mcp.js";
+import type { McpContentBlock, ToolCall } from "../src/kernel/mcp.js";
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: items}
@@ -1441,4 +1441,148 @@ test("tools/list pages with toolsPageSize and an opaque cursor bound to the cata
     await expect(call(mcp(table(["a"]), { ...options, toolsPageSize: size }))).rejects.toThrow(
       "toolsPageSize must be a positive integer",
     );
+});
+
+test("a ref handler's withResult reaches an official client on both protocol eras; Store and REST callers get the data", async () => {
+  const text = source.replace(
+    "  output: {type: object}\n  handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",
+    "  output: {type: object, required: [title], additionalProperties: false, properties: {title: {type: string}}}\n  handler: {ref: app.addItem}",
+  );
+  const http = `apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: add-item-http}
+spec: {source: {kind: http, method: POST, path: /api/items}, target: {procedure: add-item}}
+`;
+  const files = await generateOrThrow("bun-sqlite", [
+    { sourceId: "ref-result.yaml", text },
+    { sourceId: "ref-result-http.yaml", text: http },
+  ]);
+  const { withResult } = await import("../src/kernel/mcp.js");
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-ref-result-")),
+    db = new Database(":memory:");
+  const block = { type: "image", data: "aGVsbG8=", mimeType: "image/png" } as const;
+  const handlers = {
+    "add-item": async (ctx: any, input: { title: string }) => {
+      await ctx.store.collection("items").insert(input);
+      return withResult({ title: input.title }, { content: [block], _meta: { "example/card": input.title } });
+    },
+  };
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const { rest } = await import(resolve(dir, "rest.ts"));
+    const { store } = await import(resolve(dir, "generated.ts"));
+    const caller = sdkFixtureCaller(user);
+    expect(await store(db, caller, { handlers }).procedures["add-item"]({ title: "Store" })).toEqual({
+      title: "Store",
+    });
+    const posted = await rest({ db: () => db, caller: () => caller, handlers })(
+      new Request("https://app.test/api/items", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Rest" }),
+      }),
+      {},
+    );
+    expect(await posted.json()).toEqual({ title: "Rest" });
+    const handle = mcp({ db: () => db, caller: () => caller, handlers });
+    for (const mode of ["legacy", { pin: "2026-07-28" }] as const) {
+      const client = new Client({ name: "test", version: "1" }, { versionNegotiation: { mode } });
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
+          fetch: async (url, init) => (await handle(new Request(String(url), init), {}))!,
+        }),
+      );
+      // The client checks structuredContent against the listed outputSchema (no additional properties): the data, not the wrapper.
+      const listed = (await client.listTools()).tools.find(tool => tool.name === "add_item")!;
+      expect(listed.outputSchema).toMatchObject({ additionalProperties: false, required: ["title"] });
+      const result = await client.callTool({ name: "add_item", arguments: { title: "Mcp" } });
+      expect(result.isError).toBeUndefined();
+      expect(result.structuredContent).toEqual({ title: "Mcp" });
+      expect(result.content as unknown[]).toEqual([
+        { type: "text", text: '{"title":"Mcp"}' },
+        { type: "text", text: expect.stringMatching(/^tool version /) },
+        block,
+      ]);
+      expect(result._meta).toMatchObject({ "example/card": "Mcp", "net.aotter.mantle/tool": "add_item" });
+      await client.close();
+    }
+    expect(db.query("SELECT title FROM items ORDER BY title").all()).toEqual([
+      { title: "Mcp" },
+      { title: "Mcp" },
+      { title: "Rest" },
+      { title: "Store" },
+    ]);
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("ToolCall.signal aborts when the request ends; progress reaches a client that sent a progressToken", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const { steps } = await import("./seams/tool-call.js");
+  const aborted: unknown[] = [];
+  let started: () => void = () => {};
+  const tool = (name: string, run: (call: ToolCall) => Promise<unknown>) => ({
+    name,
+    surface: "public",
+    description: name,
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run: (_db: unknown, _caller: unknown, _input: unknown, _handlers: unknown, call: ToolCall) => run(call),
+  });
+  const tools = [
+    steps,
+    tool(
+      "wait",
+      call =>
+        new Promise(done => {
+          call.signal!.addEventListener("abort", () => {
+            aborted.push(call.signal!.reason);
+            done({});
+          });
+          started();
+        }),
+    ),
+    tool("offered", async call => ({ progress: typeof call.progress, signal: call.signal instanceof AbortSignal })),
+  ];
+  const handle = mcp(tools as never, { db: () => ({}), caller: () => ({ kind: "anonymous" }) });
+  for (const mode of ["legacy", { pin: "2026-07-28" }] as const) {
+    const client = new Client({ name: "test", version: "1" }, { versionNegotiation: { mode } });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
+        fetch: async (url, init) => (await handle(new Request(String(url), init), {}))!,
+      }),
+    );
+    // Progress: notifications on the call's SSE stream, before its result.
+    const progress: unknown[] = [];
+    const done = await client.callTool({ name: "seam_steps", arguments: {} }, { onprogress: p => progress.push(p) });
+    expect(done.structuredContent).toEqual({ steps: 2 });
+    expect(progress).toEqual([
+      { progress: 1, total: 2, message: "step 1" },
+      { progress: 2, total: 2, message: "step 2" },
+    ]);
+    // Without a progressToken the tool is offered no progress.
+    expect((await client.callTool({ name: "offered", arguments: {} })).structuredContent).toEqual({
+      progress: "undefined",
+      signal: true,
+    });
+    // A 2026-07-28 client cancels by closing the request, which aborts the signal. A 2025-era client sends
+    // notifications/cancelled as another request, which a stateless server cannot relate to the call, so the
+    // signal aborts only when that client closes its connection.
+    const cancel = new AbortController();
+    const running = new Promise<void>(resolve => (started = resolve));
+    const call = client.callTool({ name: "wait", arguments: {} }, { signal: cancel.signal }).catch(String);
+    await running;
+    cancel.abort("stop");
+    expect(await call).toContain("stop");
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect([mode, aborted.length]).toEqual([mode, mode === "legacy" ? 0 : 1]);
+    await client.close();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect([mode, aborted.length]).toEqual([mode, 1]);
+    aborted.length = 0;
+  }
 });

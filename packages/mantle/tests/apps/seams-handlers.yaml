@@ -1,0 +1,33 @@
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: note-card}
+spec:
+  description: Add a note and show its card.
+  requires: {auth: {all: [ctx.user]}}
+  input: {type: object, required: [title], additionalProperties: false, properties: {title: {type: string}}}
+  output: {type: object, required: [title], additionalProperties: false, properties: {title: {type: string}}}
+  handler: {ref: app.noteCard}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: note-card-copy}
+spec:
+  description: Add a note through another handler.
+  requires: {auth: {all: [ctx.user]}}
+  input: {type: object, required: [title], additionalProperties: false, properties: {title: {type: string}}}
+  output: {type: object, required: [title], additionalProperties: false, properties: {title: {type: string}}}
+  handler: {ref: app.noteCardCopy}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: note-card-http}
+spec:
+  source: {kind: http, method: POST, path: /api/note-cards}
+  target: {procedure: note-card}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: note-card-mcp}
+spec:
+  source: {kind: mcp, surface: public}
+  target: {procedure: note-card}

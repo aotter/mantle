@@ -47,9 +47,12 @@ beforeAll(async () => {
   await mkdir(resolve(import.meta.dir, "apps/.generated"), { recursive: true });
   dir = await mkdtemp(resolve(import.meta.dir, "apps/.generated/seams-"));
   const sources = await loadFixtureSources("seams.yaml");
+  // The same tables with ref Procedures, whose app must pass handlers to every store(...)
+  const withHandlers = await loadFixtureSources("seams.yaml", "seams-handlers.yaml");
   for (const stack of STACKS) {
     // unlinked: generated code and the seam modules import @aotter/mantle/* through the exports map, as an application does
     await writeGenerated(resolve(dir, stack, "generated"), await generateOrThrow(stack, sources), false);
+    await writeGenerated(resolve(dir, stack, "generated-handlers"), await generateOrThrow(stack, withHandlers), false);
     for (const seam of core.filter(seam => stacksOf(seam).includes(stack))) {
       const copy = resolve(dir, stack, basename(moduleOf(seam, stack)));
       await copyFile(resolve(root, moduleOf(seam, stack)), copy);
@@ -282,6 +285,35 @@ for (const stack of STACKS) {
           expect(withBlocks.structuredContent).toEqual({ ok: true });
           expect(withBlocks.content.at(-1)).toEqual({ type: "image", data: "AA==", mimeType: "image/png" });
           expect(withBlocks._meta).toMatchObject({ "example/result": { b: 2 } });
+        });
+        await exercising(["ref-handler-result"], async () => {
+          const { added, copied, serveMcp, serveRest } = await module("ref-result.ts");
+          // Store callers, including a handler through ctx.store.procedures, get the data alone
+          expect(await added(db, bearer, "Store")).toEqual({ title: "Store" });
+          expect(await copied(db, bearer, "Nested")).toEqual({ title: "Nested (copy)" });
+          const posted = await serveRest(db, bearer)(
+            new Request("https://seam.example/api/note-cards", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ title: "Rest" }),
+            }),
+            {},
+          );
+          expect(await posted!.json()).toEqual({ title: "Rest" });
+          // the generated MCP tool sends the blocks and _meta; the data is the text and structuredContent
+          const called = await rpc(serveMcp(db, bearer), "tools/call", {
+            name: "note_card",
+            arguments: { title: "Mcp" },
+          });
+          expect(called.isError).toBeUndefined();
+          expect(called.structuredContent).toEqual({ title: "Mcp" });
+          expect(called.content[0]).toEqual({ type: "text", text: '{"title":"Mcp"}' });
+          expect(called.content.at(-1)).toEqual({ type: "image", data: "AA==", mimeType: "image/png" });
+          expect(called._meta).toMatchObject({ "example/card": { title: "Mcp" } });
+          const rows = await sql(
+            "SELECT title FROM notes WHERE title IN ('Store', 'Nested', 'Rest', 'Mcp') ORDER BY title",
+          );
+          expect(rows.map(row => row.title)).toEqual(["Mcp", "Nested", "Rest", "Store"]);
         });
         await exercising(["app-resource-meta"], async () => {
           const serve = (await module("resource-meta.ts")).serve(db, bearer);

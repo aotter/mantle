@@ -20,6 +20,11 @@ export interface ResultWithMeta<T> {
  */
 export const withResult = <T>(data: T, extra: Omit<ResultWith<T>, "data">): ResultWith<T> =>
   ({ [Symbol.for("net.aotter.mantle/result")]: true, data, ...extra }) as ResultWith<T>;
+/** A return without its `withResult` wrapper: what Store, REST and Admin operation callers receive. */
+export const resultData = <T>(value: T | ResultWith<T>): T =>
+  value && typeof value === "object" && Symbol.for("net.aotter.mantle/result") in value
+    ? (value as ResultWith<T>).data
+    : (value as T);
 /** `withResult(data, { _meta: meta })`: `meta` reaches only the result `_meta`, beside `net.aotter.mantle/tool`, which it cannot replace. */
 export const withResultMeta = <T>(data: T, meta: Readonly<Record<string, unknown>>): ResultWithMeta<T> =>
   withResult(data, { _meta: meta }) as ResultWithMeta<T>;

@@ -3,6 +3,7 @@ import type { Caller } from "./contracts.js";
 import type { Pipeline } from "./request-pipeline.js";
 import { convert, invalid } from "./surface.js";
 import { body, type Options, type Route } from "./rest.js";
+import { resultData } from "./result-meta.js";
 
 const fail: (message: string) => never = message => invalid(message, "rest");
 function number(raw: string): number {
@@ -43,9 +44,8 @@ export async function dispatch<Database, Handlers, Env>(
     if (pipeline.dryRun) return pipeline.dryRunResponse();
     data = await route.run!(getDb(), caller, input as never, options.handlers as Handlers);
   }
-  // A handler's `withResult` wrapper is for MCP: REST answers its data; the blocks and `_meta` stay out.
-  if (data && typeof data === "object" && Symbol.for("net.aotter.mantle/result") in data)
-    data = (data as { data: unknown }).data;
+  // A route's `withResult` wrapper is for MCP: REST answers its data; the blocks and `_meta` stay out.
+  data = resultData(data);
   const headers = { "cache-control": "private, no-store" };
   return request.method === "HEAD" ? new Response(null, { headers }) : Response.json(data, { headers });
 }

@@ -105,6 +105,28 @@ export const SEAMS: readonly Seam[] = [
     check: "packages/mantle/tests/seams/tool-meta.ts",
   },
   {
+    id: "ref-handler-result",
+    package: "@aotter/mantle",
+    subpath: "./mcp",
+    exports: ["withResult"],
+    entry:
+      "generated Handlers[name]: (ctx, input) => Promise<Output | ResultWith<Output>>; store(...).procedures[name] returns Output",
+    stacks: ALL,
+    decided: "#2100",
+    check: "packages/mantle/tests/seams/ref-result.ts",
+  },
+  {
+    id: "tool-call-signal-progress",
+    package: "@aotter/mantle",
+    subpath: "./mcp",
+    exports: ["mcp"],
+    entry: "Tool.run(db, caller, input, handlers, call): call.signal, call.progress(progress, total?, message?)",
+    stacks: [],
+    decided: "#2100",
+    check: "packages/mantle/tests/seams/tool-call.ts",
+    run: false, // executed in tests/mcp.test.ts
+  },
+  {
     id: "app-resource-meta",
     package: "@aotter/mantle",
     subpath: "./mcp",
