@@ -133,12 +133,12 @@ export function RecipePage({ origin, locale, recipe: r, locales }: { origin: str
   );
 }
 
-/** The save button, rendered by the server and hydrated by the island with the same props. */
-export function SaveButton({ label, saved, busy, onClick }: { label: string; saved?: boolean; busy?: boolean; onClick?: () => void }) {
+/** The save button, rendered by the server and hydrated by the island with the same props. `failed`: a read or write failed; a click tries again. */
+export function SaveButton({ label, saved, busy, failed, onClick }: { label: string; saved?: boolean; busy?: boolean; failed?: boolean; onClick?: () => void }) {
   return (
-    <button type="button" aria-pressed={saved} disabled={busy} onClick={onClick}
+    <button type="button" aria-pressed={saved} aria-invalid={failed || undefined} disabled={busy} onClick={onClick}
       className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50">
-      {label}
+      {label}{failed ? " ↻" : ""}
     </button>
   );
 }

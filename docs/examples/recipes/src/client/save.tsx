@@ -7,31 +7,32 @@ import { hydrateRoot } from "react-dom/client";
 import { SaveButton } from "../pages.js";
 
 type Props = { slug: string; label: { save: string; saved: string } };
-type State = "loading" | "signed-out" | "saved" | "unsaved" | "busy";
+type State = "loading" | "signed-out" | "saved" | "unsaved" | "busy" | "failed";
 
 function Save({ slug, label, clicked }: Props & { clicked: boolean }) {
   // The first render must equal the server's markup: "loading" renders the static button.
   const [state, setState] = useState<State>("loading");
   const [pending, setPending] = useState(clicked);
+  // 401 for an anonymous visitor (the View requires a signed-in member); any other failure is "failed", not signed out.
+  const read = () => fetch(`/api/views/my_saved_recipes?slug=${slug}`)
+    .then(async response => setState(response.status === 401 ? "signed-out" : !response.ok ? "failed" : ((await response.json()) as { rows: unknown[] }).rows.length ? "saved" : "unsaved"), () => setState("failed"));
+  useEffect(() => void read(), [slug]);
   useEffect(() => {
-    // 401 for an anonymous visitor (the View requires a signed-in member).
-    fetch(`/api/views/my_saved_recipes?slug=${slug}`)
-      .then(async response => setState(!response.ok ? "signed-out" : ((await response.json()) as { rows: unknown[] }).rows.length ? "saved" : "unsaved"), () => setState("signed-out"));
-  }, [slug]);
-  useEffect(() => {
-    if (pending && state !== "loading") { setPending(false); act(); }
+    if (pending && state !== "loading") { setPending(false); if (state !== "failed") act(); }
   }, [pending, state]);
 
   function act() {
     if (state === "loading") return setPending(true);
     if (state === "signed-out") return location.assign(`/sign-in?return=${encodeURIComponent(location.pathname)}`);
+    // After a failure the next click reads the state again, and the visitor clicks once more to save.
+    if (state === "failed") return (setState("loading"), void read());
     const was = state;
     setState("busy");
     fetch(`/api/saved-recipes/${slug}`, { method: was === "saved" ? "DELETE" : "PUT" })
-      .then(response => setState(response.ok ? (was === "saved" ? "unsaved" : "saved") : was), () => setState(was));
+      .then(response => setState(response.ok ? (was === "saved" ? "unsaved" : "saved") : response.status === 401 ? "signed-out" : "failed"), () => setState("failed"));
   }
   const saved = state === "saved" ? true : state === "unsaved" ? false : undefined;
-  return <SaveButton label={saved ? label.saved : label.save} saved={saved} busy={state === "busy"} onClick={act} />;
+  return <SaveButton label={saved ? label.saved : label.save} saved={saved} busy={state === "busy"} failed={state === "failed"} onClick={act} />;
 }
 
 export function mount(element: HTMLElement, clicked: boolean) {

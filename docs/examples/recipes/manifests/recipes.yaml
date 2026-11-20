@@ -44,7 +44,7 @@ spec:
     required: [slug, locale, title, summary, ingredients, steps]
     properties:
       slug: {type: string, maxLength: 80}
-      locale: {type: string, description: "BCP 47 tag, e.g. en"}
+      locale: {type: string, enum: [en], description: "BCP 47 tag. AGENT: the locales of src/site-config.ts other than the default; a locale outside it has no page."}
       title: {type: string}
       summary: {type: string}
       ingredients: {type: string}
@@ -54,7 +54,6 @@ spec:
       summary: {widget: textarea}
       ingredients: {widget: textarea}
       steps: {widget: textarea}
----
 ---
 # Page Views read one row by its key and return everything the page and its `.md` alternate need. Public Views return
 # published rows only. `markdown` is the whole recipe: text composed with `||` from text fields stays typed text on

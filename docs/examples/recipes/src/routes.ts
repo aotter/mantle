@@ -18,7 +18,8 @@ const NO_STORE = { "cache-control": "no-store" };
 const page = /^\/(zh-TW|en)\/(?:recipes\/([a-z0-9-]+))?$/;
 
 /** `.md` alternates, /llms.txt, /sitemap.xml and the head tags of each recipe page, from the public Views. */
-const site = (env: Env) => web({
+let generatedWeb: ReturnType<typeof web> | undefined; // built once per isolate
+const site = (env: Env) => generatedWeb ??= web({
   db: env.DB, caller: visitor, origin: env.PUBLIC_ORIGIN, title: siteDefaults.title, description: siteDefaults.description,
   locales: LOCALES, sitemap: LOCALES.map(locale => `/${locale}/`), cacheControl: PUBLIC,
   pages: {
@@ -41,8 +42,7 @@ const site = (env: Env) => web({
 export async function appRoutes(request: Request, env: Env, _context: { caller: () => Promise<Caller>; waitUntil: (task: Promise<unknown>) => void }): Promise<Response | undefined> {
   const url = new URL(request.url), match = page.exec(url.pathname);
   if (url.pathname === "/sign-in" && request.method === "GET") return signInPage();
-  const generatedWeb = site(env);
-  const generated = await generatedWeb.fetch(request, env);
+  const generated = await site(env).fetch(request, env);
   if (generated) return generated;
   if (!["/", "/robots.txt"].includes(url.pathname) && !match) return undefined;
   if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET, HEAD", ...NO_STORE } });
@@ -60,7 +60,7 @@ export async function appRoutes(request: Request, env: Env, _context: { caller: 
   const [{ recipeHtml }, found] = await Promise.all([import("./html.js"), read(env, locale, slug)]);
   if (!found) return new Response("Not found", { status: 404, headers: NO_STORE });
   // The row this page read: web() builds its tags from it without a second query.
-  const tags = await generatedWeb.head(request, env, undefined, { row: found.recipe });
+  const tags = await site(env).head(request, env, undefined, { row: found.recipe });
   return send(request, recipeHtml({ origin, locale, ...found }, tags), "text/html; charset=utf-8");
 }
 

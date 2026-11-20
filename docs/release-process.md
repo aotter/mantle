@@ -360,7 +360,7 @@ branch, `main`; feature PRs merge into `develop`. Two automations cover that gap
   not `Refs`) gets the `pending-release` label and the comment "Merged into
   develop by #PR; it ships in the next release.", and is closed as completed.
 - The `issues` job of `release.yml`, after the GitHub release exists: every
-  closed issue labelled `pending-release` gets `Released in <version>.` and
+  closed issue labelled `pending-release` whose PR is in the released commit gets `Released in <version>.` and
   loses the label. It cannot fail the release (`continue-on-error`); a failure
   shows as a warning in its log, and a rerun of the same release repeats it.
 

@@ -4,8 +4,9 @@
  *
  *   node scripts/issue-status.mjs merged     PR merged into develop (reads GITHUB_EVENT_PATH):
  *                                            label, comment on and close each issue it closes
- *   node scripts/issue-status.mjs released   after a release (env VERSION, RELEASE_URL): comment on and
- *                                            unlabel every closed `pending-release` issue; never exits non-zero
+ *   node scripts/issue-status.mjs released   after a release (env VERSION, RELEASE_URL, RELEASE_SHA): comment on and
+ *                                            unlabel each closed `pending-release` issue whose PR is in the
+ *                                            released commit; never exits non-zero
  *   node scripts/issue-status.mjs --self-test
  *
  * GitHub closes an issue from `Closes #N` only when the PR merges into the default branch (`main`), but feature
@@ -14,7 +15,8 @@
  * Closing grammar, from GitHub's "Linking a pull request to an issue" documentation: the keywords close, closes,
  * closed, fix, fixes, fixed, resolve, resolves, resolved (any case), an optional colon, then ONE reference:
  * `#N`, `OWNER/REPO#N` or `https://github.com/OWNER/REPO/issues/N`. Every issue needs its own keyword
- * ("Fixes #1, #2" closes only #1). Other repositories, fenced code blocks and HTML comments never count.
+ * ("Fixes #1, #2" closes only #1). Other repositories, code (fenced, in a list item or in backticks) and HTML
+ * comments never count.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -28,7 +30,7 @@ const REFERENCE =
 export function closingReferences(body, repo) {
   // One pass, leftmost wins: a fence hides a comment opener and a comment hides a fence opener.
   const text = String(body ?? "").replace(
-    /^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|(?![\s\S]))|<!--[\s\S]*?(?:-->|(?![\s\S]))/gm,
+    /^[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^[ \t]*\1[`~]*[ \t]*$|(?![\s\S]))|<!--[\s\S]*?(?:-->|(?![\s\S]))|(`+)[^\n]*?\2/gm,
     "",
   );
   const numbers = [];
@@ -65,6 +67,10 @@ function selfTest() {
   assert.deepEqual(refs("```\nCloses #12 (never closed fence)"), []);
   assert.deepEqual(refs("<!-- unterminated Closes #12"), []);
   assert.deepEqual(refs("Closes #12\n<!--\n```\n-->\nCloses #13"), [12, 13]);
+  assert.deepEqual(refs("use `Closes #12` here, then Closes #13"), [13]);
+  assert.deepEqual(refs("``Closes #12 ` still code`` Closes #13"), [13]);
+  assert.deepEqual(refs("- item\n\n    ```\n    Closes #12\n    ```\nCloses #13"), [13]);
+  assert.deepEqual(refs("a stray ` backtick, Closes #12"), [12]);
   assert.deepEqual(refs(null), []);
   console.log("issue-status self-test passed");
 }
@@ -120,8 +126,24 @@ async function merged() {
   if (failed) process.exitCode = 1;
 }
 
+/**
+ * Whether the PR named by the issue's "Merged into develop by #N" comment is in the released commit. An issue
+ * without that comment was labelled by hand and counts as shipped.
+ */
+async function shipped(number, sha) {
+  if (!sha) return true;
+  const { data: comments } = await call("GET", `/issues/${number}/comments?per_page=100`);
+  const pulls = comments.flatMap(c => [...String(c.body).matchAll(/^Merged into develop by #(\d+);/gm)].map(m => m[1]));
+  for (const pull of pulls) {
+    const { data: pr } = await call("GET", `/pulls/${pull}`);
+    const { data } = await call("GET", `/compare/${pr.merge_commit_sha}...${sha}`);
+    if (data.status !== "ahead" && data.status !== "identical") return false;
+  }
+  return true;
+}
+
 async function released() {
-  const { VERSION: version, RELEASE_URL: url } = process.env;
+  const { VERSION: version, RELEASE_URL: url, RELEASE_SHA: sha } = process.env;
   try {
     const issues = [];
     for (let page = 1; ; page++) {
@@ -132,6 +154,10 @@ async function released() {
     console.log(`${issues.length} closed ${LABEL.name} issue(s) to mark as released in ${version}.`);
     for (const { number } of issues) {
       try {
+        if (!(await shipped(number, sha))) {
+          console.log(`#${number}: its PR is not in ${sha}; left for the next release.`);
+          continue;
+        }
         await call("POST", `/issues/${number}/comments`, {
           body: `Released in ${url ? `[${version}](${url})` : version}.`,
         });

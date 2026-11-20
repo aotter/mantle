@@ -842,5 +842,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.core_sha }}
           RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.tag }}
         run: node scripts/issue-status.mjs released
