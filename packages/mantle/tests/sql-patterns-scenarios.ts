@@ -134,14 +134,29 @@ export async function verifySqlPatterns(app: App, query: Query, pg: boolean) {
   equal(nested.status, 200, "products-with-orders");
   // The boundary types a computed JSON document as json: an array on every target, though SQLite and D1 return text.
   const tool = (await app(
+    // MCP protocol revision 2026-07-28: the `_meta` envelope and the headers that state it (no SDK in a Worker bundle).
     new Request("http://local/mcp", {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "x-role": "admin" },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "x-role": "admin",
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "tools/call",
+        "mcp-name": "products_with_orders",
+      },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
         method: "tools/call",
-        params: { name: "products_with_orders", arguments: {} },
+        params: {
+          name: "products_with_orders",
+          arguments: {},
+          _meta: {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {},
+          },
+        },
       }),
     }),
   ))!;

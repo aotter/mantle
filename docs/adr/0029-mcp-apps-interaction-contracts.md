@@ -116,7 +116,8 @@ rediscover its saved tool definitions or renew a revoked OAuth grant.
 > with the latest HTML.
 
 Both protocol eras are served: `2026-07-28` and `2025-*` in stateless mode
-(`createMcpHandler(..., { legacy: "stateless" })`).
+(`createMcpHandler(..., { legacy: "stateless" })`). *(Superseded by the #2100
+amendment in section 4: 2026-07-28 only.)*
 
 ### 2. Runtime is transport-neutral
 
@@ -149,7 +150,8 @@ value Runtime accepts. Ineligible outputs advertise none. Views advertise none.
 ### 4. Results and errors (D1)
 
 - **Success:** `content` is one JSON text block; `structuredContent` carries
-  the value when it is a plain object.
+  the value when it is a plain object (on 2026-07-28, any JSON value: see the
+  SEP-2106 amendment below).
 - **Business failure:** `isError: true` with `{ diagnostics: [Diagnostic] }`
   (the ADR-0008 shape) as a JSON text block, repeated as `structuredContent`
   unless the tool advertises an `outputSchema`. Structured results must
@@ -202,12 +204,79 @@ value Runtime accepts. Ineligible outputs advertise none. Views advertise none.
 >   unions are unchanged. A started call records its own access event even when
 >   the client goes away first. Ref handlers get neither: their handler is shared
 >   with Store and REST callers.
-> - Not adopted: non-object `structuredContent` (SEP-2106). The 2026-07-28
->   revision allows any JSON value, but SDK 2.3.1 sends it as is only on
->   2026-07-28 requests and wraps it as `{ result }` (and a non-object
->   `outputSchema` likewise) on 2025-era requests (its 2025-era codec's
->   `projectCallToolResult` and `wrapOutputSchemaForLegacy`), so one tool would answer two
->   shapes. Core keeps sending `structuredContent` only for an object.
+> - ~~Not adopted: non-object `structuredContent` (SEP-2106).~~ Superseded by
+>   the next amendment.
+
+> **Amendment (#2100, 2026-11-20): protocol revision 2026-07-28 only;
+> non-object `structuredContent`.** Supersedes "Both protocol eras are served"
+> in section 1, the 2025-era statements of sections 4 and 10 and of the
+> amendment above, and its "not adopted" item.
+>
+> - Decision. Core serves MCP protocol revision 2026-07-28 only:
+>   `createMcpHandler(..., { legacy: "reject" })` (SDK 2.4.0). A 2025-era
+>   request, an `initialize` or a message without the `_meta` envelope, is
+>   answered by the SDK with HTTP 400 and JSON-RPC `-32022` ("Unsupported
+>   protocol version", `data.supported: ["2026-07-28"]`); a notification gets
+>   202; `GET` and `DELETE` get 405 with `Allow: POST`; a batch gets 400.
+>   Core observes the `-32022` refusal as `request-refused` with status 400 and
+>   reason `protocol-version`, and does not log it as a server failure.
+> - Why. One wire shape removes the code and caveats that existed only for the
+>   2025 era: the `initialize` handshake's access-event path, the "unknown"
+>   MCP Apps support state of a stateless request without capabilities (Apps
+>   support is now read from the `_meta` client capabilities every request
+>   carries), batch pre-authorization, the `notifications/cancelled` caveat
+>   (closing the request is the one cancellation path), and the SDK's 2025-era
+>   `{ result }` wrap of non-object structured content and output schemas
+>   (`rev2025Codec`'s `projectCallToolResult` and `wrapOutputSchemaForLegacy`),
+>   which would have made one tool answer two shapes.
+> - Who this cuts off. As of 2026-11-20 several widely used IDE and CLI MCP
+>   clients still open with a 2025-era `initialize`; they cannot connect, and
+>   a 2025-era client has no fall-forward to 2026-07-28. The official
+>   TypeScript client (and tools built on it, such as the Inspector) connects
+>   only in its modern mode (`versionNegotiation: { mode: { pin: "2026-07-28" } }`);
+>   its default legacy mode is refused. An operator finds out from the refusal
+>   the client shows ("Unsupported protocol version", naming `2026-07-28`) and
+>   from `onObservation`'s `request-refused` events with reason
+>   `protocol-version`, which count refused clients. A hosting platform forwards
+>   2026-07-28 requests (`_meta` envelope; `MCP-Protocol-Version`, `Mcp-Method`
+>   and `Mcp-Name` headers; `server/discover` instead of `initialize`), and may
+>   send only `server/discover` (pinned to a mounted tool) or one `tools/call`:
+>   a catalogue read would show tools beyond its pin, so it stays refused.
+> - SEP-2106. The 2026-07-28 revision says structured content "can be any JSON
+>   value (object, array, string, number, boolean, or null) that conforms to
+>   the tool's `outputSchema` if one is defined", and a server "MUST provide
+>   structured results that conform to this schema". A tool lists its
+>   `outputSchema` whatever its root type, and a success sends its data, any
+>   JSON value but `undefined`, as `structuredContent` beside the JSON text
+>   block. A ref Procedure advertises its authored output schema whenever its
+>   root declares a `type`; a typeless root (`$ref`, `anyOf`) still lists none,
+>   because the SDK lists such a root with a `type` it adds and the listed
+>   definition would no longer hash to the tool's version. SQL Procedures keep
+>   `{ results }`; Views keep sending `{ rows, nextCursor? }` without a schema.
+>   A success whose data the listed schema's root `type` (with `nullable`) does
+>   not admit, `undefined` included, fails as `INTERNAL_ERROR` before it is
+>   recorded; this is a root check, not validation. A failure omits
+>   `structuredContent` when a schema is listed.
+> - Cancellation on Workers (measured on deployed Workers, 2026-11-20). From
+>   compatibility date 2026-11-17, or with `enable_request_signal`, a client
+>   closing the request aborts `ToolCall.signal` when Cloudflare sees the
+>   disconnect, for JSON and SSE results; on an earlier date without the flag
+>   only an SSE result (a call that sent progress) aborts it. The invocation
+>   ends at the disconnect, so only synchronous abort listeners run: Core emits
+>   the `REQUEST_CANCELLED` completion observation in the abort event itself.
+>   The gateway access event of such a call is still recorded when the call
+>   ends, which a Worker does not reach. Work kept alive with `waitUntil` runs
+>   on unless it checks the signal. `mantle generate` picks the newest date the
+>   installed workerd supports, which can precede 2026-11-17; the flag is
+>   documented, not added to generated configuration.
+> - Observation: an `invocation` event carries `client`, the `clientInfo` name
+>   and version the request's `_meta` declares; `request-refused` gains status
+>   400 with reason `protocol-version`.
+> - MCP Apps: the Admin App reads any JSON value. The official App bridge
+>   (ext-apps 2.0.4, also 2.1.0) still validates the result of an App's own
+>   `callServerTool` with the 2025-era shape, so an App cannot yet receive a
+>   non-object result from a tool it calls; a host's tool-result notification
+>   reaches it.
 
 ### 5. Identity stays outside the SDK
 

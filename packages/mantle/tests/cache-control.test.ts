@@ -7,10 +7,11 @@ import { expect, spyOn, test } from "bun:test";
 import { authRoutes } from "../src/auth/routes.js";
 import { authSetupIncomplete } from "../src/auth/hardening.js";
 import type { Caller } from "../src/kernel/contracts.js";
-import { mcp, type Tool } from "../src/kernel/mcp.js";
+import { mcp, type Tool, type ToolCall } from "../src/kernel/mcp.js";
 import { nativeRest, rest, type Route } from "../src/kernel/rest.js";
 import { web, type View } from "../src/kernel/web.js";
 import { fixtureCaller } from "./apps/fixtures.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const user: Caller = fixtureCaller({
   kind: "user",
@@ -24,13 +25,8 @@ const user: Caller = fixtureCaller({
 const anonymous: Caller = { kind: "anonymous" };
 const PRIVATE = "private, no-store";
 const at = (path: string, init?: RequestInit) => new Request("https://app.test" + path, init);
-const rpc = (body: string, headers: Record<string, string> = {}) =>
-  at("/mcp", {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
-    body,
-  });
-const call = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "work", arguments: {} } });
+const rpc = (body: unknown, headers: Record<string, string> = {}) => at("/mcp", mcpInit(body, { headers }));
+const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "work", arguments: {} } };
 
 test("REST, MCP, web and auth state Cache-Control on success and error paths", async () => {
   const log = spyOn(console, "error").mockImplementation(() => {});
@@ -54,10 +50,15 @@ test("REST, MCP, web and auth state Cache-Control on success and error paths", a
     description: "Work",
     inputSchema: { type: "object" },
     validate: raw => raw as Record<string, unknown>,
-    run: async () => ({}),
+    // A call that reports progress is answered as an SSE stream.
+    run: async (_db: unknown, _caller: unknown, _input: unknown, _handlers: unknown, call: ToolCall) => {
+      await call.progress?.(1, 1);
+      return {};
+    },
   };
   const tools = mcp([tool], { db: () => null, caller: () => user });
   const closed = mcp([{ ...tool, closed: true }], { db: () => null, caller: () => anonymous });
+  const bearer = mcp([tool], { db: () => null, caller: () => fixtureCaller({ ...user, credential: "oauth" }) });
   const site = (caller: Caller, cacheControl?: string) =>
     web(
       {
@@ -112,9 +113,16 @@ test("REST, MCP, web and auth state Cache-Control on success and error paths", a
     ["rest unknown path (404)", api(at("/api/nope"), {}), PRIVATE],
     ["native route JSON", native(at("/api/raw"), {}), PRIVATE],
     ["native route throws (500)", native(at("/api/throws"), {}), PRIVATE],
-    ["mcp tools/call (SSE)", tools(rpc(call), {}), "no-cache, no-transform"],
+    // 2026-07-28 answers a call as JSON, and streams it (SSE) once the call sends a progress notification.
+    ["mcp tools/call (JSON)", tools(rpc(call), {}), PRIVATE],
+    [
+      "mcp tools/call (SSE)",
+      // A bearer caller, whose call runs (a session's write needs its own Origin), and reports its progress.
+      bearer(rpc({ ...call, params: { ...call.params, _meta: { progressToken: 1 } } }), {}),
+      "no-cache, no-transform",
+    ],
     ["mcp malformed JSON (400)", tools(rpc("{"), {}), PRIVATE],
-    ["mcp JSON-only Accept (406)", tools(rpc(call, { accept: "application/json" }), {}), PRIVATE],
+    ["mcp JSON-only Accept", tools(rpc(call, { accept: "application/json" }), {}), PRIVATE],
     ["mcp GET (405)", tools(at("/mcp"), {}), PRIVATE],
     ["mcp OPTIONS (405)", tools(at("/mcp", { method: "OPTIONS" }), {}), PRIVATE],
     ["mcp foreign Origin (403)", tools(rpc(call, { origin: "https://other.test" }), {}), PRIVATE],
@@ -144,6 +152,8 @@ test("REST, MCP, web and auth state Cache-Control on success and error paths", a
   for (const [name, response, expected] of cases) {
     const answer = await response;
     seen.push([name, answer?.headers.get("cache-control") ?? null]);
+    // SDK 2.4.0 states the one method an MCP endpoint takes on each of its 405s.
+    if (name.startsWith("mcp") && name.endsWith("(405)")) expect(answer?.headers.get("allow")).toBe("POST");
     void answer?.body?.cancel();
   }
   expect(seen).toEqual(cases.map(([name, , expected]) => [name, expected]));

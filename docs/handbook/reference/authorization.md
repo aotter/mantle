@@ -54,7 +54,46 @@ Pins use [describe](describe.md)'s `_meta.id`: `rest:<METHOD> <path>`, `admin:<M
 
 A gateway computes the pin from the request with [`matchTarget(describe, request)`](describe.md#matching-a-request-to-its-target), which applies the routers' own path normalisation, `HEAD` handling, Admin mount and precedence to the saved `mantle describe` JSON. It returns the target's `_meta`, including `targetHash` and the `readOnly` flag that the freshness rule reads, or `null` when the application serves no such route or tool.
 
-MCP host callers may use `initialize` and `tools/call` of their pinned tool; batches stay refused and `tools/list` returns 403 because the host provides its catalogue.
+MCP host callers forward one request in protocol revision 2026-07-28: `server/discover` (pinned to a mounted tool) or `tools/call` of their pinned tool. Batches stay refused, `tools/list` and `resources/*` return 403 because the host provides its catalogue, and a 2025-era message (an `initialize`, or one without the `_meta` envelope) is answered with HTTP 400 and JSON-RPC `-32022`. See [Forwarding MCP requests](#forwarding-mcp-requests).
+
+### Forwarding MCP requests
+
+Core serves MCP protocol revision 2026-07-28 only. A forwarded MCP request is one JSON-RPC message, not a batch,
+whose `params._meta` carries `io.modelcontextprotocol/protocolVersion` (`"2026-07-28"`),
+`io.modelcontextprotocol/clientCapabilities` (the capabilities the host declares; include
+`extensions["io.modelcontextprotocol/ui"].mimeTypes: ["text/html;profile=mcp-app"]` for MCP App metadata) and,
+optionally, `io.modelcontextprotocol/clientInfo`, with headers that state the same: `MCP-Protocol-Version`,
+`Mcp-Method` and, for `tools/call`, `Mcp-Name` (the tool name). There is no `initialize` and no session: send
+`tools/call` directly, or `server/discover` for the server's capabilities. A host that forwarded the 2025-era form
+before must change it; Core answers that form with HTTP 400 and JSON-RPC `-32022` whose `data.supported` is
+`["2026-07-28"]`, and records the request as refused (`INPUT_VALIDATION_FAILED`, status 400) in its access event.
+
+Before (2025-era, refused now):
+
+```http
+POST /mcp/admin HTTP/1.1
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"approve_request","arguments":{"id":"r1"}}}
+```
+
+After (2026-07-28):
+
+```http
+POST /mcp/admin HTTP/1.1
+Content-Type: application/json
+Accept: application/json, text/event-stream
+MCP-Protocol-Version: 2026-07-28
+Mcp-Method: tools/call
+Mcp-Name: approve_request
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"approve_request","arguments":{"id":"r1"},
+ "_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}
+```
+
+`ctx.props.mantle` is unchanged. A result is answered as JSON, or as an SSE stream once the call sends progress;
+it carries `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`.
 
 `dryRun: true` runs target/hash checks, input validation, generated caller checks, `authorize` and freshness, without SQL or side effects. It returns 200 `{ dryRun: true, event }`; MCP carries this result in the SDK tool response. Ref handlers, custom guards, uploads and opaque work return 412 `DRY_RUN_UNSUPPORTED`. Dry runs validate authority and input; they do not verify database state, row existence or OCC conflicts.
 

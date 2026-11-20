@@ -146,7 +146,8 @@ export interface BadgeState {
 /** An MCP tool result, as a host returns it. */
 export interface McpToolResult {
   readonly content?: readonly { readonly type: string; readonly text?: string }[];
-  readonly structuredContent?: Readonly<Record<string, unknown>>;
+  /** Any JSON value (SEP-2106): an object, an array, a string, a number, a boolean or null. */
+  readonly structuredContent?: unknown;
   readonly isError?: boolean;
 }
 

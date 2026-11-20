@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { fixtureCaller } from "./apps/fixtures.js";
+import { mcpInit } from "./mcp-wire.js";
 
 // #1973: every string input is well-formed text without NUL, and x-mantle-maxBytes bounds its UTF-8 length.
 const source = `apiVersion: cms.mantle.aotter.net/v2
@@ -130,11 +131,13 @@ test("REST and MCP refuse the same strings with INPUT_VALIDATION_FAILED and acce
       );
     const call = async (name: string, args: unknown) => {
       const response = await tools(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
-        }),
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
         {},
       );
       const text = await response.text();

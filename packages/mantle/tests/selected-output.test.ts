@@ -10,6 +10,7 @@ import { outputConversions } from "../src/domain/columns.js";
 import { compilePlan } from "../src/build/compiler.js";
 import { postgresDialect } from "../src/build/postgres/dialect.js";
 import { d1Dialect as sqliteCompiler } from "../src/build/d1/dialect.js";
+import { mcpInit } from "./mcp-wire.js";
 const postgresCompiler = postgresDialect();
 
 const source = `apiVersion: cms.mantle.aotter.net/v2
@@ -333,16 +334,18 @@ async function verify(
     const { mcp } = await import(resolve(dir, "mcp.ts"));
     const handle = mcp({ db: () => counted, caller: () => caller });
     const response = await handle(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name: "values", arguments: { limit: 1 } },
-        }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "values", arguments: { limit: 1 } },
+          },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       {},
     );
     const text = await response.text(),
@@ -364,16 +367,18 @@ async function verify(
       expect(Object.hasOwn(json.rows[0], "__proto__")).toBe(true);
       expect(calls).toBe(prior + 1);
       const rpc = await handle(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: { name: `proto_${kind}`, arguments: { limit: 1 } },
-          }),
-        }),
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: `proto_${kind}`, arguments: { limit: 1 } },
+            },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
         {},
       );
       const payload = await rpc.text(),

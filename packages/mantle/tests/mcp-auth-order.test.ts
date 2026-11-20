@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 import { mcp, type Tool } from "../src/kernel/mcp.js";
 import { fixtureCaller } from "./apps/fixtures.js";
+import { mcpInit } from "./mcp-wire.js";
 
 test("OAuth linking scope hints do not become required API scopes", async () => {
   let caller: import("../src/kernel/contracts.js").Caller = { kind: "anonymous" };
@@ -18,11 +19,13 @@ test("OAuth linking scope hints do not become required API scopes", async () => 
   ];
   const handle = mcp(tools, { db: () => null, caller: () => caller, authorizationScopes: ["offline_access", "mcp"] });
   const request = () =>
-    new Request("https://app.test/mcp", {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "read", arguments: {} } }),
-    });
+    new Request(
+      "https://app.test/mcp",
+      mcpInit(
+        { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "read", arguments: {} } },
+        { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+      ),
+    );
   const challenge = await handle(request(), {});
   expect(challenge!.status).toBe(401);
   expect(challenge!.headers.get("www-authenticate")).toContain('scope="mcp offline_access"');
@@ -109,11 +112,15 @@ test("app-composed tools need an explicit read catalogue for cached cookie autho
   ] as const) {
     const handle = mcp(tools, options, reads);
     const response = await handle(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } },
+          {
+            headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
+          },
+        ),
+      ),
       {},
     );
     expect(response?.status).toBe(200);

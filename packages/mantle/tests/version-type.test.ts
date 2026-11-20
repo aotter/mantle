@@ -5,6 +5,7 @@ import { SQL } from "bun";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
+import { mcpInit } from "./mcp-wire.js";
 await mkdir(resolve(import.meta.dir, "apps/.generated"), { recursive: true });
 
 // #1826: PostgreSQL's int8 `version` arrives as text; the Store, a ref handler and REST/MCP give a number on every engine.
@@ -64,11 +65,13 @@ const caller: any = fixtureCaller({
 });
 const rpc = async (handle: (r: Request, env: unknown) => Promise<Response | undefined>, name: string, args: object) => {
   const response = (await handle(
-    new Request("https://app.test/mcp", {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
-    }),
+    new Request(
+      "https://app.test/mcp",
+      mcpInit(
+        { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } },
+        { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+      ),
+    ),
     {},
   ))!;
   const body = await response.text(),

@@ -1143,6 +1143,31 @@ it("delivers official result notifications with optional undefined metadata and 
     expect(
       await frame.evaluate(() => ({ count: (window as any).probe.results.length, polluted: ({} as any).unsafe })),
     ).toEqual({ count: 2, polluted: undefined });
+    // SEP-2106: a 2026-07-28 result carries any JSON value as structuredContent. The App takes one a host sends it; its
+    // own server call is checked by the official bridge (ext-apps 2.0.4), which still reads tools/call results as 2025-era
+    // objects and refuses it before the App sees it.
+    const values = [["a", "b"], "text", 3, false, null];
+    const calls: unknown[] = [];
+    for (const value of values) {
+      await page.evaluate(async value => {
+        const result = { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value };
+        const { bridge } = (window as any).host;
+        bridge.oncalltool = async () => result;
+        await bridge.sendToolResult(result);
+      }, value);
+      calls.push(
+        await frame.evaluate(() =>
+          (window as any).probe.call("json_result", {}).then(
+            () => "accepted",
+            (error: Error) => error.message.split(":")[0],
+          ),
+        ),
+      );
+    }
+    await expect
+      .poll(() => frame.evaluate(() => (window as any).probe.results.slice(2).map((r: any) => r.structuredContent)))
+      .toEqual(values);
+    expect(calls).toEqual(values.map(() => "Invalid result for tools/call"));
     expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
   } finally {
     await browser.close();

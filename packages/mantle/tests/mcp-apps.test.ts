@@ -3,6 +3,7 @@ import { expect, test, spyOn } from "bun:test";
 import { mcp, type Tool } from "../src/kernel/mcp.js";
 import { ContractError } from "../src/kernel/contracts.js";
 import type { McpApps, McpAppResource } from "../src/kernel/mcp-apps.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const capabilities = { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } };
 const meta = { "io.modelcontextprotocol/clientCapabilities": capabilities };
@@ -54,23 +55,25 @@ const call = async (
   method: string,
   params: Record<string, unknown> = {},
   surface = "public",
-  ui: boolean | null = true,
+  ui = true,
   origin = "https://app.test",
 ) => {
   const response = await api(
-    new Request(`${origin}/mcp${surface === "admin" ? "/admin/" : "/"}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method,
-        params: {
-          ...params,
-          ...(ui !== null ? { _meta: ui ? meta : { "io.modelcontextprotocol/clientCapabilities": {} } } : {}),
+    new Request(
+      `${origin}/mcp${surface === "admin" ? "/admin/" : "/"}`,
+      mcpInit(
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method,
+          params: {
+            ...params,
+            _meta: ui ? meta : { "io.modelcontextprotocol/clientCapabilities": {} },
+          },
         },
-      }),
-    }),
+        { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+      ),
+    ),
     {},
   );
   const text = await response!.text();
@@ -97,13 +100,8 @@ test("public app and admin app + external Admin contributor use the same hook; H
     admin: [admin, { resources: [resource("ui://my-app/details", ["admin_details"])] }],
   });
   expect(loads).toBe(0);
-  const initialized = await call(
-    api,
-    "initialize",
-    { protocolVersion: "2025-03-26", capabilities, clientInfo: { name: "test", version: "1" } },
-    "admin",
-  );
-  expect(initialized.result.capabilities.resources).toBeDefined();
+  const discovered = await call(api, "server/discover", {}, "admin");
+  expect(discovered.result.capabilities.resources).toBeDefined();
   expect((await call(api, "resources/list", {}, "admin")).result.resources.map((r: any) => r.uri)).toEqual([
     "ui://mantle-admin/rows",
     "ui://my-app/details",
@@ -125,7 +123,11 @@ test("public app and admin app + external Admin contributor use the same hook; H
   expect((await call(api, "resources/list")).result.resources.map((r: any) => r.uri)).toEqual(["ui://my-app/rows"]);
   const result = (await call(api, "tools/call", { name: "public_rows", arguments: {} })).result;
   expect(result.structuredContent).toEqual({ rows: [{ id: "one" }] });
-  expect(result._meta).toEqual({ "net.aotter.mantle/tool": "public_rows" });
+  // 2026-07-28 results name the server in `_meta`.
+  expect(result._meta).toEqual({
+    "io.modelcontextprotocol/serverInfo": expect.objectContaining({ name: "aotter.mantle" }),
+    "net.aotter.mantle/tool": "public_rows",
+  });
 });
 
 test("request-bound tool tables revalidate changed names and never dispatch the cached endpoint table", async () => {
@@ -151,16 +153,18 @@ test("request-bound tool tables revalidate changed names and never dispatch the 
     { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: app } },
   );
   const request = (name: string) =>
-    new Request("https://app.test/mcp", {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: { name, arguments: {}, _meta: meta },
-      }),
-    });
+    new Request(
+      "https://app.test/mcp",
+      mcpInit(
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name, arguments: {}, _meta: meta },
+        },
+        { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+      ),
+    );
   const response = await api(request("public_rows"), { changed: false, value: "first" }),
     body = await response!.text();
   expect(body).toContain('"value":"first"');
@@ -213,16 +217,18 @@ test("request-bound tool tables revalidate a same-named View changing into a Pro
     },
   );
   const request = (method: string) =>
-    new Request("https://app.test/mcp", {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method,
-        params: method === "tools/call" ? { name: "same", arguments: {}, _meta: meta } : { _meta: meta },
-      }),
-    });
+    new Request(
+      "https://app.test/mcp",
+      mcpInit(
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method,
+          params: method === "tools/call" ? { name: "same", arguments: {}, _meta: meta } : { _meta: meta },
+        },
+        { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+      ),
+    );
   expect((await api(request("tools/list"), { write }))!.status).toBe(200);
   write = true;
   expect((await api(request("tools/call"), { write }))!.status).toBe(500);
@@ -234,14 +240,9 @@ test("clients that declare no MCP Apps support see no App resources or App-only 
     public: { resources: [{ ...resource("ui://my-app/rows", ["public_rows"]), appOnly: ["public_details"] }] },
   });
   for (const ui of [false]) {
-    const init = await call(
-      api,
-      "initialize",
-      { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1" } },
-      "public",
-      ui,
-    );
-    expect(init.error).toBeUndefined();
+    const discovered = await call(api, "server/discover", {}, "public", ui);
+    expect(discovered.error).toBeUndefined();
+    expect(discovered.result.capabilities.resources).toBeUndefined();
     expect((await call(api, "resources/list", {}, "public", ui)).result?.resources ?? []).toEqual([]);
     const listed = (await call(api, "tools/list", {}, "public", ui)).result.tools;
     expect(listed.map((t: any) => t.name)).toEqual(["public_rows"]);
@@ -252,22 +253,6 @@ test("clients that declare no MCP Apps support see no App resources or App-only 
   }
   const listed = (await call(api, "tools/list")).result.tools;
   expect(listed[1]._meta.ui).toEqual({ resourceUri: "ui://my-app/rows", visibility: ["app"] });
-});
-
-test("a request that advertises no capabilities (unknown) still sees App resources, _meta.ui and App-only tools", async () => {
-  const api = handle({
-    public: { resources: [{ ...resource("ui://my-app/rows", ["public_rows"]), appOnly: ["public_details"] }] },
-  });
-  expect((await call(api, "resources/list", {}, "public", null)).result.resources.map((r: any) => r.uri)).toEqual([
-    "ui://my-app/rows",
-  ]);
-  const listed = (await call(api, "tools/list", {}, "public", null)).result.tools;
-  expect(listed.map((t: any) => t.name)).toEqual(["public_rows", "public_details"]);
-  expect(listed[0]._meta.ui).toEqual({ resourceUri: "ui://my-app/rows" });
-  expect(listed[1]._meta.ui).toEqual({ resourceUri: "ui://my-app/rows", visibility: ["app"] });
-  expect(
-    (await call(api, "tools/call", { name: "public_details", arguments: {} }, "public", null)).result.structuredContent,
-  ).toEqual({ rows: [{ id: "one" }] });
 });
 
 for (const [name, resources, fragment] of [
@@ -379,11 +364,13 @@ test("the admin tool table loads only for an admin caller", async () => {
   );
   const list = () =>
     api(
-      new Request("https://app.test/mcp/admin", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
-      }),
+      new Request(
+        "https://app.test/mcp/admin",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       {},
     );
   expect((await list())!.status).toBe(401);
@@ -580,11 +567,13 @@ test("an HTML loader also receives the request's env and request; a zero-argumen
   const api = handle({ admin });
   const read = async (uri: string) => {
     const response = await api(
-      new Request("https://app.test/mcp/admin/", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "resources/read", params: { uri, _meta: meta } }),
-      }),
+      new Request(
+        "https://app.test/mcp/admin/",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "resources/read", params: { uri, _meta: meta } },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       env,
     );
     const text = await response!.text();
@@ -629,15 +618,19 @@ test("async Admin contributors resolve only after origin, caller and Admin gates
     },
   });
   const list = (origin?: string) => {
-    const request = new Request("https://app.test/mcp/admin", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        ...(origin ? { origin } : {}),
-      },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
-    });
+    const request = new Request(
+      "https://app.test/mcp/admin",
+      mcpInit(
+        { jsonrpc: "2.0", id: 1, method: "tools/list" },
+        {
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            ...(origin ? { origin } : {}),
+          },
+        },
+      ),
+    );
     return api(request, env);
   };
   expect(resolved).toBe(0);
@@ -687,11 +680,13 @@ test("mixed static and async contributors retain getter-once semantics and refre
   expect(resolves).toBe(0);
   const request = async (build: string, method: string, params = {}) => {
     const response = await api(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: meta } },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       { build },
     );
     const text = await response!.text();
@@ -769,11 +764,13 @@ test("a failing contributor is redacted and a later request may resolve it again
       },
     });
     const request = () =>
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
-      });
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      );
     const failed = await api(request(), {});
     expect(failed!.status).toBe(500);
     const body = await failed!.text();
@@ -870,16 +867,18 @@ test("meta.ui.visibility hides a Procedure from clients without MCP Apps; tools/
   });
   const post = () =>
     api(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name: "public_write", arguments: {}, _meta: meta },
-        }),
-      }),
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "public_write", arguments: {}, _meta: meta },
+          },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
       {},
     );
   caller = fixtureCaller({

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 import { writeGenerated } from "./apps/link.js";
 import type { MediaStorage } from "../src/kernel/site-types.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -79,15 +80,19 @@ test("another server's upload and asset ids get a distinct refusal over MCP (old
         caller: () => admin,
         media: () => storage,
       })(
-        new Request("https://app.test/mcp/admin", {
-          method: "POST",
-          headers: {
-            origin: "https://app.test",
-            "content-type": "application/json",
-            accept: "application/json, text/event-stream",
-          },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
-        }),
+        new Request(
+          "https://app.test/mcp/admin",
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } },
+            {
+              headers: {
+                origin: "https://app.test",
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+              },
+            },
+          ),
+        ),
         {},
       );
       const text = await response.text();

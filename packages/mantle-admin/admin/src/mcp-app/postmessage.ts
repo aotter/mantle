@@ -143,7 +143,8 @@ function result(value: unknown): value is ToolResult {
             ? typeof item.text === "string"
             : item.text === undefined || typeof item.text === "string"),
       ) &&
-      (value.structuredContent === undefined || record(value.structuredContent)) &&
+      // Any JSON value: 2026-07-28 sends an array, a string, a number, a boolean or null as it is (SEP-2106).
+      (value.structuredContent === undefined || json(value.structuredContent)) &&
       (value._meta === undefined || record(value._meta)) &&
       (value.isError === undefined || typeof value.isError === "boolean")
     )

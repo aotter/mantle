@@ -27,14 +27,21 @@ wrangler.stdout.on("data", (chunk) => { logs += chunk; });
 wrangler.stderr.on("data", (chunk) => { logs += chunk; });
 
 const json = { "content-type": "application/json", origin };
+/** One MCP request in protocol revision 2026-07-28 (the only one Mantle serves): the `_meta` envelope and its headers. */
+const mcpRequest = (method, params = {}, { id = 1, capabilities = {}, headers = {} } = {}) => {
+  const message = { jsonrpc: "2.0", id, method, params: { ...params, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "reference-smoke", version: "1" }, "io.modelcontextprotocol/clientCapabilities": capabilities } } };
+  const name = method === "tools/call" ? params.name : method === "resources/read" ? params.uri : undefined;
+  return { method: "POST", headers: { ...headers, "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2026-07-28", "mcp-method": method, ...(name === undefined ? {} : { "mcp-name": name }) }, body: JSON.stringify(message) };
+};
+const appsCapabilities = { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } };
 const call = async (method, path, { cookie, body } = {}) => {
   const response = await fetch(`${origin}${path}`, { method, headers: { ...json, ...(cookie ? { cookie } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const text = await response.text();
   return { status: response.status, body: text ? JSON.parse(text) : null, headers: response.headers };
 };
 const mcp = async (path, cookie, name, args) => {
-  const response = await fetch(`${origin}${path}`, { method: "POST", headers: { ...json, accept: "application/json, text/event-stream", ...(cookie ? { cookie } : {}) },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: name ? "tools/call" : "tools/list", params: name ? { name, arguments: args } : {} }) });
+  // Declares MCP Apps support, as the hosts that render the reference App do.
+  const response = await fetch(`${origin}${path}`, mcpRequest(name ? "tools/call" : "tools/list", name ? { name, arguments: args } : {}, { capabilities: appsCapabilities, headers: { origin, ...(cookie ? { cookie } : {}) } }));
   const text = await response.text();
   const data = text.split("\n").find((line) => line.startsWith("data:"));
   return { status: response.status, body: data ? JSON.parse(data.slice(5)) : text ? JSON.parse(text) : null };
@@ -296,8 +303,7 @@ try {
   assert.ok(renderedReport.content.length > 0); // fallback remains readable when the host cannot display the App
   assert.equal((await mcp("/mcp/admin", buyer, "render_sales_report", {})).status, 403);
   assert.ok(!publicDefinitions.some(tool => tool.name === "render_sales_report"));
-  const resourceResponse = await fetch(`${origin}/mcp/admin`, { method: "POST", headers: { ...json, accept: "application/json, text/event-stream", cookie: admin },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "resources/read", params: { uri: renderDefinition._meta.ui.resourceUri } }) });
+  const resourceResponse = await fetch(`${origin}/mcp/admin`, mcpRequest("resources/read", { uri: renderDefinition._meta.ui.resourceUri }, { id: 2, capabilities: appsCapabilities, headers: { origin, cookie: admin } }));
   assert.equal(resourceResponse.status, 200);
   const resourceText = await resourceResponse.text();
   const resourceLine = resourceText.split("\n").find(line => line.startsWith("data:"));
@@ -431,10 +437,7 @@ try {
   // Never print tokens, including in an assertion diff.
   assert.ok(retried.body.refresh_token === renewed.body.refresh_token && retried.body.access_token === renewed.body.access_token);
   const bearerTools = async token => {
-    const response = await fetch(`${origin}/mcp/admin`, {
-      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
-    });
+    const response = await fetch(`${origin}/mcp/admin`, mcpRequest("tools/list", {}, { headers: { authorization: `Bearer ${token}` } }));
     const text = await response.text(), event = text.split("\n").find(line => line.startsWith("data:"));
     return { status: response.status, body: JSON.parse(event ? event.slice(5) : text) };
   };

@@ -3,6 +3,7 @@ import type { AppDescription } from "../domain/describe/index.js";
 import {
   mcpToolNameSegment,
   procedureAnnotations,
+  procedureOutputSchema,
   toolTitle,
   viewAnnotations,
   type RuntimePlan,
@@ -105,9 +106,7 @@ export function emitMcp(
     const output =
       kind === "procedures"
         ? ref
-          ? procedure?.output.type === "object"
-            ? procedure.output
-            : undefined
+          ? procedureOutputSchema(procedure!)
           : {
               type: "object",
               properties: { results: { type: "array", items: { type: "array", items: { type: "object" } } } },
