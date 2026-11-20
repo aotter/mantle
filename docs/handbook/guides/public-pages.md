@@ -82,7 +82,8 @@ listing them:
 - A favicon, and `og:image` on the home and list pages too.
 - A detail page leads to the action the brief sells (order, register, book), saying when it needs an account.
 - A cache policy: `Last-Modified` (from the row's `updated_at`) or an `ETag` on pages, `.md`, sitemap and `llms.txt`,
-  so crawlers can revalidate; `no-store` everywhere is safe but makes every crawl a full fetch.
+  so crawlers can revalidate; `no-store` everywhere is safe but makes every crawl a full fetch. The headers for a
+  cache in front of the Worker are in [caching](caching.md).
 - Structured data and answer blocks state only what the page shows. Never promise ranking or AI citation.
 
 ## Check before you report done

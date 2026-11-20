@@ -166,7 +166,8 @@ two versions served at once); if it is the entry chunk, Admin does not start and
 can recover. So the rule is one day: a present chunk costs one revalidation (`304`) a day,
 and a stored `404` heals within a day. An application whose own `/admin/assets/*` rule says
 a year keeps it; shorten it. A path the Worker must answer stays out of the
-exclusion.
+exclusion. What a cache in front of the Worker stores, and the `Cache-Control` every Worker response states, is in
+[caching](../guides/caching.md).
 
 After a deploy the previous version's assets are gone, so an open Admin tab that loads
 a chunk from the old build gets a 404; Admin then offers a reload and warns that unsaved changes may be lost.

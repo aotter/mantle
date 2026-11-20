@@ -68,6 +68,8 @@ no regression in accessibility, SEO or best practices.
 - When a bottleneck appears only because the measuring environment lacks
   something (a GPU, a fast CPU), fix it only in a way that also helps real users
   without it. Never detect the measuring tool to serve it a different page.
+- A cache in front of the Worker removes the render from repeat visits; [caching](caching.md) gives the headers it
+  needs and what it must never store.
 - After every change, prove nothing else moved: the page looks the same, links,
   forms and in-page anchors still work, and the
   [public-page checks](public-pages.md#check-before-you-report-done)

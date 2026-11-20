@@ -88,6 +88,10 @@
         {
           "text": "Performance pass",
           "link": "/guides/performance"
+        },
+        {
+          "text": "Caching",
+          "link": "/guides/caching"
         }
       ]
     },
