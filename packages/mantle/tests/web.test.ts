@@ -113,7 +113,8 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     expect(text.match(/^- /gm)).toHaveLength(6);
     expect(text).not.toContain("post0");
     expect(text).toContain("Title \\[1\\]");
-    expect(text).toContain("(https://site.test/posts/a%26b%29.md)");
+    // The list View does not select `body`, so llms.txt cannot show that the alternate exists and links the page.
+    expect(text).toContain("(https://site.test/posts/a%26b%29)");
     const sitemap = await site.fetch(request("/sitemap.xml"));
     expect((await sitemap.text()).match(/<url>/g)).toHaveLength(6);
     const md = await site.fetch(request("/posts/a%26b).md"));
@@ -218,6 +219,14 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     expect(await refusing.head(request("/posts/post0"), undefined, undefined, { row: hidden })).toContain(
       'href="https://site.test/posts/post0.md"',
     );
+    // `page` without a row (the application's read found none) is no tags, not a read or a refusal of its own.
+    const none = { row: undefined } as unknown as { row: Record<string, unknown> };
+    expect(await refusing.head(request("/posts/a%26b)"), undefined, undefined, none)).toBe("");
+    expect(await site.head(request("/posts/a%26b)"), undefined, undefined, none)).toBe("");
+    // A row without Markdown has no alternate to name: `<url>.md` answers 404.
+    expect(
+      await site.head(request("/posts/post0"), undefined, undefined, { row: { ...hidden, body: null } }),
+    ).not.toContain("text/markdown");
     db.query("UPDATE posts SET updated_at = 1767225600000000 WHERE id = '2'").run();
     const dated = web({
       db,
@@ -237,7 +246,7 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     );
     expect(datedXml.match(/<url>/g)).toHaveLength(2 + 8);
     expect(await (await dated.fetch(request("/llms.txt"))).text()).not.toContain("https://site.test/posts)");
-    for (const path of ["posts", "/posts?x", "/posts#x"])
+    for (const path of ["posts", "/posts?x", "/posts#x", "/posts/{slug}"])
       expect(() =>
         web({ db, origin: "https://site.test", title: "x", description: "y", sitemap: [path], pages: {} }),
       ).toThrow("Page templates and sitemap paths must be absolute paths without queries or fragments.");
@@ -641,11 +650,11 @@ test("llms.txt links a page's Markdown alternate; the sitemap keeps the page URL
       (path, row) => "https://site.test" + path.replace("{slug}", String(row.slug)),
     );
   const links = [...(await index(false)).matchAll(/\]\((.*?)\)/g)].map(match => match[1]);
-  // A list row whose Markdown column is NULL has no alternate; a list without the column cannot tell.
+  // Only a list row that carries the Markdown column non-null shows that `<url>.md` exists.
   expect(links).toEqual([
     "https://site.test/md/a.md",
     "https://site.test/md/b",
-    "https://site.test/md/c.md",
+    "https://site.test/md/c",
     "https://site.test/html/a",
     "https://site.test/html/b",
     "https://site.test/html/c",
@@ -655,11 +664,21 @@ test("llms.txt links a page's Markdown alternate; the sitemap keeps the page URL
 
 test("sitemap lastmod is a W3C datetime or absent; static paths share the scan cap", async () => {
   const { webIndex } = await import("../src/kernel/web-index.js");
-  const at = ["2026-01-01", "2026-01-01T08:00:00.123456+08:00", "2026-13-45", "yesterday", null, 1767225600, "1"];
+  const at = [
+    "2026-01-01",
+    "2026-01-01T08:00:00.123456+08:00",
+    "2026-13-45",
+    "2026-02-30",
+    "2026-02-30T00:00:00Z",
+    "yesterday",
+    null,
+    1767225600,
+    "1",
+  ];
   const rows = at.map((value, i) => ({ slug: "p" + i, at: value }));
   const xml = await webIndex(
     true,
-    { origin: "https://site.test", title: "T", description: "D", sitemap: ["/", "/list"] },
+    { origin: "https://site.test", title: "T", description: "D", sitemap: ["/", "/café x"] },
     [{ path: "/p/{slug}", page: { view: "one", list: "all", lastmod: "at" } }],
     async () => ({ rows }),
     (path, row) => "https://site.test" + path.replace("{slug}", String(row.slug)),
@@ -669,6 +688,8 @@ test("sitemap lastmod is a W3C datetime or absent; static paths share the scan c
     "2026-01-01T08:00:00.123456+08:00",
   ]);
   expect(xml.match(/<url>/g)).toHaveLength(2 + at.length);
+  // A static path is written as a URL, like the rows' own.
+  expect(xml).toContain("<loc>https://site.test/caf%C3%A9%20x</loc>");
   const capped = await webIndex(
     true,
     {
@@ -728,6 +749,8 @@ test("pageHead formats an application-owned page's head and escapes every value"
   ).toContain(
     '<title>Scallion pancakes | Recipes</title><link rel="canonical" href="https://site.test/a"><meta property="og:type" content="website"><meta property="og:url" content="https://site.test/a"><meta property="og:title" content="Scallion pancakes">',
   );
+  // An alternate without a URL is no translation: neither its hreflang link nor its Open Graph locale.
+  expect(pageHead({ title: "t", url: "https://site.test/", locale: "en", alternates: { fr: "" } })).not.toContain("fr");
   expect(pageHead({ title: "", description: null, url: "https://site.test/", image: "", markdown: "" })).toBe(
     '<link rel="canonical" href="https://site.test/"><meta property="og:type" content="website">' +
       '<meta property="og:url" content="https://site.test/"><meta name="twitter:card" content="summary">',

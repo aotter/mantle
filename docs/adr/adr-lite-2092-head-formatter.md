@@ -26,12 +26,17 @@ must not drift: one missed attribute or one unescaped `</script>` in stored text
 2. **Omit what is absent.** A null, undefined or empty value emits no tag. `og:type` defaults to `website`; the Twitter
    card is `summary_large_image` with an image, else `summary`. `og:locale:alternate` lists the alternates other than
    `locale`.
-3. **JSON-LD is serialized, not built.** `JSON.stringify` with `<` written as `<`, so no stored text can close the
+3. **JSON-LD is serialized, not built.** `JSON.stringify` with `<` written as `\u003c`, so no stored text can close the
    script element or open a comment; `JSON.parse` of the script body returns the application's value.
 4. **Placement.** It is exported from `@aotter/mantle/web` and lives in its own kernel module that imports only the
    shared escape helper. A bundle that imports only `pageHead` contains no `web()` serving code, and `web()`'s startup
    graph does not contain the formatter (both are tested; the Worker startup budget is unchanged).
-5. **Registered.** `pageHead` is an application seam (`page-head` in `packages/mantle/tests/application-seams.ts`).
+5. **`head()` accepts the application's row.** `head(request, env, ctx, { row })` formats the tags from the row the
+   application already read and runs no View read, caller resolution, `authorize` or gateway decision (#2087). The
+   trust boundary does not move: nothing is read on the caller's behalf, and the tags are derived only from values the
+   application holds and chose to render. Deciding who may see that row was the application's read. With `page` given
+   and no row, `head` returns no tags; it never falls back to a read of its own.
+6. **Registered.** `pageHead` is an application seam (`page-head` in `packages/mantle/tests/application-seams.ts`).
 
 ## Why not port the composer into `web()`
 
@@ -43,8 +48,8 @@ values, which is also what the public-pages checklist asks: structured data stat
 
 ## Consequences
 
-- An application-owned page writes one call instead of a hand-written head; the generated `web()` and its `head()` are
-  unchanged.
+- An application-owned page writes one call instead of a hand-written head; the generated `web()` keeps its page options, and
+  its `head()` gains only the optional row (decision 5).
 - Per-language hreflang stays the application's: it knows which translations of an item are published. `web()`'s own
   head emits an hreflang only for a single configured locale (#2087).
 - `og:title` is `ogTitle`, or `title` when omitted, so a page whose `<title>` adds the site name can keep a plain Open Graph title.

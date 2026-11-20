@@ -10,6 +10,8 @@ const size = (s: string) => new TextEncoder().encode(s).length;
 const datetime = (v: unknown) =>
   typeof v === "string" &&
   /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2}))?$/.test(v) &&
+  // Date.parse rolls 02-30 over to March instead of refusing it
+  new Date(v.slice(0, 10)).toJSON()?.slice(0, 10) === v.slice(0, 10) &&
   !Number.isNaN(Date.parse(v));
 
 export async function webIndex(
@@ -57,7 +59,7 @@ export async function webIndex(
   const origin = new URL(options.origin).origin;
   if (sitemap)
     for (const path of options.sitemap ?? [])
-      if (visited++ >= cap || !push(item(origin + path))) return start + links.join("") + end;
+      if (visited++ >= cap || !push(item(new URL(origin + path).href))) return start + links.join("") + end;
   pagesLoop: for (const entry of pages) {
     if (!entry.page.list) continue;
     let cursor: string | undefined;
@@ -69,8 +71,8 @@ export async function webIndex(
         if (visited++ >= cap) break pagesLoop;
         const url = validUrl(entry.path, row, entry.page.view);
         if (!url) continue;
-        // llms.txt links the Markdown alternate, unless the list row shows this page has none.
-        const markdown = entry.page.markdown && row[entry.page.markdown] !== null ? ".md" : "";
+        // llms.txt links the Markdown alternate only when the list row shows the page has one: `<url>.md` is a 404 otherwise.
+        const markdown = entry.page.markdown && row[entry.page.markdown] != null ? ".md" : "";
         const line = sitemap
           ? item(url, entry.page.lastmod && row[entry.page.lastmod])
           : "- [" + label(row.title ?? url) + "](" + url + markdown + "): " + label(row.description ?? "") + "\n";

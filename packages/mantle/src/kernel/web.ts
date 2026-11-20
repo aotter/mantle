@@ -120,9 +120,10 @@ export function web<Database, E>(
   const origin = new URL(options.origin);
   const bare = !origin.username && !origin.password && origin.pathname === "/" && !origin.search && !origin.hash;
   if (!/^https?:$/.test(origin.protocol) || !bare) throw new TypeError("origin must be an HTTP(S) origin.");
-  for (const path of [...Object.keys(options.pages), ...(options.sitemap ?? [])])
-    if (!path.startsWith("/") || /[?#]/.test(path))
-      throw new TypeError("Page templates and sitemap paths must be absolute paths without queries or fragments.");
+  // A sitemap path is a literal URL path, so it holds no `{name}` parameter either.
+  const bad = (path: string, banned: RegExp) => !path.startsWith("/") || banned.test(path);
+  if (Object.keys(options.pages).some(p => bad(p, /[?#]/)) || options.sitemap?.some(p => bad(p, /[?#{}]/)))
+    throw new TypeError("Page templates and sitemap paths must be absolute paths without queries or fragments.");
   const pages: PageEntry[] = Object.entries(options.pages)
     .map(([path, page]) => {
       const keys: string[] = [];

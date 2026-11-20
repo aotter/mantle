@@ -160,7 +160,12 @@ export function serve<Database, E>(
       if (!found) return "";
       const canonical = validUrl(entry.path, found, entry.page.view);
       if (!canonical) return "";
-      return (await import("./web-head.js")).headTags(canonical, found, !!entry.page.markdown, options.locales);
+      return (await import("./web-head.js")).headTags(
+        canonical,
+        found,
+        !!entry.page.markdown && found[entry.page.markdown] != null,
+        options.locales,
+      );
     } catch (error) {
       if (error instanceof ContractError && error.code === "HOST_CONTRACT") throw error;
       return "";
@@ -171,6 +176,8 @@ export function serve<Database, E>(
     render,
     renderHead,
     fetch: (request, env, ctx) => render(request, open(request, env as E, ctx)),
-    head: (request, env, ctx, page) => renderHead(request, open(request, env as E, ctx), page?.row),
+    // With `page` the application did the read: no row means no tags, never a second read.
+    head: async (request, env, ctx, page) =>
+      page && !page.row ? "" : renderHead(request, open(request, env as E, ctx), page?.row),
   };
 }

@@ -205,12 +205,13 @@ page's list View (every target returns timestamps as UTC ISO text); the sitemap
 emits it as `<lastmod>` when it is a W3C datetime and omits the element otherwise.
 `sitemap` lists static paths (home, list pages) that the sitemap names before the
 pages' rows, resolved against `origin`; like page templates, each must be absolute
-without a query or fragment, or `web()` throws a `TypeError`. HTML remains application-owned.
+without a query, fragment or `{name}` parameter, or `web()` throws a `TypeError`. HTML remains application-owned.
 
 `/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head
 read the current page View. `llms.txt` links `<url>.md` for a page that declares
-`markdown` (the HTML URL when the list row returns that column as NULL); the sitemap
-lists the HTML URLs. SQL alone controls visibility, including publication.
+`markdown` when the list row returns that column non-null, and the HTML URL otherwise
+(a list that does not select the column cannot show that the alternate exists); the sitemap
+lists the HTML URLs. Head tags name the Markdown alternate only for a row whose column is non-null. SQL alone controls visibility, including publication.
 GET/HEAD responses include content-derived SHA-256 ETags. Anonymous responses use
 `cacheControl` or `public, max-age=60`; authenticated responses use
 `private, no-store`. `If-None-Match` returns 304 only after current content is read.

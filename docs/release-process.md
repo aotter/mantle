@@ -355,12 +355,12 @@ generated site.
 A `Closes #N` in a PR closes its issue only when the PR merges into the default
 branch, `main`, and feature PRs merge into `develop`. After the GitHub release
 succeeds, close what it shipped. List the PRs merged into `develop` since the
-previous release tag, collect the issues they reference, and for each one still
-open:
+previous release tag, collect the issues their bodies close (`Closes #N`,
+`Fixes #N`), and for each one still open:
 
 ```sh
 gh pr list --base develop --state merged --search "merged:><previous tag date>" \
-  --json number,closingIssuesReferences
+  --limit 500 --json number,title,body
 gh issue close <issue> --reason completed \
   --comment "Fixed by #<PR>, released in <version>."
 ```

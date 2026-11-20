@@ -45,7 +45,7 @@ export function pageHead(options: PageHeadOptions): string {
   /** Open Graph writes `zh-TW` as `zh_TW`. */
   const ogLocale = (locale: string) => locale.replaceAll("-", "_");
   const { title, description, url, image, locale } = options;
-  const alternates = Object.entries(options.alternates ?? {});
+  const alternates = Object.entries(options.alternates ?? {}).filter(([, href]) => href);
   return [
     title ? "<title>" + escape(title) + "</title>" : "",
     tag("meta", 'name="description"', description),
