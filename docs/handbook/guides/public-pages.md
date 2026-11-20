@@ -13,10 +13,9 @@ and other pages link here instead of repeating it. The reference implementation 
 Content that should be found by search or answer engines is in the HTML the server returns for its URL: the text in
 the body, the title and description in the head, without running JavaScript.
 
-The reason is external evidence, not a measurement of ours, and it can change. Published crawl analyses from December
-2024 through 2026 (for example [Vercel's](https://vercel.com/blog/the-rise-of-the-ai-crawler)) report that AI
-crawlers such as GPTBot, ClaudeBot and PerplexityBot fetch the raw HTML and do not execute JavaScript. Google does
-execute it, but in a
+The reason is external evidence, not a measurement of ours, and it can change. Published crawl analyses (for example
+[Vercel's](https://vercel.com/blog/the-rise-of-the-ai-crawler), December 2024) report that AI crawlers such as
+GPTBot, ClaudeBot and PerplexityBot fetch the raw HTML and do not execute JavaScript. Google does execute it, but in a
 [rendering step queued after the crawl](https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics)
 that can take longer than a few seconds. Nothing we found reads `<link rel="alternate" type="text/markdown">`, and
 `llms.txt` is read mostly by coding agents, so neither replaces the HTML.
@@ -57,7 +56,7 @@ What the recipes example does, each with its reason. Numbers were measured 2026-
   [caching](caching.md).
 - **String templates remain a valid choice** for a site that accepts hand-escaping. They cost the least CPU (≤ 2 ms
   even on a first render, same measurement). The site must then escape every interpolated value, attributes
-  included, and write `<` as `<` inside JSON-LD so stored text cannot close the script element.
+  included, and write `<` as `\u003c` inside JSON-LD so stored text cannot close the script element.
 
 ## When to choose something else
 
@@ -120,7 +119,7 @@ their declared paths. Give visitor pages their own prefix (`/{locale}/…`, `/re
   `datePublished`, `dateModified`, and `image` when there is one (some rich results require it). A type that has no
   date or language properties (`Product`) gets them on a page node instead: an `@graph` with an `ItemPage`
   (`inLanguage`, dates, `mainEntity`) pointing to the `Product` (`offers` with `price` and `priceCurrency`). Write `<`
-  as `<` in the serialized JSON so stored text cannot close the script element. Do not add facts the page does
+  as `\u003c` in the serialized JSON so stored text cannot close the script element. Do not add facts the page does
   not show.
 - Recommended: a short answer block, one question heading and a one-sentence answer from the row's data, so an answer
   engine has a sentence it can quote.
