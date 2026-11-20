@@ -117,9 +117,9 @@ The two joins differ on purpose. The single-row `post-page` View joins `ON r.id 
 so a post never shows another post's revision even if its reference was written by other code; that costs nothing for
 one row. The list View `published-posts` (and any View that feeds the sitemap or `llms.txt`) joins
 `ON r.id = p.current_revision AND r.sealed = true`. On PostgreSQL at volume the planner multiplies the selectivities of
-two join conditions, abandons the list index and picks a hash join with a full scan and a sort. The reporter measured
-100,000 parent rows and 200,000 revisions: 74 ms for the first page of 24 with both conditions, 0.4 ms with the join on
-`r.id` alone. The two-column form is what makes the planner leave the index for lists.
+two join conditions, abandons the list index and picks a hash join with a full scan and a sort. One measurement of this
+pattern on PostgreSQL 16, with 100,000 parent rows and 200,000 revisions, took 74 ms for the first page of 24 with both
+conditions and 0.4 ms with the join on `r.id` alone. The two-column form is what makes the planner leave the index for lists.
 
 The `sealed` guard has a narrower reach than `r.post = p.id`. It guarantees that an unsealed draft is never public, even
 through a wrong pointer. It does not stop a pointer to another post's sealed revision. That is guaranteed by
