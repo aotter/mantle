@@ -47,6 +47,7 @@
     },
     "./kit.css": "./dist/kit/kit.css",
     "./tokens.css": "./dist/kit/tokens.css",
+    "./theme.css": "./dist/kit/theme.css",
     "./package.json": "./package.json"
   },
   "files": [
