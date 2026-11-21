@@ -32,13 +32,39 @@ Predicate failure is `UNAUTHENTICATED` for a non-user or `AUTH_DENIED` for a use
 A user field is a value the identity provider verified on the user, such as `region`. It limits rows in two places only:
 
 - A Schema `scope` applies to every SQL relation, Store, REST/MCP and native Admin access: `scope: "region IN auth.user('region')"`. See [Schema](schema.md#field-scope).
-- A View or Procedure `restrict` applies to one target: `restrict: { orders: "region IN auth.user('region')" }`. See [View](view.md#restrict).
+- A View or Procedure `restrict` applies to one target: `restrict: { orders: "region IN auth.user('region')" }`. Its terms may be joined by `OR` as well as `AND`; `scope` stays AND-only. See [View](view.md#restrict).
 
 Values come from the verified Better Auth user record. Declare stored fields with `input: false` in `user.additionalFields`, or produce derived fields through `customSession`. Session, OAuth and service credentials read roles, bans and stored fields from the same current database user record; customSession-only fields are refused on OAuth/service paths with `AUTH_CONFIGURATION_ERROR`. `input: false` protects only public endpoints. Anyone permitted to update users can change row-access field values through the admin API; control that authority with Better Auth access control (`user:update`, and `user:set-role` for roles). Store `{ all: true }` in a `json` additional field. Pass the generated `userFields` constant as `resolveCaller(request, auth, { fields: userFields })`.
 
 SQL cannot reference caller values: `auth.user()` fails with `USER_REF_SCOPE_ONLY`, and `auth.hasRole()` / `auth.role()` with `AUTH_ROLE_REMOVED`. Names are literals; Better Auth core fields and names beginning `mantle` are reserved.
 
-Values come from the original frozen Caller, which holds identity in a private WeakMap. Anonymous and copied/unbranded callers have no roles or user fields. Values are validated and frozen: finite numbers, integers when the field scopes an `integer` column; strings of 1–256 UTF-8 bytes without NUL or lone surrogates; arrays of at most 64 items with duplicates removed, only for multi-valued fields. `{ all: true }` is the typed "every value" state of one field; storing it requires a Better Auth additional field of type `json`. Unknown user fields are discarded. A missing or empty value is refused before SQL runs (`UNAUTHENTICATED` for anonymous callers, otherwise `AUTH_DENIED`); it never matches every row. Never mint verified users from request data. Resolve credentials before constructing an identity, and pass the original Caller to generated operations.
+Values come from the original frozen Caller, which holds identity in a private WeakMap. Anonymous and copied/unbranded callers have no roles or user fields. Values are validated and frozen: finite numbers, integers when the field scopes an `integer` column; strings of 1–256 UTF-8 bytes without NUL or lone surrogates; arrays of at most 64 items with duplicates removed, only for multi-valued fields. `{ all: true }` is the typed "every value" state of one field; storing it requires a Better Auth additional field of type `json`. Unknown user fields are discarded. A missing or empty value is refused before SQL runs (`UNAUTHENTICATED` for anonymous callers, otherwise `AUTH_DENIED`); it never matches every row. Inside a restrict OR-clause it instead matches no row for that term, so the clause's other terms decide ([creator or organization owner](#creator-or-organization-owner)). Never mint verified users from request data. Resolve credentials before constructing an identity, and pass the original Caller to generated operations.
+
+### Creator or organization owner
+
+Membership and roles reach row policy as user fields the application maintains; Mantle reads no auth plugin's tables. For "a document is visible to its creator or to an owner of its organization", keep an `ownerOrgIds` field beside the organizations a user belongs to, and OR the two terms:
+
+```yaml
+kind: View
+metadata: { name: documents }
+spec:
+  surface: public
+  restrict: { documents: "author_id = auth.uid() OR orgId IN auth.user('ownerOrgIds')" }
+  sql: SELECT id, title, orgId FROM documents ORDER BY title, id
+```
+
+```ts
+// auth.ts: a derived field, recomputed on each session read (or a stored additionalFields entry with input: false)
+customSession(async ({ user, session }) => ({
+  user: { ...user, ownerOrgIds: await ownedOrganizations(user.id) },
+  session,
+}));
+```
+
+- `author_id` is stamped from the caller on insert. `ownedOrganizations` is the application's own query, for example over the organization plugin's member rows with role `owner`.
+- A creator with an empty `ownerOrgIds` still sees their documents; a caller who is neither sees none. `{ all: true }` for `ownerOrgIds` is refused with `AUTH_DENIED`: it never lifts a restrict term.
+- Put the same `restrict` on the update and delete Procedures: their `UPDATE`/`DELETE` then change only rows the caller may see, and `orgId` and `author_id` can never be `SET` through them.
+- A paged View needs an index on its ordered columns (`[title, id]` here): an OR fixes no index prefix ([index prefixes](schema.md#index-prefixes-for-paged-views)).
 
 ## Gateway mode
 

@@ -14,7 +14,18 @@ OFFSET, arbitrary functions/relations, DDL and transaction control are not a rea
 
 ## Restrict
 
-`restrict` narrows one target by Schema: `restrict: { orders: "region IN auth.user('region')" }`. Each key is a Schema the SQL reads; each value uses the [scope](schema.md#field-scope) grammar, and a `= auth.uid()` term only on `author_id` or that Schema's own owner column. The effective rule is the Schema's scope AND the restrict. `{ all: true }` never lifts a restrict term: such a caller is refused with `AUTH_DENIED`. A View or Procedure that reads a restricted View carries that View's restrict too, so composing never widens it. A View with `restrict` cannot use a shared cache.
+`restrict` narrows one target by Schema: `restrict: { orders: "region IN auth.user('region')" }`. Each key is a Schema the SQL reads; each value uses the [scope](schema.md#field-scope) terms, and a `= auth.uid()` term only on `author_id` or that Schema's own owner column. The effective rule is the Schema's scope AND the restrict. `{ all: true }` never lifts a restrict term: such a caller is refused with `AUTH_DENIED`.
+
+Unlike `scope`, a restrict may join its terms with `OR` and group them with parentheses; `AND` binds tighter, as in SQL ([ADR-0046](../../adr/0046-roles-and-user-fields.md)):
+
+```
+restrict := conj ( OR conj )*
+conj     := factor ( AND factor )*
+factor   := term | "(" restrict ")"
+term     := <column> = auth.uid() | <column> IN auth.user('<field>')
+```
+
+`restrict: { documents: "author_id = auth.uid() OR orgId IN auth.user('ownerOrgIds')" }` shows a document to its creator or to an owner of its organization ([worked example](authorization.md#creator-or-organization-owner)). A value has at most 8 terms, and each AND-chain keeps the rules above (one `= auth.uid()`, a column or field once). Generation rewrites it to an AND of OR-clauses, which `describe` lists under `or`. Inside an OR-clause a missing or empty user field matches no row instead of being refused, so the clause's other terms decide; `{ all: true }` and anonymous callers are refused as before. Every column a restrict names, in any clause, is never `SET`, and a caller `INSERT` into a Schema restricted by an OR-clause runs only in trusted mode. An OR-clause never fixes an index prefix: a paged View needs an index served by its other equalities ([index prefixes](schema.md#index-prefixes-for-paged-views)). A View or Procedure that reads a restricted View carries that View's restrict too, so composing never widens it. A View with `restrict` cannot use a shared cache.
 
 ## Search and totals
 
