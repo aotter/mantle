@@ -10,28 +10,14 @@ const problem = (pointer: string, value: unknown, expected: string, message: str
   message,
 });
 
-export interface ViewListPresentation {
-  readonly columns: readonly string[];
-  readonly searchFields: readonly string[];
-  readonly filterFields: readonly string[];
-}
-
-const EMPTY_VIEW_LIST: ViewListPresentation = {
-  columns: [],
-  searchFields: [],
-  filterFields: [],
-};
-
 /** Validate the deliberately small Admin list contract for admin Views. */
 export function checkViewAdminUi(view: ViewManifest): {
-  readonly list: ViewListPresentation;
   readonly problems: readonly SchemaAdminUiProblem[];
 } {
   const uiSchema = view.spec.uiSchema;
-  if (uiSchema === undefined) return { list: EMPTY_VIEW_LIST, problems: [] };
+  if (uiSchema === undefined) return { problems: [] };
   if (view.spec.surface !== "admin") {
     return {
-      list: EMPTY_VIEW_LIST,
       problems: [
         problem(
           "/spec/uiSchema",
@@ -44,14 +30,12 @@ export function checkViewAdminUi(view: ViewManifest): {
   }
   if (!uiSchema || typeof uiSchema !== "object" || Array.isArray(uiSchema)) {
     return {
-      list: EMPTY_VIEW_LIST,
       problems: [problem("/spec/uiSchema", uiSchema, "an object", "View.spec.uiSchema must be an object.")],
     };
   }
   const unknownRoot = Object.keys(uiSchema).find(key => key !== "list" && key !== "nav");
   if (unknownRoot) {
     return {
-      list: EMPTY_VIEW_LIST,
       problems: [
         problem(
           `/spec/uiSchema/${unknownRoot}`,
@@ -66,14 +50,12 @@ export function checkViewAdminUi(view: ViewManifest): {
   if (nav !== undefined) {
     if (!nav || typeof nav !== "object" || Array.isArray(nav))
       return {
-        list: EMPTY_VIEW_LIST,
-        problems: [problem("/spec/uiSchema/nav", nav, "an object", "View.spec.uiSchema.nav must be an object.")],
+          problems: [problem("/spec/uiSchema/nav", nav, "an object", "View.spec.uiSchema.nav must be an object.")],
       };
     const bad = navPlacementProblems(nav as Record<string, unknown>);
     if (bad)
       return {
-        list: EMPTY_VIEW_LIST,
-        problems: [
+          problems: [
           problem(
             `/spec/uiSchema/nav/${bad[0]}`,
             (nav as Record<string, unknown>)[bad[0]],
@@ -84,10 +66,9 @@ export function checkViewAdminUi(view: ViewManifest): {
       };
   }
   const list = uiSchema["list"];
-  if (list === undefined) return { list: EMPTY_VIEW_LIST, problems: [] };
+  if (list === undefined) return { problems: [] };
   if (!list || typeof list !== "object" || Array.isArray(list)) {
     return {
-      list: EMPTY_VIEW_LIST,
       problems: [problem("/spec/uiSchema/list", list, "an object", "View.spec.uiSchema.list must be an object.")],
     };
   }
@@ -96,7 +77,6 @@ export function checkViewAdminUi(view: ViewManifest): {
   const unknown = Object.keys(config).find(key => !allowed.has(key));
   if (unknown) {
     return {
-      list: EMPTY_VIEW_LIST,
       problems: [
         problem(
           `/spec/uiSchema/list/${unknown}`,
@@ -107,12 +87,7 @@ export function checkViewAdminUi(view: ViewManifest): {
       ],
     };
   }
-  const normalized: Record<keyof ViewListPresentation, readonly string[]> = {
-    columns: [],
-    searchFields: [],
-    filterFields: [],
-  };
-  for (const key of Object.keys(normalized) as Array<keyof ViewListPresentation>) {
+  for (const key of ["columns", "searchFields", "filterFields"]) {
     const raw = config[key];
     if (raw === undefined) continue;
     if (
@@ -120,8 +95,7 @@ export function checkViewAdminUi(view: ViewManifest): {
       !raw.every(field => typeof field === "string" && field.length > 0 && !/["\\\0]/.test(field))
     ) {
       return {
-        list: EMPTY_VIEW_LIST,
-        problems: [
+          problems: [
           problem(
             `/spec/uiSchema/list/${key}`,
             raw,
@@ -133,8 +107,7 @@ export function checkViewAdminUi(view: ViewManifest): {
     }
     if (new Set(raw).size !== raw.length) {
       return {
-        list: EMPTY_VIEW_LIST,
-        problems: [
+          problems: [
           problem(
             `/spec/uiSchema/list/${key}`,
             raw,
@@ -144,7 +117,6 @@ export function checkViewAdminUi(view: ViewManifest): {
         ],
       };
     }
-    normalized[key] = raw;
   }
-  return { list: normalized, problems: [] };
+  return { problems: [] };
 }

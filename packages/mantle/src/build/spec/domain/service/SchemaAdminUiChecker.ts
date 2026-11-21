@@ -4,17 +4,6 @@ import { RESERVED_ENTRY_COLUMNS, enumOptions, resolveMantleRef } from "../model/
 import { checkSchemaIndexes } from "./SchemaIndexChecker.js";
 
 export { checkViewAdminUi } from "./ViewAdminUiChecker.js";
-export type { ViewListPresentation } from "./ViewAdminUiChecker.js";
-
-export interface SchemaListFilter {
-  readonly field: string;
-  readonly values: readonly string[];
-}
-
-export interface SchemaListPresentation {
-  readonly primaryField: string | null;
-  readonly columns: readonly string[];
-}
 
 /** Normalized Admin nav descriptor. Absent/`null` means fold-only. */
 export interface SchemaNavPresentation {
@@ -30,14 +19,11 @@ export interface SchemaAdminUiProblem {
   readonly message: string;
 }
 
-const EMPTY_LIST: SchemaListPresentation = { primaryField: null, columns: [] };
 const SCHEMA_UI_ROOTS = new Set(["fields", "list", "nav"]);
 const SCHEMA_LIST_KEYS = new Set(["filterField", "primaryField", "columns"]);
 const SCALAR_TYPES = new Set(["string", "number", "integer", "boolean"]);
 
 export function checkSchemaAdminUi(schema: SchemaManifest): {
-  readonly filter: SchemaListFilter | null;
-  readonly list: SchemaListPresentation;
   readonly nav: SchemaNavPresentation | null;
   readonly problems: readonly SchemaAdminUiProblem[];
 } {
@@ -45,7 +31,7 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
   if (formProblem) return invalid(formProblem);
 
   const uiSchema = schema.spec.uiSchema;
-  if (uiSchema === undefined) return { filter: null, list: EMPTY_LIST, nav: null, problems: [] };
+  if (uiSchema === undefined) return { nav: null, problems: [] };
   const roots = uiSchema as Record<string, unknown>;
   const unknownRoot = Object.keys(roots).find(key => !SCHEMA_UI_ROOTS.has(key));
   if (unknownRoot) {
@@ -79,7 +65,7 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
     }
   }
   const filterResult =
-    list === undefined ? { filter: null as SchemaListFilter | null } : checkListFilter(schema, config);
+    list === undefined ? {} : checkListFilter(schema, config);
   if (filterResult.problem) return invalid(filterResult.problem);
 
   const primaryField = config["primaryField"];
@@ -165,8 +151,6 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
   if (navResult.problem) return invalid(navResult.problem);
 
   return {
-    filter: filterResult.filter,
-    list: { primaryField: normalizedPrimary, columns: normalizedColumns },
     nav: navResult.nav,
     problems: [],
   };
@@ -289,9 +273,9 @@ export function checkFormUiSchema(
 function checkListFilter(
   schema: SchemaManifest,
   list: Record<string, unknown>,
-): { readonly filter: SchemaListFilter | null; readonly problem?: SchemaAdminUiProblem } {
+): { readonly problem?: SchemaAdminUiProblem } {
   const field = list["filterField"];
-  if (field === undefined) return { filter: null };
+  if (field === undefined) return {};
   if (typeof field !== "string" || !field) {
     return {
       problem: problem(
@@ -300,7 +284,6 @@ function checkListFilter(
         "a non-empty top-level field name",
         "Schema.spec.uiSchema.list.filterField must be a field-name string.",
       ),
-      filter: null,
     };
   }
   if ((schema.spec.lifecycle ?? "publishing") !== "operational") {
@@ -311,7 +294,6 @@ function checkListFilter(
         "a filter on an operational Schema",
         "Schema list filter tabs are supported only for lifecycle: operational Schemas.",
       ),
-      filter: null,
     };
   }
   const property = schema.spec.schema.properties?.[field];
@@ -324,7 +306,6 @@ function checkListFilter(
         "an exact top-level key in spec.schema.properties",
         `Schema '${schema.metadata.name}' list filter references unknown field '${field}'.`,
       ),
-      filter: null,
     };
   }
   if (!values?.length) {
@@ -335,7 +316,6 @@ function checkListFilter(
         "a field with a non-empty string enum, or a oneOf of string consts",
         `Schema '${schema.metadata.name}' list filter field '${field}' must declare string enum values.`,
       ),
-      filter: null,
     };
   }
   const indexed = checkSchemaIndexes(schema).declarations.some(({ fields }) => fields[0]?.name === field);
@@ -347,10 +327,9 @@ function checkListFilter(
         "the first field of a declared index tuple",
         `Schema '${schema.metadata.name}' list filter field '${field}' needs a left-prefix index.`,
       ),
-      filter: null,
     };
   }
-  return { filter: { field, values } };
+  return {};
 }
 
 function checkNav(
@@ -654,10 +633,8 @@ function problem(pointer: string, value: unknown, expected: string, message: str
 }
 
 function invalid(problem: SchemaAdminUiProblem): {
-  readonly filter: null;
-  readonly list: SchemaListPresentation;
   readonly nav: null;
   readonly problems: readonly SchemaAdminUiProblem[];
 } {
-  return { filter: null, list: EMPTY_LIST, nav: null, problems: [problem] };
+  return { nav: null, problems: [problem] };
 }
