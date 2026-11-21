@@ -10,8 +10,7 @@ export const encodeCursor = (value: unknown, id: unknown, operation?: string): s
 export function decodeCursor(cursor: string, path = ""): [unknown, unknown] {
   try {
     const c = JSON.parse(decodeURIComponent(cursor));
-    if (Array.isArray(c) && c.length === 2)
-      return [c[0], c[1]];
+    if (Array.isArray(c) && c.length === 2) return [c[0], c[1]];
   } catch {}
   invalid("Malformed or foreign cursor.", path);
 }

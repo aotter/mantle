@@ -316,7 +316,10 @@ export function admin<Env, Database, Handlers = never>(
     return { view, input, paging };
   };
   const viewPage = async (
-    c: Context<Env, Database>, preview = false, name = c.params.name, search = c.url.searchParams,
+    c: Context<Env, Database>,
+    preview = false,
+    name = c.params.name,
+    search = c.url.searchParams,
   ) => {
     const resolved = await resolveView(c, preview, name, search);
     if ("unavailable" in resolved) return resolved;
@@ -330,22 +333,21 @@ export function admin<Env, Database, Handlers = never>(
     {
       method: "GET",
       path: "/collections",
-      run: c => visibleMetadata(c).then(m => ({
-        collections: m.collections,
-        allCollections: m.allCollections ?? Object.fromEntries(m.collections.map(c => [c.name, c])),
-      })),
+      run: c =>
+        visibleMetadata(c).then(m => ({
+          collections: m.collections,
+          allCollections: m.allCollections ?? Object.fromEntries(m.collections.map(c => [c.name, c])),
+        })),
     },
     {
       method: "GET",
       path: "/views-manifest",
-      run: c =>
-        visibleMetadata(c).then(m => ({ views: m.views })),
+      run: c => visibleMetadata(c).then(m => ({ views: m.views })),
     },
     {
       method: "GET",
       path: "/operations",
-      run: c =>
-        visibleMetadata(c).then(m => ({ operations: m.operations })),
+      run: c => visibleMetadata(c).then(m => ({ operations: m.operations })),
     },
     {
       method: "GET",

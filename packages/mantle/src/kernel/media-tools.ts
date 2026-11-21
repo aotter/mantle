@@ -8,7 +8,6 @@ import type { MediaLibrary, MediaPurposePolicy } from "./site-types.js";
 const fail = (code: string, message: string) => mediaError(code, message);
 const bad = (expected: string) => fail("INPUT_VALIDATION_FAILED", `expected ${expected}`);
 
-
 /** Where `upload_media` puts the upload targets for an MCP App: the result `_meta`, which the host gives the App and not the model. */
 export const UPLOAD_META = "net.aotter.mantle/upload";
 

@@ -24,7 +24,12 @@ function valueOf(value: unknown, spec: UserField, field: string): UserValue {
         return invalid(`User field '${field}' must be ${spec.integer ? "an integer" : "finite"}.`);
     } else if (typeof value === "string") {
       const length = new TextEncoder().encode(value).length;
-      if (!(value as string & { isWellFormed(): boolean }).isWellFormed() || value.includes("\0") || length < 1 || length > 256)
+      if (
+        !(value as string & { isWellFormed(): boolean }).isWellFormed() ||
+        value.includes("\0") ||
+        length < 1 ||
+        length > 256
+      )
         return invalid(`User field '${field}' must be 1–256 UTF-8 bytes, without NUL or lone surrogates.`);
     }
     if (spec.enum && !spec.enum.includes(value as string | number))

@@ -33,7 +33,6 @@ const LISTING_METHODS = ["tools/list", "resources/read"];
 const union = (scopes: readonly string[], extra: readonly string[]) => [...new Set([...scopes, ...extra])].join(" ");
 const anonymous = () => ({ kind: "anonymous" }) as const;
 
-
 /** A refusal answered before any tool runs: `scope` is what the challenge asks for, `bare` sends no challenge. */
 interface Refusal {
   readonly error: ContractError;

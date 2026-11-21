@@ -157,12 +157,7 @@ export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcp
       catalogue = found ? JSON.parse(found[1]!) : undefined;
     } catch {}
     const object = (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value);
-    if (
-      !APP_URI.test(snapshot.uri) ||
-      !catalogue ||
-      !object(catalogue.views) ||
-      !object(catalogue.actions)
-    )
+    if (!APP_URI.test(snapshot.uri) || !catalogue || !object(catalogue.views) || !object(catalogue.actions))
       throw new ContractError(
         "INPUT_VALIDATION_FAILED",
         "A retained Admin App needs its original ui://mantle-admin/… URI and embedded catalogue from resources/read.",
