@@ -48,7 +48,7 @@ Generated types constrain Store fields and writes; Store does not interpret a JS
 
 Schemas default to operational. Publishing opts into draft/published/archived and generated admin/system transitions. Store cannot assign system columns or scope; generated policy fills them. `publishing: { liveEdits: true }` (only with `lifecycle: publishing`) lets Admin's generic patch edit a published entry in place; without it, generic patches edit drafts only, an implicit lock named `publishing` that never binds the transitions. No update clears a field `publish` requires from a published row (`INPUT_VALIDATION_FAILED`): a Store update that sets one to null is refused, while Admin's live edit validates the whole merged entry as `publish` does. See [lifecycle and locales](../concepts/lifecycle-and-locales.md).
 
-Owner and field columns prefix every unique index in that order. User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
+Owner and field columns prefix every unique index in that order ([a value unique across all owners](#a-value-unique-across-all-owners)). User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
 
 ### Locks
 
@@ -122,6 +122,121 @@ Publishing fields may be NULL in drafts even when required, so they cannot be Vi
 `checks` are restricted SQL expressions over the table's columns, emitted in initial DDL. Native databases enforce them; bare database errors are not automatically mapped to input-validation failures. `searchableFields` defaults to none: Store and Admin list search then match the exact id only, and Admin's search box says so. Name the fields people search by, such as the list `primaryField` or a `title`; with Admin selected, `mantle generate` warns when a Schema has no `searchableFields` but has such a field that could be one (a plain string, not a date, date-time or reference). Searchable fields must be plain string fields. SQLite/D1 emit FTS5 trigram tables and maintenance triggers; PostgreSQL uses ILIKE. Short SQLite terms use LIKE. Store search additionally matches exact id and combines with row policy.
 
 The runtime never creates, alters or checks tables. Initial DDL is for an empty database. Changed fields, checks, indexes and search DDL require [agent-owned native migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations), including explicit data migration for destructive/type changes. Mantle drops nothing.
+
+### A value unique across all owners
+
+A scoped Schema's unique indexes start with its scope columns, so uniqueness is per owner or partition
+([ADR-0046](../../adr/0046-roles-and-user-fields.md#schema-scope-one-row-template)); there is no global flag. A value
+that must be unique across all owners, such as a custom hostname or a public handle, gets an unscoped registry Schema
+whose unique index is the global namespace. Only the Procedures that write the scoped row write the registry, in the
+same program, so both commit or neither does; on D1 the program is one batch.
+
+```yaml
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: domains }
+spec:
+  title: Domains
+  lifecycle: operational
+  scope: "owner = auth.uid()"
+  uniqueIndexes: [[owner, hostname]]
+  indexes: [[owner, hostname, id]]
+  schema:
+    type: object
+    required: [owner, hostname]
+    properties:
+      owner: { type: string }
+      hostname: { type: string, minLength: 1, maxLength: 253 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: hostnames }
+spec:
+  title: Hostname registry
+  lifecycle: operational
+  uniqueIndexes: [[hostname], [domainId]]
+  schema:
+    type: object
+    required: [hostname, domainId]
+    properties:
+      hostname: { type: string, maxLength: 253 }
+      domainId: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: claim-hostname }
+spec:
+  description: Add a hostname. Refused (409) when anyone already holds it.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [hostname]
+    properties:
+      hostname: { type: string, minLength: 1, maxLength: 253 }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO domains (hostname) VALUES (input.hostname) RETURNING id;
+      INSERT INTO hostnames (hostname, domainId) SELECT d.hostname, d.id FROM domains d WHERE d.hostname = input.hostname
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: rename-hostname }
+spec:
+  description: Change a domain's hostname at the version you read. Refused (409) when anyone holds the new one.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion, hostname]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: integer }
+      hostname: { type: string, minLength: 1, maxLength: 253 }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE hostnames SET hostname = input.hostname
+        WHERE domainId IN (SELECT d.id FROM domains d WHERE d.id = input.id AND d.version = input.expectedVersion);
+      UPDATE domains SET hostname = input.hostname WHERE id = input.id AND version = input.expectedVersion
+        RETURNING id, version
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: release-hostname }
+spec:
+  description: Remove a domain and free its hostname for anyone.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id]
+    properties:
+      id: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      DELETE FROM hostnames WHERE domainId IN (SELECT d.id FROM domains d WHERE d.id = input.id);
+      DELETE FROM domains WHERE id = input.id RETURNING id
+```
+
+- **Claim.** The first statement inserts the caller's row. The second copies hostname and id into the registry from
+  the scoped row the caller can read, never from input. A hostname another owner holds fails the registry's unique
+  index: `CONFLICT` (409) with `kind: "unique"` and the message `A unique constraint of the Schema was violated.`, and
+  the scoped insert rolls back. The refusal names no owner or row.
+- **Rename.** The registry row follows its domain by `domainId`. A held name is the same `CONFLICT`; a stale
+  `expectedVersion` changes neither row and is `CONFLICT` `kind: "row"`.
+- **Release.** The registry row goes first, selected through the domain the caller can read, then the domain. An id
+  the caller cannot see is `CONFLICT` and deletes nothing.
+
+With a field scope (`orgId IN auth.user('orgIds')`) the claim takes `orgId` as input
+([field scope](#field-scope)) and the registry statements stay the same. What stays disclosed is existence: anyone who
+may claim learns that a value is taken, not by whom. Bound claim attempts per caller if that matters
+([quotas](../guides/sql-patterns.md#per-caller-quotas-a-handler-answers-429)). The registry holds only while every
+write of `domains.hostname` goes through these Procedures: a Store write, Admin's generic create or patch, or another
+Procedure that sets `hostname` bypasses it. Name `hostnames` in no other Procedure or View: it is unscoped, so a
+Procedure that wrote it directly could change another owner's entry.
 
 ## Admin uiSchema
 
