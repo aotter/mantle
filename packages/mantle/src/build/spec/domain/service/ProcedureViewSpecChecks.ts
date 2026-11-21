@@ -47,7 +47,7 @@ export function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   if ("requires" in s && s["requires"] != null) {
     validateRequires(s["requires"], idx, "View");
   }
-  const adminUiProblem = checkViewAdminUi(m).problems[0];
+  const adminUiProblem = checkViewAdminUi(m);
   if (adminUiProblem) {
     throw new ManifestParseError(adminUiProblem.message, idx, adminUiProblem.pointer, "VIEW_UI_INVALID");
   }

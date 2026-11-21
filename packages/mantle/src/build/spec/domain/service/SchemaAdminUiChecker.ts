@@ -25,13 +25,13 @@ const SCALAR_TYPES = new Set(["string", "number", "integer", "boolean"]);
 
 export function checkSchemaAdminUi(schema: SchemaManifest): {
   readonly nav: SchemaNavPresentation | null;
-  readonly problems: readonly SchemaAdminUiProblem[];
+  readonly problem?: SchemaAdminUiProblem;
 } {
   const formProblem = checkFormUiSchema(schema.spec.schema, schema.spec.uiSchema, "Schema")[0];
   if (formProblem) return invalid(formProblem);
 
   const uiSchema = schema.spec.uiSchema;
-  if (uiSchema === undefined) return { nav: null, problems: [] };
+  if (uiSchema === undefined) return { nav: null };
   const roots = uiSchema as Record<string, unknown>;
   const unknownRoot = Object.keys(roots).find(key => !SCHEMA_UI_ROOTS.has(key));
   if (unknownRoot) {
@@ -151,7 +151,6 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
 
   return {
     nav: navResult.nav,
-    problems: [],
   };
 }
 
@@ -493,8 +492,8 @@ export function checkSchemaNavTargets(
   schema: SchemaManifest,
   schemasByName: ReadonlyMap<string, SchemaManifest>,
 ): SchemaAdminUiProblem | null {
-  const { nav, problems } = checkSchemaAdminUi(schema);
-  if (problems.length > 0 || schema.spec.translates) return null;
+  const { nav, problem: invalidUi } = checkSchemaAdminUi(schema);
+  if (invalidUi || schema.spec.translates) return null;
   const declared = declaredParentField(schema);
   const target =
     nav?.parentCollection ??
@@ -633,7 +632,7 @@ function problem(pointer: string, value: unknown, expected: string, message: str
 
 function invalid(problem: SchemaAdminUiProblem): {
   readonly nav: null;
-  readonly problems: readonly SchemaAdminUiProblem[];
+  readonly problem?: SchemaAdminUiProblem;
 } {
-  return { nav: null, problems: [problem] };
+  return { nav: null, problem };
 }
