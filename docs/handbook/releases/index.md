@@ -34,6 +34,50 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ## 0.2.2 — in preparation
 
+### Upgrading to 0.2.2-alpha.9
+
+Pin the Mantle packages to `0.2.2-alpha.9` and regenerate: the generated `access-targets.ts` changes (#2133), and
+`generate --check` reports it until you do.
+
+- **Breaking: an `authorize` rejection with status 429 keeps its status (#2132).** Before: a `ContractError` of status
+  429 thrown from `authorize` answered 403 `AUTH_DENIED` "Target is not authorized." After: it answers 429 with its code,
+  message and `retryAfter`, on REST, MCP, web and Admin routes; no replacement for the old answer. Every other
+  non-`AUTH_DENIED` rejection still answers 403. Related answers move with it:
+  - Gateway mode access event for that request: `outcome: "deny"`, reason `AUTH_DENIED` → `outcome: "error"`, reason the
+    error's code; no replacement.
+  - Admin `view-batch` entry for a View whose `authorize` answers 429: `{ unavailable: true }` → `{ error: true }`; no
+    replacement.
+  - Admin `GET /entries/:id`, create, patch and publish asked `authorize` for the Schema read twice → once; no
+    replacement. A counter kept inside `authorize` is also advanced by `tools/list`.
+  - `describe` diff of a `restrict`: dropping the `= auth.uid()` disjunct, `widened` → `narrowed`; dropping a user-field
+    disjunct, `widened` → `changed` (review it as a widening); the same two with an added clause follow the same rule;
+    no replacement.
+- **Breaking: host contract `dryRun` is removed (#2133).** Before: a host could forward `dryRun`. After: a forwarded
+  `dryRun`, `true` or `false`, answers 412 `HOST_CONTRACT` naming `dryRun`; send props without the key. Preview access
+  from the plan with `mantle describe` (`describeApp`) instead. `mantle describe` output is unchanged. Each item below
+  is before → after:
+  - `HostProps.dryRun`, `Caller.dryRun`, `AccessEvent.dryRun` (the key is absent) → no replacement.
+  - `{ dryRun: true, event }` answers on REST, web and MCP `structuredContent`, and `DRY_RUN_UNSUPPORTED` (412) → no
+    replacement.
+  - `AccessTarget.opaque` and `AccessTarget.variants`, and the generated `access-targets.ts` → `targetHash` only;
+    regenerate.
+  - `Route.variant` and `Route.prepare` of `nativeRest`; `Pipeline.dryRun`, `dryRunResult()` and `dryRunResponse()`;
+    Admin `Route.prepare` → no replacement.
+  - `callToolLazy(tool, raw, getDb, caller, handlers, dryRun?, call?)` → `callToolLazy(tool, raw, getDb, caller,
+    handlers, call?)`; a caller that passed `undefined, call` drops the `undefined`.
+  - An unknown top-level host key that is an identifier of at most 32 characters answered the generic "Malformed host
+    contract or tenant mismatch." → `Unknown key '<key>'.` with `field`; any other unknown key keeps the generic
+    answer. A `v: 1` host that never sent `dryRun` sees no other change.
+- `pgsql-deparser` moves from 18.3.12 to 18.4.3, an exact dependency of `@aotter/mantle` (#2065). Generated output is
+  byte-identical on the repository's fixtures. #2142 slims the compiler, kernel and Admin tooling without changing
+  generated output, so it needs no regeneration; its package-level changes are the removed `./internal/authorization`
+  export key (`./internal/*` carries no promise) and `@pgsql/types` moving to a devDependency.
+- CI now runs Bun 1.4.5 (was 1.3.14) (#2136).
+- Not verified: Bun below 1.4 is no longer exercised by CI. The Admin entry routes' field-spelling pins (#2132) ran on
+  the D1 stand-in, not on workerd D1, and #2132's own run did not include the Admin browser tests. The `main` PR path of Full
+  checks and `issue-status.yml` are unobserved until a promotion (#2130). App-only tools are still listed to a 2025-era
+  client that declared no Apps support (#2129), as in alpha.8.
+
 ### Upgrading to 0.2.2-alpha.8
 
 Pin the Mantle packages to `0.2.2-alpha.8`, install `@modelcontextprotocol/server` `2.4.0` beside them if you serve
