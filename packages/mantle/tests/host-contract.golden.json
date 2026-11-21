@@ -1469,7 +1469,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -1510,7 +1510,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -1650,7 +1650,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -1730,7 +1730,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": true,
@@ -1802,7 +1802,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": true,
@@ -1841,7 +1841,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "jsonrpc": "2.0",
         "id": 1,
@@ -1879,7 +1879,7 @@
       "body": {
         "error": {
           "code": "AUTH_DENIED",
-          "message": "Host callers may only initialize or call a tool.",
+          "message": "Host callers may only discover the server or call a tool.",
           "target": "mcp"
         }
       }
@@ -1940,7 +1940,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": true,
@@ -1988,7 +1988,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": true,
@@ -2027,7 +2027,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": true,
@@ -2066,7 +2066,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": true,
@@ -2104,7 +2104,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -2551,7 +2551,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": true,
@@ -2648,7 +2648,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -2724,7 +2724,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -2860,11 +2860,11 @@
       true
     ]
   },
-  "mcp allow admin endpoint without initialize": {
+  "mcp allow admin endpoint without server/discover": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -2942,7 +2942,7 @@
       "body": {
         "error": {
           "code": "AUTH_DENIED",
-          "message": "Host callers may only initialize or call a tool.",
+          "message": "Host callers may only discover the server or call a tool.",
           "target": "mcp"
         }
       }
@@ -2967,11 +2967,11 @@
       true
     ]
   },
-  "mcp initialize": {
+  "mcp server/discover": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -2992,6 +2992,85 @@
           "layer": "admin"
         },
         "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp 2025-era initialize refused": {
+    "answer": {
+      "status": 400,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "jsonrpc": "2.0",
+        "error": {
+          "code": -32022,
+          "message": "Unsupported protocol version: 2025-06-18",
+          "data": {
+            "supported": [
+              "2026-07-28"
+            ],
+            "requested": "2025-06-18"
+          }
+        },
+        "id": 1
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp 2025-era tools/call refused": {
+    "answer": {
+      "status": 400,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "jsonrpc": "2.0",
+        "error": {
+          "code": -32022,
+          "message": "Unsupported protocol version: the request did not name a protocol version",
+          "data": {
+            "supported": [
+              "2026-07-28"
+            ]
+          }
+        },
+        "id": 1
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED",
         "dryRun": false
       }
     ],
@@ -3044,7 +3123,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -3164,7 +3243,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -3278,7 +3357,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -3475,7 +3554,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": true,
@@ -3591,7 +3670,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": true,
@@ -3707,7 +3786,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": true,
@@ -3950,7 +4029,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": true,
@@ -4023,7 +4102,7 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
         "result": {
           "isError": false,
@@ -4113,6 +4192,53 @@
         "outcome": "deny",
         "reason": "STALE_CALLER",
         "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp dry run array output": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "dryRun": true,
+            "event": {
+              "v": 1,
+              "requestId": "request-1",
+              "target": "procedure:peek_list",
+              "targetHash": "hash of procedure:peek_list",
+              "caller": {
+                "kind": "host",
+                "subject": "host:person",
+                "layer": "admin"
+              },
+              "outcome": "allow",
+              "dryRun": true
+            }
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:peek_list",
+        "targetHash": "hash of procedure:peek_list",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": true
       }
     ],
     "frozen": [

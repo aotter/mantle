@@ -10,6 +10,7 @@ import { SurfaceProvider } from "../admin/src/app/slots.js";
 import {
   actionsFor,
   APP_TOOL_META_KEY,
+  diagnosticsOf,
   hiddenInputs,
   invokeTool,
   outputOf,
@@ -20,6 +21,7 @@ import {
   type AppCatalog,
   type ToolResult,
 } from "../src/app/bridge.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const action = {
   capability: "review_requisition",
@@ -117,6 +119,20 @@ describe("MCP App bridge", () => {
     expect(await invokeTool(call, "x", {}, signal)).toEqual({ ok: true, data: { id: "r1" } });
     expect(await invokeTool(call, "x", {}, signal)).toEqual({ ok: false, diagnostics: [diagnostic] });
     await expect(invokeTool(call, "x", {}, signal)).rejects.toThrow("Tool failed");
+  });
+
+  it("reads a 2026-07-28 non-object structuredContent as the data, null included; rows only from an object", async () => {
+    const results = [["a", "b"], "text", 3, false, null].map(value => ({
+      content: [{ type: "text", text: JSON.stringify(value) }],
+      structuredContent: value,
+    }));
+    expect(results.map(outputOf)).toEqual([["a", "b"], "text", 3, false, null]);
+    expect(results.map(rowsOf)).toEqual([null, null, null, null, null]);
+    expect(diagnosticsOf({ structuredContent: [{ code: "X", message: "m" }] })).toEqual([]);
+    const call = vi.fn(async () => results[0]!);
+    expect(await invokeTool(call, "x", {}, new AbortController().signal)).toEqual({ ok: true, data: ["a", "b"] });
+    // The 2025-era form of the same tool: the text block alone.
+    expect(outputOf({ content: [{ type: "text", text: '["a","b"]' }] })).toEqual(["a", "b"]);
   });
 });
 
@@ -427,14 +443,7 @@ describe("adminMcpApps", () => {
       },
     );
     const request = async (method: string, params = {}) => {
-      const response = await api(
-        new Request("https://app.test/mcp/", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        }),
-        {},
-      );
+      const response = await api(new Request("https://app.test/mcp/", mcpInit(method, params)), {});
       const text = await response!.text();
       return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result;
     };
@@ -532,14 +541,7 @@ describe("adminMcpApps", () => {
       })),
       { db: () => null, caller: () => ({ kind: "anonymous" as const }), apps },
     );
-    const response = await api(
-      new Request("https://app.test/mcp/", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "resources/read", params: { uri } }),
-      }),
-      {},
-    );
+    const response = await api(new Request("https://app.test/mcp/", mcpInit("resources/read", { uri })), {});
     const text = await response!.text();
     return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result.contents[0]
       ._meta;

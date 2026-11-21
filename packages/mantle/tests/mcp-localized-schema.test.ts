@@ -3,12 +3,12 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { resolve } from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
-import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/ajv";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { localizedSchema } from "../src/kernel/localized-schema.js";
 import { compilePlan, d1Dialect } from "../src/build/compiler.js";
 import { describeApp, targetHash } from "../src/domain/describe/index.js";
+import { mcpClient } from "./mcp-client.js";
 
 const label = (en: string, zh: string) => `{en: "${en}", "zh-TW": "${zh}"}`;
 const source = `apiVersion: cms.mantle.aotter.net/v2
@@ -129,12 +129,7 @@ test("tools/list resolves localized schema labels to the server locale at every 
       const extra = serve([report as never], { db: () => db, caller: () => ({ kind: "anonymous" }), locale });
       const listed = [];
       for (const fetchFrom of [handle, extra]) {
-        const client = new Client({ name: "test", version: "1" });
-        await client.connect(
-          new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
-            fetch: async (url, init) => (await fetchFrom(new Request(String(url), init), {}))!,
-          }),
-        );
+        const client = await mcpClient(fetchFrom);
         listed.push(...(await client.listTools()).tools);
         await client.close();
       }
@@ -211,12 +206,7 @@ test("tools/list resolves localized schema labels to the server locale at every 
     }
     // A failed call repeats the input contract as listed: labels resolved, not maps.
     const handle = mcp({ db: () => db, caller: () => ({ kind: "anonymous" }), locale: "zh-TW" });
-    const client = new Client({ name: "test", version: "1" });
-    await client.connect(
-      new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
-        fetch: async (url, init) => (await handle(new Request(String(url), init), {}))!,
-      }),
-    );
+    const client = await mcpClient(handle);
     const failed = await client.callTool({ name: "create_company", arguments: { name: "Acme" } });
     await client.close();
     expect(failed.isError).toBe(true);

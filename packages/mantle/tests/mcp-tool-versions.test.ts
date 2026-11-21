@@ -2,13 +2,14 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { resolve } from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
-import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { fixtureCaller } from "./apps/fixtures.js";
 import { gatewaySource, mantleProps, pinned } from "./gateway-fixture.js";
 import { mcp as serveMcp } from "../src/kernel/mcp.js";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 import { versionOf } from "../src/usecase/tool-version.js";
+import { mcpClient } from "./mcp-client.js";
+import { mcpInit } from "./mcp-wire.js";
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: items}
@@ -77,7 +78,7 @@ test("a tool's version and description change only with its own definition; the 
   );
 });
 
-test("official client on both protocol eras sees version markers, versioned results and the input contract on failure", async () => {
+test("the official client sees version markers, versioned results and the input contract on failure", async () => {
   const files = await generateOrThrow("bun-sqlite", [{ sourceId: "v.yaml", text: source }]),
     listed = versions(files["mcp.ts"]!);
   const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-versions-")),
@@ -87,62 +88,42 @@ test("official client on both protocol eras sees version markers, versioned resu
     db.exec(files["schema.sql"]!);
     const { mcp, tools: generated } = await import(resolve(dir, "mcp.ts"));
     const handle = mcp({ db: () => db, caller: () => ({ kind: "anonymous" }) });
-    for (const mode of ["legacy", { pin: "2026-07-28" }] as const) {
-      const client = new Client({ name: "test", version: "1" }, { versionNegotiation: { mode } });
-      await client.connect(
-        new StreamableHTTPClientTransport(new URL("https://app.test/mcp"), {
-          fetch: async (url, init) => (await handle(new Request(String(url), init), {}))!,
-        }),
-      );
-      if (mode === "legacy") expect(client.getNegotiatedProtocolVersion()).not.toBe("2026-07-28");
-      else expect(client.getNegotiatedProtocolVersion()).toBe("2026-07-28");
-      expect(client.getServerVersion()).toMatchObject({ name: "aotter.mantle", version: catalogue(generated) });
-      const { tools } = await client.listTools();
-      for (const tool of tools) expect(tool.description).toEndWith(` (tool version ${listed[tool.name]})`);
-      const ok = await client.callTool({ name: "add_item", arguments: { title: "Hello" } });
-      expect(ok.isError).toBeFalsy();
-      expect(ok.structuredContent).toBeDefined();
-      expect(ok.content).toEqual([
-        expect.objectContaining({ type: "text" }),
-        { type: "text", text: `tool version ${listed.add_item}` },
-      ]);
-      const page = await client.callTool({ name: "items", arguments: { limit: 1 } });
-      expect((page.content as { text: string }[])[1]!.text).toBe(`tool version ${listed.items}`);
-      const bad = await client.callTool({ name: "add_item", arguments: { title: "" } });
-      expect(bad.isError).toBe(true);
-      const about = (bad.content as { text: string }[])[1]!.text;
-      expect(about).toStartWith(`tool version ${listed.add_item}; input schema `);
-      expect(JSON.parse(about.slice(about.indexOf("{")))).toMatchObject({
-        required: ["title"],
-        properties: { title: { type: "string", minLength: 1 } },
-      });
-      await client.close();
-    }
+    const client = await mcpClient(handle);
+    expect(client.getNegotiatedProtocolVersion()).toBe("2026-07-28");
+    expect(client.getServerVersion()).toMatchObject({ name: "aotter.mantle", version: catalogue(generated) });
+    const { tools } = await client.listTools();
+    for (const tool of tools) expect(tool.description).toEndWith(` (tool version ${listed[tool.name]})`);
+    const ok = await client.callTool({ name: "add_item", arguments: { title: "Hello" } });
+    expect(ok.isError).toBeFalsy();
+    expect(ok.structuredContent).toBeDefined();
+    expect(ok.content).toEqual([
+      expect.objectContaining({ type: "text" }),
+      { type: "text", text: `tool version ${listed.add_item}` },
+    ]);
+    const page = await client.callTool({ name: "items", arguments: { limit: 1 } });
+    expect((page.content as { text: string }[])[1]!.text).toBe(`tool version ${listed.items}`);
+    const bad = await client.callTool({ name: "add_item", arguments: { title: "" } });
+    expect(bad.isError).toBe(true);
+    const about = (bad.content as { text: string }[])[1]!.text;
+    expect(about).toStartWith(`tool version ${listed.add_item}; input schema `);
+    expect(JSON.parse(about.slice(about.indexOf("{")))).toMatchObject({
+      required: ["title"],
+      properties: { title: { type: "string", minLength: 1 } },
+    });
+    await client.close();
   } finally {
     db.close();
     await rm(dir, { recursive: true, force: true });
   }
 });
 
-const eras = ["legacy", { pin: "2026-07-28" }] as const;
 const connect = async (
   handle: (request: Request, env: unknown) => Promise<Response | undefined>,
-  mode: (typeof eras)[number],
   path = "/mcp",
   headers: Record<string, string> = {},
 ) => {
-  const client = new Client({ name: "test", version: "1" }, { versionNegotiation: { mode } });
-  await client.connect(
-    new StreamableHTTPClientTransport(new URL("https://app.test" + path), {
-      fetch: async (url, init) => {
-        const request = new Request(String(url), init);
-        for (const [k, v] of Object.entries(headers)) request.headers.set(k, v);
-        return (await handle(request, {}))!;
-      },
-    }),
-  );
-  if (mode === "legacy") expect(client.getNegotiatedProtocolVersion()).not.toBe("2026-07-28");
-  else expect(client.getNegotiatedProtocolVersion()).toBe("2026-07-28");
+  const client = await mcpClient(handle, "https://app.test" + path, { headers });
+  expect(client.getNegotiatedProtocolVersion()).toBe("2026-07-28");
   return client;
 };
 /** What tools/list returns, without the marker, hashes to the version the marker advertises. */
@@ -187,37 +168,32 @@ const withApp = async (
 test("what tools/list returns hashes to the version it advertises, View paging included", async () => {
   await withApp(await generateOrThrow("bun-sqlite", [{ sourceId: "v.yaml", text: source }]), async (mcp, db) => {
     const handle = mcp({ db: () => db, caller: () => ({ kind: "anonymous" }) });
-    for (const mode of eras) {
-      const client = await connect(handle, mode);
-      const { tools } = await client.listTools();
-      expect(tools.find(t => t.name === "items")!.inputSchema.properties).toHaveProperty("limit");
-      expectListedHashes(tools);
-      await client.close();
-    }
+    const client = await connect(handle);
+    const { tools } = await client.listTools();
+    expect(tools.find(t => t.name === "items")!.inputSchema.properties).toHaveProperty("limit");
+    expectListedHashes(tools);
+    await client.close();
   });
 });
 
-test("a call naming a tool the catalogue lacks gets the spec's unknown-tool error with the catalogue version, on both eras", async () => {
+test("a call naming a tool the catalogue lacks gets the spec's unknown-tool error with the catalogue version", async () => {
   const files = await generateOrThrow("bun-sqlite", [{ sourceId: "v.yaml", text: source }]);
   await withApp(files, async (mcp, db, tools) => {
     const handle = mcp({ db: () => db, caller: () => ({ kind: "anonymous" }) });
-    for (const mode of eras) {
-      const client = await connect(handle, mode);
-      const refused = await client.callTool({ name: "add_items", arguments: { title: "x" } }).then(
-        () => undefined,
-        (error: unknown) => error as { code: number; message: string },
-      );
-      expect(refused?.code).toBe(-32602);
-      expect(refused?.message).toContain(
-        `No tool named "add_items" exists in the current catalogue (catalogue version ${catalogue(tools)}).`,
-      );
-      expect((await client.callTool({ name: "add_item", arguments: { title: "x" } })).isError).toBeFalsy();
-      await client.close();
-    }
+    const client = await connect(handle);
+    const refused = await client.callTool({ name: "add_items", arguments: { title: "x" } }).then(
+      () => undefined,
+      (error: unknown) => error as { code: number; message: string },
+    );
+    expect(refused?.code).toBe(-32602);
+    expect(refused?.message).toContain(
+      `No tool named "add_items" exists in the current catalogue (catalogue version ${catalogue(tools)}).`,
+    );
+    expect((await client.callTool({ name: "add_item", arguments: { title: "x" } })).isError).toBeFalsy();
+    await client.close();
     // An application's own serverInfo.version is the catalogue version it reports.
     const own = await connect(
       mcp({ db: () => db, caller: () => ({ kind: "anonymous" }), serverInfo: { version: "7.1.0" } }),
-      "legacy",
     );
     expect(
       await own.callTool({ name: "gone", arguments: {} }).then(
@@ -262,45 +238,43 @@ test("/mcp/admin over the official client: publishing and media tools carry mark
       caller: () => admin,
       media: () => storage,
     });
-    for (const mode of eras) {
-      const client = await connect(handle, mode, "/mcp/admin", { cookie: "fixture=1", origin: "https://app.test" });
-      const { tools } = await client.listTools(),
-        version = (name: string) =>
-          /\(tool version ([0-9a-f]{8})\)$/.exec(tools.find(t => t.name === name)!.description!)![1];
-      expect(tools.map(t => t.name)).toEqual(
-        expect.arrayContaining([
-          "publish_posts",
-          "archive_posts",
-          "upload_media",
-          "find_media",
-          "get_media_upload_policy",
-          "create_media_upload",
-        ]),
-      );
-      expectListedHashes(tools);
-      const policy = await client.callTool({ name: "upload_media", arguments: { purpose: "cover" } });
-      expect(policy.isError).toBeFalsy();
-      expect((policy.content as { type: string; text: string }[])[1]).toEqual({
-        type: "text",
-        text: `tool version ${version("upload_media")}`,
-      });
-      for (const [name, args] of [
-        ["publish_posts", { id: "", expectedVersion: 1 }],
-        ["create_media_upload", { filename: "x" }],
-        ["upload_media", { purpose: "other" }],
-      ] as const) {
-        const bad = await client.callTool({ name, arguments: args });
-        expect(bad.isError).toBe(true);
-        const about = (bad.content as { text: string }[])[1]!.text;
-        expect(about).toStartWith(`tool version ${version(name)}; input schema `);
-        expect(JSON.parse(about.slice(about.indexOf("{")))).toEqual(tools.find(t => t.name === name)!.inputSchema);
-      }
-      await client.close();
+    const client = await connect(handle, "/mcp/admin", { cookie: "fixture=1", origin: "https://app.test" });
+    const { tools } = await client.listTools(),
+      version = (name: string) =>
+        /\(tool version ([0-9a-f]{8})\)$/.exec(tools.find(t => t.name === name)!.description!)![1];
+    expect(tools.map(t => t.name)).toEqual(
+      expect.arrayContaining([
+        "publish_posts",
+        "archive_posts",
+        "upload_media",
+        "find_media",
+        "get_media_upload_policy",
+        "create_media_upload",
+      ]),
+    );
+    expectListedHashes(tools);
+    const policy = await client.callTool({ name: "upload_media", arguments: { purpose: "cover" } });
+    expect(policy.isError).toBeFalsy();
+    expect((policy.content as { type: string; text: string }[])[1]).toEqual({
+      type: "text",
+      text: `tool version ${version("upload_media")}`,
+    });
+    for (const [name, args] of [
+      ["publish_posts", { id: "", expectedVersion: 1 }],
+      ["create_media_upload", { filename: "x" }],
+      ["upload_media", { purpose: "other" }],
+    ] as const) {
+      const bad = await client.callTool({ name, arguments: args });
+      expect(bad.isError).toBe(true);
+      const about = (bad.content as { text: string }[])[1]!.text;
+      expect(about).toStartWith(`tool version ${version(name)}; input schema `);
+      expect(JSON.parse(about.slice(about.indexOf("{")))).toEqual(tools.find(t => t.name === name)!.inputSchema);
     }
+    await client.close();
   });
 });
 
-test("the kernel wired as the templates wire it reports the served catalogue's version, not a fixed one, on both eras", async () => {
+test("the kernel wired as the templates wire it reports the served catalogue's version, not a fixed one", async () => {
   const versionsOf = async (text: string) => {
     let seen: string[] = [];
     await withApp(await generateOrThrow("bun-sqlite", [{ sourceId: "v.yaml", text }]), async (mcp, db, tools) => {
@@ -308,28 +282,23 @@ test("the kernel wired as the templates wire it reports the served catalogue's v
       const options = { db: () => db, caller: () => ({ kind: "anonymous" as const }) },
         kernel = serveMcp(tools, options),
         generated = mcp(options);
-      for (const mode of eras) {
-        const client = await connect(kernel, mode),
-          version = client.getServerVersion()!.version;
-        expect(version).toBe(catalogue(tools));
-        expect(version).not.toBe("0.2.0");
-        expect(client.getServerCapabilities()?.tools).toEqual({ listChanged: false });
-        expect(
-          await client.callTool({ name: "gone", arguments: {} }).then(
-            () => "",
-            (error: Error) => error.message,
-          ),
-        ).toContain(`(catalogue version ${version}).`);
-        await client.close();
-        const viaGenerated = await connect(generated, mode);
-        expect(viaGenerated.getServerVersion()!.version).toBe(version);
-        await viaGenerated.close();
-        seen.push(version);
-      }
-      const own = await connect(
-        serveMcp(tools, { ...options, serverInfo: { name: "app", version: undefined } }),
-        "legacy",
-      );
+      const client = await connect(kernel),
+        version = client.getServerVersion()!.version;
+      expect(version).toBe(catalogue(tools));
+      expect(version).not.toBe("0.2.0");
+      expect(client.getServerCapabilities()?.tools).toEqual({ listChanged: false });
+      expect(
+        await client.callTool({ name: "gone", arguments: {} }).then(
+          () => "",
+          (error: Error) => error.message,
+        ),
+      ).toContain(`(catalogue version ${version}).`);
+      await client.close();
+      const viaGenerated = await connect(generated);
+      expect(viaGenerated.getServerVersion()!.version).toBe(version);
+      await viaGenerated.close();
+      seen.push(version);
+      const own = await connect(serveMcp(tools, { ...options, serverInfo: { name: "app", version: undefined } }));
       expect(own.getServerVersion()).toMatchObject({ name: "app", version: catalogue(tools) });
       await own.close();
     });
@@ -360,15 +329,7 @@ test("transport and request validation answer before the unknown-tool error; bat
       headers: Record<string, string> = {},
       ctx?: unknown,
     ) => {
-      const response = (await handle(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
-          body: JSON.stringify(body),
-        }),
-        {},
-        ctx,
-      ))!;
+      const response = (await handle(new Request("https://app.test/mcp", mcpInit(body, { headers })), {}, ctx))!;
       const text = await response.text();
       return {
         status: response.status,
@@ -385,7 +346,7 @@ test("transport and request validation answer before the unknown-tool error; bat
     console.error = () => {};
     try {
       for (const headers of [
-        { accept: "text/html" },
+        { "mcp-method": "tools/list" },
         { "content-type": "text/plain" },
         { "mcp-protocol-version": "bogus" },
       ] as Record<string, string>[]) {
@@ -403,7 +364,7 @@ test("transport and request validation answer before the unknown-tool error; bat
         });
       for (const headers of [
         {},
-        { accept: "text/html" },
+        { "mcp-method": "tools/list" },
         { "content-type": "text/plain" },
         { "mcp-protocol-version": "bogus" },
       ] as Record<string, string>[]) {
@@ -421,15 +382,10 @@ test("transport and request validation answer before the unknown-tool error; bat
     } finally {
       console.error = quiet;
     }
-    const batch = await post(handle, [call("gone", 1), call("public_records", 2)], {
-      "mcp-protocol-version": "2025-03-26",
-    });
-    expect(batch.messages.find(m => m.id === 1)).toEqual({
-      jsonrpc: "2.0",
-      id: 1,
-      error: { code: -32602, message: message("gone") },
-    });
-    expect(batch.messages.find(m => m.id === 2).result).toBeDefined();
+    // 2026-07-28 has no batches: one is refused whole, before any name in it is looked up.
+    const batch = await post(handle, [call("gone", 1), call("public_records", 2)]);
+    expect(batch.status).toBe(400);
+    expect(JSON.stringify(batch.messages)).not.toContain("No tool named");
     const events: any[] = [],
       host = mcp({
         db: () => db,
@@ -466,7 +422,7 @@ test('a listed schema keeps a "__proto__" const key as an own key, and still has
     expect(Object.hasOwn(tools.find(t => t.name === "add_item").inputSchema.properties.p.const, "__proto__")).toBe(
       true,
     );
-    const client = await connect(mcp({ db: () => db, caller: () => ({ kind: "anonymous" }) }), eras[1]);
+    const client = await connect(mcp({ db: () => db, caller: () => ({ kind: "anonymous" }) }));
     const { tools: listed } = await client.listTools();
     expect(JSON.stringify(listed.find(t => t.name === "add_item")!.inputSchema.properties!.p)).toBe(
       '{"const":{"__proto__":1}}',
@@ -498,39 +454,37 @@ test("an MCP View page is cut by serialized size: every page fits the budget, pa
     },
   };
   const handle = serveMcp([wide as never], { db: () => null, caller: () => ({ kind: "anonymous" }) });
-  for (const mode of eras) {
-    const client = await connect(handle, mode);
-    for (const limit of [1, 7, 50, 500, undefined]) {
-      const got: typeof all = [];
-      let cursor: string | undefined,
-        pages = 0,
-        notices = 0;
-      do {
-        const result = await client.callTool({
-          name: "wide_rows",
-          arguments: { ...(limit ? { limit } : {}), ...(cursor ? { cursor } : {}) },
-        });
-        const content = result.content as { text: string }[],
-          data = result.structuredContent as { rows: typeof all; nextCursor?: string };
-        expect(result.isError).toBeFalsy();
-        expect(JSON.parse(content[0]!.text)).toEqual(data);
-        expect(data.rows.length).toBeLessThanOrEqual(limit ?? 50);
-        if (content[0]!.text.length > budget) {
-          notices++;
-          expect(data.rows.map(r => r.id)).toEqual([big]);
-          expect(content.some(c => c.text.includes("budget"))).toBe(true);
-        } else expect(content[0]!.text.length).toBeLessThanOrEqual(budget);
-        got.push(...data.rows);
-        cursor = data.nextCursor;
-        pages++;
-      } while (cursor);
-      expect(got).toEqual(all);
-      expect(new Set(got.map(r => r.id)).size).toBe(all.length);
-      expect(notices).toBe(1);
-      if (limit === 500) expect(pages).toBeGreaterThan(1);
-    }
-    await client.close();
+  const client = await connect(handle);
+  for (const limit of [1, 7, 50, 500, undefined]) {
+    const got: typeof all = [];
+    let cursor: string | undefined,
+      pages = 0,
+      notices = 0;
+    do {
+      const result = await client.callTool({
+        name: "wide_rows",
+        arguments: { ...(limit ? { limit } : {}), ...(cursor ? { cursor } : {}) },
+      });
+      const content = result.content as { text: string }[],
+        data = result.structuredContent as { rows: typeof all; nextCursor?: string };
+      expect(result.isError).toBeFalsy();
+      expect(JSON.parse(content[0]!.text)).toEqual(data);
+      expect(data.rows.length).toBeLessThanOrEqual(limit ?? 50);
+      if (content[0]!.text.length > budget) {
+        notices++;
+        expect(data.rows.map(r => r.id)).toEqual([big]);
+        expect(content.some(c => c.text.includes("budget"))).toBe(true);
+      } else expect(content[0]!.text.length).toBeLessThanOrEqual(budget);
+      got.push(...data.rows);
+      cursor = data.nextCursor;
+      pages++;
+    } while (cursor);
+    expect(got).toEqual(all);
+    expect(new Set(got.map(r => r.id)).size).toBe(all.length);
+    expect(notices).toBe(1);
+    if (limit === 500) expect(pages).toBeGreaterThan(1);
   }
+  await client.close();
 });
 
 test("a size cut measures a withResult page's data only, and the re-run's blocks and meta are the ones sent", async () => {
@@ -556,18 +510,16 @@ test("a size cut measures a withResult page's data only, and the re-run's blocks
     },
   };
   const handle = serveMcp([wide as never], { db: () => null, caller: () => ({ kind: "anonymous" }) });
-  for (const mode of eras) {
-    runs = 0;
-    const client = await connect(handle, mode);
-    const result = await client.callTool({ name: "wide_rows", arguments: {} });
-    const content = result.content as { text: string }[];
-    expect(runs).toBe(2);
-    expect(content[0]!.text.length).toBeLessThanOrEqual(60_000);
-    expect((result.structuredContent as { rows: unknown[] }).rows.length).toBeLessThan(200);
-    expect(content.slice(1).map(c => c.text.slice(0, 5))).toEqual(["run 2", "zzzzz"]);
-    expect(result._meta).toMatchObject({ "example/run": 2 });
-    await client.close();
-  }
+  runs = 0;
+  const client = await connect(handle);
+  const result = await client.callTool({ name: "wide_rows", arguments: {} });
+  const content = result.content as { text: string }[];
+  expect(runs).toBe(2);
+  expect(content[0]!.text.length).toBeLessThanOrEqual(60_000);
+  expect((result.structuredContent as { rows: unknown[] }).rows.length).toBeLessThan(200);
+  expect(content.slice(1).map(c => c.text.slice(0, 5))).toEqual(["run 2", "zzzzz"]);
+  expect(result._meta).toMatchObject({ "example/run": 2 });
+  await client.close();
   // A re-run that returns no wrapper leaves nothing of the discarded first run behind.
   const plain = {
     ...wide,
@@ -580,15 +532,12 @@ test("a size cut measures a withResult page's data only, and the re-run's blocks
         : withResult(page, { content: [{ type: "text", text: "of 200 rows" }], _meta: { "example/rows": 200 } });
     },
   };
-  const client = await connect(
-    serveMcp([plain as never], { db: () => null, caller: () => ({ kind: "anonymous" }) }),
-    eras[0]!,
-  );
-  const cut = await client.callTool({ name: "plain_rerun", arguments: {} });
+  const again = await connect(serveMcp([plain as never], { db: () => null, caller: () => ({ kind: "anonymous" }) }));
+  const cut = await again.callTool({ name: "plain_rerun", arguments: {} });
   expect((cut.structuredContent as { rows: unknown[] }).rows.length).toBeLessThan(200);
   expect(JSON.stringify(cut.content)).not.toContain("of 200 rows");
   expect(cut._meta ?? {}).not.toHaveProperty("example/rows");
-  await client.close();
+  await again.close();
 });
 
 test("a size cut through the kernel's keyset page() resumes at the first row not returned; a wide View without an order stays one whole page", async () => {
@@ -632,28 +581,26 @@ test("a size cut through the kernel's keyset page() resumes at the first row not
     db: () => null,
     caller: () => ({ kind: "anonymous" }),
   });
-  for (const mode of eras) {
-    const client = await connect(handle, mode);
-    for (const limit of [37, 500]) {
-      const got: typeof all = [];
-      let cursor: string | undefined;
-      do {
-        const result = await client.callTool({
-          name: "keyed_rows",
-          arguments: { limit, ...(cursor ? { cursor } : {}) },
-        });
-        const data = result.structuredContent as { rows: typeof all; nextCursor?: string };
-        expect(result.isError).toBeFalsy();
-        expect((result.content as { text: string }[])[0]!.text.length).toBeLessThanOrEqual(60_000);
-        got.push(...data.rows);
-        cursor = data.nextCursor;
-      } while (cursor);
-      expect(got).toEqual(all);
-    }
-    const whole = await client.callTool({ name: "unordered_rows", arguments: {} });
-    expect(whole.isError).toBeFalsy();
-    expect((whole.structuredContent as { rows: unknown[] }).rows).toHaveLength(10);
-    expect((whole.content as { text: string }[]).some(c => c.text.includes("budget"))).toBe(true);
-    await client.close();
+  const client = await connect(handle);
+  for (const limit of [37, 500]) {
+    const got: typeof all = [];
+    let cursor: string | undefined;
+    do {
+      const result = await client.callTool({
+        name: "keyed_rows",
+        arguments: { limit, ...(cursor ? { cursor } : {}) },
+      });
+      const data = result.structuredContent as { rows: typeof all; nextCursor?: string };
+      expect(result.isError).toBeFalsy();
+      expect((result.content as { text: string }[])[0]!.text.length).toBeLessThanOrEqual(60_000);
+      got.push(...data.rows);
+      cursor = data.nextCursor;
+    } while (cursor);
+    expect(got).toEqual(all);
   }
+  const whole = await client.callTool({ name: "unordered_rows", arguments: {} });
+  expect(whole.isError).toBeFalsy();
+  expect((whole.structuredContent as { rows: unknown[] }).rows).toHaveLength(10);
+  expect((whole.content as { text: string }[]).some(c => c.text.includes("budget"))).toBe(true);
+  await client.close();
 });

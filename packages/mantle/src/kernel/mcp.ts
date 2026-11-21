@@ -66,9 +66,13 @@ export type McpObservation =
       readonly kind: "request-refused";
       readonly at: number;
       readonly surface: "public" | "admin";
-      readonly status: 401 | 403;
-      /** `origin`: a browser Origin the endpoint or the session Origin rule refused; `credential`: the caller's credential. */
-      readonly reason: "origin" | "credential";
+      readonly status: 400 | 401 | 403;
+      /**
+       * `origin`: a browser Origin the endpoint or the session Origin rule refused; `credential`: the caller's credential;
+       * `protocol-version` (status 400): a request for a protocol revision other than 2026-07-28, such as a 2025-era
+       * `initialize`, refused by the SDK with JSON-RPC -32022.
+       */
+      readonly reason: "origin" | "credential" | "protocol-version";
     }
   | ({
       readonly kind: "invocation";
@@ -77,6 +81,8 @@ export type McpObservation =
       readonly invocationId: string;
       readonly tool: string;
       readonly caller: Caller;
+      /** The `clientInfo` name and version the request's `_meta` declares, when it declares one. */
+      readonly client?: { readonly name: string; readonly version: string };
     } & (
       | { readonly phase: "attempt" }
       | {
@@ -123,8 +129,9 @@ export interface Tool<Database, Handlers = never> {
   // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
   /**
    * Merged into this tool's `_meta` in `tools/list` (top level shallow, `ui` one level deep) with what its App links produce;
-   * a contradicting value fails at `mcp(...)`. `ui.visibility: ["app"]` hides the tool from clients without MCP Apps.
-   * It is a listing hint and grants or removes no execution authority.
+   * a contradicting value fails at `mcp(...)`. `ui.visibility: ["app"]` hides the tool from the `tools/list` of
+   * clients without MCP Apps; a `tools/call` that names it still runs it. It is a listing hint and grants or removes no
+   * execution authority.
    */
   readonly meta?: Readonly<Record<string, unknown>>;
 }
@@ -146,11 +153,14 @@ export interface ToolCall {
   /** The tool links an MCP App resource, independent of this request's declared support. */
   readonly linkedApp?: boolean;
   /**
-   * Aborts while the tool runs if the `tools/call` request ends before its result: the client closed the request (how a
-   * 2026-07-28 client cancels) or the connection dropped; never after the call finished. It follows the incoming
-   * `Request.signal`, so it aborts only where that one does: Bun.serve does; on Workers it needs compatibility date
-   * 2026-11-17 or later, or the `enable_request_signal` flag. A 2025-era `notifications/cancelled` arrives as another
-   * request, which a stateless server cannot relate to this one. Set on every MCP call; `callTool` passes the one it is given.
+   * Aborts while the tool runs if the client closes the `tools/call` request before its result (how a client cancels) or
+   * the connection drops; never after the call finished. It follows the incoming `Request.signal`: Bun.serve aborts it;
+   * Workers abort it from compatibility date 2026-11-17, or with the `enable_request_signal` flag, and before that only
+   * while the call streams its result (a call that sent progress). On Workers the invocation ends at the disconnect, so
+   * nothing after the tool's next `await` runs: pass the signal to `fetch()` and other cancellable APIs, and stop work
+   * kept alive with `waitUntil` when it aborts. The call is recorded as cancelled (`REQUEST_CANCELLED`) when the signal
+   * aborts, and its result is not delivered; a tool that ignores the signal may still complete its writes afterwards,
+   * where the runtime keeps running it. Set on every MCP call; `callTool` passes the one it is given.
    */
   readonly signal?: AbortSignal;
   /**

@@ -13,6 +13,7 @@ import type { HostProps } from "../src/kernel/host-caller.js";
 import { fixtureCaller } from "./apps/fixtures.js";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { mantleProps, pinned } from "./gateway-fixture.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const GOLDEN = resolve(import.meta.dir, "request-pipeline-matrix.golden.txt");
 const ORIGIN = "https://app.test";
@@ -298,18 +299,8 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
         );
       }
       if (target.mcp) {
-        const body = JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name: target.name, arguments: {} },
-        });
-        const transport = { "content-type": "application/json", accept: "application/json, text/event-stream" };
-        const request = new Request(ORIGIN + target.mcp, {
-          method: "POST",
-          body,
-          headers: { ...transport, ...headers },
-        });
+        const message = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: target.name, arguments: {} } };
+        const request = new Request(ORIGIN + target.mcp, mcpInit(message, { headers }));
         await observe("mcp", async () =>
           httpOutcome(await surfaces.mcp(request, {}, await context(`${target.kind}:${target.name}`))),
         );

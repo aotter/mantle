@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { source, seed, verifyWire, integerCases } from "./wire-scenarios.js";
+import { mcpInit } from "./mcp-wire.js";
 const caller = { kind: "anonymous" } as const;
 async function fixture(target: "bun-sqlite" | "bun-postgres") {
   const files = await generateOrThrow(target, [{ sourceId: "wire.yaml", text: source }]);
@@ -93,16 +94,18 @@ test("selected REST/MCP wire preserves aliases, JSON primitives/nulls and boolea
         expect(wire.versionAlias).toBe(id === "safe" ? Number(value) : value);
         const beforeMcp = queries,
           mcp = (await app.fetch(
-            new Request("https://app.test/mcp", {
-              method: "POST",
-              headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-              body: JSON.stringify({
-                jsonrpc: "2.0",
-                id: 1,
-                method: "tools/call",
-                params: { name: "wire_records", arguments: { id } },
-              }),
-            }),
+            new Request(
+              "https://app.test/mcp",
+              mcpInit(
+                {
+                  jsonrpc: "2.0",
+                  id: 1,
+                  method: "tools/call",
+                  params: { name: "wire_records", arguments: { id } },
+                },
+                { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+              ),
+            ),
           ))!;
         const body = await mcp.text(),
           result = JSON.parse(body.startsWith("event:") ? body.split("data: ")[1]!.split("\n")[0]! : body);
@@ -276,16 +279,18 @@ test("SQLite selected boundaries read exact int64 text before native Number roun
       expect(row.versionAlias).toBe(expected);
       expect(typeof (await app.bare(id))[0].quantityAlias).toBe("number");
       const responseMcp = (await app.fetch(
-        new Request("https://app.test/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: { name: "wire_records", arguments: { id } },
-          }),
-        }),
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: "wire_records", arguments: { id } },
+            },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
       ))!;
       const body = await responseMcp.text(),
         rpc = JSON.parse(body.startsWith("event:") ? body.split("data: ")[1]!.split("\n")[0]! : body);

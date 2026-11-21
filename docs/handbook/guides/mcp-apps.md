@@ -90,9 +90,11 @@ deep. Use it for keys such as `ui.visibility`, `ui.resourceUri` with
 link (another `ui.resourceUri` than the `renders` resource, or a visibility other
 than `["app"]` on an `appOnly` tool) fails when `mcp()` is constructed.
 `meta: { ui: { visibility: ["app"] } }` hides any tool, a Procedure included,
-from clients that declare no MCP Apps support, as `appOnly` does for Views. It
-is a listing hint only: `tools/call` still runs every identity, scope, `check`
-and `authorize` decision, so an App-only write is authorized like any other.
+from the `tools/list` of clients that declare no MCP Apps support, as `appOnly`
+does for Views. It is a listing hint only: a `tools/call` that names the tool
+runs it whatever the request declares (an App's own call that a host forwards,
+say), after every identity, scope, `check` and `authorize` decision, so an
+App-only write is authorized like any other.
 It is not an access boundary either: any client holding the same credential can
 call an App-only tool directly. An action that needs the person present is
 enforced on the server, for example by a Procedure that accepts only a
@@ -128,15 +130,14 @@ the result `_meta` for an App and return it in the data for a client that has
 none (`upload_media` does this with its targets). `callTool` and `callToolLazy`
 take it as an optional last argument (default `{ apps: false }`).
 
+### Progress and cancellation
+
 The same argument carries `signal` and, when the client asked for progress with
 a `progressToken`, `progress(progress, total?, message?)`. Progress
-notifications go out on the call's SSE stream before its result, on 2025-era and
-2026-07-28 requests alike. `signal` aborts while the tool runs if the request
-ends before its result: a 2026-07-28 client cancels by closing the request, and
-a dropped connection does the same. It never aborts after the call finished. A
-2025-era client's `notifications/cancelled` arrives as a separate request that a
-stateless server cannot relate to the call, so for that client the signal aborts
-only when its connection closes. Only hand-written tools receive them; a
+notifications go out on the call's SSE stream before its result. `signal`
+aborts while the tool runs if the request ends before its result: a client
+cancels by closing the request, and a dropped connection does the same. It
+never aborts after the call finished. Only hand-written tools receive them; a
 generated Procedure tool's handler is shared with Store and REST callers and
 gets neither.
 
@@ -146,16 +147,37 @@ runtime aborts that one on a client disconnect:
 | Stack | Client disconnect aborts `signal` |
 |---|---|
 | `bun-sqlite`, `bun-postgres` (`Bun.serve`) | Yes |
-| `cloudflare-d1`, `cloudflare-postgres` (Workers) | With `compatibility_date` 2026-11-17 or later, or the `enable_request_signal` compatibility flag; not with `disable_request_signal` |
+| `cloudflare-d1`, `cloudflare-postgres` (Workers), `compatibility_date` 2026-11-17 or later, or the `enable_request_signal` flag (and not `disable_request_signal`) | Yes, when Cloudflare sees the disconnect, for a JSON result and for a streamed (SSE) one |
+| Workers, an earlier date without the flag | Only while the result streams as SSE (a call that sent progress); a JSON result does not abort it |
 
-On Workers with an earlier date, add `enable_request_signal` to the Worker's
-`compatibility_flags` (`mantle generate` does not add it). Local `wrangler dev`
-and `workerd serve` (workerd 1.20261102) did not abort `Request.signal` on a
-client disconnect with or without the flag, so test cancellation on Bun or on a
-deployed Worker. A cancelled call's completion observation is `outcome: "failed"`
-with `code: "REQUEST_CANCELLED"`, and in gateway mode its access event is
-`outcome: "error"` with that reason; it is not logged as an unhandled failure. A
-`ContractError` the tool throws keeps its own code.
+`mantle generate` gives a new project the newest compatibility date its installed
+workerd supports, which can be earlier than 2026-11-17 (2026-11-02 with workerd
+1.20261102): on such a date add `enable_request_signal` to the Worker's
+`compatibility_flags` yourself. Whether a disconnect reaches the platform at once
+depends on the client's path: an HTTP/2 stream reset arrives at once, an HTTP/1.1
+close through a proxy may arrive late or not at all. Local `wrangler dev` and
+`workerd serve` do not deliver a client disconnect, so test cancellation on Bun or
+on a deployed Worker.
+
+On Workers the invocation ends at the disconnect: only what the abort listeners do
+synchronously still runs, and the tool's code after its next `await` does not
+resume. So pass the signal to `fetch()` and other cancellable APIs, and stop work
+the application keeps alive with `ctx.waitUntil` when it aborts: such work otherwise
+runs to its end after the client has gone. A call that completes normally never
+sees an abort.
+
+A call whose client goes away before the tool settles is recorded as cancelled
+in the abort event itself, so a Worker records it too: its completion
+observation is `outcome: "failed"` with `code: "REQUEST_CANCELLED"` and a
+`durationMs` that runs to the disconnect, and in gateway mode its access event
+is `outcome: "error"` with that reason. Neither is logged as an unhandled
+failure, and each invocation still has exactly one completion. Both records keep
+that first outcome: the result is not delivered, so a tool that ignores the
+signal and goes on to finish (on Bun, which keeps running it) is still recorded
+as cancelled, although its writes may have been committed. Stop at the signal
+before a write the client should be able to rely on. A request the client left
+before the call started runs no step of it (the SDK answers 499): no invocation
+is observed, and its access event records the cancellation.
 
 ```ts
 import type { Tool } from '@aotter/mantle/mcp';
@@ -250,6 +272,23 @@ export const handlers = {
   },
 } satisfies Partial<Handlers>;
 ```
+
+### Results that are not objects
+
+A tool may return any JSON value: an array, a string, a number, a boolean or
+`null` (SEP-2106). Its `outputSchema` (a ref Procedure's output, or
+`Tool.outputSchema`) is listed with whatever root `type` it declares, and a
+success sends the value as `structuredContent` beside its JSON text block, so a
+client validates it against that schema. Data the listed schema's root `type`
+does not admit, `undefined` included, fails the call as `INTERNAL_ERROR`: the
+server does not send a result its own schema refuses. A failure omits
+`structuredContent` when the tool lists a schema. An App reads either an object
+or any other value with `outputOf` from `@aotter/mantle-admin/controller`. An
+App that calls a tool itself through the official bridge (`callServerTool`,
+ext-apps 2.0.4) gets an "Invalid result for tools/call" error for a non-object
+`structuredContent`, because that bridge still checks result shapes the way the
+2025 protocol revisions did: give a tool an App calls an object output. A host's
+tool-result notification reaches the App with any value.
 
 ### Open an App from a host's entry point
 
@@ -531,10 +570,14 @@ catalogue. If its tool names change, those links are checked again, and a call
 always uses the current request's tool table.
 
 Clients advertise `io.modelcontextprotocol/ui` and MIME type
-`text/html;profile=mcp-app` in initialization capabilities or, for stateless
-requests, in `params._meta["io.modelcontextprotocol/clientCapabilities"]`.
-An explicit capability declaration without UI support receives no UI resources, UI tool metadata or App-only tools. A stateless request with no capability declaration is treated as unknown and retains App support. Other tools retain their existing validation,
-authorization, caller, origin and database behavior.
+`text/html;profile=mcp-app` on every request, in
+`params._meta["io.modelcontextprotocol/clientCapabilities"]` (MCP protocol revision
+2026-07-28 requires that envelope on every request). A request whose capabilities do
+not declare UI support receives no UI resources or UI tool metadata, and its
+`tools/list` shows no App-only tool. A `tools/call` that names an App-only tool runs
+it whatever the request declares, so a host that forwards an App's own calls need
+not declare the extension for them; the result then carries no UI metadata. Every
+tool retains its validation, authorization, caller, origin and database behavior.
 
 ## The Admin App in a host
 

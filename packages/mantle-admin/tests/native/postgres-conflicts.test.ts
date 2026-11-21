@@ -5,6 +5,7 @@ import { admin as createAdmin } from "../../src/server/index.js";
 import { entries } from "../../src/server/entries.js";
 import { generateAdmin, writeAdminFixture } from "./generated-fixture.js";
 import { sdkFixtureCaller } from "../../../mantle/tests/apps/fixtures.js";
+import { mcpInit } from "../../test/mcp-wire.js";
 
 test("PostgreSQL serialization/deadlock refusals stay CONFLICT through generated Store, REST, MCP and Admin", async () => {
   const source = await readFile(join(import.meta.dir, "../../../mantle/tests/apps/postgres-conflicts.yaml"), "utf8");
@@ -81,12 +82,10 @@ test("PostgreSQL serialization/deadlock refusals stay CONFLICT through generated
         const adminBody = await adminResponse!.json();
         expect(adminBody).toMatchObject({ error: { code: "CONFLICT", kind: "serialization" } });
         const mcpResponse = await mcp({ ...options, allowedOrigins: ["https://app.test"] })(
-          request("/mcp/admin", {
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: { name: "change", arguments: input },
-          }),
+          new Request(
+            "https://app.test/mcp/admin",
+            mcpInit("tools/call", { name: "change", arguments: input }, { headers: { origin: "https://app.test" } }),
+          ),
           {},
         );
         const text = await mcpResponse.text();

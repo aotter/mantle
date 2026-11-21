@@ -16,6 +16,7 @@ export {
   toolTitle,
   viewAnnotations,
   procedureAnnotations,
+  procedureOutputSchema,
   assertSiteDefaultsCanonical,
   canonicalizeLocaleList,
   expandPolicyRequired,

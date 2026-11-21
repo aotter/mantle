@@ -23,7 +23,7 @@
     "@better-auth/oauth-provider": "1.7.16",
     "@better-auth/utils": "0.5.1",
     "@modelcontextprotocol/ext-apps": "2.0.0",
-    "@modelcontextprotocol/server": "2.3.1",
+    "@modelcontextprotocol/server": "2.4.0",
     "better-auth": "1.7.16",
     "@aotter/mantle-admin": "0.2.2-alpha.7",
     "react": "19.3.0",

@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 import { writeGenerated } from "./apps/link.js";
 import { fixtureCaller } from "./apps/fixtures.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const schema = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -140,16 +141,18 @@ for (const target of ["bun-sqlite", "bun-postgres"] as const)
           expect((await collect(get, 2)).rows).toEqual(expected);
           const call = async (paging: { limit: number; cursor?: string }) => {
             const response = await rpc(
-              new Request("https://app.test/mcp", {
-                method: "POST",
-                headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-                body: JSON.stringify({
-                  jsonrpc: "2.0",
-                  id: 1,
-                  method: "tools/call",
-                  params: { name: "latest", arguments: paging },
-                }),
-              }),
+              new Request(
+                "https://app.test/mcp",
+                mcpInit(
+                  {
+                    jsonrpc: "2.0",
+                    id: 1,
+                    method: "tools/call",
+                    params: { name: "latest", arguments: paging },
+                  },
+                  { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+                ),
+              ),
               {},
             );
             expect(response!.status).toBe(200);

@@ -8,6 +8,7 @@ import { mcp, type Tool } from "../src/kernel/mcp.js";
 import { nativeRest, rest, type Route } from "../src/kernel/rest.js";
 import { web, type View } from "../src/kernel/web.js";
 import { fixtureCaller } from "./apps/fixtures.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const caller: Caller = fixtureCaller({
   kind: "user",
@@ -56,11 +57,13 @@ test("rest, nativeRest, mcp and web send no access-control-* header", async () =
     run: async () => ({}),
   };
   const tools = mcp([tool], { db: () => null, caller: () => caller });
-  const call = new Request("https://app.test/mcp", {
-    method: "POST",
-    headers: { ...cross, "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "work", arguments: {} } }),
-  });
+  const call = new Request(
+    "https://app.test/mcp",
+    mcpInit(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "work", arguments: {} } },
+      { headers: { ...cross, "content-type": "application/json", accept: "application/json, text/event-stream" } },
+    ),
+  );
   for (const request of [call, new Request("https://app.test/mcp", { method: "OPTIONS", headers: preflight })])
     expect(cors(await tools(request, {}))).toEqual([]);
 

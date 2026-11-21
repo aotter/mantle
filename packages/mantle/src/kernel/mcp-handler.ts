@@ -23,8 +23,9 @@ type Surface = "public" | "admin";
 type AppLinks = ReturnType<typeof linkSurface>;
 type ReadCatalogue = readonly { readonly name: string; readonly surface: string }[];
 const BODY_LIMIT = 1024 * 1024;
+const PROTOCOL_VERSION_META_KEY = "io.modelcontextprotocol/protocolVersion";
 /** Methods that only read the catalogue: they suit cached cookie authority. */
-const CATALOGUE_METHODS = ["initialize", "tools/list", "resources/list", "resources/read"];
+const CATALOGUE_METHODS = ["server/discover", "tools/list", "resources/list", "resources/read"];
 /** Methods whose answer names tools, so it is filtered to what the caller may call. */
 const LISTING_METHODS = ["tools/list", "resources/read"];
 const anonymous = () => ({ kind: "anonymous" }) as const;
@@ -99,7 +100,7 @@ export function handler<Env, Database, Handlers>(
       const body = bodyReader(request, pipeline.gateway);
       const cookieOnly = request.headers.has("cookie") && !request.headers.has("authorization");
       if (cookieOnly || pipeline.gateway) await body.read();
-      const readOnly = request.method === "POST" && readsOnly(body.messages, reads, surface);
+      const readOnly = request.method === "POST" && readsOnly(body.parsed, reads, surface);
 
       // Caller: resolve it, then apply the endpoint's own rules.
       let caller: Caller;
@@ -136,7 +137,7 @@ export function handler<Env, Database, Handlers>(
         return Response.json({ jsonrpc: "2.0", id: null, error }, { status: 413 });
       }
 
-      // A host forwards one message per request, and its target is admitted before anything else is decided.
+      // A host forwards one request, and its target is admitted before anything else is decided.
       if (pipeline.host) {
         try {
           await admitHostMessage(pipeline, caller, body.parsed, selected);
@@ -145,10 +146,10 @@ export function handler<Env, Database, Handlers>(
         }
       }
 
-      // Credentials: every call in a batch is checked before any call runs.
-      const called = calledTools(body.messages, selected);
-      for (const tool of called) {
-        const refusal = credentialRefusal(caller, tool, requiredScopes, pipeline.host);
+      // Credentials: the called tool's rules, before it runs. 2026-07-28 has no batches: the SDK refuses one.
+      const called = calledTool(body.parsed, selected);
+      if (called) {
+        const refusal = credentialRefusal(caller, called, requiredScopes, pipeline.host);
         if (refusal) return challenge(refusal.error, refusal.scope, refusal.bare);
       }
       // A service credential sees only the tools it may call, in every discovery mode.
@@ -159,10 +160,8 @@ export function handler<Env, Database, Handlers>(
       // Application authorization: each called tool, then the tools a list or an App's HTML may name.
       if (options.authorize) {
         try {
-          for (const tool of called) await pipeline.guard(callOf(tool));
-          const lists = body.messages.some(
-            message => isRecord(message) && LISTING_METHODS.includes(message.method as string),
-          );
+          if (called) await pipeline.guard(callOf(called));
+          const lists = isRecord(body.parsed) && LISTING_METHODS.includes(body.parsed.method as string);
           // an App's HTML is rendered for the same tools the caller's tools/list shows
           if (options.discovery !== "all" && lists) {
             const visible = [];
@@ -266,10 +265,6 @@ function bodyReader(request: Request, gateway: boolean) {
     get tooLarge() {
       return tooLarge;
     },
-    /** The body's messages: a batch, or the one message. */
-    get messages(): readonly unknown[] {
-      return Array.isArray(parsed) ? parsed : [parsed];
-    },
     async read(): Promise<void> {
       if (done || request.method !== "POST") return;
       done = true;
@@ -278,18 +273,13 @@ function bodyReader(request: Request, gateway: boolean) {
   };
 }
 
-/** The read-only hint for the caller resolver: every message only lists, or calls a tool of the read catalogue. */
-function readsOnly(messages: readonly unknown[], reads: ReadCatalogue, surface: Surface): boolean {
-  return (
-    messages.length > 0 &&
-    messages.every(message => {
-      if (!isRecord(message) || message.jsonrpc !== "2.0" || typeof message.method !== "string") return false;
-      if (CATALOGUE_METHODS.includes(message.method)) return true;
-      if (message.method !== "tools/call") return false;
-      const name = isRecord(message.params) ? message.params.name : undefined;
-      return reads.some(tool => tool.surface === surface && tool.name === name);
-    })
-  );
+/** The read-only hint for the caller resolver: the message only lists, or calls a tool of the read catalogue. */
+function readsOnly(message: unknown, reads: ReadCatalogue, surface: Surface): boolean {
+  if (!isRecord(message) || message.jsonrpc !== "2.0" || typeof message.method !== "string") return false;
+  if (CATALOGUE_METHODS.includes(message.method)) return true;
+  if (message.method !== "tools/call") return false;
+  const name = isRecord(message.params) ? message.params.name : undefined;
+  return reads.some(tool => tool.surface === surface && tool.name === name);
 }
 
 /** The tool a single message names, looked up before the caller is known. */
@@ -374,7 +364,14 @@ function credentialRefusal(
   return undefined;
 }
 
-/** A host forwards one message per request: `initialize`, pinned to a mounted tool, or one `tools/call`. */
+/**
+ * A host's authority is the one target its gateway pinned, so it forwards one request that names nothing else: one
+ * `tools/call`, or `server/discover` (the server's identity and capabilities, no tool), pinned to a mounted tool. A
+ * catalogue read (`tools/list`, `resources/*`) would show tools and App HTML beyond the pin, so it is refused, as is
+ * a notification or a batch. A message without the 2026-07-28 `_meta` envelope (a 2025-era `initialize` or call) names
+ * no revision Core serves: the SDK refuses it with JSON-RPC -32022 before any tool is registered, so the host learns
+ * which revision to send.
+ */
 async function admitHostMessage<Database, Handlers>(
   pipeline: Pipeline,
   caller: Caller,
@@ -384,28 +381,28 @@ async function admitHostMessage<Database, Handlers>(
   if (Array.isArray(message))
     throw new ContractError("INPUT_VALIDATION_FAILED", "Host calls cannot batch MCP messages.", "mcp");
   const method = isRecord(message) ? message.method : undefined;
-  if (typeof method === "string" && !["initialize", "tools/call"].includes(method))
-    throw new ContractError("AUTH_DENIED", "Host callers may only initialize or call a tool.", "mcp", { status: 403 });
-  if (method === "initialize") {
+  const params = isRecord(message) && isRecord(message.params) ? message.params : undefined;
+  if (!isRecord(params?._meta) || typeof params._meta[PROTOCOL_VERSION_META_KEY] !== "string") return;
+  if (typeof method === "string" && !["server/discover", "tools/call"].includes(method))
+    throw new ContractError("AUTH_DENIED", "Host callers may only discover the server or call a tool.", "mcp", {
+      status: 403,
+    });
+  if (method === "server/discover") {
     const pinned = "target" in caller ? caller.target : undefined;
     if (pinned && !selected.some(tool => targetId(tool) === pinned))
-      throw new ContractError("TARGET_MISMATCH", "Initialize must pin a mounted tool.", pinned, { status: 412 });
+      throw new ContractError("TARGET_MISMATCH", "server/discover must pin a mounted tool.", pinned, { status: 412 });
     await pipeline.admit({ id: pinned ?? "mcp", view: true });
     return;
   }
-  const params = isRecord(message) && isRecord(message.params) ? message.params : undefined;
   const tool = selected.find(candidate => candidate.name === params?.name);
   if (tool) await pipeline.admit(callOf(tool));
 }
 
-/** The mounted tool each `tools/call` message names; a name the catalogue lacks is the SDK's to refuse. */
-function calledTools<T extends { readonly name: string }>(messages: readonly unknown[], selected: readonly T[]): T[] {
-  return messages.flatMap(message => {
-    const call = message as { method?: unknown; params?: { name?: unknown } | null } | null | undefined;
-    if (!call || call.method !== "tools/call") return [];
-    const tool = selected.find(candidate => candidate.name === call.params?.name);
-    return tool ? [tool] : [];
-  });
+/** The mounted tool a `tools/call` names; a name the catalogue lacks is the SDK's to refuse. */
+function calledTool<T extends { readonly name: string }>(message: unknown, selected: readonly T[]): T | undefined {
+  if (!isRecord(message) || message.method !== "tools/call") return undefined;
+  const name = isRecord(message.params) ? message.params.name : undefined;
+  return selected.find(candidate => candidate.name === name);
 }
 
 /** Resolve the endpoint's App sources for this request and link them to its tools; static links are cached per surface. */

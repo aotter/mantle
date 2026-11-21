@@ -11,19 +11,29 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+/** The one MCP protocol revision Mantle serves. */
+export const MCP_REVISION = "2026-07-28";
+/** Client capabilities of an MCP Apps host: App resources, `_meta.ui` and App-only tools are listed to it. */
+export const APPS_CAPABILITIES = { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } };
+/**
+ * One MCP request in revision 2026-07-28, as `fetch` options: the `_meta` envelope in the body, and the headers the
+ * transport checks against it. `capabilities` are the client capabilities declared (MCP Apps support, say).
+ */
+export function mcpRequest(method, params = {}, { id = 1, capabilities = {}, headers = {} } = {}) {
+  const message = { jsonrpc: "2.0", id, method, params: { ...params, _meta: { "io.modelcontextprotocol/protocolVersion": MCP_REVISION, "io.modelcontextprotocol/clientInfo": { name: "mantle-smoke", version: "1" }, "io.modelcontextprotocol/clientCapabilities": capabilities, ...params._meta } } };
+  const name = method === "tools/call" ? params.name : method === "resources/read" ? params.uri : undefined;
+  return { method: "POST", headers: { ...headers, "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": MCP_REVISION, "mcp-method": method, ...(name === undefined ? {} : { "mcp-name": name }) }, body: JSON.stringify(message) };
+}
+
 /** Read-only remote acceptance. Pass generated tools filtered for this surface and the supplied test identity. */
-export async function assertMcpDiscovery(endpoint, { tools, headers = {} }) {
+export async function assertMcpDiscovery(endpoint, { tools, headers = {}, capabilities = APPS_CAPABILITIES }) {
   const expected = tools.map(tool => tool.name).sort();
   assert.equal(new Set(expected).size, expected.length, "expected tools contain duplicate names");
-  const requestHeaders = new Headers(headers);
-  requestHeaders.set("content-type", "application/json");
-  requestHeaders.set("accept", "application/json, text/event-stream");
   let id = 0;
-  const rpc = async (method, params, notification = false) => {
-    const message = { jsonrpc: "2.0", ...(notification ? {} : { id: ++id }), method, ...(params === undefined ? {} : { params }) };
-    const response = await fetch(endpoint, { method: "POST", headers: requestHeaders, redirect: "error", signal: AbortSignal.timeout(10_000), body: JSON.stringify(message) });
-    assert.equal(response.status, notification ? 202 : 200, `MCP ${method}: HTTP ${response.status}`);
-    if (notification) { await response.body?.cancel(); return; }
+  const rpc = async (method, params) => {
+    const request = mcpRequest(method, params, { id: ++id, capabilities, headers }), sent = id;
+    const response = await fetch(endpoint, { ...request, redirect: "error", signal: AbortSignal.timeout(10_000) });
+    assert.equal(response.status, 200, `MCP ${method}: HTTP ${response.status}`);
     const text = await response.text(), type = response.headers.get("content-type") ?? "";
     let replies;
     if (type.includes("text/event-stream")) {
@@ -32,22 +42,19 @@ export async function assertMcpDiscovery(endpoint, { tools, headers = {} }) {
       assert.ok(type.includes("application/json"), `MCP ${method}: expected JSON or SSE`);
       replies = [JSON.parse(text)];
     }
-    const matches = replies.filter(reply => reply?.id === message.id);
+    const matches = replies.filter(reply => reply?.id === sent);
     assert.equal(matches.length, 1, `MCP ${method}: expected one response with the request id`);
     const reply = matches[0];
     assert.equal(reply.jsonrpc, "2.0", `MCP ${method}: invalid JSON-RPC version`);
     assert.ok(!Object.hasOwn(reply, "error"), `MCP ${method}: returned a JSON-RPC error`);
     assert.ok(reply.result && typeof reply.result === "object" && !Array.isArray(reply.result), `MCP ${method}: missing result object`);
-    const session = response.headers.get("mcp-session-id");
-    if (session) requestHeaders.set("mcp-session-id", session);
     return reply.result;
   };
-  const initialized = await rpc("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "mantle-smoke", version: "1" } });
-  assert.equal(initialized.protocolVersion, "2025-11-25", "MCP initialize: unsupported protocol version");
-  assert.ok(initialized.capabilities?.tools && typeof initialized.capabilities.tools === "object" && !Array.isArray(initialized.capabilities.tools), "MCP initialize: no tools capability");
-  assert.ok(typeof initialized.serverInfo?.name === "string" && typeof initialized.serverInfo?.version === "string", "MCP initialize: invalid serverInfo");
-  requestHeaders.set("mcp-protocol-version", initialized.protocolVersion);
-  await rpc("notifications/initialized", undefined, true);
+  const discovered = await rpc("server/discover");
+  assert.ok(discovered.supportedVersions?.includes(MCP_REVISION), "MCP server/discover: revision 2026-07-28 not supported");
+  assert.ok(discovered.capabilities?.tools && typeof discovered.capabilities.tools === "object" && !Array.isArray(discovered.capabilities.tools), "MCP server/discover: no tools capability");
+  const serverInfo = discovered._meta?.["io.modelcontextprotocol/serverInfo"];
+  assert.ok(typeof serverInfo?.name === "string" && typeof serverInfo?.version === "string", "MCP server/discover: invalid serverInfo");
   const names = [], cursors = new Set();
   let cursor;
   do {
@@ -113,8 +120,7 @@ export async function startApp({ vars = {}, port = 18000 + Math.floor(Math.rando
   };
   /** MCP tools/list (no name) or tools/call on /mcp or /mcp/admin. */
   const mcp = async (path, cookie, name, args) => {
-    const response = await fetch(`${origin}${path}`, { method: "POST", headers: { "content-type": "application/json", origin, accept: "application/json, text/event-stream", ...(cookie ? { cookie } : {}) },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: name ? "tools/call" : "tools/list", params: name ? { name, arguments: args } : {} }) });
+    const response = await fetch(`${origin}${path}`, mcpRequest(name ? "tools/call" : "tools/list", name ? { name, arguments: args } : {}, { capabilities: APPS_CAPABILITIES, headers: { origin, ...(cookie ? { cookie } : {}) } }));
     if (!response.headers.has("cache-control")) unstated.push(`POST ${path} ${response.status}`);
     const text = await response.text(), data = text.split("\n").find(line => line.startsWith("data:"));
     return { status: response.status, body: data ? JSON.parse(data.slice(5)) : text ? JSON.parse(text) : null };

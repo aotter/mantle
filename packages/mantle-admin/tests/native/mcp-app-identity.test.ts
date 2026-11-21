@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { mcp, type McpApps, type Tool } from "@aotter/mantle/mcp";
 import { sdkFixtureCaller as fixtureCaller } from "../../../mantle/tests/apps/fixtures.js";
 import { adminMcpApps } from "../../src/server/mcp.js";
+import { mcpInit } from "../../test/mcp-wire.js";
 
 const catalogue = { views: { pending: { actions: [] }, other: { actions: [] } }, actions: {} };
 const caller = fixtureCaller({
@@ -34,14 +35,7 @@ const ui = {
 type Env = { ASSETS: { fetch(request: Request): Promise<Response> } };
 const env = (build: string): Env => ({ ASSETS: { fetch: async () => new Response(`<head></head><p>${build}</p>`) } });
 const rpc = async (api: ReturnType<typeof mcp<Env, null>>, env: Env, method: string, params: object = {}) => {
-  const response = await api(
-    new Request("https://app.test/mcp/admin", {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: ui } }),
-    }),
-    env,
-  );
+  const response = await api(new Request("https://app.test/mcp/admin", mcpInit(method, { ...params, _meta: ui })), env);
   const text = await response!.text();
   return {
     status: response!.status,

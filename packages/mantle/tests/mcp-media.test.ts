@@ -11,6 +11,7 @@ import { mediaError } from "../src/kernel/media.js";
 import { wire } from "../src/kernel/contracts.js";
 import { writeGenerated } from "./apps/link.js";
 import type { MediaStorage } from "../src/kernel/site-types.js";
+import { mcpInit } from "./mcp-wire.js";
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: entries}
@@ -118,17 +119,21 @@ for (const target of ["bun-sqlite", "bun-postgres"] as const)
           handler = handle,
         ) => {
           const response = await handler(
-            new Request("https://app.test" + path, {
-              method: "POST",
-              headers: {
-                cookie: "fixture=1",
-                origin: "https://app.test",
-                "content-type": "application/json",
-                accept: "application/json, text/event-stream",
-                ...(origin ? { origin } : {}),
-              },
-              body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-            }),
+            new Request(
+              "https://app.test" + path,
+              mcpInit(
+                { jsonrpc: "2.0", id: 1, method, params },
+                {
+                  headers: {
+                    cookie: "fixture=1",
+                    origin: "https://app.test",
+                    "content-type": "application/json",
+                    accept: "application/json, text/event-stream",
+                    ...(origin ? { origin } : {}),
+                  },
+                },
+              ),
+            ),
             {},
           );
           const text = await response.text();
@@ -468,27 +473,31 @@ test("generated media keeps one App catalogue but binds each concurrent request'
       path = "/mcp/admin",
     ) => {
       const response = await handle(
-        new Request("https://app.test" + path, {
-          method: "POST",
-          headers: {
-            origin: "https://app.test",
-            "content-type": "application/json",
-            accept: "application/json, text/event-stream",
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method,
-            params: {
-              ...params,
-              _meta: {
-                "io.modelcontextprotocol/clientCapabilities": {
-                  extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } },
+        new Request(
+          "https://app.test" + path,
+          mcpInit(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method,
+              params: {
+                ...params,
+                _meta: {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } },
+                  },
                 },
               },
             },
-          }),
-        }),
+            {
+              headers: {
+                origin: "https://app.test",
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+              },
+            },
+          ),
+        ),
         env,
       );
       const text = await response.text();
@@ -654,22 +663,27 @@ test("upload_media prepares, commits and fetches; find, update and delete_media;
       bare = mcp(options);
     const rpc = async (method: string, params: object, handler = handle) => {
       const response = await handler(
-        new Request("https://app.test/mcp/admin", {
-          method: "POST",
-          headers: {
-            origin: "https://app.test",
-            "content-type": "application/json",
-            accept: "application/json, text/event-stream",
-          },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        }),
+        new Request(
+          "https://app.test/mcp/admin",
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            {
+              headers: {
+                origin: "https://app.test",
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+              },
+            },
+          ),
+        ),
         {},
       );
       const text = await response.text();
       return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result;
     };
-    const call = (name: string, args: object, meta?: object) =>
-      rpc("tools/call", { name, arguments: args, ...(meta ? { _meta: meta } : {}) });
+    // Without `meta`, a client that declares no MCP Apps support.
+    const call = (name: string, args: object, meta: object = { "io.modelcontextprotocol/clientCapabilities": {} }) =>
+      rpc("tools/call", { name, arguments: args, _meta: meta });
     const code = (result: any) => {
       expect(result.isError).toBe(true);
       return JSON.parse(result.content[0].text).diagnostics[0].code;
@@ -726,7 +740,10 @@ test("upload_media prepares, commits and fetches; find, update and delete_media;
       (await rpc("tools/call", { name: "upload_media", arguments: args, _meta: ui }, bare)).structuredContent.targets,
     ).toHaveLength(1);
     const plain = await call("upload_media", args);
-    expect(plain._meta).toEqual({ "net.aotter.mantle/tool": "upload_media" });
+    expect(plain._meta).toEqual({
+      "io.modelcontextprotocol/serverInfo": expect.objectContaining({ name: "aotter.mantle" }),
+      "net.aotter.mantle/tool": "upload_media",
+    });
     expect(plain.structuredContent.targets).toEqual([
       {
         role: "primary",

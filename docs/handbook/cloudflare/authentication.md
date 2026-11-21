@@ -180,11 +180,11 @@ const caller = (request: Request, _env: Env, authority = { readOnly: false }) =>
 REST permits cached authority only on GET/HEAD Views; HEAD returns no body.
 Web permits it only on GET/HEAD page and index reads. For Cookie requests without
 an Authorization header, MCP classifies parsed
-`initialize`, `tools/list`, `resources/list`, `resources/read`, generated View
+`server/discover`, `tools/list`, `resources/list`, `resources/read`, generated View
 tools and generated native Admin media reads before resolving Caller. Generated
 metadata identifies Views versus Procedures; names and `readOnlyHint` annotations
-never make a Procedure eligible. A batch uses cached authority only if every
-message is a known read. Unknown/malformed methods or tools, mutations,
+never make a Procedure eligible. A batch, which MCP protocol revision 2026-07-28
+does not have, is refused with fresh authority. Unknown/malformed methods or tools, mutations,
 publishing transitions and Admin writes use fresh authority. Dynamic admin tool
 implementations still load only after the admin gate; their read catalogue is
 generated separately. App-composed tool tables default to fresh authority, including tools with a

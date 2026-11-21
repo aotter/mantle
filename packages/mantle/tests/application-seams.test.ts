@@ -19,6 +19,7 @@ import { d1Shim } from "./apps/d1-shim.js";
 import { SEAMS, STACKS, type Seam, type Stack } from "./application-seams.js";
 import { consumerProblems } from "./application-seams-guard.js";
 import pinned from "./application-seams.ids.json";
+import { mcpInit } from "./mcp-wire.js";
 
 const REGISTRY = "packages/mantle/tests/application-seams.ts";
 const root = resolve(import.meta.dir, "../../..");
@@ -205,11 +206,13 @@ const rpc = async (
   params: object = {},
 ) => {
   const response = await serve(
-    new Request("https://seam.example/mcp", {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: apps } }),
-    }),
+    new Request(
+      "https://seam.example/mcp",
+      mcpInit(
+        { jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: apps } },
+        { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+      ),
+    ),
     {},
   );
   const text = await response!.text();

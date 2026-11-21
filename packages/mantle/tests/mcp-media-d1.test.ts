@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 import { writeGenerated } from "./apps/link.js";
+import { mcpInit } from "./mcp-wire.js";
 
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -123,16 +124,20 @@ export default{async fetch(request,env){const url=new URL(request.url),key=url.p
         path = "/mcp/admin",
         headers: Record<string, string> = {},
       ) => {
-        const response = await fetch(origin + path, {
-          method: "POST",
-          headers: {
-            origin,
-            "content-type": "application/json",
-            accept: "application/json, text/event-stream",
-            ...headers,
-          },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        });
+        const response = await fetch(
+          origin + path,
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            {
+              headers: {
+                origin,
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                ...headers,
+              },
+            },
+          ),
+        );
         const body = await response.text();
         return {
           response,

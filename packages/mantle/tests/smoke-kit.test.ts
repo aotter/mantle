@@ -16,10 +16,10 @@ const result = (id: number, value: object) =>
   new Response(JSON.stringify({ jsonrpc: "2.0", id, result: value }), {
     headers: { "content-type": "application/json" },
   });
-const initialized = {
-  protocolVersion: "2025-11-25",
+const discovered = {
+  supportedVersions: ["2026-07-28"],
   capabilities: { tools: {} },
-  serverInfo: { name: "test", version: "1" },
+  _meta: { "io.modelcontextprotocol/serverInfo": { name: "test", version: "1" } },
 };
 function respond(reply: (body: any, init: any) => Response) {
   transport = spyOn(globalThis, "fetch").mockImplementation((async (_url: any, init: any) => {
@@ -29,35 +29,33 @@ function respond(reply: (body: any, init: any) => Response) {
   }) as typeof fetch);
 }
 
-test("discovery initializes, forwards the supplied identity/session/version, and reads every tools/list page without writes", async () => {
+test("discovery sends 2026-07-28 requests, forwards the supplied identity, and reads every tools/list page without writes", async () => {
   respond((body, init) => {
+    const headers = new Headers(init.headers);
     expect(init.redirect).toBe("error");
-    expect(new Headers(init.headers).get("authorization")).toBe("Bearer supplied-test-credential");
-    if (body.method === "initialize") {
-      const response = result(body.id, initialized);
-      response.headers.set("mcp-session-id", "session");
-      return response;
-    }
-    expect(new Headers(init.headers).get("mcp-session-id")).toBe("session");
-    expect(new Headers(init.headers).get("mcp-protocol-version")).toBe(initialized.protocolVersion);
-    if (body.method === "notifications/initialized") return new Response(null, { status: 202 });
+    expect(headers.get("authorization")).toBe("Bearer supplied-test-credential");
+    // Every request carries the 2026-07-28 envelope and the headers that state it.
+    expect(headers.get("mcp-protocol-version")).toBe("2026-07-28");
+    expect(headers.get("mcp-method")).toBe(body.method);
+    expect(body.params._meta["io.modelcontextprotocol/protocolVersion"]).toBe("2026-07-28");
+    expect(body.params._meta["io.modelcontextprotocol/clientCapabilities"]).toBeObject();
+    if (body.method === "server/discover") return result(body.id, discovered);
     expect(body.method).toBe("tools/list");
     return result(body.id, body.params.cursor ? { tools: [tools[1]] } : { tools: [tools[0]], nextCursor: "second" });
   });
   expect(
     await kit.assertMcpDiscovery(endpoint, { headers: { authorization: "Bearer supplied-test-credential" }, tools }),
   ).toEqual(tools.map(t => t.name).sort());
-  expect(requests.map(r => r.method)).toEqual(["initialize", "notifications/initialized", "tools/list", "tools/list"]);
+  expect(requests.map(r => r.method)).toEqual(["server/discover", "tools/list", "tools/list"]);
 });
 
 test("discovery supports an explicit permitted subset and SSE replies", async () => {
-  respond(body =>
-    body.method === "notifications/initialized"
-      ? new Response(null, { status: 202 })
-      : new Response(
-          `: keepalive\r\n\r\nevent: message\r\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: body.id, result: body.method === "initialize" ? initialized : { tools: [tools[0]] } })}\r\n\r\n`,
-          { headers: { "content-type": "text/event-stream" } },
-        ),
+  respond(
+    body =>
+      new Response(
+        `: keepalive\r\n\r\nevent: message\r\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: body.id, result: body.method === "server/discover" ? discovered : { tools: [tools[0]] } })}\r\n\r\n`,
+        { headers: { "content-type": "text/event-stream" } },
+      ),
   );
   expect(await kit.assertMcpDiscovery(endpoint, { tools: tools.slice(0, 1) })).toEqual(["read_inventory"]);
 });
@@ -81,9 +79,10 @@ for (const [name, reply] of [
         headers: { "content-type": "application/json" },
       }),
   ],
-  ["wrong id", (body: any) => result(body.id + 1, initialized)],
+  ["wrong id", (body: any) => result(body.id + 1, discovered)],
   ["invalid protocol", (body: any) => result(body.id, {})],
-  ["invalid tools capability", (body: any) => result(body.id, { ...initialized, capabilities: { tools: [] } })],
+  ["no 2026-07-28 support", (body: any) => result(body.id, { ...discovered, supportedVersions: ["2025-11-25"] })],
+  ["invalid tools capability", (body: any) => result(body.id, { ...discovered, capabilities: { tools: [] } })],
 ] as const) {
   test(`${name} fails even with HTTP 200`, async () => {
     respond(reply);
@@ -102,13 +101,7 @@ for (const [name, listed] of [
   ["cursor cycle", { tools: [], nextCursor: "again" }],
 ] as const) {
   test(`${name} fails discovery acceptance`, async () => {
-    respond(body =>
-      body.method === "initialize"
-        ? result(body.id, initialized)
-        : body.method === "notifications/initialized"
-          ? new Response(null, { status: 202 })
-          : result(body.id, listed),
-    );
+    respond(body => (body.method === "server/discover" ? result(body.id, discovered) : result(body.id, listed)));
     await expect(kit.assertMcpDiscovery(endpoint, { tools })).rejects.toThrow();
   });
 }
@@ -116,11 +109,9 @@ for (const [name, listed] of [
 test("a server generating endlessly new cursors is bounded", async () => {
   let pages = 0;
   respond(body =>
-    body.method === "initialize"
-      ? result(body.id, initialized)
-      : body.method === "notifications/initialized"
-        ? new Response(null, { status: 202 })
-        : result(body.id, { tools: [], nextCursor: String(++pages) }),
+    body.method === "server/discover"
+      ? result(body.id, discovered)
+      : result(body.id, { tools: [], nextCursor: String(++pages) }),
   );
   await expect(kit.assertMcpDiscovery(endpoint, { tools })).rejects.toThrow("exceeded 100 pages");
   expect(pages).toBe(100);
