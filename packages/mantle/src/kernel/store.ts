@@ -450,7 +450,7 @@ export function createStore<
           conds.push(`(${kc} ${up ? ">" : "<"} ${m} OR (${kc} = ${m} AND ${after}) OR ${kc} IS NULL)`);
         }
       }
-      // an ORDER BY column is NOT NULL (the generated type offers no other), so no NULL placement
+      // Nullable order keys use NULLS LAST, including when continuing from a NULL cursor value.
       const list = await rows(
         `${select()}${where(conds)} ORDER BY ${name === "id" ? "" : `${kc} ${way} NULLS LAST, `}${id} ${way} LIMIT ${limit + 1}`,
         values,
