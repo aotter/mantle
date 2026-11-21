@@ -3,7 +3,7 @@
  * Everything a Store does per statement before the executor runs it (ADR-0034 decisions 3 and 8).
  */
 import { PG_GRAMMAR, type SchemaColumns, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
-import { runtimeDiagnostic, DiagnosticError } from "../../spec/kernel/index.js";
+import { runtimeDiagnostic, DiagnosticError } from "../../spec/kernel/diagnostic.js";
 import type { MantleDialect, StorageSchema } from "../dialect.js";
 import { applyPolicy, type Compiled, type Mode, type PolicyOpts } from "./policy.js";
 import type { RelationPosition } from "./positions.js";
