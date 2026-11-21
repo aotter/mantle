@@ -162,7 +162,7 @@ What Core does with the field:
 
 Selected `rest`, `mcp`, `admin` and `web` boundaries accept `gateway: { tenant: "example" }`. Forward the execution context: `api(request, env, ctx)` from `fetch(request, env, ctx)`. Set gateway mode on every boundary of the application, including web output (`web.fetch(request, env, ctx)` and `web.head(request, env, ctx)`). Only `ctx.props.mantle` supplies identity; absent props are anonymous. Application cookies and bearer tokens are ignored, and the application's auth instance is never loaded. Present `props.mantle` prevents falling back to application credentials. `props.mantle` on an entry without gateway mode fails with `HOST_CONTRACT` (412); the string-returning `web.head` throws this contract error. `web.head(request, env, ctx, { row })` formats the row the application already read: it reads no View and makes no caller or gateway decision, so it does not refuse.
 
-The v1 props contain `v: 1`, the configured `tenant`, `layer` (`admin` or `member`), `user` (`id`, optional `role` and declared user fields), `authenticatedAs` (`snapshot` or `fresh`), `credential` (`session` or `oauth`) and `requestId`. `target` and `targetHash` are required for admin callers and optional for members. The boolean `dryRun` is an optional forwarding control. `hostCaller(props, { tenant, fields })` from `@aotter/mantle/host-caller` validates and brands this shape. Generated boundaries supply inferred field types; manually composed boundaries may pass `fields`. Tests call `hostCaller(props, { tenant, fields })` with the same JSON.
+The v1 props contain `v: 1`, the configured `tenant`, `layer` (`admin` or `member`), `user` (`id`, optional `role` and declared user fields), `authenticatedAs` (`snapshot` or `fresh`), `credential` (`session` or `oauth`) and `requestId`. `target` and `targetHash` are required for admin callers and optional for members. Any other top-level key is refused with 412 `HOST_CONTRACT` naming the key (message `Unknown key '<key>'.` and `field`). `hostCaller(props, { tenant, fields })` from `@aotter/mantle/host-caller` validates and brands this shape. Generated boundaries supply inferred field types; manually composed boundaries may pass `fields`. Tests call `hostCaller(props, { tenant, fields })` with the same JSON.
 
 Admin-layer callers have kind `host`, subject `host:<id>` and the admin layer. Member-layer callers have kind `user`, subject `<id>` and no admin privilege, regardless of role names. Both retain ordinary scope checks and expose freshness, credential and request id to application code. Admin-layer callers see drafts; member management refuses host-built callers with 403 because gateway-mode applications load no Better Auth instance. Copies lose identity authority.
 
@@ -220,15 +220,23 @@ call whose host request ends before the tool settles records `outcome: "error"` 
 its access event at that moment, also on Workers; a tool that ignores the signal and finishes later does not change
 it.
 
-`dryRun: true` runs target/hash checks, input validation, generated caller checks, `authorize` and freshness, without SQL or side effects. It returns 200 `{ dryRun: true, event }`; MCP carries this result in the SDK tool response. Ref handlers, custom guards, uploads and opaque work return 412 `DRY_RUN_UNSUPPORTED`. Dry runs validate authority and input; they do not verify database state, row existence or OCC conflicts.
-
 Each boundary accepts `onAccess(event)`. Every forwarded request, including malformed contracts and denied requests in either layer, produces one event after its decision. Responses never await the hook; listener failures are swallowed and logged once per listener. Ordinary applications do not invoke it. The event is:
 
 ```ts
 { v: 1, requestId, target, targetHash,
   caller: { kind, subject, layer },
-  outcome: "allow" | "deny" | "error", reason?, field?,
-  dryRun }
+  outcome: "allow" | "deny" | "error", reason?, field? }
 ```
 
-`reason` is the error code. A successful dry run returns the same event the hook receives.
+`reason` is the error code. The event carried `dryRun` before #2101; it no longer does.
+
+### Previewing access without a request
+
+v1 has no dry run. `dryRun` was removed from the props by an amendment to ADR-0046 (#2101) without a `v` bump, since no
+host sent it: a host that still sends it, `true` or `false`, gets 412 `HOST_CONTRACT` with `field: "dryRun"`, and
+props without it are answered as before. A host that previews access ("who gains or loses which targets") computes the
+preview from the plan before anything is called: [`mantle describe`](describe.md) (`describeApp(plan)`) lists every
+target with its `targetHash`, surfaces, `readOnly` flag, scope and `restrict` terms, and the diff between two plans
+marks what widened. A host that needs "would this one call be allowed" for a concrete call files an
+Extension point request ([what Core does, and what it does not](../concepts/core-boundary.md)): it is the first consumer, and its
+need decides the design.

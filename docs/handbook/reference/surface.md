@@ -427,7 +427,7 @@ a tool whose `outputSchema` root is not an object, or also admits `null` or anot
 `{ result }`). The tool version is the same in both eras. Core owns the first
 three, `structuredContent`, `isError` and the error envelope; the application's
 blocks are checked by the installed SDK, and one it refuses fails the call as
-`INTERNAL_ERROR`. A failure, a thrown error and a dry run carry Core's blocks only.
+`INTERNAL_ERROR`. A failure and a thrown error carry Core's blocks only.
 
 **Procedure output:** SQL Procedures retain the native `{ results }`
 contract rather than 0.2's authored output projection/validation; MCP advertises
