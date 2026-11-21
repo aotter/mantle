@@ -167,6 +167,15 @@ such request): it checks `server/discover`, forwards supplied identity/session h
 and compares exact names without calling business tools. JSON/SSE protocol failures, missing routes,
 unexpected/missing tools and repeated/excessive pagination fail; it never obtains credentials or mounts routes.
 
+An app made by `mantle init` before Mantle served only MCP revision 2026-07-28 owns copies of `smoke-kit.mjs` and
+`accept.mjs` that speak the 2025 form (an `initialize` handshake, requests without the `_meta` envelope). After the
+upgrade their MCP calls are refused with HTTP 400 and JSON-RPC `-32022`: `assertMcpDiscovery` fails on `initialize`,
+the kit's `mcp()` helper returns that 400, and `node accept.mjs mcp` stops at its first request. Replace both files
+with this shell's (`accept.mjs` imports `mcpRequest` from `smoke-kit.mjs`), or, in a kit you changed, copy
+`MCP_REVISION`, `APPS_CAPABILITIES`, `mcpRequest` and `assertMcpDiscovery` from this `smoke-kit.mjs`, send the kit's
+`mcp()` helper's request through `mcpRequest`, and replace `client()` in `accept.mjs`. Requests your own `smoke.mjs`
+builds by hand go through `mcpRequest(method, params, { capabilities, headers })` the same way.
+
 This local cookie test does not prove OAuth Bearer or an external client's connection. Test those separately
 with supplied credentials and record their results as layer 4 of the layered report. For each declared interface,
 the existing handoff/README/test report must say verified (command, identity and result), intentionally not exposed,

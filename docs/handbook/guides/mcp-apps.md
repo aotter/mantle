@@ -90,9 +90,11 @@ deep. Use it for keys such as `ui.visibility`, `ui.resourceUri` with
 link (another `ui.resourceUri` than the `renders` resource, or a visibility other
 than `["app"]` on an `appOnly` tool) fails when `mcp()` is constructed.
 `meta: { ui: { visibility: ["app"] } }` hides any tool, a Procedure included,
-from clients that declare no MCP Apps support, as `appOnly` does for Views. It
-is a listing hint only: `tools/call` still runs every identity, scope, `check`
-and `authorize` decision, so an App-only write is authorized like any other.
+from the `tools/list` of clients that declare no MCP Apps support, as `appOnly`
+does for Views. It is a listing hint only: a `tools/call` that names the tool
+runs it whatever the request declares (an App's own call that a host forwards,
+say), after every identity, scope, `check` and `authorize` decision, so an
+App-only write is authorized like any other.
 It is not an access boundary either: any client holding the same credential can
 call an App-only tool directly. An action that needs the person present is
 enforced on the server, for example by a Procedure that accepts only a
@@ -164,12 +166,18 @@ the application keeps alive with `ctx.waitUntil` when it aborts: such work other
 runs to its end after the client has gone. A call that completes normally never
 sees an abort.
 
-A cancelled call's completion observation is `outcome: "failed"` with
-`code: "REQUEST_CANCELLED"`, emitted in the abort event itself, so a Worker
-records it too; it is not logged as an unhandled failure. In gateway mode the
-access event, `outcome: "error"` with that reason, is recorded when the call
-ends, which on Workers it does not after a disconnect. A `ContractError` the tool
-throws keeps its own code.
+A call whose client goes away before the tool settles is recorded as cancelled
+in the abort event itself, so a Worker records it too: its completion
+observation is `outcome: "failed"` with `code: "REQUEST_CANCELLED"` and a
+`durationMs` that runs to the disconnect, and in gateway mode its access event
+is `outcome: "error"` with that reason. Neither is logged as an unhandled
+failure, and each invocation still has exactly one completion. Both records keep
+that first outcome: the result is not delivered, so a tool that ignores the
+signal and goes on to finish (on Bun, which keeps running it) is still recorded
+as cancelled, although its writes may have been committed. Stop at the signal
+before a write the client should be able to rely on. A request the client left
+before the call started runs no step of it (the SDK answers 499): no invocation
+is observed, and its access event records the cancellation.
 
 ```ts
 import type { Tool } from '@aotter/mantle/mcp';
@@ -565,9 +573,11 @@ Clients advertise `io.modelcontextprotocol/ui` and MIME type
 `text/html;profile=mcp-app` on every request, in
 `params._meta["io.modelcontextprotocol/clientCapabilities"]` (MCP protocol revision
 2026-07-28 requires that envelope on every request). A request whose capabilities do
-not declare UI support receives no UI resources, UI tool metadata or App-only tools.
-Other tools retain their existing validation, authorization, caller, origin and
-database behavior.
+not declare UI support receives no UI resources or UI tool metadata, and its
+`tools/list` shows no App-only tool. A `tools/call` that names an App-only tool runs
+it whatever the request declares, so a host that forwards an App's own calls need
+not declare the extension for them; the result then carries no UI metadata. Every
+tool retains its validation, authorization, caller, origin and database behavior.
 
 ## The Admin App in a host
 

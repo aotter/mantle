@@ -52,7 +52,8 @@ const overwrites = (node: unknown): boolean =>
 /**
  * The output schema a Procedure's tool advertises. A ref handler returns any JSON value, so its authored schema is advertised
  * whatever root `type` it declares (SEP-2106: `structuredContent` is any JSON value). A root without `type` (`$ref`,
- * `anyOf`), which the SDK would list with a `type` it adds, and a SQL handler's non-object schema are not.
+ * `anyOf`), to which the SDK adds `type: "object"` when it can prove it object-shaped, and a SQL handler's non-object
+ * schema are not.
  */
 export function procedureOutputSchema(p: PlanProcedure): JsonSchema | undefined {
   return p.output.type === "object" || ("ref" in p.handler && p.output.type !== undefined) ? p.output : undefined;

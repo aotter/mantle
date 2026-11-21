@@ -15,7 +15,7 @@ import type {
 } from "@modelcontextprotocol/server";
 import type { McpContentBlock, ToolCall } from "../src/kernel/mcp.js";
 import { mcpClient } from "./mcp-client.js";
-import { mcpInit } from "./mcp-wire.js";
+import { legacyInitialize, mcpInit } from "./mcp-wire.js";
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: items}
@@ -1106,14 +1106,35 @@ test("An anonymous closed surface challenges from server/discover; an open tool 
     mcp([tool("a", true), tool("b", true)], { db: () => ({}), caller: () => caller, authorize: () => true });
   const challenged = await post(allClosed({ kind: "anonymous" }), "server/discover");
   expect(challenged!.status).toBe(401);
-  expect(challenged!.headers.get("www-authenticate")).toMatch(/^Bearer .*scope="mcp"/);
+  // The RFC 9728 challenge: the surface's scope floor and its protected-resource metadata.
+  expect(challenged!.headers.get("www-authenticate")).toBe(
+    'Bearer scope="mcp", resource_metadata="https://app.test/.well-known/oauth-protected-resource/mcp"',
+  );
   expect((await post(allClosed(user("person")), "server/discover"))!.status).toBe(200);
+  const get = (handle: any) => handle(new Request("https://app.test/mcp"), {});
+  const legacy = (handle: any) =>
+    handle(
+      new Request("https://app.test/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify(legacyInitialize),
+      }),
+      {},
+    );
+  // The caller rules answer before the SDK: an anonymous GET or 2025-era `initialize` on a closed surface is challenged;
+  // a signed-in one gets the SDK's 405 or -32022.
+  expect((await get(allClosed({ kind: "anonymous" })))!.status).toBe(401);
+  expect((await get(allClosed(user("person"))))!.status).toBe(405);
+  expect((await legacy(allClosed({ kind: "anonymous" })))!.status).toBe(401);
+  const refused = (await legacy(allClosed(user("person"))))!;
+  expect([refused.status, ((await refused.json()) as any).error.code]).toEqual([400, -32022]);
   const mixed = mcp([tool("open"), tool("closed", true)], {
     db: () => ({}),
     caller: () => ({ kind: "anonymous" }),
     authorize: () => true,
   });
   expect((await post(mixed, "server/discover"))!.status).toBe(200);
+  expect((await get(mixed))!.status).toBe(405);
   const listed = await post(mixed, "tools/list");
   expect(listed!.status).toBe(200);
   expect(((await listed!.text()).match(/"name":"(\w+)"/g) ?? []).join()).toBe('"name":"open"');
@@ -1654,7 +1675,7 @@ test("ToolCall.signal aborts only while the call runs; a cancel is observed, not
   }
 });
 
-test("gateway: a call cancelled mid-run keeps its own access event", async () => {
+test("gateway: a call cancelled before it settles is recorded as cancelled once, in the access event and the observation alike", async () => {
   const { mcp } = await import("../src/kernel/mcp.js");
   const { mantleProps, pinned } = await import("./gateway-fixture.js");
   let started = () => {};
@@ -1671,10 +1692,14 @@ test("gateway: a call cancelled mid-run keeps its own access event", async () =>
     validate: (raw: any) => raw,
     run: (_db: unknown, _caller: unknown, _input: unknown, _handlers: unknown, call: ToolCall) => run(call),
   });
+  const ran: string[] = [];
+  let recordedBeforeResume: boolean | undefined;
   const tools = [
-    // Finishes its work although the client went away.
+    // Ignores the signal and finishes its work although the client went away (a runtime that keeps running it).
     tool("finish", async call => {
       await untilAborted(call);
+      recordedBeforeResume = events.length === 1;
+      ran.push("finish");
       return { ok: true };
     }),
     tool("stop", async call => {
@@ -1682,26 +1707,28 @@ test("gateway: a call cancelled mid-run keeps its own access event", async () =>
       call.signal!.throwIfAborted();
       return {};
     }),
+    tool("never", async () => {
+      ran.push("never");
+      return {};
+    }),
   ];
   const targets = Object.fromEntries(
     tools.map(({ name }) => [`admin:tool:${name}`, { targetHash: `${name}-hash`, opaque: false }]),
   );
   const events: { target: string; outcome: string; reason?: string }[] = [];
-  let recorded = () => {};
+  const completions: unknown[][] = [];
   const handle = mcp(tools as never, {
     db: () => ({}),
     gateway: { tenant: "example" },
     accessTargets: async () => targets,
-    onAccess: event => {
-      events.push(event);
-      recorded();
+    onAccess: event => void events.push(event),
+    onObservation: event => {
+      if (event.kind === "invocation")
+        completions.push(event.phase === "completion" ? [event.tool, event.outcome, event.code] : [event.tool]);
     },
   });
-  for (const name of ["finish", "stop"]) {
-    const cancel = new AbortController(),
-      running = new Promise<void>(resolve => (started = resolve)),
-      event = new Promise<void>(resolve => (recorded = resolve));
-    const response = handle(
+  const forward = async (name: string, cancel: AbortController) =>
+    handle(
       new Request(
         "https://app.test/mcp/admin",
         mcpInit(
@@ -1715,13 +1742,37 @@ test("gateway: a call cancelled mid-run keeps its own access event", async () =>
       {},
       { props: { mantle: await pinned(mantleProps({}), targets, `admin:tool:${name}`) } },
     );
+  const settle = () => new Promise(resolve => setTimeout(resolve, 20));
+  for (const name of ["finish", "stop"]) {
+    const cancel = new AbortController(),
+      running = new Promise<void>(resolve => (started = resolve));
+    const response = forward(name, cancel);
     await running;
     cancel.abort("stop");
     await response.then(answer => answer?.text()).catch(() => {});
-    await event;
+    await settle();
   }
+  // Recorded in the abort event, before the tool resumed: what a Worker, which runs nothing after the disconnect, records.
+  expect(recordedBeforeResume).toBe(true);
+  // `finish` completed its work, yet both records say the call was cancelled: its result was not delivered.
+  expect(ran).toEqual(["finish"]);
+  // A request the client left before it was served: the SDK answers 499 and runs no step of the call.
+  const gone = new AbortController();
+  gone.abort("gone");
+  expect((await forward("never", gone))!.status).toBe(499);
+  await settle();
+  expect(ran).toEqual(["finish"]);
+  const cancelled = (name: string) => [`admin:tool:${name}`, "error", "REQUEST_CANCELLED"];
   expect(events.map(e => [e.target, e.outcome, e.reason])).toEqual([
-    ["admin:tool:finish", "allow", undefined],
-    ["admin:tool:stop", "error", "REQUEST_CANCELLED"],
+    cancelled("finish"),
+    cancelled("stop"),
+    cancelled("never"),
+  ]);
+  // One completion per invocation, never a second when the tool settles later; no invocation for the call never run.
+  expect(completions).toEqual([
+    ["finish"],
+    ["finish", "failed", "REQUEST_CANCELLED"],
+    ["stop"],
+    ["stop", "failed", "REQUEST_CANCELLED"],
   ]);
 });

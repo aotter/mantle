@@ -235,7 +235,7 @@ test("request-bound tool tables revalidate a same-named View changing into a Pro
   expect(invoked).toBe(0);
 });
 
-test("clients that declare no MCP Apps support see no App resources or App-only tools", async () => {
+test("clients that declare no MCP Apps support list no App resources or App-only tools; a call that names one runs", async () => {
   const api = handle({
     public: { resources: [{ ...resource("ui://my-app/rows", ["public_rows"]), appOnly: ["public_details"] }] },
   });
@@ -247,12 +247,69 @@ test("clients that declare no MCP Apps support see no App resources or App-only 
     const listed = (await call(api, "tools/list", {}, "public", ui)).result.tools;
     expect(listed.map((t: any) => t.name)).toEqual(["public_rows"]);
     expect(listed[0]._meta).toBeUndefined();
-    expect(
-      (await call(api, "tools/call", { name: "public_details", arguments: {} }, "public", ui)).error,
-    ).toBeDefined();
+    // Visibility hides the tool from the list only; a call that names it runs, without App metadata.
+    const called = await call(api, "tools/call", { name: "public_details", arguments: {} }, "public", ui);
+    expect(called.error).toBeUndefined();
+    expect(called.result.isError).toBeUndefined();
+    expect(called.result.structuredContent).toEqual({ rows: [{ id: "one" }] });
+    expect(called.result._meta?.["net.aotter.mantle/tool"]).toBeUndefined();
   }
   const listed = (await call(api, "tools/list")).result.tools;
   expect(listed[1]._meta.ui).toEqual({ resourceUri: "ui://my-app/rows", visibility: ["app"] });
+});
+
+test("a host forwarding an App's call of an App-only tool with no declared capabilities runs it, authorized as any call", async () => {
+  const { mantleProps, pinned } = await import("./gateway-fixture.js");
+  const write: Tool<null> = {
+    name: "public_write",
+    surface: "public",
+    description: "write",
+    meta: { ui: { visibility: ["app"] } },
+    inputSchema: { type: "object" },
+    validate: raw => raw as Record<string, unknown>,
+    run: async () => ({ written: true }),
+  };
+  const targets = Object.fromEntries(
+    [...tools, write].map(({ name }) => [`admin:tool:${name}`, { targetHash: `${name}-hash`, opaque: false }]),
+  );
+  let allowed = true;
+  const api = mcp<unknown, null>([...tools, write], {
+    db: () => null,
+    gateway: { tenant: "example" },
+    accessTargets: async () => targets,
+    authorize: () => allowed,
+    apps: {
+      public: { resources: [{ ...resource("ui://my-app/rows", ["public_rows"]), appOnly: ["public_details"] }] },
+    },
+  });
+  // The documented forwarding example: `clientCapabilities: {}`.
+  const forward = async (name: string) => {
+    const response = await api(
+      new Request(
+        "https://app.test/mcp",
+        mcpInit({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name, arguments: {}, _meta: { "io.modelcontextprotocol/clientCapabilities": {} } },
+        }),
+      ),
+      {},
+      { props: { mantle: await pinned(mantleProps({}), targets, `admin:tool:${name}`) } },
+    );
+    return { status: response!.status, body: JSON.parse(await response!.text()) };
+  };
+  expect(await forward("public_write")).toMatchObject({
+    status: 200,
+    body: { result: { structuredContent: { written: true } } },
+  });
+  expect(await forward("public_details")).toMatchObject({
+    status: 200,
+    body: { result: { structuredContent: { rows: [{ id: "one" }] } } },
+  });
+  // Its own authorization still decides.
+  allowed = false;
+  expect(await forward("public_write")).toMatchObject({ status: 403, body: { error: { code: "AUTH_DENIED" } } });
 });
 
 for (const [name, resources, fragment] of [

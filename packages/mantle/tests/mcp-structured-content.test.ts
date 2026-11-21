@@ -32,8 +32,15 @@ const conforming = [
   tool("maybe", () => null, { type: "string", nullable: true }),
   tool("either", () => null, { type: ["string", "null"] }),
   tool("record", () => ({ id: "r1" }), { type: "object", properties: { id: { type: "string" } }, required: ["id"] }),
-  // No schema: the value is still structured content.
+  // A root without `type` the SDK cannot prove object-shaped is listed as authored, so the root guard admits any value.
+  tool("mixed", () => ["a"], { anyOf: [{ type: "array" }, { type: "object" }] }),
+  tool("referenced", () => ["a"], {
+    $ref: "#/$defs/list",
+    $defs: { list: { type: "array", items: { type: "string" } } },
+  }),
+  // No schema: the value is still structured content, `null` included.
   tool("loose", () => [1, 2]),
+  tool("blank", () => null),
 ];
 
 test("every tool lists its outputSchema whatever its root, and sends its data as structuredContent the client validates", async () => {
@@ -65,6 +72,8 @@ test("a success the listed schema's root does not admit fails before it is recor
     tool("wrong", () => "3", { type: "integer" }),
     tool("fraction", () => 1.5, { type: "integer" }),
     tool("unexpected", () => null, { type: "string" }),
+    // A typeless root the SDK proves object-shaped is listed with `type: "object"`, which an array does not fit.
+    tool("objectish", () => [1], { anyOf: [{ type: "object" }, { properties: {} }] }),
     // Without a schema, nothing is required: a tool returning nothing answers JSON text alone.
     tool("silent", () => undefined),
     tool(
@@ -91,8 +100,12 @@ test("a success the listed schema's root does not admit fails before it is recor
   console.error = () => {};
   try {
     const client = await mcpClient(handle);
-    await client.listTools();
-    for (const name of ["missing", "unshaped", "wrong", "fraction", "unexpected"]) {
+    const listed = (await client.listTools()).tools;
+    expect(listed.find(t => t.name === "objectish")!.outputSchema).toEqual({
+      type: "object",
+      anyOf: [{ type: "object" }, { properties: {} }],
+    });
+    for (const name of ["missing", "unshaped", "wrong", "fraction", "unexpected", "objectish"]) {
       const result = await client.callTool({ name, arguments: {} });
       expect([name, result.isError]).toEqual([name, true]);
       expect(JSON.parse((result.content as { text: string }[])[0]!.text).diagnostics[0].code).toBe("INTERNAL_ERROR");
@@ -118,6 +131,7 @@ test("a success the listed schema's root does not admit fails before it is recor
     ["wrong", "failed", "INTERNAL_ERROR"],
     ["fraction", "failed", "INTERNAL_ERROR"],
     ["unexpected", "failed", "INTERNAL_ERROR"],
+    ["objectish", "failed", "INTERNAL_ERROR"],
     ["silent", "succeeded", undefined],
     ["broken", "failed", "INTERNAL_ERROR"],
     ["thrown", "failed", "INTERNAL_ERROR"],

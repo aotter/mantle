@@ -161,7 +161,8 @@ value Runtime accepts. Ineligible outputs advertise none. Views advertise none.
 - **Protocol failure** (malformed request, unknown method, unsupported
   version) stays a JSON-RPC error owned by the SDK.
 - **Authentication:** an anonymous call to a tool whose capability
-  `requiresIdentity` (including any member of a 2025-era batch) is answered
+  `requiresIdentity` (including any member of a 2025-era batch, *superseded by
+  the #2100 amendment below: no batch is served*) is answered
   before the SDK with HTTP 401 and a `WWW-Authenticate` challenge built by the
   SDK helper. The SDK's own
   `scopeChallenge` covers scopes only; identity stays outside it.
@@ -250,28 +251,49 @@ value Runtime accepts. Ineligible outputs advertise none. Views advertise none.
 >   JSON value but `undefined`, as `structuredContent` beside the JSON text
 >   block. A ref Procedure advertises its authored output schema whenever its
 >   root declares a `type`; a typeless root (`$ref`, `anyOf`) still lists none,
->   because the SDK lists such a root with a `type` it adds and the listed
->   definition would no longer hash to the tool's version. SQL Procedures keep
+>   because the SDK adds `type: "object"` to such a root when it can prove it
+>   object-shaped, and the listed definition would then no longer hash to the
+>   tool's version. A hand-written tool's typeless root is listed as the SDK
+>   lists it, and the root check reads that listed schema: a root left without
+>   `type` admits any value. SQL Procedures keep
 >   `{ results }`; Views keep sending `{ rows, nextCursor? }` without a schema.
 >   A success whose data the listed schema's root `type` (with `nullable`) does
 >   not admit, `undefined` included, fails as `INTERNAL_ERROR` before it is
->   recorded; this is a root check, not validation. A failure omits
->   `structuredContent` when a schema is listed.
+>   recorded; this is a root check, not validation. A dry run answers its
+>   decision (`{ dryRun, event }`) as `structuredContent` whatever that root, as
+>   it does for an object schema. A failure omits `structuredContent` when a
+>   schema is listed.
 > - Cancellation on Workers (measured on deployed Workers, 2026-11-20). From
 >   compatibility date 2026-11-17, or with `enable_request_signal`, a client
 >   closing the request aborts `ToolCall.signal` when Cloudflare sees the
 >   disconnect, for JSON and SSE results; on an earlier date without the flag
 >   only an SSE result (a call that sent progress) aborts it. The invocation
->   ends at the disconnect, so only synchronous abort listeners run: Core emits
->   the `REQUEST_CANCELLED` completion observation in the abort event itself.
->   The gateway access event of such a call is still recorded when the call
->   ends, which a Worker does not reach. Work kept alive with `waitUntil` runs
->   on unless it checks the signal. `mantle generate` picks the newest date the
+>   ends at the disconnect, so only synchronous abort listeners run: when the
+>   client goes away before the tool settles, Core records the cancellation in
+>   the abort event itself, as the `REQUEST_CANCELLED` completion observation
+>   and, in gateway mode, the access event (`outcome: "error"`). Both keep that
+>   first outcome and an invocation has one completion, so a tool that ignores
+>   the signal and finishes where the runtime keeps running it (Bun) is still
+>   recorded as cancelled: its result was not delivered, though its writes may
+>   have been committed. A request the client left before the SDK ran it is
+>   answered 499 by the SDK and recorded as cancelled, with no invocation. Work
+>   kept alive with `waitUntil` runs on unless it checks the signal. `mantle generate` picks the newest date the
 >   installed workerd supports, which can precede 2026-11-17; the flag is
 >   documented, not added to generated configuration.
 > - Observation: an `invocation` event carries `client`, the `clientInfo` name
 >   and version the request's `_meta` declares; `request-refused` gains status
->   400 with reason `protocol-version`.
+>   400 with reason `protocol-version`. The SDK's other refusals of what the
+>   client sent (a batch, an invalid envelope, headers that contradict the
+>   body, 405, 415) are neither observed nor logged as server failures; a 5xx
+>   is logged.
+> - App-only tools (`ui.visibility` without `"model"`, or `appOnly`): a request
+>   that declares no MCP Apps support does not list them, and a `tools/call`
+>   that names one runs it whatever the request declares, after the tool's own
+>   authorization. Under the 2025-era "unknown" state any client that omitted
+>   capabilities could call them, and one that declared capabilities without
+>   the extension could not; visibility was never an access boundary (section
+>   11), so the call no longer depends on that declaration, and a host that
+>   forwards an App's call with `clientCapabilities: {}` reaches the tool.
 > - MCP Apps: the Admin App reads any JSON value. The official App bridge
 >   (ext-apps 2.0.4, also 2.1.0) still validates the result of an App's own
 >   `callServerTool` with the 2025-era shape, so an App cannot yet receive a
@@ -408,12 +430,15 @@ skills describe:
 - Negotiation uses `getUiCapability`, per request. A 2026-07-28 request, or a
   2025-era `initialize`, that declares no MCP Apps support gets no `_meta.ui`,
   no resources and no app-only tools; everything else is unchanged.
+  *(Superseded by the #2100 amendment in section 4: there is no 2025-era
+  `initialize`, and such a request lists no app-only tool but may call one.)*
 - A stateless 2025-era request after `initialize` carries no client
   capabilities. It is treated as possibly supporting MCP Apps: it gets the App
   metadata and the app-only tools, so hosts with MCP Apps can call them on
   every request. Hosts without MCP Apps ignore the metadata but may list the
   app-only tools to the model. This is why app-only tools must be declared
-  read-only.
+  read-only. *(Superseded by the #2100 amendment in section 4: no 2025-era
+  request is served, so there is no "unknown" support state.)*
 - Each surface is its own `McpServer`; staff resources never appear on public.
 - Resources hold reusable assets only: no caller data, no bearer. Per-call data
   travels in `structuredContent`. Every app tool keeps its text `content`.

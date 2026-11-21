@@ -129,8 +129,9 @@ export interface Tool<Database, Handlers = never> {
   // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
   /**
    * Merged into this tool's `_meta` in `tools/list` (top level shallow, `ui` one level deep) with what its App links produce;
-   * a contradicting value fails at `mcp(...)`. `ui.visibility: ["app"]` hides the tool from clients without MCP Apps.
-   * It is a listing hint and grants or removes no execution authority.
+   * a contradicting value fails at `mcp(...)`. `ui.visibility: ["app"]` hides the tool from the `tools/list` of
+   * clients without MCP Apps; a `tools/call` that names it still runs it. It is a listing hint and grants or removes no
+   * execution authority.
    */
   readonly meta?: Readonly<Record<string, unknown>>;
 }
@@ -157,7 +158,9 @@ export interface ToolCall {
    * Workers abort it from compatibility date 2026-11-17, or with the `enable_request_signal` flag, and before that only
    * while the call streams its result (a call that sent progress). On Workers the invocation ends at the disconnect, so
    * nothing after the tool's next `await` runs: pass the signal to `fetch()` and other cancellable APIs, and stop work
-   * kept alive with `waitUntil` when it aborts. Set on every MCP call; `callTool` passes the one it is given.
+   * kept alive with `waitUntil` when it aborts. The call is recorded as cancelled (`REQUEST_CANCELLED`) when the signal
+   * aborts, and its result is not delivered; a tool that ignores the signal may still complete its writes afterwards,
+   * where the runtime keeps running it. Set on every MCP call; `callTool` passes the one it is given.
    */
   readonly signal?: AbortSignal;
   /**

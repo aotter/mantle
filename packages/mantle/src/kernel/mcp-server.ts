@@ -82,7 +82,9 @@ const listedInput = (tool: Pick<Tool<never>, "page" | "inputSchema">, locale: st
 /**
  * Answer the request with a per-request SDK server over the caller's tools. Only protocol revision 2026-07-28 is served:
  * the SDK answers a 2025-era request (an `initialize`, or a message without the `_meta` envelope) with HTTP 400 and
- * JSON-RPC -32022 naming the supported revision. That refusal is the client's, so it is observed, not logged.
+ * JSON-RPC -32022 naming the supported revision, which is observed. Every transport refusal the SDK answers with a 4xx
+ * (that one, a batch, an invalid envelope, headers that contradict the body, 405, 415) is the client's, so what
+ * the SDK reported for it is not logged; a 5xx or an error during a served exchange is.
  */
 export async function serveTools<Env, Database, Handlers>(
   sdk: Sdk,
@@ -112,10 +114,13 @@ export async function serveTools<Env, Database, Handlers>(
       status: 400,
       reason: "protocol-version",
     });
-  else pending.forEach(log);
+  if (response.status < 400 || response.status >= 500) pending.forEach(log);
   return response;
 }
 const log = (error: unknown) => console.error("[mantle mcp] request failed", error);
+/** The client went away before the request was answered (status 499, as nginx records it). */
+const cancelled = (cause?: unknown) =>
+  new ContractError("REQUEST_CANCELLED", "The client cancelled the request.", "mcp", { status: 499, cause });
 
 function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Database, Handlers>): McpServer {
   const { options, pipeline, message, links, version } = serving;
@@ -131,15 +136,18 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
   });
   server.server.registerCapabilities({ tools: { listChanged: false } });
   // A request the transport refuses never reaches a tool: the access event says so. A call that started records its own
-  // outcome, also when the client goes away before it ends; `server/discover` names no tool and succeeds.
+  // outcome, also when the client goes away before it ends; `server/discover` names no tool and succeeds. A request the
+  // client left before it was served (the SDK answers 499 and runs nothing) is recorded as cancelled.
   const discover = isRecord(message) && message.method === "server/discover";
   let calling = false;
   server.server.onclose = () => {
     if (!calling)
       pipeline.finish(
-        discover
-          ? undefined
-          : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", { status: 400 }),
+        serving.request.signal.aborted
+          ? cancelled()
+          : discover
+            ? undefined
+            : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", { status: 400 }),
       );
   };
 
@@ -161,11 +169,18 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
       },
     });
   const locale = options.locale ?? "en";
+  // App-only visibility hides a tool from the list a client without MCP Apps shows its model. A `tools/call` that names
+  // one (an App's own call a host forwards, or any client) runs it like any other tool: visibility grants no authority
+  // and withholds none.
+  const calls = isRecord(message) && message.method === "tools/call";
   for (const { tool, call } of serving.tools) {
-    const linked = linkedMeta?.(tool.name),
+    // `false`: an `appOnly` View of a request without MCP Apps
+    const link = linkedMeta?.(tool.name),
+      linked = link || undefined,
       own = tool.meta,
       visibility = (own?.ui as { visibility?: unknown } | undefined)?.visibility;
-    if (linked === false || (!appsEnabled && Array.isArray(visibility) && !visibility.includes("model"))) continue;
+    if (!calls && (link === false || (!appsEnabled && Array.isArray(visibility) && !visibility.includes("model"))))
+      continue;
     const meta = linked && own ? { ...linked, ...own, ui: { ...linked.ui, ...(own.ui as object) } } : (linked ?? own);
     registered.add(tool.name);
     // an App renders this result only when the client declared support and a resource renders this tool
@@ -323,7 +338,8 @@ async function invoke<Env, Database, Handlers>(
   if (observed) observe(options.onObservation, { ...observed, phase: "attempt", at: Date.now() });
   let outcome: "succeeded" | "failed" | "denied" = "succeeded",
     code: string | undefined,
-    completed = false;
+    completed = false,
+    settled = false;
   /** The completion observation, once. */
   const complete = () => {
     if (!observed || completed) return;
@@ -338,17 +354,23 @@ async function invoke<Env, Database, Handlers>(
       ...(code ? { code } : {}),
     });
   };
-  // A client that goes away ends the call: observed synchronously in the abort event, since Workers ends the
-  // invocation at the disconnect and runs nothing after the tool's next `await`.
+  // A client that goes away before the call settles cancels it: the completion observation and the access event record
+  // that in the abort event itself, since Workers ends the invocation at the disconnect and runs nothing after the
+  // tool's next `await`. Both keep their first outcome, so a tool that ignores the signal and finishes on a runtime that
+  // keeps running changes neither: its result is not delivered, though its writes may be made.
   const follow = () => {
-    cancel.abort(mcpReq.signal.reason);
+    if (settled) return;
     outcome = "failed";
     code = "REQUEST_CANCELLED";
+    pipeline.finish(cancelled());
     complete();
+    cancel.abort(mcpReq.signal.reason);
   };
   if (mcpReq.signal.aborted) follow();
   else mcpReq.signal.addEventListener("abort", follow);
   try {
+    // A request already aborted when its call starts runs no step of it.
+    cancel.signal.throwIfAborted();
     // Frozen by the host contract (v1): a forwarded caller's guard answers before the Origin rule on MCP. Every other
     // caller, and REST for every caller, passes the Origin rule first.
     if (pipeline.host) pipeline.check(call);
@@ -372,6 +394,7 @@ async function invoke<Env, Database, Handlers>(
       return output.data;
     };
     const data = await fitPage(tool, raw, await run(raw), run);
+    settled = true;
     // Checked before the call is recorded: the SDK would otherwise answer a protocol error after a recorded success.
     if (blocks && !isResult({ content: blocks })) {
       const list: readonly unknown[] = Array.isArray(blocks) ? blocks : [],
@@ -384,8 +407,8 @@ async function invoke<Env, Database, Handlers>(
     }
     // structuredContent is any JSON value (SEP-2106). A listed outputSchema requires one of its root type on success:
     // data that does not fit fails here, before it is recorded, instead of reaching the client as a result its schema
-    // refuses.
-    if (listed && !rootAllows(listed, data))
+    // refuses. A dry run answers the decision (`{ dryRun, event }`) instead of the tool's output, whatever its schema.
+    if (listed && !pipeline.dryRun && !rootAllows(listed, data))
       throw new Error(
         `MCP tool ${tool.name} returned ${data === undefined ? "no value" : JSON.stringify(data === null ? "null" : Array.isArray(data) ? "array" : typeof data)}, which the root of its listed outputSchema (type ${JSON.stringify(listed.type)}) does not allow.`,
       );
@@ -407,14 +430,9 @@ async function invoke<Env, Database, Handlers>(
       ...(data === undefined ? {} : { structuredContent: data as Record<string, unknown> }),
     };
   } catch (thrown) {
+    settled = true;
     // A client that went away is not the tool's failure: its own code, which is not logged as an unhandled failure.
-    const error =
-      cancel.signal.aborted && !(thrown instanceof ContractError)
-        ? new ContractError("REQUEST_CANCELLED", "The client cancelled the request.", "mcp", {
-            status: 499,
-            cause: thrown,
-          })
-        : thrown;
+    const error = cancel.signal.aborted && !(thrown instanceof ContractError) ? cancelled(thrown) : thrown;
     pipeline.finish(error);
     const diagnostic = await pipeline.diagnostic(error, `mcp ${tool.name}`);
     code = diagnostic.code;

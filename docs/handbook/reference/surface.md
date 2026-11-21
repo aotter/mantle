@@ -386,8 +386,13 @@ A `request-refused` event carries its `status` and `reason`: `credential`, or
 session Origin rule, or status 400 and reason `protocol-version` for a request in a
 protocol revision other than 2026-07-28 (a 2025-era client), which is not logged as a failure. An
 `invocation` event carries `client`, the `clientInfo` `{ name, version }` the request's `_meta`
-declares, when it declares one. A call whose client goes away is observed as
-`code: "REQUEST_CANCELLED"` in the abort event itself, so a Worker records it too. The callback
+declares, when it declares one. Each invocation has one `attempt` and one
+`completion`. A call whose client goes away before the tool settles is observed as
+`code: "REQUEST_CANCELLED"` in the abort event itself, so a Worker records it too; a tool that
+ignores the signal and finishes later does not change it (see
+[Progress and cancellation](../guides/mcp-apps.md#progress-and-cancellation)). Other refusals the
+client causes (a batch, an invalid `_meta` envelope, headers that contradict the body, 405, 415) are
+neither observed nor logged as failures. The callback
 receives no request headers, bodies or tokens;
 delivery failures never change the business response and promises are not
 awaited. The application owns callback delivery.

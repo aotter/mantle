@@ -4198,6 +4198,53 @@
       true
     ]
   },
+  "mcp dry run array output": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "dryRun": true,
+            "event": {
+              "v": 1,
+              "requestId": "request-1",
+              "target": "procedure:peek_list",
+              "targetHash": "hash of procedure:peek_list",
+              "caller": {
+                "kind": "host",
+                "subject": "host:person",
+                "layer": "admin"
+              },
+              "outcome": "allow",
+              "dryRun": true
+            }
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:peek_list",
+        "targetHash": "hash of procedure:peek_list",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": true
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
   "describe targets": [
     {
       "name": "admin_DELETE__admin_invitations__id",

@@ -595,6 +595,40 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       );
     }
 
+    // A dry run answers the decision whatever the root of the tool's listed outputSchema: an array here.
+    const LIST = "procedure:peek_list";
+    const listMcp = kernelMcp(
+      [
+        {
+          name: "peek_list",
+          surface: "public",
+          target: { kind: "procedure", name: "peek_list" },
+          description: "peek_list",
+          inputSchema: { type: "object" },
+          outputSchema: { type: "array", items: { type: "string" } },
+          validate: raw => raw as Record<string, unknown>,
+          run: async () => {
+            ran++;
+            return ["a"];
+          },
+        },
+      ] as Tool<Database>[],
+      {
+        ...shared,
+        accessTargets: async () => ({ [LIST]: { targetHash: `hash of ${LIST}`, opaque: false } }),
+        db: getDb,
+      },
+    );
+    await record("mcp dry run array output", async () =>
+      http(
+        await listMcp(
+          bare("/mcp", rpcInit(callMessage("peek_list"))),
+          {},
+          { props: { mantle: base({ target: LIST, targetHash: `hash of ${LIST}`, dryRun: true }) } },
+        ),
+      ),
+    );
+
     // Store writes under a snapshot caller.
     for (const layer of ["member", "admin"] as const) {
       const caller = hostCaller(base({ layer, authenticatedAs: "snapshot" }), { tenant: "example", fields });
@@ -693,6 +727,15 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     ])
       expect([name, answers[name]!.status, codeOf(name)]).toEqual([name, 200, undefined]);
     expect(ran).toBe(2);
+    // 4a. A dry run answers its decision as structured content, also for a tool whose listed outputSchema is an array.
+    for (const name of ["mcp dry run write", "mcp dry run array output"])
+      expect([name, answers[name]]).toMatchObject([
+        name,
+        {
+          status: 200,
+          body: { result: { isError: false, structuredContent: { dryRun: true, event: { outcome: "allow" } } } },
+        },
+      ]);
     // 5. One unbatched tools/call per request in protocol revision 2026-07-28, without server/discover; a batch or any
     // other method is refused, and so is a 2025-era request (JSON-RPC -32022, naming the supported revision).
     for (const name of [

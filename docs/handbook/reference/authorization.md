@@ -93,7 +93,13 @@ Mcp-Name: approve_request
 ```
 
 `ctx.props.mantle` is unchanged. A result is answered as JSON, or as an SSE stream once the call sends progress;
-it carries `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`.
+it carries `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`. A `tools/call` of an App-only
+tool (`_meta.ui.visibility` without `"model"`), such as an MCP App's own call the host forwards, runs with the
+`clientCapabilities: {}` above: visibility hides a tool only from `tools/list`, and the tool's own authorization
+decides the call. Declare the `io.modelcontextprotocol/ui` extension when the result should carry App metadata. A
+call whose host request ends before the tool settles records `outcome: "error"` with reason `REQUEST_CANCELLED` in
+its access event at that moment, also on Workers; a tool that ignores the signal and finishes later does not change
+it.
 
 `dryRun: true` runs target/hash checks, input validation, generated caller checks, `authorize` and freshness, without SQL or side effects. It returns 200 `{ dryRun: true, event }`; MCP carries this result in the SDK tool response. Ref handlers, custom guards, uploads and opaque work return 412 `DRY_RUN_UNSUPPORTED`. Dry runs validate authority and input; they do not verify database state, row existence or OCC conflicts.
 

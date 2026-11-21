@@ -921,6 +921,9 @@ Boundaries that stay:
 
 ## 2026-10-02 amendment — a surface with no anonymous tool challenges at connect
 
+> **Restated by the 2026-11-21 amendment** for MCP 2026-07-28: the connect step is `server/discover`, and there is no
+> SSE `GET`.
+
 The 2026-09-21 amendment kept anonymous `initialize` and `tools/list` open on the public surface and moved the `401` to
 the first `tools/call` that needs identity. MCP clients do not all follow that: several decide whether to run OAuth from
 the connect step alone (an anonymous `initialize` that succeeds means "no sign-in"), so a surface whose every tool needs
@@ -994,3 +997,18 @@ without a new assertion); letting `resolveCredential` return an `oauth` Caller
 application); and validating ID-JAG in Core (rejected by the 2026-09-22
 amendment, not reopened). Assertion validation, trusted-issuer storage, admin
 settings and account matching remain adopter code.
+
+## 2026-11-21 amendment — the connect step under MCP 2026-07-28
+
+Issue #2100 (ADR-0029's "protocol revision 2026-07-28 only" amendment). Core no longer serves a 2025-era `initialize`
+or the SSE `GET`: the 2026-10-02 rule's connect step is now `server/discover`, and its "anonymous `initialize` that
+succeeds means no sign-in" reads as an anonymous `server/discover` that succeeds.
+
+- On a closed surface every anonymous request (`server/discover`, `tools/list`, `tools/call`) answers `401` with the
+  RFC 9728 `WWW-Authenticate` challenge (the surface's scope floor and `resource_metadata`), as `initialize` did
+  before.
+- On an open surface an anonymous `server/discover` answers `200`; the first `tools/call` that needs identity answers
+  `401`, as the 2026-09-21 amendment describes.
+- There is no SSE `GET`: the MCP SDK answers `GET` and `DELETE` with `405` and `Allow: POST`. The caller rules still
+  run first, so on a closed surface an anonymous `GET`, like an anonymous 2025-era `initialize`, gets the `401`
+  challenge; once signed in, the `GET` gets `405` and the `initialize` HTTP `400` with JSON-RPC `-32022`.
