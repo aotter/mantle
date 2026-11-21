@@ -34,6 +34,67 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ## 0.2.2 — in preparation
 
+### Upgrading to 0.2.2-alpha.8
+
+Pin the Mantle packages to `0.2.2-alpha.8`, install `@modelcontextprotocol/server` `2.4.0` beside them if you serve
+MCP, and regenerate.
+
+- **Breaking, security fix: responses that stated no `Cache-Control` now state `private, no-store` (#2103).** Before:
+  Better Auth answers passed through `authRoutes` and MCP refusals carried no `Cache-Control`, so a shared cache in
+  front of the Worker could store them. After: they carry `private, no-store`; no replacement for the old behaviour.
+  Upgrade; an advisory will follow separately. New app shells also default every response without the header to
+  `private, no-store`; a shell copied before this release does not, so add the wrapper from
+  [The shell's default](../guides/caching.md#the-shells-default).
+- **Breaking: official MCP SDK peer (#2114, #2121).** Before: `@modelcontextprotocol/server` `2.3.1`. After: `2.4.0`
+  (exact). Both protocol eras are still served: 2025-era clients, hosts that forward the 2025 form and existing
+  `smoke-kit.mjs` / `accept.mjs` copies keep working.
+- **Breaking: MCP results, calls and observations (#2114, #2121).** Each item is before → after; none has a replacement
+  to switch to.
+  - A non-object tool result on a 2026-07-28 request → sent as `structuredContent`, with the tool's `outputSchema` listed
+    whatever its root `type`. 2025-era requests are unchanged. An App called through ext-apps 2.0.4 still rejects
+    non-object `structuredContent`: give App-called tools an object output.
+  - A data value the listed `outputSchema` root does not admit → the call fails as `INTERNAL_ERROR` before it is
+    recorded.
+  - `tools/call` of an App-only tool from a client that declared capabilities without MCP Apps (refused) → runs after
+    the tool's own authorization; `tools/list` still hides it.
+  - A cancelled call → recorded once as `REQUEST_CANCELLED` (499) in the completion observation and the gateway access
+    event; a request already aborted runs no step.
+  - `McpObservation` `request-refused` → adds status `400` with reason `protocol-version`, and `invocation` adds optional
+    `client` and `protocolVersion`: an exhaustive `switch` adds the new case.
+  - A 2025-era batch of more than 100 messages → refused with 400 before any `authorize` call.
+- **Breaking: Admin's `Brand` renders before sign-in (#2117).** Before: `components.Brand` rendered only at the top of
+  the console sidebar. After: it also renders on sign-in, OAuth consent, connected apps, access denied, error and the
+  loading frame, told where by `BrandProps.placement`; return `null` for a placement to keep that page unbranded. A
+  `BrandProps` value the application builds itself (`renderDefault({ title, href })`) now needs `placement`: spread the
+  props received (`renderDefault({ ...props, title })`). A lower slot layer now receives the props passed to
+  `renderDefault` over the slot's own props. Core's consent pages take `authRoutes({ brand })`.
+- **Breaking: a Store write naming one column in two spellings is refused (#2123).** Before: `{ title, Title }` was
+  accepted on SQLite and D1, which stored one of the values. After: `INPUT_VALIDATION_FAILED`; no replacement, pass each
+  column once. A declared spelling (`orgId`) now reaches its storage column on all four targets.
+- **Breaking: a flat `restrict` naming one column twice in different case is refused (#2118).** Before:
+  `org IN auth.user('a') AND ORG IN auth.user('b')` generated. After: generation refuses it as a duplicate; no
+  replacement, name the column once. `restrict` now accepts `OR` and parentheses between its terms.
+- **Breaking: a result wrapper outside MCP answers its data (#2098).** Before: a tool or handler returning
+  `withResultMeta(...)` answered `{ data, _meta }` on Admin's WebMCP route, a REST route and an Admin operation. After:
+  those answer the data alone (WebMCP also forwards `content`); no replacement, `_meta` is for MCP Apps only.
+- **Breaking: `ResultWith` / `ResultWithMeta` carry a type brand (#2104).** Before: a hand-written `{ data, _meta }`
+  literal typechecked as `ResultWithMeta<T>`. After: it does not; use `withResult(data, { _meta })`. `withResultMeta`
+  still works.
+- MCP results carry native content blocks through `withResult(data, { content, _meta })`, from a hand-written tool or a
+  ref Procedure handler; `ToolCall` gains `signal` and `progress` (#2098, #2104). `mantle bundle` writes content-hashed
+  browser entries mapped by `@aotter/mantle/client-assets`, a one-day `immutable` rule for them and for
+  `/admin/assets/*` (shorten your own one-year rule), and React's production build (#2093, #2098, #2103, #2112).
+  `mantle generate` always emits `generated/mcp.ts`, so `generate --check` reports it until you regenerate (#2112).
+- `web()` emits `hreflang` only for a single locale, names the Markdown alternate only when the row has Markdown, and
+  sends a canonical `Link` on `.md` answers (#2093, #2115 in #2117). Composed text in View rows is typed `string`
+  (#2093). `@aotter/mantle-ui` exports `theme.css`; kit Tabs match Radix's data attributes (#2093, #2103).
+  `mantle generate --auth` resolves a `.ts` module's `./x.js` imports under Node (#2117). OAuth discovery makes no
+  database round trip (#2103). The handbook adds Core's boundary, application-owned migrations and scheduling (#2120,
+  #2122).
+- Not verified: request cancellation on a deployed Worker in the 2025 era and the cancelled access event after a
+  disconnect, third-party MCP clients beyond the official SDK, Hyperdrive pooling, and `_headers` on a dispatched user
+  Worker. App-only tools stay listed to a 2025-era client that declared no Apps support, as in alpha.7.
+
 ### Upgrading to 0.2.2-alpha.7
 
 Pin the Mantle packages to `0.2.2-alpha.7` and regenerate.
