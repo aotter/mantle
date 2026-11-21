@@ -137,8 +137,8 @@ their declared paths. Give visitor pages their own prefix (`/{locale}/…`, `/re
 - Recommended: a short answer block, one question heading and a one-sentence answer from the row's data, so an answer
   engine has a sentence it can quote.
 - A Markdown alternate at `<url>.md`, linked with `<link rel="alternate" type="text/markdown">`. `web()` serves it
-  from the page View at little cost; coding agents and tools that ask for Markdown use it, but nothing found reads it
-  for indexing (above).
+  from the page View at little cost, with `Link: <url>; rel="canonical"` naming the HTML page on `PUBLIC_ORIGIN`;
+  coding agents and tools that ask for Markdown use it, but nothing found reads it for indexing (above).
 
 ## More than one language
 
@@ -182,7 +182,7 @@ Request each page with plain `fetch`, which runs no JavaScript, as the recipes e
 1. HTML content type and the content in the body: the recipes smoke finds the `<h1>`, every ingredient and every step,
    in order. `<title>`, description, canonical on `PUBLIC_ORIGIN`, Open Graph; on detail pages JSON-LD that parses
    with the visible name, and the answer block.
-2. Each `.md` alternate returns `text/markdown` with the current text.
+2. Each `.md` alternate returns `text/markdown` with the current text and a `Link` header naming its canonical page.
 3. `llms.txt` and the sitemap list every published item in every language (with `lastmod`), and list Views carry no
    body. Below the generated `web()` caps (5,000 rows for `llms.txt`, 50,000 for the sitemap), walking the list View's
    complete cursor chain gives the same rows. `/robots.txt` names the sitemap.

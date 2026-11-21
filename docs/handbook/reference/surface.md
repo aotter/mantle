@@ -216,6 +216,10 @@ GET/HEAD responses include content-derived SHA-256 ETags. Anonymous responses us
 `cacheControl` or `public, max-age=60`; authenticated responses use
 `private, no-store`. `If-None-Match` returns 304 only after current content is read.
 Canonical URLs use the configured origin, independently of the request host.
+A `.md` answer (200, 304 and HEAD alike, anonymous or signed in) names its HTML page with
+`Link: <url>; rel="canonical"`, the URL of the canonical head tag for the same row (a template's literal
+characters outside RFC 3986 percent-encoded); a locale's `.md` names that locale's page. `llms.txt` and
+`sitemap.xml` carry no `Link`.
 Head tags add an hreflang alternate only when exactly one locale is configured; with
 several, the page is one translation and its per-language hreflang alternates are
 the application's. Importing another generated entry does not import web output.

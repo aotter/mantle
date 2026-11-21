@@ -111,11 +111,15 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   assert.ok(md.body.includes("## Steps\n\nKnead and rest the dough\nRoll, add scallions, coil\nPan-fry until golden\n"));
   const zhMd = await call("GET", "/zh-TW/recipes/scallion-pancake.md");
   assert.ok(zhMd.body.startsWith("# 蔥油餅\n") && zhMd.body.includes("## 材料\n\n中筋麵粉 200 克\n") && zhMd.body.includes("## 步驟\n\n揉麵團並靜置\n"));
-  step(".md alternate returns the whole recipe as Markdown: title, summary, ingredients and steps");
+  // Each locale's Markdown names that locale's HTML page as canonical, on PUBLIC_ORIGIN.
+  assert.equal(md.headers.get("link"), `<${origin}/en/recipes/scallion-pancake>; rel="canonical"`);
+  assert.equal(zhMd.headers.get("link"), `<${origin}/zh-TW/recipes/scallion-pancake>; rel="canonical"`);
+  step(".md alternate returns the whole recipe as Markdown: title, summary, ingredients and steps, with a canonical Link");
 
   const llms = await call("GET", "/llms.txt");
   assert.match(llms.headers.get("content-type"), /^text\/plain/);
   cached(llms, PUBLIC, "llms.txt");
+  assert.equal(llms.headers.get("link"), null);
   assert.ok(llms.body.includes(`- [蔥油餅](${origin}/zh-TW/recipes/scallion-pancake.md)`));
   assert.ok(llms.body.includes(`- [Scallion Pancake](${origin}/en/recipes/scallion-pancake.md)`));
   // List Views carry no body: sitemap.xml and llms.txt walk them row by row. llms.txt still links each `.md`.
