@@ -48,7 +48,7 @@ export function procedureFlow(
       logic: sqlLogic(stmt),
       operation: operation.replace("Stmt", "").toUpperCase(),
       table: body.relation?.relname ?? null,
-      mode: operation === "MergeStmt" ? "set" : classify(stmt),
+      mode: classify(stmt),
       reads: [...(dependencies?.reads ?? [])].sort(),
       writes: [...(dependencies?.writes ?? [])].sort(),
       filter: body.whereClause
@@ -112,10 +112,6 @@ export function sqlLogic(node: SqlNode): SqlLogicNode {
   if (node.A_Expr) {
     const e = node.A_Expr;
     const names: Record<string, string> = {
-      AEXPR_OP_ANY: `${e.name?.[0]?.String?.sval} ANY`,
-      AEXPR_OP_ALL: `${e.name?.[0]?.String?.sval} ALL`,
-      AEXPR_BETWEEN_SYM: "BETWEEN SYMMETRIC",
-      AEXPR_NOT_BETWEEN_SYM: "NOT BETWEEN SYMMETRIC",
       AEXPR_IN: e.name?.[0]?.String?.sval === "<>" ? "NOT IN" : "IN",
       AEXPR_BETWEEN: "BETWEEN",
       AEXPR_NOT_BETWEEN: "NOT BETWEEN",
@@ -135,8 +131,6 @@ export function sqlLogic(node: SqlNode): SqlLogicNode {
     return branch("predicate", node.NullTest.nulltesttype === "IS_NOT_NULL" ? "IS NOT NULL" : "IS NULL", [
       sqlLogic(node.NullTest.arg),
     ]);
-  if (node.BooleanTest)
-    return branch("predicate", node.BooleanTest.booltesttype.replaceAll("_", " "), [sqlLogic(node.BooleanTest.arg)]);
   if (node.CaseExpr) {
     const c = node.CaseExpr;
     return branch("case", c.arg ? "CASE · match value" : "CASE · first TRUE condition", [
@@ -212,14 +206,13 @@ export function sqlLogic(node: SqlNode): SqlLogicNode {
       sqlLogic(j.larg),
       sqlLogic(j.rarg),
       ...clause("ON", j.quals),
-      ...group("USING", j.usingClause),
     ]);
   }
   if (node.WindowDef) {
     const w = node.WindowDef;
     return branch(
       "window",
-      `Window${w.name ? ` ${w.name}` : ""} · ${w.frameOptions & 4 ? "ROWS" : "RANGE"} frame (see authored SQL)`,
+      `Window · ${w.frameOptions & 4 ? "ROWS" : "RANGE"} frame (see authored SQL)`,
       [
         ...group("PARTITION BY", w.partitionClause),
         ...group("ORDER BY", w.orderClause),
@@ -237,7 +230,7 @@ export function sqlLogic(node: SqlNode): SqlLogicNode {
       ...group(b.withClause?.recursive ? "WITH RECURSIVE" : "WITH", b.withClause?.ctes),
       ...(b.relation ? [branch("target", "Target", [sqlLogic({ RangeVar: b.relation })])] : []),
       ...group(key === "UpdateStmt" ? "SET" : "SELECT", b.targetList),
-      ...group("FROM", b.fromClause ?? b.usingClause),
+      ...group("FROM", b.fromClause),
       ...clause("WHERE · keep TRUE rows", b.whereClause),
       ...group("GROUP BY", b.groupClause),
       ...clause("HAVING · keep TRUE groups", b.havingClause),
@@ -298,8 +291,6 @@ export function rowPreconditions(
   );
   if (writes.length !== 1) return [];
   const body = writes[0]!;
-  // Joined writes can give an unqualified column a different meaning.
-  if (body.fromClause?.length || body.usingClause?.length || body.withClause) return [];
   const terms = (node: SqlNode): SqlNode[] =>
     node?.BoolExpr?.boolop === "AND_EXPR" ? node.BoolExpr.args.flatMap(terms) : [node];
   const column = (node: SqlNode | undefined): string | undefined => {

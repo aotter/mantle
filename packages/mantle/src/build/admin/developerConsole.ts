@@ -38,7 +38,7 @@ export function relationsOf(stmts: readonly SqlNode[]): { reads: Set<string>; wr
       // a write's target is a RangeVar without its type key, under `relation`
       if ((k === "RangeVar" || k === "relation") && n && typeof n.relname === "string" && n.mantle !== "cte")
         (write && k === "relation" ? writes : reads).add(n.relname.toLowerCase());
-      walk(c, k === "InsertStmt" || k === "UpdateStmt" || k === "DeleteStmt" || k === "MergeStmt");
+      walk(c, k === "InsertStmt" || k === "UpdateStmt" || k === "DeleteStmt");
     }
   };
   walk(stmts, false);

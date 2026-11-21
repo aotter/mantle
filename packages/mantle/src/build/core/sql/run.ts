@@ -83,9 +83,7 @@ function notNullIn(schemas: RunEnv["schemas"], sel: N, qual: string | undefined,
   }
   const sub = node.RangeSubselect;
   if (!sub || sub.alias?.colnames?.length || sub.lateral) return false;
-  const outs = (sub.subquery.SelectStmt?.targetList ?? []).filter(
-    (t: N) => outName(t) === name,
-  );
+  const outs = (sub.subquery.SelectStmt?.targetList ?? []).filter((t: N) => outName(t) === name);
   const f = outs.length === 1 ? outs[0].ResTarget.val?.ColumnRef?.fields : undefined;
   if (!f || f.length > 2 || f.some((x: N) => !x.String)) return false;
   return notNullIn(

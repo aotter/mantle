@@ -88,7 +88,6 @@ function desired(name: string, s: StorageSchema) {
     const e = checkText(c, s);
     for (const ev of ["INSERT", "UPDATE"])
       triggers.push({
-
         sql: `CREATE TRIGGER ${q(`_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`)} BEFORE ${ev} ON ${t} WHEN NOT (${e}) BEGIN SELECT RAISE(ABORT, ${lit(`MANTLE_CHECK ${name}: ${e.replace(/\bnew\./g, "")}`)}); END`,
       });
   });
@@ -99,20 +98,16 @@ function desired(name: string, s: StorageSchema) {
     const n = s.search.map(c => `new.${q(c)}`).join(", ");
     const o = s.search.map(c => `old.${q(c)}`).join(", ");
     virtuals.push({
-
       sql: `CREATE VIRTUAL TABLE ${fts} USING fts5(${f}, content=${lit(name)}, content_rowid='_rid', tokenize='trigram')`,
     });
     triggers.push(
       {
-
         sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_i`)} AFTER INSERT ON ${t} BEGIN INSERT INTO ${fts} (rowid, ${f}) VALUES (new._rid, ${n}); END`,
       },
       {
-
         sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_d`)} AFTER DELETE ON ${t} BEGIN INSERT INTO ${fts} (${fts}, rowid, ${f}) VALUES ('delete', old._rid, ${o}); END`,
       },
       {
-
         sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_u`)} AFTER UPDATE OF ${f} ON ${t} BEGIN INSERT INTO ${fts} (${fts}, rowid, ${f}) VALUES ('delete', old._rid, ${o}); INSERT INTO ${fts} (rowid, ${f}) VALUES (new._rid, ${n}); END`,
       },
     );
@@ -127,15 +122,12 @@ function desired(name: string, s: StorageSchema) {
     virtuals.push({ sql: `CREATE VIRTUAL TABLE ${g} USING rtree(id, minLat, maxLat, minLng, maxLng)` });
     triggers.push(
       {
-
         sql: `CREATE TRIGGER ${q(`${tree}_i`)} AFTER INSERT ON ${t} WHEN new.${la} IS NOT NULL AND new.${ln} IS NOT NULL BEGIN INSERT INTO ${g} VALUES (new._rid, new.${la}, new.${la}, new.${ln}, new.${ln}); END`,
       },
       {
-
         sql: `CREATE TRIGGER ${q(`${tree}_d`)} AFTER DELETE ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; END`,
       },
       {
-
         sql: `CREATE TRIGGER ${q(`${tree}_u`)} AFTER UPDATE OF ${la}, ${ln} ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; INSERT INTO ${g} SELECT new._rid, new.${la}, new.${la}, new.${ln}, new.${ln} WHERE new.${la} IS NOT NULL AND new.${ln} IS NOT NULL; END`,
       },
     );
