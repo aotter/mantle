@@ -62,9 +62,13 @@ export function hostCaller(
     !record(props.user)
   )
     return hostContract("Malformed host contract or tenant mismatch.");
-  // Named, so a host that still sends a removed key (`dryRun`, ADR-0046 #2101) sees which one.
+  // A host that still sends a removed key (`dryRun`, ADR-0046 #2101) sees which one; a key that is not a short
+  // identifier is not echoed into the message, the response or the access event.
   const unknown = Object.keys(props).find(key => !keys.includes(key));
-  if (unknown !== undefined) return hostContract(`Unknown key '${unknown}'.`, unknown);
+  if (unknown !== undefined)
+    return /^[A-Za-z_][A-Za-z0-9_]{0,31}$/.test(unknown)
+      ? hostContract(`Unknown key '${unknown}'.`, unknown)
+      : hostContract("Malformed host contract or tenant mismatch.");
   for (const key of ["target", "targetHash"])
     if (Object.hasOwn(props, key) && !text(props[key])) return hostContract(`Invalid '${key}'.`, key);
   for (const key of ["target", "targetHash"])

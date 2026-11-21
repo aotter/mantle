@@ -1,6 +1,5 @@
 /** View/Procedure dispatch loads only on a matched REST request, after the pipeline guarded the call. */
 import type { Caller } from "./contracts.js";
-import type { Pipeline } from "./request-pipeline.js";
 import { convert, invalid } from "./surface.js";
 import { body, type Options, type Route } from "./rest.js";
 import { resultData } from "./result-meta.js";
@@ -27,7 +26,6 @@ export async function dispatch<Database, Handlers, Env>(
   caller: Caller,
   params: Record<string, string>,
   options: Options<Env, Database> & { handlers?: Handlers },
-  pipeline: Pipeline,
 ): Promise<Response> {
   let data: unknown;
   if (route.page) {

@@ -571,6 +571,22 @@
       "field": "dryRun"
     }
   },
+  "refusal: unknown key of 100 characters": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: unknown key with a newline": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
   "refusal: v 2": {
     "instance": true,
     "code": "HOST_CONTRACT",

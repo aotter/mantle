@@ -141,6 +141,9 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     "unknown key": { ...base(), extra: 1 },
     "dryRun true (removed, #2101)": { ...base(), dryRun: true },
     "dryRun false (removed, #2101)": { ...base(), dryRun: false },
+    // Only a short identifier is named; any other unknown key is refused without echoing it.
+    "unknown key of 100 characters": { ...base(), ["k".repeat(100)]: 1 },
+    "unknown key with a newline": { ...base(), "a\nb": 1 },
     "v 2": { ...base(), v: 2 },
     "v missing": without(base(), "v"),
     "tenant mismatch": base({ tenant: "other" }),
@@ -735,6 +738,11 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       message: "Unknown key 'dryRun'.",
       fields: { field: "dryRun" },
     });
+    for (const name of ["unknown key of 100 characters", "unknown key with a newline"])
+      expect([name, recorded[`refusal: ${name}`]]).toMatchObject([
+        name,
+        { code: "HOST_CONTRACT", message: "Malformed host contract or tenant mismatch.", fields: null },
+      ]);
     // 5. One unbatched tools/call per request in either form, without a connect step; a batch or any other method is
     // refused. The connect step is `initialize` (2025) or `server/discover` (2026-07-28), pinned to a mounted tool.
     for (const name of [

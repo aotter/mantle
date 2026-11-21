@@ -151,9 +151,9 @@ export function rest<Env, Database, Handlers = never>(
   routes: readonly Route<Database, Handlers, Env>[],
   options: Options<Env, Database> & Pick<PipelineOptions, "fields"> & { handlers?: Handlers },
 ): Fetch<Env> {
-  return router(routes, options, async (route, request, env, caller, params, pipeline) => {
+  return router(routes, options, async (route, request, env, caller, params) => {
     const { dispatch } = await import("./rest-dispatch.js");
-    return dispatch(route, request, () => options.db(env), caller, params, options, pipeline);
+    return dispatch(route, request, () => options.db(env), caller, params, options);
   });
 }
 

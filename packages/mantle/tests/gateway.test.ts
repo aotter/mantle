@@ -73,6 +73,23 @@ test("v1 validates supported forwarding controls and own field specs", () => {
     expect(() => hostCaller({ ...mantleProps(), dryRun }, { tenant: "example" })).toThrow(
       expect.objectContaining({ code: "HOST_CONTRACT", message: "Unknown key 'dryRun'.", fields: { field: "dryRun" } }),
     );
+  // A key that is not a short identifier is never echoed: the generic refusal, with no field.
+  for (const key of ["k".repeat(100), "a\nb", "k".repeat(33)]) {
+    let refusal: any;
+    try {
+      hostCaller({ ...mantleProps(), [key]: 1 }, { tenant: "example" });
+    } catch (error) {
+      refusal = error;
+    }
+    expect([refusal?.code, refusal?.message, refusal?.fields]).toEqual([
+      "HOST_CONTRACT",
+      "Malformed host contract or tenant mismatch.",
+      undefined,
+    ]);
+  }
+  expect(() => hostCaller({ ...mantleProps(), ["k".repeat(32)]: 1 }, { tenant: "example" })).toThrow(
+    expect.objectContaining({ message: `Unknown key '${"k".repeat(32)}'.`, fields: { field: "k".repeat(32) } }),
+  );
   const user = { ...mantleProps().user, constructor: "unused", ignored: false as never };
   expect(
     hostCaller(mantleProps({ layer: "member", user }), { tenant: "example", fields: { region: fields.region } })
@@ -675,7 +692,7 @@ test("forwarded pinning and access decisions share one boundary", async () => {
     const { nativeRest } = await import("../src/kernel/rest.js");
     const uploadId = "rest:POST /upload",
       uploadTargets = {
-        [uploadId]: { targetHash: "upload-hash", readOnly: false, opaque: true, requires: { all: ["ctx.admin"] } },
+        [uploadId]: { targetHash: "upload-hash", readOnly: false, requires: { all: ["ctx.admin"] } },
       };
     let uploads = 0;
     const uploadBody = "bound\0bytes";
