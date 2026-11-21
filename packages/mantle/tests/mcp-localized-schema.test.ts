@@ -7,7 +7,7 @@ import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { localizedSchema } from "../src/kernel/localized-schema.js";
 import { compilePlan, d1Dialect } from "../src/build/compiler.js";
-import { describeApp, targetHash } from "../src/domain/describe/index.js";
+import { describeApp } from "../src/domain/describe/index.js";
 import { mcpClient } from "./mcp-client.js";
 
 const label = (en: string, zh: string) => `{en: "${en}", "zh-TW": "${zh}"}`;
@@ -254,9 +254,10 @@ test("describe lists target schemas with English labels; targetHash still hashes
   expect(report.targets.find(t => t._meta.id === "view:companies-by-status")!.inputSchema).toMatchObject({
     properties: { status: { title: "Status", description: "Which status", enum: ["open", "closed"], default: "open" } },
   });
-  // The hash is the definition's: the same as the opt-in runtime export, and it still sees a label in another locale.
-  for (const target of report.targets)
-    expect(target._meta.targetHash).toBe(await targetHash(declared, target._meta.id));
+  // The hash is the definition's: stable for the same plan, and it still sees a label in another locale.
+  expect((await describeApp(declared)).targets.map(t => t._meta.targetHash)).toEqual(
+    report.targets.map(t => t._meta.targetHash),
+  );
   const relabelled = await describeApp(await plan(source.replace('"zh-TW": "名稱"', '"zh-TW": "公司名稱"')));
   const again = relabelled.targets.find(t => t._meta.id === "procedure:create-company")!;
   expect(again.inputSchema).toEqual(procedure.inputSchema);

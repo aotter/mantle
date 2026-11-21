@@ -4,7 +4,6 @@ import type { UserFieldSpec } from "../../build/spec/domain/model/UserFields.js"
 import { canonical, hashDefinition } from "./target-hash.js";
 import { targetDefinitions, type TargetDefinition } from "./targets.js";
 import { localizedSchema } from "../../kernel/localized-schema.js";
-export { targetHash } from "./target-hash.js";
 export { matchTarget, type TargetRequest } from "./match.js";
 
 export interface DescribeTarget {
@@ -58,59 +57,51 @@ const listed = (schema: DescribeTarget["inputSchema"]) =>
   localizedSchema(schema, "en") as DescribeTarget["inputSchema"];
 /** A report of sealed declarations; no SQL or row values leave this function. */
 export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
+  const scope = (d: TargetDefinition) =>
+    Object.fromEntries(
+      d.schemas.map(name => {
+        const s = plan.schemas[name]!;
+        return [name, { ...(s.scope ? { owner: s.scope } : {}), terms: s.userScopes ?? [] }];
+      }),
+    );
+  const unscopedReads = (d: TargetDefinition) =>
+    d.readSchemas.some(name => !plan.schemas[name]?.scope && !plan.schemas[name]?.userScopes?.length);
   const targets = await Promise.all(
-    targetDefinitions(plan).map(async d => {
-      const scope = Object.fromEntries(
-        d.schemas.map(name => {
-          const s = plan.schemas[name]!;
-          return [name, { ...(s.scope ? { owner: s.scope } : {}), terms: s.userScopes ?? [] }];
-        }),
-      );
-      return {
-        name: d.name,
-        title: d.title,
-        description: d.description,
-        // A host may list targets as MCP tools: labels in `en`, like `title`; the hash keeps the definition's maps.
-        inputSchema: listed(d.inputSchema),
-        annotations: { ...d.annotations, readOnlyHint: d.readOnly },
-        _meta: {
-          ...d.toolMeta,
-          surfaces: d.surfaces,
-          triggers: d.triggers,
-          id: d.id,
-          targetHash: await hashDefinition(plan, d),
-          readOnly: d.readOnly,
-          scope,
-          restrict: d.restrict,
-          opaque: d.opaque,
-          nativeDatabase: !!d.nativeDatabase,
-          unscopedReads: d.readSchemas.some(
-            name => !plan.schemas[name]?.scope && !plan.schemas[name]?.userScopes?.length,
-          ),
-          trustedOnly: d.trustedOnly,
-          variants: d.variants.map(v => ({
-            id: v.id,
-            restrict: v.restrict,
-            requires: requirements(v, d.surface),
-            inputSchema: listed(v.inputSchema),
-            readOnly: v.readOnly,
-            trustedOnly: v.trustedOnly,
-            opaque: v.opaque,
-            nativeDatabase: !!v.nativeDatabase,
-            unscopedReads: v.readSchemas.some(
-              name => !plan.schemas[name]?.scope && !plan.schemas[name]?.userScopes?.length,
-            ),
-            scope: Object.fromEntries(
-              v.schemas.map(name => {
-                const s = plan.schemas[name]!;
-                return [name, { ...(s.scope ? { owner: s.scope } : {}), terms: s.userScopes ?? [] }];
-              }),
-            ),
-          })),
-          requires: requirements(d, d.surface),
-        },
-      };
-    }),
+    targetDefinitions(plan).map(async d => ({
+      name: d.name,
+      title: d.title,
+      description: d.description,
+      // A host may list targets as MCP tools: labels in `en`, like `title`; the hash keeps the definition's maps.
+      inputSchema: listed(d.inputSchema),
+      annotations: { ...d.annotations, readOnlyHint: d.readOnly },
+      _meta: {
+        ...d.toolMeta,
+        surfaces: d.surfaces,
+        triggers: d.triggers,
+        id: d.id,
+        targetHash: await hashDefinition(plan, d),
+        readOnly: d.readOnly,
+        scope: scope(d),
+        restrict: d.restrict,
+        opaque: d.opaque,
+        nativeDatabase: !!d.nativeDatabase,
+        unscopedReads: unscopedReads(d),
+        trustedOnly: d.trustedOnly,
+        variants: d.variants.map(v => ({
+          id: v.id,
+          restrict: v.restrict,
+          requires: requirements(v, d.surface),
+          inputSchema: listed(v.inputSchema),
+          readOnly: v.readOnly,
+          trustedOnly: v.trustedOnly,
+          opaque: v.opaque,
+          nativeDatabase: !!v.nativeDatabase,
+          unscopedReads: unscopedReads(v),
+          scope: scope(v),
+        })),
+        requires: requirements(d, d.surface),
+      },
+    })),
   );
   return JSON.parse(canonical({ schemaVersion: 1, access: plan.access?.userFields ?? {}, targets })) as AppDescription;
 }
@@ -186,11 +177,8 @@ function policyDirection(before: PlanRestrict, after: PlanRestrict, scope: boole
   }
   return combine(directions);
 }
-function requiresDirection(x: Requirements, y: Requirements): Direction {
-  const directions: Direction[] = [];
-  if (canonical(x.all) !== canonical(y.all)) directions.push(inclusion(x.all.map(canonical), y.all.map(canonical)));
-  return combine(directions);
-}
+const requiresDirection = (x: Requirements, y: Requirements): Direction =>
+  inclusion(x.all.map(canonical), y.all.map(canonical));
 /** SchemaVersion 1 reports saved before #2048 have no native database declaration. */
 const nativeDatabaseDefaults = (m: DescribeTarget["_meta"]): DescribeTarget["_meta"] => ({
   ...m,

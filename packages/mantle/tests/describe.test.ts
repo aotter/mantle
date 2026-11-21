@@ -3,7 +3,7 @@ import { readFile, mkdtemp, rm, writeFile, readdir } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describeApp, diffApp, targetHash } from "../dist/domain/describe/index.js";
+import { describeApp, diffApp } from "../dist/domain/describe/index.js";
 import { compilePlan, d1Dialect, type RuntimePlan } from "../src/build/compiler.js";
 import { mediaDefinitions } from "../src/domain/generated-tools.js";
 
@@ -16,6 +16,7 @@ async function fixture(): Promise<RuntimePlan> {
 const target = (report: Awaited<ReturnType<typeof describeApp>>, id: string) =>
   report.targets.find(t => t._meta.id === id)!._meta;
 const copy = (plan: RuntimePlan) => JSON.parse(JSON.stringify(plan));
+const targetHash = async (plan: RuntimePlan, id: string) => target(await describeApp(plan), id).targetHash;
 
 test("describe retains built-in media tool metadata and real descriptions", async () => {
   const report = await describeApp(await fixture());
@@ -54,7 +55,6 @@ test("hash is stable and binds restrictions, scope, input, requirements and SQL 
     id = "view:regional-orders",
     h = await targetHash(plan, id);
   expect(await targetHash(copy(plan), id)).toBe(h);
-  expect(target(await describeApp(plan), id).targetHash).toBe(h);
   const mutations = [
     (p: any) => {
       p.views["regional-orders"].restrict.orders.terms[0].field = "other";
@@ -77,7 +77,7 @@ test("hash is stable and binds restrictions, scope, input, requirements and SQL 
     mutate(p);
     expect(await targetHash(p, id)).not.toBe(h);
   }
-  await expect(targetHash(plan, "view:missing")).rejects.toThrow("Unknown target");
+  expect((await describeApp(plan)).targets.some(t => t._meta.id === "view:missing")).toBe(false);
 });
 
 test("readOnly is derived from nested IR and refuses ref-handler claims", async () => {
