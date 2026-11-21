@@ -3,13 +3,21 @@ name: CI
 # ponytail: every ready PR into `develop` runs these two light jobs, whoever opened it, so PostgreSQL is tested before
 # merge rather than first at release (#1979 broke a PostgreSQL-only test that local runs had skipped). Package tests run
 # against a PostgreSQL 16 service with full-checks.yml's variables, plus native four-target conformance (`test:native`,
-# including `cloudflare-postgres` under local Wrangler). Linux Full checks (full-checks.yml) still gates `main` and runs
-# by hand before a release; this workflow does not replace it. Drafts skip until marked ready, and a skipped required
-# check counts as passing. dependabot-automerge.yml queues Dependabot patch and digest bumps behind these jobs.
+# including `cloudflare-postgres` under local Wrangler). Drafts skip until marked ready, and a skipped required check
+# counts as passing. dependabot-automerge.yml queues Dependabot patch and digest bumps behind these jobs.
+# Full checks (full-checks.yml) is the gate on `main` and does not repeat these jobs: on a PR into `main` it calls this
+# workflow (workflow_call, drafts included), whose checks then read `PR CI / ...`, and its own `Typecheck + tests` needs
+# them. A manual Full checks run does not call it, since this workflow already ran on the PR.
 on:
   pull_request:
     branches: [develop]
     types: [opened, synchronize, reopened, ready_for_review]
+  workflow_call:
+    inputs:
+      drafts:
+        description: Run on a draft PR too (Full checks on `main` PRs, which ran on drafts before)
+        type: boolean
+        default: false
 
 # Cancel superseded runs on the same ref. PR pushes that arrive in
 # rapid succession only spend CI on the latest commit.
@@ -25,7 +33,7 @@ jobs:
   lint:
     name: Typecheck + tests
     needs: [typecheck, tests]
-    if: ${{ always() && !github.event.pull_request.draft }}
+    if: ${{ always() && (!github.event.pull_request.draft || inputs.drafts) }}
     runs-on: ubuntu-latest
     steps:
       - name: Require both jobs
@@ -36,7 +44,7 @@ jobs:
 
   typecheck:
     name: Typecheck + gates
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ !github.event.pull_request.draft || inputs.drafts }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -79,7 +87,7 @@ jobs:
 
   tests:
     name: Package tests (PostgreSQL)
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ !github.event.pull_request.draft || inputs.drafts }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:

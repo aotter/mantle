@@ -59,23 +59,32 @@ async function build(
   await buildAdmin({ entry: join(src, "admin.tsx"), outDir: out });
   return join(out, "mcp-app.html");
 }
-const attempt = (html: string) =>
-  checkMcpApp({ catalogue, html }).then(
+// One build of the compatible App, shared by the tests that only need some App.
+let compatibleApp: Promise<string> | undefined;
+const compatible = () => (compatibleApp ??= build("compatible", ""));
+// A test that expects a failure need not wait out the published waits (10 s to render, 5 s to settle, 10 s for
+// `inspect`) for each failing scenario: the messages are the same, only the wait is shorter.
+const fast = { renderMs: 2_500, settleMs: 1_000, inspectMs: 2_000 };
+const attempt = (html: string, waits?: typeof fast) =>
+  checkMcpApp({ catalogue, html, ...(waits && { waits }) }).then(
     () => undefined,
     (error: Error) => error.message,
   );
+const failure = (html: string) => attempt(html, fast);
 
 describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
   it("passes an App whose override and page are compatible, in a light and a dark host", async () => {
-    expect(await attempt(await build("ok", ""))).toBeUndefined();
+    expect(await attempt(await compatible())).toBeUndefined();
   }, 180_000);
 
   it("calls inspect with each scenario's open App after the built-in checks, and reports what it throws, logs or leaves unsettled", async () => {
-    const html = await build("inspect", "");
+    const html = await compatible();
     const seen: string[] = [];
+    // only inspect's wait is shortened: every scenario here renders, and the test asserts which ones report a problem
     const message = await checkMcpApp({
       catalogue,
       html,
+      waits: { inspectMs: fast.inspectMs },
       inspect: async ({ tool, theme, frame }) => {
         seen.push(`${tool} ${theme} ${await frame.locator('[data-slot="app-page"], [data-slot="app-rows"]').count()}`);
         if (tool === "queue" && theme === "dark") throw new Error("inspect-failure");
@@ -89,7 +98,7 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
     expect(seen.sort()).toEqual(["pending dark 1", "pending light 1", "queue dark 1", "queue light 1"]);
     expect(message).toContain("page for queue, dark host: inspect-failure");
     expect(message).toContain("cell:view:pending.item, light host: console error: inspect-console");
-    expect(message).toContain("cell:view:pending.item, dark host: inspect did not settle within 10000 ms");
+    expect(message).toContain(`cell:view:pending.item, dark host: inspect did not settle within ${fast.inspectMs} ms`);
     expect(message).not.toContain("page for queue, light host");
     // the seam's consumer module, against the same App
     const { check } = await import("./seams/mcp-app-inspect.js");
@@ -102,7 +111,7 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
       "network",
       'useEffect(() => { const host = ["example", "org"].join("."); void fetch("https://" + host + "/runtime.json").catch(() => undefined); new Image().src = "https://" + host + "/runtime.png"; }, []);',
     );
-    const message = await attempt(html);
+    const message = await failure(html);
     // the default CSP refuses it (a console error naming the URL) before it can leave
     expect(message).toContain("https://example.org/runtime");
     expect(message).toContain("cell:view:pending.item");
@@ -110,19 +119,19 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
 
   it("fails an override that logs a console error", async () => {
     expect(
-      await attempt(await build("console", 'useEffect(() => { console.error("cell-console-failure"); }, []);')),
+      await failure(await build("console", 'useEffect(() => { console.error("cell-console-failure"); }, []);')),
     ).toContain("console error: cell-console-failure");
   }, 180_000);
 
   it("fails an override that throws", async () => {
     expect(
-      await attempt(await build("throws", 'useEffect(() => { throw new Error("cell-throw-failure"); }, []);')),
+      await failure(await build("throws", 'useEffect(() => { throw new Error("cell-throw-failure"); }, []);')),
     ).toContain("cell-throw-failure");
   }, 180_000);
 
   it("gives a nullable column a null row", async () => {
     expect(
-      await attempt(
+      await failure(
         await build("null-row", 'useEffect(() => { if (value === null) console.error("cell-saw-null"); }, [value]);'),
       ),
     ).toContain("console error: cell-saw-null");
@@ -143,7 +152,7 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
     // the hosts are built at runtime (Math.random is never folded), so the build's static scan cannot see them
     const cell =
       'useEffect(() => { const dot = Math.random() < 2 ? "." : ""; const i = new Image(); i.src = "https://" + ["a", "cdn", "example", "test"].join(dot) + "/x.png"; const j = new Image(); j.src = "https://" + ["other", "example", "test"].join(dot) + "/y.png"; }, []);';
-    const message = await attempt(
+    const message = await failure(
       await build("wildcard", cell, ', mcp: { csp: { resourceDomains: ["https://*.cdn.example.test"] } }'),
     );
     expect(message).toContain("https://other.example.test/y.png");
@@ -151,7 +160,7 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
   }, 180_000);
 
   it("fails a page that suspends forever, and one that renders nothing: the full-screen toggle is not content", async () => {
-    const never = await attempt(
+    const never = await failure(
       await build(
         "suspends",
         "",
@@ -160,12 +169,12 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
       ),
     );
     expect(never).toContain("the App did not render the page");
-    const nothing = await attempt(await build("nothing", "", "", "function Queue() { void useView; return null; }"));
+    const nothing = await failure(await build("nothing", "", "", "function Queue() { void useView; return null; }"));
     expect(nothing).toContain("the App did not render the page (the page is empty or missing)");
   }, 180_000);
 
   it("fails empty layout wrappers and whitespace with an element-owned heading", async () => {
-    const message = await attempt(
+    const message = await failure(
       await build(
         "empty-wrappers",
         "",
@@ -205,7 +214,7 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
   it("fails an App that never renders the View, saying so", async () => {
     const blank = join(temp, "blank.html");
     writeFileSync(blank, "<!doctype html><html><head></head><body><div id=root></div></body></html>");
-    expect(await attempt(blank)).toContain("the App did not render the View");
+    expect(await failure(blank)).toContain("the App did not render the View");
   }, 180_000);
 
   it("runs every View of the catalogue when the file records no manifest", async () => {
@@ -216,7 +225,7 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
       "utf8",
     ).replace(/<meta name="mantle-mcp-app"[^>]*>/, "");
     writeFileSync(plain, html);
-    const message = await attempt(plain);
+    const message = await failure(plain);
     expect(message).toContain("View pending");
   }, 180_000);
 
@@ -228,11 +237,11 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
     const { checkMcpApp: spaced } = (await import(
       pathToFileURL(join(copy, "testing/index.js")).href
     )) as typeof import("../src/testing/index.js");
-    await expect(spaced({ catalogue, html: await build("space", "") })).resolves.toBeUndefined();
+    await expect(spaced({ catalogue, html: await compatible() })).resolves.toBeUndefined();
   }, 180_000);
 
   it("fails, not skips, when no browser is found, and says how to get one", async () => {
-    const html = await build("nobrowser", "");
+    const html = await compatible();
     const before = process.env["MANTLE_TEST_CHROMIUM"];
     process.env["MANTLE_TEST_CHROMIUM"] = join(temp, "no-such-chrome");
     try {
