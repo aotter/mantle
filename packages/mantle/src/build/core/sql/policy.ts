@@ -1,7 +1,7 @@
 // The policy rewriter (ADR-0034 decision 8, ADR-0035 decision 3): validated IR -> physical AST with visibility, scope,
 // system columns and deterministic order injected. A dialect whose policy is "inject" supplies a PolicyLowering for what
 // only it can spell (casts, Mantle's functions, generated ids). The result is still libpg-query's shape.
-import { AGGREGATES, SqlRefusal as Refused, type SqlNode as N } from "../../spec/domain/index.js";
+import { starCols, AGGREGATES, SqlRefusal as Refused, type SqlNode as N } from "../../spec/domain/index.js";
 import type { RelationPosition } from "./positions.js";
 import type { StorageSchema as SchemaDef } from "../dialect.js";
 import {
@@ -110,11 +110,6 @@ const sort = (node: N, dir = "SORTBY_DEFAULT"): N => ({
 });
 
 // ---- Schema helpers -------------------------------------------------------------------------------
-// the scope column is never read back, not even by `SELECT *`: it is the caller's own subject key
-const declaredCols = (s: SchemaDef) =>
-  Object.entries(s.fields)
-    .filter(([f]) => f !== s.scope)
-    .flatMap(([f, t]) => (t === "geo" ? [`${f}_lat`, `${f}_lng`] : [f]));
 /** what the wrapper exposes: the declared fields plus the columns policy reads */
 const readable = (s: SchemaDef) => [
   "id",
@@ -123,11 +118,8 @@ const readable = (s: SchemaDef) => [
   "updated_at",
   "author_id",
   ...(s.publishing ? ["status", "published_at"] : []),
-  ...declaredCols(s),
+  ...starCols(s),
 ];
-/** what `SELECT *` and `RETURNING *` expand to: declared fields only, never scope or system columns */
-const starCols = (s: SchemaDef) => declaredCols(s);
-
 // ---- policy ---------------------------------------------------------------------------------------
 type SelInfo = {
   container: RelationPosition;

@@ -20,6 +20,7 @@ import { refChecks } from "../../domain/service/SqlRowPolicy.js";
 import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
 import {
   AGGREGATES,
+  starCols,
   NATIVE_COLUMNS,
   NATIVE_NOT_NULL,
   notNullColumns,
@@ -71,11 +72,6 @@ function toDiagnostic(d: SqlDiagnostic, source: SourceLocation, pointer: string)
   });
 }
 
-/** What `SELECT *` expands to (the policy's `starCols`): the declared fields but the scope field, a geo field as its two columns. */
-const starCols = (s: PlanSchema) =>
-  Object.entries(s.fields)
-    .filter(([f]) => f !== s.scope)
-    .flatMap(([f, t]) => (t === "geo" ? [`${f}_lat`, `${f}_lng`] : [f]));
 
 type Columns = Record<string, { schema: string; field: string }>;
 

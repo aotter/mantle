@@ -467,3 +467,9 @@ export function lockIndexProblem(
   };
   return walk(where);
 }
+
+/** Declared SELECT/RETURNING star projection: scope is hidden and geo fields are physical pairs. */
+export const starCols = (s: Pick<SqlSchemaDef, "fields" | "scope">) =>
+  Object.entries(s.fields)
+    .filter(([f]) => f !== s.scope)
+    .flatMap(([f, t]) => (t === "geo" ? [`${f}_lat`, `${f}_lng`] : [f]));
